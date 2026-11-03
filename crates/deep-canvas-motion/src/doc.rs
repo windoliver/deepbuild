@@ -4,7 +4,12 @@
 use deep_canvas::grammar::{Seeded, Time, TimeContext};
 use serde_json::{Map, Value};
 
-use crate::curve::{Curve, Interp, Key};
+use crate::curve::{Curve, Extrapolate, Interp, Key};
+use crate::ease::{self, Ease};
+use crate::constraint::What;
+use crate::follow;
+use crate::modifier::{Kind as ModKind, Modifier, Rate, Shape};
+use crate::spring::Spring;
 
 /// Why a document can't be evaluated, as a refusal code and the path it names.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -47,6 +52,12 @@ pub struct Channel {
     pub target: Target,
     pub ty: ValueType,
     pub curve: Curve,
+    /// Added after the keys, in list order (Channel and key: `modifiers`).
+    pub modifiers: Vec<Modifier>,
+    /// `mode: follow`: what it follows and how, in place of keys.
+    pub follow: Option<follow::Spec>,
+    /// The hard range, checked at compile against keys, Bézier extremes and spring peaks.
+    pub range: Option<(f64, f64)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -111,6 +122,8 @@ pub struct Transport {
     /// Under reduced motion the timeline holds at its start: `reduced_motion: hold`, in any
     /// profile but a film, which still plays its timeline (Transport).
     pub holds: bool,
+    /// `reduced_motion: hold` (the default) rather than `slow`.
+    pub reduce_holds: bool,
 }
 
 /// A driver (canvas primitives: Driver): writes its target from an expression over its vars,
@@ -140,6 +153,47 @@ pub struct Limit {
     pub bounds: Bounds,
 }
 
+/// A constraint kind besides `limit` (canvas primitives: Constraint), with the items it reads.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Kind {
+    ChildOf { parent: String },
+    FollowPath { points: Vec<[f64; 2]>, fraction: f64, orient: bool, offset: [f64; 2] },
+    LookAt { target: String },
+    Copy { what: What, target: String },
+    /// Bones `[upper, lower, end]`, each the next one's parent.
+    Reach2 { chain: [String; 3], target: String, bend: f64, cartoon: bool },
+    FollowTip { item: String, offset: [f64; 2], rotate: bool },
+    Distance { target: String, min: f64, max: f64 },
+    SpringChain { bones: Vec<String>, hz: f64, damping_ratio: f64, max_swing: f64 },
+    RestOn { ground: f64, bottom: f64, offset: f64, max_drop: f64 },
+}
+
+/// One constraint on an owner item, applied by its influence after the owner's channels and
+/// drivers, in ID order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Constraint {
+    pub id: String,
+    pub owner: String,
+    pub kind: Kind,
+    pub influence: f64,
+}
+
+impl Kind {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Kind::ChildOf { .. } => "child_of",
+            Kind::FollowPath { .. } => "follow_path",
+            Kind::LookAt { .. } => "look_at",
+            Kind::Copy { .. } => "copy",
+            Kind::Reach2 { .. } => "reach2",
+            Kind::FollowTip { .. } => "follow_tip",
+            Kind::Distance { .. } => "distance",
+            Kind::SpringChain { .. } => "spring_chain",
+            Kind::RestOn { .. } => "rest_on",
+        }
+    }
+}
+
 /// Everything motion reads, with each map in ID order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Motion {
@@ -147,6 +201,9 @@ pub struct Motion {
     pub channels: Vec<Channel>,
     pub drivers: Vec<Driver>,
     pub limits: Vec<Limit>,
+    pub constraints: Vec<Constraint>,
+    /// Each control a follow channel may read, with its default value.
+    pub controls: Vec<(String, f64)>,
     pub clips: Vec<Clip>,
     pub placements: Vec<Placement>,
     pub markers: Vec<Marker>,
@@ -206,8 +263,17 @@ fn number(value: Option<&Value>, path: &str) -> Result<f64, Refused> {
 fn interp_of(value: Option<&Value>, path: &str) -> Result<Interp, Refused> {
     match value {
         None => Ok(Interp::Linear),
-        Some(Value::String(s)) if s == "linear" => Ok(Interp::Linear),
-        Some(Value::String(s)) if s == "hold" => Ok(Interp::Hold),
+        Some(Value::String(s)) => match s.as_str() {
+            "linear" => Ok(Interp::Linear),
+            "hold" => Ok(Interp::Hold),
+            "catmull_rom" => Ok(Interp::CatmullRom),
+            "auto" => Ok(Interp::Auto {
+                clamp: true,
+                smoothness: 0.33,
+            }),
+            // A bare `ease` or `smooth`, and every interpolation motion doesn't land, is refused.
+            _ => refuse("bad_interp", path),
+        },
         Some(Value::Object(o)) if o.len() == 1 => {
             if let Some(Value::Object(h)) = o.get("bezier") {
                 let at = |k: &str| number(h.get(k), &format!("{path}/bezier/{k}"));
@@ -223,24 +289,84 @@ fn interp_of(value: Option<&Value>, path: &str) -> Result<Interp, Refused> {
                 });
             }
             if let Some(Value::Object(s)) = o.get("spring") {
-                let freq_hz = number(s.get("freq_hz"), &format!("{path}/spring/freq_hz"))?;
-                let damping_ratio = number(
-                    s.get("damping_ratio"),
-                    &format!("{path}/spring/damping_ratio"),
-                )?;
-                if freq_hz <= 0.0 || damping_ratio <= 0.0 {
-                    return refuse("out_of_range", format!("{path}/spring"));
+                return Ok(Interp::Spring(spring_of(s, &format!("{path}/spring"))?));
+            }
+            if let Some(e) = o.get("ease") {
+                return Ok(Interp::Ease(ease_of(e, &format!("{path}/ease"))?));
+            }
+            if let Some(Value::Object(a)) = o.get("auto") {
+                let clamp = match a.get("clamp") {
+                    None => true,
+                    Some(Value::Bool(b)) => *b,
+                    Some(_) => return refuse("bad_doc", format!("{path}/auto/clamp")),
+                };
+                let smoothness = match a.get("smoothness") {
+                    None => 0.33,
+                    v => number(v, &format!("{path}/auto/smoothness"))?,
+                };
+                if !(0.0..=1.0).contains(&smoothness) {
+                    return refuse("out_of_range", format!("{path}/auto/smoothness"));
                 }
-                return Ok(Interp::Spring {
-                    freq_hz,
-                    damping_ratio,
-                });
+                return Ok(Interp::Auto { clamp, smoothness });
             }
             refuse("bad_interp", path)
         }
-        // A bare `ease` or `smooth`, and every interpolation R1 doesn't land, is refused.
         Some(_) => refuse("bad_interp", path),
     }
+}
+
+/// A spring by any of its forms: `{freq_hz, damping_ratio}`, `{decay, omega}` (ζ·ω0 = decay,
+/// damped frequency omega), `{duration, bounce}` or `{mass, stiffness, damping}`.
+pub fn spring_of(s: &Map<String, Value>, path: &str) -> Result<Spring, Refused> {
+    let at = |k: &str| number(s.get(k), &format!("{path}/{k}"));
+    let has = |k: &str| s.contains_key(k);
+    let spring = if has("decay") || has("omega") {
+        let (decay, omega) = (at("decay")?, at("omega")?);
+        if decay < 0.0 || omega < 0.0 || decay + omega <= 0.0 {
+            return refuse("out_of_range", path);
+        }
+        Spring::from_decay(decay, omega)
+    } else if has("duration") {
+        let (duration, bounce) = (at("duration")?, if has("bounce") { at("bounce")? } else { 0.0 });
+        if duration <= 0.0 || bounce >= 1.0 {
+            return refuse("out_of_range", path);
+        }
+        Spring::from_duration(duration, bounce)
+    } else if has("mass") || has("stiffness") {
+        let (m, k, c) = (at("mass")?, at("stiffness")?, at("damping")?);
+        if m <= 0.0 || k <= 0.0 || c <= 0.0 {
+            return refuse("out_of_range", path);
+        }
+        Spring::from_mass(m, k, c)
+    } else {
+        let freq = if has("freq_hz") { at("freq_hz")? } else { 2.0 };
+        let ratio = if has("damping_ratio") { at("damping_ratio")? } else { 1.0 };
+        if freq <= 0.0 || ratio <= 0.0 {
+            return refuse("out_of_range", path);
+        }
+        Spring::from_freq(freq, ratio)
+    };
+    Ok(spring)
+}
+
+/// An `ease@1` entry: `{name, params}` (params a number or an object of one), or its bare name.
+pub fn ease_of(e: &Value, path: &str) -> Result<Ease, Refused> {
+    let (name, params) = match e {
+        Value::String(n) => (n.as_str(), None),
+        Value::Object(o) => match o.get("name") {
+            Some(Value::String(n)) => (n.as_str(), o.get("params")),
+            _ => return refuse("bad_interp", path),
+        },
+        _ => return refuse("bad_interp", path),
+    };
+    let param = match params {
+        None | Some(Value::Null) => None,
+        Some(Value::Number(n)) => n.as_f64(),
+        Some(Value::Object(p)) if p.len() == 1 => p.values().next().and_then(Value::as_f64),
+        Some(Value::Object(p)) if p.is_empty() => None,
+        Some(_) => return refuse("out_of_range", format!("{path}/params")),
+    };
+    ease::named(name, param).map_or_else(|| refuse("bad_interp", path), Ok)
 }
 
 fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
@@ -354,11 +480,331 @@ fn limit_of(id: &str, c: &Map<String, Value>) -> Result<Option<Limit>, Refused> 
     }))
 }
 
+fn id_of(c: &Map<String, Value>, key: &str, path: &str) -> Result<String, Refused> {
+    match c.get(key).and_then(Value::as_str).filter(|s| !s.is_empty()) {
+        Some(s) => Ok(s.to_string()),
+        None => refuse("bad_path", format!("{path}/{key}")),
+    }
+}
+
+fn pair(v: Option<&Value>, path: &str) -> Result<[f64; 2], Refused> {
+    match v {
+        None => Ok([0.0; 2]),
+        Some(Value::Array(a)) if a.len() == 2 => Ok([
+            number(a.first(), &format!("{path}/0"))?,
+            number(a.get(1), &format!("{path}/1"))?,
+        ]),
+        Some(_) => refuse("bad_doc", path),
+    }
+}
+
+/// A constraint of any kind but `limit`. `follow_stream` is the data module's, which this build
+/// may lack; every other kind motion doesn't fill is refused as unknown.
+fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused> {
+    let path = format!("constraints/{id}");
+    let owner = id_of(c, "owner", &path)?;
+    let at = |k: &str| format!("{path}/{k}");
+    let num_or = |k: &str, d: f64| -> Result<f64, Refused> {
+        match c.get(k) {
+            None => Ok(d),
+            v => number(v, &at(k)),
+        }
+    };
+    let flag = |k: &str| c.get(k).and_then(Value::as_bool).unwrap_or(false);
+    let kind = match c.get("kind").and_then(Value::as_str) {
+        Some("child_of") => Kind::ChildOf { parent: id_of(c, "parent", &path)? },
+        Some("follow_path") => {
+            let Some(Value::Array(list)) = c.get("path") else {
+                return refuse("bad_doc", at("path"));
+            };
+            let points = list
+                .iter()
+                .enumerate()
+                .map(|(i, p)| pair(Some(p), &format!("{path}/path/{i}")))
+                .collect::<Result<Vec<_>, _>>()?;
+            if points.len() < 2 {
+                return refuse("bad_doc", at("path"));
+            }
+            Kind::FollowPath {
+                points,
+                fraction: num_or("fraction", 0.0)?,
+                orient: flag("orient"),
+                offset: pair(c.get("offset"), &at("offset"))?,
+            }
+        }
+        Some("look_at") => Kind::LookAt { target: id_of(c, "target", &path)? },
+        Some("copy") => Kind::Copy {
+            what: c
+                .get("what")
+                .and_then(Value::as_str)
+                .and_then(What::parse)
+                .map_or_else(|| refuse("bad_doc", at("what")), Ok)?,
+            target: id_of(c, "target", &path)?,
+        },
+        Some("reach2") => {
+            let chain: Vec<String> = c
+                .get("chain")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                .unwrap_or_default();
+            let Ok(chain) = <[String; 3]>::try_from(chain) else {
+                return refuse("bad_doc", at("chain"));
+            };
+            let bend = num_or("bend", 1.0)?;
+            if bend != 1.0 && bend != -1.0 {
+                return refuse("out_of_range", at("bend"));
+            }
+            let cartoon = match c.get("stretch").and_then(Value::as_str) {
+                None | Some("none") => false,
+                Some("cartoon") => true,
+                Some(_) => return refuse("bad_doc", at("stretch")),
+            };
+            Kind::Reach2 { chain, target: id_of(c, "target", &path)?, bend, cartoon }
+        }
+        Some("follow_tip") => Kind::FollowTip {
+            item: id_of(c, "item", &path)?,
+            offset: pair(c.get("offset"), &at("offset"))?,
+            rotate: flag("rotate"),
+        },
+        Some("distance") => {
+            let (min, max) = (num_or("min", 0.0)?, num_or("max", f64::MAX)?);
+            if min < 0.0 || min > max {
+                return refuse("out_of_range", path);
+            }
+            Kind::Distance { target: id_of(c, "target", &path)?, min, max }
+        }
+        Some("spring_chain") => Kind::SpringChain {
+            bones: c
+                .get("bones")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                .filter(|b: &Vec<String>| !b.is_empty() && b.len() <= 8)
+                .map_or_else(|| refuse("bad_doc", at("bones")), Ok)?,
+            hz: num_or("hz", 2.0)?,
+            damping_ratio: num_or("damping_ratio", 0.5)?,
+            max_swing: num_or("max_swing", 60.0)?,
+        },
+        Some("rest_on") => Kind::RestOn {
+            ground: num_or("ground", 0.0)?,
+            bottom: num_or("bottom", 0.0)?,
+            offset: num_or("offset", 0.0)?,
+            max_drop: num_or("max_drop", 10.0)?,
+        },
+        Some("follow_stream") => return refuse("module_missing", at("kind")),
+        _ => return refuse("unknown_kind", at("kind")),
+    };
+    Ok(Constraint {
+        id: id.to_string(),
+        owner,
+        kind,
+        influence: num_or("influence", 1.0)?,
+    })
+}
+
+/// Seconds as a number, or a time literal, in flicks.
+fn seconds_of(v: Option<&Value>, ctx: &TimeContext, path: &str) -> Result<i64, Refused> {
+    match v {
+        Some(Value::Number(n)) => match n.as_f64() {
+            Some(s) if s.is_finite() && s >= 0.0 => {
+                Ok((s * deep_canvas::grammar::FLICKS_PER_SECOND as f64).round() as i64)
+            }
+            _ => refuse("out_of_range", path),
+        },
+        v => time_of(v, ctx, path),
+    }
+}
+
+/// A follow channel's `follow`: its source, its model and its outputs.
+fn follow_of(f: &Map<String, Value>, ctx: &TimeContext, path: &str) -> Result<follow::Spec, Refused> {
+    let source = match f.get("source") {
+        Some(Value::String(s)) => match s.strip_prefix("controls/").and_then(|r| r.strip_suffix("/value")) {
+            Some(id) if !id.is_empty() => follow::Source::Control(id.to_string()),
+            _ => return refuse("bad_path", format!("{path}/source")),
+        },
+        Some(Value::Object(o)) => {
+            let Some(Value::Object(keys)) = o.get("keys") else {
+                return refuse("bad_doc", format!("{path}/source"));
+            };
+            let mut list = Vec::new();
+            for (kid, k) in keys {
+                let kpath = format!("{path}/source/keys/{kid}");
+                // The source holds between its changes: a key that moves is a varying source.
+                match k.get("interp").and_then(Value::as_str) {
+                    None | Some("hold") => {}
+                    Some(_) => return refuse("varying_source", kpath),
+                }
+                list.push((time_of(k.get("t"), ctx, &format!("{kpath}/t"))?, number(k.get("value"), &format!("{kpath}/value"))?));
+            }
+            list.sort_by_key(|(t, _)| *t);
+            if list.is_empty() {
+                return refuse("bad_doc", format!("{path}/source/keys"));
+            }
+            follow::Source::Keys(list)
+        }
+        _ => return refuse("bad_doc", format!("{path}/source")),
+    };
+    let Some(Value::Object(m)) = f.get("model") else {
+        return refuse("bad_doc", format!("{path}/model"));
+    };
+    let mpath = format!("{path}/model");
+    let positive = |o: &Map<String, Value>, k: &str, d: Option<f64>| -> Result<f64, Refused> {
+        let v = match (o.get(k), d) {
+            (None, Some(d)) => d,
+            (v, _) => number(v, &format!("{mpath}/{k}"))?,
+        };
+        if v > 0.0 { Ok(v) } else { refuse("out_of_range", format!("{mpath}/{k}")) }
+    };
+    let model = if let Some(Value::Object(s)) = m.get("spring") {
+        follow::Model::Spring(spring_of(s, &format!("{mpath}/spring"))?)
+    } else if let Some(Value::Object(o)) = m.get("first_order") {
+        let tau = o.get("tau").and_then(Value::as_f64);
+        follow::Model::FirstOrder {
+            tau_up: positive(o, "tau_up", tau)?,
+            tau_down: positive(o, "tau_down", tau)?,
+        }
+    } else if let Some(Value::Object(o)) = m.get("rate_limit") {
+        follow::Model::RateLimit { max: positive(o, "max", None)? }
+    } else if let Some(Value::Object(o)) = m.get("transition") {
+        let span = seconds_of(o.get("span"), ctx, &format!("{mpath}/transition/span"))?;
+        if span <= 0 {
+            return refuse("out_of_range", format!("{mpath}/transition/span"));
+        }
+        let along = match interp_of(o.get("interp"), &format!("{mpath}/transition/interp"))? {
+            Interp::Ease(e) => follow::Along::Ease(e),
+            Interp::Bezier { x1, y1, x2, y2 } => follow::Along::Bezier(crate::curve::Bezier::new(x1, y1, x2, y2)),
+            Interp::Linear => follow::Along::Linear,
+            _ => return refuse("bad_interp", format!("{mpath}/transition/interp")),
+        };
+        follow::Model::Transition { span, along }
+    } else {
+        return refuse("bad_doc", mpath);
+    };
+    let outputs: Vec<&str> = match f.get("outputs") {
+        None => vec!["value"],
+        Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).collect(),
+        Some(_) => return refuse("bad_doc", format!("{path}/outputs")),
+    };
+    if let Some(bad) = outputs.iter().find(|o| !matches!(**o, "value" | "rate" | "integral")) {
+        return refuse("bad_doc", format!("{path}/outputs/{bad}"));
+    }
+    let (rate, integral) = (outputs.contains(&"rate"), outputs.contains(&"integral"));
+    if matches!(model, follow::Model::Transition { .. }) && (rate || integral) {
+        return refuse("bad_doc", format!("{path}/outputs"));
+    }
+    Ok(follow::Spec { source, model, rate, integral })
+}
+
+/// The code a `per_loop` on a document that doesn't loop is refused with.
+pub const PER_LOOP_NO_LOOP: &str = "per_loop_no_loop";
+
+/// One modifier: `{wave: {...}}`, `{noise: {...}}`, `{pulse: {...}}` or `{limits: {...}}`, or
+/// the same with its kind in `kind`; each takes an `influence` (1).
+fn modifier_of(
+    m: &Value,
+    ctx: &TimeContext,
+    transport: &Transport,
+    path: &str,
+    channel: &str,
+) -> Result<Modifier, Refused> {
+    let Value::Object(m) = m else {
+        return refuse("bad_doc", path);
+    };
+    let (kind, body, at) = match m.get("kind").and_then(Value::as_str) {
+        Some(k) => (k.to_string(), m, path.to_string()),
+        None => match m.iter().find(|(k, v)| v.is_object() && *k != "influence") {
+            Some((k, Value::Object(b))) => (k.clone(), b, format!("{path}/{k}")),
+            _ => return refuse("bad_doc", path),
+        },
+    };
+    let num = |k: &str, d: f64| -> Result<f64, Refused> {
+        match body.get(k) {
+            None => Ok(d),
+            v => number(v, &format!("{at}/{k}")),
+        }
+    };
+    let rate = || -> Result<Rate, Refused> {
+        match body.get("per_loop") {
+            Some(v) => {
+                let n = v.as_u64().filter(|n| (1..=u64::from(u16::MAX)).contains(n));
+                let Some(n) = n else {
+                    return refuse("out_of_range", format!("{at}/per_loop"));
+                };
+                let span = match (transport.wrap, transport.span) {
+                    (true, Some(span)) => span,
+                    _ => return refuse(PER_LOOP_NO_LOOP, channel),
+                };
+                Ok(Rate::PerLoop { n: n as u16, span })
+            }
+            None if body.contains_key("period") => {
+                let p = num("period", 1.0)?;
+                if p <= 0.0 {
+                    return refuse("out_of_range", format!("{at}/period"));
+                }
+                Ok(Rate::Hz(1.0 / p))
+            }
+            None => Ok(Rate::Hz(num("frequency", 1.0)?)),
+        }
+    };
+    let kind = match kind.as_str() {
+        "wave" => ModKind::Wave {
+            amplitude: num("amplitude", 1.0)?,
+            rate: rate()?,
+            phase: num("phase", 0.0)?,
+            offset: num("offset", 0.0)?,
+        },
+        "noise" => ModKind::Noise {
+            amplitude: num("amplitude", 1.0)?,
+            rate: rate()?,
+            seed: match body.get("seed") {
+                None => 0,
+                Some(v) => v.as_u64().map_or_else(|| refuse("out_of_range", format!("{at}/seed")), Ok)?,
+            },
+        },
+        "limits" => ModKind::Limits {
+            min: num("min", f64::MIN)?,
+            max: num("max", f64::MAX)?,
+        },
+        "pulse" => {
+            let shape = match body.get("shape") {
+                None => Shape::ThereAndBack,
+                Some(Value::String(s)) if s == "there_and_back" => Shape::ThereAndBack,
+                Some(Value::String(s)) if s == "pause" => Shape::Pause(1.0 / 3.0),
+                Some(Value::String(s)) if s == "wiggle" => Shape::Wiggle(2.0),
+                Some(Value::Object(o)) if o.contains_key("pause") => Shape::Pause(
+                    o["pause"].get("share").and_then(Value::as_f64).unwrap_or(1.0 / 3.0),
+                ),
+                Some(Value::Object(o)) if o.contains_key("wiggle") => Shape::Wiggle(
+                    o["wiggle"].get("count").and_then(Value::as_f64).unwrap_or(2.0),
+                ),
+                Some(_) => return refuse("bad_doc", format!("{at}/shape")),
+            };
+            let ease = match body.get("ease") {
+                None => ease::named("sigmoid", Some(10.0)).unwrap_or(Ease::Smoothstep),
+                Some(e) => ease_of(e, &format!("{at}/ease"))?,
+            };
+            ModKind::Pulse {
+                at: time_of(body.get("at"), ctx, &format!("{at}/at"))?,
+                span: time_of(body.get("span"), ctx, &format!("{at}/span"))?,
+                amount: num("amount", 1.0)?,
+                shape,
+                ease,
+            }
+        }
+        _ => return refuse("bad_doc", format!("{path}/kind")),
+    };
+    let influence = match m.get("influence").or_else(|| body.get("influence")) {
+        None => 1.0,
+        v => number(v, &format!("{path}/influence"))?,
+    };
+    Ok(Modifier { kind, influence })
+}
+
 fn channel_of(
     id: &str,
     c: &Map<String, Value>,
     in_clip: bool,
     ctx: &TimeContext,
+    transport: &Transport,
     path: &str,
     labels: &mut Vec<String>,
 ) -> Result<Channel, Refused> {
@@ -376,6 +822,34 @@ fn channel_of(
         Some("enum") => ValueType::Enum,
         _ => return refuse("bad_type", format!("{path}/type")),
     };
+    let range = match c.get("range") {
+        None => None,
+        Some(Value::Array(r)) if r.len() == 2 => {
+            let (lo, hi) = (number(r.first(), &format!("{path}/range/0"))?, number(r.get(1), &format!("{path}/range/1"))?);
+            if lo > hi {
+                return refuse("out_of_range", format!("{path}/range"));
+            }
+            Some((lo, hi))
+        }
+        Some(_) => return refuse("bad_doc", format!("{path}/range")),
+    };
+    if c.get("mode").and_then(Value::as_str) == Some("follow") {
+        if in_clip || ty != ValueType::F32 {
+            return refuse("bad_doc", format!("{path}/mode"));
+        }
+        let Some(Value::Object(f)) = c.get("follow") else {
+            return refuse("bad_doc", format!("{path}/follow"));
+        };
+        return Ok(Channel {
+            id: id.to_string(),
+            target,
+            ty,
+            curve: Curve::new(Vec::new()),
+            modifiers: Vec::new(),
+            follow: Some(follow_of(f, ctx, &format!("{path}/follow"))?),
+            range,
+        });
+    }
     let mut keys = Vec::new();
     let Some(Value::Object(map)) = c.get("keys") else {
         return refuse("bad_doc", format!("{path}/keys"));
@@ -410,22 +884,74 @@ fn channel_of(
         if matches!(ty, ValueType::Bool | ValueType::Enum) && interp != Interp::Hold {
             return refuse("bad_interp", format!("{kpath}/interp"));
         }
-        if matches!(interp, Interp::Spring { .. }) && ty != ValueType::F32 {
+        if matches!(
+            interp,
+            Interp::Spring(_) | Interp::Auto { .. } | Interp::CatmullRom
+        ) && ty != ValueType::F32
+        {
             return refuse("bad_interp", format!("{kpath}/interp"));
         }
-        keys.push(Key {
-            id: kid.clone(),
-            t,
-            value,
-            interp,
-        });
+        let mut k = Key::new(kid, t, value, interp);
+        // A spring key's starting rate, per component, in value per second.
+        k.velocity = match key.get("velocity") {
+            None => Vec::new(),
+            Some(Value::Array(list)) => list
+                .iter()
+                .enumerate()
+                .map(|(i, v)| number(Some(v), &format!("{kpath}/velocity/{i}")))
+                .collect::<Result<_, _>>()?,
+            v => vec![number(v, &format!("{kpath}/velocity"))?],
+        };
+        keys.push(k);
+    }
+    let (before, after) = extrapolate_of(c.get("extrapolate"), &format!("{path}/extrapolate"))?;
+    let modifiers = match c.get("modifiers") {
+        None => Vec::new(),
+        Some(Value::Array(list)) => list
+            .iter()
+            .enumerate()
+            .map(|(i, m)| modifier_of(m, ctx, transport, &format!("{path}/modifiers/{i}"), path))
+            .collect::<Result<_, _>>()?,
+        Some(_) => return refuse("bad_doc", format!("{path}/modifiers")),
+    };
+    if !modifiers.is_empty() && ty != ValueType::F32 {
+        return refuse("bad_doc", format!("{path}/modifiers"));
     }
     Ok(Channel {
         id: id.to_string(),
         target,
         ty,
-        curve: Curve::new(keys),
+        curve: Curve::extrapolated(keys, before, after),
+        modifiers,
+        follow: None,
+        range,
     })
+}
+
+/// A channel's `extrapolate`: one mode for both sides, or `{before, after}`; hold when absent.
+fn extrapolate_of(
+    value: Option<&Value>,
+    path: &str,
+) -> Result<(Extrapolate, Extrapolate), Refused> {
+    let one = |v: Option<&Value>, path: &str| match v.and_then(Value::as_str) {
+        None | Some("hold") => Ok(Extrapolate::Hold),
+        Some("linear") => Ok(Extrapolate::Linear),
+        Some("cycle") => Ok(Extrapolate::Cycle),
+        Some("ping_pong") => Ok(Extrapolate::PingPong),
+        Some("cycle_offset") => Ok(Extrapolate::CycleOffset),
+        Some(_) => refuse("bad_doc", path),
+    };
+    match value {
+        None => Ok((Extrapolate::Hold, Extrapolate::Hold)),
+        Some(Value::Object(o)) => Ok((
+            one(o.get("before"), &format!("{path}/before"))?,
+            one(o.get("after"), &format!("{path}/after"))?,
+        )),
+        v => {
+            let both = one(v, path)?;
+            Ok((both, both))
+        }
+    }
 }
 
 fn extend_of(value: Option<&Value>, path: &str) -> Result<Extend, Refused> {
@@ -467,6 +993,10 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
             .map(|m| (m.id.clone(), (m.start, m.end)))
             .collect(),
     };
+    let reduce_holds = transport_map
+        .and_then(|t| t.get("reduced_motion"))
+        .and_then(Value::as_str)
+        != Some("slow");
     let holds = doc.get("profile").and_then(Value::as_str) != Some("film")
         && transport_map
             .and_then(|t| t.get("reduced_motion"))
@@ -478,6 +1008,7 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
             span: None,
             wrap: false,
             holds,
+            reduce_holds,
         },
         Some(t) => {
             let start = match t.get("start") {
@@ -502,6 +1033,7 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
                 span,
                 wrap,
                 holds,
+                reduce_holds,
             }
         }
     };
@@ -509,7 +1041,7 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
     let mut channels = Vec::new();
     for (id, c) in section(doc, "channels")? {
         let path = format!("channels/{id}");
-        channels.push(channel_of(id, c, false, &ctx, &path, &mut labels)?);
+        channels.push(channel_of(id, c, false, &ctx, &transport, &path, &mut labels)?);
     }
     let mut clips = Vec::new();
     for (id, c) in section(doc, "clips")? {
@@ -521,6 +1053,7 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
                 ch,
                 true,
                 &ctx,
+                &transport,
                 &format!("{path}/channels/{cid}"),
                 &mut labels,
             )?);
@@ -562,10 +1095,22 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
     for (id, d) in section(doc, "drivers")? {
         drivers.push(driver_of(id, d)?);
     }
+    let mut controls = Vec::new();
+    for (id, c) in section(doc, "controls")? {
+        let default = match c.get("default") {
+            Some(Value::Number(n)) => n.as_f64().unwrap_or(0.0),
+            Some(Value::Bool(b)) => f64::from(u8::from(*b)),
+            _ => 0.0,
+        };
+        controls.push((id.clone(), default));
+    }
     let mut limits = Vec::new();
+    let mut constraints = Vec::new();
     for (id, c) in section(doc, "constraints")? {
         if let Some(limit) = limit_of(id, c)? {
             limits.push(limit);
+        } else {
+            constraints.push(constraint_of(id, c)?);
         }
     }
     Ok(Motion {
@@ -573,6 +1118,8 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
         channels,
         drivers,
         limits,
+        constraints,
+        controls,
         clips,
         placements,
         markers,

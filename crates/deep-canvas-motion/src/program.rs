@@ -39,6 +39,9 @@ pub struct Field {
 pub enum Op {
     Num(f64),
     Var(usize),
+    /// Item `.0`'s world pose component `.1` (pos, rot, scale, three each), after every write
+    /// to that item and its parents.
+    World(usize, usize),
     Neg,
     /// `+ - * / %` as its byte.
     Bin(u8),
@@ -71,6 +74,29 @@ enum Event {
     Limit(usize, usize),
 }
 
+/// One node of the compiled order (crate::schedule): what runs, in the order it runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Step {
+    Channel(usize),
+    /// Placement `p`'s write `w`.
+    Write(usize, usize),
+    Driver(usize),
+    Limit(usize),
+    Constraint(usize),
+}
+
+/// A constraint compiled to its items' transform slots: each item's first slot.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Compiled {
+    pub(crate) owner: usize,
+    /// The item it reads (a target, a parent, a tip's item), when it reads one: its world
+    /// pose, or one transform group as its channels and drivers write it.
+    pub(crate) other: Option<(usize, Option<usize>)>,
+    /// reach2's lower bone and end, after the owner (its upper bone).
+    pub(crate) chain: [usize; 2],
+    pub(crate) table: Option<crate::constraint::ArcTable>,
+}
+
 /// A placement's write: one clip channel into one bound item's slots, after its target's delay.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Write {
@@ -78,6 +104,57 @@ pub(crate) struct Write {
     pub(crate) delay: i64,
     pub(crate) slot: usize,
     pub(crate) width: usize,
+}
+
+/// The planted wrong programs the #489 acceptance tests must fail, reachable only through
+/// `deep-motion eval`'s `planted` field.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Planted {
+    #[default]
+    None,
+    /// A follow channel that steps from the previous frame's value, not its closed form.
+    FollowStepsFromPreviousFrame,
+    /// A scheduler that orders whole items, not components.
+    SchedulesWholeItems,
+    /// A spring key that ignores its velocity.
+    SpringDropsVelocity,
+    /// A `per_loop` whose period is rounded to a whole flick first.
+    PerLoopRoundsPeriod,
+    /// A transition that restarts from its old target, not from where the value is.
+    TransitionRestarts,
+}
+
+/// One entry on the core's input track (Input track: entries): a control's new value.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Entry {
+    pub t: i64,
+    pub seq: u64,
+    pub control: String,
+    pub value: f64,
+}
+
+/// What an evaluation takes besides the document: the input track's entries, the viewer's
+/// reduced-motion preference, and a planted program.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Options {
+    pub input: Vec<Entry>,
+    pub reduced_motion: bool,
+    pub planted: Planted,
+    /// Times are timeline positions as given: the loop isn't applied.
+    pub unwrap: bool,
+}
+
+/// The input track's hash: SHA-256 over each entry's time, seq, control and value.
+pub fn track_hash(entries: &[Entry]) -> String {
+    let mut bytes = Vec::new();
+    for e in entries {
+        bytes.extend(e.t.to_le_bytes());
+        bytes.extend(e.seq.to_le_bytes());
+        bytes.extend((e.control.len() as u64).to_le_bytes());
+        bytes.extend(e.control.as_bytes());
+        bytes.extend(e.value.to_bits().to_le_bytes());
+    }
+    deep_canvas::canon::sha256_hex(&bytes)
 }
 
 /// The compiled document.
@@ -99,6 +176,15 @@ pub struct Program {
     pub(crate) drivers: Vec<(usize, Vec<Op>)>,
     /// Each limit's first slot (its transform group's) and per-axis bounds, in constraint order.
     pub(crate) limits: Vec<(usize, doc::Bounds)>,
+    /// Each constraint but `limit`, in constraint order.
+    pub(crate) constraints: Vec<Compiled>,
+    /// Every write in the order one evaluation runs them, per component.
+    pub(crate) order: Vec<Step>,
+    /// The order as `<item>.<stage>` steps, each once, as the evaluation first reaches it.
+    pub order_names: Vec<String>,
+    /// Each channel's follow segments, built once per document and input track.
+    pub follows: Vec<Option<crate::follow::Follow>>,
+    pub options: Options,
 }
 
 /// What one evaluation fills, sized by [`Program::state`] and reused frame after frame.
@@ -113,6 +199,12 @@ pub struct State {
     pub iterations: Vec<u32>,
     pub locals: Vec<Option<Local>>,
     pub valid_until: Option<i64>,
+    /// Each follow channel's value, rate and integral.
+    pub follow: Vec<crate::follow::Out>,
+    /// Each limit's, then each other constraint's, op count and stretch (NaN but for reach2).
+    pub reports: Vec<(u64, f64)>,
+    /// The planted follow stepper's last frame: its time and state, per channel.
+    pub(crate) last: Vec<Option<(i64, crate::follow::Out)>>,
 }
 
 fn number(v: Option<&Value>) -> Option<f64> {
@@ -147,7 +239,27 @@ fn authored(item: &Value, path: &[impl AsRef<str>], width: usize, out: &mut [f64
 impl Program {
     /// Compiles `doc`: reads its motion, then gives every target its slots.
     pub fn compile(doc: &Map<String, Value>) -> Result<Program, Refused> {
-        let motion = doc::read(doc)?;
+        Program::compile_with(doc, Options::default())
+    }
+
+    /// [`Program::compile`] with the input track, the view and a planted program.
+    pub fn compile_with(doc: &Map<String, Value>, options: Options) -> Result<Program, Refused> {
+        let mut motion = doc::read(doc)?;
+        if options.planted == Planted::SpringDropsVelocity {
+            for c in &mut motion.channels {
+                c.curve.keys.iter_mut().for_each(|k| k.velocity.clear());
+            }
+        }
+        if options.planted == Planted::PerLoopRoundsPeriod {
+            for c in &mut motion.channels {
+                for m in &mut c.modifiers {
+                    m.round_period();
+                }
+            }
+        }
+        for c in &motion.channels {
+            range_check(c)?;
+        }
         let empty = Map::new();
         let items_json = doc
             .get("items")
@@ -179,6 +291,11 @@ impl Program {
             parents: Vec::new(),
             drivers: Vec::new(),
             limits: Vec::new(),
+            constraints: Vec::new(),
+            order: Vec::new(),
+            order_names: Vec::new(),
+            follows: Vec::new(),
+            options,
             motion: motion.clone(),
         };
         let mut values = 0;
@@ -219,8 +336,11 @@ impl Program {
             let path = format!("drivers/{}", driver.id);
             let mut vars = Vec::new();
             for (name, target) in &driver.vars {
-                let slot = program.slot(items_json, &target.owner, target, 1);
-                vars.push((name.as_str(), slot));
+                let var = match program.world_read(&target.owner, &target.field) {
+                    Some(world) => Var::World(world.0, world.1),
+                    None => Var::Slot(program.slot(items_json, &target.owner, target, 1)),
+                };
+                vars.push((name.as_str(), var));
             }
             let slot = program.slot(items_json, &driver.target.owner, &driver.target, 1);
             program.mark_written(slot);
@@ -245,6 +365,56 @@ impl Program {
                 .limits
                 .push((i * TRANSFORM + 3 * group, limit.bounds));
         }
+        let index_of = |items: &[String], id: &str, path: String| {
+            items.iter().position(|x| x == id).ok_or(Refused {
+                code: "ref_unresolved",
+                path,
+            })
+        };
+        for c in &motion.constraints {
+            use doc::Kind;
+            let path = format!("constraints/{}", c.id);
+            let owner = index_of(&program.items, &c.owner, format!("{path}/owner"))?;
+            // An item ID reads its evaluated world pose; `items/<id>/at/<group>` reads that
+            // group as its channels and drivers write it.
+            let read = |x: &str, at: String| -> Result<(usize, Option<usize>), Refused> {
+                let parts: Vec<&str> = x.split('/').collect();
+                match parts.as_slice() {
+                    ["items", id, "at", g] => {
+                        let g = ["pos", "rot", "scale"].iter().position(|n| n == g).ok_or(Refused { code: "bad_path", path: at.clone() })?;
+                        Ok((index_of(&program.items, id, at)?, Some(g)))
+                    }
+                    [id] => Ok((index_of(&program.items, id, at)?, None)),
+                    _ => Err(Refused { code: "bad_path", path: at }),
+                }
+            };
+            let other = match &c.kind {
+                Kind::ChildOf { parent: x }
+                | Kind::LookAt { target: x }
+                | Kind::Copy { target: x, .. }
+                | Kind::Distance { target: x, .. }
+                | Kind::Reach2 { target: x, .. } => Some(read(x, format!("{path}/target"))?),
+                Kind::FollowTip { item, .. } => Some(read(item, format!("{path}/item"))?),
+                _ => None,
+            };
+            let chain = match &c.kind {
+                Kind::Reach2 { chain, .. } => {
+                    if chain[0] != c.owner {
+                        return Err(Refused { code: "bad_doc", path: format!("{path}/chain") });
+                    }
+                    [
+                        index_of(&program.items, &chain[1], format!("{path}/chain/1"))?,
+                        index_of(&program.items, &chain[2], format!("{path}/chain/2"))?,
+                    ]
+                }
+                _ => [owner; 2],
+            };
+            let table = match &c.kind {
+                Kind::FollowPath { points, .. } => Some(crate::constraint::ArcTable::new(points.clone())),
+                _ => None,
+            };
+            program.constraints.push(Compiled { owner, other, chain, table });
+        }
         let mut at = std::collections::BTreeMap::new();
         for (i, id) in program.items.iter().enumerate() {
             at.entry(id.as_str()).or_insert(i);
@@ -255,7 +425,52 @@ impl Program {
             .iter()
             .filter_map(|(child, parent)| Some((index(child)?, index(parent)?)))
             .collect();
+        program.schedule(program.options.planted == Planted::SchedulesWholeItems)?;
+        program.follows = program.build_follows();
         Ok(program)
+    }
+
+    /// `items/<id>/world/<group>/<k>`: the item and the component of its world pose.
+    fn world_read(&self, owner: &str, field: &[String]) -> Option<(usize, usize)> {
+        let [w, g, k] = field else { return None };
+        if w != "world" {
+            return None;
+        }
+        let g = ["pos", "rot", "scale"].iter().position(|n| n == g)?;
+        let k = k.parse::<usize>().ok().filter(|k| *k < 3)?;
+        Some((self.items.iter().position(|x| x == owner)?, 3 * g + k))
+    }
+
+    /// Each follow channel's segments, over its source's changes: a keyed source's keys, or
+    /// a control's default and then its entries on the input track, in time and seq order.
+    fn build_follows(&self) -> Vec<Option<crate::follow::Follow>> {
+        use crate::follow::{Follow, Model, Source};
+        let reduced = self.options.reduced_motion && self.motion.transport.reduce_holds;
+        self.motion
+            .channels
+            .iter()
+            .map(|c| {
+                let spec = c.follow.as_ref()?;
+                let (initial, changes): (f64, Vec<(i64, f64)>) = match &spec.source {
+                    Source::Keys(keys) => (keys[0].1, keys[1..].to_vec()),
+                    Source::Control(id) => {
+                        let default = self.motion.controls.iter().find(|(c, _)| c == id).map_or(0.0, |c| c.1);
+                        let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == *id).collect();
+                        entries.sort_by_key(|e| (e.t, e.seq));
+                        (default, entries.iter().map(|e| (e.t, e.value)).collect())
+                    }
+                };
+                let mut model = spec.model;
+                // Under reduced motion's hold, a transition on a position, scale or rotation
+                // lands on its target at the change's flick; opacity and color play as written.
+                let moves = matches!(c.target.field.first().map(String::as_str), Some("at"));
+                if let (true, true, Model::Transition { along, .. }) = (reduced, moves, model) {
+                    model = Model::Transition { span: 0, along };
+                }
+                let restart = self.options.planted == Planted::TransitionRestarts;
+                Some(Follow::with(model, initial, &changes, restart))
+            })
+            .collect()
     }
 
     /// Marks the field at `slot` as a bool or an enum channel's, so it is written as one.
@@ -339,6 +554,9 @@ impl Program {
             iterations: vec![0; self.channels.len()],
             locals: vec![None; self.motion.placements.len()],
             valid_until: None,
+            follow: vec![Default::default(); self.motion.channels.len()],
+            reports: vec![(0, f64::NAN); self.limits.len() + self.constraints.len()],
+            last: vec![None; self.motion.channels.len()],
         }
     }
 
@@ -365,55 +583,86 @@ impl Program {
         mut note: impl FnMut(&Event, &[f64], &[f64]),
     ) {
         let motion = &self.motion;
-        let (doc_t, pass) = crate::eval::position(motion, t);
+        let (doc_t, pass) = if self.options.unwrap {
+            (t, 0)
+        } else {
+            crate::eval::position(motion, t)
+        };
         state.t = t;
         state.doc_t = doc_t;
         state.pass = pass;
         state.slots.copy_from_slice(&self.base);
-        for (c, channel) in motion.channels.iter().enumerate() {
-            let (slot, width) = self.channels[c];
-            let run = &mut state.values[self.values[c]..self.values[c] + width];
-            state.iterations[c] = channel.curve.sample_into(doc_t, run);
-            state.slots[slot..slot + width].copy_from_slice(run);
-            note(&Event::Channel(c), &[], &state.slots);
-        }
-        let mut scratch = [0.0; 3];
         for (p, placement) in motion.placements.iter().enumerate() {
             state.locals[p] = placement.local(motion, doc_t);
-            let Some(clip) = motion.clip(&placement.clip) else {
-                continue;
-            };
-            for w in &self.placements[p] {
-                let Some(l) = placement.local_after(motion, doc_t, w.delay) else {
-                    continue;
-                };
-                let run = &mut scratch[..w.width.min(3)];
-                clip.channels[w.channel].curve.sample_into(l.local, run);
-                state.slots[w.slot..w.slot + run.len()].copy_from_slice(run);
-                note(
-                    &Event::Placement(p, w.slot..w.slot + run.len()),
-                    &[],
-                    &state.slots,
-                );
-            }
         }
-        // Drivers after the channels, then limits after both (Driver; Constraint).
-        for (d, (slot, ops)) in self.drivers.iter().enumerate() {
-            let value = evaluate_ops(ops, &state.slots);
-            if value.is_finite() {
-                let before = [state.slots[*slot]];
-                state.slots[*slot] = value;
-                note(&Event::Driver(d), &before, &state.slots);
-            }
-        }
-        for (l, (first, bounds)) in self.limits.iter().enumerate() {
-            for (k, b) in bounds.iter().enumerate() {
-                let Some((lo, hi)) = b else { continue };
-                let v = state.slots[first + k];
-                let held = v.clamp(*lo, *hi);
-                if held != v {
-                    state.slots[first + k] = held;
-                    note(&Event::Limit(l, k), &[v], &state.slots);
+        let mut scratch = [0.0; 3];
+        for step in &self.order {
+            match *step {
+                Step::Channel(c) => {
+                    let channel = &motion.channels[c];
+                    let (slot, width) = self.channels[c];
+                    let run = &mut state.values[self.values[c]..self.values[c] + width];
+                    if let Some(follow) = &self.follows[c] {
+                        let out = if self.options.planted == Planted::FollowStepsFromPreviousFrame {
+                            follow.step_from(state.last[c], doc_t)
+                        } else {
+                            follow.at(doc_t)
+                        };
+                        state.last[c] = Some((doc_t, out));
+                        state.follow[c] = out;
+                        run[0] = out.value;
+                    } else {
+                        state.iterations[c] = channel.curve.sample_into(doc_t, run);
+                    }
+                    for m in &channel.modifiers {
+                        run[0] = m.apply(run[0], doc_t - motion.transport.start);
+                    }
+                    state.slots[slot..slot + width].copy_from_slice(run);
+                    note(&Event::Channel(c), &[], &state.slots);
+                }
+                Step::Write(p, w) => {
+                    let placement = &motion.placements[p];
+                    let Some(clip) = motion.clip(&placement.clip) else {
+                        continue;
+                    };
+                    let w = &self.placements[p][w];
+                    let Some(l) = placement.local_after(motion, doc_t, w.delay) else {
+                        continue;
+                    };
+                    let run = &mut scratch[..w.width.min(3)];
+                    clip.channels[w.channel].curve.sample_into(l.local, run);
+                    state.slots[w.slot..w.slot + run.len()].copy_from_slice(run);
+                    note(
+                        &Event::Placement(p, w.slot..w.slot + run.len()),
+                        &[],
+                        &state.slots,
+                    );
+                }
+                Step::Driver(d) => {
+                    let (slot, ops) = &self.drivers[d];
+                    let slots = &state.slots;
+                    let value = evaluate_ops(ops, slots, |i, k| self.world(slots, i)[k]);
+                    if value.is_finite() {
+                        let before = [state.slots[*slot]];
+                        state.slots[*slot] = value;
+                        note(&Event::Driver(d), &before, &state.slots);
+                    }
+                }
+                Step::Limit(l) => {
+                    let (first, bounds) = &self.limits[l];
+                    state.reports[l] = (6, f64::NAN);
+                    for (k, b) in bounds.iter().enumerate() {
+                        let Some((lo, hi)) = b else { continue };
+                        let v = state.slots[first + k];
+                        let held = v.clamp(*lo, *hi);
+                        if held != v {
+                            state.slots[first + k] = held;
+                            note(&Event::Limit(l, k), &[v], &state.slots);
+                        }
+                    }
+                }
+                Step::Constraint(k) => {
+                    state.reports[self.limits.len() + k] = self.constrain(k, &mut state.slots);
                 }
             }
         }
@@ -442,6 +691,297 @@ impl Program {
             })
             .collect();
         Some((transform, fields))
+    }
+}
+
+/// Refuses a channel whose keys, Bézier extremes or spring peaks leave its hard range, naming
+/// the key and the value (Channel and key: "Bézier extremes and spring peaks are checked in
+/// closed form").
+fn range_check(c: &doc::Channel) -> Result<(), Refused> {
+    use crate::curve::{Bezier, Interp};
+    let Some((lo, hi)) = c.range else { return Ok(()) };
+    let keys = &c.curve.keys;
+    let out = |v: f64| v < lo || v > hi;
+    let refuse = |key: &str, what: String| Refused {
+        code: "out_of_range",
+        path: format!("channels/{}/keys/{key}: {what}, outside the range [{lo}, {hi}]", c.id),
+    };
+    for (i, a) in keys.iter().enumerate() {
+        if let Some(v) = a.value.iter().find(|v| out(**v)) {
+            return Err(refuse(&a.id, format!("its value {v}")));
+        }
+        let Some(b) = keys.get(i + 1) else { continue };
+        let span = (b.t - a.t) as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+        for comp in 0..a.value.len() {
+            let (va, vb) = (a.value[comp], b.value[comp]);
+            match a.interp {
+                Interp::Spring(spring) => {
+                    let v0 = a.velocity.get(comp).copied().unwrap_or(0.0);
+                    let at_end = spring.at(va - vb, v0, span).e;
+                    for t in spring.extremes(va - vb, v0, span).into_iter().flatten() {
+                        let v = vb + spring.at(va - vb, v0, t).e;
+                        if out(v) {
+                            return Err(refuse(&a.id, format!("its spring peaks at {v} {t} s after the key")));
+                        }
+                    }
+                    if out(vb + at_end) {
+                        return Err(refuse(&a.id, format!("its spring reaches {} by the next key", vb + at_end)));
+                    }
+                }
+                Interp::Bezier { x1, y1, x2, y2 } => {
+                    let bz = Bezier::new(x1, y1, x2, y2);
+                    // y'(s) = 0: the quadratic 3a·s² + 2b·s + c of the cubic's y.
+                    let (cc, bb) = (3.0 * y1, 3.0 * (y2 - y1) - 3.0 * y1);
+                    let aa = 1.0 - cc - bb;
+                    let (qa, qb, qc) = (3.0 * aa, 2.0 * bb, cc);
+                    let mut roots = Vec::new();
+                    if qa.abs() < 1e-15 {
+                        if qb != 0.0 {
+                            roots.push(-qc / qb);
+                        }
+                    } else {
+                        let d = qb * qb - 4.0 * qa * qc;
+                        if d >= 0.0 {
+                            let r = deep_canvas::ops::sqrt(d);
+                            roots.extend([(-qb - r) / (2.0 * qa), (-qb + r) / (2.0 * qa)]);
+                        }
+                    }
+                    for s in roots.into_iter().filter(|s| *s > 0.0 && *s < 1.0) {
+                        let v = va + (vb - va) * bz.y(s);
+                        if out(v) {
+                            return Err(refuse(&a.id, format!("its Bézier reaches {v}")));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+/// An item's pose from its nine transform slots starting at `first`.
+fn pose(slots: &[f64], first: usize) -> crate::constraint::Pose {
+    let g = |k: usize| [slots[first + 3 * k], slots[first + 3 * k + 1], slots[first + 3 * k + 2]];
+    crate::constraint::Pose {
+        pos: g(0),
+        rot: g(1),
+        scale: g(2),
+    }
+}
+
+/// Slots `first + 3·group ..+3` of each group in `groups`.
+fn groups(first: usize, groups: &[usize]) -> Vec<usize> {
+    groups
+        .iter()
+        .flat_map(|g| first + 3 * g..first + 3 * g + 3)
+        .collect()
+}
+
+impl Program {
+    /// The item a slot belongs to: its transform's, or the field's item.
+    fn item_of(&self, slot: usize) -> String {
+        if slot < self.items.len() * TRANSFORM {
+            return self.items[slot / TRANSFORM].clone();
+        }
+        self.fields
+            .iter()
+            .find(|f| (f.slot..f.slot + f.width).contains(&slot))
+            .and_then(|f| f.item)
+            .map_or_else(String::new, |i| self.items[i].clone())
+    }
+
+    /// Constraint `k`'s reads and writes, as slots.
+    fn constraint_slots(&self, k: usize) -> (Vec<usize>, Vec<usize>) {
+        use doc::Kind;
+        let c = &self.constraints[k];
+        let own = c.owner * TRANSFORM;
+        let other = match c.other {
+            Some((i, None)) => self.world_slots(i),
+            Some((i, Some(g))) => groups(i * TRANSFORM, &[g]),
+            None => Vec::new(),
+        };
+        let (reads, writes) = match &self.motion.constraints[k].kind {
+            Kind::ChildOf { .. } => (groups(own, &[0, 1, 2]), groups(own, &[0, 1, 2])),
+            Kind::LookAt { .. } => (groups(own, &[0, 1]), groups(own, &[1])),
+            Kind::Copy { what, .. } => (vec![], groups(own, &[what.group()])),
+            Kind::Distance { .. } => (groups(own, &[0]), groups(own, &[0])),
+            Kind::Reach2 { .. } => {
+                let [lower, end] = c.chain.map(|i| i * TRANSFORM);
+                (
+                    [groups(own, &[0, 1, 2]), groups(lower, &[0, 1]), groups(end, &[0])].concat(),
+                    [groups(own, &[1, 2]), groups(lower, &[1])].concat(),
+                )
+            }
+            Kind::FollowPath { .. } | Kind::RestOn { .. } | Kind::SpringChain { .. } | Kind::FollowTip { .. } => {
+                (groups(own, &[0, 1]), groups(own, &[0, 1]))
+            }
+        };
+        ([other, reads].concat(), writes)
+    }
+
+    /// The slots an item's world pose reads: its own nine and each ancestor's.
+    fn world_slots(&self, i: usize) -> Vec<usize> {
+        let mut out = groups(i * TRANSFORM, &[0, 1, 2]);
+        let mut at = i;
+        while let Some(&(_, p)) = self.parents.iter().find(|(c, _)| *c == at) {
+            out.extend(groups(p * TRANSFORM, &[0, 1, 2]));
+            at = p;
+        }
+        out
+    }
+
+    /// Item `i`'s world pose from the slots: its own, under each ancestor's (child-of parenting).
+    fn world(&self, slots: &[f64], i: usize) -> [f64; TRANSFORM] {
+        let mut out = [0.0; TRANSFORM];
+        out.copy_from_slice(&slots[i * TRANSFORM..(i + 1) * TRANSFORM]);
+        if let Some(&(_, p)) = self.parents.iter().find(|(c, _)| *c == i) {
+            let parent = self.world(slots, p);
+            let mut both = [0.0; 2 * TRANSFORM];
+            both[..TRANSFORM].copy_from_slice(&parent);
+            both[TRANSFORM..].copy_from_slice(&out);
+            parent_to(&mut both, 1, 0);
+            out.copy_from_slice(&both[TRANSFORM..]);
+        }
+        out
+    }
+
+    /// Orders every write per component (crate::schedule), refusing a loop with `cycle`
+    /// naming its entries; `whole_items` is the planted scheduler that orders whole items.
+    pub(crate) fn schedule(&mut self, whole_items: bool) -> Result<(), Refused> {
+        use crate::schedule::{Node, Stage};
+        let mut steps = Vec::new();
+        let mut nodes = Vec::new();
+        let mut push = |step: Step, node: Node| {
+            steps.push(step);
+            nodes.push(node);
+        };
+        for (c, &(slot, width)) in self.channels.iter().enumerate() {
+            let entry = format!("channels/{}", self.motion.channels[c].id);
+            push(Step::Channel(c), Node { entry, item: self.item_of(slot), stage: Stage::Channels, reads: vec![], writes: (slot..slot + width).collect() });
+        }
+        for (p, writes) in self.placements.iter().enumerate() {
+            for (w, write) in writes.iter().enumerate() {
+                let entry = format!("placements/{}", self.motion.placements[p].id);
+                let slots = (write.slot..write.slot + write.width.min(3)).collect();
+                push(Step::Write(p, w), Node { entry, item: self.item_of(write.slot), stage: Stage::Channels, reads: vec![], writes: slots });
+            }
+        }
+        for (d, (slot, ops)) in self.drivers.iter().enumerate() {
+            let reads = ops
+                .iter()
+                .flat_map(|op| match op {
+                    Op::Var(s) => vec![*s],
+                    Op::World(i, _) => self.world_slots(*i),
+                    _ => vec![],
+                })
+                .collect();
+            let entry = format!("drivers/{}", self.motion.drivers[d].id);
+            push(Step::Driver(d), Node { entry, item: self.item_of(*slot), stage: Stage::Driver, reads, writes: vec![*slot] });
+        }
+        for (l, (first, _)) in self.limits.iter().enumerate() {
+            let slots: Vec<usize> = (*first..first + 3).collect();
+            let entry = format!("constraints/{}", self.motion.limits[l].id);
+            push(Step::Limit(l), Node { entry, item: self.item_of(*first), stage: Stage::Constraints, reads: slots.clone(), writes: slots });
+        }
+        for k in 0..self.constraints.len() {
+            let (reads, writes) = self.constraint_slots(k);
+            let entry = format!("constraints/{}", self.motion.constraints[k].id);
+            let item = self.items[self.constraints[k].owner].clone();
+            push(Step::Constraint(k), Node { entry, item, stage: Stage::Constraints, reads, writes });
+        }
+        let order = crate::schedule::order(&nodes, whole_items).map_err(|cycle| Refused {
+            code: "cycle",
+            path: cycle
+                .iter()
+                .map(|&i| format!("{} ({})", nodes[i].entry, nodes[i].item))
+                .collect::<Vec<_>>()
+                .join(" → "),
+        })?;
+        self.order = order.iter().map(|&i| steps[i]).collect();
+        // The order by item and stage: an item's transform composes before its first
+        // constraint, or after its last write when it has none.
+        let mut names: Vec<String> = Vec::new();
+        let last_of = |item: &str| order.iter().rposition(|&i| nodes[i].item == item);
+        let mut composed = std::collections::BTreeSet::new();
+        for (at, &i) in order.iter().enumerate() {
+            let node = &nodes[i];
+            if node.stage == Stage::Constraints && composed.insert(node.item.clone()) {
+                names.push(format!("{}.transform", node.item));
+            }
+            names.push(format!("{}.{}", node.item, node.stage.name()));
+            if last_of(&node.item) == Some(at) && composed.insert(node.item.clone()) {
+                names.push(format!("{}.transform", node.item));
+            }
+        }
+        names.dedup();
+        self.order_names = names;
+        Ok(())
+    }
+
+    /// Runs constraint `k` on the slots, mixing what it writes by its influence.
+    fn constrain(&self, k: usize, slots: &mut [f64]) -> (u64, f64) {
+        use crate::constraint as cs;
+        use doc::Kind;
+        let c = &self.constraints[k];
+        let spec = &self.motion.constraints[k];
+        let own_at = c.owner * TRANSFORM;
+        let own = pose(slots, own_at);
+        let other = match c.other {
+            Some((i, None)) => pose(&self.world(slots, i), 0),
+            Some((i, Some(_))) => pose(slots, i * TRANSFORM),
+            None => own,
+        };
+        let mut ops = cs::Ops::default();
+        let mut extra: Option<(usize, f64)> = None;
+        let mut stretch = f64::NAN;
+        let solved = match &spec.kind {
+            Kind::ChildOf { .. } => cs::child_of(&other, &own, &mut ops),
+            Kind::LookAt { .. } => cs::look_at(&own, other.pos, &mut ops),
+            Kind::Copy { what, .. } => cs::copy(&own, *what, &other, &mut ops),
+            Kind::Distance { min, max, .. } => cs::distance(&own, other.pos, *min, *max, &mut ops),
+            Kind::FollowPath { fraction, orient, offset, .. } => match &c.table {
+                Some(table) => cs::follow_path(&own, table, *fraction, *orient, *offset, &mut ops),
+                None => own,
+            },
+            Kind::FollowTip { offset, rotate, .. } => {
+                cs::follow_tip(&own, [other.pos[0], other.pos[1]], other.rot[2], *offset, *rotate, &mut ops)
+            }
+            Kind::RestOn { ground, bottom, offset, max_drop } => {
+                cs::rest_on(&own, *bottom, *ground, *offset, *max_drop, &mut ops).unwrap_or(own)
+            }
+            Kind::SpringChain { .. } => own,
+            Kind::Reach2 { bend, cartoon, .. } => {
+                let [lower, end] = c.chain.map(|i| pose(slots, i * TRANSFORM));
+                let length = |p: &cs::Pose| deep_canvas::ops::hypot(p.pos[0], p.pos[1]);
+                let r = cs::reach2(
+                    [own.pos[0], own.pos[1]],
+                    [length(&lower), length(&end)],
+                    [other.pos[0], other.pos[1]],
+                    *bend,
+                    *cartoon,
+                    &mut ops,
+                );
+                // The lower bone's turn is its own, after the upper bone's.
+                extra = Some((c.chain[0] * TRANSFORM + 5, r.lower - r.upper));
+                stretch = r.stretch;
+                let mut out = own;
+                out.rot[2] = r.upper;
+                out.scale = [r.stretch, r.stretch, own.scale[2] * r.stretch];
+                out
+            }
+        };
+        let w = spec.influence;
+        let (_, writes) = self.constraint_slots(k);
+        let after = [solved.pos, solved.rot, solved.scale].concat();
+        for s in writes.iter().filter(|s| (own_at..own_at + TRANSFORM).contains(s)) {
+            let v = after[s - own_at];
+            slots[*s] += w * (v - slots[*s]);
+        }
+        if let Some((slot, v)) = extra {
+            slots[slot] += w * (v - slots[slot]);
+        }
+        (ops.0, stretch)
     }
 }
 
@@ -574,9 +1114,16 @@ impl Program {
 /// A driver's postfix steps as ops over slots: each name its var's slot. `None` past
 /// [`DRIVER_OPS`] steps, for a function outside the closed list, or for a stack that doesn't
 /// end with one value.
+/// What a driver's var reads: a slot, or a component of an item's world pose.
+#[derive(Clone, Copy)]
+enum Var {
+    Slot(usize),
+    World(usize, usize),
+}
+
 fn compile_ops(
     steps: &[deep_canvas::document::packs::ExprStep],
-    vars: &[(&str, usize)],
+    vars: &[(&str, Var)],
 ) -> Option<Vec<Op>> {
     use deep_canvas::document::packs::ExprStep;
     if steps.len() > DRIVER_OPS {
@@ -587,7 +1134,13 @@ fn compile_ops(
     for step in steps {
         let (op, delta) = match step {
             ExprStep::Num(n) => (Op::Num(*n), 1),
-            ExprStep::Name(n) => (Op::Var(vars.iter().find(|(v, _)| v == n)?.1), 1),
+            ExprStep::Name(n) => (
+                match vars.iter().find(|(v, _)| v == n)?.1 {
+                    Var::Slot(s) => Op::Var(s),
+                    Var::World(i, k) => Op::World(i, k),
+                },
+                1,
+            ),
             ExprStep::Neg => (Op::Neg, 0),
             ExprStep::Bin(c) => (Op::Bin(*c as u8), -1),
             ExprStep::Call(name, n) => {
@@ -611,7 +1164,7 @@ fn compile_ops(
 }
 
 /// A driver's value over the slots, with a fixed stack and no allocation; NaN on `/` or `%` by 0.
-fn evaluate_ops(ops: &[Op], slots: &[f64]) -> f64 {
+fn evaluate_ops(ops: &[Op], slots: &[f64], world: impl Fn(usize, usize) -> f64) -> f64 {
     let mut stack = [0.0f64; DRIVER_OPS];
     let mut n = 0;
     for op in ops {
@@ -622,6 +1175,10 @@ fn evaluate_ops(ops: &[Op], slots: &[f64]) -> f64 {
             }
             Op::Var(s) => {
                 stack[n] = slots[s];
+                n += 1;
+            }
+            Op::World(i, k) => {
+                stack[n] = world(i, k);
                 n += 1;
             }
             Op::Neg => stack[n - 1] = -stack[n - 1],

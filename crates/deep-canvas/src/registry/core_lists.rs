@@ -634,6 +634,10 @@ fn logic_service() -> RegistryDef {
 /// The code a cycle through constraints is refused with at check (Item and kind: relations).
 pub const RELATION_CYCLE: &str = "relation_cycle";
 
+/// The code motion refuses a loop of channels, drivers and constraints with at check (Driver:
+/// "cycles are refused"), the other answer the kit's cycle rule takes.
+pub const CYCLE: &str = "cycle";
+
 fn strings<'a>(v: &'a Value, at: &str) -> Vec<&'a str> {
     v.pointer(at)
         .and_then(Value::as_array)
@@ -712,11 +716,11 @@ fn constraint_cycle(v: &Value) -> Result<(), String> {
     let mut named = chain.clone();
     named.sort_unstable();
     named.dedup();
-    if code == Some(RELATION_CYCLE) && named.len() >= 2 {
+    if matches!(code, Some(RELATION_CYCLE | CYCLE)) && named.len() >= 2 {
         Ok(())
     } else {
         Err(format!(
-            "a two-item cycle through it is answered {code:?} naming {chain:?}, not refused `{RELATION_CYCLE}` naming both"
+            "a two-item cycle through it is answered {code:?} naming {chain:?}, not refused `{RELATION_CYCLE}` or `{CYCLE}` naming both"
         ))
     }
 }
