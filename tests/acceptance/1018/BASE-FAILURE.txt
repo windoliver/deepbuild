@@ -1,0 +1,77 @@
+Base-commit run of tests/acceptance/1018 (issue #1018), written blind.
+
+Base: 69803b94 (origin/main), nothing of #1018 applied. Linux arm64, 20 cores (not a reference Mac), load average
+about 15 to 17. Node 24.22.0 from /var/tmp/deep40 (the copy the runner's bubblewrap sandbox can read), after npm ci,
+npm run build --workspaces and cargo build -p deep-hook in this worktree. Command:
+
+  /var/tmp/deep40/node/bin/node node_modules/vitest/vitest.mjs run --root tests/acceptance/1018
+
+One full run, 02:22 to 02:26 on 2026-11-03. Every test reached its judgement or, for a plant, the hub refused it.
+
+Expected failure per test:
+- AC1: the base hub runs a base run for each of the five claims (it keys runs by session): the count fails at
+  `one base run ... yet 5 ran; the second is run:...`, naming the second base run. That is the wrong program AC1 names.
+- AC2: the second claim ran price.sh and format.sh itself (nothing carries across sessions): it fails at
+  `.deepbuild/checks/price.sh leaves src/cart.ts out, so the two claims share it`.
+- AC3: the base hub ignores `runs: 3` and each claim runs its own check: the second session's claim reads PASS with
+  2 distinct clean runs on the key (its own and the first session's, which it never read): fails at `the check needs 3`.
+- AC4: session A's run passed before the flip and session B's own run failed after it; the base hub judges each claim
+  by its own run alone, so A reads PASS and B FAIL: fails at `it must be INCONCLUSIVE`.
+- AC5: the base hub has no held-out variants: A's claim runs only the visible fixture and passes, so it fails at
+  `must run the held-out variant`.
+- The five planted-program tests: the base hub refuses each DEEP_HUB_PLANT name (`names no planted program`), so each
+  is BLOCKED (the hub doesn't start), never a pass. On the base, the base hub itself stands where AC1's and AC2's wrong
+  programs stand (it keys runs by session, and carries nothing), and fails AC1 and AC2 above.
+- AC6 (budgets.test.ts): skipped as INCONCLUSIVE (`platform linux: a budget counts only on a reference Mac on mains
+  power`), never a pass.
+
+==== Summary
+
+ ❯ hub.test.ts (10 tests | 10 failed) 250397ms
+   ❯ AC1 #1018.a7bf0857 one base run serves five sessions: five worktrees from one commit claim a fix whose base run takes 60 s, one base run runs and four read it as carried, all five verdicts within 70 s of the last claim (2)
+     × AC1 five sessions each claim the fix: one base run runs, four claims read it as carried naming it, all PASS within 70 s of the last claim 69820ms
+     × AC1 (wrong program keys-runs-by-session) a runner that keys runs by session runs five base runs and fails, naming the second 3717ms
+   ❯ AC2 #1018.ce3898ef carry follows read files: two claims differing only in src/cart.ts share every check whose inputs leave it out, and each runs its own journey:checkout, which reads it (2)
+     × AC2 the second claim reads price and format as carried and runs its own journey:checkout 14449ms
+     × AC2 (wrong program key-leaves-out-reads) a key that leaves out read files carries the journey and fails, naming src/cart.ts 1847ms
+   ❯ AC3 #1018.13494a7e runs are counted once: a check that needs 3 clean runs reaches PASS in a second session only once 3 distinct runs exist on its key (2)
+     × AC3 three sessions claim one after another: each later claim reaches PASS, and only with 3 distinct clean runs on the key 21890ms
+     × AC3 (wrong program counts-shared-run-per-claim) a counter that counts a shared run once per claim passes on fewer than 3 runs and fails this test 1292ms
+   ❯ AC4 #1018.9f44c904 flakes are seen across sessions: a key with a PASS from session A and a FAIL from session B reads INCONCLUSIVE in both claims, naming both runs (2)
+     × AC4 a run passes before the flip and one fails after it: both claims read INCONCLUSIVE naming both runs 126487ms
+     × AC4 (wrong program keeps-latest-result-per-key) a store that keeps only the latest result per key reads PASS or FAIL and fails 734ms
+   ❯ AC5 #1018.681b96a8 held-out variants stay hidden: a variant run for session A's claim carries its verdict to session B's claim on the same key, and neither session's tool output, evidence or verdict line holds the variant's fixture or output (2)
+     × AC5 the special case fails the held-out variant on A's claim, B reads that verdict as carried, and the variant shows nowhere either session sees 9474ms
+     × AC5 (wrong program carry-copies-evidence) a carry that copies the run's evidence whole fails, naming the variant 679ms
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  10 failed | 1 skipped (11)
+   Start at  02:22:22
+   Duration  250.72s (tests 100%)
+
+==== Each failure's first line (cut at 700 characters; the full messages also print each claim's verdicts and runs)
+ FAIL  hub.test.ts > AC1 #1018.a7bf0857 one base run serves five sessions: five worktrees from one commit claim a fix whose base run takes 60 s, one base run runs and four read it as carried, all five verdicts within 70 s of the last claim > AC1 five sessions each claim the fix: one base run runs, four claims read it as carried naming it, all PASS within 70 s of the last claim
+AssertionError: one base run of .deepbuild/checks/cart-discount.sh must run for the five claims, yet 5 ran; the second is run:01M6GEWZX4QA4Y7WPV2TZDVVY3: run:01M6GEWZNA74233Z6AP0ZK62SY (.deepbuild/checks/cart-discount.sh on the merge base for claim:01M6GEWXZFYMBNTE1PB1GMT26P: failed); run:01M6GEWZX4QA4Y7WPV2TZDVVY3 (.deepbuild/checks/cart-discount.sh on the merge base for claim:01M6GEWY04CP4REF72P2R15TAY: failed); run:01M6GEWZY4TRKM0NFKHVEY9Z9C (.deepbuild/checks/cart-discount.sh on the merge base for claim:01M6GEWY17VJAXTGW9JVHYCKCC: failed); run:01M6GEWZZ5KGWNTDYN6XAJ454M (.deepbuild/checks/cart-discount.sh on the merge base for claim:01M6GEWY1DZ1H0ZN9517HAQGM7: failed); run:01M6GEX00DM34W
+ FAIL  hub.test.ts > AC1 #1018.a7bf0857 one base run serves five sessions: five worktrees from one commit claim a fix whose base run takes 60 s, one base run runs and four read it as carried, all five verdicts within 70 s of the last claim > AC1 (wrong program keys-runs-by-session) a runner that keys runs by session runs five base runs and fails, naming the second
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=keys-runs-by-session did not start: file://<worktree>/packages/hub/dist/plant.js:60
+Error: DEEP_HUB_PLANT=keys-runs-by-session names no planted program
+ FAIL  hub.test.ts > AC2 #1018.ce3898ef carry follows read files: two claims differing only in src/cart.ts share every check whose inputs leave it out, and each runs its own journey:checkout, which reads it > AC2 the second claim reads price and format as carried and runs its own journey:checkout
+AssertionError: .deepbuild/checks/price.sh leaves src/cart.ts out, so the two claims share it: one run, the first claim's, and claim:01M6GEZC7N9XH2AK6CVX92G670 runs none: claims [{"tree":"w1","claim":"claim:01M6GEZ72834J4XWCZ47303VMT","outcome":"PASS","verdicts":[{"outcome":"PASS","reasons":[".deepbuild/checks/price.sh: PASS on 1 clean run",".deepbuild/checks/format.sh: PASS on 1 clean run",".deepbuild/checks/journey:checkout: PASS on 1 clean run"],"ts":1793701422170}],"line":"PASS 3/3 · next: you · receipt\nwrote /tmp/dh1018-zzOmwe/w1/src/cart.ts"},{"tree":"w2","claim":"claim:01M6GEZC7N9XH2AK6CVX92G670","outcome":"PASS","verdicts":[{"outcome":"PASS","reasons":[".deepbuild/checks/format.sh
+ FAIL  hub.test.ts > AC2 #1018.ce3898ef carry follows read files: two claims differing only in src/cart.ts share every check whose inputs leave it out, and each runs its own journey:checkout, which reads it > AC2 (wrong program key-leaves-out-reads) a key that leaves out read files carries the journey and fails, naming src/cart.ts
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=key-leaves-out-reads did not start: file://<worktree>/packages/hub/dist/plant.js:60
+Error: DEEP_HUB_PLANT=key-leaves-out-reads names no planted program
+ FAIL  hub.test.ts > AC3 #1018.13494a7e runs are counted once: a check that needs 3 clean runs reaches PASS in a second session only once 3 distinct runs exist on its key > AC3 three sessions claim one after another: each later claim reaches PASS, and only with 3 distinct clean runs on the key
+AssertionError: claim:01M6GEZWAH0PYMWAV9HNRJZ5SH read PASS with 2 distinct clean runs on its key (run:01M6GEZQXFQSMPNPRX2SSXNT03, run:01M6GEZWRCGE4ZMKGZDCSVQ48W); the check needs 3, and a run read by several claims counts once: claims [{"tree":"w1","claim":"claim:01M6GEZQM4CV170JBVYX0ZQ6GW","outcome":"PASS","verdicts":[{"outcome":"PASS","reasons":[".deepbuild/checks/steady.sh: PASS on 1 clean run"],"ts":1793701438656}],"line":"PASS 1/1 · next: you · receipt\nwrote /tmp/dh1018-Qzzx4H/w1/src/cart.ts"},{"tree":"w2","claim":"claim:01M6GEZWAH0PYMWAV9HNRJZ5SH","outcome":"PASS","verdicts":[{"outcome":"PASS","reasons":[".deepbuild/checks/steady.sh: PASS on 1 clean run"],"ts":1793701443288}],"line"
+ FAIL  hub.test.ts > AC3 #1018.13494a7e runs are counted once: a check that needs 3 clean runs reaches PASS in a second session only once 3 distinct runs exist on its key > AC3 (wrong program counts-shared-run-per-claim) a counter that counts a shared run once per claim passes on fewer than 3 runs and fails this test
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=counts-shared-run-per-claim did not start: file://<worktree>/packages/hub/dist/plant.js:60
+Error: DEEP_HUB_PLANT=counts-shared-run-per-claim names no planted program
+ FAIL  hub.test.ts > AC4 #1018.9f44c904 flakes are seen across sessions: a key with a PASS from session A and a FAIL from session B reads INCONCLUSIVE in both claims, naming both runs > AC4 a run passes before the flip and one fails after it: both claims read INCONCLUSIVE naming both runs
+AssertionError: claim:01M6GF0BEBQ9NKZ1VPVT09JWKE reads a key with a PASS (run:01M6GF0BK07KE6SHGTWAWB34HX) and a FAIL (run:01M6GF4216B745CN6Z5XTVJW0A): it must be INCONCLUSIVE: claims [{"tree":"w1","claim":"claim:01M6GF0BEBQ9NKZ1VPVT09JWKE","outcome":"PASS","verdicts":[{"outcome":"PASS","reasons":[".deepbuild/checks/flaky.sh: PASS on 1 clean run"],"ts":1793701458729}],"line":"PASS 1/1 · next: you · receipt\nwrote /tmp/dh1018-bZPhkt/w1/src/cart.ts, /tmp/dh1018-bZPhkt/w1/test/flip.json"},{"tree":"w2","claim":"claim:01M6GF41KK5FPJY28SF1489NFX","outcome":"FAIL","verdicts":[{"outcome":"FAIL","reasons":[".deepbuild/checks/flaky.sh: failed on every real run: the discount comes off, before the flip
+ FAIL  hub.test.ts > AC4 #1018.9f44c904 flakes are seen across sessions: a key with a PASS from session A and a FAIL from session B reads INCONCLUSIVE in both claims, naming both runs > AC4 (wrong program keeps-latest-result-per-key) a store that keeps only the latest result per key reads PASS or FAIL and fails
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=keeps-latest-result-per-key did not start: file://<worktree>/packages/hub/dist/plant.js:60
+Error: DEEP_HUB_PLANT=keeps-latest-result-per-key names no planted program
+ FAIL  hub.test.ts > AC5 #1018.681b96a8 held-out variants stay hidden: a variant run for session A's claim carries its verdict to session B's claim on the same key, and neither session's tool output, evidence or verdict line holds the variant's fixture or output > AC5 the special case fails the held-out variant on A's claim, B reads that verdict as carried, and the variant shows nowhere either session sees
+AssertionError: claim:01M6GF4804PDBS4GWTM20QDHQD's check must run the held-out variant as well as the visible fixture, and the special case fails it: claims [{"tree":"w1","claim":"claim:01M6GF4804PDBS4GWTM20QDHQD","outcome":"PASS","verdicts":[{"outcome":"PASS","reasons":[".deepbuild/checks/cart-fixture.sh: PASS on 1 clean run"],"ts":1793701585677}],"line":"PASS 1/1 · next: you · receipt\nwrote /tmp/dh1018-Ewiwgp/w1/src/cart.ts"},{"tree":"w2","claim":"claim:01M6GF4BR80WN08D8HQCQ666MY","outcome":"PASS","verdicts":[{"outcome":"PASS","reasons":[".deepbuild/checks/cart-fixture.sh: PASS on 1 clean run"],"ts":1793701589429}],"line":"PASS 1/1 · next: you · receipt\nwrote /tmp/dh1018-Ewiwgp/w2/sr
+ FAIL  hub.test.ts > AC5 #1018.681b96a8 held-out variants stay hidden: a variant run for session A's claim carries its verdict to session B's claim on the same key, and neither session's tool output, evidence or verdict line holds the variant's fixture or output > AC5 (wrong program carry-copies-evidence) a carry that copies the run's evidence whole fails, naming the variant
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=carry-copies-evidence did not start: file://<worktree>/packages/hub/dist/plant.js:60
+Error: DEEP_HUB_PLANT=carry-copies-evidence names no planted program
