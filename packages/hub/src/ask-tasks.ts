@@ -484,10 +484,11 @@ export class AskTasks {
    * definition carries the hash recomputed from the stored definition and the checks' bytes now; a check whose bytes
    * differ from the approved ones is a proposal naming its file, and the claim's checks run the approved bytes, read
    * from the evidence store by digest, never the file in the folder the agent works in. One whose definition hasn't
-   * locked (#322) is judged on the repo's spec meanwhile and waits for the lock. Answers the claims it made, in order;
-   * one task's failure is reported and the others still claimed.
+   * locked (#322) is judged on the repo's spec meanwhile and waits for the lock: the turn's own task only (`task`),
+   * never another the thread opened. Answers the claims it made, in order; one task's failure is reported and the
+   * others still claimed.
    */
-  async claim(session: string, agent: string, cwd: string, o: { early?: boolean } = {}): Promise<string[]> {
+  async claim(session: string, agent: string, cwd: string, o: { early?: boolean; task?: string } = {}): Promise<string[]> {
     await this.locking.get(session);
     const made: string[] = [];
     for (const row of await this.lockedIn(session)) {
@@ -499,7 +500,7 @@ export class AskTasks {
       }
     }
     // A turn whose claim already stands (a deep_claim with no work since) claims no early task anew.
-    for (const task_ref of o.early === false ? [] : await this.unlockedIn(session)) {
+    for (const task_ref of o.early === false ? [] : (await this.unlockedIn(session)).filter((t) => t === o.task)) {
       try {
         made.push(await this.claimEarly(session, agent, cwd, task_ref));
       } catch (error) {

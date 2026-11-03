@@ -1127,7 +1127,7 @@ export class Core {
     // A stop the rule reads as a claim recomputes its tasks' definitions' hashes once the stop is in the record; the
     // agent's final message is what the claim cites, for the validity gate (#29).
     if (claimed) this.lastMessage.set(meta.session, meta.fields?.last_assistant_message ?? '');
-    if (claimed) live.claiming = settled.then(() => this.tasks.claim(meta.session, meta.agent, meta.cwd, { early: !(live.claim && live.claimTurn === live.turn && !live.workedSinceClaim) })).catch((error: unknown): string[] => { process.stderr.write(`deep hub: the claim at ${meta.id} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); return []; });
+    if (claimed) live.claiming = settled.then(async () => this.tasks.claim(meta.session, meta.agent, meta.cwd, { early: !(live.claim && live.claimTurn === live.turn && !live.workedSinceClaim), task: await this.turnTaskOf(meta.session, live) })).catch((error: unknown): string[] => { process.stderr.write(`deep hub: the claim at ${meta.id} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); return []; });
     // A call reaches the hub once its hook's event is durable, never before: a restart trusts the cursors kept.
     // Its turn is judged once the append settles, however long past the grace that is.
     if (session && call) {
@@ -3092,9 +3092,7 @@ export class Core {
     const commit = live.head ?? (await headOf(meta.cwd).catch(() => undefined))?.sha ?? '0'.repeat(40);
     const ts = this.now();
     const id = ulid(ts);
-    // The task the prompt that opened the turn named, kept at the prompt; after a restart, the newest a person named.
-    const [prompt] = live.turnTask ? [] : (await this.record.raw(`SELECT json_extract(data, '$.tasks[0]') AS task FROM events WHERE session_id = ? AND kind = 'user.ask' AND json_extract(data, '$.from') = 'person' AND json_extract(data, '$.tasks[0]') IS NOT NULL ORDER BY log_pos DESC LIMIT 1`, [meta.session])) as { task: string | null }[];
-    const task_ref = live.turnTask ?? prompt?.task ?? `session:${letters(meta.session)}#0`;
+    const task_ref = await this.turnTaskOf(meta.session, live);
     const [before] = (await this.record.raw(`SELECT COUNT(*) AS n FROM claims WHERE session_id = ? AND subject_ref = ?`, [meta.session, task_ref])) as { n: number }[];
     await this.append(this.connection('core', { session: meta.session, agent: live.agent }), { v: 2, id, kind: 'claim.made', ts, data: { task_ref, attempt: (before?.n ?? 0) + 1, commit, scope: 'session', predictions: [] } });
     this.claimed(meta.session, `claim:${id}`);
@@ -3102,6 +3100,11 @@ export class Core {
     // recorded again after them, or an unclean restart would read the idle session as active and its claim as lost.
     if (live.state === 'finished' || live.state === 'failed') await this.attention(meta.session, live.agent, live.state);
     return live;
+  }
+  /** The turn's task: the one the prompt that opened the turn named, kept at the prompt; after a restart, the newest a person named; else the session's own. */
+  private async turnTaskOf(session: string, live: Live): Promise<string> {
+    const [prompt] = live.turnTask ? [] : (await this.record.raw(`SELECT json_extract(data, '$.tasks[0]') AS task FROM events WHERE session_id = ? AND kind = 'user.ask' AND json_extract(data, '$.from') = 'person' AND json_extract(data, '$.tasks[0]') IS NOT NULL ORDER BY log_pos DESC LIMIT 1`, [session])) as { task: string | null }[];
+    return live.turnTask ?? prompt?.task ?? `session:${letters(session)}#0`;
   }
   /**
    * A session whose turn this hub's restart interrupted, with work the stop rule would read as a claim, is judged
