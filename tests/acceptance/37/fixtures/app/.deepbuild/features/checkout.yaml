@@ -1,0 +1,4 @@
+feature: checkout
+name: Paying for the cart
+files: [server.mjs, public/checkout.js, public/money.js]
+journeys: [checkout]

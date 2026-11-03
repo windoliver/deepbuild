@@ -1,0 +1,6 @@
+# A feature, proposed by an agent and approved once (design: the journeys row). Its files are the ones a change to
+# it touches; its journeys prove it.
+feature: cart
+name: The cart and its total
+files: [server.mjs, public/cart.js, public/money.js]
+journeys: [cart-total]

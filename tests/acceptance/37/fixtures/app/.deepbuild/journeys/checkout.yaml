@@ -1,0 +1,25 @@
+# Paying: /cart, Pay, then the confirmation at /order/<id>, whose ID differs on every run.
+journey: checkout
+feature: checkout
+depth: journey
+masks: []
+steps:
+  - id: open
+    deadline: 10000
+    goto: /cart
+  - id: pay
+    deadline: 5000
+    click: { role: button, name: Pay, within: { role: region, name: Actions } }
+  - id: confirmed
+    deadline: 5000
+    expect: { role: status, name: Order, visible: true }
+    timeout: 3000
+end_state:
+  - id: order-placed
+    oracle: code
+    locator: { role: status, name: Order }
+    visible: true
+  - id: order-stored
+    oracle: code
+    readback: { method: GET, path: /api/orders }
+    count: { orders: 1 }

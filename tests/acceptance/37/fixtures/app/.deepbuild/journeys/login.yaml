@@ -1,0 +1,23 @@
+# Signing in with a secret referenced by name: the run is given TEST_PASSWORD from a lease; this file never holds it.
+journey: login
+feature: login
+depth: journey
+masks: []
+steps:
+  - id: open
+    deadline: 10000
+    goto: /login
+  - id: user
+    deadline: 5000
+    fill: { role: textbox, name: Username, text: "tester" }
+  - id: password
+    deadline: 5000
+    fill: { role: textbox, name: Password, secret: TEST_PASSWORD }
+  - id: sign-in
+    deadline: 5000
+    click: { role: button, name: Sign in }
+end_state:
+  - id: welcomed
+    oracle: code
+    locator: { role: status, name: Welcome }
+    text: "Signed in"
