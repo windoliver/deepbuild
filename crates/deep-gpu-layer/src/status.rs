@@ -177,8 +177,11 @@ pub fn bindings(doc: &Value) -> Result<Vec<Binding>, Value> {
         let (item, slot) = match parts.as_slice() {
             ["items", item, "params", "paint", "badge"] => (*item, "badge"),
             ["items", item, "params", "paint", "stroke"] => (*item, "stroke"),
-            ["items", _, "params", "paint", "fill"] => {
-                return Err(refused("status_slot_kind", format!("{path}/target")))
+            // Refused naming the item, so the fix is plain without reading the target (#421).
+            ["items", item, "params", "paint", "fill"] => {
+                let mut r = refused("status_slot_kind", format!("{path}/target"));
+                r["item"] = json!(item);
+                return Err(r);
             }
             _ => return Err(refused("bad_doc", format!("{path}/target"))),
         };

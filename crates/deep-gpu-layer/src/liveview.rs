@@ -494,6 +494,9 @@ pub struct Drawing {
     pub offsets: Offsets,
     pub effects_resolution: f64,
     pub canonical: bool,
+    /// Whether a still scene may settle: not while a frame it drew is still in flight, whose
+    /// completion releases what it read (#421).
+    pub settles: bool,
 }
 
 /// What a view draws: a 3D scene's frames, or a 2D document's (#397).
@@ -523,6 +526,9 @@ pub struct View {
     history: Option<History>,
     /// What the view allocated beyond `low` and `history`, as the device reports it.
     base_bytes: Option<u64>,
+    /// How the last frame drew (its rung and internal scale) and how many frames it has drawn
+    /// since its scene last changed: a still scene settles once its history is full (#421).
+    still: Option<(Rung, f64, u32)>,
     #[cfg(feature = "test-meter")]
     pub test: crate::testgpu::Items,
 }
@@ -572,6 +578,7 @@ impl View {
             drew: (1.0, "none"),
             history: None,
             base_bytes,
+            still: None,
             #[cfg(feature = "test-meter")]
             test: crate::testgpu::Items::default(),
         })
@@ -581,6 +588,7 @@ impl View {
     pub fn set_frames(&mut self, frames: Content) {
         self.frames = frames;
         self.prepared = false;
+        self.still = None;
     }
 
     /// What the view itself holds on the device, as the device reports it.
@@ -624,8 +632,10 @@ impl View {
         Some(self.slots[self.shown?].read())
     }
 
-    /// Records the frame at `t` into `encoder`, each pass timed by `timer` as `session`'s. Fails
-    /// only when the document can't be evaluated.
+    /// Records the frame at `t` into `encoder`, each pass timed by `timer` as `session`'s, and
+    /// says whether it drew: a scene that hasn't changed since a frame drawn the same way, once
+    /// its history is full, records nothing (#421). Fails only when the document can't be
+    /// evaluated.
     #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &mut self,
@@ -638,11 +648,35 @@ impl View {
         encoder: &mut wgpu::CommandEncoder,
         timer: &mut Timer,
         session: usize,
-    ) -> Result<(), Refused> {
+    ) -> Result<bool, Refused> {
         let scale = if drawing.canonical {
             1.0
         } else {
             drawing.rung.scale(self.scale)
+        };
+        let evaluated = match &mut self.frames {
+            Content::Scene(frames) if !drawing.canonical && drawing.rung != Rung::Placeholder => {
+                frames.at(t, self.size, &drawing.offsets, labels)?;
+                let still = match self.still {
+                    Some((rung, s, n))
+                        if drawing.settles && self.prepared && !frames.changed() =>
+                    {
+                        (rung == drawing.rung && s == scale).then_some(n)
+                    }
+                    _ => None,
+                };
+                #[cfg(feature = "test-meter")]
+                let still = still.filter(|_| self.test.bound.is_empty());
+                if still.is_some_and(|n| n >= self.window) {
+                    return Ok(false);
+                }
+                self.still = Some((drawing.rung, scale, still.map_or(0, |n| n + 1)));
+                true
+            }
+            _ => {
+                self.still = None;
+                false
+            }
         };
         // The scene is evaluated at the view's size; the renderer draws it at the internal size
         // and returns it to full size through the upscale, once its pipelines are compiled.
@@ -681,7 +715,7 @@ impl View {
             });
             timer.end(i);
             self.after(encoder, slot);
-            return Ok(());
+            return Ok(true);
         }
         let frames = match &mut self.frames {
             Content::Scene(frames) => frames,
@@ -690,10 +724,12 @@ impl View {
                 flat.draw(device, t, self.size, &slot_view, encoder, timer, session)
                     .map_err(|(code, path)| Refused { code, path })?;
                 self.after(encoder, slot);
-                return Ok(());
+                return Ok(true);
             }
         };
-        frames.at(t, self.size, &drawing.offsets, labels)?;
+        if !evaluated {
+            frames.at(t, self.size, &drawing.offsets, labels)?;
+        }
         let scene = frames.scene();
         let clip = scene.camera.clip(Depth::Reversed);
         match frames.moved().filter(|_| self.prepared) {
@@ -705,7 +741,7 @@ impl View {
         self.renderer.record_geometry(encoder, timer.writes(i));
         timer.end(i);
         let Some((linear_texture, linear)) = self.renderer.linear() else {
-            return Ok(());
+            return Ok(true);
         };
         let (linear_texture, linear) = (linear_texture.clone(), linear.clone());
         #[cfg(feature = "test-meter")]
@@ -770,7 +806,7 @@ impl View {
             timer.end(i);
         }
         self.after(encoder, slot);
-        Ok(())
+        Ok(true)
     }
 
     fn after(&self, encoder: &mut wgpu::CommandEncoder, slot: usize) {

@@ -483,6 +483,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         app.planted == Some(Planted::LoadsEverything),
     );
     let result = (|| -> Result<(), Value> {
+        // The lights the policy last left out: a change is reported once, by ID (#421).
+        let mut left_out: Vec<String> = Vec::new();
+        let mut dropped: Vec<String> = Vec::new();
         for n in args.from..args.from + args.frames {
             // A seek applies every patch up to the frame it opens at.
             let mut patched = false;
@@ -716,6 +719,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if let Some((labels, pages)) = label_report {
                 frame.insert("labels".into(), labels);
                 frame.insert("pages".into(), pages);
+            }
+            // Lights the budget left out, and shadows it dropped, reported once per change.
+            let c = &drawn.counts;
+            if c.lights_left_out != left_out || c.shadows_dropped != dropped {
+                left_out.clone_from(&c.lights_left_out);
+                dropped.clone_from(&c.shadows_dropped);
+                let notice = json!({"code": "lights_over_budget", "lights": left_out, "shadows": dropped});
+                frame.insert("notices".into(), json!([notice]));
             }
             if args.counts {
                 let c = &drawn.counts;

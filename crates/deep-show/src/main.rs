@@ -38,6 +38,7 @@ mod serve;
 mod shaper;
 mod shared;
 mod snapshot;
+mod spatial;
 mod terminal;
 #[cfg(feature = "test-machines")]
 mod test_machines;
@@ -49,7 +50,8 @@ mod time;
     feature = "test-json",
     feature = "test-debug-digest",
     feature = "test-accent",
-    feature = "test-threads"
+    feature = "test-threads",
+    feature = "test-scene3d-tie-by-order"
 ))]
 mod twins;
 mod verdict;
@@ -522,6 +524,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "registry" => return Some(Call::Registry),
         "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
         "kinds" => return Some(Call::KindSchemas),
+        "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -1160,6 +1163,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "comparer_matches_hash" => Planted::ComparerMatchesHash,
                 "keeps_voices_on_switch" => Planted::KeepsVoicesOnSwitch,
                 "fades_on_close" => Planted::FadesOnClose,
+                "cull_by_center" => Planted::CullByCenter,
+                "bounds_children_only" => Planted::BoundsChildrenOnly,
                 _ => return None,
             }),
         },
@@ -1573,6 +1578,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-sim-b-off",
     feature = "test-sim-c",
     feature = "test-gpu-second-backend",
+    feature = "test-scene3d-tie-by-order",
     feature = "test-b",
     feature = "test-b-requires-a",
     feature = "test-two-writers",
@@ -1628,6 +1634,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     if set >= BuildSet::R2 {
         // Issue #402: the cell grid, on the text module.
         out.push(deep_canvas_cells::module::module());
+        // Issue #421: `test-scene3d-tie-by-order` holds the planted implementation in its place.
+        #[cfg(feature = "test-scene3d-tie-by-order")]
+        out.push(twins::scene3d_tie_by_order());
+        #[cfg(not(feature = "test-scene3d-tie-by-order"))]
         out.push(deep_canvas_scene3d::module::module());
         // Issue #380: the shipped effects, whose passes go into scene3d's frame; #200's planted
         // layout has it fill the op table's base steps.
@@ -1805,7 +1815,14 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             }
             deep_canvas::registry::Interface {
                 name: interface,
-                reference: if sandbox { deep_canvas_sandbox::module::module() } else { m },
+                // #421: scene3d@1's reference is the shipped module, whichever a test build holds.
+                reference: if sandbox {
+                    deep_canvas_sandbox::module::module()
+                } else if m.manifest.name == "scene3d" {
+                    deep_canvas_scene3d::module::module()
+                } else {
+                    m
+                },
                 kit: parts,
                 behavior: None,
             }
