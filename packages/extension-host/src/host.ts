@@ -29,7 +29,7 @@
 // (./series.ts), so a bound value resolves at a frame's pinned log position.
 import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
+import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
@@ -38,7 +38,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
 import type { EvidenceStore } from '@deepbuild/evidence';
-import { runKit, slotKits } from '@deepbuild/conformance';
 import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
@@ -54,7 +53,7 @@ import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type 
 import { missing, SeriesStore, shownValue, type BoundValue, type Rollup, type Span } from './series.js';
 import { Sends, type SendRow, type SendRule } from './sends.js';
 import { declareSource, handleOf, nodeHttp, openBrowser, osSecrets, Sources, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
-import { Terminals, type OpenSpec } from './terminals.js';
+import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
 
 /** A package inside DeepBuild's signed release, as the release's signed manifest lists it. */
@@ -75,7 +74,11 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   // #103's: a hub that wires a use by its interface's name alone, serves a use the provider's newest shape, keeps a use
   // wired to the piece it prefers once that piece is gone, removes a required use's provider with no ask, reads an
   // optional use with no provider as empty, and runs a call through an edge under the provider's own grant.
-  | 'compares-names-alone' | 'serves-newest-minor' | 'wires-by-name' | 'detaches-silently' | 'optional-reads-empty' | 'call-under-provider-grant';
+  | 'compares-names-alone' | 'serves-newest-minor' | 'wires-by-name' | 'detaches-silently' | 'optional-reads-empty' | 'call-under-provider-grant'
+  // #989's hosted terminals: hosts that keep the start size, drop the bottom rows, keep every byte, read a FIFO or
+  // block their output on input; hubs that leave a closed terminal's files, throw once input is full, or stop or
+  // read as ended a host of another protocol version.
+  | TerminalPlant;
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -146,6 +149,8 @@ export interface ExtensionHostOptions {
   /** Methods this host answers `unsupported` to, as a shim that dropped them would: the contract step's planted twin (#139). */
   unsupported?: readonly string[];
   plant?: Plant;
+  /** The hosted-terminal host protocol this hub speaks, and the hosts it starts state (#989). Default: TERMINAL_PROTOCOL. */
+  terminalProtocol?: number;
   /** The OS secret store a source's secret is read from (#364). Default: the Keychain on macOS, and none elsewhere. */
   secrets?: SecretStore;
   /** Opens your browser at a sign-in page. Default: macOS's open. */
@@ -221,6 +226,10 @@ export interface ExtensionHost {
   revoke(connection: Connection, id: string, word: 'run_as_you'): Promise<void>;
   /** Raw input for a hosted terminal, written to its program: only from the app, which sends the panel you focused. */
   rawInput(connection: Connection, terminal: string, text: string): Promise<void>;
+  /** What the app's tab for a hosted terminal shows now (#989), for every terminal the hub knows, loaded or not: only for the app. */
+  tab(connection: Connection, terminal: string): Promise<TerminalTab>;
+  /** The focused tab's size in cells, from the app: the program's terminal and the tab's screen take it (#989). */
+  resize(connection: Connection, terminal: string, cols: number, rows: number): Promise<void>;
   /** Runs its conformance on its files now; the result is kept for that digest. */
   check(pkg: Installed): Promise<Conformance>;
   /** Whether a conformance result is kept for this id and version, passed or failed; a load with none is refused. */
@@ -820,7 +829,16 @@ class Host implements ExtensionHost {
     this.keys = this.read('keys.json');
     this.published = new Map((options.api ?? extensionApi()).map((e) => [e.method, e]));
     this.runAsYou = this.read('run-as-you.json');
-    this.terminals = new Terminals(options.home, options.supervisor);
+    const plant = options.plant;
+    this.terminals = new Terminals(options.home, options.supervisor, {
+      protocol: options.terminalProtocol ?? TERMINAL_PROTOCOL,
+      // A writer the host refused, by its process: recorded, never delivered.
+      refused: (terminal, pid) => {
+        const now = options.now();
+        void options.record.append(CORE, { v: 1, id: ulid(now), kind: 'terminal.refused', ts: now, data: { terminal, pid } }).catch(() => undefined);
+      },
+      ...((TERMINAL_PLANTS as readonly string[]).includes(plant as string) ? { plant: plant as TerminalPlant } : {}),
+    });
     const series = this.series = options.evidence ? new SeriesStore({
       record: options.record, evidence: options.evidence, now: options.now, connection: CORE,
       timeoutOf: (name) => [...this.exts.values()].map((e) => e.live ? e.sources.get(name) : undefined).find((s): s is Polled => s?.variant === 'polled')?.timeout,
@@ -1209,7 +1227,15 @@ class Host implements ExtensionHost {
     if (connection.writer !== 'app' && this.options.plant !== 'input-from-any-writer') {
       throw Error(`raw input for ${terminal} comes only from the panel you focused in the app, not from ${connection.writer}${connection.session ? ` in session ${connection.session}` : ''}`);
     }
-    this.terminals.input(terminal, text);
+    await this.terminals.input(terminal, text);
+  }
+  async tab(connection: Connection, terminal: string): Promise<TerminalTab> {
+    if (connection.writer !== 'app') throw Error(`${terminal}'s tab is the app's, not ${connection.writer}'s`);
+    return this.terminals.tab(terminal);
+  }
+  async resize(connection: Connection, terminal: string, cols: number, rows: number): Promise<void> {
+    if (connection.writer !== 'app') throw Error(`${terminal}'s size comes only from the tab you focused in the app, not from ${connection.writer}`);
+    await this.terminals.resize(terminal, cols, rows);
   }
   /** Whether a loaded package holds the grant a call needs: run-as-you only once its manifest asks for it and you approved it. */
   private holds(ext: Ext, needs: string): boolean {
@@ -1262,6 +1288,8 @@ class Host implements ExtensionHost {
     const runs: KitRun[] = [];
     // One fill held to its slot's kit: the run is kept, and anything but PASS refuses the install, naming the case.
     const judge = async <F extends SlotFill>(slot: string, name: string, what: string, fill: (revision: number) => F): Promise<void> => {
+      // The kits load with the first install that runs one: a hub that installs nothing never holds them.
+      const { runKit, slotKits } = await import('@deepbuild/conformance');
       const kit = slotKits().find((k) => k.slot === slot) as SlotKit<F> | undefined;
       if (!kit) throw Error(`the conformance package ships no ${slot} kit`);
       const report = await runKit(kit, fill(kit.revision), { parts: ['fixed'] });
@@ -2394,8 +2422,13 @@ class Host implements ExtensionHost {
         return this.terminals.of(id).map((t) => ({ terminal: t.terminal, run: t.run, pid: t.pid, title: t.title }));
       case 'deep.terminal.read':
         return this.terminals.read(id, args[0] as string, args[1] as number);
+      case 'deep.terminal.close': {
+        const t = this.terminals.of(id).find((x) => x.terminal === args[0]);
+        if (!t) throw Error(`${id} has no terminal ${String(args[0])}`);
+        return void (await this.terminals.stop(t));
+      }
       case 'deep.terminal.write':
-        return void this.terminals.input(args[0] as string, args[1] as string);
+        return void (await this.terminals.input(args[0] as string, args[1] as string));
       case 'deep.notices.send': {
         quiet();
         // #348's wrong program checks nothing here, as it checks no grant but deep.record.query's.
@@ -3373,6 +3406,7 @@ class Host implements ExtensionHost {
   async ready(): Promise<void> {
     if (this.isReady) return this.starting;
     this.isReady = true;
+    this.terminals.attach();
     // The hub's own timer: schedules fire from it, never from the app's clock (#365).
     this.timer = setInterval(() => void this.tick().catch(() => undefined), TIMER_MS);
     this.timer.unref();
@@ -3401,6 +3435,8 @@ class Host implements ExtensionHost {
     if (ext.server) throw Error(`${id} is already turned on`);
     for (const route of routes) if (!ext.routes.has(route)) throw Error(`${id} registered no route ${route}`);
     const chosen = new Set(routes);
+    // node:http loads only for a package turned on: about 2.7 MB of heap the hub's core otherwise never holds.
+    const { createServer: createHttpServer } = await import('node:http');
     // A request has the call deadline to arrive whole; one that fails is that request's alone.
     const server = createHttpServer({ requestTimeout: CALL_MS, connectionsCheckingInterval: 1000 }, (req, res) => void this.serve(ext, chosen, req, res).catch(() => res.destroy()));
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -3488,6 +3524,7 @@ class Host implements ExtensionHost {
     // A terminal that lives past the app runs on, its run kept by the supervisor; AC1's wrong program stops them all.
     const stopping = this.terminals.all().filter((t) => !t.kept || this.options.plant === 'close-stops-every-host');
     await Promise.all(stopping.map((t) => this.terminals.stop(t).catch(() => undefined)));
+    this.terminals.close();
   }
 }
 
