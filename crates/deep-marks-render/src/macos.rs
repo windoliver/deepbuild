@@ -4,7 +4,8 @@
 //!
 //! - A path's tessellation is cached by (content key, zoom bucket): moving or recoloring it, or a
 //!   zoom inside its bucket, reuses the triangles.
-//! - A text's shaped run comes from deep-text-gpui's cache, keyed by what the shaper reads.
+//! - A text's shaped run comes from deep-text-gpui's cache, keyed by what the shaper reads; the
+//!   session holds each run's entry by the text's content key.
 //! - A writer layer, once it and every layer under it have stayed the same for 3 presented frames,
 //!   is drawn once into a cache window over the ground and composited from that picture after, so
 //!   its marks aren't drawn again while it stays still.
@@ -17,6 +18,10 @@
 //! Status marks draw after every writer layer, unlit and exact, each with its state's glyph and
 //! word inside it, and a legend of every state on screen (its swatch, glyph and word) at the
 //! frame's top right; nothing covers them (canvas primitives: The status-color rule).
+//!
+//! Issue #417: a session's step may switch the look. The look enters the scene's rebuild key and
+//! every key that reads it (a mark's colors, a text's face), so a switch rebuilds only the nodes
+//! whose content key changed; each step reports the entries it built and the rebuild key.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -260,6 +265,13 @@ struct Session {
     main: Option<Surface>,
     cache: Option<Surface>,
     tessellations: HashMap<(ContentKey, i32), Tessellation>,
+    /// #417: each shaped run's entry by its text's content key.
+    shaped: HashMap<ContentKey, Entry>,
+    /// #417: the entries made, not reused, since the last step's report, and the presented
+    /// frame's rebuild key: the look's tokens and every layer's key.
+    built: Read,
+    fresh: BTreeSet<(ContentKey, i32)>,
+    rebuild_key: Option<ContentKey>,
     layers: HashMap<ContentKey, LayerCache>,
     /// Each layer prefix's key on the last presented frame and how many frames in a row it held.
     stable: Vec<(ContentKey, u32)>,
@@ -472,10 +484,12 @@ fn tessellation<'a>(
 ) -> &'a Tessellation {
     let key = geometry.key(d, bucket);
     used.insert((key, bucket));
+    let fresh = &mut session.fresh;
     session
         .tessellations
         .entry((key, bucket))
         .or_insert_with(|| {
+            fresh.insert((key, bucket));
             // The fill's triangles as marks2d tessellates them; the stroke as a strip (#140).
             let lines = path::flatten(&geometry.verbs, path::tolerance(bucket));
             let mut mesh = Mesh::default();
@@ -491,6 +505,35 @@ fn tessellation<'a>(
                 entry: Entry::of(key, &bytes),
             }
         })
+}
+
+/// The key of what a look gives a scene in a theme (#417): its roles, at an alpha too, its type
+/// and its status map.
+fn look_key(look: &Look, theme: Theme) -> ContentKey {
+    let (palette, alpha, ty) = match theme {
+        Theme::Light => (&look.light, &look.light_alpha, &look.light_type),
+        Theme::Dark => (&look.dark, &look.dark_alpha, &look.dark_type),
+    };
+    let mut k = KeyBuilder::new("look@marks2d.1");
+    for (role, rgb) in palette {
+        k.text(role).bytes(rgb);
+    }
+    for (role, rgba) in alpha {
+        k.text(role).bytes(rgba);
+    }
+    for (font, family) in &ty.fonts {
+        k.text(font).text(family);
+    }
+    k.int(ty.fallback.len() as i64);
+    for family in &ty.fallback {
+        k.text(family);
+    }
+    if let Some(status) = &look.status {
+        for (state, rgb) in &status.colors {
+            k.text(state).bytes(rgb);
+        }
+    }
+    k.finish()
 }
 
 fn shaped_bytes(shaped: &deep_text::Shaped) -> Vec<u8> {
@@ -691,7 +734,12 @@ impl Renderer {
                 &captures,
                 store,
             ),
-            Request::Session { look, steps, store } => self.session(&look, steps, store),
+            Request::Session {
+                look,
+                steps,
+                store,
+                switch_rebuilds,
+            } => self.session(look, steps, store, switch_rebuilds),
             Request::Idle {
                 doc,
                 look,
@@ -984,7 +1032,7 @@ impl Renderer {
                             .map(|g| {
                                 let (role, _) =
                                     scene::run_paint(runs, g.grapheme, role.as_deref(), *color);
-                                crate::raster::glyph_row(g, role)
+                                crate::raster::glyph_row(g, role, spec.lang.as_deref())
                             })
                             .collect();
                         session
@@ -1102,8 +1150,16 @@ impl Renderer {
             (eval::items(doc, program, state), state.valid_until)
         };
         let palette = palette_of(look, view.theme);
-        let frame = scene::frame(doc, &items, palette, record, view.zoom)
-            .map_err(|r| refused(r.code, &r.path))?;
+        let ty = crate::type_of(look, view.theme);
+        let frame = scene::frame_planted(
+            doc,
+            &items,
+            (palette, ty),
+            record,
+            view.zoom,
+            scene::Planted::None,
+        )
+        .map_err(|r| refused(r.code, &r.path))?;
         // A writer layer GPUI's paths can't draw exactly draws on Vello GPU once its spike passed,
         // as a picture GPUI composites in the layer's place (#385); one Vello GPU can't draw yet is
         // the live view's refusal, naming the item.
@@ -1215,6 +1271,7 @@ impl Renderer {
             .collect();
 
         let mut used = BTreeSet::new();
+        let mut shaped_used = BTreeSet::new();
         let ground = fill_quad(
             Bounds {
                 origin: Point::default(),
@@ -1316,15 +1373,34 @@ impl Renderer {
                         let entry = tessellation(session, geometry, d, bucket, &mut used)
                             .entry
                             .clone();
+                        if session.fresh.remove(&(entry.key, bucket)) {
+                            session
+                                .built
+                                .tessellation
+                                .push((item.clone(), bucket, entry.clone()));
+                        }
                         read.tessellation.push((item.clone(), bucket, entry));
                     }
                     Mark::Text { item, spec, .. } => {
-                        let Some(label) = label_of(spec) else {
-                            return Err(refused("bad_font", &format!("items/{item}/params/font")));
+                        let key = spec.key();
+                        shaped_used.insert(key);
+                        let entry = match session.shaped.get(&key) {
+                            Some(entry) => entry.clone(),
+                            None => {
+                                let Some(label) = label_of(spec) else {
+                                    return Err(refused(
+                                        "bad_font",
+                                        &format!("items/{item}/params/font"),
+                                    ));
+                                };
+                                let shaped = deep_text_gpui::shape(&label);
+                                let entry = Entry::of(key, &shaped_bytes(&shaped));
+                                session.shaped.insert(key, entry.clone());
+                                session.built.text.push((item.clone(), entry.clone()));
+                                entry
+                            }
                         };
-                        let shaped = deep_text_gpui::shape(&label);
-                        read.text
-                            .push((item.clone(), Entry::of(spec.key(), &shaped_bytes(&shaped))));
+                        read.text.push((item.clone(), entry));
                     }
                     Mark::Image {
                         item,
@@ -1344,6 +1420,13 @@ impl Renderer {
         }
         // A cached result lives while the frame on screen reads it.
         session.tessellations.retain(|k, _| used.contains(k));
+        session.shaped.retain(|k, _| shaped_used.contains(k));
+        let mut rebuild = KeyBuilder::new("rebuild@marks2d.1");
+        rebuild.key(&look_key(look, view.theme));
+        for layer in &frame.layers {
+            rebuild.text(&layer.id).key(&layer.key);
+        }
+        session.rebuild_key = Some(rebuild.finish());
         if let Some(top) = cached {
             let keep = prefixes[top];
             session.layers.retain(|k, _| *k == keep);
@@ -1382,6 +1465,10 @@ impl Renderer {
             main: None,
             cache: None,
             tessellations: HashMap::new(),
+            shaped: HashMap::new(),
+            built: Read::default(),
+            fresh: BTreeSet::new(),
+            rebuild_key: None,
             layers: HashMap::new(),
             stable: Vec::new(),
             valid_until: None,
@@ -1536,7 +1623,13 @@ impl Renderer {
         image.save(out).map_err(|_| refused("not_written", out))
     }
 
-    fn session(&mut self, look: &Look, steps: Vec<Step>, store: Option<PathBuf>) -> Value {
+    fn session(
+        &mut self,
+        mut look: Look,
+        steps: Vec<Step>,
+        store: Option<PathBuf>,
+        switch_rebuilds: bool,
+    ) -> Value {
         let mut session = Self::new_session();
         session.store = store;
         let mut doc = Map::new();
@@ -1559,6 +1652,14 @@ impl Renderer {
                 if let Some(r) = step.record {
                     record = r;
                 }
+                if let Some(l) = step.look {
+                    look = l;
+                    // The wrong program: a switch that empties every node cache.
+                    if switch_rebuilds {
+                        session.tessellations.clear();
+                        session.shaped.clear();
+                    }
+                }
                 for f in 0..i64::from(step.frames) {
                     let t = step.t + f * STEP_VSYNC;
                     // A new revision, view or reading arms the step's first frame; after it the
@@ -1568,15 +1669,18 @@ impl Renderer {
                         || session.valid_until.is_some_and(|v| v <= t)
                         || session.stale_at.is_some_and(|s| s <= t);
                     if armed {
-                        self.present(&mut session, &doc, look, view, &record, t, false, f > 0)?;
+                        self.present(&mut session, &doc, &look, view, &record, t, false, f > 0)?;
                     }
                 }
+                let built = std::mem::take(&mut session.built).to_json();
                 let dirty: Vec<Value> = std::mem::take(&mut session.stamped)
                     .into_iter()
                     .map(|(item, class)| json!({"item": item, "class": class.name()}))
                     .collect();
                 out.push(json!({
                     "caches": session.read.to_json(),
+                    "built": {"tessellation": built["tessellation"], "text": built["text"]},
+                    "rebuild_key": session.rebuild_key.map(|k| k.hex()),
                     "dirty": dirty,
                     "resamples": session.resamples - resampled_before,
                 }));
