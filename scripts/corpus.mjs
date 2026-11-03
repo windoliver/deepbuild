@@ -79,6 +79,8 @@ const strings = (value) => (typeof value === 'string' ? [value] : value && typeo
  * session, one whose response names a task a later `<task-notification>` prompt names, has its entry in the loop facts.
  */
 function loopFactsCase(loops, corpus) {
+  // A facts folder with no loop facts (an agent's own, planted alone) has none to judge.
+  if (!loops) return [];
   const named = new Set(Object.values(loops?.agents?.claude ?? {}).flatMap((section) => (section && typeof section === 'object' && !Array.isArray(section) ? Object.keys(section) : [])));
   const missing = new Map();
   for (const version of folders(join(corpus, 'claude-code'))) {
