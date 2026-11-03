@@ -78,7 +78,8 @@ function certificate(subject: KeyObject, issuer: { key: KeyObject; id: Buffer },
   const now = Date.now();
   const id = keyId(subject);
   const serial = randomBytes(16);
-  serial[0]! &= 0x7f;
+  // Positive, and its first byte never zero, so DER's minimal integer holds every byte.
+  serial[0] = (serial[0]! & 0x7f) | 0x40;
   const exts = host === undefined
     ? [ext('2.5.29.19', true, seq(der(0x01, Buffer.from([0xff])))), ext('2.5.29.15', true, bits(Buffer.from([0x06]), 1))]
     : [
