@@ -1,0 +1,1272 @@
+//! A builder's modifier stack (canvas primitives: Modifier; issue #420): pure steps on the
+//! built mesh, top to bottom in the order the item declares, each of a class its kind fixes
+//! (`deform` moves points, `generate` makes new ones), reading time where a channel binds one
+//! of its params or where the kind reads it by nature (sway, bob, wave, spin, boil), always as a
+//! closed form in t. A modifier with `enabled: false` is skipped and reads nothing.
+
+use std::collections::BTreeMap;
+
+use deep_canvas::ops::{cos, rad, sin};
+use serde_json::{json, Value};
+
+use crate::builders::{path, Fault};
+use crate::geom::{add, cross, dot, scale, sub, unit, Mesh, V3};
+
+/// The modifier kinds: each one's class, whether it is a GPU kind (evaluated here on the CPU
+/// from its per-instance params) and whether it reads time by its nature.
+pub const KINDS: [(&str, &str, bool, bool); 17] = [
+    ("mod.array@1", "generate", false, false),
+    ("mod.mirror@1", "generate", false, false),
+    ("mod.subdivide@1", "generate", false, false),
+    ("mod.bevel@1", "generate", false, false),
+    ("mod.solidify@1", "generate", false, false),
+    ("mod.build@1", "generate", false, false),
+    ("mod.store@1", "generate", false, false),
+    ("mod.curve_deform@1", "deform", false, false),
+    ("mod.simple_deform@1", "deform", false, false),
+    ("mod.displace@1", "deform", false, false),
+    ("mod.sway@1", "deform", true, true),
+    ("mod.bob@1", "deform", true, true),
+    ("mod.wave@1", "deform", true, true),
+    ("mod.spin@1", "deform", true, true),
+    // A line's stroke modifiers (with `mod.build@1`), which scene3d's line evaluation applies.
+    ("mod.dash@1", "generate", false, false),
+    ("mod.outline@1", "generate", false, false),
+    ("mod.boil@1", "deform", false, true),
+];
+
+/// The stroke modifiers a `mark.line@1` takes.
+pub const STROKE: [&str; 4] = ["mod.dash@1", "mod.outline@1", "mod.boil@1", "mod.build@1"];
+
+fn kind_row(kind: &str) -> Option<(&'static str, bool, bool)> {
+    KINDS.iter().find(|k| k.0 == kind).map(|k| (k.1, k.2, k.3))
+}
+
+/// Whether the modifier kind reads time by its nature (sway, bob, wave, spin, boil).
+pub fn timed(kind: &str) -> bool {
+    kind_row(kind).is_some_and(|k| k.2)
+}
+
+/// An item whose enabled stack holds a modifier that reads time by its nature.
+pub fn reads_time_by_kind(item: &Value) -> bool {
+    list(item)
+        .iter()
+        .any(|m| enabled(m) && timed(m.get("kind").and_then(Value::as_str).unwrap_or("")))
+}
+
+/// One modifier as the `geometry` call lists it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Row {
+    pub kind: String,
+    pub class: &'static str,
+    pub reads_time: bool,
+    pub enabled: bool,
+    pub gpu: bool,
+}
+
+impl Row {
+    pub fn to_json(&self) -> Value {
+        json!({"kind": self.kind, "class": self.class, "reads_time": self.reads_time,
+               "enabled": self.enabled, "gpu": self.gpu})
+    }
+}
+
+/// Whether a channel or driver of `doc` binds a param of the item's modifier `k`.
+pub fn reads_time(doc: &Value, id: &str, k: usize) -> bool {
+    let prefix = format!("items/{id}/modifiers/{k}/");
+    ["channels", "drivers"].iter().any(|section| {
+        doc.get(*section)
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .any(|(_, c)| {
+                c.get("target")
+                    .and_then(Value::as_str)
+                    .is_some_and(|t| t.starts_with(&prefix))
+            })
+    })
+}
+
+pub(crate) fn enabled(m: &Value) -> bool {
+    m.get("enabled").and_then(Value::as_bool).unwrap_or(true)
+}
+
+/// The items an item's modifiers name (a `curve_deform`'s path, an array's `along`), each
+/// enabled one's; the planted `keeps_disabled_refs` keeps a disabled one's too (AC9's wrong
+/// program).
+pub fn refs(item: &Value, planted: Option<&str>) -> Vec<String> {
+    let keep_disabled = planted == Some("keeps_disabled_refs");
+    item.get("modifiers")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|m| keep_disabled || enabled(m))
+        .flat_map(|m| {
+            ["/params/path", "/params/along"]
+                .into_iter()
+                .filter_map(|p| m.pointer(p).and_then(Value::as_str).map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// The vertices the stack leaves of a builder's `(vertices, triangles)`, counted from the
+/// params: a stack holding a modifier that reads the mesh's topology (`bevel`, `solidify`) is
+/// counted on the stack `full` runs over the builder's mesh instead.
+pub fn estimate(
+    counts: (u64, u64),
+    item: &Value,
+    full: &dyn Fn() -> Result<usize, Fault>,
+) -> Result<u64, Fault> {
+    let (mut v, mut t) = counts;
+    for (k, m) in list(item).iter().enumerate() {
+        if !enabled(m) {
+            continue;
+        }
+        let at = |f: &str| format!("modifiers/{k}/params/{f}");
+        match m.get("kind").and_then(Value::as_str).unwrap_or("") {
+            "mod.array@1" => {
+                let c = array_count(m).ok_or_else(|| at("count"))?;
+                (v, t) = (v * c, t * c);
+            }
+            "mod.mirror@1" => {
+                let a = axes(m).ok_or_else(|| at("axes"))?.len();
+                (v, t) = (v << a, t << a);
+            }
+            "mod.subdivide@1" => {
+                for _ in 0..levels(m).ok_or_else(|| at("levels"))? {
+                    (v, t) = (6 * t, 4 * t);
+                }
+            }
+            "mod.build@1" => t = kept(m, t).ok_or_else(|| at("from"))?.len() as u64,
+            "mod.bevel@1" | "mod.solidify@1" => return full().map(|n| n as u64),
+            _ => {}
+        }
+    }
+    Ok(v)
+}
+
+fn list(item: &Value) -> Vec<Value> {
+    item.get("modifiers")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// An array's count: given, or as many copies `offset` apart as fit in `fit` metres.
+fn array_count(m: &Value) -> Option<u64> {
+    if let Some(fit) = m.pointer("/params/fit") {
+        let fit = fit.as_f64().filter(|f| *f >= 0.0)?;
+        let step = vec3(m.pointer("/params/offset")).map_or(0.0, crate::geom::length);
+        if step <= 0.0 {
+            return None;
+        }
+        return Some(((fit / step).floor() as u64 + 1).clamp(1, 1024));
+    }
+    m.pointer("/params/count")
+        .and_then(Value::as_u64)
+        .filter(|c| (1..=1024).contains(c))
+}
+
+fn levels(m: &Value) -> Option<u64> {
+    match m.pointer("/params/levels") {
+        None => Some(1),
+        Some(v) => v.as_u64().filter(|l| *l <= 3),
+    }
+}
+
+/// The triangles a `build` keeps of `t`, by index or by a seeded order, in index order.
+fn kept(m: &Value, t: u64) -> Option<Vec<u32>> {
+    let num = |k: &str, d: f64| match m.pointer(&format!("/params/{k}")) {
+        None => Some(d),
+        Some(v) => v.as_f64(),
+    };
+    let (from, to) = (num("from", 0.0)?, num("to", 1.0)?);
+    if !(0.0..=1.0).contains(&from) || !(0.0..=1.0).contains(&to) {
+        return None;
+    }
+    let (a, b) = (
+        (from * t as f64).floor() as usize,
+        (to * t as f64).floor() as usize,
+    );
+    let mut order: Vec<u32> = (0..t as u32).collect();
+    match m
+        .pointer("/params/order")
+        .and_then(Value::as_str)
+        .unwrap_or("index")
+    {
+        "index" => {}
+        "seeded" => {
+            let seed = m
+                .pointer("/params/seed")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            order.sort_by_key(|i| (mix(seed ^ mix(u64::from(*i))), *i));
+        }
+        _ => return None,
+    }
+    let mut keep: Vec<u32> = order.get(a.min(b)..b.max(a)).unwrap_or(&[]).to_vec();
+    keep.sort_unstable();
+    Some(keep)
+}
+
+fn axes(m: &Value) -> Option<Vec<usize>> {
+    m.pointer("/params/axes")?
+        .as_array()?
+        .iter()
+        .map(|a| axis_of(a.as_str()?))
+        .collect()
+}
+
+fn axis_of(a: &str) -> Option<usize> {
+    match a {
+        "x" => Some(0),
+        "y" => Some(1),
+        "z" => Some(2),
+        _ => None,
+    }
+}
+
+fn vec3(v: Option<&Value>) -> Option<V3> {
+    let a = v?.as_array().filter(|a| a.len() == 3)?;
+    Some([a[0].as_f64()?, a[1].as_f64()?, a[2].as_f64()?])
+}
+
+/// splitmix64: the noise the seeded modifiers draw from.
+pub(crate) fn mix(mut x: u64) -> u64 {
+    x = x.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^ (x >> 31)
+}
+
+/// A seed from the item's stable ID and the modifier's own `seed` (Builder: "seeds from stable
+/// IDs").
+pub(crate) fn seed_of(id: &str, m: &Value) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in id.bytes() {
+        h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+    }
+    mix(h ^ m
+        .pointer("/params/seed")
+        .and_then(Value::as_u64)
+        .unwrap_or(0))
+}
+
+/// A number in [−1, 1] from a seed and a key.
+pub(crate) fn unit_noise(seed: u64, key: u64) -> f64 {
+    (mix(seed ^ mix(key)) >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0
+}
+
+/// Noise in [−1, 1] at a point, the same for every vertex welded to it.
+fn noise(seed: u64, p: V3) -> f64 {
+    let k = p.map(|x| (x / 1e-6).round() as i64 as u64);
+    unit_noise(seed, k[0] ^ mix(k[1] ^ mix(k[2])))
+}
+
+/// The vertices `on` (a named part's, or every one) a deform moves.
+fn targets(m: &Mesh, on: &str) -> Option<Vec<bool>> {
+    if on == "all" {
+        return Some(vec![true; m.positions.len()]);
+    }
+    let tris = m.parts.get(on).or_else(|| m.closed.get(on).map(|c| &c.0))?;
+    let mut out = vec![false; m.positions.len()];
+    for &t in tris {
+        for j in 0..3 {
+            out[m.indices[3 * t as usize + j] as usize] = true;
+        }
+    }
+    Some(out)
+}
+
+/// The mesh with the vertices `on` moved by `f(p, k)` and their normals by `g`.
+fn deform(m: &Mesh, on: &[bool], f: impl Fn(V3, usize) -> V3, g: impl Fn(V3) -> V3) -> Mesh {
+    let mut out = m.clone();
+    for (k, _) in on.iter().enumerate().filter(|(_, x)| **x) {
+        out.positions[k] = f(m.positions[k], k);
+        out.normals[k] = unit(g(m.normals[k]));
+    }
+    out
+}
+
+/// `moved`'s vertices where `only` holds them, `m`'s elsewhere.
+fn mask(m: &Mesh, moved: Mesh, only: &[bool]) -> Mesh {
+    if only.iter().all(|x| *x) {
+        return moved;
+    }
+    let mut out = m.clone();
+    for (k, _) in only.iter().enumerate().filter(|(_, x)| **x) {
+        out.positions[k] = moved.positions[k];
+        out.normals[k] = moved.normals[k];
+    }
+    out
+}
+
+/// Each vertex's normal averaged over the vertices welded to it, so a move along it keeps the
+/// mesh closed.
+fn welded_normals(m: &Mesh) -> Vec<V3> {
+    let w = m.welded();
+    let n = w.iter().max().map_or(0, |x| *x as usize + 1);
+    let mut acc = vec![[0.0; 3]; n];
+    for (k, id) in w.iter().enumerate() {
+        acc[*id as usize] = add(acc[*id as usize], m.normals[k]);
+    }
+    w.iter().map(|id| unit(acc[*id as usize])).collect()
+}
+
+fn rotate(p: V3, axis: usize, a: f64) -> V3 {
+    let (c, s) = (cos(a), sin(a));
+    let (i, j) = ((axis + 1) % 3, (axis + 2) % 3);
+    let mut q = p;
+    q[i] = p[i] * c - p[j] * s;
+    q[j] = p[i] * s + p[j] * c;
+    q
+}
+
+const TAU: f64 = core::f64::consts::TAU;
+
+/// Each modifier of `item` applied to `mesh` in its declared order at `t` seconds, with the
+/// rows that say what each is; why one can't apply, by its path under the item.
+pub fn apply(
+    mesh: Mesh,
+    item: &Value,
+    doc: &Value,
+    id: &str,
+    t: f64,
+) -> Result<(Mesh, Vec<Row>), Fault> {
+    let mut m = mesh;
+    let mut rows = Vec::new();
+    for (k, modifier) in list(item).iter().enumerate() {
+        let kind = modifier
+            .get("kind")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let at = |f: &str| format!("modifiers/{k}/{f}");
+        // A line's stroke modifiers (but `build`) are no builder's.
+        let (class, gpu, timed) = kind_row(&kind)
+            .filter(|_| kind == "mod.build@1" || !STROKE.contains(&kind.as_str()))
+            .ok_or_else(|| at("kind"))?;
+        let on = enabled(modifier);
+        rows.push(Row {
+            kind: kind.clone(),
+            class,
+            reads_time: timed || reads_time(doc, id, k),
+            enabled: on,
+            gpu,
+        });
+        if !on {
+            continue;
+        }
+        let params = modifier.get("params").cloned().unwrap_or(json!({}));
+        let part = modifier.get("on").and_then(Value::as_str).unwrap_or("all");
+        // A generate step makes the mesh anew; only a deform moves part of it.
+        if class == "generate" && part != "all" {
+            return Err(at("on"));
+        }
+        let only = targets(&m, part).ok_or_else(|| at("on"))?;
+        let num = |f: &str, d: f64| -> Result<f64, Fault> {
+            match params.get(f) {
+                None => Ok(d),
+                Some(v) => v
+                    .as_f64()
+                    .filter(|x| x.is_finite())
+                    .ok_or_else(|| at(&format!("params/{f}"))),
+            }
+        };
+        let seed = seed_of(id, modifier);
+        let phase = (unit_noise(seed, 1) + 1.0) * core::f64::consts::PI;
+        m = match kind.as_str() {
+            "mod.array@1" => array(&m, modifier, &params, doc).ok_or_else(|| at("params"))?,
+            "mod.mirror@1" => {
+                let mut out = m;
+                for axis in axes(modifier).ok_or_else(|| at("params/axes"))? {
+                    let flip = |mut p: V3| {
+                        p[axis] = -p[axis];
+                        p
+                    };
+                    let reflected = out.mapped(flip, |_, n| flip(n)).turned();
+                    let suffix = format!(".m{}", ["x", "y", "z"][axis]);
+                    out.append(&reflected, &suffix);
+                }
+                out
+            }
+            "mod.subdivide@1" => {
+                let n = levels(modifier).ok_or_else(|| at("params/levels"))?;
+                (0..n).fold(m, |m, _| subdivide(&m))
+            }
+            "mod.bevel@1" => {
+                let width = num("width", 0.02)?;
+                let segments = params
+                    .get("segments")
+                    .map_or(Some(1), Value::as_u64)
+                    .filter(|s| (1..=8).contains(s))
+                    .ok_or_else(|| at("params/segments"))?;
+                if width <= 0.0 {
+                    return Err(at("params/width"));
+                }
+                bevel(&m, width, segments as usize)
+            }
+            "mod.solidify@1" => {
+                let h = num("thickness", 0.01)?;
+                if h <= 0.0 {
+                    return Err(at("params/thickness"));
+                }
+                solidify(&m, h)
+            }
+            "mod.build@1" => {
+                let keep = kept(modifier, m.triangles() as u64).ok_or_else(|| at("params"))?;
+                build(&m, &keep)
+            }
+            "mod.store@1" => {
+                let name = params
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .filter(|n| !n.is_empty())
+                    .ok_or_else(|| at("params/name"))?;
+                let field = params
+                    .get("field")
+                    .and_then(Value::as_str)
+                    .unwrap_or("height");
+                let values = field_of(&m, field).ok_or_else(|| at("params/field"))?;
+                let mut out = m;
+                out.attributes.insert(name.to_string(), values);
+                out
+            }
+            "mod.curve_deform@1" => {
+                let curve = path(doc, params.get("path")).ok_or_else(|| at("params/path"))?;
+                let axis = params
+                    .get("axis")
+                    .and_then(Value::as_str)
+                    .map_or(Some(0), axis_of)
+                    .ok_or_else(|| at("params/axis"))?;
+                let bent = curve_deform(&m, &curve, axis);
+                mask(&m, bent, &only)
+            }
+            "mod.simple_deform@1" => {
+                let amount = params
+                    .get("amount")
+                    .and_then(Value::as_f64)
+                    .ok_or_else(|| at("params/amount"))?;
+                let mode = params
+                    .get("mode")
+                    .and_then(Value::as_str)
+                    .unwrap_or("twist");
+                match mode {
+                    "twist" | "bend" | "taper" | "stretch" => {
+                        mask(&m, simple_deform(&m, mode, amount), &only)
+                    }
+                    _ => return Err(at("params/mode")),
+                }
+            }
+            "mod.displace@1" => {
+                let amount = num("amount", 0.05)?;
+                if params
+                    .get("field")
+                    .and_then(Value::as_str)
+                    .unwrap_or("noise")
+                    != "noise"
+                {
+                    return Err(at("params/field"));
+                }
+                let normals = welded_normals(&m);
+                deform(
+                    &m,
+                    &only,
+                    |p, k| add(p, scale(normals[k], amount * noise(seed, p))),
+                    |n| n,
+                )
+            }
+            "mod.sway@1" => {
+                let amount = num("amount", 0.1)?;
+                let hz = num("hz", 0.4)?;
+                let wind = params.get("wind").cloned().unwrap_or(json!({}));
+                let w = |f: &str, d: f64| wind.get(f).and_then(Value::as_f64).unwrap_or(d);
+                let (direction, speed) = (w("direction", 0.0), w("speed", 3.0));
+                let gust = wind.get("gust").cloned().unwrap_or(json!({}));
+                let g = |f: &str, d: f64| gust.get(f).and_then(Value::as_f64).unwrap_or(d);
+                let (gscale, strength) = (g("scale", 20.0), g("strength", 0.5));
+                if gscale <= 0.0 || !(0.0..=1.0).contains(&strength) {
+                    return Err(at("params/wind/gust"));
+                }
+                let weights = match params
+                    .get("weight")
+                    .and_then(Value::as_str)
+                    .unwrap_or("height")
+                {
+                    "height" => field_of(&m, "height").ok_or_else(|| at("params/weight"))?,
+                    name => m
+                        .attributes
+                        .get(name)
+                        .cloned()
+                        .ok_or_else(|| at("params/weight"))?,
+                };
+                let d = [cos(rad(direction)), 0.0, sin(rad(direction))];
+                deform(
+                    &m,
+                    &only,
+                    |p, k| {
+                        let along = p[0] * d[0] + p[2] * d[2];
+                        let gusting = strength * sin(TAU * (t * speed - along) / gscale);
+                        let s = amount * weights[k] * (sin(TAU * hz * t + phase) + gusting);
+                        add(p, scale(d, s))
+                    },
+                    |n| n,
+                )
+            }
+            "mod.bob@1" => {
+                let dy = num("amount", 0.05)? * sin(TAU * num("hz", 0.5)? * t + phase);
+                deform(&m, &only, |p, _| [p[0], p[1] + dy, p[2]], |n| n)
+            }
+            "mod.wave@1" => {
+                let (amount, length, speed) = (
+                    num("amount", 0.05)?,
+                    num("length", 1.0)?,
+                    num("speed", 1.0)?,
+                );
+                if length <= 0.0 {
+                    return Err(at("params/length"));
+                }
+                let dr = rad(num("direction", 0.0)?);
+                let d = [cos(dr), 0.0, sin(dr)];
+                deform(
+                    &m,
+                    &only,
+                    |p, _| {
+                        let along = p[0] * d[0] + p[2] * d[2];
+                        let dy = amount * sin(TAU * (along - speed * t) / length);
+                        [p[0], p[1] + dy, p[2]]
+                    },
+                    |n| n,
+                )
+            }
+            "mod.spin@1" => {
+                let axis = params
+                    .get("axis")
+                    .and_then(Value::as_str)
+                    .map_or(Some(1), axis_of)
+                    .ok_or_else(|| at("params/axis"))?;
+                let a = rad(num("rate", 90.0)? * t);
+                deform(&m, &only, |p, _| rotate(p, axis, a), |n| rotate(n, axis, a))
+            }
+            _ => return Err(at("kind")),
+        };
+    }
+    Ok((m, rows))
+}
+
+/// A per-vertex field: `height` (0 at the lowest point, 1 at the highest), `x`, `y`, `z`, or
+/// `distance` from the item's origin.
+fn field_of(m: &Mesh, field: &str) -> Option<Vec<f64>> {
+    let [lo, hi] = m.bounds();
+    Some(match field {
+        "height" => {
+            let span = (hi[1] - lo[1]).max(1e-12);
+            m.positions
+                .iter()
+                .map(|p| ((p[1] - lo[1]) / span).clamp(0.0, 1.0))
+                .collect()
+        }
+        "x" | "y" | "z" => {
+            let a = axis_of(field)?;
+            m.positions.iter().map(|p| p[a]).collect()
+        }
+        "distance" => m
+            .positions
+            .iter()
+            .map(|p| crate::geom::length(*p))
+            .collect(),
+        _ => return None,
+    })
+}
+
+/// `count` copies: `offset` apart, laid along a curve (`along`), or turned `around` an axis.
+fn array(m: &Mesh, modifier: &Value, params: &Value, doc: &Value) -> Option<Mesh> {
+    let count = array_count(modifier)?;
+    let offset = match params.get("offset") {
+        None => [0.0; 3],
+        v => vec3(v)?,
+    };
+    let mut out = m.clone();
+    if let Some(along) = params.get("along") {
+        let curve = path(doc, Some(along))?;
+        let step = match crate::geom::length(offset) {
+            s if s > 0.0 => s,
+            _ if count > 1 => curve.length() / (count - 1) as f64,
+            _ => 0.0,
+        };
+        let start = curve.at(0.0).0;
+        for c in 1..count {
+            let shift = sub(curve.at(step * c as f64).0, start);
+            out.append(&m.mapped(|p| add(p, shift), |_, n| n), &format!(".{c}"));
+        }
+    } else if let Some(around) = params.get("around") {
+        let axis = around
+            .get("axis")
+            .and_then(Value::as_str)
+            .map_or(Some(1), axis_of)?;
+        let pivot = match around.get("pivot") {
+            None => [0.0; 3],
+            Some(Value::Number(n)) => [n.as_f64()?, 0.0, 0.0],
+            v => vec3(v)?,
+        };
+        let angle = around.get("angle").map_or(Some(360.0), Value::as_f64)?;
+        // A whole turn spaces its copies around it; a part turn ends on its last copy.
+        let per = if (angle - 360.0).abs() < 1e-9 || count < 2 {
+            angle / count as f64
+        } else {
+            angle / (count - 1) as f64
+        };
+        for c in 1..count {
+            let a = rad(per * c as f64);
+            let turned = m.mapped(
+                |p| add(pivot, rotate(sub(p, pivot), axis, a)),
+                |_, n| rotate(n, axis, a),
+            );
+            out.append(&turned, &format!(".{c}"));
+        }
+    } else {
+        for c in 1..count {
+            let shift = scale(offset, c as f64);
+            out.append(&m.mapped(|p| add(p, shift), |_, n| n), &format!(".{c}"));
+        }
+    }
+    Some(out)
+}
+
+/// One level of midpoint subdivision: each triangle four, with its own six vertices (its three
+/// corners and three edge midpoints, which a neighbour's shared edge makes at the same point),
+/// in its face and its parts.
+fn subdivide(m: &Mesh) -> Mesh {
+    let mut out = Mesh {
+        outputs: m.outputs.clone(),
+        attributes: m
+            .attributes
+            .keys()
+            .map(|k| (k.clone(), Vec::new()))
+            .collect(),
+        ..Mesh::default()
+    };
+    // Each new vertex: the corner or edge it comes from, by its corners' places in the triangle.
+    const FROM: [(usize, usize); 6] = [(0, 0), (1, 1), (2, 2), (0, 1), (1, 2), (2, 0)];
+    for t in 0..m.triangles() {
+        let ids = [0, 1, 2].map(|j| m.indices[3 * t + j] as usize);
+        let base = out.positions.len() as u32;
+        for (a, b) in FROM {
+            let (a, b) = (ids[a], ids[b]);
+            let p = scale(add(m.positions[a], m.positions[b]), 0.5);
+            let v = out.vertex(p, unit(add(m.normals[a], m.normals[b])));
+            for (name, values) in &m.attributes {
+                out.attributes.get_mut(name).expect("made above")[v as usize] =
+                    (values[a] + values[b]) / 2.0;
+            }
+        }
+        for [a, b, c] in [[0, 3, 5], [3, 1, 4], [5, 4, 2], [3, 4, 5]] {
+            out.indices.extend([base + a, base + b, base + c]);
+            out.faces.push(m.faces[t]);
+        }
+    }
+    let split = |tris: &Vec<u32>| -> Vec<u32> {
+        tris.iter()
+            .flat_map(|t| (0..4).map(move |k| 4 * t + k))
+            .collect()
+    };
+    out.parts = m.parts.iter().map(|(k, v)| (k.clone(), split(v))).collect();
+    out.closed = m
+        .closed
+        .iter()
+        .map(|(k, (v, g))| (k.clone(), (split(v), *g)))
+        .collect();
+    out
+}
+
+/// The triangles `keep` names, every vertex kept (so the count stays the builder's); a closed
+/// part stays closed only when all of it stays.
+fn build(m: &Mesh, keep: &[u32]) -> Mesh {
+    let mut out = m.clone();
+    out.indices.clear();
+    out.faces.clear();
+    let mut at = vec![u32::MAX; m.triangles()];
+    for (n, &t) in keep.iter().enumerate() {
+        at[t as usize] = n as u32;
+        out.indices
+            .extend(&m.indices[3 * t as usize..3 * t as usize + 3]);
+        out.faces.push(m.faces[t as usize]);
+    }
+    let remap = |tris: &Vec<u32>| -> Vec<u32> {
+        tris.iter()
+            .map(|t| at[*t as usize])
+            .filter(|x| *x != u32::MAX)
+            .collect()
+    };
+    out.parts = m.parts.iter().map(|(k, v)| (k.clone(), remap(v))).collect();
+    out.closed = m
+        .closed
+        .iter()
+        .filter(|(_, (v, _))| v.iter().all(|t| at[*t as usize] != u32::MAX))
+        .map(|(k, (v, g))| (k.clone(), (remap(v), *g)))
+        .collect();
+    out
+}
+
+/// A triangle of `m` facing `n`.
+fn facing(m: &mut Mesh, a: u32, b: u32, c: u32, n: V3, face: u32) {
+    let [pa, pb, pc] = [a, b, c].map(|i| m.positions[i as usize]);
+    if dot(cross(sub(pb, pa), sub(pc, pa)), n) < 0.0 {
+        m.tri(a, c, b, face);
+    } else {
+        m.tri(a, b, c, face);
+    }
+}
+
+/// A shell `h` thick: the mesh, its copy moved in along the welded normals and turned over, and
+/// a rim along every open edge; each closed piece after is a closed part.
+fn solidify(m: &Mesh, h: f64) -> Mesh {
+    let normals = welded_normals(m);
+    let w = m.welded();
+    let mut out = m.clone();
+    let mut inner = m.mapped(|p| p, |_, n| scale(n, -1.0)).turned();
+    for (k, n) in normals.iter().enumerate() {
+        inner.positions[k] = sub(m.positions[k], scale(*n, h));
+    }
+    inner.parts.clear();
+    out.append(&inner, ".inner");
+    // Each edge on welded points, with its two vertices and the triangle on it.
+    type Uses = Vec<(usize, usize, usize)>;
+    let mut uses: BTreeMap<(u32, u32), Uses> = BTreeMap::new();
+    for t in 0..m.triangles() {
+        for j in 0..3 {
+            let (a, b) = (
+                m.indices[3 * t + j] as usize,
+                m.indices[3 * t + (j + 1) % 3] as usize,
+            );
+            uses.entry((w[a].min(w[b]), w[a].max(w[b])))
+                .or_default()
+                .push((a, b, t));
+        }
+    }
+    let first = out.next_face();
+    for (rim, list) in uses.values().filter(|l| l.len() == 1).enumerate() {
+        let face = first + rim as u32;
+        let (a, b, t) = list[0];
+        let centre = scale(
+            [0, 1, 2]
+                .map(|j| m.positions[m.indices[3 * t + j] as usize])
+                .into_iter()
+                .fold([0.0; 3], add),
+            1.0 / 3.0,
+        );
+        let outward = unit(sub(scale(add(m.positions[a], m.positions[b]), 0.5), centre));
+        let base = out.positions.len() as u32;
+        for c in [
+            m.positions[a],
+            m.positions[b],
+            sub(m.positions[b], scale(normals[b], h)),
+            sub(m.positions[a], scale(normals[a], h)),
+        ] {
+            out.vertex(c, outward);
+        }
+        facing(&mut out, base, base + 1, base + 2, outward, face);
+        facing(&mut out, base, base + 2, base + 3, outward, face);
+    }
+    out.close_components();
+    out
+}
+
+/// A chamfer `width` wide on every edge between two faces (`segments` strips across it): each
+/// face's boundary moved in along its edges, a strip on every edge (out to the edge itself on an
+/// open one), and a cap at every corner, so a closed mesh stays closed.
+fn bevel(m: &Mesh, width: f64, segments: usize) -> Mesh {
+    let w = m.welded();
+    let mut point: BTreeMap<u32, V3> = BTreeMap::new();
+    for (k, id) in w.iter().enumerate() {
+        point.entry(*id).or_insert(m.positions[k]);
+    }
+    // Each face's half-edges on welded points, and its normal.
+    let mut half: BTreeMap<u32, Vec<(u32, u32)>> = BTreeMap::new();
+    let mut normal: BTreeMap<u32, V3> = BTreeMap::new();
+    for t in 0..m.triangles() {
+        let ids = [0, 1, 2].map(|j| w[m.indices[3 * t + j] as usize]);
+        let f = m.faces[t];
+        let list = half.entry(f).or_default();
+        for j in 0..3 {
+            list.push((ids[j], ids[(j + 1) % 3]));
+        }
+        let [a, b, c] = ids.map(|i| point[&i]);
+        let e = normal.entry(f).or_insert([0.0; 3]);
+        *e = add(*e, cross(sub(b, a), sub(c, a)));
+    }
+    // A face's boundary: the half-edges with no twin in the face, each corner's next and prev.
+    let mut next: BTreeMap<(u32, u32), u32> = BTreeMap::new();
+    let mut prev: BTreeMap<(u32, u32), u32> = BTreeMap::new();
+    for (f, hs) in &half {
+        for &(a, b) in hs {
+            if !hs.contains(&(b, a)) {
+                next.insert((*f, a), b);
+                prev.insert((*f, b), a);
+            }
+        }
+    }
+    // Each boundary corner of each face, moved in `width` along both its edges.
+    let mut inset: BTreeMap<(u32, u32), V3> = BTreeMap::new();
+    for (&(f, v), &b) in &next {
+        let p = point[&v];
+        let along = |q: u32| scale(unit(sub(point[&q], p)), width);
+        inset.insert((f, v), add(p, add(along(prev[&(f, v)]), along(b))));
+    }
+    let mut out = Mesh {
+        outputs: m.outputs.clone(),
+        ..Mesh::default()
+    };
+    for t in 0..m.triangles() {
+        let f = m.faces[t];
+        let n = unit(normal[&f]);
+        let vs = [0, 1, 2].map(|j| {
+            let k = m.indices[3 * t + j] as usize;
+            let p = inset.get(&(f, w[k])).copied().unwrap_or(m.positions[k]);
+            out.vertex(p, n)
+        });
+        out.indices.extend(vs);
+        out.faces.push(f);
+    }
+    let mut face = out.next_face();
+    let rows = |a: V3, b: V3| -> Vec<V3> {
+        (0..=segments)
+            .map(|r| add(a, scale(sub(b, a), r as f64 / segments as f64)))
+            .collect()
+    };
+    let mut by_edge: BTreeMap<(u32, u32), u32> = BTreeMap::new();
+    for (&(f, a), &b) in &next {
+        by_edge.insert((a, b), f);
+    }
+    for (&(a, b), &f) in &by_edge {
+        let twin = by_edge.get(&(b, a)).copied();
+        if twin.is_some_and(|g| g < f) {
+            continue;
+        }
+        let (ra, rb, n) = match twin {
+            Some(g) => (
+                rows(inset[&(f, a)], inset[&(g, a)]),
+                rows(inset[&(f, b)], inset[&(g, b)]),
+                unit(add(unit(normal[&f]), unit(normal[&g]))),
+            ),
+            None => (
+                rows(inset[&(f, a)], point[&a]),
+                rows(inset[&(f, b)], point[&b]),
+                unit(normal[&f]),
+            ),
+        };
+        for r in 0..segments {
+            let base = out.positions.len() as u32;
+            for c in [ra[r], rb[r], rb[r + 1], ra[r + 1]] {
+                out.vertex(c, n);
+            }
+            facing(&mut out, base, base + 1, base + 2, n, face);
+            facing(&mut out, base, base + 2, base + 3, n, face);
+            face += 1;
+        }
+    }
+    // A cap at every corner: the strips' ends around it, face after face.
+    let mut corners: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+    for &(f, v) in next.keys() {
+        corners.entry(v).or_default().push(f);
+    }
+    for (v, faces) in corners {
+        // Around v, a face's successor is the face across its edge from v to its next corner.
+        let succ = |f: u32| by_edge.get(&(next[&(f, v)], v)).copied();
+        let pred = |f: u32| by_edge.get(&(v, prev[&(f, v)])).copied();
+        let start = faces
+            .iter()
+            .copied()
+            .find(|f| pred(*f).is_none())
+            .unwrap_or(faces[0]);
+        let open = pred(start).is_none();
+        let mut ring: Vec<V3> = Vec::new();
+        if open {
+            ring.push(point[&v]);
+        }
+        let mut f = start;
+        for _ in 0..faces.len() {
+            match succ(f) {
+                Some(g) if !(open && g == start) => {
+                    ring.extend(&rows(inset[&(f, v)], inset[&(g, v)])[..segments]);
+                    f = g;
+                    if f == start {
+                        break;
+                    }
+                }
+                _ => {
+                    ring.push(inset[&(f, v)]);
+                    break;
+                }
+            }
+        }
+        if ring.len() < 3 {
+            continue;
+        }
+        // A segmented chamfer's cap has points in a line along each side, so it is cut into
+        // ears, never fanned.
+        let n = unit(faces.iter().fold([0.0; 3], |s, f| add(s, unit(normal[f]))));
+        if dot(crate::geom::newell(&ring), n) < 0.0 {
+            ring.reverse();
+        }
+        out.polygon(&ring, &[]);
+    }
+    out.close_components();
+    out
+}
+
+/// The mesh laid along the curve: its coordinate along `axis`, from its least, becomes arc
+/// length, and the other two its offsets across the curve's frame.
+fn curve_deform(m: &Mesh, curve: &crate::curve::Sampled, axis: usize) -> Mesh {
+    let low = m.bounds()[0][axis];
+    let (o1, o2) = ((axis + 1) % 3, (axis + 2) % 3);
+    let frame = |s: f64| -> (V3, V3, V3, V3) {
+        let (c, t) = curve.at(s);
+        let up = if t[1].abs() < 0.9 {
+            [0.0, 1.0, 0.0]
+        } else {
+            [0.0, 0.0, 1.0]
+        };
+        let n = unit(sub(up, scale(t, dot(up, t))));
+        (c, t, n, cross(t, n))
+    };
+    // Along x the frame's normal is the item's y and its binormal z; the other axes turn with it.
+    let place = |p: V3| -> V3 {
+        let (c, _, n, b) = frame(p[axis] - low);
+        let (u, w) = if axis == 0 {
+            (p[1], p[2])
+        } else {
+            (p[o1], p[o2])
+        };
+        add(c, add(scale(n, u), scale(b, w)))
+    };
+    m.mapped(place, |p, nrm| {
+        let (_, t, n, b) = frame(p[axis] - low);
+        let (u, w) = if axis == 0 {
+            (nrm[1], nrm[2])
+        } else {
+            (nrm[o1], nrm[o2])
+        };
+        add(scale(t, nrm[axis]), add(scale(n, u), scale(b, w)))
+    })
+}
+
+/// Twist about y, bend about z, taper across y or stretch along y, by `amount` (degrees per
+/// metre for twist and bend, per metre for taper, a fraction for stretch).
+fn simple_deform(m: &Mesh, mode: &str, amount: f64) -> Mesh {
+    let f = |p: V3| -> V3 {
+        match mode {
+            "twist" => {
+                let a = rad(amount * p[1]);
+                [
+                    p[0] * cos(a) - p[2] * sin(a),
+                    p[1],
+                    p[0] * sin(a) + p[2] * cos(a),
+                ]
+            }
+            "bend" => {
+                let a = rad(amount * p[0]);
+                [
+                    p[0] * cos(a) - p[1] * sin(a),
+                    p[0] * sin(a) + p[1] * cos(a),
+                    p[2],
+                ]
+            }
+            "taper" => {
+                let k = 1.0 + amount * p[1];
+                [p[0] * k, p[1], p[2] * k]
+            }
+            _ => [p[0], p[1] * (1.0 + amount), p[2]],
+        }
+    };
+    let mut out = m.mapped(f, |_, n| n);
+    // Normals from the moved faces: flat per triangle, accumulated at shared vertices.
+    let mut acc = vec![[0.0; 3]; out.positions.len()];
+    for t in 0..out.triangles() {
+        let [a, b, c] = [0, 1, 2].map(|j| out.indices[3 * t + j] as usize);
+        let n = cross(
+            sub(out.positions[b], out.positions[a]),
+            sub(out.positions[c], out.positions[a]),
+        );
+        for v in [a, b, c] {
+            acc[v] = add(acc[v], n);
+        }
+    }
+    out.normals = acc.into_iter().map(unit).collect();
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::builders::{self, Ctx};
+
+    fn box_mesh() -> Mesh {
+        let doc = json!({"items": {}});
+        let ctx = Ctx {
+            id: "it",
+            doc: &doc,
+            plants: Default::default(),
+        };
+        builders::build("slab@1", &json!({"size": [1, 1, 1]}), &ctx).unwrap()
+    }
+
+    fn plate() -> Mesh {
+        let doc = json!({"items": {}});
+        let ctx = Ctx {
+            id: "it",
+            doc: &doc,
+            plants: Default::default(),
+        };
+        builders::build("plate@1", &json!({"grid": [2, 2], "size": [1, 1]}), &ctx).unwrap()
+    }
+
+    fn run(m: Mesh, modifiers: Value, t: f64) -> Mesh {
+        let item = json!({"modifiers": modifiers});
+        apply(m, &item, &json!({"items": {}}), "it", t).unwrap().0
+    }
+
+    /// Every closed part's welded V − E + F, with its open edges: what `close_components` and
+    /// a watertight build agree on.
+    fn euler(m: &Mesh) -> Vec<(i64, usize, u32)> {
+        let w = m.welded();
+        m.closed
+            .values()
+            .map(|(tris, g)| {
+                let mut edges: BTreeMap<(u32, u32), u32> = BTreeMap::new();
+                let mut verts = std::collections::BTreeSet::new();
+                for &t in tris {
+                    let v = [0, 1, 2].map(|j| w[m.indices[3 * t as usize + j] as usize]);
+                    for j in 0..3 {
+                        let (a, b) = (v[j], v[(j + 1) % 3]);
+                        verts.insert(a);
+                        *edges.entry((a.min(b), a.max(b))).or_default() += 1;
+                    }
+                }
+                let open = edges.values().filter(|c| **c != 2).count();
+                (
+                    verts.len() as i64 - edges.len() as i64 + tris.len() as i64,
+                    open,
+                    *g,
+                )
+            })
+            .collect()
+    }
+
+    fn declared(modifiers: Value, base: &Mesh) -> u64 {
+        let item = json!({"modifiers": modifiers});
+        let full = || -> Result<usize, Fault> {
+            Ok(
+                apply(base.clone(), &item, &json!({"items": {}}), "it", 0.0)?
+                    .0
+                    .positions
+                    .len(),
+            )
+        };
+        estimate(
+            (base.positions.len() as u64, base.triangles() as u64),
+            &item,
+            &full,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn subdivide_splits_each_triangle_in_four_and_keeps_the_box_closed() {
+        let m = run(
+            box_mesh(),
+            json!([{"kind": "mod.subdivide@1", "params": {"levels": 2}}]),
+            0.0,
+        );
+        assert_eq!(m.triangles(), 12 * 16);
+        assert_eq!(
+            m.positions.len() as u64,
+            declared(
+                json!([{"kind": "mod.subdivide@1", "params": {"levels": 2}}]),
+                &box_mesh()
+            )
+        );
+        assert_eq!(euler(&m), vec![(2, 0, 0)]);
+    }
+
+    #[test]
+    fn bevel_chamfers_a_box_closed_with_its_count_declared() {
+        for segments in [1, 3] {
+            let mods =
+                json!([{"kind": "mod.bevel@1", "params": {"width": 0.1, "segments": segments}}]);
+            let m = run(box_mesh(), mods.clone(), 0.0);
+            assert_eq!(m.positions.len() as u64, declared(mods, &box_mesh()));
+            assert_eq!(euler(&m), vec![(2, 0, 0)], "segments {segments}");
+            // The corners are cut: no point stays at a cube's corner.
+            assert!(m.positions.iter().all(|p| !(p[0].abs() > 0.4999
+                && (p[1] - 0.5).abs() > 0.4999
+                && p[2].abs() > 0.4999)));
+            let vol = m.closed.values().map(|(t, _)| m.volume(t)).sum::<f64>();
+            assert!(vol < 1.0 && vol > 0.9, "{vol}");
+        }
+    }
+
+    #[test]
+    fn solidify_closes_an_open_plate_into_one_shell() {
+        let mods = json!([{"kind": "mod.solidify@1", "params": {"thickness": 0.1}}]);
+        let m = run(plate(), mods.clone(), 0.0);
+        assert_eq!(euler(&m), vec![(2, 0, 0)]);
+        assert_eq!(m.positions.len() as u64, declared(mods, &plate()));
+        let vol: f64 = m.closed.values().map(|(t, _)| m.volume(t)).sum();
+        assert!((vol.abs() - 0.1).abs() < 1e-9, "{vol}");
+    }
+
+    #[test]
+    fn build_keeps_its_fraction_of_triangles_in_order_or_seeded() {
+        let half = run(
+            box_mesh(),
+            json!([{"kind": "mod.build@1", "params": {"from": 0, "to": 0.5}}]),
+            0.0,
+        );
+        assert_eq!(half.triangles(), 6);
+        assert_eq!(&half.indices[..], &box_mesh().indices[..18]);
+        assert!(half.closed.is_empty());
+        let seeded = run(
+            box_mesh(),
+            json!([{"kind": "mod.build@1", "params": {"to": 0.5, "order": "seeded", "seed": 3}}]),
+            0.0,
+        );
+        assert_eq!(seeded.triangles(), 6);
+        assert_ne!(seeded.indices, half.indices);
+    }
+
+    #[test]
+    fn store_keeps_a_height_field_that_sway_reads_by_name() {
+        let mods = json!([
+            {"kind": "mod.store@1", "params": {"name": "wind", "field": "height"}},
+            {"kind": "mod.sway@1", "params": {"amount": 0.2, "weight": "wind", "hz": 1.0}}
+        ]);
+        let base = box_mesh();
+        let at = |t: f64| run(base.clone(), mods.clone(), t);
+        let m = at(0.3);
+        assert_eq!(m.attributes["wind"].len(), m.positions.len());
+        // The foot doesn't move; the top does, as a closed form in t.
+        for (k, p) in m.positions.iter().enumerate() {
+            if base.positions[k][1] < 1e-9 {
+                assert_eq!(*p, base.positions[k]);
+            }
+        }
+        assert_ne!(m.positions, base.positions);
+        assert_eq!(at(0.3).positions, m.positions);
+        assert_ne!(at(0.7).positions, m.positions);
+        let rows = apply(
+            base.clone(),
+            &json!({"modifiers": mods}),
+            &json!({}),
+            "it",
+            0.0,
+        )
+        .unwrap()
+        .1;
+        assert_eq!(
+            rows.iter()
+                .map(|r| (r.reads_time, r.gpu))
+                .collect::<Vec<_>>(),
+            vec![(false, false), (true, true)]
+        );
+    }
+
+    #[test]
+    fn displace_moves_welded_points_together_so_the_box_stays_closed() {
+        let a = run(
+            box_mesh(),
+            json!([{"kind": "mod.displace@1", "params": {"amount": 0.05, "seed": 1}}]),
+            0.0,
+        );
+        assert_eq!(euler(&a), vec![(2, 0, 0)]);
+        assert_ne!(a.positions, box_mesh().positions);
+        let b = run(
+            box_mesh(),
+            json!([{"kind": "mod.displace@1", "params": {"amount": 0.05, "seed": 2}}]),
+            0.0,
+        );
+        assert_ne!(a.positions, b.positions);
+    }
+
+    #[test]
+    fn bob_wave_and_spin_are_closed_forms_in_t() {
+        for kind in ["mod.bob@1", "mod.wave@1", "mod.spin@1"] {
+            let mods = json!([{"kind": kind, "params": {}}]);
+            let at = |t: f64| run(box_mesh(), mods.clone(), t).positions;
+            assert_eq!(at(0.25), at(0.25), "{kind}");
+            assert_ne!(at(0.25), at(0.5), "{kind}");
+        }
+        // A quarter turn at 90 deg/s after 1 s.
+        let p = run(
+            box_mesh(),
+            json!([{"kind": "mod.spin@1", "params": {"rate": 90}}]),
+            1.0,
+        );
+        for (q, r) in p.positions.iter().zip(&box_mesh().positions) {
+            assert!(
+                (q[1] - r[1]).abs() < 1e-12
+                    && (q[0] - r[2]).abs() < 1e-9
+                    && (q[2] + r[0]).abs() < 1e-9
+            );
+        }
+    }
+
+    #[test]
+    fn array_fits_lays_along_and_turns_around_with_exact_counts() {
+        let doc = json!({"items": {"rail": {"kind": "curve@1", "params": {"points": [[0, 0, 0], [4, 0, 0]]}}}});
+        let base = box_mesh();
+        for (params, copies) in [
+            (json!({"fit": 3, "offset": [1, 0, 0]}), 4),
+            (json!({"count": 3, "along": "rail"}), 3),
+            (
+                json!({"count": 4, "around": {"axis": "y", "pivot": [2, 0, 0]}}),
+                4,
+            ),
+        ] {
+            let item = json!({"modifiers": [{"kind": "mod.array@1", "params": params}]});
+            let m = apply(base.clone(), &item, &doc, "it", 0.0).unwrap().0;
+            assert_eq!(m.positions.len(), copies * base.positions.len(), "{params}");
+            let full = || -> Result<usize, Fault> { Ok(0) };
+            let n = estimate(
+                (base.positions.len() as u64, base.triangles() as u64),
+                &item,
+                &full,
+            )
+            .unwrap();
+            assert_eq!(n as usize, m.positions.len(), "{params}");
+        }
+        let along = apply(base.clone(), &json!({"modifiers": [{"kind": "mod.array@1", "params": {"count": 3, "along": "rail"}}]}), &doc, "it", 0.0).unwrap().0;
+        assert!((along.bounds()[1][0] - 4.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_deform_on_a_part_moves_only_that_part() {
+        let doc = json!({"items": {}});
+        let ctx = Ctx {
+            id: "it",
+            doc: &doc,
+            plants: Default::default(),
+        };
+        let d = builders::build("display@1", &json!({"size": [0.6, 0.4]}), &ctx).unwrap();
+        let m = run(
+            d.clone(),
+            json!([{"kind": "mod.bob@1", "on": "screen", "params": {"amount": 0.1, "hz": 1}}]),
+            0.25,
+        );
+        let idx = &d.indices;
+        let screen: std::collections::BTreeSet<u32> = d.parts["screen"]
+            .iter()
+            .flat_map(|t| (0..3).map(move |j| idx[3 * *t as usize + j]))
+            .collect();
+        for k in 0..d.positions.len() {
+            assert_eq!(
+                m.positions[k] == d.positions[k],
+                !screen.contains(&(k as u32)),
+                "vertex {k}"
+            );
+        }
+        let item = json!({"modifiers": [{"kind": "mod.subdivide@1", "on": "screen"}]});
+        assert!(apply(d, &item, &doc, "it", 0.0).is_err());
+    }
+}
