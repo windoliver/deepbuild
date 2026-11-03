@@ -1,0 +1,67 @@
+#1097 acceptance suite on the base commit fad1c4cb (origin/main), November 2, 2026, before any #1097 code.
+Run: npx vitest run --root tests/acceptance/1097 --no-file-parallelism --testTimeout=600000
+     (Node v23.9.0; 1-minute load about 32-60 on 12 cores while it ran)
+Result: Test Files 5 failed (5); Tests 7 failed | 2 passed (9). Every criterion test fails at a named assertion or a
+documented missing surface. The 2 that pass are the merge-base wrong-program tests of AC1 and AC2: on the base the
+pinned merge base is this checkout, so it fails the criterion as they expect. Trimmed to each failing assertion.
+
+Before the run, base `deep-hook check` (target/debug/deep-hook) on the issue's calls:
+  kill:by-name  sh -c nested 12 deep around pkill node (8272 chars)   {"matched":true}
+  kill:by-name  sh -c nested 13 deep around pkill node (16470 chars)  {"matched":false}   <- dropped past depth 12
+  effect:push   git push origin main                                  {"matched":true}
+  effect:push   "$(printf git)" push origin main                      {"matched":false}   <- program read as empty
+  effect:push   G=git; "$G" push origin main                          {"matched":true}    <- base reads $G as git
+  run:npm publish  "$NPM" publish                                     {"matched":false}
+  run:deep off  "$(printf deep)" off                                  {"matched":false}
+  (README, The calls: why AC1 holds G=git; "$G" only to the denial.)
+
+computed.test.ts (AC1 #1097.35142c93)
+  x AC1 with t-push installed, "$(printf git)" push origin main and G=git; "$G" push origin main are each denied by it,
+    $(printf git) named, hub up and stopped, and "$CC" -o app main.c is allowed
+    Error: `"$(printf git)" push origin main` must be denied with the hub up: exit 0 after 25.9 ms, stdout "", stderr ""
+    -> the base reads the computed program as empty; no entry matches; the push is let through.
+  v AC1 (wrong program) deep-hook on the merge base reads the program as empty, allows the push and fails this test,
+    naming the call   (passes: the merge base allows "$(printf git)" push origin main, hub up and stopped)
+
+depth.test.ts (AC2 #1097.68b4ff24)
+  x AC2 sh -c 13 deep around pkill node (16470 characters) is denied by no-kill-by-name, saying it nests past what the
+    reader reads, hub up and stopped
+    Error: the line nesting sh -c 13 deep around pkill node, past the reader's depth of 12, must be denied with the hub
+    up: exit 0 after 52.4 ms, stdout "", stderr "deep-hook: could not spool 01M6FX2S9GD06TSQAJS4954Q1G within the
+    hook's 50 ms\n"
+    -> the 12-deep control was denied by no-kill-by-name just before it; the 13-deep line is dropped and allowed.
+  v AC2 (wrong program) a reader that stops at its depth and allows the call (deep-hook on the merge base) fails this
+    test, naming the depth   (passes: the failure says "past the reader's depth of 12"; allowed hub up and stopped)
+
+warn.test.ts (AC3 #1097.cd061f3b)
+  x AC3 t-npm-publish (run:npm publish, warn) meeting "$NPM" publish allows it and tells the agent the reason with
+    "couldn't be read"
+    Error: t-npm-publish: the agent must be told the entry's reason with `"$NPM" publish`: exit 0 after 404.9 ms,
+    stdout "", stderr ""
+    -> allowed, but the warn entry never met the call, so the agent is told nothing.
+  x AC3 (wrong program) an engine that treats the unknown as block (DEEP_HUB_PLANT=unknown-as-block) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=unknown-as-block did not start: ...
+    Error: DEEP_HUB_PLANT=unknown-as-block names no planted program
+    -> the plant is the implementer's to write.
+
+install.test.ts (AC4 #1097.818d5af2)
+  x AC4 no-deep-off installs with the hub's own deep-hook, and is refused, naming it, when the install's check mode
+    misses computed programs (plant-computed-misses)
+    (the control install with the hub's own deep-hook passed: exit 0, no-deep-off in rules.json)
+    Error: BLOCKED: the deep-hook build with the plant plant-computed-misses did not build: cargo build --locked -q -p
+    deep-hook --features plant-computed-misses --target-dir .../target/plant-computed-misses exited 101: error: the
+    package 'deep-hook' does not contain this feature: plant-computed-misses
+    -> the plant (and DEEP_HUB_TEST_DEEP_HOOK) are the implementer's to write. On the base the install runs no
+    computed-program form at all, so even with the engine that misses it (the base's own), no-deep-off would install.
+
+budgets.test.ts (AC5 #1097.a5ceefc6)
+  x AC5 the perf lane has a task naming #1097, valid against the merge base's budgets, and it runs
+    Error: benchmarks/budgets.json must have a task whose reason names issue #1097, timing the hook path on calls with
+    unknowns
+  x AC5 matching the computed push and the 13-deep nesting against every installed entry adds under 2 ms at p95 to the
+    hook path
+    Error: the timed call `"$(printf git)" push origin main` must be read as an unknown and denied with every entry
+    installed: exit 0 after 34.7 ms, stdout "", stderr "deep-hook: spooled 01M6FWZ0M5CYGMJZ2RJ6R0YJWX, but its sync
+    didn't finish within the hook's 50 ms\n"
+    -> no number was read: the timed call is not an unknown match on the base. (This machine is loaded past its cores,
+    so the timing would be INCONCLUSIVE here anyway.)
