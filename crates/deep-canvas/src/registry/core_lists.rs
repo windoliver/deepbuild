@@ -3,8 +3,9 @@
 //! module fills it: the GPU layer's `gpu.step@1` (the op table), `gpu.output@1` (operator
 //! outputs) and `gpu.function@1` (step functions); `mark@1`, `builder@1`, `modifier@1` and
 //! `check.kind.doc@1`; and the kits of `device.class@1` and `logic.service@1`, whose entries land
-//! with the input seam and the logic module. Each kit's rules are each isolated by a planted wrong
-//! entry that breaks that rule alone.
+//! with the input seam and the logic module; and `data.layout@1` (#415), the data layouts canvas
+//! modules, first-party packs and packs fill, whose validators the sandbox module runs. Each kit's
+//! rules are each isolated by a planted wrong entry that breaks that rule alone.
 
 use serde_json::{json, Value};
 
@@ -764,12 +765,90 @@ fn constraint() -> RegistryDef {
     )
 }
 
+// ---- data.layout@1
+
+/// The verdicts `judged` holds, by asset, for each sha256 in `at`; a missing one is an error.
+fn verdicts<'a>(v: &'a Value, at: &str, judged: &str) -> Result<Vec<(&'a str, &'a Value)>, String> {
+    let list = v.get(judged).and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+    strings(v, at)
+        .into_iter()
+        .map(|sha| {
+            list.iter()
+                .find(|j| j["asset"] == sha)
+                .map(|j| (sha, j))
+                .ok_or(format!("`{sha}` was never run through its validator"))
+        })
+        .collect()
+}
+
+fn layout_has_twins(v: &Value) -> Result<(), String> {
+    if strings(v, "/twins").is_empty() {
+        return Err("it ships no malformed twin for its validator to refuse".into());
+    }
+    Ok(())
+}
+
+fn layout_refuses_twins(v: &Value) -> Result<(), String> {
+    for (sha, j) in verdicts(v, "/twins", "judged")? {
+        if j.get("valid") != Some(&Value::Bool(false)) {
+            return Err(format!("its validator accepts its own twin `{sha}`"));
+        }
+    }
+    Ok(())
+}
+
+fn layout_admits_fixtures(v: &Value) -> Result<(), String> {
+    for (sha, j) in verdicts(v, "/fixtures", "admitted")? {
+        if j.get("valid") != Some(&Value::Bool(true)) {
+            return Err(format!("its validator refuses its own fixture `{sha}`"));
+        }
+    }
+    Ok(())
+}
+
+fn layout_doc(v: &Value) -> Result<(), String> {
+    match v.get("doc").and_then(Value::as_str) {
+        Some(d) if !d.is_empty() && d.chars().count() <= 2_000 => Ok(()),
+        _ => Err("its doc is empty or past 2,000 characters".into()),
+    }
+}
+
+fn data_layout() -> RegistryDef {
+    let entry = |twins: Value, judged: Value, fixtures: Value, admitted: Value, doc: &str| {
+        json!({"validator": "planted", "max_bytes": 4096, "twins": twins, "judged": judged,
+               "fixtures": fixtures, "admitted": admitted, "doc": doc})
+    };
+    let refused = json!([{"asset": "t", "valid": false, "offset": 5}]);
+    let mut def = RegistryDef::new(
+        "data.layout@1",
+        obj(
+            json!({"validator": {"type": "string"}, "max_bytes": {"type": "integer"},
+                   "twins": {"type": "array"}, "fixtures": {"type": "array"},
+                   "doc": {"type": "string"}, "judged": {"type": "array"}, "admitted": {"type": "array"}}),
+            &["validator", "max_bytes", "twins", "doc"],
+        ),
+        &["module", "first_party_pack", "pack"],
+        "R6",
+    )
+    .rule("twins", "a layout with no malformed twin", layout_has_twins)
+    .rule("refuses_its_twins", "a validator that accepts one of its own twins", layout_refuses_twins)
+    .rule("admits_its_fixtures", "a validator that refuses one of its own fixtures", layout_admits_fixtures)
+    .rule("doc", "a layout without a doc of at most 2,000 characters", layout_doc)
+    .planted("accepts_its_twin", entry(json!(["t"]), json!([{"asset": "t", "valid": true, "offset": null}]), json!([]), json!([]), "d"))
+    .planted("no_twin", entry(json!([]), json!([]), json!([]), json!([]), "d"))
+    .planted("refuses_its_fixture", entry(json!(["t"]), refused.clone(), json!(["f"]), json!([{"asset": "f", "valid": false, "offset": 0}]), "d"))
+    .planted("no_doc", entry(json!(["t"]), refused, json!([]), json!([]), ""));
+    def.resolve = "check";
+    def
+}
+
 /// Every registry the core declares, by name.
 pub fn registries() -> Vec<RegistryDef> {
     vec![
         builder(),
         check_kind_doc(),
         constraint(),
+        data_layout(),
         device_class(),
         gpu_function(),
         gpu_output(),
