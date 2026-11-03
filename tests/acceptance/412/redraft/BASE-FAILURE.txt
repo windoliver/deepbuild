@@ -1,0 +1,104 @@
+Base commit: 960045da ("Merge pull request #1027 from windoliver/claude/issue-875-on-main")
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/412/redraft --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked: redraft/, and the original suite's
+helpers.ts and fixtures/ copied unchanged beside it). node_modules was the original blind suite's npm ci install of
+the same commit, reached through a symlink (removed after the run) because the disk held under 20 GB (9.8 GB, then
+6.3 GB); no workspace build was needed, since these tests use neither deep mcp nor @deepbuild/contracts.
+All 3 tests fail, each at a named assertion, none fails to load (the file typechecks with
+node node_modules/typescript/bin/tsc -p tests/acceptance/412/redraft/tsconfig.json):
+- test-cue and test-cue-span, the test features this suite chose, don't exist at the base: cargo refuses each build
+  before compiling ("none of the selected packages contains this feature") and each test fails at "the binary
+  builds". No target folder was written.
+Beside the run, at the base (the original suite's built base binaries, read only): `deep-canvas parse time` accepts
+0s, 0.5s, 0.8s, 0.13104s and 0.65882s, each printing back as itself, and refuses 0.130999375s and 0.000000000s with
+bad_time; deep_query on a shown board answers {"ok":true,…} for at ["0s","0.13104s","0.5s"] and {"ok":false,
+"code":"bad_input"} for at ["0.000000000s","0.130999375s"].
+Date: 2026-11-03T02:28:24Z  Node v24.22.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1 (Mac15,7)
+Exit code: 1
+Paths below have the checkout's absolute path replaced by <worktree>.
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/412/redraft
+
+ ❯ moves-redraft.test.ts (3 tests | 3 failed) 1566ms
+   ❯ AC14 a pop-in cue kind lists its moves at defaults, printed from its expansion (3)
+     × AC14 pop_in lists a scale from 0 to 1 over its 0.5 s span with its spring's decay, frequency and peak, each equal to its expansion's within 1e-9 53ms
+     × AC14 changing the default span to 0.8 s changes the listing with no other edit, and the listing still equals the expansion 16ms
+     × AC14 a planted entry whose listing is stored text that differs from its expansion fails, naming pop_in and span 10ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  moves-redraft.test.ts > AC14 a pop-in cue kind lists its moves at defaults, printed from its expansion > AC14 pop_in lists a scale from 0 to 1 over its 0.5 s span with its spring's decay, frequency and peak, each equal to its expansion's within 1e-9
+AssertionError: the binary builds: deep-show with features core,test-cue: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-cue failed:
++ error: none of the selected packages contains this feature: test-cue
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++ help: there are similarly named features: test-a, test-b, test-cycle, test-kit, test-nudge
++
+
+ ❯ Object.bin ../helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ moves-redraft.test.ts:132:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  moves-redraft.test.ts > AC14 a pop-in cue kind lists its moves at defaults, printed from its expansion > AC14 changing the default span to 0.8 s changes the listing with no other edit, and the listing still equals the expansion
+AssertionError: the binary builds: deep-show with features core,test-cue: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-cue failed:
++ error: none of the selected packages contains this feature: test-cue
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++ help: there are similarly named features: test-a, test-b, test-cycle, test-kit, test-nudge
++
+
+ ❯ Object.bin ../helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ moves-redraft.test.ts:140:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  moves-redraft.test.ts > AC14 a pop-in cue kind lists its moves at defaults, printed from its expansion > AC14 a planted entry whose listing is stored text that differs from its expansion fails, naming pop_in and span
+AssertionError: the binary builds: deep-show with features core,test-cue-span: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features core,test-cue-span failed:
++ error: none of the selected packages contains this feature: test-cue-span
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-canvas-vector, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin ../helpers.ts:166:107
+    164|       const entry = made.get(buildName(build));
+    165|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    166|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    167|       return entry.bin;
+    168|     },
+ ❯ moves-redraft.test.ts:150:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  18:28:24
+   Duration  1.88s (tests 97%, import 2%, transform 1%)
+
