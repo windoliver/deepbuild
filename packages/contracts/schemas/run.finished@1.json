@@ -202,6 +202,10 @@
             "withheld": {
               "type": "boolean",
               "description": "A held-out variant's run: its verdict carries, never its output."
+            },
+            "plain": {
+              "type": "boolean",
+              "description": "Its record is whole here (no retried test, no stand-in seeded, every failure on an assertion, no contract), so a restarted hub may read it again."
             }
           },
           "required": [
@@ -211,7 +215,8 @@
             "claim",
             "session",
             "base",
-            "withheld"
+            "withheld",
+            "plain"
           ],
           "additionalProperties": false
         }

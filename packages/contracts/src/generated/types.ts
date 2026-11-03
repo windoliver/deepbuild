@@ -4585,6 +4585,7 @@ export interface RunFinished {
       session: string;
       base: boolean;
       withheld: boolean;
+      plain: boolean;
     };
   };
   evidence?: Array<string>;

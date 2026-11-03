@@ -4826,11 +4826,16 @@ export class Core {
       renameSync(`${script}.tmp`, script);
     }
     // A held-out variant's files (#1018), from the store by their digests, over the snapshot's in its own checkout.
+    // Its folder is resolved through any link the snapshot holds and must still lie in the checkout, and a link in the
+    // file's place is removed, never written through: the agent never reaches the variant's bytes.
     for (const [path, sha] of Object.entries(r.overlay ?? {})) {
       const file = join(r.cwd, path);
-      if (!file.startsWith(`${r.cwd}/`)) throw Error(`a held-out variant's file ${path} lies outside its checkout`);
+      let folder = dirname(file);
+      while (!existsSync(folder)) folder = dirname(folder);
+      if (!`${realpathSync(folder)}/`.startsWith(`${realpathSync(r.cwd)}/`) || !`${file}/`.startsWith(`${r.cwd}/`)) throw Error(`a held-out variant's file ${path} lies outside its checkout`);
       mkdirSync(dirname(file), { recursive: true });
-      writeFileSync(file, await this.store.read(sha));
+      rmSync(file, { force: true });
+      writeFileSync(file, await this.store.read(sha), { flag: 'wx' });
     }
     // A stand-in's port (#874) is the one host it may reach, and its origin the one variable it gets; a command's stand-in is found by name.
     const grant: Grant = r.hosts?.length ? { ...RUN_AS_YOU, hosts: r.hosts } : RUN_AS_YOU;
