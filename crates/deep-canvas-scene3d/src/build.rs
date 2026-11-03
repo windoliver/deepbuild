@@ -26,6 +26,10 @@ pub struct Built {
     pub rows: Vec<Row>,
     pub resolved: Value,
     pub curve: Vec<[f64; 3]>,
+    /// The welded points, edges and faces declared before the build.
+    pub welded: Option<[u64; 3]>,
+    /// The block count the stack ran at.
+    pub blocks: usize,
 }
 
 impl Canonical for Built {
@@ -44,6 +48,8 @@ impl Canonical for Built {
         let rows: Vec<Value> = self.rows.iter().map(Row::to_json).collect();
         canonical(&json!([rows, self.resolved])).encode(out);
         self.curve.encode(out);
+        self.welded.encode(out);
+        (self.blocks as u64).encode(out);
     }
 }
 
@@ -92,9 +98,9 @@ pub fn has_shading(_: &Value, _: &str, item: &Value) -> bool {
 /// disabled modifier reads nothing").
 fn refs(item: &Value, planted: Option<&str>) -> Vec<String> {
     let mut out = stack::refs(item, planted);
-    for at in ["/params/path", "/params/along/curve"] {
+    for at in ["/params/path", "/params/along/curve", "/params/of"] {
         if let Some(p) = item.pointer(at).and_then(Value::as_str) {
-            out.push(p.to_string());
+            out.push(p.split('#').next().unwrap_or(p).to_string());
         }
     }
     out.sort();
@@ -210,6 +216,9 @@ fn item_at(v: &mut View<'_>) -> Result<Value, OpError> {
 }
 
 fn fault(id: &str, path: String) -> OpError {
+    if path == crate::hull::FLAT {
+        return OpError::new(crate::hull::FLAT, format!("items/{id}"));
+    }
     OpError::new("out_of_range", format!("items/{id}/{path}"))
 }
 
@@ -218,9 +227,10 @@ pub fn built(
     doc: &Value,
     id: &str,
     item: &Value,
-    planted: Option<&str>,
+    run: &stack::Run,
     t: f64,
 ) -> Result<Built, String> {
+    let planted = run.planted.as_deref();
     let kind = kind_of(item).to_string();
     let params = item.get("params").cloned().unwrap_or(json!({}));
     let spec = spec_of(&kind).ok_or("kind")?;
@@ -249,17 +259,20 @@ pub fn built(
     };
     let counts = builders::counts(&kind, &params, &ctx)?;
     let mesh = builders::build(&kind, &params, &ctx)?;
-    let (last, rows) = stack::apply(mesh.clone(), item, doc, id, t)?;
-    let full = || -> Result<usize, String> { Ok(last.positions.len()) };
-    let declared = stack::estimate(counts, item, &full)?;
+    let (last, rows) = stack::apply(mesh.clone(), item, doc, id, t, run)?;
+    let declared = stack::estimate(counts, item, &|k| {
+        Ok(stack::apply(mesh.clone(), &stack::prefix(item, k), doc, id, t, run)?.0)
+    })?;
     Ok(Built {
         kind,
         built: Some(mesh),
         mesh: Some(last),
-        declared,
+        declared: declared.vertices,
         rows,
         resolved,
         curve: Vec::new(),
+        welded: declared.welded,
+        blocks: run.blocks(),
     })
 }
 
@@ -267,7 +280,11 @@ fn run_scene3d(v: &mut View<'_>) -> Result<(), OpError> {
     let id = v.id().unwrap_or_default().to_string();
     let item = item_at(v)?;
     let doc = v.document()?;
-    let out = built(doc, &id, &item, v.planted(), 0.0).map_err(|p| fault(&id, p))?;
+    let run = stack::Run {
+        planted: v.planted().map(str::to_string),
+        ..Default::default()
+    };
+    let out = built(doc, &id, &item, &run, 0.0).map_err(|p| fault(&id, p))?;
     v.write("scene3d.built", Val::typed(out))
 }
 
@@ -276,7 +293,11 @@ fn run_scene3d_live(v: &mut View<'_>) -> Result<(), OpError> {
     let t = v.t()? as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
     let item = item_at(v)?;
     let doc = v.document()?;
-    let out = built(doc, &id, &item, v.planted(), t).map_err(|p| fault(&id, p))?;
+    let run = stack::Run {
+        planted: v.planted().map(str::to_string),
+        ..Default::default()
+    };
+    let out = built(doc, &id, &item, &run, t).map_err(|p| fault(&id, p))?;
     v.write("scene3d.livebuilt", Val::typed(out))
 }
 
@@ -300,6 +321,8 @@ fn run_building(v: &mut View<'_>) -> Result<(), OpError> {
             rows: Vec::new(),
             resolved,
             curve: Vec::new(),
+            welded: None,
+            blocks: 1,
         }),
     )
 }
