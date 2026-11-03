@@ -101,6 +101,8 @@ function recorded(root: string): Ours[] {
   if (!record || !isObj(record.hooks)) return [];
   return Object.entries(record.hooks).flatMap(([event, g]) => ((g as Group).hooks ?? []).map((entry) => ({ event, command: String(entry.command), entry })));
 }
+/** The entries setup wrote for Codex, each by its event and command. */
+export const recordedEntries = (root: string): { event: string; command: string }[] => recorded(root).map(({ event, command }) => ({ event, command }));
 
 // ---- config.toml: read as far as DeepBuild needs it, by table; what TOML itself refuses refuses the file.
 
