@@ -296,6 +296,9 @@ pub struct Startup {
     pub listing: Option<crate::registries::Listing>,
     /// #412: a planted wrong deep_kinds listing, sheet, dump, diff or gallery.
     pub kinds: Option<crate::kinds::Planted>,
+    /// #415: a planted wrong first-party layout: pages@1 under a pack's cap, or nav.graph's
+    /// validators trusting the header's link count.
+    pub layouts: deep_canvas_sandbox::layouts::Planted,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
@@ -515,6 +518,8 @@ pub enum Call {
     Sandbox,
     /// #238: the providers a document's current revision ran at check, with their output.
     Provided(String),
+    /// #415: the check-time validation of one data asset in a layout of `data.layout@1`.
+    Validate { layout: String, path: PathBuf },
     /// #200: an entry of a registry by name, through a document's pinned packs, `runs` times.
     Lookup {
         doc: String,
@@ -1037,7 +1042,7 @@ impl<'a> Hub<'a> {
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
-            sandbox: crate::sandbox::Host::default(),
+            sandbox: crate::sandbox::Host::planted(startup.layouts),
             vias: BTreeMap::new(),
             shapings: HashMap::new(),
         };
@@ -1404,6 +1409,7 @@ impl<'a> Hub<'a> {
                 "checks": self.sandbox.checks, "links": self.sandbox.links,
                 "rewrites": self.sandbox.rewrites, "runs": self.sandbox.runs,
             }),
+            Call::Validate { layout, path } => self.sandbox.validate(&self.startup.sealed, layout, path),
             Call::Provided(doc) => json!({
                 "doc": doc,
                 "provided": self.sandbox.provided.get(doc).cloned().unwrap_or_default(),
@@ -1797,7 +1803,7 @@ impl<'a> Hub<'a> {
                 }
                 issues.extend(unreadable_handles(&doc, |h| self.can_read(&writer, h)));
                 // #238: the providers the document names run at its check, once per content key.
-                issues.extend(self.sandbox.provide(&show.doc, &doc));
+                issues.extend(self.sandbox.provide(&self.startup.sealed, &show.doc, &doc));
                 let scope = match self.scenario.planted {
                     Some(Planted::DiffsItemsOnly) => Scope::ItemsOnly,
                     _ => Scope::Every,

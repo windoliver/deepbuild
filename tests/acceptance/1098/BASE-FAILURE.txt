@@ -1,0 +1,49 @@
+# #1098 acceptance tests on the base commit fad1c4cb (origin/main, no implementation of #1098)
+
+Command, from the checkout's root:  npx vitest run tests/acceptance/1098 --testTimeout=600000 --reporter=verbose
+Machine: Mac15,7 (Apple M3 Pro), Node 24.22.0, load average about 30 on 12 cores. Run 2026-11-02.
+
+Result: Test Files 3 failed (3); Tests 11 failed (11); about 2 s.
+
+Every criterion test fails on the base, on a missing surface: the base's plan.proposed@1 has no `targets` on a step, so
+the first authority ask each scenario raises is refused:
+
+  AskRefused: plan.proposed@1 refuses the plan at /data/steps/0/targets   (field: plan/steps/0/targets)
+
+  criteria.test.ts
+    AC1 #1098.23c3f8ea  FAIL  AskRefused at the first send's raise (new surface: PlanStep.targets, Card.targets)
+    AC2 #1098.cfbd489a  FAIL  AskRefused at the first weekly send's raise
+    AC3 #1098.7e22fb1f  FAIL  AskRefused at the push to origin's raise
+    AC4 #1098.c09c4e38  FAIL  AskRefused at the push to origin's raise (it plays AC3's session first)
+  plants.test.ts (each expects its scenario to fail with CriterionFailed naming the address, URL or option)
+    AC1 origin-from-agent-message  FAIL  got AskRefused, not CriterionFailed (and the base has no such plant)
+    AC1 first-recipient-origin     FAIL  got AskRefused, not CriterionFailed
+    AC2 rule-by-recipient-kind     FAIL  got AskRefused, not CriterionFailed
+    AC3 push-target-as-repo        FAIL  got AskRefused, not CriterionFailed
+    AC4 wider-scope-offered        FAIL  got AskRefused, not CriterionFailed
+  budgets.test.ts
+    AC5 #1098.4e407b8b perf lane   FAIL  benchmarks/budgets.json has a task target-origins: expected undefined to be defined
+    AC5 #1098.4e407b8b timing      FAIL  AskRefused at the first timed raise (it runs before judging, so it isn't
+                                         skipped as INCONCLUSIVE on this loaded machine)
+
+Type check (node node_modules/typescript/bin/tsc -p tests/acceptance/1098/tsconfig.json): 8 errors, all the missing
+surface: no exported `Target` or `CardTarget` from packages/asks/src/index.ts (3), and the five plant names not in
+`AsksPlant` (5).
+
+## What the checks themselves do on the base (a probe, not part of the suite)
+
+To see that each scenario's checks bite past the refusal, a throwaway copy of the suite was run once with `targets`
+left off every step (so the base takes the plans), and deleted afterwards:
+
+  AC1  CriterionFailed: ana@shop.example: <ask>'s card shows no entry for this target of its plan (its targets: null)
+  AC2  CriterionFailed: boss@corp.example: the weekly send with this second recipient went with no ask: <ask> was
+       decided for you by decision:<id>
+       (so the rule is set from your yes and the weekly send to you is decided for you on the base; the base lets the
+       second recipient through, as the rule-by-recipient-kind wrong program does)
+  AC3  CriterionFailed: origin: <ask>'s card shows no entry for this target of its plan (its targets: null)
+  AC4  with the origin checks skipped too:
+       CriterionFailed: Saved for this repo (shop): <ask>'s card, with a read target, offers to save your answer wider
+       than this ask
+       and with that check skipped as well:
+       CriterionFailed: repo:shop: your yes to <ask>, a card with a read target, was saved as a decision at repo:shop
+       (the suite's message now names this option "for this repo")

@@ -9,6 +9,7 @@ pub mod check;
 pub mod rewrite;
 pub mod trap;
 pub mod kit;
+pub mod layouts;
 pub mod module;
 
 use serde_json::Value;
