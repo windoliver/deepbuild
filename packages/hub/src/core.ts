@@ -183,6 +183,8 @@ interface Session {
 }
 /** The watches of monitors a session armed that still run, as its row names them (#997). */
 const watching = (live: Live): string[] => [...live.background.values()].filter((b) => b.watch).map((b) => b.what);
+/** The reading a session's row shows while its monitors' watches run (#997). */
+const waitingOn = (watches: string[]): string => `Waiting on its monitor ${backgrounded(watches)}: each event wakes it, and its stop is judged once the watch ends.`;
 /** Background work as a session's row names it: each command in backticks, cut at 80 characters (#907). */
 const backgrounded = (what: string[]): string => what.map((w) => `\`${w.length > 80 ? `${w.slice(0, 80)}…` : w}\``).join(', ');
 /**
@@ -1124,7 +1126,9 @@ export class Core {
     // A stop the rule reads as a claim recomputes its tasks' definitions' hashes once the stop is in the record; the
     // agent's final message is what the claim cites, for the validity gate (#29).
     if (claimed) this.lastMessage.set(meta.session, meta.fields?.last_assistant_message ?? '');
-    // A stop while a monitor's watch runs isn't final (#997): its claims are made once the watch ends.
+    // A stop while a monitor's watch runs isn't final (#997): its claims are made once the watch ends, and its row reads
+    // waiting on the watch at every stop, held or not, since its events are the session's next turns.
+    if (meta.event === 'Stop' && verified && watching(live).length) void settled.then(() => this.appendReading(meta.session, meta.agent, waitingOn(watching(live)))).catch(() => undefined);
     if (claimed && !watching(live).length) live.claiming = settled.then(() => this.tasks.claim(meta.session, meta.agent, meta.cwd)).catch((error: unknown): string[] => { process.stderr.write(`deep hub: the claim at ${meta.id} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); return []; });
     // A call reaches the hub once its hook's event is durable, never before: a restart trusts the cursors kept.
     // Its turn is judged once the append settles, however long past the grace that is.
@@ -1750,7 +1754,9 @@ export class Core {
     if (meta.event === 'SessionEnd') {
       // A watch ends with its session, whose last stop is then judged (#997), before the session is let go.
       const ends = [...live.background].filter(([, b]) => b.watch).map(([id]) => this.watchEnded(meta.session, id, 'its session ended'));
-      void Promise.all(ends).finally(() => { this.live.delete(meta.session); this.gate.ended(meta.session); this.askingSoon(); });
+      const end = () => { this.live.delete(meta.session); this.gate.ended(meta.session); this.askingSoon(); };
+      if (ends.length) void Promise.all(ends).finally(end);
+      else end();
     }
     else if (state === 'working' && !statusQuestion && !this.stopping) {
       live.quiet = setTimeout(() => void this.queue(() => this.quiet(meta.session, now)).catch(() => undefined), QUIET_MS);
@@ -2768,9 +2774,6 @@ export class Core {
       const starter = live?.claimedInTurn ? 'claim' as const : live?.words ?? null;
       await this.gate.turnEnded(lane && judged?.claim ? judged.claim : null, background, stopAt, { session: meta.session, origin: live?.turnFrom, due, starter }).catch(() => undefined);
       if (live) live.words = undefined;
-      // Its row reads waiting on its monitor until the watch ends (#997): its events are the session's next turns.
-      const watches = live ? watching(live) : [];
-      if (watches.length) await this.appendReading(meta.session, meta.agent, `Waiting on its monitor ${backgrounded(watches)}: each event wakes it, and its stop is judged once the watch ends.`).catch(() => undefined);
       if (lane && judged?.claim && background.length && lane.slow.length) await this.appendReading(meta.session, meta.agent, `${lane.slow.join(', ')} ${lane.slow.length === 1 ? 'waits' : 'wait'} for ${backgrounded(background)} in the background, and ${lane.slow.length === 1 ? 'starts' : 'start'} once it ends or 30 minutes from this stop.`).catch(() => undefined);
     }
     // The verdict in the chat: one line at every judged stop, as the verdict stands once the hold is over, first in a send-back's reason too (#83).
@@ -3108,9 +3111,13 @@ export class Core {
     live.background.delete(id);
     if (live.state === 'working') return;
     await this.queue(() => this.appendReading(session, live.agent, `Its monitor ${backgrounded([b.what])} ended: ${why}.`)).catch(() => undefined);
-    if (!live.judged || watching(live).length) return;
+    // Another watch still running keeps the row waiting on it; a wake that began a turn meanwhile is judged at its stop.
+    if (watching(live).length) return void await this.queue(() => this.appendReading(session, live.agent, waitingOn(watching(live)))).catch(() => undefined);
+    if (!live.judged || live.state === 'working') return;
     live.claiming ??= this.tasks.claim(session, live.agent, live.cwd).catch((): string[] => []);
     const judged = await this.queue(() => this.judging({ session, cwd: live.cwd } as HookMeta)).catch(() => undefined);
+    // Judged here once: a later wake's stop with no work in it doesn't judge it again.
+    live.judged = false;
     if (!judged?.claim) return;
     await this.laneOf(judged.claim, Date.now() + STOP_HOLD_MS);
     await this.gate.turnEnded(judged.claim, [...live.background.values()].map((x) => x.what), this.now(), { session, origin: live.turnFrom, due: null, starter: 'claim' }).catch(() => undefined);
