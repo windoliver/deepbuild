@@ -89,7 +89,12 @@ export type Plant =
   // #965's: slow checks started at every green stop, every loop check held, a loop's claim or your words mid-turn
   // starting nothing, no grace window, no 30-minute cap or one timed from the first stop, and facts read only at stops.
   | 'starts-on-every-green-stop' | 'holds-every-loop-check' | 'holds-claim-stop-for-loop' | 'words-only-at-turn-start'
-  | 'no-grace-window' | 'holds-background-without-limit' | 'caps-from-first-stop' | 'rechecks-facts-at-stops-only';
+  | 'no-grace-window' | 'holds-background-without-limit' | 'caps-from-first-stop' | 'rechecks-facts-at-stops-only'
+  // #322's: criteria read from the GitHub API alone, a comment author's role from the comment's text, every author a
+  // collaborator, an app's membership taken as collaborator, an early claim judged on the repo spec alone, a lint that
+  // only looks for a number, and a gate that runs no check before the definition locks.
+  | 'criteria-from-github-api' | 'role-from-comment-text' | 'every-author-collaborator' | 'app-membership-as-collaborator'
+  | 'spec-only-judges-early-claim' | 'lint-number-only' | 'lock-before-any-check';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -136,6 +141,8 @@ const PLANTS: readonly string[] = [
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
+  'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
+  'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

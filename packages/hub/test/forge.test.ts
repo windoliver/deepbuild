@@ -2,7 +2,7 @@
 // running", a release names its commit through its tag, and the next issue is found past the first page with pull
 // requests left out.
 import { afterEach, describe, expect, it } from 'vitest';
-import { Forge, isPrCreate, parsePrUrl } from '../src/forge.js';
+import { closesIssue, Forge, isPrCreate, parsePrUrl } from '../src/forge.js';
 
 type Route = (url: URL) => { body: unknown; next?: string } | undefined;
 const realFetch = globalThis.fetch;
@@ -78,6 +78,14 @@ describe('isPrCreate', () => {
   });
   it('is not a second command joined to it, or another command, however the quotes or heredocs around the join mix', () => {
     for (const c of ['gh pr create --help; echo https://github.com/acme/widgets/pull/7', 'gh pr create --fill && echo done', 'gh pr create --fill & echo done', 'gh pr create --fill | cat', 'gh pr create --body "$(echo x)"', 'gh pr create --body "`echo x`"', 'gh pr create\necho x', 'echo gh pr create', 'gh pr view 7', `gh pr create --title 'a"' ; echo https://github.com/acme/widgets/pull/9 --body '"b'`, 'gh pr create --title "a\\"; echo x', 'gh pr create --title "unterminated', 'gh pr create --title t --body-file >(echo https://github.com/acme/widgets/pull/9)', 'gh pr create --body "$(cat <<EOF\n\tx\n\tEOF\n)"', `gh pr create --body "$(cat <<'EOF'\nx\nEOF\n) " ; echo "$(cat <<'EOF'\nhttps://github.com/acme/widgets/pull/9\nEOF\n)"`, `gh pr create --body-file - <<'EOF'\nx\nEOF\necho https://github.com/acme/widgets/pull/9`, `gh pr create --body "$(cat <<'EOF'\nnever ends\n)"`]) expect(isPrCreate(c), c).toBe(false);
+  });
+});
+
+describe('closesIssue', () => {
+  it("names the issue a PR body closes by any of GitHub's closing keywords, and none for Part of", () => {
+    for (const [body, n] of [['Closes #83', 83], ['closes #83', 83], ['Closed #4', 4], ['Fixes #12', 12], ['fixed #12', 12], ['Fix #12', 12], ['Resolves #7', 7], ['resolved #7', 7], ['Resolve: #7', 7], ['Part of #83\n- left: R2', undefined], ['Encloses #83', undefined]] as const) {
+      expect(closesIssue(`gh pr create --title t --body "$(cat <<'EOF'\n## Summary\n${body}\nEOF\n)"`), body).toBe(n);
+    }
   });
 });
 

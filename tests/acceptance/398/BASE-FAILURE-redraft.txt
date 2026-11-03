@@ -13,7 +13,7 @@ base's raster refuses planted "import_skips_clip_path" as bad_input.
 1. The run at the base (verbatim)
 =================================================================================================
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-398-d2398a/agent-a0d32e48c7dc0e430/tests/acceptance/398
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-398-d2398a/agent-a0d32e48c7dc0e430/tests/acceptance/398
 
  ❯ elements.test.ts (43 tests | 43 failed) 26825ms
    ❯ #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue (7)
