@@ -28,6 +28,8 @@ pub struct Mesh {
     /// Each closed part: its triangles and its genus.
     pub closed: BTreeMap<String, (Vec<u32>, u32)>,
     pub outputs: BTreeMap<String, Value>,
+    /// Named per-vertex values a `store` modifier keeps, such as a wind weight an engine reads.
+    pub attributes: BTreeMap<String, Vec<f64>>,
 }
 
 impl Canonical for Mesh {
@@ -39,6 +41,8 @@ impl Canonical for Mesh {
             self.closed.iter().map(|(k, (t, g))| (k, t, *g)).collect();
         closed.encode(out);
         canonical(&json!(self.outputs)).encode(out);
+        let attributes: Vec<(&String, &Vec<f64>)> = self.attributes.iter().collect();
+        attributes.encode(out);
     }
 }
 
@@ -79,10 +83,13 @@ impl Mesh {
         self.indices.len() / 3
     }
 
-    /// A vertex at `p` with normal `n`.
+    /// A vertex at `p` with normal `n`; each attribute gets a 0 for it.
     pub fn vertex(&mut self, p: V3, n: V3) -> u32 {
         self.positions.push(p);
         self.normals.push(n);
+        for values in self.attributes.values_mut() {
+            values.push(0.0);
+        }
         (self.positions.len() - 1) as u32
     }
 
@@ -180,13 +187,22 @@ impl Mesh {
             parts: self.parts.clone(),
             closed: self.closed.clone(),
             outputs: self.outputs.clone(),
+            attributes: self
+                .attributes
+                .keys()
+                .map(|k| (k.clone(), Vec::new()))
+                .collect(),
             ..Mesh::default()
         };
         for t in 0..self.triangles() {
-            let [a, b, c] = [0, 1, 2].map(|j| self.positions[self.indices[3 * t + j] as usize]);
+            let ids = [0, 1, 2].map(|j| self.indices[3 * t + j] as usize);
+            let [a, b, c] = ids.map(|i| self.positions[i]);
             let n = unit(cross(sub(b, a), sub(c, a)));
-            for p in [a, b, c] {
+            for (k, p) in [a, b, c].into_iter().enumerate() {
                 let i = out.vertex(p, n);
+                for (name, values) in &self.attributes {
+                    out.attributes.get_mut(name).expect("made above")[i as usize] = values[ids[k]];
+                }
                 out.indices.push(i);
             }
         }
@@ -208,6 +224,23 @@ impl Mesh {
         let base = self.positions.len() as u32;
         let tbase = self.triangles() as u32;
         let fbase = self.next_face();
+        // An attribute either side lacks reads 0 there.
+        let names: Vec<String> = self
+            .attributes
+            .keys()
+            .chain(other.attributes.keys())
+            .cloned()
+            .collect();
+        for name in names {
+            let mine = self
+                .attributes
+                .entry(name.clone())
+                .or_insert_with(|| vec![0.0; base as usize]);
+            match other.attributes.get(&name) {
+                Some(theirs) => mine.extend(theirs),
+                None => mine.extend(std::iter::repeat_n(0.0, other.positions.len())),
+            }
+        }
         self.positions.extend(&other.positions);
         self.normals.extend(&other.normals);
         self.indices.extend(other.indices.iter().map(|i| i + base));
@@ -295,8 +328,80 @@ impl Mesh {
             .iter()
             .map(|(k, (t, g))| (k.clone(), json!({"triangles": t, "genus": g})))
             .collect();
+        let attributes: serde_json::Map<String, Value> = self
+            .attributes
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    json!({"domain": "point", "type": "f32", "values": v}),
+                )
+            })
+            .collect();
         json!({"positions": self.positions, "normals": self.normals, "indices": self.indices,
-               "closed": closed, "parts": self.parts, "outputs": self.outputs})
+               "closed": closed, "parts": self.parts, "outputs": self.outputs, "attributes": attributes})
+    }
+}
+
+impl Mesh {
+    /// Each vertex's welded point (positions equal to 1e-6 m are one), numbered from 0.
+    pub fn welded(&self) -> Vec<u32> {
+        let mut ids: BTreeMap<[i64; 3], u32> = BTreeMap::new();
+        self.positions
+            .iter()
+            .map(|p| {
+                let key = p.map(|x| (x / 1e-6).round() as i64);
+                let next = ids.len() as u32;
+                *ids.entry(key).or_insert(next)
+            })
+            .collect()
+    }
+
+    /// The closed parts recomputed from the triangles: each connected piece (on welded points)
+    /// with no open edge is a closed part `solid.k`, its genus from V − E + F = 2 − 2g.
+    pub fn close_components(&mut self) {
+        let w = self.welded();
+        let n = w.iter().max().map_or(0, |m| *m as usize + 1);
+        let mut root: Vec<usize> = (0..n).collect();
+        fn find(root: &mut [usize], mut x: usize) -> usize {
+            while root[x] != x {
+                root[x] = root[root[x]];
+                x = root[x];
+            }
+            x
+        }
+        let tri = |t: usize| [0, 1, 2].map(|j| w[self.indices[3 * t + j] as usize] as usize);
+        for t in 0..self.triangles() {
+            let [a, b, c] = tri(t);
+            for (x, y) in [(a, b), (b, c)] {
+                let (rx, ry) = (find(&mut root, x), find(&mut root, y));
+                root[rx] = ry;
+            }
+        }
+        let mut pieces: BTreeMap<usize, Vec<u32>> = BTreeMap::new();
+        for t in 0..self.triangles() {
+            let r = find(&mut root, tri(t)[0]);
+            pieces.entry(r).or_default().push(t as u32);
+        }
+        self.closed.clear();
+        for (k, tris) in pieces.into_values().enumerate() {
+            let mut edges: BTreeMap<(usize, usize), u32> = BTreeMap::new();
+            let mut verts = std::collections::BTreeSet::new();
+            for &t in &tris {
+                let v = tri(t as usize);
+                for j in 0..3 {
+                    let (a, b) = (v[j], v[(j + 1) % 3]);
+                    verts.insert(a);
+                    *edges.entry((a.min(b), a.max(b))).or_default() += 1;
+                }
+            }
+            if edges.values().any(|c| *c != 2) {
+                continue;
+            }
+            let chi = verts.len() as i64 - edges.len() as i64 + tris.len() as i64;
+            let genus = ((2 - chi) / 2).max(0) as u32;
+            self.closed.insert(format!("solid.{k}"), (tris, genus));
+        }
     }
 }
 

@@ -98,8 +98,14 @@ impl Hub<'_> {
                 };
                 let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
                 let params = item.get("params").cloned().unwrap_or(json!({}));
-                let counted =
-                    builders::estimate(kind, &params, &ctx).and_then(|n| stack::estimate(n, item));
+                let counted = builders::counts(kind, &params, &ctx).and_then(|c| {
+                    // A stack that reads its mesh's topology is counted on a build of it.
+                    let full = || -> Result<usize, String> {
+                        let mesh = builders::build(kind, &params, &ctx)?;
+                        Ok(stack::apply(mesh, item, &doc, id, 0.0)?.0.positions.len())
+                    };
+                    stack::estimate(c, item, &full)
+                });
                 let declared = match counted {
                     Ok(n) => n,
                     Err(path) => {

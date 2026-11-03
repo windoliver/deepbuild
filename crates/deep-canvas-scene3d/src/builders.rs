@@ -196,6 +196,11 @@ pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
 
 /// The vertices `kind` builds from `params`, counted without building it.
 pub fn estimate(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<u64, Fault> {
+    counts(kind, params, ctx).map(|c| c.0)
+}
+
+/// The vertices `kind` declares and the triangles it builds, counted from `params` alone.
+pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), Fault> {
     let (vertices, triangles) = match kind {
         "slab@1" => {
             let o = slab_plan(params)?.0;
@@ -236,9 +241,9 @@ pub fn estimate(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<u64, Fault>
         return Err("params".into());
     }
     if kind == "slab@1" && ctx.plants.vertex_count_off_by_one {
-        return Ok(declared - 1);
+        return Ok((declared - 1, triangles));
     }
-    Ok(declared)
+    Ok((declared, triangles))
 }
 
 /// A prism: the plan polygon `outer` (made counter-clockwise) with `holes` (made clockwise),
