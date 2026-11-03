@@ -62,7 +62,9 @@ impl Canonical for Modifier {
                 match *shape {
                     Shape::ThereAndBack => (0u8, 0.0).encode(out),
                     Shape::Pause(v) => (1u8, v).encode(out),
-                    Shape::Wiggle(v) => (2u8, v).encode(out),
+                    // #490: the wiggle turned at twice Manim's frequency under tag 2; at its
+                    // frequency now, it keys apart, so no cache serves the old frames.
+                    Shape::Wiggle(v) => (3u8, v).encode(out),
                 }
                 ease.encode(out);
             }

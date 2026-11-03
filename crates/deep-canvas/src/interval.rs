@@ -533,8 +533,11 @@ pub fn atan2(y: Iv, x: Iv) -> Iv {
         return Iv::EMPTY;
     }
     let pi = Iv::new(down(-ops::PI, 1), up(ops::PI, 1));
-    // Zero is one value, unsigned, as IEEE 1788 reads it and the point form takes it: y on 0 or
-    // above sits on the cut's upper side, where the angle reaches π and its corners bound it.
+    // Zero is one value, unsigned, as IEEE 1788 reads it and the point form takes it (−0 is 0,
+    // on either axis): y on 0 or above sits on the cut's upper side, where the angle reaches π
+    // and its corners bound it.
+    let unsigned = |v: Iv| Iv::new(v.lo + 0.0, v.hi + 0.0);
+    let (y, x) = (unsigned(y), unsigned(x));
     if x.lo <= 0.0 && y.lo < 0.0 && y.hi >= 0.0 {
         return pi;
     }

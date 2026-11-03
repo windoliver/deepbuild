@@ -1185,10 +1185,10 @@ fn clog((a, b): (f64, f64)) -> (f64, f64) {
     (ops::log(ops::hypot(a, b)), atan2(b, a))
 }
 
-/// atan2 with zero one value: −0 reads as 0, so the angle on the negative x axis is π, as its
-/// interval form and IEEE 1788 take it.
+/// atan2 with zero one value on either axis: −0 reads as 0, so the angle on the negative x axis
+/// is π and at the origin 0, as its interval form and IEEE 1788 take it.
 fn atan2(y: f64, x: f64) -> f64 {
-    ops::atan2(if y == 0.0 { 0.0 } else { y }, x)
+    ops::atan2(y + 0.0, x + 0.0)
 }
 
 /// z to a whole power by squaring, or through exp(w · log z).
@@ -2458,6 +2458,14 @@ mod tests {
         holds("ease(in_quad, x)", 1.5, 2.0, &[1.5, 2.0]);
         holds("ease(in_elastic, x)", 0.0, 0.01, &[1e-9, 0.005]);
         holds("ease(out_elastic, x)", 0.99, 1.0, &[1.0 - 1e-9]);
+    }
+
+
+    #[test]
+    fn atan2_takes_zero_unsigned_in_both_forms() {
+        holds("atan2(-x, -1)", -1.0, 0.0, &[-1.0, -0.5, 0.0]);
+        holds("atan2(0, x * 0)", -1.0, -0.5, &[-1.0, -0.75, -0.5]);
+        holds("carg(conj(vec2(x, 0)))", -2.0, -1.0, &[-2.0, -1.5, -1.0]);
     }
 
 }
