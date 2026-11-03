@@ -79,6 +79,11 @@ pub struct Solid {
     /// Object: `cast_shadow` and `receive_shadow`, both true unless the item says not.
     pub cast_shadow: bool,
     pub receive_shadow: bool,
+    /// Its coverage (#418): its material's alpha (1 opaque, 0 or 1 under a mask) times the item's
+    /// `adjust.opacity`. Below 1 it draws see-through and writes no ambient-occlusion depth.
+    pub alpha: f64,
+    /// Its material's emission × emission_strength, linear RGB.
+    pub emission: [f64; 3],
 }
 
 /// An object's outline: its silhouette drawn `width` device px wide in `color`, which a status
@@ -116,7 +121,7 @@ pub struct Line {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EdgesOf {
     pub mesh: Arc<crate::geom::Mesh>,
-    pub all: bool,
+    pub kind: crate::geom::EdgeKind,
     pub model: Affine3,
     pub width: f64,
 }
@@ -125,8 +130,13 @@ impl EdgesOf {
     /// The segments it draws, on welded positions unless `welded` is false (the planted
     /// `edges_unwelded` reader).
     pub fn segments(&self, welded: bool) -> Vec<Segment> {
-        self.mesh
-            .edges(self.all, welded)
+        let edges = if welded {
+            self.mesh.edge_list(self.kind, None)
+        } else {
+            self.mesh
+                .edges(self.kind == crate::geom::EdgeKind::All, false)
+        };
+        edges
             .into_iter()
             .map(|[a, b]| Segment {
                 a: apply(&self.model, a),
@@ -413,6 +423,9 @@ pub struct Scene {
     pub overlays: Vec<Overlay>,
     /// The first sun in item order, which shades the solids and casts the shadow.
     pub sun: Option<Sun>,
+    /// The first `sky@1`'s ambient light from above and below, linear RGB (#418); with none, the
+    /// solids keep the fixed ambient term.
+    pub sky: Option<[[f64; 3]; 2]>,
     pub others: Vec<Other>,
     /// Each curve item's samples in world metres, closed ones back to their start (#420).
     pub curves: BTreeMap<String, Vec<Vec3>>,
@@ -971,7 +984,8 @@ fn mesh_of(doc: &Value, id: &str, item: &Value, t: f64) -> Result<crate::geom::M
     let built = if crate::building::KINDS.contains(&kind) {
         crate::building::build(doc, id, item)
     } else {
-        crate::build::built(doc, id, item, None, t).map(|b| b.mesh.unwrap_or_default())
+        crate::build::built(doc, id, item, &Default::default(), t)
+            .map(|b| b.mesh.unwrap_or_default())
     };
     built.map_err(|path| Refused {
         code: "out_of_range",
@@ -995,10 +1009,10 @@ fn edge_line(
     let Some(item) = items.get(target) else {
         return refused("ref_unresolved", format!("{path}/edges/of"));
     };
-    let all = match edges.get("kind").and_then(Value::as_str).unwrap_or("quads") {
-        "all" => true,
-        "quads" | "cage" => false,
-        _ => return refused("out_of_range", format!("{path}/edges/kind")),
+    let Some(kind) =
+        crate::geom::EdgeKind::named(edges.get("kind").and_then(Value::as_str).unwrap_or("quads"))
+    else {
+        return refused("out_of_range", format!("{path}/edges/kind"));
     };
     let width = match params.get("width") {
         None | Some(Value::Null) => 1.5,
@@ -1031,7 +1045,7 @@ fn edge_line(
     }
     let source = EdgesOf {
         mesh: Arc::new(mesh),
-        all,
+        kind,
         model: world(items, target),
         width,
     };
@@ -1046,6 +1060,114 @@ fn edge_line(
 }
 
 /// A solid's color: its paint's role, or the look's `muted` when it names none.
+/// A linear RGB value: three (or four, alpha last) finite numbers at least 0.
+fn linear3(v: &Value) -> Option<[f64; 3]> {
+    let a = v.as_array().filter(|a| a.len() == 3 || a.len() == 4)?;
+    let mut out = [0.0; 3];
+    for (o, x) in out.iter_mut().zip(a) {
+        *o = num(Some(x)).filter(|x| *x >= 0.0)?;
+    }
+    Some(out)
+}
+
+fn encode8(v: f64) -> u8 {
+    let v = v.clamp(0.0, 1.0);
+    let e = if v <= 0.0031308 {
+        v * 12.92
+    } else {
+        1.055 * deep_canvas::ops::pow(v, 1.0 / 2.4) - 0.055
+    };
+    (e * 255.0).round() as u8
+}
+
+/// What an object's material and `adjust` give its surface (#418; Material: alpha_mode, alpha,
+/// emission; Item: adjust.opacity): its base color when the material sets one, its coverage and
+/// its emission.
+struct Surface {
+    color: Option<[u8; 3]>,
+    alpha: f64,
+    emission: [f64; 3],
+}
+
+fn surface(items: &Items<'_>, look: &Look3, id: &str, item: &Value) -> Result<Surface, Refused> {
+    let mut out = Surface {
+        color: None,
+        alpha: 1.0,
+        emission: [0.0; 3],
+    };
+    if let Some(o) = item.get("adjust").and_then(|a| a.get("opacity")) {
+        out.alpha = num(Some(o))
+            .filter(|o| (0.0..=1.0).contains(o))
+            .ok_or(Refused {
+                code: "out_of_range",
+                path: format!("items/{id}/adjust/opacity"),
+            })?;
+    }
+    let Some(material) = item.get("material").filter(|m| !m.is_null()) else {
+        return Ok(out);
+    };
+    let unresolved = || Refused {
+        code: "ref_unresolved",
+        path: format!("items/{id}/material"),
+    };
+    let mid = material.as_str().ok_or_else(unresolved)?;
+    let m = items
+        .get(mid)
+        .filter(|m| m.get("kind").and_then(Value::as_str) == Some("material@1"))
+        .ok_or_else(unresolved)?;
+    let empty = Value::Object(Map::new());
+    let params = m.get("params").unwrap_or(&empty);
+    let path = format!("items/{mid}/params");
+    let bad = |k: &str| Refused {
+        code: "out_of_range",
+        path: format!("{path}/{k}"),
+    };
+    let mut alpha = 1.0;
+    out.color = match params.get("base_color") {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(o)) => {
+            let role = o.get("role").and_then(Value::as_str);
+            Some(role.and_then(|r| look.role(r)).ok_or(Refused {
+                code: "ref_unresolved",
+                path: format!("{path}/base_color/role"),
+            })?)
+        }
+        Some(v) => {
+            let c = linear3(v).ok_or_else(|| bad("base_color"))?;
+            if let Some(a) = v.as_array().and_then(|a| a.get(3)) {
+                alpha = num(Some(a)).ok_or_else(|| bad("base_color"))?;
+            }
+            Some(c.map(encode8))
+        }
+    };
+    if let Some(a) = params.get("alpha") {
+        alpha *= num(Some(a))
+            .filter(|a| (0.0..=1.0).contains(a))
+            .ok_or_else(|| bad("alpha"))?;
+    }
+    let coverage = match params.get("alpha_mode").and_then(Value::as_str) {
+        None | Some("opaque") => 1.0,
+        Some("blend" | "add") => alpha,
+        // A mask keeps a fragment whole or cuts it.
+        Some("mask") => {
+            let cutoff = num(params.get("alpha_cutoff")).unwrap_or(0.5);
+            if alpha >= cutoff {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        Some(_) => return Err(bad("alpha_mode")),
+    };
+    out.alpha *= coverage;
+    if let Some(e) = params.get("emission") {
+        let e = linear3(e).ok_or_else(|| bad("emission"))?;
+        let k = num(params.get("emission_strength")).unwrap_or(1.0);
+        out.emission = e.map(|c| c * k);
+    }
+    Ok(out)
+}
+
 fn paint_or_muted(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
     if params.pointer("/paint/fill/role").is_none() {
         if let Some(c) = look.role("muted") {
@@ -1327,6 +1449,7 @@ pub(crate) fn evaluate_compiled(
     let mut doc_value: Option<Value> = None;
     let mut bounds: Vec<Vec3> = Vec::new();
     let mut sun = None;
+    let mut sky = None;
     let mut others = Vec::new();
     let mut curves = BTreeMap::new();
     for layer_id in &order {
@@ -1364,15 +1487,24 @@ pub(crate) fn evaluate_compiled(
                         ],
                     );
                     bounds.extend(corners(&model));
+                    let surface = surface(&items, look, id, item)?;
+                    if surface.alpha <= 0.0 {
+                        continue;
+                    }
                     layer.solids.push(Solid {
                         id: id.clone(),
                         shape,
                         model,
-                        color: paint(look, params, &path)?,
+                        color: match surface.color {
+                            Some(c) => c,
+                            None => paint(look, params, &path)?,
+                        },
                         stroke: stroke(look, params, shape, &path)?,
                         mesh: None,
                         cast_shadow: shadows(item, "cast_shadow"),
                         receive_shadow: shadows(item, "receive_shadow"),
+                        alpha: surface.alpha,
+                        emission: surface.emission,
                     });
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
@@ -1414,15 +1546,24 @@ pub(crate) fn evaluate_compiled(
                     let hash = u64::from_le_bytes([
                         key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
                     ]);
+                    let surface = surface(&items, look, id, item)?;
+                    if surface.alpha <= 0.0 {
+                        continue;
+                    }
                     layer.solids.push(Solid {
                         id: id.clone(),
                         shape: Shape::Built(hash),
                         model,
-                        color: paint_or_muted(look, params, &path)?,
+                        color: match surface.color {
+                            Some(c) => c,
+                            None => paint_or_muted(look, params, &path)?,
+                        },
                         stroke: None,
                         mesh: Some(Arc::new(mesh)),
                         cast_shadow: shadows(item, "cast_shadow"),
                         receive_shadow: shadows(item, "receive_shadow"),
+                        alpha: surface.alpha,
+                        emission: surface.emission,
                     });
                 }
                 // A curve draws nothing; what follows it (particles along it, #420) reads it
@@ -1523,7 +1664,20 @@ pub(crate) fn evaluate_compiled(
                             .unwrap_or(false),
                     });
                 }
-                "light.sun@1" | "camera@1" => {}
+                "sky@1" if sky.is_none() => {
+                    let rgb = |k: &str| -> Result<[f64; 3], Refused> {
+                        match params.get(k) {
+                            None => Ok([0.0; 3]),
+                            Some(v) => linear3(v).ok_or(Refused {
+                                code: "out_of_range",
+                                path: format!("{path}/{k}"),
+                            }),
+                        }
+                    };
+                    sky = Some([rgb("ambient_top")?, rgb("ambient_low")?]);
+                }
+                // A material draws nothing itself; the objects naming it read it (#418).
+                "light.sun@1" | "camera@1" | "sky@1" | "material@1" => {}
                 _ => others.push(Other {
                     id: id.clone(),
                     kind: kind.to_string(),
@@ -1582,6 +1736,7 @@ pub(crate) fn evaluate_compiled(
         layers,
         overlays,
         sun,
+        sky,
         others,
         curves,
         pages: labels.pages(),

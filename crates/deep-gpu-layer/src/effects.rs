@@ -4,6 +4,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use deep_canvas::ops;
 use deep_canvas_effects::emit::Options;
@@ -304,7 +305,24 @@ pub fn planted_fx(p: Option<Planted>) -> fx::Planted {
         without_karis: p == Some(Planted::BloomWithoutKaris),
         off_by_two: p == Some(Planted::PassOffByTwo),
         slow_glow: p == Some(Planted::SlowGlow),
+        dirt_overlay: p == Some(Planted::DirtOverlay),
     }
+}
+
+/// The bloom's lens dirt image (#418) when `seeded`: made from `seed` (the look's, else the
+/// document's), its low 32 bits, once per seed and kept; `None` otherwise.
+fn dirt_of(dirt: &Value, seed: u64) -> Option<Arc<Image>> {
+    static SEEDED: Mutex<BTreeMap<u32, Arc<Image>>> = Mutex::new(BTreeMap::new());
+    if dirt["texture"] != "seeded" {
+        return None;
+    }
+    let seed = seed as u32;
+    let mut held = SEEDED.lock().unwrap_or_else(|e| e.into_inner());
+    Some(
+        held.entry(seed)
+            .or_insert_with(|| Arc::new(deep_canvas_effects::dirt::seeded(seed)))
+            .clone(),
+    )
 }
 
 /// The settings the look, the scene and the session's selection give a frame at `t`.
@@ -369,6 +387,10 @@ pub fn settings(
             .map(|(k, v)| (format!("bloom.{k}"), v.clone()))
             .collect::<BTreeMap<_, _>>()
     });
+    let dirt = bloom
+        .as_ref()
+        .and_then(|b| b.get("bloom.dirt"))
+        .and_then(|d| dirt_of(d, look_json["seed"].as_u64().unwrap_or(doc_seed)));
     Settings {
         grid,
         shadow,
@@ -376,6 +398,7 @@ pub fn settings(
         selection: selection.to_vec(),
         outline_width: 2,
         bloom,
+        dirt,
         roles,
         t,
     }
