@@ -96,7 +96,10 @@ export type Plant =
   // collaborator, an app's membership taken as collaborator, an early claim judged on the repo spec alone, a lint that
   // only looks for a number, and a gate that runs no check before the definition locks.
   | 'criteria-from-github-api' | 'role-from-comment-text' | 'every-author-collaborator' | 'app-membership-as-collaborator'
-  | 'spec-only-judges-early-claim' | 'lint-number-only' | 'lock-before-any-check';
+  | 'spec-only-judges-early-claim' | 'lint-number-only' | 'lock-before-any-check'
+  // #323's: open items' normalizer that drops numbers, a gate that reads only the PR body, one that counts every
+  // resolved review thread as closed, and one that closes an item the agent marked completed in its task list.
+  | 'normalizer-drops-numbers' | 'pr-body-only' | 'resolved-counts-closed' | 'completed-closes-item';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -145,6 +148,7 @@ const PLANTS: readonly string[] = [
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
+  'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
