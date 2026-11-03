@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8J1",
+  "kind": "credential.loaded",
+  "subject": "run:01K74FMXR4T6V8X0Z2B4D6F8J2",
+  "data": {
+    "run": "run:01K74FMXR4T6V8X0Z2B4D6F8J2",
+    "env": "SHOP_API_KEY",
+    "by": "stand-in",
+    "hosts": [
+      "api.shop.example:443"
+    ]
+  },
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017051123
+}

@@ -14,7 +14,7 @@ use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
+use deep_canvas_scene3d::scene::{evaluate_with, Labels, Scene};
 use deep_gpu::device::Backend;
 use deep_scene3d_render::status::{Mode, COLORS_PASS, GUARD_PASS};
 use deep_scene3d_render::SHADOW_PASS;
@@ -59,6 +59,8 @@ struct Args {
     window: Option<Window3>,
     latency: Vec<u64>,
     counts: bool,
+    /// The glTF files `mesh.asset@1` items name, by sha256 (#420).
+    assets: std::collections::BTreeMap<String, std::path::PathBuf>,
     /// The documents an item may open by reference, by doc handle.
     docs: BTreeMap<String, std::path::PathBuf>,
     /// Report each label's glyphs and the atlas pages they sample (#381).
@@ -232,6 +234,12 @@ fn parse(call: &Value) -> Result<Args, Value> {
         window,
         latency,
         counts: call["counts"].as_bool().unwrap_or(false),
+        assets: call["assets"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter_map(|(sha, p)| Some((sha.clone(), std::path::PathBuf::from(p.as_str()?))))
+            .collect(),
         labels: call["labels"].as_bool().unwrap_or(false),
         clicks,
         states,
@@ -500,8 +508,32 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
             levels.collect();
             let (composed, resident) = levels.compose(&args.doc);
-            let mut scene = evaluate(&composed, t, &args.look, &mut labels)
+            let read = |sha: &str| std::fs::read(args.assets.get(sha)?).ok();
+            let mut scene = evaluate_with(&composed, t, &args.look, &mut labels, &read)
                 .map_err(|r| refused(r.code, r.path))?;
+            // A particles@1 count past its class's limit is refused, never clamped (#420).
+            let class = args.doc.pointer("/budget/class").and_then(Value::as_str);
+            if let Some(path) = effects::count_refusal(&scene, class) {
+                return Err(refused("out_of_range", path));
+            }
+            // #420 AC6's wrong programs: mesh edges unwelded, or drawn over their faces.
+            scene.plant_edges(
+                app.planted == Some(Planted::EdgesUnwelded),
+                app.planted == Some(Planted::EdgesSkipDepth),
+            );
+            // Each mesh-edge line's segments, in world metres, as `counts` reports them.
+            let edge_segments: Map<String, Value> = scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.lines)
+                .filter(|l| l.edges.is_some())
+                .map(|l| {
+                    (
+                        l.id.clone(),
+                        json!(l.segments.iter().map(|s| [s.a, s.b]).collect::<Vec<_>>()),
+                    )
+                })
+                .collect();
             // A stroke binding draws its outline around the object, exact (#386).
             if let Some(status) = status.as_ref().filter(|_| bound) {
                 status::strokes(&mut scene, status, &bindings, &args.states)?;
@@ -521,12 +553,18 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 Some(Planted::NoiseFromClock) => effects::Seeding::Clock,
                 _ => effects::Seeding::Item,
             };
+            // #420 AC1's wrong program steps the operators' clock from the last frame drawn,
+            // so a seek starts it again at zero; the shipped one reads t itself.
+            let fx_t = match app.planted {
+                Some(Planted::ParticlesIntegrate) => (n - args.from) as f64 / args.fps as f64,
+                _ => n as f64 / args.fps as f64,
+            };
             let settings = effects::settings(
                 &scene,
                 &args.look_json,
                 &args.look,
                 &args.selection,
-                n as f64 / args.fps as f64,
+                fx_t,
                 doc_seed,
                 seeding,
             );
@@ -690,6 +728,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("replayed".into(), json!(c.replayed));
                 frame.insert("instances_written".into(), json!(c.instances_written));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
+                frame.insert("segments".into(), Value::Object(edge_segments));
             }
             if let Some((gpu_ms, passes)) = &drawn.timing {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));

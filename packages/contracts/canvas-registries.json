@@ -107,6 +107,50 @@
     }
   },
   {
+    "registry": "data.layout@1",
+    "owner": "core",
+    "fill": [
+      "module",
+      "first_party_pack",
+      "pack"
+    ],
+    "resolve": "check",
+    "since": "R6",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "validator": {
+          "type": "string"
+        },
+        "max_bytes": {
+          "type": "integer"
+        },
+        "twins": {
+          "type": "array"
+        },
+        "fixtures": {
+          "type": "array"
+        },
+        "doc": {
+          "type": "string"
+        },
+        "judged": {
+          "type": "array"
+        },
+        "admitted": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "validator",
+        "max_bytes",
+        "twins",
+        "doc"
+      ]
+    }
+  },
+  {
     "registry": "device.class@1",
     "owner": "core",
     "fill": [

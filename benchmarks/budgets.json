@@ -346,6 +346,17 @@
       "initialReason": "Issue #304 first measurement: the merge base's deep-hook has no check mode and its rules.json no planted calls or tool classes. One process starts the hub on a temp home and times 200 forwarded PreToolUse calls with every shipped default entry in rules.json and 200 with none, interleaved, then deep-hook's check mode on one default's planted call and twin, 200 each, all from spawn to exit, so p50 includes Node's start and the release build; the issue's 2 ms added for matching and 10 ms over process start stay in tests/acceptance/304/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "deep-hook-unread",
+      "command": [
+        "node",
+        "benchmarks/deep-hook.mjs",
+        "unread"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1097 first measurement: the merge base's reader reads a computed program as no program and drops a nesting past its depth, so neither call meets an entry there. One process starts the hub on a temp home and times 200 forwarded PreToolUse calls of `\"$(printf rm)\" -rf \"$OUT\"/*` and 200 of `pkill node` nested 13 `sh -c` deep, each with every shipped default entry in rules.json and with none, interleaved, from spawn to exit; the issue's 2 ms at p95 stays in tests/acceptance/1097/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "deep-hook-during-backup",
       "command": [
         "node",
@@ -1077,6 +1088,17 @@
         "frame_cpu_p95_ms": 4
       },
       "initialReason": "Issue #417 first measurement: the merge base has no shipped looks. A release deep-gpu plays each shipped look's fixture film (tests/acceptance/417/fixtures/looks/<id>.json) in the app's headless window, 300 timed frames after 30 warm ones, each frame's GPU time (Vello GPU's passes by device timestamps plus GPUI's frame past the window's own) and CPU time (its marks, their encode and GPUI's latch and paint), five runs after a warm-up one. tests/acceptance/417/budgets.test.ts holds the worst look's p95s to the figure class's limits by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "target-origins",
+      "command": [
+        "node",
+        "benchmarks/asks.mjs",
+        "target-origins"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1098 first measurement: the merge base places no target of a plan. One process opens a record with an evidence store and the asks core, archives a session transcript of 5,000 tool results, and raises one authority ask whose step names eight targets of every kind, until its card shows each placed, with no model in the path; p50 includes Node's start, so the issue's 20 ms limit stays in tests/acceptance/1098/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }
