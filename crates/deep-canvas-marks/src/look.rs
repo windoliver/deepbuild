@@ -150,6 +150,9 @@ pub struct Look {
     /// fallback families.
     pub light_type: Type,
     pub dark_type: Type,
+    /// How far apart (OKLab ΔE) two data roles a chart tells apart by color alone stay, as seen
+    /// and under each simulated color-vision deficiency (Look: `data_distance`).
+    pub data_distance: f64,
 }
 
 /// Where a look's status distance holds (The status-color rule): everywhere, for the app's look,
@@ -159,6 +162,9 @@ pub enum Distance {
     Everywhere,
     WhereStatusShows,
 }
+
+/// The look's data distance when its definition names none (Look: `data_distance = 0.06*`).
+pub const DATA_DISTANCE: f64 = 0.06;
 
 /// Why a look is refused.
 #[derive(Clone, Debug, PartialEq)]
@@ -466,6 +472,54 @@ pub fn distance(a: Rgb, b: Rgb) -> f64 {
     delta(lab(a), lab(b))
 }
 
+/// Machado, Oliveira and Fernandes 2009's simulation matrices at full severity, applied in linear
+/// sRGB: protanopia, deuteranopia and tritanopia.
+const MACHADO_100: [(&str, [[f64; 3]; 3]); 3] = [
+    (
+        "protanopia",
+        [
+            [0.152286, 1.052583, -0.204868],
+            [0.114503, 0.786281, 0.099216],
+            [-0.003882, -0.048116, 1.051998],
+        ],
+    ),
+    (
+        "deuteranopia",
+        [
+            [0.367322, 0.860646, -0.227968],
+            [0.280085, 0.672501, 0.047413],
+            [-0.011820, 0.042940, 0.968881],
+        ],
+    ),
+    (
+        "tritanopia",
+        [
+            [1.255528, -0.076749, -0.178779],
+            [-0.078411, 0.930809, 0.147602],
+            [0.004733, 0.691367, 0.303900],
+        ],
+    ),
+];
+
+/// The nearest two colors come as seen or under a simulated deficiency: the vision and its
+/// OKLab ΔE.
+pub fn nearest_vision(a: Rgb, b: Rgb) -> (&'static str, f64) {
+    let lin = |c: Rgb| c.map(|v| deep_canvas::color::srgb_decode(f64::from(v) / 255.0));
+    let oklab = |[r, g, b]: [f64; 3]| {
+        deep_canvas::color::linear_to_oklab(deep_canvas::color::LinearRgb { r, g, b })
+    };
+    let (la, lb) = (lin(a), lin(b));
+    let mut nearest = ("seen", delta(oklab(la), oklab(lb)));
+    for (vision, m) in MACHADO_100 {
+        let sim = |c: [f64; 3]| m.map(|row| row[0] * c[0] + row[1] * c[1] + row[2] * c[2]);
+        let d = delta(oklab(sim(la)), oklab(sim(lb)));
+        if d < nearest.1 {
+            nearest = (vision, d);
+        }
+    }
+    nearest
+}
+
 /// WCAG 2.x relative luminance of an sRGB-encoded color.
 fn luminance(c: Rgb) -> f64 {
     let lin = |v: u8| deep_canvas::color::srgb_decode(f64::from(v) / 255.0);
@@ -703,6 +757,10 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
         dark_oklab,
         light_fonts,
         dark_fonts,
+        data_distance: def
+            .get("data_distance")
+            .and_then(Value::as_f64)
+            .unwrap_or(DATA_DISTANCE),
     };
     // Data colors keep the look's distance from every status color where status shows; the
     // ground sits behind them.

@@ -19,6 +19,7 @@ mod conformance;
 mod effects;
 mod film;
 mod fixtures;
+mod flat;
 mod frames;
 mod golden;
 mod guard;
