@@ -979,6 +979,12 @@ export class Core {
       this.readings.add(`${meta.session}\0${whose.reading.job}`);
       await this.appendReading(meta.session, meta.agent, whose.reading.text).catch(() => undefined);
     }
+    // The server's watch-only for hooks that can't run (#993) is no version's: the session is still verified. A hook
+    // arriving says a hook program ran, so the programs are checked again at the next tick.
+    if (meta.cantRun) {
+      delete meta.watchOnly;
+      this.hookCheckDue = 0;
+    }
     // A session on a version its facts don't cover is recorded unverified, with one reading naming the version.
     if (!meta.version && meta.transcript) {
       const version = versionOf(meta.transcript);
@@ -3585,6 +3591,7 @@ export class Core {
       this.sessions.delete(id);
       for (const kept of [this.lastMessage, this.counters, this.typedAt, this.projects, this.tasted]) kept.delete(id);
       this.versioned.delete(id);
+      this.miscalled.delete(id);
       this.firstPrompted.delete(id);
       for (const reading of this.readings) if (reading.startsWith(`${id}\0`)) this.readings.delete(reading);
       // Its answers whose delivery timed out: only its next prompt reads for them, and the record keeps them undelivered.
