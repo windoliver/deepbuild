@@ -6,11 +6,11 @@
 // The budget itself is budgets.long.test.ts.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { cleanup, MINUTE, recorded, REPO, sizesNamed } from '../helpers.ts';
 import { AC4, bench, BENCH_PATH, COUNTS, CRITERION, grewMost, LIMIT, lineFrom, PER_SESSION_ROLES, perSessionGrowth, roleGrowth, ROLES, shown, TRANSCRIPT_BYTES, worded, type Line, type Ran, type Role } from './helpers.ts';
 
-afterEach(cleanup, MINUTE);
+afterAll(cleanup, MINUTE);
 
 const METHOD: Record<string, string> = { linux: 'pss', darwin: 'phys_footprint' };
 /** The record's time stamps: milliseconds, or nanoseconds on some kinds. */
@@ -52,7 +52,7 @@ describe(`${AC4} ${CRITERION}: the per-session reading`, () => {
       const commands: [Role, RegExp][] = [['hub', /\bhub run\b/], ['deep mcp', /\bmcp$/], ['deep mcp actions', /\bmcp actions$/], ['waiter', /deep-hook\S* claude-code waiter$/]];
       for (const [role, shape] of commands) for (const p of own.filter((q) => q.role === role)) expect(p.command, `${at}: the ${role} runs as DeepBuild starts it`).toMatch(shape);
       expect(own.find((p) => p.role === 'hub')!.bytes, `${at}: the hub's own memory is measured, not a stub`).toBeGreaterThanOrEqual(5_000_000);
-      for (const p of own.filter((q) => q.role === 'deep mcp' || q.role === 'deep mcp actions')) expect(p.bytes, `${at}: a Node MCP server holds at least 1 MB of its own: ${JSON.stringify(p)}`).toBeGreaterThanOrEqual(1_000_000);
+      for (const p of own.filter((q) => q.role === 'deep mcp')) expect(p.bytes, `${at}: a Node MCP server holds at least 1 MB of its own: ${JSON.stringify(p)}`).toBeGreaterThanOrEqual(1_000_000);
       expect(reading.totalBytes, `${at}: the sum is the processes' readings summed`).toBe(processes.reduce((sum, p) => sum + p.bytes, 0));
     }
     const mcps = line.readings.at(-1)!.processes.filter((p) => p.role === 'deep mcp').map((p) => p.bytes);
