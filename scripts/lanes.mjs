@@ -220,6 +220,11 @@ function missed(lane, changed, cwd) {
   }
 }
 
+const throttle = fileURLToPath(new URL('./throttle.mjs', import.meta.url));
+/** A lane command's throttle class: the vitest parallel block and node --test are test, anything else build. */
+const throttleClass = ([command, ...args]) => (command === process.execPath
+  && ((args[0]?.endsWith('vitest.mjs') && !args.includes('--no-file-parallelism')) || args[0] === '--test') ? 'test' : 'build');
+
 export function runLanes(lanes, { cwd = root } = {}) {
   const failures = [];
   // The release preflight runs every lane; the local one runs a lane with paths only for a change that touches them.
@@ -255,7 +260,8 @@ export function runLanes(lanes, { cwd = root } = {}) {
         const log = join(directory, 'output');
         descriptor = openSync(log, 'w', 0o600);
         // One shared descriptor preserves the child's stdout/stderr write order.
-        result = spawnSync(command, args, { cwd, stdio: ['ignore', descriptor, descriptor] });
+        // Through the machine's throttle table, by its class (docs/parallel-proof.md, section 6).
+        result = spawnSync(process.execPath, [throttle, throttleClass([command, ...args]), '--wait', '30', '--', command, ...args], { cwd, stdio: ['ignore', descriptor, descriptor] });
         output = readFileSync(log, 'utf8').trim();
       } catch (error) {
         result = { status: null, error };
