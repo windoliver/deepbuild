@@ -211,7 +211,14 @@ pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validit
     let channels = motion
         .channels
         .iter()
-        .filter_map(|c| c.curve.next_change(doc_t));
+        .filter_map(|c| {
+            // A modified channel may change at every flick.
+            if c.modifiers.is_empty() {
+                c.curve.next_change(doc_t)
+            } else {
+                Some(doc_t + 1)
+            }
+        });
     let placements = motion
         .placements
         .iter()
@@ -305,8 +312,20 @@ fn evaluated(
 
 /// Evaluates `doc`, compiled as `program`, at `t`.
 pub fn frame(doc: &Map<String, Value>, program: &Program, t: i64, validity: Validity) -> Frame {
-    let mut state = program.state();
-    program.evaluate(t, validity, &mut state);
+    frame_with(doc, program, t, validity, &mut program.state())
+}
+
+/// [`frame`] into a state kept across a line's frames, which only the planted follow stepper
+/// reads from; every real evaluation overwrites what it reads.
+pub fn frame_with(
+    doc: &Map<String, Value>,
+    program: &Program,
+    t: i64,
+    validity: Validity,
+    state: &mut State,
+) -> Frame {
+    program.evaluate(t, validity, state);
+    let state = &*state;
     let motion = &program.motion;
     let mut at = 0;
     let mut channels: Vec<(String, Sample)> = motion
@@ -351,7 +370,7 @@ pub fn frame(doc: &Map<String, Value>, program: &Program, t: i64, validity: Vali
         t,
         doc_t: state.doc_t,
         pass: state.pass,
-        items: items(doc, program, &state),
+        items: items(doc, program, state),
         channels,
         placements,
         cameras,
