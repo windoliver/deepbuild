@@ -4,6 +4,7 @@
 //! trap to its kind, and names the function and the offset in the program as written, through the
 //! offset map the rewrite carries.
 
+pub mod layouts;
 pub mod service;
 
 use std::sync::mpsc;
@@ -54,6 +55,8 @@ pub struct Runner {
     instance: Instance,
     /// The rewrite's offset map, and whether a trap names the offset in the program as written.
     map: Vec<Entry>,
+    /// How far a memory sized for the run moved the code (rewrite::sized), taken off an offset.
+    shift: i64,
     written: bool,
     faults: Faults,
 }
@@ -61,6 +64,16 @@ pub struct Runner {
 impl Runner {
     /// `written`: a trap names the offset in the program as written; else in the rewritten one.
     pub fn new(bytes: &[u8], faults: Faults, written: bool) -> Result<Runner, String> {
+        Runner::sized(bytes, None, faults, written)
+    }
+
+    /// As `new`, with the program's one memory holding `pages` pages when given: the memory the
+    /// role's budget gives, such as a validator's asset plus 4 MiB (#415).
+    pub fn sized(bytes: &[u8], pages: Option<u64>, faults: Faults, written: bool) -> Result<Runner, String> {
+        let (sized, shift) = match pages {
+            Some(p) => deep_canvas_sandbox::rewrite::sized(bytes, p)?,
+            None => (bytes.to_vec(), 0),
+        };
         let mut config = Config::new();
         config
             .wasm_backtrace_max_frames(std::num::NonZeroUsize::new(1))
@@ -77,7 +90,7 @@ impl Runner {
             .wasm_custom_page_sizes(false)
             .wasm_wide_arithmetic(false);
         let engine = Engine::new(&config).map_err(|e| e.to_string())?;
-        let module = Module::new(&engine, bytes).map_err(|e| e.to_string())?;
+        let module = Module::new(&engine, &sized).map_err(|e| e.to_string())?;
         let mut store = Store::new(&engine, ());
         store.set_epoch_deadline(1);
         if faults.wasmtime_fuel {
@@ -89,6 +102,7 @@ impl Runner {
             store,
             instance,
             map: offsets(bytes),
+            shift,
             written,
             faults,
         })
@@ -193,7 +207,7 @@ impl Runner {
             .downcast_ref::<WasmBacktrace>()
             .and_then(|b| b.frames().first().map(|f| (f.func_index(), f.module_offset())));
         let (function, offset) = match frame {
-            Some((f, Some(o))) => (f, locate(&self.map, o as u32, self.written, by_rewrite)),
+            Some((f, Some(o))) => (f, locate(&self.map, (o as i64 - self.shift) as u32, self.written, by_rewrite)),
             _ => return Err(format!("the trap {kind} has no frame: {e}")),
         };
         Ok(Outcome {

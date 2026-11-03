@@ -1,0 +1,127 @@
+{
+  "fn.table@1": {
+    "program": "1b89146acfd20aa83e9ed8aca2d4b73181ba9182c049509f57f70a13ff143408",
+    "twins": [
+      {
+        "asset": "0b46dd74ffb68b4ca1b0477956ef3c01b450959f87c153a64f028b75c8c368be",
+        "valid": false,
+        "offset": 32
+      }
+    ],
+    "fixtures": [
+      {
+        "asset": "aec2646105be531adf55602cdbc9e28d7cc0a4b29dfcec397585cb2d5acf353b",
+        "valid": true,
+        "offset": null
+      }
+    ]
+  },
+  "nav.graph@1": {
+    "program": "46c50a9666fc0f7df008df1d04e63be1c70c46d9ebd4b67f20b7992c332e87b9",
+    "twins": [
+      {
+        "asset": "3d000c323ce3c3976ba27557e1fb5c640d918a6ae27c3277207199f874316d9d",
+        "valid": false,
+        "offset": 232
+      },
+      {
+        "asset": "999573505228110b2f42e3806319c7e7fcf964e473364da7422684877c7c102b",
+        "valid": false,
+        "offset": 68
+      },
+      {
+        "asset": "5166c512cc7d873bf181adc870ee3d6605557c12726000d8ccdb051c225b17ed",
+        "valid": false,
+        "offset": 72
+      },
+      {
+        "asset": "a3be4d9fad6229965c1d075549c41d4a6f218e2c8d33440af861bb8bf28739ef",
+        "valid": false,
+        "offset": 76
+      }
+    ],
+    "fixtures": [
+      {
+        "asset": "dd90e137c6079ea3a6fc6731f466fb1a9a523a2d4e2bf7a95597e88847d3da7b",
+        "valid": true,
+        "offset": null
+      }
+    ]
+  },
+  "nav.graph@2": {
+    "program": "ae3f7b4293dab680cab275bc0ec5d0d2114d94426cdec70980dda45280c23a89",
+    "twins": [
+      {
+        "asset": "e2d030d9efcd3bf2ea096db49f0881607b1c2011ca704ca600ca2958cb86c256",
+        "valid": false,
+        "offset": 312
+      },
+      {
+        "asset": "810e5a27615e0583f8f2dc9f005ed67872ee9d09578a6fc988014f90126560ff",
+        "valid": false,
+        "offset": 68
+      },
+      {
+        "asset": "2a399735d594f96d65b950ef0eab8a822d663ec7a57f4cf8d9b7a21ac5f75e90",
+        "valid": false,
+        "offset": 140
+      },
+      {
+        "asset": "77ac6212b261920181a7a5003e390ffd04d3e52af75d1978f556fe8caddcfde2",
+        "valid": false,
+        "offset": 144
+      },
+      {
+        "asset": "393c056a6def4b09abb18695af1c1ae4e39fc29b5471b4976143d5fddfb531fe",
+        "valid": false,
+        "offset": 196
+      },
+      {
+        "asset": "c2cabe9d170d4acc06b4853af9427afcd28de3914151e3485acc26f8013832a8",
+        "valid": false,
+        "offset": 373
+      }
+    ],
+    "fixtures": [
+      {
+        "asset": "911b2c1da44590ac294e31fd2a51501b6fda4b732d900bbee964855b13fd7b32",
+        "valid": true,
+        "offset": null
+      }
+    ]
+  },
+  "pages@1": {
+    "program": "a9db9ac7e18feafbb4daa721d7d88cfdf1eea72367634b3518784ea27ef704ef",
+    "twins": [
+      {
+        "asset": "38b8c1a4a1a71d75be7dc1b3142267315bf2f2852d0edcb9261fc6be9751b511",
+        "valid": false,
+        "offset": 131092
+      }
+    ],
+    "fixtures": [
+      {
+        "asset": "a8c0cf51bcdd92c039523a100096508cdf118ac3c60655144b4c5eab618508ba",
+        "valid": true,
+        "offset": null
+      }
+    ]
+  },
+  "table.layout@1": {
+    "program": "96c2535a4124018371eff966642df806e03c81acc5d920eed65ff8e7a56942cb",
+    "twins": [
+      {
+        "asset": "9d5a5244f32f941ab988d36ca74c2d042c5891a10087a3784e6a4b8a352cb56d",
+        "valid": false,
+        "offset": 154
+      }
+    ],
+    "fixtures": [
+      {
+        "asset": "d658e11221f3ced4e3f592d3221330b385b32305b4f0819e37cc769a91015c83",
+        "valid": true,
+        "offset": null
+      }
+    ]
+  }
+}

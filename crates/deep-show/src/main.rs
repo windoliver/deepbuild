@@ -538,6 +538,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "deep_kinds" => return Some(Call::Kinds(Value::Object(c.clone()))),
         "sandbox" => return Some(Call::Sandbox),
         "provided" => return Some(Call::Provided(c.get("doc")?.as_str()?.to_string())),
+        "validate" => {
+            return Some(Call::Validate {
+                layout: c.get("layout")?.as_str()?.to_string(),
+                path: PathBuf::from(c.get("path")?.as_str()?),
+            })
+        }
         "resolve" if c.get("registry").is_some() => {
             return Some(Call::Lookup {
                 doc: doc()?,
@@ -1228,8 +1234,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let at = list
         .iter()
         .map(|c| {
-            // deep_query's `at` is the times it reads (#411): on the clock it arrives at `arrives`.
-            let arrives = if c.get("call") == Some(&json!("deep_query")) {
+            // deep_query's `at` is the times it reads (#411), geometry's the curve fractions it
+            // reads (#441): on the clock either arrives at `arrives`.
+            let arrives = if c.get("call") == Some(&json!("deep_query"))
+                || c.get("call") == Some(&json!("geometry"))
+            {
                 "arrives"
             } else {
                 "at"
@@ -1420,7 +1429,7 @@ impl CanvasSide {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                let arrives = if c["call"] == "deep_query" {
+                let arrives = if c["call"] == "deep_query" || c["call"] == "geometry" {
                     "arrives"
                 } else {
                     "at"
@@ -1601,6 +1610,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-text",
     feature = "test-check-kind",
     feature = "test-leave-out-logic",
+    feature = "test-leave-out-data",
     feature = "test-leave-out-sandbox",
     feature = "test-mesh-item",
     feature = "test-prog-registry",
@@ -1619,7 +1629,12 @@ fn modules(set: BuildSet) -> Vec<Module> {
     #[allow(unused_mut)]
     let mut out: Vec<Module> = vec![
         deep_canvas_marks::modules::text(),
-        deep_canvas_marks::modules::look(),
+        // #418: `test-look-finish-off` seals the planted look@1 implementation in its place.
+        if cfg!(feature = "test-look-finish-off") {
+            deep_canvas_marks::modules::look_finish_off()
+        } else {
+            deep_canvas_marks::modules::look()
+        },
     ];
     if set >= BuildSet::R1 {
         out.extend([
@@ -1749,6 +1764,9 @@ fn modules(set: BuildSet) -> Vec<Module> {
     // #403: `full` holds no logic module yet; once one lands, this build leaves it out.
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
+    // #489: a build without the data module, whose motion@1 digest equals the full set's.
+    #[cfg(feature = "test-leave-out-data")]
+    out.retain(|m| m.manifest.name != "data");
     out
 }
 
@@ -1813,16 +1831,20 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             if sandbox {
                 parts.push(kit::SANDBOX_PART.to_string());
             }
+            // #418: look@1's reference is the shipped look, whichever a test build holds.
+            let reference = if sandbox {
+                deep_canvas_sandbox::module::module()
+            } else if interface == "look@1" {
+                deep_canvas_marks::modules::look()
+            } else if m.manifest.name == "scene3d" {
+                // #421: scene3d@1's reference is the shipped module, whichever a test build holds.
+                deep_canvas_scene3d::module::module()
+            } else {
+                m
+            };
             deep_canvas::registry::Interface {
                 name: interface,
-                // #421: scene3d@1's reference is the shipped module, whichever a test build holds.
-                reference: if sandbox {
-                    deep_canvas_sandbox::module::module()
-                } else if m.manifest.name == "scene3d" {
-                    deep_canvas_scene3d::module::module()
-                } else {
-                    m
-                },
+                reference,
                 kit: parts,
                 behavior: None,
             }
@@ -1917,6 +1939,12 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
             *m = deep_canvas_marks::modules::marks2d_planted(p);
         }
     }
+    // #489: motion with a planted constraint solve, whose entry the constraint kit refuses.
+    if let Some(StartPlanted::Constraints(p)) = planted {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "motion") {
+            *m = deep_canvas_motion::module::planted(p);
+        }
+    }
     // Every build set holds text and look, since a status mark needs text's shaper and look's
     // status map; the planted seal lets a build without look start (#388).
     for name in deep_canvas::registry::CORE_MODULES {
@@ -1996,6 +2024,10 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
             Some(StartPlanted::Kinds(k)) => Some(k),
             _ => None,
         },
+        layouts: match planted {
+            Some(StartPlanted::Layouts(l)) => l,
+            _ => Default::default(),
+        },
     })
 }
 
@@ -2021,8 +2053,12 @@ enum StartPlanted {
     Listing(registries::Listing),
     /// #221: marks2d's relations solved by a planted program.
     Relations(deep_canvas_marks::relations::Planted),
+    /// #489: motion's constraint kinds solved by a planted program.
+    Constraints(deep_canvas_motion::kit::Planted),
     /// #412: a wrong deep_kinds listing, sheet, dump, diff or gallery.
     Kinds(kinds::Planted),
+    /// #415: a wrong first-party layout's cap or validator.
+    Layouts(deep_canvas_sandbox::layouts::Planted),
 }
 
 #[cfg(test)]
@@ -2043,6 +2079,7 @@ mod tests {
             ignores_unknown_occlusion: false,
             listing: None,
             kinds: None,
+            layouts: Default::default(),
         }
     }
 
@@ -2383,10 +2420,24 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "relation_reads_previous_place" => Ok(StartPlanted::Relations(
             deep_canvas_marks::relations::Planted::PreviousPlace,
         )),
+        "constraint_iterates_to_convergence" => Ok(StartPlanted::Constraints(
+            deep_canvas_motion::kit::Planted::Iterates,
+        )),
+        "constraint_reads_previous_output" => Ok(StartPlanted::Constraints(
+            deep_canvas_motion::kit::Planted::PreviousFrame,
+        )),
         "registries_without_slots" => Ok(StartPlanted::Listing(registries::Listing::WithoutSlots)),
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
         "validator_without_close" => Ok(StartPlanted::Seal(Fault::NoCloseNames)),
         "close_by_spelling" => Ok(StartPlanted::Seal(Fault::CloseBySpelling)),
+        "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(deep_canvas_sandbox::layouts::Planted {
+            pages_pack_cap: true,
+            ..Default::default()
+        })),
+        "nav_graph_trusts_link_count" => Ok(StartPlanted::Layouts(deep_canvas_sandbox::layouts::Planted {
+            trusts_link_count: true,
+            ..Default::default()
+        })),
         _ if kinds::Planted::named(twin).is_some() => {
             Ok(StartPlanted::Kinds(kinds::Planted::named(twin).ok_or(())?))
         }

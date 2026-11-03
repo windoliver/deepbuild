@@ -7,6 +7,7 @@
 //! object-ID and depth targets and replays every batch's bundle; the output pass reads the linear
 //! target and writes the slot.
 
+pub mod ao;
 mod mesh;
 pub mod shadow;
 pub mod status;
@@ -216,6 +217,12 @@ pub trait After: Send {
     fn passes(&self) -> Vec<Pass>;
     /// The passes' encodes, in frame order.
     fn jobs(&mut self, device: &Device, frame: &AfterFrame<'_>) -> Vec<(String, Job)>;
+    /// What it draws over the finished frame this frame, premultiplied RGBA at the frame's size:
+    /// the finish leaves those pixels undithered (#418: deband never touches status colors or
+    /// legends).
+    fn covers(&self) -> Option<status::Layer> {
+        None
+    }
 }
 
 /// Passes between geometry and output, with the targets they read.
@@ -247,6 +254,9 @@ struct FrameUniform {
     /// This target's px per device px, which lines it draws, the depth target's px per px of
     /// this target, and 1 for the planted forward Z (scene3d.wgsl's `px`).
     px: [f32; 4],
+    /// The sky's ambient light from above and below, linear RGB, w 1 with a sky (#418).
+    sky_top: [f32; 4],
+    sky_low: [f32; 4],
 }
 
 /// scene3d.wgsl's `Lights`: the view, the light count and the lights the policy shades (#421).
@@ -315,7 +325,13 @@ struct ToneUniform {
     white: f32,
     contrast: f32,
     encode: u32,
-    pad: [u32; 3],
+    deband: f32,
+    saturation: f32,
+    graded: u32,
+    wb: [[f32; 4]; 3],
+    slope: [f32; 4],
+    offset: [f32; 4],
+    power: [f32; 4],
 }
 
 #[repr(C)]
@@ -328,12 +344,13 @@ struct SolidRecord {
     flags: u32,
     /// Its rank among the frame's solids by ID, which breaks coplanar depth ties (#421).
     tie: u32,
-    /// Its material's base color (linear) and alpha; metallic, roughness and specular level;
-    /// specular color; and emission (#421).
+    /// Its material's emission, linear RGB, and its coverage in w (#418).
+    emission: [f32; 4],
+    /// Its material's base color (linear) and its pattern's scale (a catcher's strength);
+    /// metallic, roughness, specular level and coat; specular color and coat roughness (#421).
     base: [f32; 4],
     surface: [f32; 4],
     specular: [f32; 4],
-    emission: [f32; 4],
 }
 
 /// A solid the shadow pass leaves out (`cast_shadow: false`).
@@ -398,8 +415,7 @@ fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool) -> SolidRecord {
     let mut flags =
         if s.cast_shadow { 0 } else { NO_CAST } | if s.receive_shadow { 0 } else { NO_RECEIVE };
     let f = |v: [f64; 3], w: f64| [v[0] as f32, v[1] as f32, v[2] as f32, w as f32];
-    let (mut base, mut surface, mut specular, mut emission) =
-        ([0.0; 4], [0.0; 4], [0.0; 4], [0.0; 4]);
+    let (mut base, mut surface, mut specular) = ([0.0; 4], [0.0; 4], [0.0; 4]);
     if let Some(mat) = &s.material {
         let mode = match mat.alpha_mode {
             AlphaMode::Opaque => 0,
@@ -415,11 +431,12 @@ fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool) -> SolidRecord {
             | mode << 7
             | mat.pattern << 9
             | (mat.pattern_seed & 0xffff) << 16;
-        base = mat.base.map(|c| c as f32);
-        base[3] *= mat.catch.unwrap_or(1.0) as f32;
+        // Its coverage is the record's emission.w (#418); its base's w carries the pattern's
+        // scale, or a catcher's strength.
+        let b = [mat.base[0], mat.base[1], mat.base[2]];
+        base = f(b, mat.catch.unwrap_or(mat.pattern_scale));
         surface = f([mat.metallic, mat.roughness, mat.specular_level], mat.coat);
         specular = f(mat.specular_color, mat.coat_roughness);
-        emission = f(mat.emission, mat.pattern_scale);
     }
     SolidRecord {
         rows: m.map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]),
@@ -427,10 +444,10 @@ fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool) -> SolidRecord {
         pick,
         flags,
         tie,
+        emission: v4(s.emission, s.alpha),
         base,
         surface,
         specular,
-        emission,
     }
 }
 
@@ -813,7 +830,14 @@ pub struct Renderer {
     flip: bool,
     tone_buffer: wgpu::Buffer,
     output_layout: wgpu::BindGroupLayout,
+    /// What the passes after the finish cover this frame (their layer, which the view holds), as
+    /// the output pass's undithered mask; one clear texel with none (#418).
+    covered: (Option<std::sync::Arc<[u8]>>, wgpu::TextureView),
     mesh_pipeline: wgpu::RenderPipeline,
+    /// Ambient occlusion's prepass, passes and the solids' group 2 (#418).
+    ao: ao::Passes,
+    /// The scene3d shader module and the solids' vertex layouts, which the ao prepass shares.
+    scene_module: wgpu::ShaderModule,
     families: Families,
     output_pipeline: wgpu::RenderPipeline,
     /// The output pass into the finished frame, for the passes after the finish (#382).
@@ -848,6 +872,9 @@ pub struct Renderer {
     low: Option<Low>,
     low_bytes: Option<u64>,
     outlines: Outlines,
+    /// The linear image this frame's output pass reads when passes between geometry and output
+    /// wrote one (#418's `pre_tone`); `None`, the linear target.
+    pre_tone: Option<wgpu::TextureView>,
 }
 
 /// The pass that draws thin lines and outlines at full size after the upscale (#386).
@@ -923,6 +950,10 @@ fn silhouette(
     out
 }
 
+fn rgb4(v: [f64; 3]) -> [f32; 4] {
+    [v[0] as f32, v[1] as f32, v[2] as f32, 0.0]
+}
+
 fn decode(c: u8) -> f64 {
     let v = f64::from(c) / 255.0;
     if v <= 0.04045 {
@@ -943,6 +974,7 @@ fn shape_code(s: Shape) -> u64 {
 
 const MESH_VERTEX: [wgpu::VertexAttribute; 2] =
     wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
+// Location 8 is the solid's tie rank, which the vertex stage reads (#421).
 const SOLID: [wgpu::VertexAttribute; 11] = wgpu::vertex_attr_array![
     2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Uint32, 6 => Uint32, 7 => Uint32,
     8 => Uint32, 9 => Float32x4, 10 => Float32x4, 11 => Float32x4, 12 => Float32x4
@@ -956,6 +988,18 @@ const TEXT: [wgpu::VertexAttribute; 8] = wgpu::vertex_attr_array![
     0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4,
     5 => Uint32, 6 => Uint32, 7 => Uint32
 ];
+
+/// A solid's vertex layouts: the mesh's vertices, then its instance records.
+fn mesh_buffers() -> [Option<wgpu::VertexBufferLayout<'static>>; 2] {
+    [
+        Some(wgpu::VertexBufferLayout {
+            array_stride: 24,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &MESH_VERTEX,
+        }),
+        Some(instance(std::mem::size_of::<SolidRecord>() as u64, &SOLID)),
+    ]
+}
 
 fn instance(
     stride: u64,
@@ -1034,14 +1078,7 @@ fn clear_pipeline(
             write_mask: wgpu::ColorWrites::empty(),
         }),
     ];
-    let buffers = [
-        Some(wgpu::VertexBufferLayout {
-            array_stride: 24,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &MESH_VERTEX,
-        }),
-        Some(instance(std::mem::size_of::<SolidRecord>() as u64, &SOLID)),
-    ];
+    let buffers = mesh_buffers();
     let label = if add { "scene3d.add" } else { "scene3d.blend" };
     pipeline(
         d,
@@ -1208,10 +1245,25 @@ impl Renderer {
                 },
             ],
         });
+        let mut covered = texture_entry();
+        covered.binding = 2;
         let output_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("scene3d output"),
-            entries: &[texture_entry(), uniform(1, wgpu::ShaderStages::FRAGMENT)],
+            entries: &[
+                texture_entry(),
+                uniform(1, wgpu::ShaderStages::FRAGMENT),
+                covered,
+            ],
         });
+        // Nothing covered: one clear texel.
+        let uncovered = texture2d(
+            d,
+            "scene3d uncovered",
+            [1, 1],
+            wgpu::TextureFormat::R8Unorm,
+            wgpu::TextureUsages::TEXTURE_BINDING,
+        )
+        .create_view(&Default::default());
         let uniform_buffer = |label, size| {
             d.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(label),
@@ -1277,21 +1329,15 @@ impl Renderer {
         )
         .create_view(&Default::default());
         let lights_bind = lights_bind(d, &lights_layout, &lights_buffer, &dfg_buffer, &shadow_stub);
-        let solid_layout = layout(&[Some(&frame_layout), Some(&lights_layout)]);
+        let ao = ao::Passes::new(device);
+        let mesh_layout = layout(&[Some(&frame_layout), Some(&lights_layout), Some(&ao.shade_layout)]);
         let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
-        let mesh_buffers = [
-            Some(wgpu::VertexBufferLayout {
-                array_stride: 24,
-                step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &MESH_VERTEX,
-            }),
-            Some(instance(std::mem::size_of::<SolidRecord>() as u64, &SOLID)),
-        ];
+        let mesh_buffers = mesh_buffers();
         let mesh_pipeline = draw_pipeline(
             d,
             &module,
-            &solid_layout,
+            &mesh_layout,
             planted.forward_z,
             "mesh_vs",
             "mesh_fs",
@@ -1449,13 +1495,16 @@ impl Renderer {
             dfg_buffer,
             lights_read_shadow: false,
             catches: false,
-            solid_layout,
+            solid_layout: mesh_layout.clone(),
             clear_pipelines: [None, None],
             ties: BTreeMap::new(),
             flip: false,
             tone_buffer,
             output_layout,
+            covered: (None, uncovered),
             mesh_pipeline,
+            ao,
+            scene_module: module.clone(),
             families: Families {
                 module,
                 draw_layout,
@@ -1501,6 +1550,7 @@ impl Renderer {
             low: None,
             low_bytes: None,
             outlines,
+            pre_tone: None,
         }
     }
 
@@ -1582,8 +1632,61 @@ impl Renderer {
             [
                 wgpu::BindingResource::TextureView(linear),
                 self.tone_buffer.as_entire_binding(),
+                wgpu::BindingResource::TextureView(&self.covered.1),
             ],
         )
+    }
+
+    /// The mask of what `layer` covers, uploaded when the layer changed; the clear texel with
+    /// none. Whether it changed.
+    fn cover(&mut self, device: &Device, layer: Option<status::Layer>) -> bool {
+        let same = match (&self.covered.0, &layer) {
+            (None, None) => true,
+            (Some(a), Some(b)) => Arc::ptr_eq(a, &b.rgba),
+            _ => false,
+        };
+        if same {
+            return false;
+        }
+        let view = match &layer {
+            Some(l) => {
+                // Every pixel the layer draws over or one of its boxes owns, grown a pixel.
+                let mut alpha: Vec<u8> = l.rgba.chunks_exact(4).map(|p| p[3]).collect();
+                let [w, h] = l.size.map(f64::from);
+                for b in &l.covers {
+                    let x0 = (b[0] - 1.0).floor().clamp(0.0, w) as usize;
+                    let y0 = (b[1] - 1.0).floor().clamp(0.0, h) as usize;
+                    let x1 = (b[0] + b[2] + 1.0).ceil().clamp(0.0, w) as usize;
+                    let y1 = (b[1] + b[3] + 1.0).ceil().clamp(0.0, h) as usize;
+                    for y in y0..y1 {
+                        alpha[y * l.size[0] as usize + x0..y * l.size[0] as usize + x1].fill(255);
+                    }
+                }
+                let texture = texture2d(
+                    &device.device,
+                    "scene3d covered",
+                    l.size,
+                    wgpu::TextureFormat::R8Unorm,
+                    wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                );
+                write_texture(&device.queue, &texture, 0, &alpha, l.size[0], l.size);
+                texture.create_view(&Default::default())
+            }
+            None => texture2d(
+                &device.device,
+                "scene3d uncovered",
+                [1, 1],
+                wgpu::TextureFormat::R8Unorm,
+                wgpu::TextureUsages::TEXTURE_BINDING,
+            )
+            .create_view(&Default::default()),
+        };
+        self.covered = (layer.map(|l| l.rgba), view);
+        if let Some(t) = &self.targets {
+            let bind = self.output_bind(&device.device, &t.linear_view);
+            self.targets.as_mut().expect("checked above").output_bind = bind;
+        }
+        true
     }
 
     /// Plants the upscale's wrong programs (#386).
@@ -1812,7 +1915,15 @@ impl Renderer {
         {
             return self.prepare(device, scene, look);
         }
+        let generation = self.ao.generation;
         self.prepare_frame(device, scene, look);
+        if self.ao.generation != generation {
+            // The solids' ao bind group changed: every batch with solids encodes again.
+            for layer in &scene.layers {
+                self.prepare_batch(device, layer, &scene.camera);
+            }
+            return;
+        }
         let mut written = 0;
         for &(l, i) in moved {
             let layer = &scene.layers[l];
@@ -1864,6 +1975,16 @@ impl Renderer {
             }
         }
         self.camera = (camera, cam.eye, cam.near);
+        self.compiled += self.ao.prepare(
+            device,
+            &self.scene_module,
+            &self.families.draw_layout,
+            &mesh_buffers(),
+            &mut self.names,
+            look.ao,
+            internal,
+            &camera,
+        );
         // A sun shades the solids by its direction and illuminance (w: E ÷ π, the radiance a white
         // surface facing it reflects); with none, the view's own key light, w 0.
         let (toward, w) = match &scene.sun {
@@ -1895,6 +2016,8 @@ impl Renderer {
             ],
             light,
             px: [k as f32, if below { 1.0 } else { 0.0 }, 1.0, forward],
+            sky_top: scene.sky.map_or([0.0; 4], |s| v4(s[0], 1.0)),
+            sky_low: scene.sky.map_or([0.0; 4], |s| v4(s[1], 1.0)),
         };
         // The outline pass over the full-size slot, and over the internal size for the planted
         // programs that draw there.
@@ -1973,7 +2096,16 @@ impl Renderer {
             } else {
                 0
             },
-            pad: [0; 3],
+            deband: look.deband.unwrap_or(0.0) as f32,
+            saturation: look.grade.saturation as f32,
+            graded: u32::from(!look.grade.is_identity()),
+            wb: look
+                .grade
+                .white_balance()
+                .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]),
+            slope: rgb4(look.grade.slope),
+            offset: rgb4(look.grade.offset),
+            power: rgb4(look.grade.power),
         };
         deep_gpu::alloc::outside(|| {
             device
@@ -2154,6 +2286,9 @@ impl Renderer {
         // The draw key: each draw's pipeline, the buffers and bind groups it binds by resource,
         // and its counts. The values written into those buffers never enter it.
         batch.next_key.clear();
+        if !batch.solids.is_empty() {
+            batch.next_key.extend([20, self.ao.generation]);
+        }
         for (shape, set) in &batch.solids {
             batch
                 .next_key
@@ -2206,6 +2341,7 @@ impl Renderer {
                 });
         enc.set_bind_group(0, &self.frame_bind, &[]);
         enc.set_bind_group(1, &self.lights_bind, &[]);
+        enc.set_bind_group(2, self.ao.shade(), &[]);
         for (shape, set) in &batch.solids {
             let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
                 continue;
@@ -2252,6 +2388,30 @@ impl Renderer {
             enc.draw(0..6, 0..batch.labels.len());
         }
         enc.finish(&wgpu::RenderBundleDescriptor { label: Some(id) })
+    }
+
+    /// This frame's ao passes over every batch's solids, in layer order; `None` with ao off.
+    fn ao_frame(&self) -> Option<ao::Frame> {
+        if !self.ao.is_on() {
+            return None;
+        }
+        let solids = self
+            .order
+            .iter()
+            .filter_map(|id| self.batches.get(id))
+            .flat_map(|b| &b.solids)
+            .filter_map(|(shape, set)| {
+                let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.get(shape)?);
+                Some((
+                    mesh.vertices.clone(),
+                    mesh.indices.clone(),
+                    mesh.count,
+                    buffer.clone(),
+                    set.len(),
+                ))
+            })
+            .collect();
+        self.ao.frame(&self.frame_bind, solids)
     }
 
     pub fn counts(&self) -> &Counts {
@@ -2393,7 +2553,21 @@ impl Renderer {
         if let Some(s) = shadow {
             jobs.push((SHADOW_PASS.into(), s));
         }
+        if let Some(ao) = self.ao_frame() {
+            let profiler = self.profiler.clone();
+            jobs.push((
+                ao::OCCLUSION.into(),
+                Box::new(move |encoder| {
+                    timed(&profiler, ao::OCCLUSION, encoder, |e, _| ao.record(e))
+                }),
+            ));
+        }
         jobs.push((GEOMETRY_PASS.into(), geometry));
+        let covers = after.as_deref().and_then(|a| a.covers());
+        deep_gpu::alloc::outside(|| self.cover(device, covers));
+        let Some(t) = self.targets.as_ref() else {
+            return Vec::new();
+        };
         let mut bind = t.output_bind.clone();
         if let Some(post) = post {
             let frame = PostFrame {
@@ -2410,9 +2584,12 @@ impl Renderer {
             };
             let (more, source) = post.jobs(device, &frame);
             jobs.extend(more);
-            if let Some(view) = source {
-                bind = self.output_bind(&device.device, &view);
+            if let Some(view) = &source {
+                bind = self.output_bind(&device.device, view);
             }
+            self.pre_tone = source;
+        } else {
+            self.pre_tone = None;
         }
         // With passes after the finish, the output writes the finished frame, and they write
         // the slot from it (#382). Below scale 1 the output and the guard write the internal
@@ -2691,6 +2868,9 @@ impl Renderer {
         let Some(t) = self.targets.as_ref() else {
             return;
         };
+        if let Some(ao) = self.ao_frame() {
+            ao.record(encoder);
+        }
         let bundles = self
             .order
             .iter()
@@ -2730,6 +2910,21 @@ impl Renderer {
         self.targets.as_ref().map(|t| (&t.linear, &t.linear_view))
     }
 
+    /// The linear image the frame's output pass read (after the effects and bloom, before
+    /// exposure) as little-endian f32 RGBA, rows top-down (#418).
+    pub fn read_pre_tone(&self, device: &Device) -> Option<Vec<u8>> {
+        let t = self.targets.as_ref()?;
+        let texture = self.pre_tone.as_ref().map_or(&t.linear, |v| v.texture());
+        let half = read_texture(device, texture, t.size, 8)?;
+        Some(
+            half.as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|h| f16_to_f32(u16::from_le_bytes(*h)).to_le_bytes())
+                .collect(),
+        )
+    }
+
     /// The frame's linear target as little-endian f32 RGBA and its object-ID target as each
     /// pixel's u32 in little-endian bytes, rows top-down; `None` on a backend with no pixels.
     pub fn read_targets(&self, device: &Device) -> Option<(Vec<u8>, Vec<u8>)> {
@@ -2744,6 +2939,104 @@ impl Renderer {
             .collect();
         Some((floats, ids))
     }
+}
+
+/// The look's tone map alone (#418's `tone` call), as the output pass runs it, over `input` (f32
+/// RGBA, rows top-down, `size` px) on `device`, with no exposure and no encode; the output in the
+/// same layout, or `None` on a backend with no pixels.
+pub fn tone(device: &Device, map: ToneMap, input: &[f32], size: [u32; 2]) -> Option<Vec<u8>> {
+    let d = &device.device;
+    let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("scene3d tone"),
+        source: wgpu::ShaderSource::Wgsl(OUTPUT.into()),
+    });
+    let layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("scene3d tone"),
+        entries: &[
+            texture_entry(),
+            buffer_entry(1, wgpu::ShaderStages::FRAGMENT, wgpu::BufferBindingType::Uniform),
+        ],
+    });
+    let pipeline_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("scene3d tone"),
+        bind_group_layouts: &[Some(&layout)],
+        immediate_size: 0,
+    });
+    let format = wgpu::TextureFormat::Rgba32Float;
+    let pipe = pipeline(
+        d,
+        "scene3d.tone",
+        Some(&pipeline_layout),
+        &module,
+        ("out_vs", &[]),
+        Some(("tone_fs", &[target(format, None)])),
+        None,
+    );
+    let source = texture2d(
+        d,
+        "scene3d tone input",
+        size,
+        format,
+        wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+    );
+    let bytes: Vec<u8> = input.iter().flat_map(|v| v.to_le_bytes()).collect();
+    write_texture(&device.queue, &source, 0, &bytes, size[0] * 16, size);
+    let out = texture2d(
+        d,
+        "scene3d tone output",
+        size,
+        format,
+        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+    );
+    let (code, white, contrast) = match map {
+        ToneMap::Agx { white, contrast } => (2, white, contrast),
+        other => (other.code(), 16.29, 1.25),
+    };
+    let uniform = ToneUniform {
+        exposure: 1.0,
+        map: code,
+        white: white as f32,
+        contrast: contrast as f32,
+        encode: 0,
+        deband: 0.0,
+        saturation: 1.0,
+        graded: 0,
+        wb: [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]],
+        slope: [1.0; 4],
+        offset: [0.0; 4],
+        power: [1.0; 4],
+    };
+    let buffer = d.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("scene3d tone"),
+        size: std::mem::size_of::<ToneUniform>() as u64,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    device
+        .queue
+        .write_buffer(&buffer, 0, bytemuck::bytes_of(&uniform));
+    let view = source.create_view(&Default::default());
+    let bind = bind_group(
+        d,
+        "scene3d tone",
+        &layout,
+        [
+            wgpu::BindingResource::TextureView(&view),
+            buffer.as_entire_binding(),
+        ],
+    );
+    let mut encoder = d.create_command_encoder(&Default::default());
+    full_pass(
+        &mut encoder,
+        "scene3d.tone",
+        &out.create_view(&Default::default()),
+        wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+        &pipe,
+        &bind,
+        None,
+    );
+    device.queue.submit([encoder.finish()]);
+    read_texture(device, &out, size, 16)
 }
 
 /// An IEEE 754 half as the f32 it is exactly.
@@ -3047,6 +3340,18 @@ impl Module3 {
     /// scene3d's own passes: geometry and the output.
     fn own_passes(&self) -> Vec<Pass> {
         vec![
+            // Ambient occlusion (#418), drawn only while the look has it on: its cost counts the
+            // depth and normal prepass with the occlusion and the blur.
+            Pass {
+                name: ao::OCCLUSION.into(),
+                place: "geometry",
+                order: 0,
+                reads: Vec::new(),
+                writes: vec!["ao"],
+                resolution: Resolution::Full,
+                ns_per_px: 0.6,
+                determinism: Determinism::SameMachine,
+            },
             Pass {
                 name: GEOMETRY_PASS.into(),
                 place: "geometry",

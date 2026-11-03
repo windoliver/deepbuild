@@ -38,6 +38,7 @@ mod status;
 #[cfg(feature = "test-meter")]
 mod testgpu;
 mod timing;
+mod tone;
 mod validation;
 mod view3d;
 mod window;
@@ -156,6 +157,8 @@ pub enum Planted {
     TiesBySubmission,
     SpotCountsCone,
     StatusBeforeToneMap,
+    /// #418's: the bloom's lens dirt laid over the frame instead of multiplying its light.
+    DirtOverlay,
 }
 
 impl Planted {
@@ -234,6 +237,7 @@ impl Planted {
             "ties_by_submission" => Planted::TiesBySubmission,
             "spot_counts_cone" => Planted::SpotCountsCone,
             "status_before_tone_map" => Planted::StatusBeforeToneMap,
+            "dirt_overlay" => Planted::DirtOverlay,
             _ => return None,
         })
     }
@@ -431,6 +435,7 @@ impl App {
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("tone") => tone::call(self, out, call),
             Some("host") => host::call(self, out, call),
             Some("guard") => guard::call(self, out, call),
             Some("operators") => effects::operators(self),

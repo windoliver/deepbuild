@@ -18,7 +18,9 @@ use serde_json::Value;
 
 use crate::compile::{compile_with, Compiled};
 use crate::glow;
-use crate::reference::{target, Camera};
+use crate::reference::{target, upload, Camera};
+use deep_canvas_effects::graph::Tex;
+use deep_canvas_effects::interp::Image;
 use crate::runner::{Runner, LINEAR};
 
 /// One particles@1 item: its compute operator's params, its seed and how its dots draw.
@@ -56,6 +58,8 @@ pub struct Settings {
     pub outline_width: u32,
     /// The look's bloom as `bloom.*` params.
     pub bloom: Option<BTreeMap<String, Value>>,
+    /// The bloom's lens dirt image, each pixel's value 0 to 1 (#418).
+    pub dirt: Option<Arc<Image>>,
     /// Each role the effects read, linear.
     pub roles: BTreeMap<String, [f64; 3]>,
     /// The frame's time, s.
@@ -71,6 +75,8 @@ pub struct Planted {
     pub off_by_two: bool,
     /// The glow blurs at full resolution 64 more times.
     pub slow_glow: bool,
+    /// #418: the lens dirt laid over the frame, `intensity × d` added to every pixel.
+    pub dirt_overlay: bool,
 }
 
 /// A pass of the frame, for the view's reply: its name, the targets it reads and writes, and the
@@ -94,6 +100,8 @@ pub struct Effects {
     /// The chain's targets by index, with their sizes.
     targets: Vec<([u32; 2], wgpu::TextureView)>,
     sparks: Option<SparkDraw>,
+    /// The lens dirt on the GPU, with the image it holds; black with none.
+    dirt: Option<(Option<Arc<Image>>, wgpu::TextureView)>,
 }
 
 struct SparkDraw {
@@ -137,7 +145,24 @@ impl Effects {
             runners: BTreeMap::new(),
             targets: Vec::new(),
             sparks: None,
+            dirt: None,
         }
+    }
+
+    /// The lens dirt's texture: the settings' image, or one black texel with none.
+    fn dirt_view(&mut self, device: &Device) -> wgpu::TextureView {
+        let want = self.settings.dirt.clone();
+        let same = |held: &Option<Arc<Image>>| match (held, &want) {
+            (None, None) => true,
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        };
+        if !self.dirt.as_ref().is_some_and(|(held, _)| same(held)) {
+            let black = Image::new(1, 1);
+            let (tex, _) = upload(device, Tex::Float, want.as_deref().unwrap_or(&black));
+            self.dirt = Some((want, tex.create_view(&Default::default())));
+        }
+        self.dirt.as_ref().expect("made above").1.clone()
     }
 
     fn runner(&mut self, device: &Device, id: &str) -> Arc<Runner> {
@@ -534,7 +559,10 @@ impl Post for Effects {
             cur = out;
         }
         if let Some(bloom) = &s.bloom {
-            let (runs, params) = glow::chain(size, bloom);
+            let (runs, mut params) = glow::chain(size, bloom);
+            if self.planted.dirt_overlay {
+                params.insert("bloom.overlay".into(), Value::from(1.0));
+            }
             let ids = [
                 if self.planted.without_karis {
                     "glow.down@1"
@@ -547,6 +575,7 @@ impl Post for Effects {
             ];
             let first = next;
             let scene = cur.clone();
+            let dirt = self.dirt_view(device);
             let mut levels: BTreeMap<usize, wgpu::TextureView> = BTreeMap::new();
             let mut parts: Vec<Job> = Vec::new();
             for r in &runs {
@@ -557,6 +586,7 @@ impl Post for Effects {
                     ("bloom", level(r.a)),
                     ("large", level(r.b)),
                     ("scene", scene.clone()),
+                    ("dirt", dirt.clone()),
                 ]);
                 let out = self.target(device, first + r.out.unwrap_or(runs.len()), r.size);
                 parts.push(self.pass_job(

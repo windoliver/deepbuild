@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { homedir, tmpdir, userInfo } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHECK_RUNTIME, type CheckResult, type CheckRunnerFill, type CheckSpec, type RunOutcome } from '@deepbuild/conformance';
+import type { CheckResult, CheckRunnerFill, CheckSpec, RunOutcome } from '@deepbuild/conformance';
 import { scrubValues } from '@deepbuild/evidence';
 import { after, badDeadline, type Exit, type Host } from '@deepbuild/supervisor';
 import { segmentsOf } from '@deepbuild/gate';
@@ -75,6 +75,12 @@ export interface CommandRun extends CheckResult {
 }
 
 const RUNTIME = fileURLToPath(new URL('../runtime/', import.meta.url));
+/**
+ * The conformance package's check runtime, the tracer and node:test reporter its check.kind@1 kit loads too, found
+ * beside its public entry (src/index.ts or dist/index.js) without loading the kits, which a hub that runs checks never
+ * otherwise needs.
+ */
+const CHECK_RUNTIME = fileURLToPath(new URL('../runtime/check-kind/', import.meta.resolve('@deepbuild/conformance')));
 /**
  * The locale and zone every run gets, whatever the host's: a pass can't lean on your machine's. CI, so a tool never
  * writes an expected value it lacks (a missing snapshot) from what the program gives and passes on it.

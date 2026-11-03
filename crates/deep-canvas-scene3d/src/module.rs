@@ -20,6 +20,9 @@ pub const OUTPUT_PASS: &str = "scene3d.output";
 /// The key light's shadow map: the solids' vertex stage under the light's clip matrix, depth
 /// only (the core's shadow pass, in the frame's shadows place).
 pub const SHADOW_PASS: &str = "scene3d.shadow";
+/// Ambient occlusion (#418; Look `look@1`: ao): the opaque solids' depth and normal prepass, the
+/// occlusion and its blur, before the geometry pass reads it; drawn only while the look has ao on.
+pub const AO_PASS: &str = "scene3d.ao";
 /// The object-ID target's writes: each draw's pick ID where it covers at least half the pixel.
 /// They run inside the geometry pass's draws, which carry their time and the target's bytes; the
 /// registry lists them apart so the steps they compile from resolve at the seal (#200).
@@ -278,6 +281,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             Tie::Id => lit_by_id,
             Tie::Order => lit_by_order,
         });
+    r.pass(AO_PASS, "geometry");
     r.pass(GEOMETRY_PASS, "geometry");
     // #200: the shadow and object-ID passes compile from the core's base steps, which the seal
     // resolves in gpu.step@1, so a build without effects still has every step they need.

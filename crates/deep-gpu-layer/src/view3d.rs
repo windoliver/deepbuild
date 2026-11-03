@@ -160,9 +160,9 @@ fn parse(call: &Value) -> Result<Args, Value> {
         .collect::<BTreeSet<_>>();
     if targets
         .iter()
-        .any(|t| !matches!(t.as_str(), "final" | "linear" | "ids"))
+        .any(|t| !matches!(t.as_str(), "final" | "linear" | "ids" | "pre_tone" | "dirt"))
     {
-        return Err(bad("targets are final, linear and ids"));
+        return Err(bad("targets are final, linear, ids, pre_tone and dirt"));
     }
     let capture = match &call["capture"] {
         Value::String(s) if s == "every" => Capture::Every,
@@ -364,6 +364,46 @@ pub(crate) fn picks_json(picks: &[(String, u32)]) -> Value {
 }
 
 /// Writes `bytes` under `out`, named by their SHA-256 with `ext`; returns the name.
+/// A lens dirt PNG from the call's assets (#418): each pixel's value its red channel ÷ 255.
+fn dirt_png(
+    assets: &BTreeMap<String, std::path::PathBuf>,
+    sha: &str,
+) -> Result<deep_canvas_effects::interp::Image, Value> {
+    let path = "look/bloom/dirt/texture";
+    let file = assets
+        .get(sha)
+        .ok_or_else(|| refused("asset_missing", path))?;
+    let bytes = std::fs::read(file).map_err(|_| refused("asset_missing", path))?;
+    let img = image::load_from_memory(&bytes)
+        .map_err(|_| refused("out_of_range", path))?
+        .to_rgba8();
+    let mut out = deep_canvas_effects::interp::Image::new(img.width(), img.height());
+    for (p, px) in out.px.iter_mut().zip(img.pixels()) {
+        let d = f64::from(px.0[0]) / 255.0;
+        *p = [d, d, d, 1.0];
+    }
+    Ok(out)
+}
+
+/// The dirt image as the bloom's mix reads it at each pixel of a `size` frame, stretched over it:
+/// f32 RGBA with d in red, green and blue.
+fn dirt_target(dirt: &deep_canvas_effects::interp::Image, size: [u32; 2]) -> Vec<u8> {
+    let mut out = Vec::with_capacity((size[0] * size[1] * 16) as usize);
+    for y in 0..size[1] {
+        for x in 0..size[0] {
+            let uv = [
+                (f64::from(x) + 0.5) / f64::from(size[0]),
+                (f64::from(y) + 0.5) / f64::from(size[1]),
+            ];
+            let d = dirt.sample(uv)[0] as f32;
+            for v in [d, d, d, 1.0] {
+                out.extend_from_slice(&v.to_le_bytes());
+            }
+        }
+    }
+    out
+}
+
 pub(crate) fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, Value> {
     let name = hex(bytes);
     std::fs::write(
@@ -477,7 +517,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut strokes = false;
     // Held slots, each with the frame whose present releases it.
     let mut held: Vec<(u64, usize)> = Vec::new();
-    let wants_targets = args.targets.contains("linear") || args.targets.contains("ids");
+    let wants_targets = ["linear", "ids", "pre_tone"]
+        .iter()
+        .any(|t| args.targets.contains(*t));
+    // The bloom's lens dirt (#418): a PNG the assets name, its red channel ÷ 255, or seeded, made
+    // once for the whole call; and as the `dirt` target, sampled at each pixel of the frame.
+    let dirt = match args.look_json["bloom"]["dirt"]["texture"].as_str() {
+        Some("seeded") | None => None,
+        Some(sha) => Some(Arc::new(dirt_png(&args.assets, sha)?)),
+    };
+    let mut dirt_file: Option<String> = None;
     let mut levels = Levels::new(
         std::mem::take(&mut args.docs),
         app.planted == Some(Planted::LoadsEverything),
@@ -571,6 +620,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 doc_seed,
                 seeding,
             );
+            let mut settings = settings;
+            if dirt.is_some() {
+                settings.dirt = dirt.clone();
+            }
+            if args.targets.contains("dirt") && dirt_file.is_none() {
+                if let Some(d) = &settings.dirt {
+                    dirt_file = Some(write_named(out, &dirt_target(d, size), "f32")?);
+                }
+            }
             lock(&fx).settings = settings;
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
@@ -699,6 +757,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if capture {
                 if let (Some(bgra), true) = (&drawn.bytes, args.targets.contains("final")) {
                     frame.insert("final".into(), json!(write_final(out, bgra, size)?));
+                }
+                if let (Some(pre), true) = (&drawn.pre_tone, args.targets.contains("pre_tone")) {
+                    frame.insert("pre_tone".into(), json!(write_named(out, pre, "f32")?));
+                }
+                if let Some(name) = &dirt_file {
+                    frame.insert("dirt".into(), json!(name));
                 }
                 if let Some((linear, ids)) = &drawn.targets {
                     if args.targets.contains("linear") {
