@@ -91,6 +91,8 @@ export interface HookMeta {
   payloadWriter?: string;
   /** Why the adapter can't read this patch's paths, so its PreToolUse is denied before it runs (#39). */
   denied?: string;
+  /** Set by the server on a PreToolUse its guard entries blocked: the entries, by name, for a PostToolUse that shows it ran anyway (#1033). */
+  blockedBy?: string[];
   /** What a hook said beside its turn, for the core to append as a session.reading (#39). */
   reading?: string;
   /** A caller name the payload's own fields contradict, for the core to append once per session as a reading (#993). */
