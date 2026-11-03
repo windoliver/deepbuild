@@ -3,6 +3,46 @@
   "phases": {
     "items": [
       {
+        "operator": "scene3d.build",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.built"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.mark",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.marked"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.shade",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.shaded"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "scene3d.stack",
         "module": "scene3d",
         "version": "1.0.0",

@@ -137,9 +137,21 @@ impl BuildSet {
     }
 }
 
-/// The module kinds the design names without a family, each its module's own name: the cell
-/// grid `cells@1` (#402). Any other bare name is the core's.
-const BARE_MODULE_KINDS: &[&str] = &["cells"];
+/// The module kinds the design names without a family, with the module each is: the cell grid
+/// `cells@1` (#402), and scene3d's builders and curve (Builder; Curve `curve@1`; #420). Any
+/// other bare name is the core's.
+const BARE_MODULE_KINDS: &[(&str, &str)] = &[
+    ("cells", "cells"),
+    ("slab", "scene3d"),
+    ("lathe", "scene3d"),
+    ("extrude", "scene3d"),
+    ("tube", "scene3d"),
+    ("ball", "scene3d"),
+    ("coil", "scene3d"),
+    ("plate", "scene3d"),
+    ("display", "scene3d"),
+    ("curve", "scene3d"),
+];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
 /// map (Registry and seal: `build_set`), so a build that leaves one out is refused at startup.
@@ -401,6 +413,12 @@ pub type Run = fn(&mut crate::schedule::View<'_>) -> Result<(), crate::schedule:
 /// whether the document has its node (`(document, "", null)`).
 pub type Applies = fn(&Value, &str, &Value) -> bool;
 
+/// What a per-item node's key holds of its item and document in place of the whole item and
+/// document (Content key: "each declared read"): `(document, item ID, item, planted)` to the
+/// canonical value of exactly what it reads, such as a kind's paths of one dirty class and the
+/// items it references (#420).
+pub type Keyed = fn(&Value, &str, &Value, Option<&str>) -> Value;
+
 /// What an operator runs per (Operator and read set: `per`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Per {
@@ -504,6 +522,9 @@ pub struct Operator {
     /// Its determinism class (Determinism class): `exact` for CPU work and GPU work of integer
     /// steps only, `same_machine` for any GPU float work, as its steps compute it (#411).
     pub determinism: &'static str,
+    /// What its per-item nodes key on of `self` and `refs`, when narrower than the whole item
+    /// and document (#420).
+    pub keyed: Option<Keyed>,
 }
 
 impl Operator {
@@ -541,6 +562,12 @@ impl Operator {
     /// Its determinism class, as its steps compute it: one of [`CLASSES`].
     pub fn determinism(&mut self, class: &'static str) -> &mut Self {
         self.determinism = class;
+        self
+    }
+
+    /// Keys its per-item nodes on `keyed`'s value in place of their item and document.
+    pub fn keyed(&mut self, keyed: Keyed) -> &mut Self {
+        self.keyed = Some(keyed);
         self
     }
 }
@@ -820,6 +847,7 @@ impl Registrar {
             step: None,
             serial: false,
             determinism: "exact",
+            keyed: None,
         });
         self.operators.last_mut().expect("just pushed")
     }
@@ -1363,8 +1391,10 @@ impl Sealed {
         // the cells module's.
         let family = match full.split_once('.') {
             Some((f, _)) => f,
-            None if BARE_MODULE_KINDS.contains(&full) => full,
-            None => return None,
+            None => match BARE_MODULE_KINDS.iter().find(|(k, _)| *k == full) {
+                Some((_, module)) => module,
+                None => return None,
+            },
         };
         KNOWN_MODULES
             .iter()
@@ -1962,7 +1992,9 @@ impl Registry {
                 // A bare name is the core's (a core kind has no family); a module's kind
                 // carries its family, so no module takes `rect` or `text` from the compositor.
                 // The one module kind the design names bare, `cells@1`, is the cells module's.
-                let bare = BARE_MODULE_KINDS.contains(&k.entry.name) && k.entry.name == name;
+                let bare = BARE_MODULE_KINDS
+                    .iter()
+                    .any(|(kind, module)| *kind == k.entry.name && *module == name);
                 if k.entry.family.is_empty() && !bare {
                     return Err(SealError::of(
                         "bad_shape",

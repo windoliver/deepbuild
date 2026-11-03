@@ -2,8 +2,37 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "019b358fe4f0928c9dd36181ed1889bbe91bfd4b037a4832e2197555337bec43",
+  "set_digest": "2a46dd04546068beb07fa1793b923075b3cab967cd60e9440097dbe5590cf48b",
   "interfaces": {
+    "building@1": {
+      "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
+      "reference": "building",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "building",
+      "implementation": {
+        "name": "building",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
       "reference": "cells",
@@ -237,7 +266,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "cd167cd65bccbd5953bddb9860d380167c2021c7639f63001c5d8cd15e4b6889",
+      "digest": "0b9b76d4455a885207fabcae30861fedc4dc5413d1487a2d3b4caee3221ad381",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -461,6 +490,33 @@
         "per": "item"
       },
       {
+        "operator": "building.build",
+        "module": "building",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "motion.fields"
+        ],
+        "writes": [
+          "building.built"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "building.shade",
+        "module": "building",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "building.shaded"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "core.world",
         "module": "core",
         "version": "0.0.0",
@@ -519,6 +575,46 @@
         ],
         "writes": [
           "record.level"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.build",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.built"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.mark",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.marked"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.shade",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.shaded"
         ],
         "per": "item"
       },

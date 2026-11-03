@@ -10,6 +10,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Index;
+use std::sync::Arc;
 
 use deep_canvas::camera::{screen_basis, Offsets, Rig, Spec, Vec3};
 use deep_canvas::kinds::with_defaults;
@@ -52,7 +53,7 @@ pub const OVERLAY: &str = "overlay.frame@1";
 
 /// Whether an item of `kind` (its text, `family.name@major`) is one of scene3d's marks.
 pub fn is_3d(kind: &str) -> bool {
-    KINDS.contains(&kind)
+    KINDS.contains(&kind) || crate::builders::KINDS.contains(&kind)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -60,6 +61,8 @@ pub enum Shape {
     Box,
     Cylinder,
     Sphere,
+    /// A builder's mesh (#420), by the hash of its bytes: the solid carries it.
+    Built(u64),
 }
 
 /// An object: one instance record, a 3×4 world matrix (rows), its paint and its item.
@@ -71,6 +74,8 @@ pub struct Solid {
     pub color: [u8; 3],
     /// Its stroke slot: an outline around the object (#386).
     pub stroke: Option<Stroke>,
+    /// A builder's mesh in the item's own space, which `model` places (#420).
+    pub mesh: Option<Arc<crate::geom::Mesh>>,
 }
 
 /// An object's outline: its silhouette drawn `width` device px wide in `color`, which a status
@@ -98,6 +103,36 @@ pub struct Line {
     /// Widths in m (`size_space: world`), else in px.
     pub world: bool,
     pub color: [u8; 3],
+    /// What a mesh-edge line draws the edges of (Marks in 3D: mesh edges; #420).
+    pub edges: Option<Arc<EdgesOf>>,
+    /// Drawn over whatever is in front of it: the planted `edges_skip_depth`'s line.
+    pub over: bool,
+}
+
+/// A mesh-edge line's mesh, its kind and the matrix that places the mesh.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EdgesOf {
+    pub mesh: Arc<crate::geom::Mesh>,
+    pub all: bool,
+    pub model: Affine3,
+    pub width: f64,
+}
+
+impl EdgesOf {
+    /// The segments it draws, on welded positions unless `welded` is false (the planted
+    /// `edges_unwelded` reader).
+    pub fn segments(&self, welded: bool) -> Vec<Segment> {
+        self.mesh
+            .edges(self.all, welded)
+            .into_iter()
+            .map(|[a, b]| Segment {
+                a: apply(&self.model, a),
+                b: apply(&self.model, b),
+                wa: self.width,
+                wb: self.width,
+            })
+            .collect()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -380,6 +415,22 @@ pub struct Scene {
     pub pages: Vec<AtlasPage>,
 }
 
+impl Scene {
+    /// #420 AC6's wrong programs, reachable only through `deep-gpu --planted`: mesh-edge lines
+    /// read from the unwelded mesh, or drawn over what is in front of them.
+    pub fn plant_edges(&mut self, unwelded: bool, over: bool) {
+        for line in self.layers.iter_mut().flat_map(|l| &mut l.lines) {
+            let Some(edges) = line.edges.clone() else {
+                continue;
+            };
+            if unwelded {
+                line.segments = edges.segments(false);
+            }
+            line.over |= over;
+        }
+    }
+}
+
 pub(crate) fn num(v: Option<&Value>) -> Option<f64> {
     v.and_then(Value::as_f64).filter(|x| x.is_finite())
 }
@@ -405,7 +456,7 @@ pub(crate) fn size3(v: Option<&Value>, default: Vec3) -> Option<Vec3> {
 }
 
 /// `x ↦ R·S·x + T` as rows of a 3×4 matrix.
-pub(crate) type Affine3 = [[f64; 4]; 3];
+pub type Affine3 = [[f64; 4]; 3];
 
 pub(crate) fn matmul(a: &Affine3, b: &Affine3) -> Affine3 {
     let mut out = [[0.0; 4]; 3];
@@ -719,7 +770,98 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
         segments,
         world: params.get("size_space").and_then(Value::as_str) == Some("world"),
         color: paint(look, params, &path)?,
+        edges: None,
+        over: false,
     })
+}
+
+/// A builder's or building kind's mesh after its stack, or why it can't be built.
+fn mesh_of(doc: &Value, id: &str, item: &Value) -> Result<crate::geom::Mesh, Refused> {
+    let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+    let built = if crate::building::KINDS.contains(&kind) {
+        crate::building::build(doc, id, item)
+    } else {
+        crate::build::built(doc, id, item, None).map(|b| b.mesh.unwrap_or_default())
+    };
+    built.map_err(|path| Refused {
+        code: "out_of_range",
+        path: format!("items/{id}/{path}"),
+    })
+}
+
+/// A line of the edges of the mesh `edges.of` builds (Marks in 3D: mesh edges).
+fn edge_line(
+    doc: &Value,
+    items: &Items<'_>,
+    id: &str,
+    params: &Value,
+    look: &Look3,
+) -> Result<Line, Refused> {
+    let path = format!("items/{id}/params");
+    let edges = &params["edges"];
+    let of = edges.get("of").and_then(Value::as_str).unwrap_or("");
+    let target = of.split('#').next().unwrap_or("");
+    let Some(item) = items.get(target) else {
+        return refused("ref_unresolved", format!("{path}/edges/of"));
+    };
+    let all = match edges.get("kind").and_then(Value::as_str).unwrap_or("quads") {
+        "all" => true,
+        "quads" | "cage" => false,
+        _ => return refused("out_of_range", format!("{path}/edges/kind")),
+    };
+    let width = match params.get("width") {
+        None | Some(Value::Null) => 1.5,
+        Some(v) => match num(Some(v)).filter(|w| *w >= 0.0) {
+            Some(w) => w,
+            None => return refused("out_of_range", format!("{path}/width")),
+        },
+    };
+    let mut mesh = mesh_of(doc, target, item)?;
+    if let Some((_, part)) = of.split_once('#') {
+        let Some(tris) = mesh
+            .parts
+            .get(part)
+            .or_else(|| mesh.closed.get(part).map(|c| &c.0))
+            .cloned()
+        else {
+            return refused("ref_unresolved", format!("{path}/edges/of"));
+        };
+        let mut only = crate::geom::Mesh {
+            positions: mesh.positions.clone(),
+            normals: mesh.normals.clone(),
+            ..Default::default()
+        };
+        for t in tris {
+            let k = 3 * t as usize;
+            only.indices.extend(&mesh.indices[k..k + 3]);
+            only.faces.push(mesh.faces[t as usize]);
+        }
+        mesh = only;
+    }
+    let source = EdgesOf {
+        mesh: Arc::new(mesh),
+        all,
+        model: world(items, target),
+        width,
+    };
+    Ok(Line {
+        id: id.to_string(),
+        segments: source.segments(true),
+        world: params.get("size_space").and_then(Value::as_str) == Some("world"),
+        color: paint(look, params, &path)?,
+        edges: Some(Arc::new(source)),
+        over: false,
+    })
+}
+
+/// A solid's color: its paint's role, or the look's `muted` when it names none.
+fn paint_or_muted(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
+    if params.pointer("/paint/fill/role").is_none() {
+        if let Some(c) = look.role("muted") {
+            return Ok(c);
+        }
+    }
+    paint(look, params, path)
 }
 
 /// The camera's evaluated pose on a frame of `size`, with near and far from the params or
@@ -910,6 +1052,8 @@ pub(crate) fn evaluate_compiled(
 
     let mut layers = Vec::new();
     let mut overlay_items = Vec::new();
+    // The document as builders read it (the curves they name), made once when one draws.
+    let mut doc_value: Option<Value> = None;
     let mut bounds: Vec<Vec3> = Vec::new();
     let mut sun = None;
     let mut others = Vec::new();
@@ -954,8 +1098,47 @@ pub(crate) fn evaluate_compiled(
                         model,
                         color: paint(look, params, &path)?,
                         stroke: stroke(look, params, shape, &path)?,
+                        mesh: None,
                     });
                 }
+                "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
+                    let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
+                    let l = edge_line(doc, &items, id, params, look)?;
+                    bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
+                    layer.lines.push(l);
+                }
+                k if crate::builders::KINDS.contains(&k) || crate::building::KINDS.contains(&k) => {
+                    let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
+                    let mesh = mesh_of(doc, id, item)?;
+                    if mesh.triangles() == 0 {
+                        continue;
+                    }
+                    let model = world(&items, id);
+                    let [lo, hi] = mesh.bounds();
+                    for c in 0..8 {
+                        let p = [
+                            if c & 1 == 0 { lo[0] } else { hi[0] },
+                            if c & 2 == 0 { lo[1] } else { hi[1] },
+                            if c & 4 == 0 { lo[2] } else { hi[2] },
+                        ];
+                        bounds.push(apply(&model, p));
+                    }
+                    let mut h = deep_canvas::schedule::Hasher::new("scene3d.mesh");
+                    h.bytes(&deep_canvas::schedule::Canonical::canonical_bytes(&mesh));
+                    let key = h.finish().0;
+                    let hash = u64::from_le_bytes([
+                        key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
+                    ]);
+                    layer.solids.push(Solid {
+                        id: id.clone(),
+                        shape: Shape::Built(hash),
+                        model,
+                        color: paint_or_muted(look, params, &path)?,
+                        stroke: None,
+                        mesh: Some(Arc::new(mesh)),
+                    });
+                }
+                "curve@1" => {}
                 "mark.line@1" => {
                     let l = line(&items, id, params, look)?;
                     bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));

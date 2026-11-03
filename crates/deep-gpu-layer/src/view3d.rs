@@ -502,6 +502,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let (composed, resident) = levels.compose(&args.doc);
             let mut scene = evaluate(&composed, t, &args.look, &mut labels)
                 .map_err(|r| refused(r.code, r.path))?;
+            // #420 AC6's wrong programs: mesh edges unwelded, or drawn over their faces.
+            scene.plant_edges(
+                app.planted == Some(Planted::EdgesUnwelded),
+                app.planted == Some(Planted::EdgesSkipDepth),
+            );
+            // Each mesh-edge line's segments, in world metres, as `counts` reports them.
+            let edge_segments: Map<String, Value> = scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.lines)
+                .filter(|l| l.edges.is_some())
+                .map(|l| {
+                    (
+                        l.id.clone(),
+                        json!(l.segments.iter().map(|s| [s.a, s.b]).collect::<Vec<_>>()),
+                    )
+                })
+                .collect();
             // A stroke binding draws its outline around the object, exact (#386).
             if let Some(status) = status.as_ref().filter(|_| bound) {
                 status::strokes(&mut scene, status, &bindings, &args.states)?;
@@ -521,12 +539,18 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 Some(Planted::NoiseFromClock) => effects::Seeding::Clock,
                 _ => effects::Seeding::Item,
             };
+            // #420 AC1's wrong program steps the operators' clock from the last frame drawn,
+            // so a seek starts it again at zero; the shipped one reads t itself.
+            let fx_t = match app.planted {
+                Some(Planted::ParticlesIntegrate) => (n - args.from) as f64 / args.fps as f64,
+                _ => n as f64 / args.fps as f64,
+            };
             let settings = effects::settings(
                 &scene,
                 &args.look_json,
                 &args.look,
                 &args.selection,
-                n as f64 / args.fps as f64,
+                fx_t,
                 doc_seed,
                 seeding,
             );
@@ -690,6 +714,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("replayed".into(), json!(c.replayed));
                 frame.insert("instances_written".into(), json!(c.instances_written));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
+                frame.insert("segments".into(), Value::Object(edge_segments));
             }
             if let Some((gpu_ms, passes)) = &drawn.timing {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));

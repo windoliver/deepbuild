@@ -791,6 +791,7 @@ fn shape_code(s: Shape) -> u64 {
         Shape::Box => 1,
         Shape::Cylinder => 2,
         Shape::Sphere => 3,
+        Shape::Built(h) => 4 | (h << 3),
     }
 }
 
@@ -1377,6 +1378,14 @@ impl Renderer {
         }
     }
 
+    /// Uploads a builder's mesh the first time a batch draws one of its hash (#420).
+    fn built_mesh(&mut self, device: &Device, shape: Shape, m: &deep_canvas_scene3d::geom::Mesh) {
+        if let std::collections::btree_map::Entry::Vacant(e) = self.meshes.entry(shape) {
+            e.insert(Mesh::of(device, m));
+            self.counts.meshes_built += 1;
+        }
+    }
+
     /// Uploads each atlas page whose generation the GPU doesn't hold.
     fn upload_pages(&mut self, device: &Device, pages: &[AtlasPage]) {
         for (i, page) in pages.iter().enumerate().take(PAGES) {
@@ -1600,7 +1609,10 @@ impl Renderer {
         );
         slots.clear();
         for s in &layer.solids {
-            self.mesh(device, s.shape);
+            match &s.mesh {
+                Some(m) => self.built_mesh(device, s.shape, m),
+                None => self.mesh(device, s.shape),
+            }
             slots.push((s.shape, 0, self.pick(&s.id)));
         }
         for l in &layer.lines {
@@ -1636,7 +1648,11 @@ impl Renderer {
                     b: v4(seg.b, seg.wb),
                     color: pack(l.color),
                     pick: picks[&l.id],
-                    flags: u32::from(l.world),
+                    // A mesh-edge line sits a hair toward the camera, so the faces whose
+                    // edges it draws don't hide it; one drawn over everything skips depth.
+                    flags: u32::from(l.world)
+                        | (u32::from(l.edges.is_some()) << 1)
+                        | (u32::from(l.over) << 2),
                     pad: 0,
                 };
                 batch.lines.push(&l.id, bytemuck::bytes_of(&record));

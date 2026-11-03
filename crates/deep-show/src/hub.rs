@@ -491,6 +491,10 @@ pub enum Call {
     Revisions(String),
     /// The sealed set as the build holds it (#305).
     Registry,
+    /// #420: an item's built mesh, or its count from its params.
+    Geometry(Box<crate::geometry::Geometry>),
+    /// #420: every kind's schema, dirty map, reads, fixture and sweep.
+    Kinds,
     /// #306: the pack store's rows.
     Packs,
     /// #306: one pack version installed mid-run; #200: through a session, which wrote it.
@@ -747,6 +751,8 @@ pub struct Scenario {
     pub placement_planted: placement::Planted,
     pub fault: Option<Fault>,
     pub planted: Option<Planted>,
+    /// A canvas module's wrong program by name, which the scheduler hands its operators (#420).
+    pub module_planted: Option<String>,
     pub calls: Vec<Call>,
     /// Each call's arrival on the clock, in flicks (0 without one).
     pub at: Vec<i64>,
@@ -936,6 +942,7 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         admits_frame_json: startup.admits_frame_json,
         runs_every_node: scenario.planted == Some(Planted::RunsEveryNode),
         forgets_changes: scenario.planted == Some(Planted::RebuildsDrawList),
+        module: scenario.module_planted.clone(),
     };
     Options {
         access_log: startup.test_build,
@@ -1358,6 +1365,8 @@ impl<'a> Hub<'a> {
             Call::History { doc, item } => self.history(doc, item),
             Call::ByWriter(doc) => self.by_writer(doc),
             Call::Registry => self.registry_reply(),
+            Call::Geometry(g) => self.geometry(g),
+            Call::Kinds => self.kinds_reply(),
             Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir, session } => {

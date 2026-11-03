@@ -15,6 +15,7 @@ mod efficiency;
 mod evidence;
 mod frames;
 mod gate;
+mod geometry;
 mod host;
 mod hub;
 mod input;
@@ -515,6 +516,8 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "screen" => return Some(Call::Screen),
         "registry" => return Some(Call::Registry),
+        "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
+        "kinds" => return Some(Call::Kinds),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -1016,9 +1019,16 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         }),
     };
     let mut placement_planted = placement::Planted::default();
+    // #420's wrong programs live in scene3d's and the building module's operators.
+    let module_planted = input
+        .get("planted")
+        .and_then(Value::as_str)
+        .filter(|p| deep_canvas_scene3d::PLANTED.contains(p))
+        .map(str::to_string);
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
         Some(None) => return None,
+        Some(Some(_)) if module_planted.is_some() => None,
         Some(Some(p)) => match placement_planted.flag(p) {
             // #400's wrong programs live in the placement.
             Some(flag) => {
@@ -1266,6 +1276,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         placement_planted,
         fault,
         planted,
+        module_planted,
         calls,
         at,
         seeds,
@@ -1569,6 +1580,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
         });
         // Issue #398: SVG import and formulas, drawn as marks2d's items.
         out.push(deep_canvas_vector::module::module());
+    }
+    if set >= BuildSet::Full {
+        // Issue #420: walls, openings, slabs, roofs and stairs as trusted builders.
+        out.push(deep_canvas_scene3d::building::module());
     }
     #[cfg(feature = "test-leave-out-effects")]
     out.retain(|m| m.manifest.name != "effects");

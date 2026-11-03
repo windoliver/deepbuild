@@ -122,6 +122,8 @@ fn register(r: &mut Registrar) {
                 json_param("ends"),
                 json_param("cap"),
                 json_param("join"),
+                // A line of a mesh's edges in place of points (Marks in 3D: mesh edges; #420).
+                json_param("edges"),
             ]),
         ),
         &[],
@@ -170,6 +172,15 @@ fn register(r: &mut Registrar) {
         &[],
         "",
     );
+    // The trusted builders and the curve, named bare as the design names them, with their
+    // build, mark and shade operators (Builder; Curve `curve@1`; #420).
+    for spec in crate::spec::scene3d() {
+        if crate::builders::KINDS.contains(&spec.kind) || spec.kind == "curve@1" {
+            let name = &spec.kind[..spec.kind.len() - "@1".len()];
+            r.kind(crate::spec::entry(&spec, "", name), &[], "");
+        }
+    }
+    crate::build::register_scene3d(r);
     // A solid's modifier stack, every prefix kept by its content key (Modifier; #411).
     r.array("scene3d.stack", "stack", "item", "geometry", "items");
     r.operator("stack", "items", &["self"], &["scene3d.stack"])
