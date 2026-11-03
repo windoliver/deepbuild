@@ -9,12 +9,14 @@
 // for one recorded with the run token, the token read back from its environment.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { availableParallelism, constants, totalmem } from 'node:os';
-import { dirname } from 'node:path';
+import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { availableParallelism, constants, homedir, totalmem } from 'node:os';
+import { dirname, join } from 'node:path';
 import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
 import type { JsonValue } from '@deepbuild/contracts';
 import { HELPER, scan, sha256, startNow, table, tokenOf, type Proc } from './procs.js';
 import { bubblewrapWith } from './bubblewrap.js';
+import { openEgress, type Egress } from './egress.js';
 import { markerOf, quote, real, seatbeltWith } from './seatbelt.js';
 import type { Cleanup, Exit, Grant, HostFacts, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor, SupervisorOptions } from './types.js';
 
@@ -71,6 +73,8 @@ interface Run {
   cleaning?: Promise<Cleanup>;
   /** It keeps running when the hub stops: an open adopts it rather than reaping it (StartSpec.keep). */
   kept?: boolean;
+  /** Its egress filter, while it holds a credential by stand-in; closed by its cleanup. */
+  egress?: Egress;
   child?: ChildProcess;
   exit?: Promise<Exit>;
   state: RunStatus['state'];
@@ -533,21 +537,41 @@ class LocalSupervisor implements Supervisor {
     const token = spec.env?.DEEP_RUN_TOKEN ?? randomBytes(24).toString('base64url');
     // Each lease's key in the variable it names; the leases come in the order they were asked for.
     const keys = Object.fromEntries((spec.leases ?? []).flatMap((want, i) => (want.env ? [[want.env, leases[i]!.key]] : [])));
-    const env = { ...(spec.inherit === false ? {} : process.env), ...spec.env, ...keys, DEEP_RUN_TOKEN: token } as Record<string, string>;
-    // A leased port is one it may listen on, and connect to.
+    // A credential with hosts goes in as a stand-in, its value only into requests through the run's egress filter.
+    const creds = spec.credentials ?? [];
+    const egress = creds.some((c) => c.hosts?.length)
+      ? await openEgress(creds, (r) => void this.append('sandbox.denied', { run: spec.run, ...r }, spec.run).catch(() => undefined), this.options.plant === 'standin-every-host' ? 'standin-every-host' : undefined)
+      : undefined;
+    const given = Object.fromEntries(creds.flatMap((c) => [
+      [c.env, egress?.standIns[c.env] ?? c.value],
+      // The planted wrong program: the filter puts the value in the run's environment too, beside the stand-in.
+      ...(this.options.plant === 'standin-value-in-env' && egress?.standIns[c.env] ? [[`${c.env}_VALUE`, c.value]] : []),
+    ]));
+    // The planted wrong program: the run's CA added to the login keychain, where every process of yours trusts it.
+    if (egress && this.options.plant === 'run-ca-in-login-keychain') {
+      mkdirSync(join(homedir(), 'Library', 'Keychains'), { recursive: true });
+      appendFileSync(join(homedir(), 'Library', 'Keychains', 'login.keychain-db'), readFileSync(join(egress.dir, 'run-ca.pem')));
+    }
+    const env = { ...(spec.inherit === false ? {} : process.env), ...spec.env, ...keys, ...given, ...egress?.env, DEEP_RUN_TOKEN: token } as Record<string, string>;
+    // A leased port is one it may listen on, and connect to; the egress filter's port, one it may connect to.
     const ports = leases.filter((l) => this.kinds.get(l.kind)?.port).map((l) => `127.0.0.1:${l.key}`);
-    const grant: Grant = ports.length
-      ? { ...spec.grant, listen: [...(spec.grant?.listen ?? []), ...ports], hosts: [...(spec.grant?.hosts ?? []), ...ports] }
+    const out = egress ? [`127.0.0.1:${egress.port}`] : [];
+    const grant: Grant = ports.length || egress
+      ? { ...spec.grant, listen: [...(spec.grant?.listen ?? []), ...ports], hosts: [...(spec.grant?.hosts ?? []), ...ports, ...out], ...(egress ? { read: [...(spec.grant?.read ?? []), egress.dir] } : {}) }
       : spec.grant ?? {};
     // The profile first: a grant the sandbox can't enforce refuses the start before anything is held or recorded.
-    const launch = sandboxed ? await this.sandbox.confine({ argv: spec.argv, cwd, env }, grant, spec.run) : { argv: spec.argv, cwd, env };
+    const launch = sandboxed
+      ? await this.sandbox.confine({ argv: spec.argv, cwd, env }, grant, spec.run).catch(async (error: unknown) => { await egress?.close(); throw error; })
+      : { argv: spec.argv, cwd, env };
     // After a minute with no report, the stream is shown live again before a process can be refused anything.
     if (sandboxed) await this.warming;
     if (sandboxed && this.log && Date.now() - this.warmAt > WARM_MS) await this.warm(2000);
-    const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}) };
+    const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}), ...(egress ? { egress } : {}) };
     this.runs.set(spec.run, r);
     // The run first, so a replay finds its leases on it.
     await this.append('process.starting', { run: spec.run, cwd }, spec.run);
+    // How each credential reached it, by name: the value itself, or a stand-in for its hosts.
+    for (const c of creds) await this.append('credential.loaded', { run: spec.run, env: c.env, ...(egress?.standIns[c.env] ? { by: 'stand-in', hosts: c.hosts! } : { by: 'value' }) }, spec.run);
     if (spec.keep) {
       r.kept = true;
       await this.append('run.kept', { run: spec.run }, spec.run);
@@ -770,6 +794,8 @@ class LocalSupervisor implements Supervisor {
       }
     }
     const outcome = left.length ? 'unfinished' : 'clean';
+    await r.egress?.close();
+    delete r.egress;
     await this.append('run.cleaned', { run, outcome, left, stopped: [...stopped] }, run);
     r.state = 'cleaned';
     r.cleaned = { run, outcome, left, stopped: [...stopped] };
@@ -906,6 +932,7 @@ class LocalSupervisor implements Supervisor {
     this.closed = true;
     if (this.timer) clearInterval(this.timer);
     await Promise.allSettled([this.scanning, this.pumping, this.ticking, ...this.cleaning]);
+    await Promise.allSettled([...this.runs.values()].map((r) => r.egress?.close()));
     if (this.log?.pid) try { process.kill(this.log.pid, 'SIGTERM'); } catch { /* gone */ }
   }
 }
