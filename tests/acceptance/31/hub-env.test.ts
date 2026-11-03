@@ -129,9 +129,22 @@ function judge(w: World, o: Observed): void {
 /**
  * The drafted check's body: line 3, the one `asserts` names, exits 0 only once the turn's edit is in src/auth.ts, so it
  * fails on the repo's base and passes on the snapshot, and the fix check gets its base run. (h-d.ts's CHECK_BYTES reads
- * src/auth.js, which the repo never has, so it fails on every head.)
+ * src/auth.js, which the repo never has, so it fails on every head.) Line 3 runs Node's own test runner on TEST_FILE: the
+ * tracers see into Node, where `grep` would make the run uncounted (Traced programs), and a line that only exits 0 or 1
+ * runs no test, which is INVALID, never a pass (Check health), so the snapshot run would never pass and no base run follow.
  */
-const CHECK_BODY = '#!/bin/sh\n# Drafted check: an expired token is rejected.\ngrep -q \'Date.now()\' src/auth.ts\n';
+const CHECK_BODY = '#!/bin/sh\n# Drafted check: an expired token is rejected.\nnode --test .deepbuild/checks/expired-token.test.mjs\n';
+/** The check's one test, beside it: its assertion fails on the base and holds once src/auth.ts has the turn's edit. */
+const TEST_FILE = '.deepbuild/checks/expired-token.test.mjs';
+const TEST_BODY = [
+  "import { test } from 'node:test';",
+  "import assert from 'node:assert/strict';",
+  "import { readFileSync } from 'node:fs';",
+  "test('an expired token is rejected: src/auth.ts compares the expiry with Date.now()', () => {",
+  "  assert.ok(readFileSync('src/auth.ts', 'utf8').includes('Date.now()'), 'src/auth.ts does not compare with Date.now()');",
+  '});',
+  '',
+].join('\n');
 /**
  * The world with the drafted fix check (on_base fails) committed as the repo's HEAD, another repository beside it, and an
  * excludes file naming src/extra.ts. `base` is that HEAD: the merge base of the stop's snapshot.
@@ -139,6 +152,7 @@ const CHECK_BODY = '#!/bin/sh\n# Drafted check: an expired token is rejected.\ng
 function worldWithOther(): { w: World; env: Record<string, string>; restore: () => void } {
   const made = makeWorld({ drafts: [draftFor(BEHAVIOR, { requirements: [req('R1', 'An expired token is rejected', { check: CHECK_FILE, asserts: [`${CHECK_FILE}:3`] })] })] });
   writeFileSync(join(made.repo, CHECK_FILE), CHECK_BODY, { mode: 0o755 });
+  writeFileSync(join(made.repo, TEST_FILE), TEST_BODY);
   git(made.repo, ['add', '-A']);
   git(made.repo, ['commit', '-q', '-m', 'the drafted check']);
   const w: World = { ...made, base: git(made.repo, ['rev-parse', 'HEAD']) };
