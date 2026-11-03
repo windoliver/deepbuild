@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use deep_canvas::color::{srgb_to_oklab, Srgb};
 use deep_canvas_marks::look::{self, Status, STATES};
+use deep_canvas_scene3d::finish::{self, Grade};
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{Scene, Shape, Stroke};
 use deep_scene3d_render::status::{Guard, Layer, Mode};
@@ -119,8 +120,29 @@ pub fn clash(
         if let Some(r) = role_clash(&role, color, status, theme) {
             return Some(r);
         }
+        // #418: the grade applied to the role, as a 3D writer layer draws it, keeps the distance
+        // too.
+        if roles.grade.is_identity() {
+            continue;
+        }
+        let graded = graded(&roles.grade, color);
+        if let Some((state, _)) = look::clash(graded, status) {
+            return Some(json!({
+                "ok": false, "code": "status_distance", "theme": theme, "role": role,
+                "state": state, "graded": format!("#{:02x}{:02x}{:02x}", graded[0], graded[1], graded[2]),
+                "reason": format!("the grade moves the data role `{role}` within the status distance of {state}"),
+            }));
+        }
     }
     None
+}
+
+/// A role's color through the grade (#418): decoded, white-balanced, through the CDL and encoded.
+pub fn graded(grade: &Grade, color: [u8; 3]) -> [u8; 3] {
+    let linear = color.map(|c| finish::srgb_decode(f64::from(c) / 255.0));
+    let balanced = finish::mul(&grade.white_balance(), linear);
+    let out = grade.cdl(balanced.map(|v| v.clamp(0.0, 1.0)));
+    out.map(|v| (finish::srgb_encode(v) * 255.0).round() as u8)
 }
 
 /// One role's color against the status map: the look's refusal when it comes within the
@@ -437,6 +459,8 @@ pub fn layer(
     let ground = roles.ground;
     let mut marks = Vec::new();
     let mut chips: Vec<[f64; 4]> = Vec::new();
+    // The boxes the marks and legend own, which the finish leaves undithered (#418).
+    let mut covers: Vec<[f64; 4]> = Vec::new();
     let mut on_screen: Vec<&'static str> = Vec::new();
     struct Chip {
         rect: [f64; 4],
@@ -496,6 +520,7 @@ pub fn layer(
             "bounds": px_box(rect), "glyph": glyph, "word": look::word(state), "label": px_box(label),
         }));
         chips.push(rect);
+        covers.push(rect);
         if !on_screen.contains(&state) {
             on_screen.push(state);
         }
@@ -558,6 +583,8 @@ pub fn layer(
                 (top + (LEGEND_ROW - run.height) / 2.0).round(),
             ];
             canvas.text(text, run, origin, ink_role);
+            covers.push(swatch);
+            covers.push([origin[0], origin[1], run.width, run.height]);
             legend.push(json!({
                 "state": state, "glyph": status.glyphs[state], "word": look::word(state), "color": color,
                 "swatch": px_box(swatch), "label": px_box([origin[0], origin[1], run.width, run.height]),
@@ -577,6 +604,7 @@ pub fn layer(
         Layer {
             size,
             rgba: Arc::from(canvas.rgba),
+            covers,
         },
         Value::Array(marks),
         Value::Array(legend),

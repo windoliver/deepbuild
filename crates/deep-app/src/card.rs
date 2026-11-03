@@ -11,7 +11,6 @@
 use std::cell::RefCell;
 
 use gpui_kit::*;
-use serde_json::Value;
 
 use crate::arming::Source;
 use crate::chrome::Chrome;
@@ -77,10 +76,6 @@ pub fn present_question(controller: Controller, window: &mut Window, cx: &mut Ap
         .expect("the prompt builder made the card")
 }
 
-fn events() -> Vec<Value> {
-    crate::record::with_view(|view| view.events.clone()).unwrap_or_default()
-}
-
 pub struct Card {
     question: SharedString,
     options: Vec<SharedString>,
@@ -122,7 +117,8 @@ impl Card {
             return;
         };
         let (t, source) = (crate::views::now(), Source::Synthetic { pid: None });
-        let events = events();
+        // The card reads the record's history from the hub, as it stands at the press.
+        let events = crate::record::history();
         let did = match controller.press(
             Input {
                 t,
