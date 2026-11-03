@@ -90,7 +90,8 @@ pub fn draw(f: &Value) -> Result<Drawn, Refusal> {
 }
 
 /// The adaptive samples over [a, b], each segment split until its bound settles it within the
-/// tolerance, and the stretches left as estimates once the points run out.
+/// tolerance, level by level so the points spread over the whole range, and the stretches left
+/// as estimates once the points run out. A NaN in the samples marks a break.
 fn adaptive(
     a: f64,
     b: f64,
@@ -103,36 +104,47 @@ fn adaptive(
         let r = bound(lo, hi);
         r.is_empty() || (r.is_bounded() && r.width() <= TOLERANCE)
     };
+    // Each segment, in order, and whether it is done: settled, or a jump.
+    let mut segs: Vec<(f64, f64, bool)> = vec![(a, b, settled(a, b))];
+    let mut breaks: Vec<f64> = Vec::new();
+    loop {
+        let open = segs.iter().filter(|s| !s.2).count();
+        // Splitting every open segment adds one point each.
+        if open == 0 || segs.len() + 1 + open > MAX_POINTS {
+            break;
+        }
+        let mut next = Vec::with_capacity(segs.len() + open);
+        for &(lo, hi, done) in &segs {
+            if done {
+                next.push((lo, hi, true));
+                continue;
+            }
+            let mid = 0.5 * (lo + hi);
+            // Split down to adjacent floats and still unsettled: a jump (floor, a comparison, a
+            // pole), which breaks the curve rather than drawing a wall.
+            if mid <= lo || mid >= hi {
+                breaks.push(hi);
+                next.push((lo, hi, true));
+                continue;
+            }
+            next.push((lo, mid, settled(lo, mid)));
+            next.push((mid, hi, settled(mid, hi)));
+        }
+        segs = next;
+    }
     let mut xs = vec![a];
     let mut estimates: Vec<[f64; 2]> = Vec::new();
-    // Depth first, left to right, so the points come out in order.
-    let mut stack = vec![(a, b)];
-    while let Some((lo, hi)) = stack.pop() {
-        let mid = 0.5 * (lo + hi);
-        let room = xs.len() + stack.len() + 2 <= MAX_POINTS;
-        if settled(lo, hi) {
-            xs.push(hi);
-            continue;
-        }
-        // Split down to adjacent floats and still unsettled: a jump (floor, a comparison, a
-        // pole), which breaks the curve rather than drawing a wall.
-        if mid <= lo || mid >= hi {
-            xs.push(f64::NAN);
-            xs.push(hi);
-            continue;
-        }
-        if !room {
-            if y(lo).is_finite() && y(hi).is_finite() {
-                match estimates.last_mut() {
-                    Some(e) if e[1] == lo => e[1] = hi,
-                    _ => estimates.push([lo, hi]),
-                }
+    for &(lo, hi, done) in &segs {
+        if !done && y(lo).is_finite() && y(hi).is_finite() {
+            match estimates.last_mut() {
+                Some(e) if e[1] == lo => e[1] = hi,
+                _ => estimates.push([lo, hi]),
             }
-            xs.push(hi);
-            continue;
         }
-        stack.push((mid, hi));
-        stack.push((lo, mid));
+        if breaks.contains(&hi) {
+            xs.push(f64::NAN);
+        }
+        xs.push(hi);
     }
     (xs, estimates)
 }
@@ -155,6 +167,13 @@ mod tests {
         let d = draw(&json!({"y": "floor(x)", "over": [0.5, 1.5]})).unwrap();
         assert_eq!(d.subpaths.len(), 2);
         assert!(d.estimates.is_empty());
+    }
+
+    #[test]
+    fn a_pole_leaves_points_for_both_sides() {
+        let d = draw(&json!({"y": "1 / x", "over": [-3, 3]})).unwrap();
+        assert_eq!(d.subpaths.len(), 2, "{:?}", d.subpaths.iter().map(Vec::len).collect::<Vec<_>>());
+        assert!(d.subpaths.iter().all(|s| s.len() > 100));
     }
 
     #[test]
