@@ -78,6 +78,8 @@ export function isPrCreate(command: string): boolean {
 }
 /** `Closes #n` in a PR body: the issue it closes. */
 const closes = (body: string): number | undefined => { const m = /\bCloses #(\d+)/i.exec(body); return m ? Number(m[1]) : undefined; };
+/** The issue a `gh pr create` command's body says it closes, by `Closes #n` in the command's text (#322); undefined when it says none. */
+export const closesIssue = (command: string): number | undefined => closes(command);
 /** An issue's epic, `**Epic:** #n` in its body. */
 const epicOf = (body: string): number | undefined => { const m = /\*\*Epic:\*\*\s*#(\d+)/.exec(body); return m ? Number(m[1]) : undefined; };
 /** The issues an issue depends on: the `#n` items under its `### Depends on` heading. */
