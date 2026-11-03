@@ -1005,7 +1005,7 @@ mod notifications {
         record::install(reader);
         let mut notifier = Notifier::new(NOTIFY_AFTER);
         let held = super::notification_center::delivered().unwrap_or_default();
-        let (mut start, mut fed, stale) = record::with_view(|view| {
+        let stale = record::with_view(|view| {
             // What Notification Center still holds from before: each is its session's open ask whose question it
             // carries, and one whose ask closed while the app was away leaves now.
             let (kept, stale): (Vec<_>, Vec<_>) = held
@@ -1025,10 +1025,12 @@ mod notifications {
                     notification
                 })
                 .partition(|notification| notification.ask.is_some());
-            notifier.start(&view.events, kept);
-            (view.start.clone(), view.events.len(), stale)
+            notifier.start(view, kept);
+            stale
         })
         .unwrap_or_default();
+        // What the reads hold, the notifier has started on.
+        record::take_unseen();
         for notification in stale {
             eprintln!("deep-app: withdrew {}", notification.session);
             cx.dismiss_system_notification(&notification.session);
@@ -1044,19 +1046,11 @@ mod notifications {
                 .iter()
                 .map(|notification| notification.session.clone())
                 .collect();
-            let posted = record::with_view(|view| {
-                // A new hub start: the reader read again, and its events start over.
-                if view.start != start {
-                    start = view.start.clone();
-                    fed = 0;
-                }
-                for event in &view.events[fed..] {
-                    notifier.saw(event, now);
-                }
-                fed = view.events.len();
-                notifier.due(&view.events, now, None, true)
-            })
-            .unwrap_or_default();
+            for event in record::take_unseen() {
+                notifier.saw(&event, now);
+            }
+            let posted =
+                record::with_view(|view| notifier.due(view, now, None, true)).unwrap_or_default();
             cx.update(|cx| {
                 for session in before.iter().filter(|session| {
                     !notifier
