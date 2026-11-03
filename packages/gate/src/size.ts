@@ -4,7 +4,8 @@
 // What is outside the plan and what a person is asked are the hub's; this module only measures.
 import { execFile } from 'node:child_process';
 import { lstat, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 import { gitEnv } from './env.js';
 
 /** A change past this many times the usual size is over it. */
@@ -13,6 +14,8 @@ export const OVER = 2;
 export const LAST = 20;
 /** An untracked file larger than this counts as a file with no lines, never read whole at a stop. */
 const READ_MAX = 4 * 1024 * 1024;
+/** A duplicated block is at least this many lines, blank lines aside, that the change adds and that appear elsewhere in it or in a file it changes. */
+export const BLOCK = 6;
 
 export interface ChangedFile { path: string; added: number; removed: number }
 /** Something a change brought in, and the file it came from. */
@@ -25,6 +28,10 @@ export interface Measured {
   dependencies: Brought[];
   /** Top-level folders the base didn't have, each with the first changed file in it. */
   folders: Brought[];
+  /** Services and cloud resources added: a compose file's services and Terraform's resources (`type.name`), with the file. */
+  resources: Brought[];
+  /** The lines the change adds that sit in a duplicated block. */
+  duplicated: number;
 }
 export interface Usual { lines: number; files: number; n: number }
 
@@ -68,18 +75,74 @@ export async function measure(folder: string, base: string, head?: string): Prom
   }
   files.sort((a, b) => a.path.localeCompare(b.path));
   const atHead = (path: string) => (head ? showAt(cwd, head, path) : readFile(join(cwd, path), 'utf8').catch(() => undefined));
-  const dependencies: Brought[] = [];
-  for (const f of files.filter((x) => x.path === 'package.json' || x.path.endsWith('/package.json'))) {
-    const before = depsOf(await showAt(cwd, base, f.path));
-    for (const name of depsOf(await atHead(f.path))) if (!before.includes(name)) dependencies.push({ name, from: f.path });
-  }
+  // What a changed file names that its base version didn't: a manifest's dependencies, a compose file's services, Terraform's resources.
+  const brought = async (test: (path: string) => boolean, names: (text: string | undefined) => string[]): Promise<Brought[]> => {
+    const out: Brought[] = [];
+    for (const f of files.filter((x) => test(x.path))) {
+      const before = names(await showAt(cwd, base, f.path));
+      for (const name of names(await atHead(f.path))) if (!before.includes(name) && !out.some((b) => b.name === name)) out.push({ name, from: f.path });
+    }
+    return out;
+  };
+  const dependencies = await brought((p) => basename(p) === 'package.json', depsOf);
+  const resources = [...await brought((p) => COMPOSE.test(basename(p)), servicesOf), ...await brought((p) => p.endsWith('.tf'), terraformOf)];
   const top = new Set((await git(cwd, ['ls-tree', '--name-only', '-z', base])).split('\0').filter(Boolean));
   const folders: Brought[] = [];
   for (const f of files) {
     const name = f.path.includes('/') ? f.path.slice(0, f.path.indexOf('/')) : undefined;
     if (name && !top.has(name) && !folders.some((x) => x.name === name)) folders.push({ name, from: f.path });
   }
-  return { files, added: files.reduce((n, f) => n + f.added, 0), removed: files.reduce((n, f) => n + f.removed, 0), dependencies, folders };
+  const duplicated = await duplicatedLines(cwd, base, head, files);
+  return { files, added: files.reduce((n, f) => n + f.added, 0), removed: files.reduce((n, f) => n + f.removed, 0), dependencies, folders, resources, duplicated };
+}
+const COMPOSE = /^(docker-)?compose(\.[\w-]+)?\.ya?ml$/;
+function servicesOf(text: string | undefined): string[] {
+  try {
+    const doc = parseYaml(text ?? '') as { services?: unknown } | null;
+    return doc?.services && typeof doc.services === 'object' ? Object.keys(doc.services).map((s) => `service ${s}`) : [];
+  } catch {
+    return [];
+  }
+}
+const terraformOf = (text: string | undefined): string[] => [...(text ?? '').matchAll(/^\s*resource\s+"([^"]+)"\s+"([^"]+)"/gm)].map((m) => `${m[1]}.${m[2]}`);
+/**
+ * The lines the change adds that sit in a duplicated block: a run of BLOCK added lines (blank ones aside, each trimmed)
+ * found more than once across the files it changes as they stand, so a block that only moved is not one.
+ */
+async function duplicatedLines(cwd: string, base: string, head: string | undefined, files: ChangedFile[]): Promise<number> {
+  // A file as the change leaves it: a regular file within READ_MAX, never a link followed or a binary read.
+  const now = async (path: string): Promise<string[]> => {
+    let text: string | undefined;
+    if (head) text = await showAt(cwd, head, path);
+    else {
+      const st = await lstat(join(cwd, path)).catch(() => undefined);
+      if (st?.isFile() && st.size <= READ_MAX) text = await readFile(join(cwd, path), 'utf8').catch(() => undefined);
+    }
+    return text === undefined || text.includes('\0') ? [] : text.split('\n').map((l) => l.trim()).filter(Boolean);
+  };
+  const windows = (lines: string[]) => (lines.length < BLOCK ? [] : Array.from({ length: lines.length - BLOCK + 1 }, (_, i) => lines.slice(i, i + BLOCK).join('\n')));
+  const seen = new Map<string, number>();
+  const changed = files.filter((f) => f.added > 0).slice(0, 200);
+  const contents = new Map<string, string[]>();
+  for (const f of changed) { const lines = await now(f.path); contents.set(f.path, lines); for (const w of windows(lines)) seen.set(w, (seen.get(w) ?? 0) + 1); }
+  // The runs of lines the change adds: each hunk's added lines, and an untracked file whole.
+  const runs: string[][] = [];
+  const diff = await git(cwd, ['diff', '-U0', '--no-renames', '--no-color', base, ...(head ? [head] : [])]).catch(() => '');
+  const inDiff = new Set<string>();
+  let run: string[] = [];
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('+++ b/')) inDiff.add(line.slice(6));
+    if (line.startsWith('+') && !line.startsWith('+++')) { const t = line.slice(1).trim(); if (t) run.push(t); } else if (run.length) { runs.push(run); run = []; }
+  }
+  if (run.length) runs.push(run);
+  for (const f of changed) if (!inDiff.has(f.path)) runs.push(contents.get(f.path) ?? []);
+  let lines = 0;
+  for (const r of runs) {
+    const dup = new Set<number>();
+    windows(r).forEach((w, i) => { if ((seen.get(w) ?? 0) > 1) for (let k = i; k < i + BLOCK; k++) dup.add(k); });
+    lines += dup.size;
+  }
+  return lines;
 }
 function depsOf(manifest: string | undefined): string[] {
   try {

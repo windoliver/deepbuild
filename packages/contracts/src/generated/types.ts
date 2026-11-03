@@ -2446,6 +2446,11 @@ export interface ClaimSized {
       name: string;
       from: string;
     }>;
+    resources: Array<{
+      name: string;
+      from: string;
+    }>;
+    duplicated: number;
     unreached: Array<string> | null;
     items: Array<{
       doc: string;

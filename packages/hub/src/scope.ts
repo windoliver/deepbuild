@@ -120,11 +120,13 @@ export class SizeScope {
     const inPlan = (path: string) => files.some((f) => path === f || path.startsWith(f.endsWith('/') ? f : `${f}/`));
     const dependencies = plan ? m.dependencies.filter((d) => !plan.scope.dependencies.includes(d.name)) : [];
     const folders = plan ? m.folders.filter((f) => !plan.scope.folders.includes(f.name) && !files.some((p) => p === f.name || p.startsWith(`${f.name}/`))) : [];
+    // A service or cloud resource is in the plan when its parts name it, as `service api` or `aws_s3_bucket.logs`.
+    const resources = plan ? m.resources.filter((r) => !plan.scope.parts.includes(r.name)) : [];
     const unreached = !files.length ? [] : s.reached ? m.files.map((f) => f.path).filter((p) => !inPlan(p) && !s.reached!.includes(p)) : null;
     const items = plan ? await this.items(s, plan) : [];
     const found = [
       ...(big ? ['size'] : []), ...(unreached ?? []).map((p) => `file:${p}`), ...dependencies.map((d) => `dependency:${d.name}`),
-      ...folders.map((f) => `folder:${f.name}`), ...items.map((i) => `item:${i.doc}#${i.id}`),
+      ...resources.map((r) => `resource:${r.name}`), ...folders.map((f) => `folder:${f.name}`), ...items.map((i) => `item:${i.doc}#${i.id}`),
     ];
     // What this task's stops sent back and asked before, from the record: once each.
     const before = (await this.o.raw(`SELECT data FROM events WHERE kind = 'claim.sized' AND json_extract(data, '$.task_ref') = ?`, [s.task])) as { data: string }[];
@@ -137,9 +139,10 @@ export class SizeScope {
       const has = (k: string) => keys.includes(k);
       const doc = (d: string) => items.filter((i) => has(`item:${i.doc}#${i.id}`) && i.doc === d).map((i) => i.id);
       return [
-        ...(has('size') ? [`${lines} lines changed (${m.added} added, ${m.removed} removed) over ${m.files.length} files, against a usual ${usual!.lines} lines over ${usual!.files} files for a ${kind} change in this repo, the median of the last ${usual!.n} you accepted; the biggest additions: ${biggest.map((b) => `${b.path} (${b.lines})`).join(', ')}`] : []),
+        ...(has('size') ? [`${lines} lines changed (${m.added} added, ${m.removed} removed${m.duplicated ? `, ${m.duplicated} added in duplicated blocks` : ''}) over ${m.files.length} files, against a usual ${usual!.lines} lines over ${usual!.files} files for a ${kind} change in this repo, the median of the last ${usual!.n} you accepted; the biggest additions: ${biggest.map((b) => `${b.path} (${b.lines})`).join(', ')}`] : []),
         ...(unreached ?? []).filter((p) => has(`file:${p}`)).map((p) => `${p} changed, and neither the plan nor any check reaches it`),
         ...dependencies.filter((d) => has(`dependency:${d.name}`)).map((d) => `the dependency ${d.name}, added in ${d.from}, which the plan doesn't name`),
+        ...resources.filter((r) => has(`resource:${r.name}`)).map((r) => `${r.name}, added in ${r.from}, which the plan doesn't name`),
         ...folders.filter((f) => has(`folder:${f.name}`)).map((f) => `the new top-level folder ${f.name}/, from ${f.from}, which the plan doesn't name`),
         ...[...new Set(items.map((i) => i.doc))].filter((d) => doc(d).length).map((d) => `${d}'s items ${doc(d).join(', ')} were changed, and neither the plan nor a requirement names them`),
       ];
@@ -151,7 +154,7 @@ export class SizeScope {
       v: 1, id: ulid(at), kind: 'claim.sized', ts: at, subject: s.claim,
       data: {
         claim: s.claim, task_ref: s.task, kind, lines: { added: m.added, removed: m.removed }, files: m.files.length, usual, over: big, biggest,
-        dependencies: dependencies.map((d) => ({ ...d })), folders: folders.map((f) => ({ ...f })), unreached, items, sent_back: sentBack, asked,
+        dependencies: dependencies.map((d) => ({ ...d })), folders: folders.map((f) => ({ ...f })), resources: resources.map((r) => ({ ...r })), duplicated: m.duplicated, unreached, items, sent_back: sentBack, asked,
       } as unknown as JsonValue,
     });
     if (!sentBack.length) return undefined;
