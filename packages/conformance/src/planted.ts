@@ -60,6 +60,7 @@ const DOCTOR_FIXES: Record<string, string> = {
   deprecated_used: 'Update the package to call the method that replaced the deprecated one before the release that stops serving it.',
   gpu_unsupported: "Use a Mac whose GPU grants every feature its tier's table requires; the item names the missing ones.",
   render_failed: 'Rebuild the canvas binaries and run deep doctor again; a render that still fails or misses its golden is a canvas bug to report.',
+  hook_program_missing: 'Run deep setup, which builds deep-hook and points the entries at it.',
   unknown: "Update deep: this doctor code was added after the reader's minor.",
 };
 const EXIT_FIXES: Record<string, string> = {

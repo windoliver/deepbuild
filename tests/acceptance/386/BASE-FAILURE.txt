@@ -5,7 +5,7 @@
 # pass are the 'holds at the base' fixture and measure checks, which are not criterion proofs.
 
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/doneright/github-issue-386-b3be11
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-386-b3be11
 
  ❯ tests/acceptance/386/budgets.test.ts (8 tests | 8 failed) 68617ms
    ❯ #386.b603e2cd the merge-base comparison is the perf lane's (2)
@@ -56,12 +56,12 @@ AssertionError: budgets.json has a task canvas-upscale: expected undefined to be
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/19]⎯
 
  FAIL  tests/acceptance/386/budgets.test.ts > #386.b603e2cd the merge-base comparison is the perf lane's > #386.b603e2cd the perf lane's task runs on this reference Mac and exits 0
-AssertionError: node benchmarks/canvas.mjs upscale exits 0: file:///Users/tafeng/dev/claude-worktrees/doneright/github-issue-386-b3be11/benchmarks/canvas.mjs:733
+AssertionError: node benchmarks/canvas.mjs upscale exits 0: file://~/dev/claude-worktrees/doneright/github-issue-386-b3be11/benchmarks/canvas.mjs:733
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
                             ^
 
 Error: Unknown task upscale; one of: patch-apply, merge-10k, seal, kit, map-deepest-level, costs, class, panel-bound-value, panel-pop-out, judge, terminal-60hz, cell-grid-60hz, patch-settled, patch-dirty, scene-read, idle, replica-cold-start, capture-save
-    at file:///Users/tafeng/dev/claude-worktrees/doneright/github-issue-386-b3be11/benchmarks/canvas.mjs:733:29
+    at file://~/dev/claude-worktrees/doneright/github-issue-386-b3be11/benchmarks/canvas.mjs:733:29
     at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
