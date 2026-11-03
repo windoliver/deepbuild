@@ -299,9 +299,22 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         }
         Some(other) => issues.push(bad("recipes", other.clone(), "not an object")),
     }
+    // Providers, layouts' validators and program entries are programs the sandbox module admits
+    // and runs (#238): a build without it refuses them, whatever `requires.modules` says.
+    for key in ["providers", "layouts"] {
+        if fields.contains_key(key) && sealed.module(SANDBOX).is_none() {
+            issues.push(Issue::envelope(
+                "module_missing",
+                key.into(),
+                json!({"module": SANDBOX}),
+                &format!("pack `{}`'s {key} are programs the sandbox module runs, which this build lacks", id.text()),
+            ));
+        }
+    }
+    let assets = fields.get("assets").and_then(Value::as_array).cloned().unwrap_or_default();
     let entries = match fields.get("entries") {
         None => Vec::new(),
-        Some(e) => check_entries(&id, e, sealed, &mut issues),
+        Some(e) => check_entries(&id, e, &assets, sealed, &mut issues),
     };
     for key in fields.keys() {
         if !PACK_KEYS.contains(&key.as_str()) {
@@ -332,6 +345,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
 fn check_entries(
     id: &PackId,
     entries: &Value,
+    assets: &[Value],
     sealed: &Sealed,
     issues: &mut Vec<Issue>,
 ) -> Vec<registry::lists::SealedEntry> {
@@ -366,6 +380,15 @@ fn check_entries(
                     reg.def.fill.join(", "),
                     reg.def.fill.join(" | ")
                 ),
+            ));
+            continue;
+        }
+        if reg.def.program.is_some() && sealed.module(SANDBOX).is_none() {
+            issues.push(Issue::envelope(
+                "module_missing",
+                path.clone(),
+                json!({"registry": name, "module": SANDBOX}),
+                &format!("the entries of `{name}` are programs the sandbox module admits and runs, which this build lacks"),
             ));
             continue;
         }
@@ -410,7 +433,28 @@ fn check_entries(
                 ));
                 continue;
             }
-            let kit = reg.def.run_kit(entry, value);
+            // A program entry's kit reads the program's bytes, from the pack's asset of its hash.
+            let judged = match reg.def.program {
+                None => value.clone(),
+                Some(_) => {
+                    let sha = value.get("program").and_then(Value::as_str).unwrap_or_default();
+                    let Some(hex) = assets
+                        .iter()
+                        .find(|a| a.get("sha256").and_then(Value::as_str) == Some(sha))
+                        .and_then(|a| a.get("hex"))
+                    else {
+                        issues.push(refuse(
+                            json!({"registry": name, "entry": entry, "program": sha}),
+                            format!("`{entry}`'s program `{sha}` is none of the pack's assets"),
+                        ));
+                        continue;
+                    };
+                    let mut v = value.clone();
+                    v["wasm"] = hex.clone();
+                    v
+                }
+            };
+            let kit = reg.def.run_kit(entry, &judged);
             if !kit.pass() {
                 let why: Vec<String> = kit
                     .rules
@@ -457,7 +501,13 @@ const PACK_KEYS: &[&str] = &[
     "requires",
     "recipes",
     "entries",
+    "assets",
+    "providers",
+    "layouts",
 ];
+
+/// The canvas module that admits and runs a pack's programs (#238).
+const SANDBOX: &str = "sandbox";
 
 /// The recipe's keys.
 const RECIPE_KEYS: &[&str] = &[
@@ -807,6 +857,11 @@ impl Packs {
             planted,
             ..Packs::default()
         }
+    }
+
+    /// Takes back an admitted version a later half of its pack check refused (#238: its programs).
+    pub fn withdraw(&mut self, key: &str) {
+        self.by_id.remove(key);
     }
 
     /// Runs the pack check and admits the version. A version already admitted with other
