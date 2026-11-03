@@ -147,12 +147,12 @@ pub fn operators(
         .applies(applies)
         .keyed(keyed)
         .run(run_scene3d);
-        r.array("scene3d.built_live", "built", "item", "geometry", "items");
+        r.array("scene3d.livebuilt", "built", "item", "geometry", "items");
         r.operator(
-            "build_live",
+            "rebuild",
             "items",
             &["self", "refs", "motion.fields", "t"],
-            &["scene3d.built_live"],
+            &["scene3d.livebuilt"],
         )
         .applies(is_live_builder)
         .keyed(keyed)
@@ -275,7 +275,7 @@ fn run_scene3d_live(v: &mut View<'_>) -> Result<(), OpError> {
     let item = item_at(v)?;
     let doc = v.document()?;
     let out = built(doc, &id, &item, v.planted(), t).map_err(|p| fault(&id, p))?;
-    v.write("scene3d.built_live", Val::typed(out))
+    v.write("scene3d.livebuilt", Val::typed(out))
 }
 
 fn run_building(v: &mut View<'_>) -> Result<(), OpError> {
