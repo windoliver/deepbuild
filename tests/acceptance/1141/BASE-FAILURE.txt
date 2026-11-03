@@ -1,0 +1,78 @@
+#1141's acceptance tests at the merge base 15de8c5b (deep-app identical at 502541f6), run on November 3, 2026 on a
+Mac15,7 (Apple M3 Pro, 36 GiB, a reference Mac) under a 1-minute load average of about 40 to 64 on 12 cores (other
+sessions' builds and suites), dev profile, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0. Paths shortened.
+
+== 1. The base as it is: both targets fail to build, at the new surface only ==
+
+$ cargo test --locked -p deep-app --test acceptance_1141 --test acceptance_1141_memory --no-run
+error[E0425]: cannot find function `sidebar` in module `deep_app::views`
+  --> tests/acceptance/1141/app/surface.rs:14:22
+error[E0599]: no method named `open_asks` found for reference `&deep_app::record::View` in the current scope
+  --> tests/acceptance/1141/app/surface.rs:19:35
+error[E0599]: no method named `deadline` found for reference `&deep_app::record::View` in the current scope
+  --> tests/acceptance/1141/app/surface.rs:24:35
+error[E0308]: mismatched types   (Notifier::start: expected `&[Value]`, found `&View`)
+  --> tests/acceptance/1141/app/surface.rs:29:45
+error[E0308]: mismatched types   (Notifier::due: expected `&[Value]`, found `&View`)
+  --> tests/acceptance/1141/app/surface.rs:39:...
+error: could not compile `deep-app` (test "acceptance_1141") due to 5 previous errors
+error: could not compile `deep-app` (test "acceptance_1141_memory") due to 5 previous errors
+(and two warnings: unexpected `cfg` condition values `plant-drops-close` and `plant-walks-events`, the features the
+implementation adds)
+
+Every error is in surface.rs; the rest of the suite builds. So every test fails at the base for the missing surface.
+To show where each fails at a named assertion, runs 2 to 4 swap only surface.rs for a shim over the base's own reads
+(below; kept outside the checkout, under target/), and put the real file back afterwards.
+
+The shim (surface.rs at the base):
+    fn with<R>(read: impl FnOnce(&[Value]) -> R) -> R   // record::with_view(|view| read(&view.events)), or, with
+                                                         // DA1141_SHIM_DROP_MOOT set, over view.events without ask.moot
+    sidebar()            = with(states::every_session)
+    open_asks(session)   = with(|e| states::open_asks(e, session).map(states::handle))
+    deadline(ask)        = with(|e| states::deadline(e, <the ask.created whose handle is ask>))
+    start(n, delivered)  = with(|e| n.start(e, delivered))
+    due(n, now, l, s)    = with(|e| n.due(e, now, l, s))
+
+== 2. AC1, the base's reader: FAIL, naming the count ==
+
+$ cargo test --locked -p deep-app --test acceptance_1141_memory -- --nocapture
+with 30 sessions and 200,000 streamed events the app's record reader process peaked at 832.8 MB resident (816.0 MB now), streamed in 10.1 s
+FAIL: with 30 sessions and 200,000 streamed events the app's record reader process peaked at 832.8 MB resident (816.0 MB now), streamed in 10.1 s: past the 300 MB budget at 200,000 events
+test ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb ... FAILED
+
+Its second half, checked once with the budget raised to 3,000,000,000 bytes for that run only (then put back): the
+sidebar after the stream shows the 30 sessions, their titles and the states the stream left, so the check passes a
+reader that holds what the app shows.
+test ac1_… ... ok   (6.6 s)
+
+== 3. AC3, the base's reads (which walk every event): FAIL at 100,000 ==
+
+$ cargo test --locked -p deep-app --test acceptance_1141 -- --test-threads=1
+FAIL: at 100,000 events held, the sidebar's render took 78.141 ms (median) against 11.948 ms at 20,000: it grows with the event count; 20,000 events: sidebar 11.948 ms, tick 12.446 ms (medians); 100,000 events: sidebar 78.141 ms, tick 68.709 ms (medians)
+test ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count ... FAILED
+
+The base's reads are the walker AC3's plant names, so the plant test's judge, run on the shim with --ignored:
+$ cargo test --locked -p deep-app --test acceptance_1141 -- --test-threads=1 --nocapture --ignored plant_walks_events
+the planted reader fails: at 100,000 events held, the sidebar's render took 80.976 ms (median) against 13.968 ms at 20,000: it grows with the event count; 20,000 events: sidebar 13.968 ms, tick 14.562 ms (medians); 100,000 events: sidebar 80.976 ms, tick 70.297 ms (medians)
+test plant_walks_events_a_reader_that_walks_every_event_per_render_fails_at_100000_events ... ok
+
+AC3's PASS side (a folded read under 4 ms at 200,000, judged by five runs) has not run: no folded reader exists at the
+base. Under this machine's load it would read INCONCLUSIVE by the timing rule; the growth check gates either way.
+
+== 4. AC2: the judge passes a right program and fails the planted one, naming the ask ==
+
+AC2's reference is the base's own reads, so the base equals it by construction; the shim run shows the judge and the
+seeded streams hold together (no false difference, every listed case reached):
+$ cargo test --locked -p deep-app --test acceptance_1141 -- --test-threads=1 --nocapture ac2
+12 streams of 1,200 records: 847 ask notifications, 915 notices, 446 withdrawals, states {"BLOCKED", "INCONCLUSIVE", "INVALID", "PASS", "needs you", "queued", "quiet", "says done", "sent back", "stale", "working"}
+test ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases ... ok   (24.2 s)
+
+AC2's wrong program, a reader that drops an ask's close, on the shim (DA1141_SHIM_DROP_MOOT: every ask.moot left out):
+$ DA1141_SHIM_DROP_MOOT=1 cargo test --locked -p deep-app --test acceptance_1141 -- --test-threads=1 --nocapture --ignored plant_drops_close
+the planted reader fails: seed 1, after log_pos 328: ask:01KA0001000000000000000319 reads closed in the merge base's whole-list read and not in the app's folded view (open asks of every session: app [… "ask:01KA0001000000000000000317", "ask:01KA0001000000000000000319"], base [… "ask:01KA0001000000000000000317"]); the events about it: ask.created core @326, ask.moot core @327
+test plant_drops_close_a_reader_that_drops_an_asks_close_fails_naming_the_ask ... ok
+
+== Not run at the base ==
+
+The plant tests in a build with their features (`--features plant-drops-close`, `--features plant-walks-events`): the
+features don't exist at the base (cargo refuses them), so they run once the implementation adds them.

@@ -138,8 +138,8 @@ impl BuildSet {
 }
 
 /// The module kinds the design names without a family, with the module each is: the cell grid
-/// `cells@1` (#402), and scene3d's builders and curve (Builder; Curve `curve@1`; #420). Any
-/// other bare name is the core's.
+/// `cells@1` (#402), and scene3d's builders and curve (Builder; Curve `curve@1`; #420; Builder
+/// `hull`, #440). Any other bare name is the core's.
 const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("cells", "cells"),
     ("slab", "scene3d"),
@@ -150,6 +150,7 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("coil", "scene3d"),
     ("plate", "scene3d"),
     ("display", "scene3d"),
+    ("hull", "scene3d"),
     ("curve", "scene3d"),
 ];
 

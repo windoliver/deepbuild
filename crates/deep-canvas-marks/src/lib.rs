@@ -12,8 +12,10 @@
 //! own check ([`check`]).
 
 pub mod check;
+pub mod code;
 pub mod data;
 pub mod dirty;
+pub mod finish;
 pub mod key;
 pub mod layout;
 pub mod look;
