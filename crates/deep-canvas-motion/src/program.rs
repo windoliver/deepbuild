@@ -4,10 +4,15 @@
 //! frame evaluates into a [`State`] the program sized up front. After the first frame, evaluating
 //! allocates nothing: no map, string or vector is made per frame.
 
-use serde_json::{Map, Value};
+use std::sync::Arc;
+
+use deep_canvas::expr::{Expr, Scope};
+use deep_canvas::interval::Iv;
+use serde_json::{json, Map, Value};
 
 use deep_canvas::schedule::core_ops::Datum;
 
+use crate::curve::Key;
 use crate::doc::{self, Feel, Motion, Refused, Target};
 use crate::eval::{Local, Validity};
 use crate::input::{Entry, Inputs};
@@ -49,6 +54,35 @@ pub enum Op {
     /// A function of the closed list (`min max floor ceil round abs` as 0 to 5), with its
     /// argument count.
     Call(u8, usize),
+    /// The whole expression through the core's closed function list: [`Program`]'s core
+    /// driver `.0`, for any expression past the six functions above.
+    Core(usize),
+}
+
+/// Each channel's or driver's bound by ID, `None` where the forms don't settle it.
+pub type Bounds = Vec<(String, Option<(f64, f64)>)>;
+
+/// A driver compiled through the core's closed function list, with where each of its vars
+/// reads from, in [`Expr::vars`] order.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Core {
+    pub(crate) expr: Arc<Expr>,
+    pub(crate) inputs: Vec<CoreInput>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum CoreInput {
+    Slot(usize),
+    World(usize, usize),
+    /// Seconds since the transport's start; over the document's span when bounded.
+    Time,
+    /// A control's value: its entries on the input track as `(t, seq, value)` in order, its
+    /// default before any, and its declared range.
+    Control {
+        entries: Vec<(i64, i64, f64)>,
+        default: f64,
+        range: (f64, f64),
+    },
 }
 
 /// A driver's ops at most (Driver: "≤ 64 ops"), and so its stack's depth.
@@ -124,6 +158,14 @@ pub enum Planted {
     PerLoopRoundsPeriod,
     /// A transition that restarts from its old target, not from where the value is.
     TransitionRestarts,
+    /// #490: a table's interval form from 8 samples between its range's ends.
+    TableFormSamples8,
+    /// #490: a pulse that leaves 1e-6 at its end.
+    PulseLeavesResidue,
+    /// #490: out_back with its fixed 1.70158, ignoring `overshoot`.
+    BackIgnoresParams,
+    /// #490: an opening of `ease@1` that renumbers its entries.
+    EaseRenumbered,
 }
 
 /// What an evaluation takes besides the document: the input track's entries, the viewer's
@@ -133,6 +175,8 @@ pub struct Options {
     pub input: Vec<Entry>,
     pub reduced_motion: bool,
     pub planted: Planted,
+    /// The function tables and ease tables the document's packs give (#490).
+    pub scope: Scope,
     /// Times are timeline positions as given: the loop isn't applied.
     pub unwrap: bool,
 }
@@ -174,6 +218,8 @@ pub struct Program {
     pub(crate) parents: Vec<(usize, usize)>,
     /// Each driver's target slot and compiled expression, in driver order.
     pub(crate) drivers: Vec<(usize, Vec<Op>)>,
+    /// The drivers past the six functions, through the core's expressions.
+    pub(crate) cores: Vec<Core>,
     /// Each limit's first slot (its transform group's) and per-axis bounds, in constraint order.
     pub(crate) limits: Vec<(usize, doc::Bounds)>,
     /// Each constraint but `limit`, in constraint order.
@@ -259,6 +305,7 @@ impl Program {
                 }
             }
         }
+        open_eases(&mut motion, &options)?;
         for c in &motion.channels {
             range_check(c)?;
         }
@@ -294,6 +341,7 @@ impl Program {
             placements: Vec::new(),
             parents: Vec::new(),
             drivers: Vec::new(),
+            cores: Vec::new(),
             limits: Vec::new(),
             constraints: Vec::new(),
             order: Vec::new(),
@@ -353,18 +401,24 @@ impl Program {
             }
             let slot = program.slot(items_json, &driver.target.owner, &driver.target, 1);
             program.mark_written(slot);
-            let ops = compile_ops(&driver.expr, &vars).ok_or_else(|| Refused {
-                code: "bad_doc",
-                path: format!("{path}/expr"),
-            })?;
+            // A driver with inputs or a hard range compiles through the core, whose interval
+            // form the range check reads.
+            let r1 = driver.inputs.is_empty() && driver.range.is_none();
+            let ops = match compile_ops(&driver.expr, &vars).filter(|_| r1) {
+                Some(ops) => ops,
+                None => {
+                    let core = program.core_driver(doc, driver, &vars, &path)?;
+                    program.cores.push(core);
+                    vec![Op::Core(program.cores.len() - 1)]
+                }
+            };
             program.drivers.push((slot, ops));
         }
         for limit in &motion.limits {
             let Some(i) = program.items.iter().position(|x| *x == limit.owner) else {
                 return Err(Refused {
                     code: "ref_unresolved",
-                    path: format!("constraints/{}/owner", limit.id),
-                });
+                    path: format!("constraints/{}/owner", limit.id), detail: None });
             };
             let group = ["pos", "rot", "scale"]
                 .iter()
@@ -377,8 +431,7 @@ impl Program {
         let index_of = |items: &[String], id: &str, path: String| {
             items.iter().position(|x| x == id).ok_or(Refused {
                 code: "ref_unresolved",
-                path,
-            })
+                path, detail: None })
         };
         for c in &motion.constraints {
             use doc::Kind;
@@ -390,11 +443,11 @@ impl Program {
                 let parts: Vec<&str> = x.split('/').collect();
                 match parts.as_slice() {
                     ["items", id, "at", g] => {
-                        let g = ["pos", "rot", "scale"].iter().position(|n| n == g).ok_or(Refused { code: "bad_path", path: at.clone() })?;
+                        let g = ["pos", "rot", "scale"].iter().position(|n| n == g).ok_or(Refused { code: "bad_path", path: at.clone(), detail: None })?;
                         Ok((index_of(&program.items, id, at)?, Some(g)))
                     }
                     [id] => Ok((index_of(&program.items, id, at)?, None)),
-                    _ => Err(Refused { code: "bad_path", path: at }),
+                    _ => Err(Refused { code: "bad_path", path: at, detail: None }),
                 }
             };
             let other = match &c.kind {
@@ -409,7 +462,7 @@ impl Program {
             let chain = match &c.kind {
                 Kind::Reach2 { chain, .. } => {
                     if chain[0] != c.owner {
-                        return Err(Refused { code: "bad_doc", path: format!("{path}/chain") });
+                        return Err(Refused { code: "bad_doc", path: format!("{path}/chain"), detail: None });
                     }
                     [
                         index_of(&program.items, &chain[1], format!("{path}/chain/1"))?,
@@ -645,6 +698,13 @@ impl Program {
                     }
                     for m in &channel.modifiers {
                         run[0] = m.apply(run[0], doc_t - motion.transport.start);
+                        if self.options.planted == Planted::PulseLeavesResidue {
+                            if let crate::modifier::Kind::Pulse { at, span, .. } = m.kind {
+                                if doc_t - motion.transport.start >= at + span {
+                                    run[0] += 1e-6;
+                                }
+                            }
+                        }
                     }
                     state.slots[slot..slot + width].copy_from_slice(run);
                     note(&Event::Channel(c), &[], &state.slots);
@@ -670,7 +730,10 @@ impl Program {
                 Step::Driver(d) => {
                     let (slot, ops) = &self.drivers[d];
                     let slots = &state.slots;
-                    let value = evaluate_ops(ops, slots, |i, k| self.world(slots, i)[k]);
+                    let value = match ops.as_slice() {
+                        [Op::Core(i)] => self.evaluate_core(*i, slots, doc_t),
+                        _ => evaluate_ops(ops, slots, |i, k| self.world(slots, i)[k]),
+                    };
                     if value.is_finite() {
                         let before = [state.slots[*slot]];
                         state.slots[*slot] = value;
@@ -730,63 +793,154 @@ impl Program {
 /// Refuses a channel whose keys, Bézier extremes or spring peaks leave its hard range, naming
 /// the key and the value (Channel and key: "Bézier extremes and spring peaks are checked in
 /// closed form").
-fn range_check(c: &doc::Channel) -> Result<(), Refused> {
+/// Each value a segment from key `a` to `b` reaches inside it, component `comp`, beside its
+/// keys' own: a spring's peaks and where it stands at the next key, a Bézier's extremes, and an
+/// ease's, from its interval form; each with what reaches it.
+fn segment_reach(a: &Key, b: &Key, comp: usize) -> Vec<(f64, String)> {
     use crate::curve::{Bezier, Interp};
+    let (va, vb) = (a.value[comp], b.value[comp]);
+    let span = (b.t - a.t) as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+    let mut out = Vec::new();
+    match a.interp {
+        Interp::Spring(spring) => {
+            let v0 = a.velocity.get(comp).copied().unwrap_or(0.0);
+            for t in spring.extremes(va - vb, v0, span).into_iter().flatten() {
+                out.push((vb + spring.at(va - vb, v0, t).e, format!("its spring peaks at {{}} {t} s after the key")));
+            }
+            out.push((vb + spring.at(va - vb, v0, span).e, "its spring reaches {} by the next key".into()));
+        }
+        Interp::Bezier { x1, y1, x2, y2 } => {
+            let bz = Bezier::new(x1, y1, x2, y2);
+            // y'(s) = 0: the quadratic 3a·s² + 2b·s + c of the cubic's y.
+            let (cc, bb) = (3.0 * y1, 3.0 * (y2 - y1) - 3.0 * y1);
+            let aa = 1.0 - cc - bb;
+            let (qa, qb, qc) = (3.0 * aa, 2.0 * bb, cc);
+            let mut roots = Vec::new();
+            if qa.abs() < 1e-15 {
+                if qb != 0.0 {
+                    roots.push(-qc / qb);
+                }
+            } else {
+                let d = qb * qb - 4.0 * qa * qc;
+                if d >= 0.0 {
+                    let r = deep_canvas::ops::sqrt(d);
+                    roots.extend([(-qb - r) / (2.0 * qa), (-qb + r) / (2.0 * qa)]);
+                }
+            }
+            for s in roots.into_iter().filter(|s| *s > 0.0 && *s < 1.0) {
+                out.push((va + (vb - va) * bz.y(s), "its Bézier reaches {}".into()));
+            }
+        }
+        _ => {
+            // An ease's share of the change from its interval form; a share of exactly 0 or 1
+            // is a key's own value, and any other is widened by the mix's rounding.
+            if let Some((lo, hi)) = a.ease_extremes() {
+                for share in [lo, hi] {
+                    if share == 0.0 || share == 1.0 {
+                        continue;
+                    }
+                    let v = va + (vb - va) * share;
+                    let what = "its ease reaches {}";
+                    out.push((deep_canvas::interval::down(v, 2), what.into()));
+                    out.push((deep_canvas::interval::up(v, 2), what.into()));
+                }
+            }
+        }
+    }
+    out
+}
+
+fn range_check(c: &doc::Channel) -> Result<(), Refused> {
     let Some((lo, hi)) = c.range else { return Ok(()) };
     let keys = &c.curve.keys;
     let out = |v: f64| v < lo || v > hi;
     let refuse = |key: &str, what: String| Refused {
         code: "out_of_range",
         path: format!("channels/{}/keys/{key}: {what}, outside the range [{lo}, {hi}]", c.id),
+        detail: None,
     };
     for (i, a) in keys.iter().enumerate() {
         if let Some(v) = a.value.iter().find(|v| out(**v)) {
             return Err(refuse(&a.id, format!("its value {v}")));
         }
         let Some(b) = keys.get(i + 1) else { continue };
-        let span = (b.t - a.t) as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
         for comp in 0..a.value.len() {
-            let (va, vb) = (a.value[comp], b.value[comp]);
-            match a.interp {
-                Interp::Spring(spring) => {
-                    let v0 = a.velocity.get(comp).copied().unwrap_or(0.0);
-                    let at_end = spring.at(va - vb, v0, span).e;
-                    for t in spring.extremes(va - vb, v0, span).into_iter().flatten() {
-                        let v = vb + spring.at(va - vb, v0, t).e;
-                        if out(v) {
-                            return Err(refuse(&a.id, format!("its spring peaks at {v} {t} s after the key")));
-                        }
-                    }
-                    if out(vb + at_end) {
-                        return Err(refuse(&a.id, format!("its spring reaches {} by the next key", vb + at_end)));
+            for (v, what) in segment_reach(a, b, comp) {
+                if out(v) {
+                    return Err(refuse(&a.id, what.replacen("{}", &v.to_string(), 1)));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The bound a channel's value keeps over its whole timeline: its keys' values and what each
+/// segment reaches inside, widened by its modifiers' reach; `None` where the forms don't settle
+/// it (a follow channel, or a curve extrapolated past its keys other than by holding).
+pub fn channel_bound(c: &doc::Channel) -> Option<(f64, f64)> {
+    use crate::curve::Extrapolate;
+    let keys = &c.curve.keys;
+    if c.follow.is_some() || keys.is_empty() || c.curve.before != Extrapolate::Hold || c.curve.after != Extrapolate::Hold {
+        return None;
+    }
+    // A Catmull-Rom or an unclamped auto segment overshoots its keys by a reach no form
+    // bounds yet: the channel's bound is an estimate.
+    use crate::curve::Interp;
+    if keys.iter().any(|k| matches!(k.interp, Interp::CatmullRom | Interp::Auto { clamp: false, .. })) {
+        return None;
+    }
+    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    let mut take = |v: f64| {
+        lo = lo.min(v);
+        hi = hi.max(v);
+    };
+    for (i, a) in keys.iter().enumerate() {
+        a.value.iter().for_each(|v| take(*v));
+        if let Some(b) = keys.get(i + 1) {
+            for comp in 0..a.value.len() {
+                segment_reach(a, b, comp).into_iter().for_each(|(v, _)| take(v));
+            }
+        }
+    }
+    for m in &c.modifiers {
+        (lo, hi) = m.bound(lo, hi);
+    }
+    (lo.is_finite() && hi.is_finite()).then_some((lo, hi))
+}
+
+/// Opens each key's ease through `ease@1` (#490): a pack's ease table resolved from the
+/// document's packs, and the planted programs that read params or numbers wrongly.
+fn open_eases(motion: &mut Motion, options: &Options) -> Result<(), Refused> {
+    use crate::curve::Interp;
+    use deep_canvas::ease::{Family, Named};
+    let mut channels: Vec<&mut doc::Channel> = motion.channels.iter_mut().collect();
+    for clip in &mut motion.clips {
+        channels.extend(clip.channels.iter_mut());
+    }
+    for c in channels {
+        for k in &mut c.curve.keys {
+            if let Some((name, table)) = &mut k.table {
+                match options.scope.eases.get(name.as_str()) {
+                    Some(t) => *table = Some(Arc::new(t.clone())),
+                    None => {
+                        return Err(Refused {
+                            code: "ref_unresolved",
+                            path: format!("channels/{}/keys/{}/interp/ease/table", c.id, k.id),
+                            detail: Some(Box::new(json!({"table": name, "why": "no pack gives this ease table"}))),
+                        })
                     }
                 }
-                Interp::Bezier { x1, y1, x2, y2 } => {
-                    let bz = Bezier::new(x1, y1, x2, y2);
-                    // y'(s) = 0: the quadratic 3a·s² + 2b·s + c of the cubic's y.
-                    let (cc, bb) = (3.0 * y1, 3.0 * (y2 - y1) - 3.0 * y1);
-                    let aa = 1.0 - cc - bb;
-                    let (qa, qb, qc) = (3.0 * aa, 2.0 * bb, cc);
-                    let mut roots = Vec::new();
-                    if qa.abs() < 1e-15 {
-                        if qb != 0.0 {
-                            roots.push(-qc / qb);
-                        }
-                    } else {
-                        let d = qb * qb - 4.0 * qa * qc;
-                        if d >= 0.0 {
-                            let r = deep_canvas::ops::sqrt(d);
-                            roots.extend([(-qb - r) / (2.0 * qa), (-qb + r) / (2.0 * qa)]);
-                        }
-                    }
-                    for s in roots.into_iter().filter(|s| *s > 0.0 && *s < 1.0) {
-                        let v = va + (vb - va) * bz.y(s);
-                        if out(v) {
-                            return Err(refuse(&a.id, format!("its Bézier reaches {v}")));
-                        }
+            }
+            if let Interp::Ease(e) = &mut k.interp {
+                if options.planted == Planted::BackIgnoresParams {
+                    if let Named::Penner(Family::Back(c), _) = &mut e.ease {
+                        *c = deep_canvas::ease::BACK_OVERSHOOT;
                     }
                 }
-                _ => {}
+                if options.planted == Planted::EaseRenumbered {
+                    e.number = deep_canvas::ease::renumbered(e.number);
+                }
             }
         }
     }
@@ -906,6 +1060,15 @@ impl Program {
                 .flat_map(|op| match op {
                     Op::Var(s) => vec![*s],
                     Op::World(i, _) => self.world_slots(*i),
+                    Op::Core(c) => self.cores[*c]
+                        .inputs
+                        .iter()
+                        .flat_map(|input| match input {
+                            CoreInput::Slot(s) => vec![*s],
+                            CoreInput::World(i, _) => self.world_slots(*i),
+                            _ => vec![],
+                        })
+                        .collect(),
                     _ => vec![],
                 })
                 .collect();
@@ -929,8 +1092,7 @@ impl Program {
                 .iter()
                 .map(|&i| format!("{} ({})", nodes[i].entry, nodes[i].item))
                 .collect::<Vec<_>>()
-                .join(" → "),
-        })?;
+                .join(" → "), detail: None })?;
         self.order = order.iter().map(|&i| steps[i]).collect();
         // The order by item and stage: an item's transform composes before its first
         // constraint, or after its last write when it has none.
@@ -950,6 +1112,196 @@ impl Program {
         names.dedup();
         self.order_names = names;
         Ok(())
+    }
+
+    /// A driver past the six functions, compiled through the core's closed function list over
+    /// its vars, its hard range checked against its bound.
+    fn core_driver(
+        &self,
+        doc: &Map<String, Value>,
+        driver: &doc::Driver,
+        vars: &[(&str, Var)],
+        path: &str,
+    ) -> Result<Core, Refused> {
+        let mut scope = self.options.scope.clone();
+        let controls = doc.get("controls").and_then(Value::as_object);
+        let mut inputs_of: Vec<(&str, CoreInput)> = vars
+            .iter()
+            .map(|(n, v)| {
+                (*n, match *v {
+                    Var::Slot(s) => CoreInput::Slot(s),
+                    Var::World(i, k) => CoreInput::World(i, k),
+                })
+            })
+            .collect();
+        for (name, input) in &driver.inputs {
+            let input = match input {
+                doc::DriverInput::Time => CoreInput::Time,
+                doc::DriverInput::Control(id) => {
+                    let c = controls.and_then(|c| c.get(id));
+                    let range = c.and_then(|c| c.get("range")).and_then(Value::as_array);
+                    let (Some(c), Some([lo, hi])) = (c, range.map(Vec::as_slice)) else {
+                        return Err(Refused {
+                            code: "ref_unresolved",
+                            path: format!("{path}/vars/{name}"),
+                            detail: None,
+                        });
+                    };
+                    let (lo, hi) = (lo.as_f64().unwrap_or(0.0), hi.as_f64().unwrap_or(0.0));
+                    scope.maxes.insert(name.clone(), hi);
+                    let mut entries: Vec<(i64, i64, f64)> = self
+                        .options
+                        .input
+                        .iter()
+                        .filter(|e| e.control == *id)
+                        .filter_map(|e| Some((e.t, e.seq, e.value.as_f64()?)))
+                        .collect();
+                    entries.sort_by_key(|e| (e.0, e.1));
+                    CoreInput::Control {
+                        entries,
+                        default: c.get("default").and_then(Value::as_f64).unwrap_or(lo),
+                        range: (lo, hi),
+                    }
+                }
+            };
+            inputs_of.push((name.as_str(), input));
+        }
+        if self.options.planted == Planted::TableFormSamples8 {
+            scope.planted = Some(deep_canvas::expr::Planted::TableFormSamples8);
+        }
+        let expr = Expr::compile(&driver.text, &scope, DRIVER_OPS).map_err(|r| Refused {
+            code: "bad_doc",
+            path: format!("{path}/expr"),
+            detail: Some(Box::new(json!({"call": r.call, "why": r.why}))),
+        })?;
+        let mut inputs = Vec::new();
+        for name in &expr.vars {
+            let Some((_, input)) = inputs_of.iter().find(|(n, _)| n == name) else {
+                return Err(Refused {
+                    code: "ref_unresolved",
+                    path: format!("{path}/expr"),
+                    detail: Some(Box::new(json!({"name": name}))),
+                });
+            };
+            inputs.push(input.clone());
+        }
+        let core = Core {
+            expr: Arc::new(expr),
+            inputs,
+        };
+        if let Some((lo, hi)) = driver.range {
+            let b = self.core_bound(&core);
+            if !(b.lo >= lo && b.hi <= hi) {
+                return Err(Refused {
+                    code: "out_of_range",
+                    path: format!(
+                        "{path}: its bound [{}, {}] leaves the range [{lo}, {hi}]",
+                        b.lo, b.hi
+                    ),
+                    detail: Some(Box::new(json!({"driver": driver.id, "bound": [b.lo, b.hi]}))),
+                });
+            }
+        }
+        Ok(core)
+    }
+
+    /// A core driver's value over the slots at `doc_t`.
+    fn evaluate_core(&self, c: usize, slots: &[f64], doc_t: i64) -> f64 {
+        let core = &self.cores[c];
+        let mut vals = [0.0f64; DRIVER_OPS];
+        for (v, input) in vals.iter_mut().zip(&core.inputs) {
+            *v = match input {
+                CoreInput::Slot(s) => slots[*s],
+                CoreInput::World(i, k) => self.world(slots, *i)[*k],
+                // The document's time, held to its span, the range its bound reads.
+                CoreInput::Time => {
+                    let s = (doc_t - self.motion.transport.start) as f64
+                        / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+                    let span = self.motion.transport.span.map_or(f64::INFINITY, |sp| {
+                        sp as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
+                    });
+                    s.clamp(0.0, span)
+                }
+                // A control's value, held to its declared range.
+                CoreInput::Control {
+                    entries,
+                    default,
+                    range,
+                } => {
+                    let i = entries.partition_point(|e| e.0 <= doc_t);
+                    let v = i.checked_sub(1).map_or(*default, |i| entries[i].2);
+                    v.clamp(range.0, range.1)
+                }
+            };
+        }
+        core.expr.eval_num(&vals[..core.inputs.len()])
+    }
+
+    /// A core driver's bound from its interval form: time over the span, each control over its
+    /// declared range (Control sweep), each slot a channel writes over that channel's bound.
+    fn core_bound(&self, core: &Core) -> Iv {
+        let span = self.motion.transport.span.map_or(f64::INFINITY, |s| {
+            s as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
+        });
+        let vars: Vec<Iv> = core
+            .inputs
+            .iter()
+            .map(|input| match input {
+                CoreInput::Time => Iv::new(0.0, span),
+                CoreInput::Control { range, .. } => Iv::new(range.0, range.1),
+                CoreInput::Slot(s) => self.slot_bound(*s),
+                CoreInput::World(..) => Iv::ENTIRE,
+            })
+            .collect();
+        core.expr.bound_num(&vars)
+    }
+
+    /// The bound of what slot `s` holds: its base value when nothing writes it, a channel's
+    /// bound when one channel writes it, otherwise unbounded.
+    fn slot_bound(&self, s: usize) -> Iv {
+        let by: Vec<usize> = (0..self.channels.len())
+            .filter(|&c| {
+                let (slot, width) = self.channels[c];
+                (slot..slot + width).contains(&s)
+            })
+            .collect();
+        // Any write but the channels' (a placement's clip, a follow, a driver, a constraint)
+        // leaves the slot unbounded here.
+        let others = self.follows.contains(&s)
+            || self.placements.iter().flatten().any(|w| (w.slot..w.slot + w.width).contains(&s))
+            || self.drivers.iter().any(|(slot, _)| *slot == s)
+            || self.limits.iter().any(|(first, _)| (*first..first + 3).contains(&s))
+            || (0..self.constraints.len()).any(|k| self.constraint_slots(k).1.contains(&s));
+        match by.as_slice() {
+            [] if !self.writes(s..s + 1) => Iv::point(self.base[s]),
+            [c] if !others => channel_bound(&self.motion.channels[*c]).map_or(Iv::ENTIRE, |(lo, hi)| Iv::new(lo, hi)),
+            _ => Iv::ENTIRE,
+        }
+    }
+
+    /// Each channel's and each driver's bound (`None` where the forms don't settle it), the
+    /// bound the hard-range check reads.
+    pub fn bounds(&self) -> (Bounds, Bounds) {
+        let channels = self
+            .motion
+            .channels
+            .iter()
+            .map(|c| (c.id.clone(), channel_bound(c)))
+            .collect();
+        let drivers = self
+            .motion
+            .drivers
+            .iter()
+            .zip(&self.drivers)
+            .map(|(d, (_, ops))| {
+                let b = match ops.as_slice() {
+                    [Op::Core(i)] => Some(self.core_bound(&self.cores[*i])),
+                    _ => None,
+                };
+                (d.id.clone(), b.filter(Iv::is_bounded).map(|b| (b.lo, b.hi)))
+            })
+            .collect();
+        (channels, drivers)
     }
 
     /// Runs constraint `k` on the slots, mixing what it writes by its influence.
@@ -1210,6 +1562,8 @@ fn evaluate_ops(ops: &[Op], slots: &[f64], world: impl Fn(usize, usize) -> f64) 
     let mut n = 0;
     for op in ops {
         match *op {
+            // A core driver evaluates whole, in `run`.
+            Op::Core(_) => return f64::NAN,
             Op::Num(v) => {
                 stack[n] = v;
                 n += 1;

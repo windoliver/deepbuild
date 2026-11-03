@@ -14,6 +14,7 @@ mod costs;
 mod efficiency;
 mod evidence;
 mod frames;
+mod function;
 mod gate;
 mod geometry;
 mod host;
@@ -531,6 +532,14 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })
         }
         "registries" => return Some(Call::Registries),
+        // #490: the closed function list's point and interval forms, and their search.
+        "fn" => return Some(Call::Fn(Box::new(c.clone()))),
+        "path" => {
+            return Some(Call::Path {
+                doc: doc()?,
+                item: c.get("item")?.as_str()?.to_string(),
+            })
+        }
         // #412: deep_kinds checks its own fields, so each refusal is error@2 at its path.
         "deep_kinds" => return Some(Call::Kinds(Value::Object(c.clone()))),
         "sandbox" => return Some(Call::Sandbox),
@@ -1229,8 +1238,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let at = list
         .iter()
         .map(|c| {
-            // deep_query's `at` is the times it reads (#411): on the clock it arrives at `arrives`.
-            let arrives = if c.get("call") == Some(&json!("deep_query")) {
+            // deep_query's `at` is the times it reads (#411), and fn's the points (#490): on the
+            // clock each arrives at `arrives`.
+            let arrives = if c.get("call") == Some(&json!("deep_query")) || c.get("call") == Some(&json!("fn")) {
                 "arrives"
             } else {
                 "at"
@@ -1421,7 +1431,7 @@ impl CanvasSide {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                let arrives = if c["call"] == "deep_query" {
+                let arrives = if c["call"] == "deep_query" || c["call"] == "fn" {
                     "arrives"
                 } else {
                     "at"
@@ -1749,6 +1759,33 @@ fn modules(set: BuildSet) -> Vec<Module> {
     // #489: a build without the data module, whose motion@1 digest equals the full set's.
     #[cfg(feature = "test-leave-out-data")]
     out.retain(|m| m.manifest.name != "data");
+    // #490: a build without the motion module, which still resolves ease@1, the core's; and the
+    // planted layout that declares ease@1 in the motion module instead.
+    #[cfg(feature = "test-leave-out-motion")]
+    {
+        // With motion go the modules that require it (building), so the set still seals.
+        out.retain(|m| m.manifest.name != "motion");
+        while let Some(i) = out.iter().position(|m| {
+            m.manifest
+                .depends_on
+                .iter()
+                .any(|(dep, d)| !d.optional && !out.iter().any(|o| o.manifest.name == *dep))
+        }) {
+            out.remove(i);
+        }
+    }
+    #[cfg(feature = "test-ease-in-motion")]
+    for m in &mut out {
+        if m.manifest.name == "motion" {
+            *m = deep_canvas_motion::module::declaring_eases();
+        }
+    }
+    #[cfg(feature = "test-ease-renumbered")]
+    for m in &mut out {
+        if m.manifest.name == "motion" {
+            *m = deep_canvas_motion::module::renumbered();
+        }
+    }
     out
 }
 
@@ -1942,6 +1979,13 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
     }
     if cfg!(feature = "test-steps-in-effects") {
         registry = registry.plant(Fault::BaseStepsElsewhere);
+    }
+    // #490's planted openings of ease@1: its entries renumbered, or declared by motion.
+    if cfg!(feature = "test-ease-renumbered") {
+        registry = registry.plant(Fault::EaseRenumbered);
+    }
+    if cfg!(feature = "test-ease-in-motion") {
+        registry = registry.plant(Fault::EaseInMotion);
     }
     // #412: the fixture ring keeps the bare name the issue gives it (`ring@1`, `ring@2`).
     if cfg!(any(feature = "test-ring-a", feature = "test-ring-b")) {
