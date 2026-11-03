@@ -21,6 +21,31 @@ use crate::hub::{Hub, Planted, Via};
 /// The rows an answer keeps when the call names no cap.
 pub const DEFAULT_CAP: usize = 200;
 
+/// No reply passes this many bytes of JSON without a cursor (#412).
+const REPLY_CAP: usize = 65_536;
+
+/// The bytes a reply's list may take: the cap less the rest of the reply and room for the fields
+/// every reply carries.
+pub fn reply_room(reply: &Value) -> usize {
+    REPLY_CAP.saturating_sub(reply.to_string().len() + 8_192)
+}
+
+/// The elements of `all` from `from` that fit in `room` bytes of JSON (at least one), and where
+/// the next page starts when the rest didn't fit.
+pub fn fitted(all: &[Value], from: usize, room: usize) -> (Vec<Value>, Option<usize>) {
+    let mut size = 0;
+    let mut page = Vec::new();
+    for (i, v) in all.iter().enumerate().skip(from) {
+        let n = v.to_string().len() + 1;
+        if size + n > room && !page.is_empty() {
+            return (page, Some(i));
+        }
+        size += n;
+        page.push(v.clone());
+    }
+    (page, None)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum What {
     Rows,
@@ -48,6 +73,8 @@ pub struct Query {
     /// Flicks, in the call's order.
     pub at: Vec<i64>,
     pub cap: usize,
+    /// #412: the row the page starts at, as an earlier answer's cursor gave it.
+    pub cursor: usize,
     /// `expect: {none: {kind}}`: the kind the caller asks to conclude no row is of.
     pub none_of_kind: Option<String>,
     /// The why's path and time.
@@ -363,7 +390,7 @@ impl Hub<'_> {
             // The planted cut: the first `cap` items by ID, parents or not.
             matched.iter().take(q.cap).copied().collect()
         } else {
-            order.iter().take(q.cap).copied().collect()
+            order.iter().skip(q.cursor).take(q.cap).copied().collect()
         };
         let row_session = if kept.is_empty() {
             None
@@ -377,7 +404,6 @@ impl Hub<'_> {
             .as_ref()
             .map(|s| self.lowered_keys(s))
             .unwrap_or_default();
-        let kept_set: BTreeSet<&str> = kept.iter().copied().collect();
         let mut rows = Vec::with_capacity(kept.len());
         for id in &kept {
             let item = &items[*id];
@@ -397,6 +423,12 @@ impl Hub<'_> {
             }
             rows.push(row);
         }
+        // #412: rows past what fits under 64 KB come on the next page, from its cursor; the
+        // coverage block names the cut of the rows this page keeps.
+        let probe = json!({"values": values, "keys": keys, "unresolved": unresolved});
+        let (rows, next) = fitted(&rows, 0, reply_room(&probe));
+        let kept = &kept[..rows.len()];
+        let kept_set: BTreeSet<&str> = kept.iter().copied().collect();
         let mut cut = Vec::new();
         let top = children.get(&None).map_or(0, Vec::len);
         let shown_top = kept
@@ -406,7 +438,7 @@ impl Hub<'_> {
         if shown_top < top {
             cut.push(json!({"parent": null, "shown": shown_top, "total": top}));
         }
-        for id in &kept {
+        for id in kept {
             let total = children.get(&Some(*id)).map_or(0, Vec::len);
             let shown = children
                 .get(&Some(*id))
@@ -423,8 +455,11 @@ impl Hub<'_> {
             "keys": keys,
             "unresolved": unresolved,
             "coverage": {"complete": complete, "rows_total": matched.len(),
-                         "rows_shown": kept.len(), "cut": cut},
+                         "rows_shown": rows.len(), "cut": cut},
         });
+        if let Some(n) = next {
+            reply["next"] = json!((q.cursor + n).to_string());
+        }
         if let Some(kind) = &q.none_of_kind {
             let found = kept
                 .iter()
