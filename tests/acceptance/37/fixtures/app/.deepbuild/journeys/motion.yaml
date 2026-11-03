@@ -1,0 +1,20 @@
+# The card's motion: scrolled into view, it fades in from 28 px below over 0.7 s on cubic-bezier(0.33, 1, 0.68, 1).
+journey: motion
+feature: cart
+depth: journey
+masks: []
+steps:
+  - id: open
+    deadline: 10000
+    goto: /motion
+  - id: reveal
+    deadline: 5000
+    scroll_into_view: { role: article, name: Featured }
+    motion:
+      - { target: { role: article, name: Featured }, property: opacity, from: "0", to: "1", duration: 700, delay: 0, easing: "cubic-bezier(0.33, 1, 0.68, 1)" }
+      - { target: { role: article, name: Featured }, property: transform, from: "translateY(28px)", to: "translateY(0px)", duration: 700, delay: 0, easing: "cubic-bezier(0.33, 1, 0.68, 1)" }
+end_state:
+  - id: card-shown
+    oracle: code
+    locator: { role: article, name: Featured }
+    visible: true

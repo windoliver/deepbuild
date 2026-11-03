@@ -1,0 +1,4 @@
+feature: login
+name: Signing in
+files: [public/login.js]
+journeys: [login]

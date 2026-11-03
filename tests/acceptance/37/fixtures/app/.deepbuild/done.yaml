@@ -1,0 +1,7 @@
+# The sample app's environment block, as env-local reads it (#331): the dev script, run by /bin/sh in the folder the
+# stack starts from (a check's temporary checkout), on the port leased as `web`, ready once /health answers 200.
+# The tests' checkout helper rewrites `up` with the full path of the Node this test process runs on.
+environment:
+  up: "node server.mjs"
+  ports: [web]
+  ready: { http: "http://127.0.0.1:${web}/health", within: 20 }
