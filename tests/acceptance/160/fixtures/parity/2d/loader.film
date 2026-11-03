@@ -1,0 +1,128 @@
+{
+  "format": 1,
+  "id": "parity-loader",
+  "profile": "film",
+  "title": "Loader",
+  "description": "A ring drawn as a path, trimmed by a window whose end grows, whose start follows and whose offset travels round the ring, with an arrow at the trim's end; a still hub beside it.",
+  "size": [
+    240,
+    240
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "loader": {
+      "id": "loader",
+      "kind": "path@1",
+      "layer": "main",
+      "name": "Loader ring",
+      "order": "a00",
+      "params": {
+        "d": "M 200 120 C 200 164.18278 164.18278 200 120 200 C 75.81722 200 40 164.18278 40 120 C 40 75.81722 75.81722 40 120 40 C 164.18278 40 200 75.81722 200 120 Z",
+        "ops": [
+          {
+            "trim": {
+              "start": 0,
+              "end": 0.05,
+              "offset": 0
+            }
+          }
+        ],
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        },
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 10
+          }
+        }
+      }
+    },
+    "hub": {
+      "id": "hub",
+      "kind": "path@1",
+      "layer": "main",
+      "name": "Hub",
+      "order": "a01",
+      "params": {
+        "d": "M 110 120 L 130 120 M 120 110 L 120 130",
+        "paint": {
+          "stroke": {
+            "role": "hub",
+            "width": 4
+          }
+        }
+      }
+    }
+  },
+  "transport": {
+    "span": "2s"
+  },
+  "channels": {
+    "loader-end": {
+      "target": "items/loader/params/ops/0/end",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 0.05,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "1s",
+          "value": 0.8,
+          "interp": "linear"
+        },
+        "k2": {
+          "t": "2s",
+          "value": 0.8,
+          "interp": "linear"
+        }
+      }
+    },
+    "loader-start": {
+      "target": "items/loader/params/ops/0/start",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 0,
+          "interp": "hold"
+        },
+        "k1": {
+          "t": "1s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k2": {
+          "t": "2s",
+          "value": 0.75,
+          "interp": "linear"
+        }
+      }
+    },
+    "loader-offset": {
+      "target": "items/loader/params/ops/0/offset",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "2s",
+          "value": 360,
+          "interp": "linear"
+        }
+      }
+    }
+  }
+}
