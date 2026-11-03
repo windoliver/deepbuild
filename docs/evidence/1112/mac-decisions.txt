@@ -134,7 +134,12 @@ Nine Claude Code sessions stayed resident (eight before plus one new).
   02:36:16Z  swap 29,907 of 30,720 MiB (97%)  load 6.78
   02:41:25Z  swap 30,417 of 31,744 MiB (96%)  load 5.67
 No cargo, rustc, vitest, proof or stryker process in any of them. Load got under 8 once the stale
-processes went; swap did not move, because macOS frees swapped pages only when the processes that own
-them exit, and the nine sessions stayed. The first acceptance criterion (swap < 50% and load < 8,
-three readings five minutes apart) is NOT met on the Mac. Next step: fewer resident sessions (the
-issue's scope says at most three), or a restart, then the three readings again.
+processes went; swap did not move. The first acceptance criterion (swap < 50% and load < 8, three
+readings five minutes apart) is NOT met on the Mac.
+
+Where the swap is (end of mac-idle.txt, 02:47Z): fseventsd (PID 308, root, up 34 days) holds 32G of
+memory, 29G of it compressed or swapped, which is nearly all of the 30 GB swap in use. The nine Claude
+Code sessions hold about 0.2 GB each, so cutting sessions alone cannot bring swap under 50%. This fits
+the design's note that FSEvents watches every worktree. fseventsd is a system daemon: restarting it
+needs root (launchd starts it again) or a reboot, which is the owner's call, not an agent's.
+Next step: restart fseventsd or the Mac, then the three readings again.

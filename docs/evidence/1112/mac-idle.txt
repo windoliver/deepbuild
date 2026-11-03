@@ -30,3 +30,22 @@ $ resident Claude Code processes
 18
 
 
+
+# Where the swap is (02:47Z, after the three readings above; nine sessions still resident)
+$ top -l 1 -o cmprs -n 12 -stats pid,command,mem,cmprs
+PID    COMMAND          MEM   CMPRS
+308    fseventsd        32G   29G  
+56965  Google Chrome He 1135M 1130M
+1104   Google Chrome He 1091M 1088M
+70020  Claude Helper (R 1323M 965M 
+682    Google Chrome    706M  672M 
+650    WiFiAgent        643M  638M 
+840    Google Chrome He 468M  599M 
+68762  node             595M  485M 
+6041   Google Chrome He 480M  470M 
+371    WindowServer     1071M 447M 
+1190   UURemote         279M  380M 
+69807  Claude           409M  342M 
+$ ps -o pid,etime,user,command -p 308
+  PID     ELAPSED USER COMMAND
+  308 34-23:09:54 root /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
