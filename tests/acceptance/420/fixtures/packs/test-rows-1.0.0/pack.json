@@ -1,0 +1,15 @@
+{
+  "name": "rows",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #420 acceptance suite: a fence of n short walls from the building module, n fixed at check by the instance's input.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "building": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "rows.fence@1": "rows.fence@1.json"
+  }
+}

@@ -90,6 +90,214 @@ fn pair(v: Option<&Value>, default: [f64; 2]) -> [f64; 2] {
     }
 }
 
+/// Where an item stands in world metres: a solid's origin, another module's item's, or none.
+fn item_pos(scene: &Scene, id: &str) -> Option<[f64; 3]> {
+    let id = id.split('#').next().unwrap_or(id);
+    scene
+        .layers
+        .iter()
+        .flat_map(|l| &l.solids)
+        .find(|s| s.id == id)
+        .map(|s| [s.model[0][3], s.model[1][3], s.model[2][3]])
+        .or_else(|| scene.others.iter().find(|o| o.id == id).map(|o| o.pos))
+}
+
+/// A curve's samples resampled to [`shipped::CURVE_POINTS`] points evenly by arc length, and
+/// its length.
+fn resampled(points: &[[f64; 3]]) -> (Vec<[f64; 3]>, f64) {
+    let n = shipped::CURVE_POINTS as usize;
+    let seg = |a: [f64; 3], b: [f64; 3]| {
+        ops::sqrt((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2) + (b[2] - a[2]).powi(2))
+    };
+    let total: f64 = points.windows(2).map(|w| seg(w[0], w[1])).sum();
+    let mut out = Vec::with_capacity(n);
+    for k in 0..n {
+        let mut left = total * k as f64 / (n - 1) as f64;
+        let mut at = *points.last().unwrap_or(&[0.0; 3]);
+        for w in points.windows(2) {
+            let d = seg(w[0], w[1]);
+            if left <= d && d > 0.0 {
+                let f = left / d;
+                at = [0, 1, 2].map(|i| w[0][i] + (w[1][i] - w[0][i]) * f);
+                break;
+            }
+            left -= d;
+        }
+        out.push(at);
+    }
+    (out, total)
+}
+
+/// A channel over life (Particles: `size, opacity: channels over life`): a number, `[birth,
+/// death]`, or keys `[{at, value}]`, as its values at birth and at death.
+fn over_life(v: Option<&Value>, default: f64) -> [f64; 2] {
+    match v {
+        Some(Value::Array(keys)) if keys.iter().all(Value::is_object) && !keys.is_empty() => {
+            let at = |k: &Value| k["value"].as_f64().unwrap_or(default);
+            [at(&keys[0]), at(&keys[keys.len() - 1])]
+        }
+        other => pair(other, [default, default]),
+    }
+}
+
+/// One particles@1 item as the operator and the draw read it: its emitter, motion, life and
+/// look over life (Particles `particles@1`; #420).
+fn sparks_of(
+    scene: &Scene,
+    o: &deep_canvas_scene3d::scene::Other,
+    look: &Look3,
+    seed: u32,
+) -> Sparks {
+    let p = &o.params;
+    let emit = &p["emit"];
+    let count = p["count"]
+        .as_u64()
+        .unwrap_or(256)
+        .min(u64::from(shipped::MAX_PARTICLES_SHOWPIECE)) as u32;
+    let life = pair(p.get("life"), [1.0, 1.0]);
+    let motion = p["motion"]
+        .as_object()
+        .and_then(|m| m.keys().next().cloned())
+        .unwrap_or_else(|| "ballistic".into());
+    let m = &p["motion"][&motion];
+    let ballistic = &p["motion"]["ballistic"];
+    let v0 = pair(ballistic.get("v0"), [1.0, 2.0]);
+    let origin = emit["anchor"]
+        .as_str()
+        .and_then(|a| item_pos(scene, a))
+        .unwrap_or(o.pos);
+    // The emitter's shape, and the curve it or the motion runs along.
+    let (shape, shape_curve) = match &emit["shape"] {
+        Value::Object(s) => match s.get("along").and_then(Value::as_str) {
+            Some(c) => (3, Some(c.to_string())),
+            None => (0, None),
+        },
+        Value::String(s) => (
+            shipped::SHAPES.iter().position(|x| x == s).unwrap_or(0) as u32,
+            None,
+        ),
+        _ => (0, None),
+    };
+    let curve_id = m["curve"].as_str().map(str::to_string).or(shape_curve);
+    let (curve, curve_len) = curve_id
+        .and_then(|c| scene.curves.get(&c))
+        .map(|pts| resampled(pts))
+        .unwrap_or((vec![origin; shipped::CURVE_POINTS as usize], 0.0));
+    let code = shipped::MOTIONS
+        .iter()
+        .position(|x| *x == motion)
+        .unwrap_or(0) as u32;
+    let mut stops: Vec<(f64, [f64; 3])> = p["color"]
+        .as_array()
+        .map(|c| {
+            c.iter()
+                .take(4)
+                .map(|k| {
+                    (
+                        k["at"].as_f64().unwrap_or(0.0),
+                        role(look, k["role"].as_str(), "accent"),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if stops.is_empty() {
+        stops.push((0.0, role(look, None, "accent")));
+    }
+    let params = BTreeMap::from([
+        ("particles.count".to_string(), json!(count)),
+        (
+            "particles.rate".to_string(),
+            json!(emit["rate"].as_f64().unwrap_or(100.0)),
+        ),
+        (
+            "particles.span".to_string(),
+            json!(emit["span"].as_f64().unwrap_or(1e9)),
+        ),
+        ("particles.life_min".to_string(), json!(life[0])),
+        ("particles.life_max".to_string(), json!(life[1])),
+        ("particles.v0_min".to_string(), json!(v0[0])),
+        ("particles.v0_max".to_string(), json!(v0[1])),
+        (
+            "particles.drag".to_string(),
+            json!(ballistic["drag"].as_f64().unwrap_or(0.0)),
+        ),
+        (
+            "particles.gravity".to_string(),
+            ballistic
+                .get("gravity")
+                .cloned()
+                .unwrap_or(json!([0.0, -9.8, 0.0])),
+        ),
+        ("particles.origin".to_string(), json!(origin)),
+        ("particles.motion".to_string(), json!(code)),
+        ("particles.shape".to_string(), json!(shape)),
+        (
+            "particles.radius".to_string(),
+            json!(emit["radius"].as_f64().unwrap_or(0.25)),
+        ),
+        ("particles.curve".to_string(), json!(curve)),
+        ("particles.curve_len".to_string(), json!(curve_len)),
+        (
+            "particles.speed".to_string(),
+            json!(m["speed"].as_f64().unwrap_or(1.0)),
+        ),
+        (
+            "particles.axis".to_string(),
+            m.get("axis").cloned().unwrap_or(json!([0.0, 1.0, 0.0])),
+        ),
+        (
+            "particles.spin".to_string(),
+            json!(ops::rad(m["rate"].as_f64().unwrap_or(0.0))),
+        ),
+        (
+            "particles.amplitude".to_string(),
+            json!(m["amplitude"].as_f64().unwrap_or(0.0)),
+        ),
+        (
+            "particles.frequency".to_string(),
+            json!(m["frequency"].as_f64().unwrap_or(0.0)),
+        ),
+    ]);
+    let draw = ["dot", "spark", "puff", "streak"]
+        .iter()
+        .position(|d| Some(*d) == p["draw"].as_str())
+        .unwrap_or(0) as u32;
+    Sparks {
+        item: o.id.clone(),
+        params,
+        count,
+        seed,
+        size_px: 1.0,
+        // Sparks are emissive, bright enough to glow.
+        opacity: 4.0,
+        size: over_life(p.get("size"), 3.0),
+        fade: over_life(p.get("opacity"), 1.0),
+        stops,
+        draw,
+        half: draw == 2 && p["resolution"].as_str() != Some("full"),
+    }
+}
+
+/// A particles@1 item whose count is past its class's limit (Particles `particles@1`:
+/// `count: u32 ≤ 65,536`, or ≤ 1,048,576 in a showpiece or an export), by its path.
+pub fn count_refusal(scene: &Scene, class: Option<&str>) -> Option<String> {
+    let limit = match class {
+        Some("showpiece" | "export") => shipped::MAX_PARTICLES_SHOWPIECE,
+        _ => shipped::MAX_PARTICLES,
+    };
+    scene
+        .others
+        .iter()
+        .filter(|o| o.kind == "particles@1")
+        .find(|o| {
+            o.params["count"]
+                .as_u64()
+                .is_some_and(|c| c > u64::from(limit))
+        })
+        .map(|o| format!("items/{}/params/count", o.id))
+}
+
 /// The wrong programs the effects run under (frame::Planted).
 pub fn planted_fx(p: Option<Planted>) -> fx::Planted {
     fx::Planted {
@@ -153,58 +361,7 @@ pub fn settings(
         .others
         .iter()
         .filter(|o| o.kind == "particles@1")
-        .map(|o| {
-            let p = &o.params;
-            let count = p["count"]
-                .as_u64()
-                .unwrap_or(256)
-                .min(u64::from(shipped::MAX_PARTICLES)) as u32;
-            let life = pair(p.get("life"), [1.0, 1.0]);
-            let ballistic = &p["motion"]["ballistic"];
-            let v0 = pair(ballistic.get("v0"), [1.0, 2.0]);
-            let colors: Vec<&str> = p["color"]
-                .as_array()
-                .map(|c| c.iter().filter_map(|k| k["role"].as_str()).collect())
-                .unwrap_or_default();
-            let params = BTreeMap::from([
-                ("particles.count".to_string(), json!(count)),
-                (
-                    "particles.rate".to_string(),
-                    json!(p["emit"]["rate"].as_f64().unwrap_or(100.0)),
-                ),
-                (
-                    "particles.span".to_string(),
-                    json!(p["emit"]["span"].as_f64().unwrap_or(1e9)),
-                ),
-                ("particles.life_min".to_string(), json!(life[0])),
-                ("particles.life_max".to_string(), json!(life[1])),
-                ("particles.v0_min".to_string(), json!(v0[0])),
-                ("particles.v0_max".to_string(), json!(v0[1])),
-                (
-                    "particles.drag".to_string(),
-                    json!(ballistic["drag"].as_f64().unwrap_or(0.0)),
-                ),
-                (
-                    "particles.gravity".to_string(),
-                    ballistic
-                        .get("gravity")
-                        .cloned()
-                        .unwrap_or(json!([0.0, -9.8, 0.0])),
-                ),
-                ("particles.origin".to_string(), json!(o.pos)),
-            ]);
-            Sparks {
-                item: o.id.clone(),
-                params,
-                count,
-                seed: seeding.key(item_seed(doc_seed, &o.id)),
-                size_px: p["size"].as_f64().unwrap_or(3.0),
-                // Sparks are emissive, bright enough to glow.
-                opacity: 4.0 * p["opacity"].as_f64().unwrap_or(1.0),
-                from: role(look, colors.first().copied(), "accent"),
-                to: role(look, colors.last().copied(), "accent"),
-            }
-        })
+        .map(|o| sparks_of(scene, o, look, seeding.key(item_seed(doc_seed, &o.id))))
         .collect();
     roles.insert("selection".into(), role(look, Some("selection"), "accent"));
     let bloom = look_json["bloom"].as_object().map(|b| {
@@ -642,7 +799,7 @@ fn output(d: &wgpu::Device, label: &str, [width, height]: [u32; 2]) -> wgpu::Tex
     })
 }
 
-fn pollster_block<F: std::future::Future>(f: F) -> F::Output {
+pub(crate) fn pollster_block<F: std::future::Future>(f: F) -> F::Output {
     // The error scope resolves at once on a device whose work is polled.
     let waker = std::task::Waker::noop();
     let mut cx = std::task::Context::from_waker(waker);

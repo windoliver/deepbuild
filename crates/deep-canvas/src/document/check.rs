@@ -155,6 +155,7 @@ fn check_by(
             // Expansion at check, never per frame (Recipe): the derived items join the lowered
             // items before any item is checked, so they meet the item contract, the module
             // checks and the budget as any item does.
+            issues.extend(packs::driven_counts(doc, items, &resolved));
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
             let derived: BTreeSet<&str> = expansions
                 .iter()
@@ -225,6 +226,20 @@ fn check_by(
             other.clone(),
             "not an object",
         )),
+    }
+
+    // A recipe's channels join the document's, targeting the items it derived (#420).
+    let recipe_channels: Map<String, Value> =
+        expansions.iter().flat_map(|e| e.channels.clone()).collect();
+    if !recipe_channels.is_empty() {
+        if let Some(doc) = lowered.as_object_mut() {
+            let channels = doc
+                .entry("channels")
+                .or_insert_with(|| Value::Object(Map::new()));
+            if let Some(map) = channels.as_object_mut() {
+                map.extend(recipe_channels);
+            }
+        }
     }
 
     // The module checks, the budget estimate and the document checks read the lowered document
@@ -444,6 +459,35 @@ fn module_checks(
     }
 }
 
+/// The document's `budget.lights` cap (Document envelope: `budget`): every `light.*` item counts,
+/// those a recipe derived among them (Recipe: lights count in the budget; #420), and a
+/// document with more is refused, naming them.
+fn lights_check(lowered: &Value, issues: &mut Vec<Issue>) {
+    let Some(cap) = member(lowered, "budget")
+        .and_then(|b| member(b, "lights"))
+        .and_then(Value::as_u64)
+    else {
+        return;
+    };
+    let lights: Vec<String> = member(lowered, "items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, item)| kind_text(item).is_some_and(|k| k.starts_with("light.")))
+        .map(|(id, _)| id.clone())
+        .collect();
+    if lights.len() as u64 > cap {
+        let mut issue = Issue::envelope(
+            "over_budget",
+            "budget/lights".into(),
+            json!(lights.len()),
+            &format!("{} lights, past the document's cap of {cap}", lights.len()),
+        );
+        issue.ids = lights;
+        issues.push(issue);
+    }
+}
+
 /// The budget estimate (issue #379; canvas primitives: The cost model, "Before it shows"): a
 /// document that names its budget class and whose estimated CPU time, GPU time or GPU memory
 /// per frame passes one of its caps is refused, naming its top three contributors, with the
@@ -454,6 +498,7 @@ fn budget_check(
     coefficients: Option<&Coefficients>,
     issues: &mut Vec<Issue>,
 ) {
+    lights_check(lowered, issues);
     let Some((class, limits)) = crate::budget::of(lowered) else {
         return;
     };
@@ -2251,6 +2296,28 @@ pub(crate) fn resolve(
                     .is_some_and(|p| p.contains_key(*name)),
             };
             if known {
+                Ok(())
+            } else {
+                unreachable()
+            }
+        }
+        // A param of one of the item's modifiers (Modifier; #420): it must reach a value the
+        // modifier holds, as a param's parts do.
+        ["modifiers", k, "params", rest @ ..] if !rest.is_empty() => {
+            let mut cursor = member(target, "modifiers")
+                .and_then(Value::as_array)
+                .and_then(|list| k.parse::<usize>().ok().and_then(|i| list.get(i)))
+                .and_then(|m| member(m, "params"));
+            for field in rest {
+                cursor = match cursor {
+                    Some(Value::Object(map)) => map.get(*field),
+                    Some(Value::Array(list)) => {
+                        field.parse::<usize>().ok().and_then(|i| list.get(i))
+                    }
+                    _ => None,
+                };
+            }
+            if cursor.is_some() {
                 Ok(())
             } else {
                 unreachable()
