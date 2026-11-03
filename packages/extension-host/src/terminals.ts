@@ -105,36 +105,49 @@ function lostOne(terminal: string, field: (name: string) => unknown): Terminal {
 }
 
 /**
- * The entries of an index that can't be read whole, as save() writes it, one key a line (#996): each entry that parses
- * on its own, and each that doesn't as lost, named by its key or, with its key damaged, by its own terminal field.
+ * The entries of an index that can't be read whole, as save() writes it (#996): each entry's fields one a line, four
+ * spaces in, between its key line and its closing brace. A run of field lines that parses, whole between the two, is
+ * an entry; any other is lost, named by its own terminal field or by the key above it. A bad byte anywhere loses at
+ * most its own entry, never a neighbour's.
  */
 function salvage(text: string): Record<string, Terminal> {
-  const keys = [...text.matchAll(/^ {2}"([^\n]*)": (?=\{)/gm)];
   const read: Record<string, Terminal> = {};
-  keys.forEach((key, i) => {
-    let body = text.slice(key.index + key[0].length, keys[i + 1]?.index ?? text.length).trimEnd();
-    // The last entry ends with the index's own brace.
-    if (i === keys.length - 1) body = body.replace(/\}$/, '').trimEnd();
-    body = body.replace(/,$/, '');
+  const TERM = /^term:[0-9A-Za-z]+$/;
+  let key: string | undefined;
+  let fields: string[] = [];
+  const end = (closed: boolean): void => {
+    if (!fields.length) return;
+    const body = `{${fields.join('\n').replace(/,\s*$/, '')}}`;
+    const lines = fields;
+    fields = [];
     try {
       const t = JSON.parse(body) as unknown;
-      if (isTerminal(key[1]!, t)) {
-        read[t.terminal] = t;
+      if (closed && key !== undefined && isTerminal(key, t) && !read[key]) {
+        read[key] = t;
+        key = undefined;
         return;
       }
     } catch {
       // Lost: named below by what can be read.
     }
     const field = (name: string): unknown => {
-      const value = new RegExp(`"${name}": ("(?:[^"\\\\\\u0000-\\u001f]|\\\\.)*"|\\d+)`).exec(body)?.[1];
+      const value = lines.map((l) => new RegExp(`^ {4}"${name}": ("(?:[^"\\\\\\u0000-\\u001f]|\\\\.)*"|\\d+)`).exec(l)?.[1]).find((v) => v !== undefined);
       try { return value === undefined ? undefined : JSON.parse(value); } catch { return undefined; }
     };
-    const named = [key[1], field('terminal')].find((v): v is string => typeof v === 'string' && /^term:[0-9A-Za-z]+$/.test(v));
-    if (named) read[named] = lostOne(named, field);
-  });
+    const named = [field('terminal'), key].find((v): v is string => typeof v === 'string' && TERM.test(v));
+    // A run a damaged line cut in two: the part that can't name itself belongs to the entry its first part named.
+    if (named && !read[named]) read[named] = lostOne(named, field);
+    key = undefined;
+  };
+  for (const line of text.split('\n')) {
+    if (/^ {4}"/.test(line)) { fields.push(line); continue; }
+    end(/^ {2}\},?$/.test(line));
+    const k = /^ {2}"([^"\n]*)": \{\s*$/.exec(line)?.[1];
+    if (k !== undefined) key = k;
+  }
+  end(false);
   return read;
 }
-
 
 /** How many bytes of `buf` end on a whole UTF-8 character: a character the read cut is left for the next one. */
 function whole(buf: Buffer): number {
@@ -177,7 +190,7 @@ export class Terminals {
 
   constructor(
     private readonly home: string, private readonly supervisor: Supervisor,
-    private readonly options: { protocol: number; refused: (terminal: string, pid: number) => void; plant?: TerminalPlant; point?: () => void },
+    private readonly options: { protocol: number; refused: (terminal: string, pid: number) => void; plant?: TerminalPlant; point?: () => void; now?: () => number },
   ) {
     this.index = join(home, 'extensions', 'terminals.json');
     const bytes = existsSync(this.index) ? readFileSync(this.index) : Buffer.from('{}');
@@ -196,12 +209,15 @@ export class Terminals {
         ? Object.fromEntries(Object.entries(index).filter(([key]) => /^term:[0-9A-Za-z]+$/.test(key))
           .map(([key, t]) => [key, isTerminal(key, t) ? t : lostOne(key, (name) => (isObj(t) ? t[name] : undefined))]))
         : salvage(bytes.toString('utf8'));
-      const aside = `${this.index}.${new Date().toISOString().replace(/:/g, '-')}`;
+      const aside = `${this.index}.${new Date(options.now?.() ?? Date.now()).toISOString().replace(/:/g, '-')}`;
       writeSynced(aside, bytes);
       this.damaged = { aside, lost: Object.values(saved).filter((t) => t.lost).map((t) => t.terminal) };
     }
     // One that didn't live past the app was reaped with its run when the supervisor opened.
     this.open_ = Object.fromEntries(Object.entries(saved).filter(([, t]) => t.kept));
+  }
+  /** Writes a damaged index again as this start read it, once its reading is recorded: a cut in between finds it damaged still. */
+  settle(): void {
     if (this.damaged) this.save();
   }
 
@@ -465,7 +481,9 @@ export class Terminals {
 
   /** Stops every process the terminal's run owns, its host process, its program and everything they started, and removes its folder. */
   async stop(t: Terminal): Promise<void> {
-    if (t.run) await this.supervisor.cleanup(t.run);
+    // A lost one's run and folder are what damaged bytes say: nothing stops or removes what it can't prove it started.
+    if (t.lost) throw Error(`${t.terminal} is lost: its entry in the terminals index couldn't be read, so it isn't closed`);
+    await this.supervisor.cleanup(t.run);
     this.drop(t.terminal);
     delete this.open_[t.terminal];
     this.save();
