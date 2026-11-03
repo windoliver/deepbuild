@@ -65,6 +65,7 @@
   "definition.locked@2": "d1:5b042bde7b32f26c50ff88b37d08441d6736f19520e956535d4310ba640da024",
   "definition.locked@3": "d1:231fbe1527dce7f7619d32ae455173c9f9bd3be88d38be09ac3613e2772b2749",
   "definition.locked@4": "d1:533707d21f93f8bfe11e46487be377b33797312c7dec809b0ffcd4126b549edc",
+  "definition.locked@5": "d1:e0fb262fece336df133c500f860a547cbe902b23fa3921ecfea8cf1478916204",
   "definition.revised@1": "d1:c3bdc73d54dcd63c82068d63760882693cb73228cd84bcfc7cf1ae8c10faaa0c",
   "definition.stood_in@1": "d1:96df07c8bb2d181d7dd4f9933f19bbad9e289e1c01330be43c4cf13fa344414b",
   "delivery.outcome@1": "d1:a9391e46b1e727702a97949643e58e16996f9da12a96593d23a345bdd038a1e5",
@@ -207,6 +208,7 @@
   "wiki.read@1": "d1:f5a9c37e2a5a28e4adbf6485402c2574e6f4795267f58f667d1369b8b0092d9b",
   "work.broke@1": "d1:d6fb16f7d3a7137641c50eb32bf6fdf55d8a903b20349ecbad5dcc1a343b8b02",
   "work.item@1": "d1:d03fef5f129416f39e80175c5bab7b93867985782ae75f8f76590c6b417fce79",
+  "work.item@2": "d1:d80eb3518411c3f846cc2e6bafd5a2c8ced1aa61050f1e405f8825cfcd68b0cd",
   "worktree.created@1": "d1:dea9b05ceff3089d338c4881262aa529524cc63c3161257eda6e2db5edc0f2e3",
   "worktree.removed@1": "d1:645f1b3b4d84d811073e3d08b3b053a46a0b127d9a237fca629bee48a9eb2939"
 }
