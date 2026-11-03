@@ -400,19 +400,22 @@ fn base64(bytes: &[u8]) -> String {
 /// One request to an `http://` address on this machine: `body` `POST`ed if given, else a `GET`. Nothing else is
 /// reached.
 pub(crate) fn local_http(url: &str, body: Option<&[u8]>) -> bool {
-    let Some(rest) = url.strip_prefix("http://") else {
-        return false;
-    };
+    let host = url
+        .strip_prefix("http://")
+        .and_then(|r| r.split('/').next());
+    host.is_some_and(|h| h.starts_with("127.0.0.1:") || h.starts_with("localhost:"))
+        && http(url, body).is_some()
+}
+
+/// One HTTP/1.0 request to an `http://` URL: `body` `POST`ed if given, else a `GET`. The whole
+/// response as read until the server closed it.
+pub(crate) fn http(url: &str, body: Option<&[u8]>) -> Option<Vec<u8>> {
+    let rest = url.strip_prefix("http://")?;
     let (host, path) = match rest.split_once('/') {
         Some((h, p)) => (h, format!("/{p}")),
         None => (rest, "/".to_string()),
     };
-    if !host.starts_with("127.0.0.1:") && !host.starts_with("localhost:") {
-        return false;
-    }
-    let Ok(mut stream) = std::net::TcpStream::connect(host) else {
-        return false;
-    };
+    let mut stream = std::net::TcpStream::connect(host).ok()?;
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let head = match body {
         Some(body) => format!(
@@ -421,9 +424,11 @@ pub(crate) fn local_http(url: &str, body: Option<&[u8]>) -> bool {
         ),
         None => format!("GET {path} HTTP/1.0\r\nHost: {host}\r\n\r\n"),
     };
-    stream.write_all(head.as_bytes()).is_ok()
-        && stream.write_all(body.unwrap_or_default()).is_ok()
-        && stream.read_to_end(&mut Vec::new()).is_ok()
+    stream.write_all(head.as_bytes()).ok()?;
+    stream.write_all(body.unwrap_or_default()).ok()?;
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response).ok()?;
+    Some(response)
 }
 
 /// The first item `d` delivers at or after `t`.

@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "id": "rel-221-edge-title",
+  "profile": "figure",
+  "title": "A title on the frame's top edge",
+  "description": "Issue #221 AC3: a title placed with edge n, so its top side sits at the safe margin; at.pos x adds after the relation.",
+  "size": [1920, 1080],
+  "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+  "items": {
+    "title": {"id": "title", "kind": "text@1", "layer": "main", "name": "Title", "order": "a1",
+      "at": {"pos": [200, 0, 0], "place": {"edge": "n"}},
+      "params": {"text": "The energy of a falling ball", "font": "body", "size": 48, "paint": {"fill": {"role": "ink"}}}}
+  }
+}

@@ -1,0 +1,155 @@
+# #1112 on the Mac: what each policy found and what was done (2026-11-03 UTC)
+# Facts per worktree are in mac-before.txt (table); lists with `git status --porcelain` per worktree in
+# mac-before-worktrees.txt (01:34:04Z) and mac-after-worktrees.txt (01:38:53Z); their difference in
+# mac-worktree-diff.txt. Worktrees of other live sessions can change between the two lists
+# (issue-824-acceptance moved from 7aaf5d17 in the table to 5a00ecfa in the list while it was being read).
+# Sizes from sysctl and df are binary units (MiB, GiB).
+
+## Worktrees (policy: prune merged branches down to open PRs; never one on an open branch,
+## with uncommitted, staged or untracked edits, or with a live process whose cwd is inside it)
+
+Removed with `git worktree remove` (no --force), after the owner's go-ahead in chat (5 worktrees):
+  agent-acc593499bc1d6118   detached at bddb84dd, in origin/main, porcelain empty; its ignored
+                            0.7 GiB target/ went with it
+  agent-a367b84c3ec0c1b93   impl/39-runner, in origin/main, no PR; porcelain was only `?? target`
+  agent-a65e859048883de67   impl/39-loops, same
+  agent-ad05b8765cc5b9e8a   impl/39-adapter, same
+  issue-327-implementation  PR 809 merged at this tip, porcelain empty. The table counts 24
+                            "non-generated ignored" files: the column's pattern did not know them,
+                            but all 24 match .gitignore lines 16-17 (per-panel tooling output):
+                            gpui-kit.d.ts and jsconfig.json in each of crates/deep-app/panels/
+                            338-canvas, 338-cap20, 338-drop-folded, 338-hide-newest, 338-home,
+                            338-line, 338-list-superseded, 338-needs-you, 338-sidebar, 338-tab,
+                            claude-code, codex. Its ignored build output went with it too, read
+                            before removal (`git status --porcelain --ignored`, after the 24 lines above):
+                            !! packages/adapters/dist/  !! packages/archive/dist/  !! packages/asks/dist/
+                            !! packages/budget/dist/ ... !! packages/otlp/dist/ (one dist/ per package)
+Branches were kept, so every removed tip is still reachable.
+
+The `?? target` in the three impl/39 worktrees was a symlink, unlinked before the removal:
+  $ ls -la <wt>/target   (read before unlinking)
+  agent-a367b84c3ec0c1b93/target -> ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
+  agent-a65e859048883de67/target -> ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
+  agent-ad05b8765cc5b9e8a/target -> ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
+issue-22's target/ itself is untouched; read right after the three unlinks:
+  $ ls -d ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
+  ~/private/deepbuild-core/.claude/worktrees/issue-22-implementation-14b8cf/target
+
+`git worktree prune -v` then dropped admin entries only (metadata under .git/worktrees, no files).
+base21 was in the before list as "prunable" (its gitdir pointed nowhere, so its porcelain reads
+`fatal: not a git repository`; the table's 0 is that failed read). It is the first line of
+mac-worktree-diff.txt; its folder in another session's scratchpad is left as it was. The other eight
+entries were not in `git worktree list` before (their folders were already gone):
+  $ git worktree prune -v
+  Removing worktrees/issue-44-implementation-3bb689: gitdir file does not exist
+  Removing worktrees/issue-137-implementation-1d9a30: gitdir file does not exist
+  Removing worktrees/issue-488-implementation-de6827: gitdir file does not exist
+  Removing worktrees/issue-111-implementation-5e4986: gitdir file does not exist
+  Removing worktrees/issue-358-implementation-8c5ca4: gitdir file does not exist
+  Removing worktrees/issue-331-implementation-4a2ef3: gitdir file does not exist
+  Removing worktrees/issue-777-47bdc6: gitdir file does not exist
+  Removing worktrees/base21: gitdir file points to non-existent location
+  Removing worktrees/issue-376-implementation-22897e: gitdir file does not exist
+
+Kept, listed for the owner:
+  deepbuild-core (main checkout)   `M package-lock.json`, 432 live processes
+  feat-761-scrub-field-names       PR 778 merged at tip, clean, but 13 live processes run in it
+  issue-30-ac12-counting           PR 720 merged at tip, untracked .claude/, 7 live processes
+  issue-22-implementation-14b8cf   PR 877 merged, but mid-merge: 368 porcelain entries (staged and modified paths,
+                                   one unresolved `UU packages/hub/src/server.ts`) and a 7.7 GiB target/
+  issue-63-read-by-reference       in origin/main, two modified files
+  issue-303-implementation-814647  in origin/main, clean, but an ignored packages/tasks/ that is not generated
+  agent-* with untracked tests/acceptance/<n>/ (blind drafts): a02a6b7e, a201604a, a5248a97, a5a1aa40,
+    a6c5fa28, a82eaf08, a884ad18, a91442a6, a926336e, a941a951, adadec93, af731015
+  agent-* with tracked edits: aa4208f6 (modified crates/deep-replica/Cargo.toml, untracked tests),
+    abcd69cb (staged tests/acceptance/332/), aca6492c (modified, deleted and untracked tests/acceptance/331/ files)
+  agent-* clean but with commits not in origin/main and no PR: a0a70551, a2dd046b, a7f6dff7 (blind/39-acceptance),
+    a95c2444, aab08fb2, ac7f89f1, add91173
+  issue-45-implementation-e83eea   detached, not in main, target/ 10.7 GiB (large target listed, not touched)
+  issue-824-acceptance             detached, not in main, active today
+  db31main, db39A, db45ac          other sessions' detached checkouts under /private/tmp with live processes
+  remote-control-52cfec, summary-document-review-346b4a   live sessions, untracked files
+  issue-842-implementation-2194f1  this session's worktree (branch claude/issue-1112-...), target/ 13.2 GiB
+
+## target/ in worktrees idle more than three days
+No worktree had been idle more than three days (largest idle reading 2.5 days, from the
+mtime of each worktree's index, HEAD and logs/HEAD), so no target/ was deleted on its own; the only
+target/ removed was the 0.7 GiB one inside agent-acc593499bc1d6118, which went with that worktree.
+Large targets, listed for the owner and never deleted by an agent:
+  issue-842-implementation-2194f1 13.2 GiB, issue-45-implementation-e83eea 10.7 GiB,
+  issue-22-implementation-14b8cf 7.7 GiB (also the target the three impl/39 symlinks pointed at)
+
+## Orphaned proof-run copies under $TMPDIR
+Seven deep-proof-run-* folders (2,424,652 KiB = 2.3 GiB, 50 to 215 hours old). For each, `lsof +D` found no
+process holding a file or cwd inside it and no running command line named it (mac-before.txt). The
+second reading, just before deleting, gave the same seven lines with empty PID lists:
+  $TMPDIR/deep-proof-run-j4rQxm size_kb=755100 mtime_age_h=215 lsof_pids=[] argv_pids=[]
+  $TMPDIR/deep-proof-run-iuchsJ size_kb=755404 mtime_age_h=213 lsof_pids=[] argv_pids=[]
+  $TMPDIR/deep-proof-run-7uxEmf size_kb=212 mtime_age_h=210 lsof_pids=[] argv_pids=[]
+  $TMPDIR/deep-proof-run-g4XJXA size_kb=913704 mtime_age_h=54 lsof_pids=[] argv_pids=[]
+  $TMPDIR/deep-proof-run-SHuE7H size_kb=52 mtime_age_h=213 lsof_pids=[] argv_pids=[]
+  $TMPDIR/deep-proof-run-Q7bu9q size_kb=4 mtime_age_h=50 lsof_pids=[] argv_pids=[]
+  $TMPDIR/deep-proof-run-oJAZ7o size_kb=176 mtime_age_h=210 lsof_pids=[] argv_pids=[]
+All seven were removed with rm -rf, naming each folder; mac-after.txt ends with a listing that finds none.
+
+## Free disk (/System/Volumes/Data, df -h)
+  before cleanup (mac-before.txt)                       34Gi available
+  right after the proof copies went (01:38Z)            39Gi available
+    $ df -h /System/Volumes/Data
+    /dev/disk3s5   460Gi   360Gi    39Gi    91%    5.8M  408M    1%   /System/Volumes/Data
+  at 01:50Z (mac-after.txt)                             38Gi available
+    (the 1 GiB drop has no recorded cause; other sessions kept writing in the meantime)
+
+## Resident sessions and swap
+Before: swap 37,308 of 37,888 MiB used (98%), 1-minute load 108, with no cargo, vitest or proof running.
+Eight Claude Code processes were resident, and another session's `npm ci` (44972, 77% CPU, seconds
+old) ran during that reading. The rest came mostly from long-lived processes that this session did
+not start, so it did not stop them (rules: stop only processes you started, by PID).
+They were listed for the owner to close by hand. Reading at about 01:38:46Z, after the removals (from the elapsed times; command lines cut to the
+part that names them; the before/after files cut them at 160-200 columns):
+  $ ps -o pid,ppid,etime,pcpu,command -p ...
+    PID  PPID     ELAPSED  %CPU COMMAND
+  17029     1 04-20:50:46   0.3 node ~/private/deepbuild-core/.claude/worktrees/issue-44-implementation-3bb689/packages/cli/dist/main.js hub run
+  17036 17029 04-20:50:46  39.4 /usr/bin/log stream --style ndjson --predicate sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"
+  40417 39850    14:26:57   0.6 node packages/cli/dist/main.js hub run            (cwd /private/tmp/db39A)
+  40503 40417    14:26:56  58.1 /usr/bin/log stream --style ndjson --predicate sender == "Sandbox" AND ...
+  40073     1 11-01:10:54 122.9 /usr/libexec/diagnosticd
+   5920     1 04-22:09:54   0.0 ~/private/deepbuild-core/.claude/worktrees/issue-376-implementation-22897e/target/debug/deep-hook claude-code waiter
+  77635     1 11-03:18:55   0.9 /bin/bash /private/tmp/claude-501/<deleted worktree's scratchpad>/floor/run.sh worker 3 floor-l1
+  11727, 23319, 38896, 41806, 56407, 64508, 67390, 76534   parent 1, codex app-server-broker.mjs serve, 06-20:12 to 13-07:11
+  58001     1    07:39:21  21.4 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+  58701 58001    07:39:08  16.8 .../Codex Computer Use.app/Contents/MacOS/SkyComputerUseService
+  68762     1 07-19:13:39   5.1 openclaw-gateway
+At 01:50Z (mac-after.txt) every one of these PIDs except openclaw-gateway (68762, which is only in the
+before file's top-CPU list) and the db39A hub 40417 (in neither file) is still listed: swap 37,237 of
+37,888 MiB (98%), load 34.7.
+
+Before 02:30Z the owner stopped them by hand (this session's own attempt was refused by its permission
+classifier). Read at 02:30Z: gone except 17029 (the issue-44 hub, whose log stream 17036 did end) and
+the db39A hub 40417 with its log stream 40503, left to the live Issue 39 session. ChatGPT had quit.
+Nine Claude Code sessions stayed resident (eight before plus one new).
+
+## AC1 readings (mac-idle.txt)
+  02:31:10Z  swap 30,172 of 31,744 MiB (95%)  load 60.44
+  02:36:16Z  swap 29,907 of 30,720 MiB (97%)  load 6.78
+  02:41:25Z  swap 30,417 of 31,744 MiB (96%)  load 5.67
+No cargo, rustc, vitest, proof or stryker process in any of them. Load got under 8 once the stale
+processes went; swap did not move. The first acceptance criterion (swap < 50% and load < 8, three
+readings five minutes apart) is NOT met on the Mac.
+
+Where the swap is (end of mac-idle.txt, 02:47Z): fseventsd (PID 308, root, up 34 days) holds 32G of
+memory, 29G of it compressed or swapped, which is nearly all of the 30 GB swap in use. The nine Claude
+Code sessions hold about 0.2 GB each, so cutting sessions alone cannot bring swap under 50%. This fits
+the design's note that FSEvents watches every worktree. fseventsd is a system daemon: restarting it
+needs root (launchd starts it again) or a reboot, which is the owner's call, not an agent's.
+
+The owner restarted fseventsd before 05:02Z (`sudo kill -9 308`; a plain kill had left it running);
+launchd started it again as PID 75574. Readings again (end of mac-idle.txt):
+  05:02:34Z  swap 3,440 of 5,120 MiB (67%)  load 5.51
+  05:07:46Z  swap 3,424 of 5,120 MiB (67%)  load 4.49
+  05:12:45Z  swap 3,424 of 5,120 MiB (67%)  load 4.14
+Load is under 8 in all three; swap is not under 50%, so AC1 is still NOT met. What stays paged out is
+spread over Chrome, Claude, WiFiAgent and other processes (none over 1.1 GiB compressed), and macOS pages
+it back in only when it is touched. Another session's #824 long budgets vitest ran through all three,
+and nine Claude Code sessions stayed resident (scope: at most three). Remaining steps are the owner's:
+cut resident sessions to three, or restart the Mac once no proof run is going, then read three times again.

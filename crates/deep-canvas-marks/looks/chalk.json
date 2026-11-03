@@ -1,0 +1,145 @@
+{
+  "id": "chalk",
+  "format": 1,
+  "basis": "drawing",
+  "license": "Apache-2.0",
+  "description": "Chalk on a green board: chalk-white lines with a dry, broken edge, dust-grey fills, a pale yellow chalk for the accent and a handwriting face; the board is the same in light and dark.",
+  "palette": {
+    "board": "#22332b",
+    "chalk_white": "#efeee6",
+    "dust": "#7d9488",
+    "chalk_yellow": "#f3d36b"
+  },
+  "roles": {
+    "ground": "board",
+    "ink": "chalk_white",
+    "muted": "dust",
+    "accent": "chalk_yellow",
+    "body": "hand",
+    "math": "math"
+  },
+  "themes": {
+    "light": {},
+    "dark": {}
+  },
+  "status": {
+    "pass": "#007429",
+    "fail": "#bf232b",
+    "invalid": "#8645b0",
+    "blocked": "#a44700",
+    "inconclusive": "#666600",
+    "running": "#0063b8",
+    "needs_you": "#8a5900",
+    "stale": "#326c6f",
+    "idle": "#636464"
+  },
+  "status_treatment": {
+    "core_min_px": 4,
+    "glyph": {
+      "pass": "✓",
+      "fail": "✗",
+      "invalid": "⊘",
+      "blocked": "■",
+      "inconclusive": "?",
+      "running": "↻",
+      "needs_you": "!",
+      "stale": "◇",
+      "idle": "○"
+    },
+    "outline": {
+      "px": 1,
+      "role": "ink"
+    }
+  },
+  "min_distance": 0.1,
+  "attention_treatment": {
+    "line": "dashed",
+    "role": "ink",
+    "glyph": "⚠"
+  },
+  "legend": "auto",
+  "lines": {
+    "line": {
+      "kind": "chalk",
+      "width": 2.5,
+      "wobble_px": 0.6,
+      "segment_px": 10,
+      "opacity": 0.92
+    }
+  },
+  "fills": {
+    "fill": {
+      "kind": "flat"
+    }
+  },
+  "ground": {
+    "kind": "flat"
+  },
+  "fonts": {
+    "body": {
+      "family": "Inter",
+      "file": "Inter-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "file": "JetBrainsMono-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "math": {
+      "family": "STIX Two Math",
+      "file": "STIXTwoMath-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "cjk": {
+      "family": "Noto Sans SC",
+      "file": "NotoSansSC-Regular.otf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "arabic": {
+      "family": "Noto Sans Arabic",
+      "file": "NotoSansArabic-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "emoji": {
+      "family": "Noto Emoji",
+      "file": "NotoEmoji-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "hand": {
+      "family": "Caveat",
+      "file": "Caveat-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    }
+  },
+  "fallback": [
+    "cjk",
+    "arabic",
+    "emoji"
+  ],
+  "time": {
+    "state": {
+      "span": "0.25s",
+      "interp": {
+        "ease": {
+          "name": "in_out_cubic"
+        }
+      }
+    }
+  },
+  "finish": []
+}

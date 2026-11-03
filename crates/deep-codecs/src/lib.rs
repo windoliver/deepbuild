@@ -12,6 +12,7 @@
 mod apple;
 pub mod color;
 pub mod mp4;
+pub mod table;
 mod wav;
 
 use std::collections::BTreeSet;
@@ -876,6 +877,14 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
         Err((r, sha)) => return (r, sha),
     };
     let sha = Some(opened.sha.clone());
+    if op == "table" {
+        let key = job.s("key").unwrap_or_default();
+        let probed = table::probe(&opened.data, key);
+        return (
+            probed.map(|p| json!({"probe": p})).unwrap_or_else(|r| r),
+            sha,
+        );
+    }
     let f = match format(&opened.data) {
         Ok(f) => f,
         Err(r) => return (r, sha),

@@ -1,6 +1,9 @@
 //! The bundled fonts: the only fonts the canvas's text ever uses, on every platform. Each role
-//! names one family; the shaper picks the face by weight. Both families ship under the SIL Open
-//! Font License (fonts/LICENSE-Inter.txt, fonts/LICENSE-JetBrainsMono.txt).
+//! names one family; the shaper picks the face by weight. Issue #417 adds the faces a look names
+//! beside Inter and JetBrains Mono: a math face (STIX Two Math), a handwriting face (Caveat) and the
+//! fallback faces for Han (Noto Sans SC), Arabic (Noto Sans Arabic) and emoji (Noto Emoji). Every
+//! face ships under the SIL Open Font License, its text beside it (fonts/LICENSE-*.txt), and its
+//! own embedding bits allow embedding (Look `look@1`: `fonts`).
 
 use std::sync::Arc;
 
@@ -13,6 +16,8 @@ pub enum Role {
     Body,
     /// JetBrains Mono: code and anything that lines up by column.
     Mono,
+    /// STIX Two Math: a lone symbol beside typeset formulas (#417).
+    Math,
 }
 
 impl Role {
@@ -21,6 +26,7 @@ impl Role {
         match self {
             Role::Body => "body",
             Role::Mono => "mono",
+            Role::Math => "math",
         }
     }
 
@@ -29,6 +35,7 @@ impl Role {
         match name {
             "body" => Some(Role::Body),
             "mono" => Some(Role::Mono),
+            "math" => Some(Role::Math),
             _ => None,
         }
     }
@@ -38,15 +45,19 @@ impl Role {
         match self {
             Role::Body => "Inter",
             Role::Mono => "JetBrains Mono",
+            Role::Math => "STIX Two Math",
         }
     }
 }
 
-/// One bundled face: its family's role, its weight, its file name under `fonts/` and its bytes.
+/// One bundled face: its family, its weight, its file name under `fonts/`, its license (an SPDX
+/// ID) with the file under `fonts/` that holds its text, and its bytes.
 pub struct Face {
-    pub role: Role,
+    pub family: &'static str,
     pub weight: u16,
     pub file: &'static str,
+    pub license: &'static str,
+    pub license_file: &'static str,
     pub bytes: &'static [u8],
 }
 
@@ -54,34 +65,84 @@ pub struct Face {
 /// address wherever they are read.
 pub static FACES: &[Face] = &[
     Face {
-        role: Role::Body,
+        family: "Inter",
         weight: 400,
         file: "Inter-Regular.ttf",
+        license: "OFL-1.1",
+        license_file: "LICENSE-Inter.txt",
         bytes: include_bytes!("../fonts/Inter-Regular.ttf"),
     },
     Face {
-        role: Role::Body,
+        family: "Inter",
         weight: 500,
         file: "Inter-Medium.ttf",
+        license: "OFL-1.1",
+        license_file: "LICENSE-Inter.txt",
         bytes: include_bytes!("../fonts/Inter-Medium.ttf"),
     },
     Face {
-        role: Role::Body,
+        family: "Inter",
         weight: 600,
         file: "Inter-SemiBold.ttf",
+        license: "OFL-1.1",
+        license_file: "LICENSE-Inter.txt",
         bytes: include_bytes!("../fonts/Inter-SemiBold.ttf"),
     },
     Face {
-        role: Role::Mono,
+        family: "JetBrains Mono",
         weight: 400,
         file: "JetBrainsMono-Regular.ttf",
+        license: "OFL-1.1",
+        license_file: "LICENSE-JetBrainsMono.txt",
         bytes: include_bytes!("../fonts/JetBrainsMono-Regular.ttf"),
     },
     Face {
-        role: Role::Mono,
+        family: "JetBrains Mono",
         weight: 500,
         file: "JetBrainsMono-Medium.ttf",
+        license: "OFL-1.1",
+        license_file: "LICENSE-JetBrainsMono.txt",
         bytes: include_bytes!("../fonts/JetBrainsMono-Medium.ttf"),
+    },
+    Face {
+        family: "STIX Two Math",
+        weight: 400,
+        file: "STIXTwoMath-Regular.ttf",
+        license: "OFL-1.1",
+        license_file: "LICENSE-STIXTwoMath.txt",
+        bytes: include_bytes!("../fonts/STIXTwoMath-Regular.ttf"),
+    },
+    Face {
+        family: "Caveat",
+        weight: 400,
+        file: "Caveat-Regular.ttf",
+        license: "OFL-1.1",
+        license_file: "LICENSE-Caveat.txt",
+        bytes: include_bytes!("../fonts/Caveat-Regular.ttf"),
+    },
+    Face {
+        family: "Noto Sans SC",
+        weight: 400,
+        file: "NotoSansSC-Regular.otf",
+        license: "OFL-1.1",
+        license_file: "LICENSE-NotoSansSC.txt",
+        bytes: include_bytes!("../fonts/NotoSansSC-Regular.otf"),
+    },
+    Face {
+        family: "Noto Sans Arabic",
+        weight: 400,
+        file: "NotoSansArabic-Regular.ttf",
+        license: "OFL-1.1",
+        license_file: "LICENSE-NotoSansArabic.txt",
+        bytes: include_bytes!("../fonts/NotoSansArabic-Regular.ttf"),
+    },
+    Face {
+        family: "Noto Emoji",
+        weight: 400,
+        file: "NotoEmoji-Regular.ttf",
+        license: "OFL-1.1",
+        license_file: "LICENSE-NotoEmoji.txt",
+        bytes: include_bytes!("../fonts/NotoEmoji-Regular.ttf"),
     },
 ];
 

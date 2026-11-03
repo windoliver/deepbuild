@@ -3,7 +3,7 @@
 //! weight outside 1..=1000 or a negative box side, answers `{"ok":false,"code":"bad_input"}`.
 //! Subcommands: `fit` (the fit check of one Text item against its widest string), `shape` (#856:
 //! the item shaped through the shaped-run cache, with what it shaped and the cache's size), `fonts` (the
-//! bundled faces by role), and `breaks`, `graphemes` and `bidi` (issue #381: the shaper's UAX #14
+//! bundled faces by role, and #417: every face with its license), and `breaks`, `graphemes` and `bidi` (issue #381: the shaper's UAX #14
 //! line-break opportunities, UAX #29 grapheme ends and UAX #9 levels and visual order, as code point
 //! offsets). `breaks` takes `planted: "space_breaker"` and `bidi` `planted: "logical_arabic"`, the
 //! acceptance suite's wrong programs. `--planted no_cache | reshaping_fit | evicts_oldest` after
@@ -101,7 +101,9 @@ fn read_spec(input: &Map<String, Value>) -> Result<(Spec<'_>, Option<f32>, Optio
     };
     let spec = Spec {
         text,
-        role,
+        family: role.family(),
+        fallback: &[],
+        lang: None,
         size,
         weight: weight.round() as u16,
         line_height: None,
@@ -166,17 +168,26 @@ fn shaped_reply(shaper: &mut Shaper, input: &Map<String, Value>) -> Value {
 }
 
 fn fonts_line() -> Value {
-    let fonts: Vec<Value> = [Role::Body, Role::Mono]
+    let dir = "crates/deep-text/fonts";
+    let fonts: Vec<Value> = [Role::Body, Role::Mono, Role::Math]
         .iter()
         .map(|role| {
             let face = FACES
                 .iter()
-                .find(|face| face.role == *role && face.weight == 400)
+                .find(|face| face.family == role.family() && face.weight == 400)
                 .expect("every role has a regular face");
-            json!({"role": role.name(), "family": role.family(), "file": format!("crates/deep-text/fonts/{}", face.file)})
+            json!({"role": role.name(), "family": role.family(), "file": format!("{dir}/{}", face.file)})
         })
         .collect();
-    json!({"ok": true, "fonts": fonts})
+    // #417: every bundled face with its license and the file beside it that holds its text.
+    let faces: Vec<Value> = FACES
+        .iter()
+        .map(|face| {
+            json!({"file": format!("{dir}/{}", face.file), "family": face.family,
+                   "license": face.license, "license_file": format!("{dir}/{}", face.license_file)})
+        })
+        .collect();
+    json!({"ok": true, "fonts": fonts, "faces": faces})
 }
 
 /// The planted field: absent, or the one name a subcommand knows.

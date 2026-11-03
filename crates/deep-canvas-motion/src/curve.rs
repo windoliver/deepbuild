@@ -163,6 +163,43 @@ pub fn segment_into(a: &Key, b: &Key, t: i64, out: &mut [f64]) -> u32 {
     }
 }
 
+/// How a change of state moves over its span (#417, the look's `time.state.interp`; #489's
+/// transition follow): an `ease@1` name or a Bézier, from a share of the span to a share of the way.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Ease {
+    Linear,
+    InCubic,
+    OutCubic,
+    InOutCubic,
+    Bezier(Bezier),
+}
+
+impl Ease {
+    /// The `ease@1` names motion lands, as written.
+    pub const NAMES: [(&'static str, Ease); 4] = [
+        ("linear", Ease::Linear),
+        ("in_cubic", Ease::InCubic),
+        ("out_cubic", Ease::OutCubic),
+        ("in_out_cubic", Ease::InOutCubic),
+    ];
+
+    /// The share of the way at `u` of the span, `u` clamped to [0, 1] (the cubics as CSS and
+    /// Penner name them).
+    pub fn at(&self, u: f64) -> f64 {
+        let u = u.clamp(0.0, 1.0);
+        match *self {
+            Ease::Linear => u,
+            Ease::InCubic => u * u * u,
+            Ease::OutCubic => {
+                let r = 1.0 - u;
+                1.0 - r * r * r
+            }
+            Ease::InOutCubic => deep_canvas::camera::ease_in_out_cubic(u),
+            Ease::Bezier(b) => b.solve(u).y,
+        }
+    }
+}
+
 /// A damped spring's displacement from its target, released from rest at 1, after `seconds`, in
 /// closed form in all three damping regimes (ω0 = 2π · `freq_hz`, ζ = `damping_ratio`).
 pub fn spring_from_rest(freq_hz: f64, damping_ratio: f64, seconds: f64) -> f64 {

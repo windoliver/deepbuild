@@ -6,12 +6,13 @@ use std::sync::Arc;
 
 use parley::fontique::{Collection, CollectionOptions, SourceCache};
 use parley::{
-    Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontWeight, Layout,
-    LayoutContext, LineHeight, PositionedLayoutItem, StyleProperty,
+    Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontFamilyName, FontWeight,
+    Language, Layout, LayoutContext, LineHeight, PositionedLayoutItem, StyleProperty,
 };
 
 use crate::cache::{self, Key, Planted};
 use crate::fonts::{self, Role, FACES};
+use crate::unicode::is_default_ignorable;
 use crate::unicode::{grapheme_starts, LineBreaks};
 
 /// Text's horizontal alignment within its box (`align: start | center | end = start`).
@@ -31,7 +32,12 @@ pub enum Align {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Spec<'a> {
     pub text: &'a str,
-    pub role: Role,
+    /// The bundled family the run is set in: a font role's face, as the look names it.
+    pub family: &'a str,
+    /// #417: bundled families in order; a grapheme the family lacks is set in the first that has it.
+    pub fallback: &'a [&'a str],
+    /// #417: the language the run is shaped in (BCP 47), such as `zh-Hans` for Simplified forms.
+    pub lang: Option<&'a str>,
     /// Font size in logical pixels (`size: f32, u = 13`).
     pub size: f32,
     /// `weight: u16 = 400`; the shaper picks the nearest bundled face.
@@ -53,7 +59,9 @@ impl<'a> Spec<'a> {
     pub fn label(text: &'a str) -> Self {
         Spec {
             text,
-            role: Role::Body,
+            family: Role::Body.family(),
+            fallback: &[],
+            lang: None,
             size: 13.,
             weight: 400,
             line_height: None,
@@ -161,9 +169,16 @@ impl Shaper {
             .ranged_builder(&mut self.fonts, text, 1.0, false);
         // Lines break at UAX #14's opportunities at the pinned Unicode version (17.0.0).
         builder.set_line_break_override(Some(&*decide));
-        builder.push_default(StyleProperty::FontFamily(FontFamily::named(
-            spec.role.family(),
-        )));
+        // The family first, then the fallback families in order: parley sets each cluster in the
+        // first family of the list whose face maps it.
+        let families: Vec<FontFamilyName<'_>> = std::iter::once(spec.family)
+            .chain(spec.fallback.iter().copied())
+            .map(FontFamilyName::named)
+            .collect();
+        builder.push_default(StyleProperty::FontFamily(FontFamily::List(families.into())));
+        if let Some(lang) = spec.lang {
+            builder.push_default(StyleProperty::Locale(Language::parse(lang).ok()));
+        }
         builder.push_default(StyleProperty::FontSize(spec.size));
         builder.push_default(StyleProperty::FontWeight(FontWeight::new(f32::from(
             spec.weight,
@@ -306,6 +321,27 @@ impl Shaper {
         };
         best.ellipsized = true;
         cache::put(fitted, best)
+    }
+
+    /// #417: the graphemes of `text` that neither the spec's family nor any of its fallbacks can
+    /// draw, in order, each once: those any of whose glyphs is `.notdef`. Whitespace and
+    /// default-ignorable code points alone (joiners, variation selectors) need no glyph.
+    pub fn missing(&mut self, spec: &Spec<'_>, text: &str) -> Vec<String> {
+        let run = self.run(spec, text);
+        let starts = grapheme_starts(text);
+        let mut out: Vec<String> = Vec::new();
+        for (i, start) in starts.iter().enumerate() {
+            let end = starts.get(i + 1).copied().unwrap_or(text.len());
+            let grapheme = &text[*start..end];
+            let needs_glyph = grapheme
+                .chars()
+                .any(|c| !c.is_whitespace() && !is_default_ignorable(c));
+            let notdef = run.glyphs.iter().any(|g| g.grapheme == i && g.id == 0);
+            if needs_glyph && notdef && !out.iter().any(|g| g == grapheme) {
+                out.push(grapheme.to_string());
+            }
+        }
+        out
     }
 
     /// The fit check: shapes `widest` (the spec's own text when `None`) as the spec would and
