@@ -560,6 +560,9 @@ pub fn mark_set(
                 spec: TextSpec {
                     text: text(i).unwrap_or_default(),
                     font: "body".into(),
+                    family: Some(deep_text::Role::Body.family()),
+                    fallback: Vec::new(),
+                    lang: None,
                     size: number("size", i).unwrap_or(11.0),
                     weight: 400,
                     width: None,
@@ -715,6 +718,9 @@ pub fn axis(
             spec: TextSpec {
                 text: label.clone(),
                 font: "body".into(),
+                family: Some(deep_text::Role::Body.family()),
+                fallback: Vec::new(),
+                lang: None,
                 size: LABEL_SIZE,
                 weight: 400,
                 width: Some(LABEL_BOX),

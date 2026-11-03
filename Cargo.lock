@@ -1825,6 +1825,7 @@ name = "deep-canvas-motion"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-marks",
  "serde_json",
 ]
 

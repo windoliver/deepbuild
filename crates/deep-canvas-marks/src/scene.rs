@@ -43,6 +43,26 @@ pub type Rgb = [u8; 3];
 /// Role → color, for one theme.
 pub type Palette = BTreeMap<String, Rgb>;
 
+/// #417: a look's type for one theme: the bundled family each of its font names and font roles
+/// sets text in, and the fallback families in order (Look `look@1`: `fonts`, `roles`, `fallback`).
+/// The default is the bundled roles' own families with no fallback.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Type {
+    pub fonts: BTreeMap<String, &'static str>,
+    pub fallback: Vec<&'static str>,
+}
+
+impl Type {
+    /// The family a text's `font` sets it in: the look's font of that name or role, else the
+    /// bundled role's; `None` for a font the look doesn't name and nothing bundles.
+    pub fn family(&self, font: &str) -> Option<&'static str> {
+        self.fonts
+            .get(font)
+            .copied()
+            .or_else(|| deep_text::Role::parse(font).map(deep_text::Role::family))
+    }
+}
+
 /// Why a frame can't be drawn.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Refused {
@@ -441,11 +461,17 @@ fn text_runs(
 }
 
 /// What a text mark is shaped from: `text@1`'s text, font role, size, weight, box width and
-/// alignment.
+/// alignment, and (#417) the family its font sets it in, the look's fallback families and its
+/// language.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextSpec {
     pub text: String,
     pub font: String,
+    /// The bundled family `font` names in the look; `None` for a font nothing bundles.
+    pub family: Option<&'static str>,
+    pub fallback: Vec<&'static str>,
+    /// `lang` (BCP 47), the language the text is shaped in.
+    pub lang: Option<String>,
     pub size: f64,
     pub weight: u16,
     pub width: Option<f64>,
@@ -464,6 +490,12 @@ impl TextSpec {
             .text("text@1")
             .text(&self.text)
             .text(&self.font)
+            .text(self.family.unwrap_or(""))
+            .int(self.fallback.len() as i64);
+        for family in &self.fallback {
+            k.text(family);
+        }
+        k.text(self.lang.as_deref().unwrap_or(""))
             .number(self.size)
             .int(i64::from(self.weight));
         match self.width {
@@ -477,11 +509,22 @@ impl TextSpec {
 }
 
 /// What a `text@1` item is shaped from: its text (or what its bound value or counter shows),
-/// font role, size, weight, box width, alignment, and tabular figures for a bound number.
+/// font role, size, weight, box width, alignment, and tabular figures for a bound number, set in
+/// the bundled roles' families with no fallback.
 pub fn text_spec(
     id: &str,
     params: &Map<String, Value>,
     shown: Option<&Shown>,
+) -> Result<TextSpec, Refused> {
+    text_spec_in(id, params, shown, &Type::default())
+}
+
+/// [`text_spec`] in a look's type (#417): its font names and roles, and its fallback families.
+pub fn text_spec_in(
+    id: &str,
+    params: &Map<String, Value>,
+    shown: Option<&Shown>,
+    ty: &Type,
 ) -> Result<TextSpec, Refused> {
     let path = format!("items/{id}");
     let text = shown.map(|s| s.text.clone()).or_else(|| {
@@ -493,13 +536,22 @@ pub fn text_spec(
     let Some(text) = text else {
         return refuse("bad_doc", format!("{path}/params/text"));
     };
+    let font = params
+        .get("font")
+        .and_then(Value::as_str)
+        .unwrap_or("body")
+        .to_string();
+    let lang = match params.get("lang") {
+        None => None,
+        Some(Value::String(lang)) => Some(lang.clone()),
+        Some(_) => return refuse("bad_doc", format!("{path}/params/lang")),
+    };
     Ok(TextSpec {
         text,
-        font: params
-            .get("font")
-            .and_then(Value::as_str)
-            .unwrap_or("body")
-            .to_string(),
+        family: ty.family(&font),
+        fallback: ty.fallback.clone(),
+        lang,
+        font,
         size: num(params.get("size")).unwrap_or(13.0),
         weight: params
             .get("weight")
@@ -522,7 +574,9 @@ impl TextSpec {
     pub fn shaper_spec(&self) -> Option<deep_text::Spec<'_>> {
         Some(deep_text::Spec {
             text: &self.text,
-            role: deep_text::Role::parse(&self.font)?,
+            family: self.family?,
+            fallback: &self.fallback,
+            lang: self.lang.as_deref(),
             size: self.size as f32,
             weight: self.weight,
             line_height: None,
@@ -2381,14 +2435,21 @@ pub fn frame(
     record: &Record,
     zoom: f64,
 ) -> Result<Frame, Refused> {
-    frame_planted(doc, items, palette, record, zoom, Planted::None)
+    frame_planted(
+        doc,
+        items,
+        (palette, &Type::default()),
+        record,
+        zoom,
+        Planted::None,
+    )
 }
 
-/// [`frame`], with a planted wrong program.
+/// [`frame`] in a look's palette and type (#417), with a planted wrong program.
 pub fn frame_planted(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     record: &Record,
     zoom: f64,
     planted: Planted,
@@ -2397,7 +2458,7 @@ pub fn frame_planted(
     frame_shown(
         doc,
         items,
-        palette,
+        (palette, ty),
         zoom,
         planted,
         &bound,
@@ -2420,7 +2481,7 @@ pub fn frame_with(
     frame_shown(
         doc,
         items,
-        palette,
+        (palette, &Type::default()),
         zoom,
         Planted::None,
         bound,
@@ -2431,7 +2492,7 @@ pub fn frame_with(
 fn frame_shown(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     zoom: f64,
     planted: Planted,
     bound: &BTreeMap<String, Shown>,
@@ -2440,7 +2501,7 @@ fn frame_shown(
     let (frame, wants_boxes, _) = build(
         doc,
         (items, &[]),
-        palette,
+        (palette, ty),
         (bound, row_readings),
         zoom,
         planted,
@@ -2454,7 +2515,7 @@ fn frame_shown(
     Ok(build(
         doc,
         (items, &[]),
-        palette,
+        (palette, ty),
         (bound, row_readings),
         zoom,
         planted,
@@ -2493,6 +2554,7 @@ impl deep_canvas::schedule::Canonical for Placed {
 struct ItemCtx<'a> {
     items: &'a Map<String, Value>,
     palette: &'a Palette,
+    ty: &'a Type,
     paints: &'a Paints<'a>,
     scopes: &'a BTreeMap<String, Vec<Scope>>,
     bound: &'a BTreeMap<String, Shown>,
@@ -2758,7 +2820,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 };
                 Mark::Text {
                     item: id.clone(),
-                    spec: text_spec(id, params, shown)?,
+                    spec: text_spec_in(id, params, shown, ctx.ty)?,
                     origin: pos,
                     color: role(
                         ctx.palette,
@@ -2843,6 +2905,7 @@ pub fn item_placed(
     let ctx = ItemCtx {
         items: &empty,
         palette,
+        ty: &Type::default(),
         paints: &paints,
         scopes: &scopes,
         bound: &bound,
@@ -2871,7 +2934,7 @@ pub fn frame_prebuilt(
     let (frame, wants_boxes, places) = build(
         doc,
         (items, prebuilt),
-        palette,
+        (palette, &Type::default()),
         (bound, &row_readings),
         zoom,
         Planted::None,
@@ -2906,7 +2969,7 @@ fn build(
     doc: &Map<String, Value>,
     // The items to build, and those built from the item alone (#857), placed as given.
     (items, prebuilt): (&Map<String, Value>, &[(&str, &Placed)]),
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     // What each bound value and counter shows, and the readings bound to mark sets' rows.
     (bound, row_readings): (&BTreeMap<String, Shown>, &BTreeMap<String, data::BoundRows>),
     zoom: f64,
@@ -2960,6 +3023,7 @@ fn build(
     let ctx = ItemCtx {
         items,
         palette,
+        ty,
         paints: &paints,
         scopes: &scopes,
         bound,
