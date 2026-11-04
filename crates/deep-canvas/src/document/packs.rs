@@ -114,6 +114,11 @@ pub struct Step {
     pub along: Option<(Template, Option<Template>)>,
     /// Its condition, over the recipe's inputs and lets: false leaves the step out (#420).
     pub when: Option<Template>,
+    /// The material its items name (Recipe: a step's `material`; #429).
+    pub material: Option<Value>,
+    /// Its own channels, each targeting a field of its items (`params/size/0`), written into the
+    /// document as `<item>.<channel>` as it expands (#429).
+    pub channels: Vec<(String, Value)>,
 }
 
 /// A recipe as its pack ships it.
@@ -637,7 +642,9 @@ const RECIPE_KEYS: &[&str] = &[
     "twins",
 ];
 /// A step's keys in this slice.
-const STEP_KEYS: &[&str] = &["op", "kind", "params", "at", "repeat", "let", "when"];
+const STEP_KEYS: &[&str] = &[
+    "op", "kind", "params", "at", "material", "repeat", "let", "when", "channels",
+];
 
 fn check_recipe(
     pack: &str,
@@ -764,9 +771,7 @@ fn check_recipe(
                 for k in s.keys() {
                     if !STEP_KEYS.contains(&k.as_str()) {
                         let what = match k.as_str() {
-                            "channels" | "modifiers" | "material" | "steps" => {
-                                "lands with 3D scenes, not this slice"
-                            }
+                            "modifiers" | "steps" => "lands with 3D scenes, not this slice",
                             _ => "not a field of a step",
                         };
                         issues.push(Issue::envelope(
@@ -903,6 +908,40 @@ fn check_recipe(
                     Some(w) => Some(Template::of(w)),
                 };
                 let step_lets = read_lets(s.get("let"), &format!("{path}/{at}/let"), &mut issues);
+                let material = match s.get("material") {
+                    None => None,
+                    Some(m @ Value::String(_)) => Some(m.clone()),
+                    Some(other) => {
+                        issues.push(bad(&format!("{at}/material"), other.clone(), "not an ID"));
+                        continue;
+                    }
+                };
+                // Its own channels target a field of each item it makes.
+                let mut own = Vec::new();
+                match s.get("channels") {
+                    None => {}
+                    Some(Value::Object(map)) => {
+                        for (name, c) in map {
+                            let target = member(c, "target").and_then(Value::as_str);
+                            if well_named(name) && target.is_some_and(|t| !t.is_empty()) {
+                                own.push((name.clone(), c.clone()));
+                            } else {
+                                issues.push(bad(
+                                    &format!("{at}/channels/{name}/target"),
+                                    json!(target),
+                                    "a step's channel targets a field of the items it makes",
+                                ));
+                            }
+                        }
+                    }
+                    Some(other) => {
+                        issues.push(bad(
+                            &format!("{at}/channels"),
+                            other.clone(),
+                            "not an object",
+                        ));
+                    }
+                }
                 steps.push(Step {
                     id: step_id.clone(),
                     op: op.to_string(),
@@ -913,6 +952,8 @@ fn check_recipe(
                     repeat,
                     along,
                     when,
+                    material,
+                    channels: own,
                 });
             }
         }
@@ -2073,6 +2114,14 @@ fn expand_one(
                 }
             }
             fields.insert("params".into(), Value::Object(params));
+            if let Some(m) = &step.material {
+                fields.insert("material".into(), m.clone());
+            }
+            // Without an `at` of its own, an item stands at the instance's origin.
+            if let (None, None, Some(o)) = (&step.at, &curve, &origin) {
+                let pos: Vec<Value> = o.iter().map(|v| number(*v)).collect();
+                fields.insert("at".into(), json!({ "pos": pos }));
+            }
             if let Some(at) = &step.at {
                 match at.eval(&scope) {
                     Ok(mut v) => {
@@ -2220,6 +2269,15 @@ fn expand_one(
                 .entry(step.id.clone())
                 .or_default()
                 .push(derived_id.clone());
+            // The step's own channels, each on this item's field.
+            for (name, c) in &step.channels {
+                let field = member(c, "target")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let mut out = c.clone();
+                out["target"] = json!(format!("items/{derived_id}/{field}"));
+                channels.insert(format!("{derived_id}.{name}"), out);
+            }
             derived_items.insert(derived_id, Value::Object(fields));
         }
     }
