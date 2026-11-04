@@ -27,8 +27,20 @@ const MAX_COPIES: f64 = 64.0;
 const MAX_OFFSET_COPIES: u64 = 16;
 /// The most ridges a zig zag puts on one segment.
 const MAX_RIDGES: u64 = 256;
-/// Samples along a curve for its arc length and its point at a length.
+/// Samples along a curve for its point at a length.
 const SAMPLES: usize = 128;
+/// 8-point Gauss–Legendre nodes and weights on 0..1, for a curve's arc length: exact for a line,
+/// and within 1e-6 of the integral for the curves the ops build, at 8 derivative reads a curve.
+const GAUSS: [(f64, f64); 8] = [
+    (0.019_855_071_751_231_856, 0.050_614_268_145_188_13),
+    (0.101_666_761_293_186_64, 0.111_190_517_226_687_24),
+    (0.237_233_795_041_835_5, 0.156_853_322_938_943_63),
+    (0.408_282_678_752_175_1, 0.181_341_891_689_181),
+    (0.591_717_321_247_825, 0.181_341_891_689_181),
+    (0.762_766_204_958_164_5, 0.156_853_322_938_943_63),
+    (0.898_333_238_706_813_4, 0.111_190_517_226_687_24),
+    (0.980_144_928_248_768_1, 0.050_614_268_145_188_13),
+];
 
 type P = [f64; 2];
 
@@ -115,7 +127,17 @@ impl Seg {
 
     /// The derivative at `t`, or the chord where it vanishes.
     pub fn tangent(&self, t: f64) -> P {
-        let d = match *self {
+        let d = self.derivative(t);
+        if norm(d) > 0.0 {
+            d
+        } else {
+            vsub(self.end(), self.start())
+        }
+    }
+
+    /// The derivative at `t`, as it is.
+    fn derivative(&self, t: f64) -> P {
+        match *self {
             Seg::Line(a, b) => vsub(b, a),
             Seg::Quad(a, b, c) => {
                 vadd(vmul(vsub(b, a), 2.0 * (1.0 - t)), vmul(vsub(c, b), 2.0 * t))
@@ -127,11 +149,6 @@ impl Seg {
                     vmul(vsub(d, c), 3.0 * t * t),
                 )
             }
-        };
-        if norm(d) > 0.0 {
-            d
-        } else {
-            vsub(self.end(), self.start())
         }
     }
 
@@ -191,10 +208,74 @@ impl Seg {
         out
     }
 
-    /// Arc length.
+    /// Arc length: a line's exactly, a curve's by Gauss–Legendre quadrature of its speed.
     pub fn length(&self) -> f64 {
-        let l = self.lengths();
-        l[l.len() - 1]
+        if let Seg::Line(a, b) = self {
+            return norm(vsub(*b, *a));
+        }
+        // The speed is smooth between the parameters where either coordinate turns back, so the
+        // rule runs on each piece between them: a curve that runs past its end and back, or nearly
+        // loops, is measured as closely as a gentle one.
+        let mut cuts = self.turns();
+        cuts.push(1.0);
+        let mut from = 0.0;
+        let mut sum = 0.0;
+        for to in cuts {
+            sum += self.gauss(from, to);
+            from = to;
+        }
+        sum
+    }
+
+    /// The parameters inside 0..1 where the derivative's x or y is zero, in order.
+    fn turns(&self) -> Vec<f64> {
+        // Each coordinate of the derivative as q t² + l t + c (a quadratic's has q = 0).
+        let coefficients = |k: usize| -> (f64, f64, f64) {
+            match *self {
+                Seg::Line(..) => (0.0, 0.0, 1.0),
+                Seg::Quad(a, b, c) => (0.0, 2.0 * (c[k] - 2.0 * b[k] + a[k]), 2.0 * (b[k] - a[k])),
+                Seg::Cubic(a, b, c, d) => {
+                    let (e, f, g) = (b[k] - a[k], c[k] - b[k], d[k] - c[k]);
+                    (3.0 * (e - 2.0 * f + g), 6.0 * (f - e), 3.0 * e)
+                }
+            }
+        };
+        let mut out = Vec::new();
+        for k in 0..2 {
+            let (q, l, c) = coefficients(k);
+            let scale = q.abs().max(l.abs()).max(c.abs());
+            if scale == 0.0 {
+                continue;
+            }
+            if q.abs() <= 1e-12 * scale {
+                if l != 0.0 {
+                    out.push(-c / l);
+                }
+            } else {
+                let disc = l * l - 4.0 * q * c;
+                if disc >= 0.0 {
+                    let r = m::sqrt(disc);
+                    out.push((-l - r) / (2.0 * q));
+                    out.push((-l + r) / (2.0 * q));
+                }
+            }
+        }
+        out.retain(|t| *t > 1e-9 && *t < 1.0 - 1e-9);
+        out.sort_by(f64::total_cmp);
+        out
+    }
+
+    /// The speed's integral over `t0..t1` by the 8-point rule.
+    fn gauss(&self, t0: f64, t1: f64) -> f64 {
+        let h = t1 - t0;
+        GAUSS
+            .iter()
+            .map(|(t, w)| {
+                let d = self.derivative(t0 + h * t);
+                w * m::sqrt(d[0] * d[0] + d[1] * d[1])
+            })
+            .sum::<f64>()
+            * h
     }
 
     /// Every point of the segment mapped through `f`.
@@ -215,24 +296,34 @@ pub struct Sub {
     pub closed: bool,
 }
 
-/// A sub-path with each segment's cumulative chord lengths sampled once, so a trim, an anchor
-/// read or a column's arc lengths measure every curve one time.
+/// A sub-path with each segment's arc length measured once, so a trim or an anchor read measures
+/// every curve one time; only a segment a length falls inside is sampled finely, to find the
+/// parameter there (#160 AC9: a trim after ops that curve 2,000 segments).
 struct Measured<'a> {
     sub: &'a Sub,
-    lengths: Vec<Vec<f64>>,
+    lengths: Vec<f64>,
 }
 
 impl<'a> Measured<'a> {
     fn of(sub: &'a Sub) -> Measured<'a> {
         Measured {
             sub,
-            lengths: sub.segs.iter().map(Seg::lengths).collect(),
+            lengths: sub.segs.iter().map(Seg::length).collect(),
         }
     }
 
     fn seg_length(&self, i: usize) -> f64 {
-        let l = &self.lengths[i];
-        l[l.len() - 1]
+        self.lengths[i]
+    }
+
+    /// The parameter `s` u along segment `i`, from its chord samples scaled to its arc length.
+    fn t_of(&self, i: usize, s: f64) -> f64 {
+        let l = self.lengths[i];
+        if l <= 0.0 {
+            return 0.0;
+        }
+        let table = self.sub.segs[i].lengths();
+        t_at(&table, s / l * table[table.len() - 1])
     }
 
     fn length(&self) -> f64 {
@@ -246,7 +337,7 @@ impl<'a> Measured<'a> {
         for (i, seg) in self.sub.segs.iter().enumerate() {
             let l = self.seg_length(i);
             if rest <= l || i == last {
-                let t = t_at(&self.lengths[i], rest.min(l));
+                let t = self.t_of(i, rest.min(l));
                 return Some((seg.at(t), seg.tangent(t)));
             }
             rest -= l;
@@ -263,12 +354,12 @@ impl<'a> Measured<'a> {
             let to = from + l;
             if to > s0 && from < s1 && l > 0.0 {
                 let t0 = if s0 > from {
-                    t_at(&self.lengths[i], s0 - from)
+                    self.t_of(i, s0 - from)
                 } else {
                     0.0
                 };
                 let t1 = if s1 < to {
-                    t_at(&self.lengths[i], s1 - from)
+                    self.t_of(i, s1 - from)
                 } else {
                     1.0
                 };
@@ -1094,8 +1185,14 @@ fn trim_one(subs: &[Sub], start: f64, end: f64, offset: f64) -> Vec<Sub> {
     }
     let turn = offset / 360.0;
     let shift = (turn - turn.floor()) * total;
-    let s0 = start * total + shift;
-    let s1 = end * total + shift;
+    // A window whose start passes the end wraps whole, so it starts inside 0..total.
+    let wrap = if start * total + shift >= total {
+        total
+    } else {
+        0.0
+    };
+    let s0 = start * total + shift - wrap;
+    let s1 = end * total + shift - wrap;
     // The windows in 0..total: one, or two when the window wraps past the end.
     let windows: Vec<(f64, f64)> = if s1 <= total {
         vec![(s0, s1)]
@@ -1133,90 +1230,95 @@ fn trim_one(subs: &[Sub], start: f64, end: f64, offset: f64) -> Vec<Sub> {
 // ---------------------------------------------------------------------------------------------------
 // Round corners
 
-/// Each corner between two straight segments becomes a circular arc of up to `radius`, tangent to
-/// both, taking at most half of each segment.
-fn round_corners(sub: &Sub, radius: f64) -> Sub {
+/// The handle fraction lottie-web's rounded corners use: a cubic with handles this far back toward
+/// the corner draws a quarter circle on a right angle.
+const ROUND_CORNER: f64 = 0.5519;
+
+/// A sub-path as Lottie holds one: each vertex with its in and out handles (the vertex itself
+/// where its segment is straight). A quadratic's handles are its cubic's.
+fn lottie_vertices(sub: &Sub) -> Vec<(P, P, P)> {
     let n = sub.segs.len();
-    if radius <= 0.0 || n == 0 {
+    let count = if sub.closed { n } else { n + 1 };
+    let mut v: Vec<(P, P, P)> = (0..count)
+        .map(|k| {
+            let p = if k < n {
+                sub.segs[k].start()
+            } else {
+                sub.segs[n - 1].end()
+            };
+            (p, p, p)
+        })
+        .collect();
+    for (k, seg) in sub.segs.iter().enumerate() {
+        let next = (k + 1) % count;
+        let (out, inn) = match *seg {
+            Seg::Line(a, b) => (a, b),
+            Seg::Quad(a, c, b) => (
+                vadd(a, vmul(vsub(c, a), 2.0 / 3.0)),
+                vadd(b, vmul(vsub(c, b), 2.0 / 3.0)),
+            ),
+            Seg::Cubic(_, c1, c2, _) => (c1, c2),
+        };
+        v[k].2 = out;
+        v[next].1 = inn;
+    }
+    v
+}
+
+/// Lottie's vertices, `(point, in, out)`, back to segments: straight where both handles sit on
+/// their vertices, else a cubic.
+fn from_lottie(v: &[(P, P, P)], closed: bool) -> Sub {
+    let n = v.len();
+    let spans = if closed { n } else { n.saturating_sub(1) };
+    let segs = (0..spans)
+        .map(|k| {
+            let (a, _, out) = v[k];
+            let (b, inn, _) = v[(k + 1) % n];
+            if out == a && inn == b {
+                Seg::Line(a, b)
+            } else {
+                Seg::Cubic(a, out, inn, b)
+            }
+        })
+        .collect();
+    Sub { segs, closed }
+}
+
+/// Lottie's rounded corners (lottie-web's RoundCornersModifier): each sharp vertex, one whose
+/// handles both sit on it, becomes two, cut min(side ÷ 2, `radius`) back along the line to each
+/// neighbour and joined by a cubic whose handles reach 0.5519 of the way back to the vertex. An
+/// open sub-path's two ends stay, and a vertex with a handle off it is left as it is.
+fn round_corners(sub: &Sub, radius: f64) -> Sub {
+    let v = lottie_vertices(sub);
+    let n = v.len();
+    if radius <= 0.0 || n < 2 {
         return sub.clone();
     }
-    let corners = if sub.closed { n } else { n.saturating_sub(1) };
-    // How far back each corner's arc reaches along the segments before and after it.
-    let mut reach = vec![0.0; n + 1];
-    let mut arcs: Vec<Option<(usize, f64)>> = vec![None; n];
-    for (c, arc) in arcs.iter_mut().enumerate().take(corners) {
-        let i = c;
-        let j = (c + 1) % n;
-        let (Seg::Line(a0, a1), Seg::Line(b0, b1)) = (sub.segs[i], sub.segs[j]) else {
-            continue;
+    let cut = |at: P, toward: P| -> P {
+        let d = norm(vsub(toward, at));
+        let f = if d > 0.0 {
+            (d / 2.0).min(radius) / d
+        } else {
+            0.0
         };
-        let (Some(da), Some(db)) = (unit(vsub(a1, a0)), unit(vsub(b1, b0))) else {
-            continue;
-        };
-        let cos = dot(da, db).clamp(-1.0, 1.0);
-        // The turn at the corner; none for straight on, and a doubling back can't round.
-        let phi = m::acos(cos);
-        if phi < 1e-9 || std::f64::consts::PI - phi < 1e-9 {
-            continue;
-        }
-        let want = radius * m::tan(phi / 2.0);
-        let d = want
-            .min(norm(vsub(a1, a0)) / 2.0)
-            .min(norm(vsub(b1, b0)) / 2.0);
-        if d <= 0.0 {
+        vadd(at, vmul(vsub(toward, at), f))
+    };
+    let mut out: Vec<(P, P, P)> = Vec::with_capacity(n * 2);
+    for k in 0..n {
+        let (p, inn, o) = v[k];
+        let end = !sub.closed && (k == 0 || k == n - 1);
+        if p != inn || p != o || end {
+            out.push(v[k]);
             continue;
         }
-        *arc = Some((j, d));
+        let prev = v[(k + n - 1) % n].0;
+        let next = v[(k + 1) % n].0;
+        let a = cut(p, prev);
+        out.push((a, a, vsub(a, vmul(vsub(a, p), ROUND_CORNER))));
+        let b = cut(p, next);
+        out.push((b, vsub(b, vmul(vsub(b, p), ROUND_CORNER)), b));
     }
-    let mut segs = Vec::with_capacity(n * 2);
-    for i in 0..n {
-        let seg = sub.segs[i];
-        let Seg::Line(a, b) = seg else {
-            segs.push(seg);
-            continue;
-        };
-        let before = if i == 0 && !sub.closed { 0.0 } else { reach[i] };
-        let (_, after) = arcs[i].unwrap_or((0, 0.0));
-        let d = unit(vsub(b, a)).unwrap_or([0.0, 0.0]);
-        let p = vadd(a, vmul(d, before));
-        let q = vsub(b, vmul(d, after));
-        if norm(vsub(q, p)) > 0.0 {
-            segs.push(Seg::Line(p, q));
-        }
-        if let Some((j, dd)) = arcs[i] {
-            let Seg::Line(c, e) = sub.segs[j] else {
-                continue;
-            };
-            let dn = unit(vsub(e, c)).unwrap_or([0.0, 0.0]);
-            let r = vadd(c, vmul(dn, dd));
-            // A cubic through the arc: handles a fraction of the tangent lengths toward the corner.
-            let phi = m::acos(dot(d, dn).clamp(-1.0, 1.0));
-            let radius_here = dd / m::tan(phi / 2.0).max(1e-12);
-            let k = 4.0 / 3.0 * m::tan(phi / 4.0) * radius_here;
-            segs.push(Seg::Cubic(q, vadd(q, vmul(d, k)), vsub(r, vmul(dn, k)), r));
-            reach[j] = dd;
-            if j == 0 {
-                // The closed sub-path's first segment starts after its arc; fix it up below.
-                reach[0] = dd;
-            }
-        }
-    }
-    // A closed sub-path's first line started before its own arc was known: trim it now.
-    if sub.closed && reach[0] > 0.0 {
-        if let Some(Seg::Line(a, b)) = segs.first().copied() {
-            let d = unit(vsub(b, a)).unwrap_or([0.0, 0.0]);
-            let p = vadd(a, vmul(d, reach[0]));
-            if norm(vsub(b, p)) > 0.0 {
-                segs[0] = Seg::Line(p, b);
-            } else {
-                segs.remove(0);
-            }
-        }
-    }
-    Sub {
-        segs,
-        closed: sub.closed,
-    }
+    from_lottie(&out, sub.closed)
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -1486,45 +1588,102 @@ pub fn bent(a: P, b: P, turn: f64) -> Vec<Verb> {
 // ---------------------------------------------------------------------------------------------------
 // Zig zag
 
-/// Each segment cut into `ridges` + 1 pieces, its interior points pushed `size` u to either side
-/// in turn: corners as lines, or a smooth curve through them.
+/// Lottie's zig zag: each segment cut into `ridges` + 1 pieces, its ridges and its corners
+/// pushed `size` u to either side in turn: corners as lines, or smooth with lottie-web's handles
+/// along the path.
 fn zigzag(sub: &Sub, size: f64, ridges: u64, points: Points) -> Sub {
-    let n = ridges as usize + 1;
-    let mut segs = Vec::with_capacity(sub.segs.len() * n);
-    // Alternation runs on across segments, so a closed path's ridges stay even.
-    let mut side = 1.0;
-    for seg in &sub.segs {
-        let mut pts: Vec<P> = Vec::with_capacity(n + 1);
-        pts.push(seg.start());
-        for k in 1..n {
-            let t = k as f64 / n as f64;
-            let p = seg.at(t);
-            let nrm = unit(left(seg.tangent(t))).unwrap_or([0.0, 0.0]);
-            pts.push(vadd(p, vmul(nrm, side * size)));
-            side = -side;
+    // lottie-web's ZigZagModifier.processPath: each corner moves `size` along the normal of the
+    // chord from its previous vertex to its next, each ridge along its segment's normal at
+    // k ÷ (ridges + 1), the direction flipping after each ridge; every side starts opposite the
+    // corner before it, and each corner takes the direction the side before it ended on. An open
+    // sub-path's two ends stay where they are (Lottie's would wrap to the far end for a neighbour).
+    let n = sub.segs.len();
+    if n == 0 {
+        return sub.clone();
+    }
+    let f = ridges as f64 + 1.0;
+    let count = if sub.closed { n } else { n + 1 };
+    let vertex = |k: usize| -> P {
+        if k < n {
+            sub.segs[k].start()
+        } else {
+            sub.segs[n - 1].end()
         }
-        pts.push(seg.end());
-        match points {
-            Points::Corner => {
-                for w in pts.windows(2) {
-                    segs.push(Seg::Line(w[0], w[1]));
-                }
-            }
-            Points::Smooth => {
-                // A Catmull-Rom spline through the points, each span one cubic.
-                let m = pts.len();
-                for i in 0..m - 1 {
-                    let p0 = if i == 0 { pts[0] } else { pts[i - 1] };
-                    let p1 = pts[i];
-                    let p2 = pts[i + 1];
-                    let p3 = if i + 2 < m { pts[i + 2] } else { pts[m - 1] };
-                    let c1 = vadd(p1, vmul(vsub(p2, p0), 1.0 / 6.0));
-                    let c2 = vsub(p2, vmul(vsub(p3, p1), 1.0 / 6.0));
-                    segs.push(Seg::Cubic(p1, c1, c2, p2));
-                }
-            }
+    };
+    // Each point: where it lands, its direction along the path (for smooth handles), and its
+    // handle lengths in and out.
+    let mut pts: Vec<(P, P, f64, f64)> = Vec::with_capacity(count + n * ridges as usize);
+    let corner = |k: usize, direction: f64| -> (P, P, f64, f64) {
+        let p = vertex(k);
+        let open_end = !sub.closed && (k == 0 || k == count - 1);
+        let prev = vertex(if k == 0 { count - 1 } else { k - 1 });
+        let next = vertex((k + 1) % count);
+        let along = if open_end {
+            sub.segs[k.min(n - 1)].tangent(if k == 0 { 0.0 } else { 1.0 })
+        } else {
+            vsub(next, prev)
+        };
+        let t = unit(along).unwrap_or([0.0, 0.0]);
+        let moved = if open_end {
+            p
+        } else {
+            vadd(p, vmul(left(t), direction * size))
+        };
+        let (din, dout) = match points {
+            Points::Corner => (0.0, 0.0),
+            Points::Smooth => (
+                if k == 0 && !sub.closed {
+                    0.0
+                } else {
+                    norm(vsub(p, prev))
+                },
+                if k == count - 1 && !sub.closed {
+                    0.0
+                } else {
+                    norm(vsub(p, next))
+                },
+            ),
+        };
+        (moved, t, din / (f * 2.0), dout / (f * 2.0))
+    };
+    let mut direction = -1.0;
+    pts.push(corner(0, direction));
+    for (s, seg) in sub.segs.iter().enumerate() {
+        let mut d = -direction;
+        let chord = match points {
+            Points::Corner => 0.0,
+            Points::Smooth => norm(vsub(seg.end(), seg.start())) / (f * 2.0),
+        };
+        for r in 0..ridges {
+            let t = (r as f64 + 1.0) / f;
+            let along = unit(seg.tangent(t)).unwrap_or([0.0, 0.0]);
+            pts.push((
+                vadd(seg.at(t), vmul(left(along), d * size)),
+                along,
+                chord,
+                chord,
+            ));
+            d = -d;
+        }
+        direction = d;
+        // A closed sub-path's last corner is its first again.
+        if s + 1 < count {
+            pts.push(corner(s + 1, direction));
         }
     }
+    let m = pts.len();
+    let spans = if sub.closed { m } else { m - 1 };
+    let segs = (0..spans)
+        .map(|i| {
+            let (a, ta, _, aout) = pts[i];
+            let (b, tb, bin, _) = pts[(i + 1) % m];
+            if aout == 0.0 && bin == 0.0 {
+                Seg::Line(a, b)
+            } else {
+                Seg::Cubic(a, vadd(a, vmul(ta, aout)), vsub(b, vmul(tb, bin)), b)
+            }
+        })
+        .collect();
     Sub {
         segs,
         closed: sub.closed,
@@ -1610,10 +1769,31 @@ fn twist(subs: &[Sub], angle: f64, center: P) -> Vec<Sub> {
         let f = (1.0 - norm(vsub(p, center)) / reach).max(0.0);
         rotate(p, center, angle * f)
     };
+    // Each point turned once: a segment's start is the one before's end, turned already.
     subs.iter()
-        .map(|s| Sub {
-            segs: s.segs.iter().map(|seg| seg.map(turn)).collect(),
-            closed: s.closed,
+        .map(|s| {
+            let mut last: Option<(P, P)> = None;
+            let segs = s
+                .segs
+                .iter()
+                .map(|seg| {
+                    let start = match last {
+                        Some((p, turned)) if p == seg.start() => turned,
+                        _ => turn(seg.start()),
+                    };
+                    let end = turn(seg.end());
+                    last = Some((seg.end(), end));
+                    match *seg {
+                        Seg::Line(..) => Seg::Line(start, end),
+                        Seg::Quad(_, b, _) => Seg::Quad(start, turn(b), end),
+                        Seg::Cubic(_, b, c, _) => Seg::Cubic(start, turn(b), turn(c), end),
+                    }
+                })
+                .collect();
+            Sub {
+                segs,
+                closed: s.closed,
+            }
         })
         .collect()
 }
@@ -1796,6 +1976,69 @@ fn repeat_from(r: &Repeater, source: &dyn Fn(usize) -> Vec<Sub>, opacity: f64) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_trim_whose_start_wraps_past_the_end_keeps_its_window() {
+        // #160: the loader's window late in its play, start 0.6, end 0.8 and offset 324°, on a
+        // closed square of side 100 (400 u): both ends of the window pass the path's end, so
+        // it's the 80 u from 200 u (1.5 × 400 − 400) to 280 u, one piece along the third side.
+        let sq = |x: f64, y: f64| [x, y];
+        let sub = Sub {
+            segs: vec![
+                Seg::Line(sq(0.0, 0.0), sq(100.0, 0.0)),
+                Seg::Line(sq(100.0, 0.0), sq(100.0, 100.0)),
+                Seg::Line(sq(100.0, 100.0), sq(0.0, 100.0)),
+                Seg::Line(sq(0.0, 100.0), sq(0.0, 0.0)),
+            ],
+            closed: true,
+        };
+        let out = trim(&[sub], 0.6, 0.8, 324.0, false);
+        let length: f64 = out.iter().map(Sub::length).sum();
+        assert!(
+            (length - 80.0).abs() < 1e-9,
+            "the window is 80 u, got {length} in {out:?}"
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].segs[0].start(), [100.0, 100.0]);
+        assert_eq!(out[0].segs[0].end(), [20.0, 100.0]);
+    }
+
+    #[test]
+    fn a_curve_measures_its_arc_length_by_quadrature() {
+        // A quarter circle of radius 100 as one cubic (handles 0.5523 r): its length by 200,000
+        // chords is the reference; the quadrature lands within 1e-6 u, where a 128-chord sum
+        // falls 1e-3 u short and the chord itself 11 u short.
+        let k = 55.228_474_983_079_34;
+        let arc = Seg::Cubic([100.0, 0.0], [100.0, k], [k, 100.0], [0.0, 100.0]);
+        let n = 200_000;
+        let fine: f64 = (1..=n)
+            .map(|i| {
+                let (a, b) = (
+                    arc.at((i - 1) as f64 / n as f64),
+                    arc.at(i as f64 / n as f64),
+                );
+                norm(vsub(b, a))
+            })
+            .sum();
+        assert!(
+            (arc.length() - fine).abs() < 1e-6,
+            "{} vs {fine}",
+            arc.length()
+        );
+        // A trim to the first half then ends half way along the arc by length.
+        let sub = Sub {
+            segs: vec![arc],
+            closed: false,
+        };
+        let half = trim(&[sub], 0.0, 0.5, 0.0, false);
+        let cut = half[0].segs[0].end();
+        let to = |p: P, q: P| norm(vsub(q, p));
+        let mid = arc.at(0.5);
+        assert!(
+            to(cut, mid) < 0.01,
+            "{cut:?} vs the symmetric middle {mid:?}"
+        );
+    }
     use crate::path::parse;
 
     fn square() -> Vec<Verb> {

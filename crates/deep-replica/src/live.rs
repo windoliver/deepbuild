@@ -37,6 +37,10 @@ mod live {
             Ok(args) => args,
             Err(code) => return code,
         };
+        if view == deep_replica::FIRST_SCREEN {
+            eprintln!("deep-live: --first-screen is the replica's; deep-live draws a shipped view");
+            return 2;
+        }
         deep_app::views::set_state(deep_replica::load_state());
         let layout = Layout::shipped(&view);
         gpui_kit::application().run(move |cx| {
