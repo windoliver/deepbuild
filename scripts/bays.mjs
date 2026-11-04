@@ -4,7 +4,7 @@
 // `bays.mjs <base|change> -- <command>` claims a pair, replaces that role's bay to the tree of the worktree it runs
 // from, runs the command there, seals the bay, releases the pair and exits with the command's status. A proof claims
 // one pair for its base and change bays with `claimPair` (#1118), and every copy it makes is a use of one of them.
-import { spawn, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync, writeSync } from 'node:fs';
 import { constants, homedir, tmpdir } from 'node:os';
@@ -14,9 +14,11 @@ import { acquire, holds, release } from './throttle.mjs';
 
 // What a bay keeps across runs: its builds, and the git folder it gets anew each run.
 const KEPT = ['.git', 'target', 'node_modules'];
-// proof-change.mjs reads with TypeScript, so only the CLI loads it: perf imports replace and walk from a checkout or
-// a test's fixture that may have no node_modules.
-let git, listFiles;
+// Git as proof-change.mjs reads it, and the files it lists there. That module loads TypeScript, and perf imports
+// replace and walk from a checkout or a test's fixture that may have no node_modules, so bays reads git itself.
+const git = (root, args, options = {}) => execFileSync('git', ['-c', 'core.quotePath=false', ...args], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 30, stdio: ['ignore', 'pipe', 'pipe'], ...options });
+const listFiles = (root) => [...new Set(git(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).split('\0').filter(Boolean))]
+  .filter((path) => { try { return !lstatSync(join(root, path)).isDirectory(); } catch { return false; } });
 const bays = () => join(homedir(), 'deepbuild-bays');
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const real = (path) => {
@@ -436,7 +438,6 @@ class Pair {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  ({ git, listFiles } = await import('./proof-change.mjs'));
   const args = process.argv.slice(2);
   const [role, split] = args;
   const command = args.slice(2);
