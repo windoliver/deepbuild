@@ -1,0 +1,66 @@
+Base commit: 407d600d (origin/main, merge of #1205), workspaces built (npm run build --workspaces), Node 24.22.0,
+target/debug/deep-hook built (cargo build --locked -q -p deep-hook), Linux arm64, November 3, 2026. deep-app and
+deep-replica were not built: deep-app doesn't build on Linux at the base (its `image` dependency is macOS-only) and
+the replica draws on macOS only.
+
+Command:
+  npx vitest run --root tests/acceptance/1002 --no-file-parallelism
+
+Result:
+  Test Files  3 failed | 1 passed (4)
+       Tests  7 failed | 9 passed (16)
+    Duration  59 s
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1002/tsconfig.json reports no errors.
+
+The three CLI tests fail at an assertion, for the bug: the first deep command keys on ~/.deepbuild existing, and
+nothing writes a finished record.
+
+cli.test.ts  "#1002.4273b842 with Claude Code's settings file unparseable, the first deep command's setup fails ..."
+  AssertionError: #1002 while setup hasn't finished, the next deep command (deep status) must offer Set up again
+  whatever else exists, which fails naming /tmp/da1002-pP1QGA/h/.claude/settings.json while it is still unparseable;
+  it ran no setup: exit 3, stdout "", stderr "deep status: no hub could be read at unix:/tmp/da1002-pP1QGA/h/.deepbuild/
+  hub.sock (... connect ENOENT ...), and there is no database to read; start it with deep hub start.\n"
+  (The first deep status did fail naming the file, exit 1, and left ~/.deepbuild with originals/ in it.)
+
+cli.test.ts  "#1002.8e3f037e after the file is fixed, the next deep command sets up, finishes and writes its record ..."
+  AssertionError: #1002 after the file is fixed, the next deep command (deep status) must set up, finish and do its own
+  job, exit 0: exit 3, stdout "", stderr "deep status: no hub could be read at unix:/tmp/da1002-PK8aWc/h/.deepbuild/
+  hub.sock (...); start it with deep hub start.\n"
+
+cli.test.ts  "#1002.8e3f037e a setup whose hub doesn't start writes no finished record and is offered again ..."
+  AssertionError: #1002 after a setup whose hub didn't start, the next deep command (deep status) must offer Set up
+  again, finish it and do its own job, exit 0: exit 3, stdout "", stderr "deep status: no hub could be read at
+  unix:/tmp/da1002-pTdwoZ/h/.deepbuild/hub.sock (...); start it with deep hub start.\n"
+  (The first deep status, its login service starting nothing, failed after 15 s naming the hub: "deep setup: the hub
+  didn't start through its login service; deep doctor names what is missing.", exit 3.)
+
+The four app tests are BLOCKED on this box, not run:
+
+app.test.ts      #1002.4273b842, #1002.8e3f037e (x2)
+screens.test.ts  #1002.1f6f1740
+  Error: BLOCKED: the app and its replica draw on macOS only; this is linux
+
+Expected at the base on macOS (not run here): #1002.4273b842's app test gets past the app's Set up (the base's
+deep-app --set-up fails naming the file, exit 1) and fails at reopening the app:
+  #1002 reopening the app (deep-replica --first-screen) must draw the app's first screen for this home and exit 0:
+  exit 2, ... stderr "deep-replica: unknown argument --first-screen\n"
+The base has no first-screen surface. What its first screen would say, "0 asks need you" with no Set up button, is
+the planted first screen folder-check below, which fails naming the count.
+
+twins.test.ts passes at the base (9 tests), as it must; rerun after the CLI twins' redraft (README, Disputes 9), still
+9 passed, on November 3, 2026: each wrong program fails with its own message, and each
+control passes.
+  (control finishes-once)              passes the settings-fixed and the hub scenarios
+  (wrong program record-first)         "#1002 the first deep command (deep status)'s setup stopped, so it must leave no
+                                        record that it finished, but .../setup-finished.json holds ..."
+  (wrong program folder-check)         "#1002 while setup hasn't finished, the next deep command (deep status) must
+                                        offer Set up again ..." and "#1002 after a setup whose hub didn't start, ..."
+  (wrong program no-version)           "#1002 ...'s record must name its version, "0.0.0" (deep --version) ..."
+  (control right)                      passes the first screen's judges; offers no Set up once the record exists
+  (wrong program folder-check screen)  "#1002 the count must read setup didn't finish, never 0: the first screen reads
+                                        "0 asks need you""
+  (wrong program count-reads-zero)     the same message
+  (wrong program no-reason)            "#1002 reopening the app must show why setup stopped, naming ..."
+  (taste call)                         none recorded, or one on other screenshots or by nobody: INCONCLUSIVE; "looks
+                                        wrong": fails; "looks right" on these screenshots: passes
