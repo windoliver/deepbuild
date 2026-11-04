@@ -7,6 +7,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import { call } from './client.js';
 import { CAN_RUN, CANT_RUN } from './hook-programs.js';
+import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { rowReadings } from './codex-loops.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
@@ -31,14 +32,16 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const asks = new Map(((await query("SELECT session_id, COUNT(*) AS n, MIN(created) AS since FROM asks WHERE status IN ('open', 'later') AND session_id IS NOT NULL GROUP BY session_id")) as { session_id: string; n: number; since: number | null }[]).map((r) => [r.session_id, r]));
   const gone = new Set(((await query("SELECT DISTINCT session_id FROM events WHERE kind = 'session.gone' AND session_id IS NOT NULL")) as { session_id: string }[]).map((r) => r.session_id));
   const due = await duePromises(query);
-  // The newest reading that says why a session's holds don't apply (#39): watch-only past its facts, or a stop not held.
-  const noted = ((await query("SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND session_id IS NOT NULL AND (json_extract(data, '$.reading') LIKE '%watch-only%' OR json_extract(data, '$.reading') LIKE 'Hooks can run again%' OR (json_extract(data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = events.session_id AND later.log_pos > events.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) ORDER BY log_pos")) as { session_id: string; text: string }[]);
+  // The newest reading that says why a session's holds don't apply (#39): watch-only past its facts, a stop not held,
+  // or a call DeepBuild denied that ran anyway (#1033).
+  const noted = ((await query("SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND session_id IS NOT NULL AND (json_extract(data, '$.reading') LIKE '%watch-only%' OR json_extract(data, '$.reading') LIKE 'DeepBuild denied % and it ran anyway%' OR json_extract(data, '$.reading') LIKE 'Its Claude Code home loads no mod%' OR json_extract(data, '$.reading') LIKE 'Hooks can run again%' OR (json_extract(data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = events.session_id AND later.log_pos > events.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) ORDER BY log_pos")) as { session_id: string; text: string }[]);
   // Hooks that can run again (#993) take back each "hooks can't run" before them, and show nothing of their own.
   const notes = new Map<string, string>();
   const shown = new Map<string, string[]>();
   for (const r of noted) {
     const kept = shown.get(r.session_id) ?? [];
-    shown.set(r.session_id, r.text.startsWith(CAN_RUN) ? kept.filter((t) => !t.startsWith(CANT_RUN)) : [...kept, r.text]);
+    // A home that no longer loads an overriding mod takes back its watch-only line the same way (#1033).
+    shown.set(r.session_id, r.text.startsWith(CAN_RUN) ? kept.filter((t) => !t.startsWith(CANT_RUN)) : r.text.startsWith(MODS_GONE) ? kept.filter((t) => !t.startsWith(MODS_WATCH)) : [...kept, r.text]);
     const last = shown.get(r.session_id)!.at(-1);
     if (last) notes.set(r.session_id, last);
     else notes.delete(r.session_id);

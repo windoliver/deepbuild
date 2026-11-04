@@ -351,6 +351,32 @@ export interface AdapterFacts {
     package: AdapterFactsText;
     version: AdapterFactsVersion;
   };
+  mods?: {
+    readBy: AdapterFactsText;
+    conformance: AdapterFactsText;
+    since: {
+      terminal: AdapterFactsVersion;
+      desktop: AdapterFactsVersion;
+    };
+    validate: {
+      args: AdapterFactsTexts;
+      hooks: AdapterFactsText;
+      calls: AdapterFactsText;
+    };
+    overrides: {
+      event: AdapterFactsText;
+      past: AdapterFactsText;
+    };
+    promptCalls: AdapterFactsTexts;
+    holdsWhen: Array<{
+      case: "managed" | "login" | "plan" | "interactive";
+      text: AdapterFactsText;
+      subscriptionTypes?: AdapterFactsTexts;
+      mode?: AdapterFactsText;
+      since?: AdapterFactsVersion;
+      tools?: AdapterFactsTexts;
+    }>;
+  };
   classifyStop?: AdapterFactsOperation;
   skills?: AdapterFactsOperation;
 }
@@ -3785,6 +3811,30 @@ export interface ExtensionManifest {
   codes?: Array<string>;
   notices?: Array<string>;
   actions?: Array<string>;
+}
+
+/** guard.overridden@1 */
+export interface GuardOverridden {
+  v: 1;
+  id: string;
+  kind: "guard.overridden";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    tool: string;
+    label: string;
+    guard: string;
+    send: boolean;
+    mods: Array<string>;
+    mods_unread: string | null;
+  };
+  evidence?: Array<string>;
 }
 
 /** guard@1 */
