@@ -47939,12 +47939,12 @@ pub struct TaskWithdrawnData {
 
 impl Contract for TaskWithdrawnData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &[])?;
+        deep_contracts::members(value, at, &[])?;
         Ok(Self {
         })
     }
     fn to_json(&self) -> Value {
-        let mut members = Vec::new();
+        let members = Vec::new();
         Value::Object(members)
     }
 }
