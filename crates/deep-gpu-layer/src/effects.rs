@@ -1216,12 +1216,14 @@ pub fn exact_bits(app: &mut App) -> (String, BTreeMap<String, String>) {
 /// `exact`: every shipped exact operator on its exactness fixture on this GPU, as a record.
 pub fn exact(app: &mut App, out: &str) -> Value {
     let (name, ops) = exact_bits(app);
+    let steps = crate::steps_ref::exact_steps(app);
     let record = json!({
         "format": 1,
         "gpu": {"name": name, "family": family(&name)},
         "os": crate::golden::os(),
         "wgpu": env!("DEEP_WGPU_VERSION"),
         "operators": ops,
+        "steps": steps,
     });
     let bytes = serde_json::to_vec_pretty(&record).unwrap_or_default();
     match write_named(out, &bytes, "json") {
@@ -1255,18 +1257,22 @@ pub fn cross_gpu(app: &App, call: &Value) -> Value {
     families.sort();
     families.dedup();
     if families.len() < 2 && app.planted != Some(Planted::PassesOneGpu) {
+        let missing = crate::steps_ref::missing_family(families.first().map_or("", String::as_str));
         return json!({
             "result": "BLOCKED",
             "families": families,
-            "asks": [{"kind": "unblock", "ask": "run deep-gpu's exact call on a GPU of another family (an M1 beside this M3) and compare its record", "needs": "a second GPU family"}],
+            "asks": [{"kind": "unblock", "ask": format!("run deep-gpu's exact call on an {missing} GPU (another family than this one) and compare its record"), "needs": "a second GPU family", "gpu": missing}],
         });
     }
     let mut differs = Vec::new();
     if let Some(first) = records.first() {
-        for (name, bits) in first["operators"].as_object().into_iter().flatten() {
-            for r in &records[1..] {
-                if r["operators"][name] != *bits {
-                    differs.push(json!({"operator": name, "families": [first["gpu"]["family"], r["gpu"]["family"]]}));
+        // Every shipped exact operator's bits, then every exact public step's.
+        for (field, what) in [("operators", "operator"), ("steps", "step")] {
+            for (name, bits) in first[field].as_object().into_iter().flatten() {
+                for r in &records[1..] {
+                    if r[field][name] != *bits {
+                        differs.push(json!({what: name, "families": [first["gpu"]["family"], r["gpu"]["family"]]}));
+                    }
                 }
             }
         }

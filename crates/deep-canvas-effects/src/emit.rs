@@ -882,18 +882,18 @@ pub const MAT_GEOM: &str = "struct MatGeom {
 ";
 
 /// What a material operator's function gives: `base` (rgb, alpha), `emission` (rgb),
-/// `mr` (metallic, roughness) and `set`, bit flags of the outputs it wrote: 1 base color,
-/// 2 alpha, 4 emission, 8 metallic, 16 roughness. The renderer keeps the material's own value
-/// for every output not set.
+/// `mr` (metallic, roughness) and `wrote`, bit flags of the outputs it wrote: 1 base color,
+/// 2 alpha, 4 emission, 8 metallic, 16 roughness (not `set`, a WGSL reserved word). The
+/// renderer keeps the material's own value for every output not set.
 pub const MAT_OUT: &str = "struct MatOut {
     base: vec4<f32>,
     emission: vec4<f32>,
     mr: vec4<f32>,
-    set: vec4<u32>,
+    wrote: vec4<u32>,
 };
 ";
 
-/// The bit each material output sets in `MatOut.set`.
+/// The bit each material output sets in `MatOut.wrote`.
 pub const MAT_OUTPUTS: &[(&str, u32)] = &[
     ("base_color", 1),
     ("alpha", 2),
@@ -949,7 +949,7 @@ pub fn material(c: &Checked, options: Options, groups: [u32; 2]) -> String {
             _ => format!("o.mr.y = {};", cast(&e, &t, &Ty::F32)),
         };
         w.line(&line);
-        w.line(&format!("o.set.x = o.set.x | {bit}u;"));
+        w.line(&format!("o.wrote.x = o.wrote.x | {bit}u;"));
     }
     w.line("return o;");
     let mut m = String::new();
