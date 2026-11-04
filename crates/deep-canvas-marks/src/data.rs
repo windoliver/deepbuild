@@ -595,11 +595,39 @@ pub fn mark_set(
     } else {
         role(palette, fill_role, &format!("{path}/paint"))?
     };
+    // A stepped fill over the rows: each row one color by its rank, in row order or by key.
+    let steps = paint
+        .and_then(|pt| pt.get("fill"))
+        .and_then(|f| f.get("steps"))
+        .and_then(Value::as_object)
+        .filter(|s| s.get("over").and_then(Value::as_str) == Some("rows"));
+    let row_steps = match steps {
+        Some(s) => {
+            let stops = crate::paint::row_stops(palette, s, &format!("{path}/paint/fill/steps"))?;
+            let mut rank: Vec<usize> = (0..n).collect();
+            if s.get("by").and_then(Value::as_str) == Some("key") {
+                let num = |k: &str| k.parse::<f64>().ok();
+                rank.sort_by(|a, b| match (num(&keys[*a]), num(&keys[*b])) {
+                    (Some(x), Some(y)) => x.total_cmp(&y),
+                    _ => keys[*a].cmp(&keys[*b]),
+                });
+            }
+            let mut at = vec![0.0; n];
+            for (r, i) in rank.into_iter().enumerate() {
+                at[i] = if n > 1 { r as f64 / (n - 1) as f64 } else { 0.0 };
+            }
+            Some((stops, at))
+        }
+        None => None,
+    };
     // A row's color: its `role` through a scale whose range is palette roles, or the paint's.
     let color_of = |i: usize| -> Result<[u8; 3], Refused> {
         let rpath = format!("{path}/encode/role");
         match props.get("role") {
-            None => Ok(color),
+            None => Ok(match &row_steps {
+                Some((stops, at)) => crate::paint::sample_stops(stops, at[i]),
+                None => color,
+            }),
             Some(Encoded::Const(Value::String(r))) => role(palette, r, &rpath),
             Some(Encoded::Column {
                 column,

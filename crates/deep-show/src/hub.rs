@@ -1247,6 +1247,19 @@ impl<'a> Hub<'a> {
 
     /// A new session for a document: its epochs from the scenario's start, the look's tokens
     /// and the record's readings.
+    /// The look a document names by asset, resolved over the bundled faces (#1162).
+    fn look_of(&self, doc: &Value) -> Option<Look> {
+        let name = doc.pointer("/look/asset")?.as_str()?;
+        let id = name.split('@').next()?;
+        let sha = doc.pointer(&format!("/assets/{id}/sha256"))?.as_str()?;
+        let bytes = (sha.len() == 64)
+            .then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())
+            .flatten()?;
+        let def: Value = serde_json::from_slice(&bytes).ok()?;
+        let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
+        look::resolve(&def, &bundled).ok()
+    }
+
     /// Mark set columns that read the agent's table, inlined from the evidence store as
     /// `deep-canvas-render` reads them (#397, #1162): what every frame of a revision draws.
     pub(crate) fn inline_tables(
@@ -1796,6 +1809,13 @@ impl<'a> Hub<'a> {
             &writer,
             &title,
         );
+        // The document's look (Document envelope: `look: {asset: look@major}`), read from the
+        // evidence store by its asset's hash; one the store doesn't hold leaves the shipped look.
+        if let Ok(doc) = &stamped {
+            if let Some(look) = self.look_of(doc) {
+                self.look = look;
+            }
+        }
         let mut notices = Vec::new();
         // #403: in a claim that names the document, an item of a kind this build doesn't know
         // blocks its checks, naming the kind, while the rest still draws.
