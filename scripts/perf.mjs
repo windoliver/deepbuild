@@ -175,7 +175,7 @@ function keptCopy(side, fill) {
       }
     });
     const { written, deleted } = bays.replace(directory, { from, paths });
-    console.log(`perf: ${side} copy ${directory}: wrote ${written} files, deleted ${deleted}; rewrote what the last run left with other bytes: ${rewritten.join(', ') || 'nothing'}`);
+    console.log(`perf: ${side} copy ${directory}: wrote ${written.length} files, deleted ${deleted}; rewrote what the last run left with other bytes: ${rewritten.join(', ') || 'nothing'}`);
   } finally {
     rmSync(from, { recursive: true, force: true });
   }
