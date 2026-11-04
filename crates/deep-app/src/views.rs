@@ -19,8 +19,6 @@ use gpui_kit::base::dock::{
 use gpui_kit::base::ObservedElement;
 use gpui_kit::{prelude::FluentBuilder as _, *};
 
-use serde_json::Value;
-
 use crate::{canvas, chrome, events::Inbox, states, text};
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
@@ -246,33 +244,90 @@ fn title(
         .font_weight(FontWeight::SEMIBOLD)
 }
 
-/// What the views draw from the one record reader: its events, its open asks and its sessions.
+/// What a view draws from the one record reader, read in its borrow so no event is copied to draw a frame, and only
+/// what that view shows: its open asks, its sessions with their task's title and state, and the deadlines of the
+/// first session's asks.
 struct Record {
-    events: Vec<Value>,
     /// Open asks, oldest first: `(handle, session)`.
     open: Vec<(String, String)>,
-    sessions: Vec<String>,
+    /// The sessions the view shows, in the order each first appears, with its task's title and its state: every
+    /// one for the sidebar, the first for a session's page and its line, none for the others.
+    sessions: Vec<(String, String, states::State)>,
+    /// The sidebar's rows (#992), one per session: its words after the title and the status-map entry its mark draws.
+    rows: Vec<(String, &'static str)>,
+    /// When each of the first session's open asks defaults, in event order: on a session's page only.
+    deadlines: Vec<u64>,
 }
 
-fn record() -> Record {
-    crate::record::with_view(|view| Record {
-        events: view.events.clone(),
-        open: view
-            .inbox
+/// What the sidebar draws: every session, in the order each first appears, with its task's title and its state.
+pub fn sidebar() -> Vec<(String, String, states::State)> {
+    record(Kind::Sidebar).sessions
+}
+
+fn record(kind: Kind) -> Record {
+    crate::record::with_view(|view| read(view, kind))
+        .unwrap_or_else(|| read(&crate::record::View::default(), kind))
+}
+
+/// What the view `kind` draws of `view`.
+fn read(view: &crate::record::View, kind: Kind) -> Record {
+    let open: Vec<(String, String)> = view
+        .inbox
+        .iter()
+        .filter(|row| row["status"] != "closed")
+        .map(|row| {
+            let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
+            (text("ask"), text("session"))
+        })
+        .collect();
+    let table = view.table();
+    // A session's page and its line draw the first session, or the one named "" when the record has none.
+    let sessions: Vec<(String, String, states::State)> = match kind {
+        Kind::Sidebar => table.every_session(),
+        Kind::Session | Kind::Line => {
+            let session = table.sessions().first().cloned().unwrap_or_default();
+            vec![(
+                session.clone(),
+                table.title(&session),
+                table.state(&session),
+            )]
+        }
+        Kind::Home | Kind::NeedsYou => Vec::new(),
+    };
+    let deadlines = match (kind, sessions.first()) {
+        (Kind::Session, Some((first, ..))) => {
+            let mine: Vec<&String> = open
+                .iter()
+                .filter(|(_, of)| of == first)
+                .map(|(handle, _)| handle)
+                .collect();
+            table
+                .open_asks(None)
+                .into_iter()
+                .filter(|ask| mine.contains(&&states::handle(ask)))
+                .filter_map(|ask| table.deadline(ask))
+                .collect()
+        }
+        _ => Vec::new(),
+    };
+    let rows = match kind {
+        Kind::Sidebar => sessions
             .iter()
-            .filter(|row| row["status"] != "closed")
-            .map(|row| {
-                let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
-                (text("ask"), text("session"))
-            })
+            .map(|(session, ..)| table.row(session, now()))
             .collect(),
-        sessions: states::sessions(&view.events),
-    })
-    .unwrap_or(Record {
-        events: Vec::new(),
-        open: Vec::new(),
-        sessions: Vec::new(),
-    })
+        _ => Vec::new(),
+    };
+    Record {
+        open,
+        sessions,
+        rows,
+        deadlines,
+    }
+}
+
+/// The session a session's page and its line draw, with its task's title and state.
+fn first(record: &Record) -> (String, String, states::State) {
+    record.sessions[0].clone()
 }
 
 /// The virtual clock's time where one runs (the replica), else the system's.
@@ -294,7 +349,12 @@ fn status(
     state: &states::State,
     text: String,
 ) -> ObservedElement<Stateful<Div>> {
-    let glyph = states::glyph(state.entry());
+    marked(id, state.entry(), text)
+}
+
+/// A status mark for a status-map entry, and its words.
+fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElement<Stateful<Div>> {
+    let glyph = states::glyph(entry);
     let name = format!("{glyph} {text}");
     div()
         .id(id)
@@ -309,7 +369,7 @@ fn status(
             div()
                 .size(px(CORE))
                 .flex_none()
-                .bg(rgb(states::color(state.entry()))),
+                .bg(rgb(states::color(entry))),
         )
         .child(glyph)
         .child(text)
@@ -319,7 +379,7 @@ impl Render for Shipped {
     fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let chrome = chrome::of(window);
         let decorations = current_state();
-        let record = record();
+        let record = record(self.kind);
         let now = now();
         let open = record.open.len();
         let page = div()
@@ -334,20 +394,17 @@ impl Render for Shipped {
             Kind::Sidebar => page
                 .bg(chrome.raised)
                 .child(title("sidebar-title", "Sessions"))
-                .children(record.sessions.iter().enumerate().map(|(index, session)| {
-                    let state = states::state(&record.events, session);
-                    let text = format!(
-                        "{} · {}",
-                        states::title(&record.events, session),
-                        state.text(now)
-                    );
-                    status(("sidebar-session", index), &state, text)
-                        .role(Role::Button)
-                        .h(px(24.))
-                        .px_1()
-                        .rounded_sm()
-                        .hover(|style| style.bg(chrome.hover))
-                })),
+                .children(record.sessions.iter().zip(&record.rows).enumerate().map(
+                    |(index, ((_, task, _), (words, entry)))| {
+                        let text = format!("{task} · {words}");
+                        marked(("sidebar-session", index), entry, text)
+                            .role(Role::Button)
+                            .h(px(24.))
+                            .px_1()
+                            .rounded_sm()
+                            .hover(|style| style.bg(chrome.hover))
+                    },
+                )),
             Kind::Home => page
                 .child(title("home-title", "Home"))
                 .child(label("home-needs-you", format!("{open} asks need you"))),
@@ -372,29 +429,20 @@ impl Render for Shipped {
                 }),
             ),
             Kind::Session => {
-                let session = record.sessions.first().cloned().unwrap_or_default();
-                let mine: Vec<&String> = record
-                    .open
-                    .iter()
-                    .filter(|(_, of)| *of == session)
-                    .map(|(handle, _)| handle)
-                    .collect();
+                let (session, task, state) = first(&record);
+                let mine = record.open.iter().filter(|(_, of)| *of == session).count();
                 let hours: Vec<f64> = record
-                    .events
+                    .deadlines
                     .iter()
-                    .filter(|event| mine.contains(&&states::handle(event)))
-                    .filter_map(|ask| states::deadline(&record.events, ask))
-                    .map(|deadline| (deadline as f64 - now as f64) / 3_600_000.0)
+                    .map(|deadline| (*deadline as f64 - now as f64) / 3_600_000.0)
                     .collect();
                 let points = hours.len();
-                let state = states::state(&record.events, &session);
-                let task = states::title(&record.events, &session);
                 // The line's caption and its readout are the canvas's text (#390): the readout
                 // is a bound number, tabular and never cut, holding its widest value's room.
                 let caption = text::Label::new("Hours to each deadline");
                 let readout = text::Label {
                     bound: true,
-                    ..text::Label::new(mine.len().to_string())
+                    ..text::Label::new(mine.to_string())
                 };
                 page.child(title("session-title", format!("Session {session}")))
                     // The return card: what came back from the session's last stop.
@@ -443,9 +491,7 @@ impl Render for Shipped {
             }
             Kind::Line => {
                 // The session's line: from its task to where it stands now.
-                let session = record.sessions.first().cloned().unwrap_or_default();
-                let state = states::state(&record.events, &session);
-                let task = states::title(&record.events, &session);
+                let (_, task, state) = first(&record);
                 page.bg(chrome.raised).child(status(
                     "line-status",
                     &state,

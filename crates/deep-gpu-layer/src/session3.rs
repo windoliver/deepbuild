@@ -34,6 +34,18 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         outlines_before_upscale: p == Some(Planted::OutlinesBeforeUpscale),
         status_before_upscale: p == Some(Planted::StatusBeforeUpscale),
         status_without_depth: p == Some(Planted::StatusWithoutDepth),
+        winding_ignores_determinant: p == Some(Planted::WindingIgnoresDeterminant),
+        ties_by_submission: p == Some(Planted::TiesBySubmission),
+        spot_counts_cone: p == Some(Planted::SpotCountsCone),
+        status_before_tone_map: p == Some(Planted::StatusBeforeToneMap),
+        labels_before_upscale: p == Some(Planted::LabelsBeforeUpscale),
+        premixed_metallic: p == Some(Planted::PremixedMetallic),
+        uncompensated_lobe: p == Some(Planted::UncompensatedLobe),
+        compensates_environment_only: p == Some(Planted::CompensatesEnvironmentOnly),
+        draws_black: p == Some(Planted::DrawsBlack),
+        drops_clouds: p == Some(Planted::DropsClouds),
+        cascade_cache_keeps_stale: p == Some(Planted::CascadeCacheKeepsStale),
+        prefilter_over_frames: p == Some(Planted::PrefilterOverFrames),
     }
 }
 
@@ -190,6 +202,8 @@ pub struct Drawn {
     /// The slot's BGRA bytes.
     pub bytes: Option<Vec<u8>>,
     pub targets: Option<(Vec<u8>, Vec<u8>)>,
+    /// The linear image the output pass read, f32 RGBA, read with the targets (#418).
+    pub pre_tone: Option<Vec<u8>>,
     /// The frame's GPU time and each pass's share, ms.
     pub timing: Option<(f64, std::collections::BTreeMap<String, f64>)>,
     /// How many pixels the status guard moved, when the stage ran and the frame asked.
@@ -294,6 +308,11 @@ pub fn draw_on(
                 bytes,
                 targets: if read_targets && !noop {
                     r.read_targets(&device)
+                } else {
+                    None
+                },
+                pre_tone: if read_targets && !noop {
+                    r.read_pre_tone(&device)
                 } else {
                     None
                 },

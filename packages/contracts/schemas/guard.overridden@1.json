@@ -1,0 +1,138 @@
+{
+  "title": "guard.overridden@1",
+  "description": "A call DeepBuild denied at PreToolUse ran anyway (#1033): its PostToolUse or PostToolUseFailure arrived for the same tool-use ID, as when a Claude Code mod's tool.check approved it past the deny. The session's claims can't pass on its own evidence, and a send among them raises one ask.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "guard.overridden"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "call": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The agent's ID for the call, as its tool.before has it."
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The tool the call named."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The call as a person reads it: a shell call's command, an MCP call's server and tool, or a file call's paths."
+        },
+        "guard": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "What denied it: the guard entries in rules.json by name, or the gate's rule."
+        },
+        "send": {
+          "type": "boolean",
+          "description": "Whether the call sends: a push, a merge, a dispatch, a send or a delete, which may already have left."
+        },
+        "mods": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "A mod's name."
+          },
+          "description": "The mods of the session's Claude Code home that handle tool.check, any of which could have approved it."
+        },
+        "mods_unread": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8192,
+          "description": "Why the home's mods couldn't be read, so mods may be short; null when they were read."
+        }
+      },
+      "required": [
+        "call",
+        "tool",
+        "label",
+        "guard",
+        "send",
+        "mods",
+        "mods_unread"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

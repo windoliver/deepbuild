@@ -19,9 +19,10 @@ const DEFAULT_TIMEOUT = 60;
 /**
  * The hooks the adapter maps (#18), each one entry; Stop also carries the waiter. FileChanged maps to no event: it is
  * the route a line takes into the terminal while a call still runs (#120), fired by the session's ticker file, which
- * the SessionStart reply names in `watchPaths`.
+ * the SessionStart reply names in `watchPaths`. Notification, Elicitation and ElicitationResult say only whether the
+ * session waits on you (#992).
  */
-export const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'StopFailure', 'SessionEnd', 'FileChanged'];
+export const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'StopFailure', 'SessionEnd', 'FileChanged', 'Notification', 'Elicitation', 'ElicitationResult'];
 const TOOL_HOOKS = new Set(['PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure']);
 
 export const claudeSettings = (): string => join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'settings.json');
@@ -58,12 +59,18 @@ export const installed = (root: string): Installed | undefined => {
 };
 export const commands = (record: Installed): Set<string> => new Set(Object.values(record.hooks).flatMap((groups) => groups.flatMap((g) => (g.hooks as Obj[]).map((h) => String(h.command)))));
 
+/**
+ * The command of one of our entries: deep-hook as Claude Code's `claude-code` adapter, with its argument. Claude Code
+ * runs it with `/bin/sh -c`, and `exec` makes deep-hook the agent's own child, whose parent the hub checks a hook by:
+ * dash runs a lone command in a child of the shell, a new process for every hook.
+ */
+export const claudeCommand = (deepHook: string, arg: string): string => `exec '${deepHook.replaceAll("'", `'\\''`)}' claude-code ${arg}`;
+
 /** Our groups: one entry per hook, plus the waiter under Stop and under StopFailure. Each runs deep-hook, or the deep CLI's waiter. */
 export function ourGroups(deepHook: string, waiter: string, waiterTimeoutS: number): Record<string, Obj[]> {
-  const q = (path: string) => `'${path.replaceAll("'", `'\\''`)}'`;
   const groups: Record<string, Obj[]> = {};
   for (const hook of HOOKS) {
-    const entry = { type: 'command', command: `${q(deepHook)} claude-code ${hook}` };
+    const entry = { type: 'command', command: claudeCommand(deepHook, hook) };
     groups[hook] = [TOOL_HOOKS.has(hook) ? { matcher: '*', hooks: [entry] } : { hooks: [entry] }];
   }
   // A background waiter wakes an idle session with an answer; its timeout covers your longest ask deadline. A turn

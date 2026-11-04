@@ -160,6 +160,9 @@ enum Event {
     Camera(String, f64),
     Rung(String, Rung),
     Canonical(String, Purpose, u64, [u32; 2]),
+    /// A window shown or hidden, focused or not, from this frame on: the headless window has no
+    /// occlusion or activation of its own, so the call says what the app's window would.
+    Window(usize, Option<bool>, Option<bool>),
 }
 
 struct Charge {
@@ -356,9 +359,26 @@ fn parse(call: &Value) -> Result<Args, Value> {
                 return Err(bad("canonical is {session, purpose, frame, size}"));
             };
             Event::Canonical(s.to_string(), p, f, size)
+        } else if let Some(w) = e.get("window_state") {
+            let window = match w.get("window") {
+                None | Some(Value::Null) => Some(0),
+                Some(id) => windows.iter().position(|x| Some(x.as_str()) == id.as_str()),
+            };
+            let flag = |key: &str| match w.get(key) {
+                None => Ok(None),
+                Some(v) => v.as_bool().map(Some).ok_or(()),
+            };
+            let (Some(window), Ok(visible), Ok(focused)) =
+                (window, flag("visible"), flag("focused"))
+            else {
+                return Err(bad(
+                    "window_state is {window?, visible?: bool, focused?: bool}",
+                ));
+            };
+            Event::Window(window, visible, focused)
         } else {
             return Err(bad(
-                "an event is open, close, revise, hold, camera, rung or canonical",
+                "an event is open, close, revise, hold, camera, rung, canonical or window_state",
             ));
         };
         events.push((frame, ev));
@@ -708,6 +728,8 @@ struct ViewRow {
     binds: Vec<String>,
     rung: Option<Rung>,
     drawn: bool,
+    /// Its window hidden, or unfocused under a class that pauses then: nothing drawn or metered.
+    paused: bool,
     gpu: f64,
     cpu: f64,
     scale: f64,
@@ -734,6 +756,8 @@ struct FrameRow {
     views: (usize, usize),
     passes: (usize, usize),
     allocs: Option<u64>,
+    /// When its views presented, in ms from the first frame's due time; `None` when none drew.
+    presented_ms: Option<f64>,
     /// Its pixel hashes and memory, when the call reports them.
     extra: Map<String, Value>,
 }
@@ -802,6 +826,8 @@ struct Live {
     app: AppMeter,
     canonicals: Vec<Value>,
     planted_log: Vec<Vec<f64>>,
+    /// Each window's (visible, focused), by index in `args.windows`.
+    shown: Vec<(bool, bool)>,
 }
 
 impl Live {
@@ -845,6 +871,7 @@ impl Live {
             app: AppMeter::new(plants.ladder),
             canonicals: Vec::new(),
             planted_log: Vec::new(),
+            shown: vec![(true, true); args.windows.len()],
             device,
             args,
             plants,
@@ -1315,9 +1342,16 @@ impl Live {
         // The window presents frame k no sooner than (k − 1) ÷ fps after the first, as a display
         // does, so work off-screen (a rung's compile) runs beside the frames it would in the app.
         let origin = Instant::now();
+        // The last present and the ambient cap of the views it showed (the budget class table).
+        let mut last: Option<(Instant, u32)> = None;
         for frame in 1..=self.args.frames {
-            let due = origin
+            let mut due = origin
                 + std::time::Duration::from_secs_f64((frame - 1) as f64 / self.args.fps as f64);
+            // A class's ambient cap holds its views' presents at least 1 ÷ cap apart, however
+            // fast the call's clock runs; frame k still shows t = (k − 1) ÷ fps.
+            if let Some((at, cap)) = last.filter(|(_, cap)| u64::from(*cap) < self.args.fps) {
+                due = due.max(at + std::time::Duration::from_secs_f64(1.0 / f64::from(cap)));
+            }
             if let Some(wait) = due.checked_duration_since(Instant::now()) {
                 std::thread::sleep(wait);
             }
@@ -1372,6 +1406,11 @@ impl Live {
                             canonical_queue.push((s, *purpose, *of, *size));
                         }
                     }
+                    Event::Window(w, visible, focused) => {
+                        let shown = &mut self.shown[*w];
+                        shown.0 = visible.unwrap_or(shown.0);
+                        shown.1 = focused.unwrap_or(shown.1);
+                    }
                 }
                 next_event += 1;
             }
@@ -1395,10 +1434,16 @@ impl Live {
                 if self.sessions[s].state != State::Live {
                     continue;
                 }
+                // Hidden, or unfocused under a class that pauses then, it draws and submits nothing.
+                let (visible, focused) = self.shown[self.sessions[s].window];
+                let paused = !self.sessions[s]
+                    .class()
+                    .unwrap_or(Class::Figure)
+                    .draws(visible, focused);
                 let hold = self
                     .holds
                     .iter()
-                    .find(|h| h.0 == s && h.1 == frame)
+                    .find(|h| h.0 == s && h.1 == frame && !paused)
                     .map(|h| h.2);
                 let mut held = hold.map(|_| {
                     let enc = self
@@ -1408,11 +1453,12 @@ impl Live {
                     (enc, Timer::new(&self.device))
                 });
                 let rung = self.sessions[s].drawn;
-                let drawn = match rung {
-                    Rung::Freeze => false,
-                    Rung::Hz30 => frame % 2 == 1,
-                    _ => true,
-                };
+                let mut drawn = !paused
+                    && match rung {
+                        Rung::Freeze => false,
+                        Rung::Hz30 => frame % 2 == 1,
+                        _ => true,
+                    };
                 let started = Instant::now();
                 let ses = &mut self.sessions[s];
                 let drawing = Drawing {
@@ -1420,6 +1466,7 @@ impl Live {
                     offsets: ses.offsets,
                     effects_resolution: ses.ops_resolution,
                     canonical: false,
+                    settles: self.in_flight.is_empty(),
                 };
                 let (scale, upscale, history) = match ses.view.as_mut() {
                     Some(view) => {
@@ -1431,17 +1478,19 @@ impl Live {
                                 }
                                 None => (&mut encoder, &mut timer),
                             };
-                            let _ = view.draw(
-                                &self.device,
-                                &self.kit,
-                                &self.args.look,
-                                t,
-                                &drawing,
-                                &mut self.labels,
-                                enc,
-                                tim,
-                                s,
-                            );
+                            drawn = view
+                                .draw(
+                                    &self.device,
+                                    &self.kit,
+                                    &self.args.look,
+                                    t,
+                                    &drawing,
+                                    &mut self.labels,
+                                    enc,
+                                    tim,
+                                    s,
+                                )
+                                .unwrap_or(true);
                         }
                         (view.drew.0, view.drew.1, view.history_frames(&drawing))
                     }
@@ -1472,6 +1521,7 @@ impl Live {
                     binds,
                     rung: Some(rung),
                     drawn,
+                    paused,
                     gpu: 0.0,
                     cpu: cpu_of[s % 64],
                     scale,
@@ -1489,6 +1539,19 @@ impl Live {
             for &s in &drew {
                 self.fence("gpu_done", Some(s), Some(frame), None);
                 self.fence("present", Some(s), Some(frame), None);
+            }
+            let presented = (!drew.is_empty()).then(Instant::now);
+            if let Some(at) = presented {
+                let cap = drew
+                    .iter()
+                    .filter_map(|&s| {
+                        self.sessions[s]
+                            .class()
+                            .unwrap_or(Class::Figure)
+                            .ambient_fps()
+                    })
+                    .min();
+                last = cap.map(|c| (at, c));
             }
             let raised = self
                 .device
@@ -1635,6 +1698,9 @@ impl Live {
             // The meter: each writer's charges and the operator meter, the app's one budget
             // across every window, then each layer's ladder.
             for v in views_start..views_end {
+                if self.views[v].paused {
+                    continue;
+                }
                 let s = self.views[v].session;
                 let (mut gpu, mut cpu) = charged[s % 64];
                 if !self.views[v].drawn {
@@ -1672,6 +1738,7 @@ impl Live {
                 self.app.frame(
                     views
                         .iter()
+                        .filter(|v| !v.paused)
                         .map(|v| (v.session, sessions[v.session].window, v.gpu)),
                     limit,
                 )
@@ -1679,6 +1746,9 @@ impl Live {
             let app_over = self.app.last_over;
             let mut stepped_for_health = false;
             for v in views_start..views_end {
+                if self.views[v].paused {
+                    continue;
+                }
                 let (s, gpu, cpu) = (self.views[v].session, self.views[v].gpu, self.views[v].cpu);
                 let limits = self.sessions[s].limits();
                 if let Some(step) = self.sessions[s].ladder.frame(gpu, cpu, &limits, app_over) {
@@ -1765,6 +1835,7 @@ impl Live {
                 views: (views_start, views_end),
                 passes: (passes_start, self.passes.len()),
                 allocs,
+                presented_ms: presented.map(|at| at.duration_since(origin).as_secs_f64() * 1e3),
                 extra,
             });
         }
@@ -1860,7 +1931,7 @@ impl Live {
                         let mut o = json!({
                             "session": ses.id, "writer": ses.writer, "window": self.args.windows[ses.window],
                             "rung": v.rung.unwrap_or(Rung::Base).name(),
-                            "drawn": v.drawn, "charged_gpu_ms": v.gpu, "charged_cpu_ms": v.cpu,
+                            "drawn": v.drawn, "paused": v.paused, "charged_gpu_ms": v.gpu, "charged_cpu_ms": v.cpu,
                             "internal_scale": v.scale, "upscale": v.upscale, "history_frames": v.history,
                         });
                         if let Some(h) = f.extra.get("hashes") {
@@ -1874,7 +1945,7 @@ impl Live {
                     .collect();
                 let mut o = json!({
                     "frame": f.frame, "gpu_ms": f.gpu_ms, "cpu_ms": f.cpu_ms,
-                    "gpu_source": source,
+                    "gpu_source": source, "presented_ms": f.presented_ms,
                     "views": views,
                 });
                 if self.args.reports.passes {
@@ -2066,6 +2137,7 @@ fn render_canonical(
         offsets: Offsets::default(),
         effects_resolution: resolution,
         canonical: live.is_none() && surface.is_none(),
+        settles: false,
     };
     let mut timer = Timer::new(device);
     timer.begin_frame();
