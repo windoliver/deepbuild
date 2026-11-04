@@ -10,9 +10,9 @@
       "panel": "deepbuild/home",
       "entry": "crates/deep-app/src/views.rs Shipped, Kind::Home",
       "roles": [
-        "hover",
+        "ground",
         "ink_primary",
-        "raised"
+        "ink_secondary"
       ],
       "literals": []
     },

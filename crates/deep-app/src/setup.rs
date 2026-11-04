@@ -4,7 +4,7 @@
 
 use std::{
     io::ErrorKind,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Output},
 };
 
@@ -40,9 +40,21 @@ pub fn count() -> Option<&'static str> {
     }
 }
 
-/// The line under Set up: why the last setup stopped and its fix, when it kept them.
+/// The line under Set up: why the last setup stopped and its fix, when it kept them, with your home written `~`.
 pub fn reason() -> Option<String> {
-    stopped().map(|(reason, fix)| format!("Setup stopped: {}. {fix}", reason.trim_end_matches('.')))
+    let (reason, fix) = stopped()?;
+    let line = format!("Setup stopped: {}. {fix}", reason.trim_end_matches('.'));
+    let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+    // macOS resolves /tmp and /var to /private, so setup may have named either form of the same home.
+    let homes = [std::fs::canonicalize(&home).unwrap_or_default(), home];
+    Some(
+        homes
+            .iter()
+            .filter(|h| h.as_os_str().len() > 1)
+            .fold(line, |line, h| {
+                line.replace(&format!("{}/", h.display()), "~/")
+            }),
+    )
 }
 
 /// Runs `deep setup` and returns the one line, or what went wrong.

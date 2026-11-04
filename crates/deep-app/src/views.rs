@@ -405,11 +405,14 @@ impl Render for Shipped {
                         label("set-up", "Set up")
                             .role(Role::Button)
                             .aria_label("Set up")
-                            .w(px(72.))
-                            .px_2()
-                            .rounded_sm()
-                            .bg(chrome.raised)
-                            .hover(|style| style.bg(chrome.hover))
+                            // As the welcome draws it: ink on the ground, as wide as its word.
+                            .self_start()
+                            .my_1()
+                            .px_4()
+                            .rounded_md()
+                            .bg(chrome.ink_primary)
+                            .text_color(chrome.ground)
+                            .hover(|style| style.bg(chrome.ink_secondary))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.set_up = Some(
                                     crate::setup::set_up()
