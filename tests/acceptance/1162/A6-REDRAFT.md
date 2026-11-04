@@ -69,3 +69,16 @@ Proof files: `ac6-redraft-ask.json`, `ac6-redraft-ask-<planted>.json` and `ac6-r
 proof folder, named apart from the first draft's.
 
 Not run: no implementation is this job's input. `npx tsc -p tests/acceptance/1162/tsconfig.json` exits 0.
+
+## Swapped in
+
+On the implementation, the first draft (`ask.test.ts`) failed only on the quote; this redraft passed:
+
+```
+AC6 quote: undefined, not the title's text "Sales by region"
+```
+
+The first draft placed the 3D label's anchor 150 px left of the `=` sign and read its text box as holding the pointer
+"whichever corner or centre anchors it". The label draws centred on its anchor (203 px wide), so its box ends about
+48 px short of the pointer: no program that hit-tests the label where it draws can quote it there. The redraft took
+the swap on that mechanical defect (as #671's AC1 redraft did); `ask.test.ts` is removed.

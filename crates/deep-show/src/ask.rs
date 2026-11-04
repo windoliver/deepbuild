@@ -302,7 +302,11 @@ impl Hub<'_> {
         // The 2D items draw one document unit to a px of a view the document's size.
         let page = [0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(size[i]));
         let u = [0, 1].map(|i| at[i] * page[i] / size[i].max(1.0));
-        let session = self.evaluated(doc, t);
+        // The form the frame draws: the agent's tables and the vectors inlined (#1162).
+        let mut form = doc.clone();
+        let _ = self.inline_tables(&mut form);
+        self.inline_vectors(&mut form);
+        let session = self.evaluated(&form, t);
         let mut hits: Vec<(String, String)> = Vec::new();
         let mut quote = None;
         if let Some(drawing) = crate::frames::drawing_of(&self.sched, &session) {
