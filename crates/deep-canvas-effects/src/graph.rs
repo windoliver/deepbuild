@@ -12,6 +12,8 @@ use serde_json::{json, Map, Value};
 pub struct Issue {
     pub code: &'static str,
     pub step: Option<String>,
+    /// The operator item an issue is about, by its ID.
+    pub item: Option<String>,
     /// A field's path in the operator, `/`-separated (`wgsl`, `inputs/n`).
     pub path: Option<String>,
     /// A WGSL-subset source's line and column (1-based) and the construct there.
@@ -50,6 +52,7 @@ impl Issue {
         o.insert("severity".into(), json!("error"));
         for (k, v) in [
             ("step", &self.step),
+            ("item", &self.item),
             ("path", &self.path),
             ("construct", &self.construct),
         ] {
@@ -311,6 +314,14 @@ pub enum Blend {
     Screen,
 }
 
+/// What draws while an operator compiles, after it's switched off, and in place of a live-only
+/// operator in every canonical render.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fallback {
+    None,
+    Look,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Origin {
     Shipped,
@@ -348,6 +359,7 @@ pub struct Operator {
     pub storage: BTreeMap<String, StorageOut>,
     pub blend: Blend,
     pub declared: Option<Class>,
+    pub fallback: Fallback,
     /// ns per pixel (material, pass) or per element (compute).
     pub cost: Option<f64>,
     pub size: Size,
@@ -391,7 +403,34 @@ const CODE_FIELDS: &[&str] = &[
     "wgsl", "glsl", "hlsl", "msl", "shader", "code", "spirv", "program", "fragment", "vertex",
 ];
 /// An op's own literal fields, which its args may hold beside its ports.
-const LITERAL_FIELDS: &[&str] = &["value", "type", "to", "pick", "of"];
+const LITERAL_FIELDS: &[&str] = &["value", "type", "to", "pick", "of", "name", "space"];
+/// The look's status roles: no operator reads or writes one (Status guard).
+pub const STATUS_ROLES: &[&str] = &[
+    "pass",
+    "fail",
+    "invalid",
+    "blocked",
+    "inconclusive",
+    "running",
+    "needs_you",
+    "stale",
+    "idle",
+];
+
+/// The input a `role@1 {name}` step reads its color from.
+pub fn role_input(name: &str) -> String {
+    let safe: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("role__{safe}")
+}
 
 fn ident(s: &str) -> bool {
     !s.is_empty()
@@ -450,6 +489,14 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
         ));
         return None;
     };
+    if let Some(k) = o.keys().find(|k| CODE_FIELDS.contains(&k.as_str())) {
+        issues.push(Issue::at_step(
+            "operator_source",
+            id,
+            format!("a step carries no shader text ({k}): every step is an op from the closed list"),
+        ));
+        return None;
+    }
     let empty = Map::new();
     let given = match o.get("args") {
         None => &empty,
@@ -460,6 +507,9 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
         }
     };
     let repeat = op.starts_with("repeat@");
+    let role = (op == "role@1")
+        .then(|| given.get("name").and_then(Value::as_str))
+        .flatten();
     let mut args = BTreeMap::new();
     let mut fields = Map::new();
     for (port, v) in given {
@@ -472,6 +522,9 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
         }
     }
     let body = repeat.then(|| Box::new(body(given, issues)));
+    if let Some(name) = role {
+        args.insert("x".into(), Arg::Ref(role_input(name), None));
+    }
     Some(Step {
         op: op.into(),
         args,
@@ -711,6 +764,30 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
             BTreeMap::new()
         }
     };
+    // Each role a `role@1` step names is an input of the operator, theme-resolved like `from:
+    // {role}`; a status role is refused by the check, naming the step.
+    let mut roles = Vec::new();
+    let mut stack: Vec<&BTreeMap<String, Step>> = vec![&steps];
+    while let Some(st) = stack.pop() {
+        for s in st.values() {
+            if s.op == "role@1" {
+                if let Some(n) = s.fields.get("name").and_then(Value::as_str) {
+                    roles.push(n.to_string());
+                }
+            }
+            if let Some(b) = &s.body {
+                stack.push(&b.steps);
+            }
+        }
+    }
+    for name in roles {
+        inputs.entry(role_input(&name)).or_insert(Input {
+            ty: Ty::V(Sc::F32, 3),
+            from: From::Role(name),
+            range: None,
+            default: None,
+        });
+    }
     let mut outputs = BTreeMap::new();
     let mut storage = BTreeMap::new();
     let mut blend = Blend::Replace;
@@ -777,6 +854,18 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
             None
         }
     };
+    let fallback = match o.get("fallback").and_then(Value::as_str) {
+        None | Some("look") => Fallback::Look,
+        Some("none") => Fallback::None,
+        Some(other) => {
+            issues.push(Issue::at_path(
+                "operator_type",
+                "fallback",
+                format!("fallback is none or look, not {other}"),
+            ));
+            Fallback::Look
+        }
+    };
     let cost = o
         .get("cost")
         .and_then(|c| c.get("ns_per_px").or_else(|| c.get("ns_per_element")))
@@ -837,6 +926,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
         storage,
         blend,
         declared,
+        fallback,
         cost,
         size,
         elements: o.get("elements").and_then(Value::as_u64).unwrap_or(0) as u32,

@@ -85,6 +85,8 @@ pub struct Env<'a> {
     pub eye: [f64; 4],
     pub inputs: BTreeMap<String, Val>,
     pub textures: BTreeMap<String, &'a Image>,
+    /// A material's surface normal in object, world and view space, where `normal@1` reads it.
+    pub normals: [[f64; 3]; 3],
 }
 
 /// The fixed hash, as [`crate::emit::HASH`] writes it.
@@ -643,7 +645,7 @@ impl<'a> Prog<'a> {
         if name == "discard_if" {
             return Ok(());
         }
-        if name == "write" {
+        if name == "write" || name.starts_with("atomic_") {
             let guarded =
                 p.s.when
                     .as_ref()
@@ -660,7 +662,16 @@ impl<'a> Prog<'a> {
             if let Some((_, words)) = self.storage.iter_mut().find(|(n, _)| n == buf) {
                 let at = i.min(words.len().saturating_sub(1));
                 if let Some(w) = words.get_mut(at) {
-                    *w = v;
+                    let (x, y) = (*w as u32, v as u32);
+                    *w = match name {
+                        "atomic_add" => f64::from(x.wrapping_add(y)),
+                        "atomic_min" => f64::from(x.min(y)),
+                        "atomic_max" => f64::from(x.max(y)),
+                        "atomic_and" => f64::from(x & y),
+                        "atomic_or" => f64::from(x | y),
+                        "atomic_xor" => f64::from(x ^ y),
+                        _ => v,
+                    };
                 }
             }
             return Ok(());
@@ -945,6 +956,17 @@ impl<'a> Prog<'a> {
                 Some("position") => V::N(Sc::F32, L::of(&self.env.eye[..3])),
                 _ => one(Sc::F32, self.env.eye[3]),
             },
+            "role" => g("x"),
+            "normal" => {
+                let space = p.s.fields.get("space").and_then(Value::as_str);
+                let k = match space {
+                    Some("world") => 1,
+                    Some("view") => 2,
+                    _ => 0,
+                };
+                let n3 = self.env.normals[k];
+                V::N(Sc::F32, L::of(&n3))
+            }
             "luminance" => {
                 let c = as_l(g("rgb"), Sc::F32, 3).v;
                 one(Sc::F32, 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2])
@@ -1009,9 +1031,15 @@ impl<'a> Prog<'a> {
                         _ => v as i64 as u32,
                     }
                 };
+                let xl = g("x").l();
+                let xl = if xl.n == 1 && n > 1 {
+                    L { v: [xl.v[0]; 4], n }
+                } else {
+                    xl
+                };
                 V::N(
                     sc,
-                    g("x").l().map(|v| match sc {
+                    xl.map(|v| match sc {
                         Sc::F32 => f64::from(f32::from_bits(bitsof(v))),
                         Sc::I32 => f64::from(bitsof(v) as i32),
                         _ => f64::from(bitsof(v)),

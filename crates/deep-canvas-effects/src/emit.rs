@@ -141,6 +141,7 @@ struct W<'a> {
     indent: usize,
     /// The repeats around the step being written, innermost last, each with its accumulators.
     accs: Vec<(String, Vec<String>)>,
+    options: Options,
 }
 
 /// An accumulator's variable: named by its repeat too, so nested repeats never shadow one.
@@ -214,6 +215,25 @@ impl W<'_> {
             self.line(&format!("if {cond} {{ discard; }}"));
             return;
         }
+        if let Some(f) = name.strip_prefix("atomic_") {
+            // A statement whose result is never read.
+            let Some(Arg::Ref(buf, None)) = s.args.get("buf") else {
+                unreachable!("checked")
+            };
+            let out = &self.c.op.storage[buf];
+            let i = self.arg_as(s, "i", &Ty::U32);
+            let v = self.arg_as(s, "v", &Ty::V(out.sc, 1));
+            let f = format!("{}{}", f[..1].to_uppercase(), &f[1..]);
+            let store = format!(
+                "atomic{f}(&out_{buf}[min({i}, {}u)], {v});",
+                out.count.max(1) - 1
+            );
+            match &s.when {
+                Some(w) => self.line(&format!("if {} {{ {store} }}", ident(w))),
+                None => self.line(&store),
+            }
+            return;
+        }
         if name == "write" {
             // The index clamps into the declared count, as wgpu's runtime checks would; a bool is
             // stored as a u32 word.
@@ -226,7 +246,12 @@ impl W<'_> {
                 Sc::Bool => format!("select(0u, 1u, {})", self.raw(s, "v")),
                 sc => self.arg_as(s, "v", &Ty::V(sc, 1)),
             };
-            let store = format!("out_{buf}[min({i}, {}u)] = {v};", out.count.max(1) - 1);
+            let last = out.count.max(1) - 1;
+            let store = if atomic_bufs(&self.c.op.steps).contains(buf) {
+                format!("atomicStore(&out_{buf}[min({i}, {last}u)], {v});")
+            } else {
+                format!("out_{buf}[min({i}, {last}u)] = {v};")
+            };
             match &s.when {
                 Some(w) => self.line(&format!("if {} {{ {store} }}", ident(w))),
                 None => self.line(&store),
@@ -306,6 +331,14 @@ impl W<'_> {
                 let xt = self.arg_ty(s, "x");
                 if xt == Ty::Int {
                     format!("i32({x})")
+                } else if self.options.drops_swizzle_last && pick.len() >= 2 {
+                    // The planted emitter: a swizzle's last lane written as zero.
+                    let Ty::V(sc, n) = out.clone() else {
+                        unreachable!("a swizzle of 2 or more lanes is a vector")
+                    };
+                    let kept = &pick[..pick.len() - 1];
+                    let head = format!("({x}).{kept}");
+                    format!("vec{n}<{}>({head}, {}(0))", sc.wgsl(), sc.wgsl())
                 } else {
                     format!("({x}).{pick}")
                 }
@@ -521,7 +554,18 @@ impl W<'_> {
             }
             "size" => format!("textureDimensions({})", self.raw(s, "tex")),
             "element" => "e".into(),
-            "bitcast" => format!("bitcast<{ow}>({})", self.raw(s, "x")),
+            "bitcast" => match (self.arg_ty(s, "x"), &out) {
+                // A scalar's bits splat into every lane.
+                (Ty::V(sc, 1), Ty::V(_, n)) if *n > 1 => {
+                    format!("bitcast<{ow}>(vec{n}<{}>({}))", sc.wgsl(), self.raw(s, "x"))
+                }
+                _ => format!("bitcast<{ow}>({})", self.raw(s, "x")),
+            },
+            "role" => self.raw(s, "x"),
+            "normal" => format!(
+                "g.normal_{}",
+                s.fields.get("space").and_then(Value::as_str).unwrap_or("object")
+            ),
             "count_ones" => un(self, "countOneBits"),
             "first_leading_bit" => un(self, "firstLeadingBit"),
             "first_trailing_bit" => un(self, "firstTrailingBit"),
@@ -653,6 +697,8 @@ fn crate_unify(a: &Ty, b: &Ty) -> Ty {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Options {
     pub off_by_two: bool,
+    /// The planted emitter that drops a swizzle's last lane (writes it as zero).
+    pub drops_swizzle_last: bool,
 }
 
 /// The inputs' uniform, the sampler and the texture and storage bindings, in binding order.
@@ -688,14 +734,39 @@ fn bindings(c: &Checked, m: &mut String) {
         );
         b += 1;
     }
+    let atomic = atomic_bufs(&c.op.steps);
     for (name, out) in &c.op.storage {
+        let ty = if atomic.contains(name) {
+            format!("array<atomic<{}>>", out.sc.wgsl())
+        } else {
+            Ty::Storage(out.sc, out.count).wgsl()
+        };
         let _ = writeln!(
             m,
-            "@group(1) @binding({b}) var<storage, read_write> out_{name}: {};",
-            Ty::Storage(out.sc, out.count).wgsl()
+            "@group(1) @binding({b}) var<storage, read_write> out_{name}: {ty};"
         );
         b += 1;
     }
+}
+
+/// The storage outputs an atomic statement adds into, anywhere in the steps: WGSL holds them as
+/// atomics, so every write to them is an atomic store.
+fn atomic_bufs(steps: &std::collections::BTreeMap<String, Step>) -> std::collections::BTreeSet<String> {
+    let mut out = std::collections::BTreeSet::new();
+    let mut stack: Vec<&std::collections::BTreeMap<String, Step>> = vec![steps];
+    while let Some(st) = stack.pop() {
+        for s in st.values() {
+            if s.op.starts_with("atomic_") {
+                if let Some(Arg::Ref(b, None)) = s.args.get("buf") {
+                    out.insert(b.clone());
+                }
+            }
+            if let Some(b) = &s.body {
+                stack.push(&b.steps);
+            }
+        }
+    }
+    out
 }
 
 /// The function body's start: each value input read from the uniform.
@@ -723,9 +794,10 @@ fn prologue(w: &mut W<'_>) {
     }
 }
 
-fn writer(c: &Checked) -> W<'_> {
+fn writer(c: &Checked, options: Options) -> W<'_> {
     W {
         c,
+        options,
         out: String::new(),
         globals: String::new(),
         indent: 1,
@@ -737,7 +809,7 @@ fn writer(c: &Checked) -> W<'_> {
 /// stage and a fragment stage that runs its steps.
 pub fn pass(c: &Checked, options: Options) -> String {
     assert_eq!(c.op.kind, Kind::Pass, "a pass");
-    let mut w = writer(c);
+    let mut w = writer(c, options);
     prologue(&mut w);
     let color = w.arg(&c.op.outputs["color"]);
     let mut ret = cast(&color.0, &color.1, &Ty::V(Sc::F32, 4));
@@ -777,11 +849,144 @@ fn fs(in: VOut) -> @location(0) vec4<f32> {
     m
 }
 
+/// What a material operator's function reads of the surface it shades: its fragment position
+/// (as a pass's `pos`), and its normal in object, world and view space.
+pub const MAT_GEOM: &str = "struct MatGeom {
+    pos: vec4<f32>,
+    normal_object: vec3<f32>,
+    normal_world: vec3<f32>,
+    normal_view: vec3<f32>,
+};
+";
+
+/// What a material operator's function gives: `base` (rgb, alpha), `emission` (rgb),
+/// `mr` (metallic, roughness) and `set`, bit flags of the outputs it wrote: 1 base color,
+/// 2 alpha, 4 emission, 8 metallic, 16 roughness. The renderer keeps the material's own value
+/// for every output not set.
+pub const MAT_OUT: &str = "struct MatOut {
+    base: vec4<f32>,
+    emission: vec4<f32>,
+    mr: vec4<f32>,
+    set: vec4<u32>,
+};
+";
+
+/// The bit each material output sets in `MatOut.set`.
+pub const MAT_OUTPUTS: &[(&str, u32)] = &[
+    ("base_color", 1),
+    ("alpha", 2),
+    ("emission", 4),
+    ("metallic", 8),
+    ("roughness", 16),
+];
+
+/// Renames whole identifiers in WGSL text: `map` is (from, to).
+fn rename(text: &str, map: &[(&str, &str)]) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut word = String::new();
+    let flush = |word: &mut String, out: &mut String| {
+        let w = map
+            .iter()
+            .find(|(f, _)| f == word)
+            .map_or(word.as_str(), |(_, t)| t);
+        out.push_str(w);
+        word.clear();
+    };
+    for ch in text.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            word.push(ch);
+        } else {
+            flush(&mut word, &mut out);
+            out.push(ch);
+        }
+    }
+    flush(&mut word, &mut out);
+    out
+}
+
+/// The WGSL for a checked material operator, to be added to a renderer's own module: its frame
+/// and inputs at bind groups `groups` (frame, inputs), every global it declares prefixed `op_`
+/// so none meets the renderer's, and `fn op_material(g: MatGeom) -> MatOut`, which runs its
+/// steps for one fragment.
+pub fn material(c: &Checked, options: Options, groups: [u32; 2]) -> String {
+    assert_eq!(c.op.kind, Kind::Material, "a material operator");
+    let mut w = writer(c, options);
+    w.line("let pos = g.pos;");
+    prologue(&mut w);
+    w.line("var o = MatOut(vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0), vec4<u32>(0u));");
+    for (name, bit) in MAT_OUTPUTS {
+        let Some(a) = c.op.outputs.get(*name) else {
+            continue;
+        };
+        let (e, t) = w.arg(a);
+        let line = match *name {
+            "base_color" => format!("o.base = vec4<f32>({}, o.base.w);", cast(&e, &t, &Ty::V(Sc::F32, 3))),
+            "alpha" => format!("o.base.w = {};", cast(&e, &t, &Ty::F32)),
+            "emission" => format!("o.emission = vec4<f32>({}, 0.0);", cast(&e, &t, &Ty::V(Sc::F32, 3))),
+            "metallic" => format!("o.mr.x = {};", cast(&e, &t, &Ty::F32)),
+            _ => format!("o.mr.y = {};", cast(&e, &t, &Ty::F32)),
+        };
+        w.line(&line);
+        w.line(&format!("o.set.x = o.set.x | {bit}u;"));
+    }
+    w.line("return o;");
+    let mut m = String::new();
+    bindings(c, &mut m);
+    m.push_str(&w.globals);
+    m.push_str(MAT_GEOM);
+    m.push_str(MAT_OUT);
+    m.push_str("fn material(g: MatGeom) -> MatOut {\n");
+    m.push_str(&w.out);
+    m.push_str("}\n");
+    let m = m
+        .replace("@group(0)", &format!("@group({})", groups[0]))
+        .replace("@group(1)", &format!("@group({})", groups[1]));
+    let header = format!("// {}: written by the core from its checked steps.\n", c.op.id);
+    header
+        + &rename(
+            &m,
+            &[
+                ("Frame", "OpFrame"),
+                ("frame", "op_frame"),
+                ("Inputs", "OpInputs"),
+                ("inputs", "op_inputs"),
+                ("smp", "op_smp"),
+                ("deep_hash1", "op_hash1"),
+                ("material", "op_material"),
+            ],
+        )
+}
+
+/// A material operator as a runnable module: its function at groups 0 and 1, called by a
+/// full-screen pass whose surface faces the eye with a normal that sweeps across the frame
+/// (`normalize(uv × 2 − 1, 1)`, the same in every space), writing base color plus emission. The
+/// check's one run and the step references draw material steps through it.
+pub fn material_harness(c: &Checked, options: Options) -> String {
+    let mut m = material(c, options, [0, 1]);
+    m.push_str(
+        "struct HOut { @builtin(position) pos: vec4<f32> };
+@vertex
+fn vs(@builtin(vertex_index) vi: u32) -> HOut {
+    let p = vec2<f32>(f32((vi << 1u) & 2u), f32(vi & 2u));
+    return HOut(vec4<f32>(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0, 0.0, 1.0));
+}
+@fragment
+fn fs(in: HOut) -> @location(0) vec4<f32> {
+    let uv = in.pos.xy * op_frame.size.zw;
+    let n = normalize(vec3<f32>(uv * 2.0 - 1.0, 1.0));
+    let o = op_material(MatGeom(in.pos, n, n, n));
+    return vec4<f32>(o.base.xyz + o.emission.xyz, 1.0);
+}
+",
+    );
+    m
+}
+
 /// The WGSL module for a checked compute operator: one invocation per element, those past the
 /// operator's elements writing nothing.
-pub fn compute(c: &Checked) -> String {
+pub fn compute(c: &Checked, options: Options) -> String {
     assert_eq!(c.op.kind, Kind::Compute, "a compute operator");
-    let mut w = writer(c);
+    let mut w = writer(c, options);
     w.line(&format!("if gid.x >= {}u {{ return; }}", c.op.elements));
     w.line("let e = gid.x;");
     prologue(&mut w);

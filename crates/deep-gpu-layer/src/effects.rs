@@ -13,7 +13,7 @@ use deep_canvas_effects::interp::{self, hash1, Image};
 use deep_canvas_effects::{check, shipped};
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
-use deep_effects_render::compile::{compile_with, validate, Compiled};
+use deep_effects_render::compile::{compile_planted, compile_with, validate, Compiled};
 use deep_effects_render::frame::{self as fx, Settings, Sparks};
 use deep_effects_render::reference::{self, Camera};
 use deep_effects_render::runner::{dispatch, Frame, Runner, LINEAR};
@@ -655,7 +655,7 @@ pub fn reference(app: &mut App, out: &str, call: &Value) -> Value {
                 .stages
                 .iter()
                 .map(|g| {
-                    compile_with(g, &BTreeMap::new(), Options { off_by_two: off })
+                    compile_with(g, &BTreeMap::new(), Options { off_by_two: off, ..Options::default() })
                         .expect("shipped stages check")
                 })
                 .collect();
@@ -917,13 +917,37 @@ pub fn check_operator(app: &mut App, call: &Value) -> Value {
         })
         .unwrap_or_default();
     let skips = app.planted == Some(Planted::SkipsOperatorCheck);
+    let (emit_options, check_options) = operator_plants(app.planted);
+    let ui_thread = std::thread::current()
+        .name()
+        .unwrap_or("main")
+        .to_string();
     app.worker.call(move |state| {
         let device = state.gpu.device();
         let mut reached = Reached::default();
         if skips && unchecked(&device, &op, &mut reached).is_some() {
             return json!({"outcome": "accepted", "issues": [], "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}});
         }
-        let result = compile_with(&op, &assets, Options::default());
+        // The check alone, timed, for the computed class and the estimate.
+        let started = std::time::Instant::now();
+        let alone = graph::read(&op).and_then(|o| check::check_with(&o, check_options));
+        let check_ms = started.elapsed().as_secs_f64() * 1e3;
+        let started = std::time::Instant::now();
+        let result = compile_planted(&op, &assets, emit_options, check_options);
+        let compile_ms = (started.elapsed().as_secs_f64() * 1e3 - check_ms).max(0.0);
+        let thread = std::thread::current()
+            .name()
+            .unwrap_or("render")
+            .to_string();
+        let mut extra = serde_json::Map::new();
+        if let Ok(c) = &alone {
+            extra.insert("class".into(), json!(c.class.name()));
+            extra.insert("estimate_ns".into(), json!(c.estimate));
+        }
+        extra.insert(
+            "timing".into(),
+            json!({"check_ms": check_ms, "compile_ms": compile_ms, "thread": thread, "ui_thread": ui_thread}),
+        );
         let (outcome, issues) = match result {
             Err(issues) => {
                 // A refusal from naga's validation means the module reached naga.
@@ -938,8 +962,28 @@ pub fn check_operator(app: &mut App, call: &Value) -> Value {
                 }
             }
         };
-        json!({"outcome": outcome, "issues": issues, "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}})
+        let mut reply = json!({"outcome": outcome, "issues": issues, "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}});
+        if let Value::Object(o) = &mut reply {
+            o.extend(extra);
+        }
+        reply
     })
+}
+
+/// The emitter's and the check's planted wrong programs (#429), from the binary's `--planted`.
+pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
+    (
+        Options {
+            drops_swizzle_last: p == Some(Planted::DropsSwizzleLast),
+            ..Options::default()
+        },
+        check::CheckOptions {
+            declared_class: p == Some(Planted::TakesDeclaredClass),
+            exact_f32_compares: p == Some(Planted::F32CompareFloorExact),
+            exact_f32_floor: p == Some(Planted::F32CompareFloorExact),
+            trusts_index: p == Some(Planted::TrustsWriteIndex),
+        },
+    )
 }
 
 /// The compute operator `op` builds: one storage input of 32-bit words per argument, the step
@@ -1088,6 +1132,7 @@ pub fn op(app: &mut App, call: &Value) -> Value {
         eye: [0.0; 4],
         inputs: interp::inputs(&c.checked, &BTreeMap::new(), &BTreeMap::new()),
         textures: BTreeMap::new(),
+        normals: [[0.0; 3]; 3],
     };
     let storage: BTreeMap<String, Vec<f64>> = columns
         .iter()
