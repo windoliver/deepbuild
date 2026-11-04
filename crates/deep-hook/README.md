@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The binary every agent hook runs as `deep-hook <agent> <event>`: it stamps the call with its seq and ID, matches it against the guard entries in `~/.deepbuild/rules.json`, forwards it to the hub and prints the reply; with the hub away it applies the fail-closed entries, allows the rest and spools the request for replay. It is also Claude Code's status line command and background Stop waiter. It only appends events and reads `rules.json`; it never holds the control token (technical design: deep-hook).
+The binary every agent hook runs as `deep-hook <agent> <event>`: it stamps the call with its seq and ID, matches it against the guard entries in `~/.deepbuild/rules.json`, forwards it to the hub and prints the reply; with the hub away it applies the fail-closed entries, allows the rest and spools the request for replay. It is also Claude Code's status line command, its background Stop waiter and, as `deep-hook mcp actions`, its deep-actions MCP server (#824), so a session runs one Node server rather than two. It only appends events and reads `rules.json`; it never holds the control token (technical design: deep-hook).
 
 ## Where new code goes
 

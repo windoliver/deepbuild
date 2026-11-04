@@ -59,6 +59,11 @@ export interface LedgerOptions {
 }
 export interface Ledger {
   approve(connection: Connection, budget: BudgetInput): Promise<string>;
+  /**
+   * An issue's one budget (#325), approved by your yes to the ask the core raised for it: the budget it named, on the
+   * channel your yes came on; undefined while the ask has no yes from you. Each ask approves once.
+   */
+  approveOn(connection: Connection, ask: string, budget: BudgetInput): Promise<string | undefined>;
   request(connection: Connection, run: RunRequest): Promise<Outcome>;
   resolve(connection: Connection, ask: string, answer: { decision: string; budget: string }): Promise<Outcome>;
   /** A run's cost reading; `evidence` names what it was read from, such as a purchase's receipt (#69). */
@@ -178,6 +183,9 @@ class BudgetLedger implements Ledger {
    * that turn instead of waiting behind it.
    */
   private raising: { key: string; waiting: Waiting } | undefined;
+  /** Each ask you answered yes to on the trusted path, by the channel it came on; and the budget each issue's budget ask approved (#325). */
+  private readonly allowed = new Map<string, 'card' | 'inbox'>();
+  private readonly approvedOn = new Map<string, string>();
 
   constructor(private readonly options: LedgerOptions) {}
 
@@ -206,18 +214,36 @@ class BudgetLedger implements Ledger {
     return this.exclusive(async () => {
       const via = TRUSTED[connection.writer];
       if (via === undefined) throw new BudgetRefused(`only you approve a budget, on the card or from deep inbox, not ${connection.writer}`);
-      if (!isObj(input) || !isObj(input.scope) || !SCOPES.has(input.scope.kind as string) || !isText(input.scope.ref)) throw new BudgetRefused('a budget names its scope: an issue, a resource, a project or a kind of work');
-      if (!isPrice(input.cap_usd)) throw new BudgetRefused('a budget has a cap in dollars, zero or more');
-      if (input.runs !== undefined && !(Number.isSafeInteger(input.runs) && input.runs >= 1)) throw new BudgetRefused('a budget covers a whole number of runs, one or more');
-      const now = this.options.now();
-      if (!Number.isSafeInteger(input.ends) || input.ends <= now) throw new BudgetRefused('a budget ends after it is approved');
-      const id = ulid(now);
-      await this.append(this.core(connection), {
-        v: 2, id, kind: 'spend.approved', ts: now,
-        data: { scope: { kind: input.scope.kind, ref: input.scope.ref }, ...(input.runs === undefined ? {} : { runs: input.runs }), cap_usd: usd(microDown(input.cap_usd)), ends: input.ends, via },
-      });
+      return this.approved(connection, input, via);
+    });
+  }
+
+  approveOn(connection: Connection, ask: string, input: BudgetInput): Promise<string | undefined> {
+    return this.exclusive(async () => {
+      await this.sync();
+      const via = this.allowed.get(ask);
+      if (via === undefined) return undefined;
+      const done = this.approvedOn.get(ask);
+      if (done) return done;
+      const id = await this.approved(connection, input, via);
+      this.approvedOn.set(ask, id);
       return id;
     });
+  }
+
+  /** Appends a budget you approved on `via`, once its shape is checked. */
+  private async approved(connection: Connection, input: BudgetInput, via: 'card' | 'inbox'): Promise<string> {
+    if (!isObj(input) || !isObj(input.scope) || !SCOPES.has(input.scope.kind as string) || !isText(input.scope.ref)) throw new BudgetRefused('a budget names its scope: an issue, a resource, a project or a kind of work');
+    if (!isPrice(input.cap_usd)) throw new BudgetRefused('a budget has a cap in dollars, zero or more');
+    if (input.runs !== undefined && !(Number.isSafeInteger(input.runs) && input.runs >= 1)) throw new BudgetRefused('a budget covers a whole number of runs, one or more');
+    const now = this.options.now();
+    if (!Number.isSafeInteger(input.ends) || input.ends <= now) throw new BudgetRefused('a budget ends after it is approved');
+    const id = ulid(now);
+    await this.append(this.core(connection), {
+      v: 2, id, kind: 'spend.approved', ts: now,
+      data: { scope: { kind: input.scope.kind, ref: input.scope.ref }, ...(input.runs === undefined ? {} : { runs: input.runs }), cap_usd: usd(microDown(input.cap_usd)), ends: input.ends, via },
+    });
+    return id;
   }
 
   async request(connection: Connection, input: RunRequest): Promise<Outcome> {
@@ -502,6 +528,8 @@ class BudgetLedger implements Ledger {
     if (this.closed.has(ask)) return;
     this.closed.add(ask);
     if (e.kind !== 'ask.answered' || e.writer !== 'core' || (e.data as Obj).decision !== 'allow') return;
+    const via = (e.data as Obj).via;
+    if (via === 'card' || via === 'inbox') this.allowed.set(ask, via);
     this.yeses.set(ask, e);
     this.grant(ask);
   }
@@ -550,6 +578,7 @@ export async function openLedger(options: LedgerOptions): Promise<Ledger> {
   const ledger = new BudgetLedger(options);
   return {
     approve: (connection, budget) => ledger.approve(connection, budget),
+    approveOn: (connection, ask, budget) => ledger.approveOn(connection, ask, budget),
     request: (connection, run) => ledger.request(connection, run),
     resolve: (connection, ask, answer) => ledger.resolve(connection, ask, answer),
     charge: (connection, run, cost, evidence) => ledger.charge(connection, run, cost, evidence),

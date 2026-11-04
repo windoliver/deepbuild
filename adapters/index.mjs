@@ -204,6 +204,12 @@ function map(facts, payload, transcript) {
   if (rule.kind === 'permission.request' && questions.includes(payload.tool_name)) {
     Object.assign(event, { data: { ...event.data, kind: 'question' }, rule: pointer('questionTools', 'tools', questions.indexOf(payload.tool_name)) });
   }
+  // A hook whose payload names the session's state: the state its value maps to, and no event for a value not listed.
+  if (rule.state) {
+    const value = get(payload, rule.state.field);
+    if (typeof value !== 'string' || !Object.hasOwn(rule.state.values, value)) return [];
+    Object.assign(event, { data: { ...event.data, state: rule.state.values[value] }, rule: pointer('mapping', hook, 'state', 'values', value) });
+  }
   if (rule.stop) {
     const openers = (facts.mapping.UserPromptSubmit?.origin?.rules ?? []).flatMap((one) => (one.match ? [one.match] : []));
     const { start, end } = turnOf(facts.stop.turn, payload, transcript, openers);

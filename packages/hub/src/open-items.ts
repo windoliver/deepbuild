@@ -118,6 +118,11 @@ export class OpenItems {
       if (!was && waived.has(this.shapeOf(f.text))) continue;
       await this.opened(core, c.task, item, f);
       if (!was && f.from === 'section' && f.section && UNVERIFIED.has(f.section)) await this.askWaiver(c, item, f.text);
+      // A review note on the PR keeps it from Closes until it is fixed or you accept it (#87). Its ask is raised
+      // apart from the claim, so no verdict waits on the ask's resolver.
+      if (!was && f.from === 'review_thread' && !f.resolved_by) {
+        void this.askAccept(c, item, f.text).catch((error: unknown) => process.stderr.write(`deep hub: the ask for review note ${item} was not raised: ${error instanceof Error ? error.message : String(error)}\n`));
+      }
     }
     for (const x of closes) if (standing.get(x.item)?.open) await this.closed(core, c.task, x.item, x.text, x.by);
     // The planted wrong program takes the agent's "completed" as closing its item.
@@ -171,25 +176,39 @@ export class OpenItems {
     await this.o.append(core, { v: 2, id: ulid(ts), kind: 'open_item.closed', ts, data: { task_ref: task, text: text.slice(0, 8192), item, by: by.slice(0, 1024) } });
   }
 
+  /** The task's review notes still open (#87): each one's words, naming its thread and its first comment's link. */
+  async openNotes(task: string): Promise<string[]> {
+    return [...(await this.standing(task)).values()].filter((s) => s.open && s.from === 'review_thread').map((s) => s.text);
+  }
+
   /** The ask an unproven item reaches you through: waive it, closing it without evidence, or keep it open. */
-  private async askWaiver(c: ClaimRead, item: string, text: string): Promise<void> {
+  private askWaiver(c: ClaimRead, item: string, text: string): Promise<void> {
     const question = `Close this open item of ${c.task} without evidence, as a waiver? The agent's final message left it: “${text.slice(0, 2000)}”`;
+    return this.ask(c, item, question, { id: 'waive', label: 'Waive it: close it without evidence' });
+  }
+  /** The ask a review note reaches you through (#87): accept it as it stands, closing its item, or keep it open. */
+  private askAccept(c: ClaimRead, item: string, text: string): Promise<void> {
+    const question = `Accept this review note on the PR of ${c.task} without a fix, so the PR may say Closes? ${text.slice(0, 2400)}`;
+    return this.ask(c, item, question, { id: 'accept', label: 'Accept it: close it without a fix' });
+  }
+  private async ask(c: ClaimRead, item: string, question: string, close: { id: string; label: string }): Promise<void> {
     const raised = {
       kind: 'exception', question, recommended: 'keep', default: 'keep', fallback: 'you', provisional: false, owner: 'you', key: waiverKey(item), pinned_to: await this.o.pin(c.cwd, question),
-      options: [{ id: 'waive', label: 'Waive it: close it without evidence', decision: 'none' }, { id: 'keep', label: 'Keep it open', decision: 'none' }],
+      options: [{ ...close, decision: 'none' }, { id: 'keep', label: 'Keep it open', decision: 'none' }],
     };
     // Raised by the core, bound to no session: the stop doesn't wait on it, and your answer is never the agent's to read.
     await this.o.asks().raise(this.o.connection(), 'open_item.waive', raised).catch((error: unknown) => process.stderr.write(`deep hub: the ask for open item ${item} was not raised: ${error instanceof Error ? error.message : String(error)}\n`));
   }
 
-  /** Your answer to an item's ask: "waive" closes it, as your waiver; any other leaves it open. */
+  /** Your answer to an item's ask: "waive" or "accept" closes it, as your answer; any other leaves it open. */
   async answered(ask: { key?: unknown }, option: string | undefined): Promise<void> {
-    if (option !== 'waive' || typeof ask.key !== 'string') return;
+    if ((option !== 'waive' && option !== 'accept') || typeof ask.key !== 'string') return;
     const rows = (await this.o.raw(`SELECT data FROM events WHERE kind = 'open_item.opened' AND json_extract(data, '$.item') IS NOT NULL ORDER BY log_pos DESC LIMIT 5000`)) as { data: string }[];
     for (const row of rows) {
       const d = JSON.parse(row.data) as Obj;
       if (waiverKey(String(d.item)) !== ask.key) continue;
-      if ((await this.standing(String(d.task_ref))).get(String(d.item))?.open) await this.closed(this.o.connection(), String(d.task_ref), String(d.item), String(d.text), 'your answer: waived, closed without evidence');
+      const by = option === 'accept' ? 'your answer: accepted, closed without a fix' : 'your answer: waived, closed without evidence';
+      if ((await this.standing(String(d.task_ref))).get(String(d.item))?.open) await this.closed(this.o.connection(), String(d.task_ref), String(d.item), String(d.text), by);
       return;
     }
   }

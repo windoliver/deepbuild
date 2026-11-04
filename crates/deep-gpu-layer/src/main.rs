@@ -152,8 +152,26 @@ pub enum Planted {
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
+    /// #421's wrong programs (tests/acceptance/421/README.md: Planted programs): front faces
+    /// chosen without the world determinant; coplanar ties left to a submission order that turns
+    /// over each frame; a spot's lumens spread over its cone; status outlines tone mapped.
+    WindingIgnoresDeterminant,
+    TiesBySubmission,
+    SpotCountsCone,
+    StatusBeforeToneMap,
     /// #418's: the bloom's lens dirt laid over the frame instead of multiplying its light.
     DirtOverlay,
+    /// #422's wrong programs (tests/acceptance/422/README.md: Planted programs): every final
+    /// target black; the puffs not drawn; a cascade kept while the solid count holds; the
+    /// environment prefiltered one mip a frame; the specular lobe uncompensated, or compensated on
+    /// environment light alone; metallic premixed into one F0 before shading.
+    DrawsBlack,
+    DropsClouds,
+    CascadeCacheKeepsStale,
+    PrefilterOverFrames,
+    UncompensatedLobe,
+    CompensatesEnvironmentOnly,
+    PremixedMetallic,
 }
 
 impl Planted {
@@ -229,7 +247,18 @@ impl Planted {
             "edges_skip_depth" => Planted::EdgesSkipDepth,
             "releases_at_revision" => Planted::ReleasesAtRevision,
             "stops_at_request" => Planted::StopsAtRequest,
+            "winding_ignores_determinant" => Planted::WindingIgnoresDeterminant,
+            "ties_by_submission" => Planted::TiesBySubmission,
+            "spot_counts_cone" => Planted::SpotCountsCone,
+            "status_before_tone_map" => Planted::StatusBeforeToneMap,
             "dirt_overlay" => Planted::DirtOverlay,
+            "draws_black" => Planted::DrawsBlack,
+            "drops_clouds" => Planted::DropsClouds,
+            "cascade_cache_keeps_stale" => Planted::CascadeCacheKeepsStale,
+            "prefilter_over_frames" => Planted::PrefilterOverFrames,
+            "uncompensated_lobe" => Planted::UncompensatedLobe,
+            "compensates_environment_only" => Planted::CompensatesEnvironmentOnly,
+            "premixed_metallic" => Planted::PremixedMetallic,
             _ => return None,
         })
     }

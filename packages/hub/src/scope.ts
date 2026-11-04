@@ -84,6 +84,21 @@ export class SizeScope {
     });
   }
 
+  /**
+   * The keys of the asks size and scope raised in a session, found again from the record: the plan's for each task
+   * it locked, and each taste call's from what its stop asked. DeepBuild's readings, never a question the agent left,
+   * so none of them holds a send-back.
+   */
+  async keysIn(session: string): Promise<Set<string>> {
+    const locked = (await this.o.raw(`SELECT DISTINCT json_extract(data, '$.task_ref') AS task FROM events WHERE kind = 'definition.locked' AND session_id = ?`, [session])) as { task: string }[];
+    const sized = (await this.o.raw(`SELECT data FROM events WHERE kind = 'claim.sized' AND session_id = ?`, [session])) as { data: string }[];
+    const keys = new Set(locked.map((r) => sha256Hex(canonicalize({ kind: 'size.plan', task_ref: r.task }))));
+    for (const row of sized) {
+      const d = JSON.parse(row.data) as { task_ref: string; asked: string[] };
+      if (d.asked.length) keys.add(sha256Hex(canonicalize({ kind: 'size.scope', task_ref: d.task_ref, found: [...d.asked].sort() })));
+    }
+    return keys;
+  }
   /** A task's definition locked: a plan marked large whose scope is past the usual size comes to you once, before any code. */
   async planned(r: { task_ref: string; session: string; agent: string; cwd: string }): Promise<void> {
     const { kind, plan } = await this.o.scopeOf(r.task_ref);

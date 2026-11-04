@@ -1,0 +1,8 @@
+{
+  "schema": "corpus.session@1",
+  "agent": "claude-code",
+  "version": "2.1.308",
+  "surface": "terminal",
+  "recorded": "made up for #1033 (README, The session)",
+  "scenario": "mod-overrides-deny"
+}
