@@ -173,6 +173,16 @@ pub fn look_colors(dark: bool) -> Screen {
     Screen::of(&term, 1, fg, bg, &ansi)
 }
 
+/// [`look_colors`] as a page: the grid on the terminal's background, which fills the page.
+pub fn look_colors_page(dark: bool) -> Div {
+    let screen = look_colors(dark);
+    div()
+        .size_full()
+        .p(px(16.))
+        .bg(color(screen.bg))
+        .child(cells("terminal-colors", screen))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -20,7 +20,8 @@
 use std::collections::BTreeMap;
 
 use deep_canvas_cells::emulator::{Cell, Terminal, ATTRS};
-use deep_canvas_cells::palette::{off_status, resolve};
+use deep_canvas_cells::palette::{off_status, resolve, resolve_in};
+use deep_canvas_marks::look::{self, Look};
 use serde_json::{json, Map, Value};
 
 use crate::hub::{Hub, Planted};
@@ -29,9 +30,42 @@ use crate::shared::FLICKS;
 
 /// The default history a terminal keeps, in rows.
 const HISTORY: usize = 10_000;
-/// The palette's default foreground and background, before the look's roles.
+/// The palette's default foreground and background, for a look that gives a terminal no colors.
 const FG: [u8; 3] = [0xe8, 0xe8, 0xe8];
 const BG: [u8; 3] = [0x10, 0x10, 0x10];
+
+/// What a terminal draws with (#1003): the look's 16 colors, its background and default text, in
+/// the theme the hub draws (light); xterm's 16 on the palette's defaults for a look with none.
+pub struct Colors {
+    ansi: Option<[[u8; 3]; 16]>,
+    fg: [u8; 3],
+    bg: [u8; 3],
+}
+
+impl Colors {
+    pub fn of(look: &Look) -> Colors {
+        match look::terminal_colors(&look.light) {
+            Some((ansi, bg, fg)) => Colors {
+                ansi: Some(ansi),
+                fg,
+                bg,
+            },
+            None => Colors {
+                ansi: None,
+                fg: FG,
+                bg: BG,
+            },
+        }
+    }
+
+    /// A color the program asked for; its own true color or cube color as it sent it.
+    fn resolve(&self, c: deep_canvas_cells::emulator::Color, default: [u8; 3]) -> [u8; 3] {
+        match &self.ansi {
+            Some(ansi) => resolve_in(c, default, ansi),
+            None => resolve(c, default),
+        }
+    }
+}
 /// The three tabs R1 ships on a session's page, before the terminal tab.
 const TABS: [&str; 3] = ["line", "asks", "checks"];
 
@@ -231,10 +265,10 @@ pub fn grid_json(t: &Terminal, revision: u64) -> Value {
     })
 }
 
-/// One cell as drawn: its colors after the status rule when `status` is `Some`.
-pub fn cell_json(cell: &Cell, status: Option<(&[[u8; 3]], f64)>) -> Value {
-    let mut fg = resolve(cell.fg, FG);
-    let mut bg = resolve(cell.bg, BG);
+/// One cell as drawn in `colors`: its colors after the status rule when `status` is `Some`.
+pub fn cell_json(cell: &Cell, colors: &Colors, status: Option<(&[[u8; 3]], f64)>) -> Value {
+    let mut fg = colors.resolve(cell.fg, colors.fg);
+    let mut bg = colors.resolve(cell.bg, colors.bg);
     if let Some((colors, min)) = status {
         fg = off_status(fg, colors, min);
         bg = off_status(bg, colors, min);
@@ -404,13 +438,14 @@ impl<'a> Hub<'a> {
             return json!({"code": "out_of_range"});
         }
         let cell = &t.term.row(y)[usize::from(x)];
+        let drawn = Colors::of(&self.look);
         // Status can show on a session's page; a plug-in's panel draws the cell as asked.
         match t.home {
             Home::Session(_) => {
                 let (colors, min) = self.status_colors();
-                cell_json(cell, Some((&colors, min)))
+                cell_json(cell, &drawn, Some((&colors, min)))
             }
-            Home::Panel(_) => cell_json(cell, None),
+            Home::Panel(_) => cell_json(cell, &drawn, None),
         }
     }
 
@@ -635,4 +670,27 @@ fn depends_on(name: &str) -> Value {
             })
             .collect(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_terminal_draws_the_looks_sixteen_colors_and_a_programs_own_as_sent() {
+        let look = crate::hub::shipped_look();
+        let colors = Colors::of(&look);
+        let mut term = Terminal::new(4, 1, 0);
+        // Bright black (ANSI 8), then the program's own true color at 1.5:1 on its own background.
+        term.feed(b"\x1b[90ma\x1b[0m\x1b[38;2;44;44;44;48;2;0;0;0mb");
+        let row = term.row(0);
+        let first = cell_json(&row[0], &colors, None);
+        assert_eq!(first["fg"], hex(look.light["term_bright_black"]));
+        assert_eq!(first["bg"], hex(look.light["ground"]));
+        let own = cell_json(&row[1], &colors, None);
+        assert_eq!(
+            (own["fg"].clone(), own["bg"].clone()),
+            (json!("#2c2c2c"), json!("#000000"))
+        );
+    }
 }
