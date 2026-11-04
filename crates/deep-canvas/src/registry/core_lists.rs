@@ -930,29 +930,134 @@ fn data_layout() -> RegistryDef {
     def
 }
 
-/// Every registry the core declares, by name.
-pub fn registries() -> Vec<RegistryDef> {
-    vec![
+// ---- ease@1
+
+/// The release `ease@1` opens in, with the eases it lands.
+pub const EASE_SINCE: &str = "R6";
+
+/// An entry's ease: a first-party one by its number at its defaults, or a pack's table.
+enum Shape {
+    Named(crate::ease::Named),
+    Table(crate::table::EaseTable),
+}
+
+fn ease_shape(v: &Value) -> Result<Shape, String> {
+    // A first-party entry names its ease and carries its number; a pack's is a table.
+    if v.get("number").is_some() {
+        let name = v.get("ease").and_then(Value::as_str).unwrap_or_default();
+        return match crate::ease::named(name, None) {
+            Some(e) => Ok(Shape::Named(e)),
+            None => Err(format!("`{name}` is no first-party ease")),
+        };
+    }
+    crate::table::EaseTable::unchecked(v)
+        .map(Shape::Table)
+        .map_err(|r| r.to_string())
+}
+
+fn ease_ends(v: &Value) -> Result<(), String> {
+    match ease_shape(v)? {
+        Shape::Named(e) => match (e.at(0.0), e.at(1.0)) {
+            (z, o) if z == 0.0 && o == 1.0 => Ok(()),
+            (z, o) => Err(format!("it reads {z} at 0 and {o} at 1")),
+        },
+        Shape::Table(t) => t.check_ends().map_err(|r| r.to_string()),
+    }
+}
+
+fn ease_shape_kept(v: &Value) -> Result<(), String> {
+    match ease_shape(v)? {
+        // A named ease's extremes come from its interval form, so its overshoot is its own.
+        Shape::Named(e) => {
+            let (lo, hi) = e.extremes();
+            if lo.is_finite() && hi.is_finite() {
+                Ok(())
+            } else {
+                Err("its interval form leaves it unbounded".into())
+            }
+        }
+        Shape::Table(t) => t.check_shape().map_err(|r| r.to_string()),
+    }
+}
+
+fn ease() -> RegistryDef {
+    let number = json!({"type": "number"});
+    let list = json!({"type": "array", "items": {"type": "number"}});
+    RegistryDef::new(
+        "ease@1",
+        json!({"type": "object", "properties": {
+            "number": number, "ease": {"type": "string"}, "name": {"type": "string"}, "x": list, "y": list,
+            "mode": {"type": "string"}, "overshoot": {}}}),
+        &["module", "pack"],
+        EASE_SINCE,
+    )
+    .rule("ends", "an ease that misses 0 at 0 or 1 at 1, each within 1e-9", ease_ends)
+    .rule(
+        "keeps_its_shape",
+        "an ease that dips while declared monotone or passes its declared overshoot",
+        ease_shape_kept,
+    )
+    .planted("reads_0999_at_1", json!({"x": [0, 1], "y": [0, 0.999]}))
+    .planted(
+        "dips_while_monotone",
+        json!({"x": [0, 0.5, 1], "y": [0, -0.1, 1], "overshoot": "none"}),
+    )
+}
+
+/// Every registry the core declares, by name; with `eases`, `ease@1` among them, which only
+/// the planted layout that declares it in the motion module leaves out.
+pub fn registries_with(eases: bool) -> Vec<RegistryDef> {
+    let mut out = vec![
         builder(),
         check_kind_doc(),
         column_source(),
         constraint(),
         data_layout(),
         device_class(),
+    ];
+    if eases {
+        out.push(ease());
+    }
+    out.extend([
         gpu_function(),
         gpu_output(),
         gpu_step(),
         logic_service(),
         mark(),
         modifier(),
-    ]
+    ]);
+    out
+}
+
+/// Every registry the core declares, by name.
+pub fn registries() -> Vec<RegistryDef> {
+    registries_with(true)
+}
+
+/// `ease@1`'s declaration, for the planted layout that declares it in the motion module.
+pub fn ease_registry() -> RegistryDef {
+    ease()
+}
+
+/// The core's entries of `ease@1`, the named eases, each by its entry number; `renumbered`, the
+/// planted opening's numbering.
+pub fn ease_entries(renumbered: bool) -> Vec<EntryDef> {
+    crate::ease::entries()
+        .into_iter()
+        .map(|(name, n)| EntryDef {
+            registry: "ease@1".into(),
+            name: name.clone(),
+            value: json!({"ease": name, "number": if renumbered { crate::ease::renumbered(n) } else { n }}),
+            since: EASE_SINCE.into(),
+        })
+        .collect()
 }
 
 /// The core's own entries: the op table's base steps (unless `steps_elsewhere`, the planted
 /// layout in which a canvas module fills them), today's outputs, marks and modifiers, and the
 /// core's document check kinds.
 pub fn entries(steps_elsewhere: bool) -> Vec<EntryDef> {
-    let mut out = Vec::new();
+    let mut out = ease_entries(false);
     let entry = |registry: &str, name: &str, value: Value| EntryDef {
         registry: registry.into(),
         name: name.into(),

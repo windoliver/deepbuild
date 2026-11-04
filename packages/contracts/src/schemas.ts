@@ -2,13 +2,17 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { ContractError, issue } from './errors.js';
 import type { JsonValue, Schema, SchemaEntry } from './json.js';
 import { registry, type Registry } from './validate.js';
+import { MACHINE_FILE } from './lifecycle.js';
 
 const SCHEMAS = new URL('../schemas/', import.meta.url);
 const FIXTURES = new URL('../fixtures/', import.meta.url);
 const readJson = (url: URL): JsonValue => JSON.parse(readFileSync(url, 'utf8')) as JsonValue;
 
-/** The published schemas' names, one file per name: schemas/<name>.json. A file is read only when its schema is. */
-const names: readonly string[] = readdirSync(SCHEMAS).filter((file) => file.endsWith('.json')).sort().map((file) => file.slice(0, -'.json'.length));
+/**
+ * The published schemas' names, one file per name: schemas/<name>.json. A file is read only when its schema is.
+ * A lifecycle table beside them is no schema (lifecycle.ts reads it).
+ */
+const names: readonly string[] = readdirSync(SCHEMAS).filter((file) => file.endsWith('.json') && !MACHINE_FILE.test(file)).sort().map((file) => file.slice(0, -'.json'.length));
 const published = new Set(names);
 // Each file's text, read the first time a caller needs it: a process that validates a few kinds reads only those.
 // Callers get their own copies; parsing the JSON text is cheaper than a structured clone.
