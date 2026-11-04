@@ -210,6 +210,28 @@ pub struct Layer3 {
     pub lines: Vec<Line>,
     pub points: Vec<Point>,
     pub labels: Vec<Label>,
+    /// Its soft cloud sprites (#422; Puff `puff@1`).
+    pub puffs: Vec<Puff>,
+}
+
+/// A soft cloud sprite at t (#422; Puff `puff@1`): where it is in world m, its size, and how the
+/// key sun and the sky light it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Puff {
+    pub id: String,
+    pub pos: Vec3,
+    pub radius: f64,
+    pub aspect: f64,
+    pub density: f64,
+    pub bright: f64,
+    pub seed: u32,
+    /// Lit by the key sun; by the sky's ambient.
+    pub sun: bool,
+    pub ambient: bool,
+    pub phase: f64,
+    pub shade: f64,
+    /// Inside this distance of the camera it fades out, in m.
+    pub near_fade: f64,
 }
 
 impl Layer3 {
@@ -220,6 +242,7 @@ impl Layer3 {
         out.extend(self.lines.iter().map(|s| s.id.clone()));
         out.extend(self.points.iter().map(|s| s.id.clone()));
         out.extend(self.labels.iter().map(|s| s.id.clone()));
+        out.extend(self.puffs.iter().map(|s| s.id.clone()));
         out
     }
 }
@@ -408,6 +431,71 @@ pub struct Sun {
     pub toward: Vec3,
     pub illuminance: f64,
     pub shadow: bool,
+    /// Its shadow's cascades (#422).
+    pub cascades: Cascades,
+}
+
+/// The key sun's cascades (#422; canvas primitives: Light policy: cascades).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Cascades {
+    /// 1 to 4.
+    pub count: u32,
+    /// 0 uniform, 1 logarithmic.
+    pub split: f64,
+    /// The last cascade's far end in m; `None` for auto, from the view's bounds.
+    pub far: Option<f64>,
+    /// Blend across cascade edges.
+    pub fade: bool,
+}
+
+impl Default for Cascades {
+    fn default() -> Self {
+        Cascades {
+            count: 3,
+            split: 0.5,
+            far: None,
+            fade: true,
+        }
+    }
+}
+
+/// A sun's `cascades`, `split`, `shadow_far` and `fade`; more than four cascades is refused.
+fn cascades(params: &Value, path: &str) -> Result<Cascades, Refused> {
+    let mut c = Cascades::default();
+    if let Some(v) = params.get("cascades") {
+        c.count = v
+            .as_u64()
+            .filter(|n| (1..=4).contains(n))
+            .ok_or_else(|| Refused {
+                code: "out_of_range",
+                path: format!("{path}/cascades"),
+            })? as u32;
+    }
+    if let Some(v) = params.get("split") {
+        c.split = num(Some(v))
+            .filter(|s| (0.0..=1.0).contains(s))
+            .ok_or_else(|| Refused {
+                code: "out_of_range",
+                path: format!("{path}/split"),
+            })?;
+    }
+    match params.get("shadow_far") {
+        None => {}
+        Some(Value::String(s)) if s == "auto" => {}
+        Some(v) => {
+            c.far = Some(num(Some(v)).filter(|f| *f > 0.0).ok_or_else(|| Refused {
+                code: "out_of_range",
+                path: format!("{path}/shadow_far"),
+            })?)
+        }
+    }
+    if let Some(v) = params.get("fade") {
+        c.fade = v.as_bool().ok_or_else(|| Refused {
+            code: "out_of_range",
+            path: format!("{path}/fade"),
+        })?;
+    }
+    Ok(c)
 }
 
 /// An item of a kind another canvas module draws (particles@1 among them), as evaluated at t:
@@ -433,9 +521,9 @@ pub struct Scene {
     pub sun: Option<Sun>,
     /// Every light, in layer and item order (#421): what shades the solids that name a material.
     pub lights: Vec<Light>,
-    /// The first `sky@1`'s ambient light from above and below, linear RGB (#418); with none, the
-    /// solids keep the fixed ambient term.
-    pub sky: Option<[[f64; 3]; 2]>,
+    /// The first `sky@1` (#418, #422): its ambient light from above and below, its background,
+    /// fog and environment; with none, the solids keep the fixed ambient term.
+    pub sky: Option<crate::sky::Sky>,
     pub others: Vec<Other>,
     /// Each curve item's samples in world metres, closed ones back to their start (#420).
     pub curves: BTreeMap<String, Vec<Vec3>>,
@@ -449,6 +537,18 @@ pub struct Scene {
 }
 
 impl Scene {
+    /// Whether the key sun's shadow is drawn through its cascades (#422): a shadowed sun over a
+    /// scene whose solids name materials, which shade it per pixel. A scene of painted solids
+    /// alone keeps the single fitted map the effects' shadow reads (#380).
+    pub fn cascaded(&self) -> bool {
+        self.sun.as_ref().is_some_and(|s| s.shadow)
+            && self
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .any(|s| s.material.is_some())
+    }
+
     /// #420 AC6's wrong programs, reachable only through `deep-gpu --planted`: mesh-edge lines
     /// read from the unwelded mesh, or drawn over what is in front of them.
     pub fn plant_edges(&mut self, unwelded: bool, over: bool) {
@@ -1667,6 +1767,7 @@ pub(crate) fn evaluate_compiled(
     let mut sun = None;
     let mut lights = Vec::new();
     let mut sky = None;
+    let mut puffs = 0u64;
     let mut others = Vec::new();
     let mut curves = BTreeMap::new();
     for layer_id in &order {
@@ -1905,6 +2006,11 @@ pub(crate) fn evaluate_compiled(
                     });
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
+                "puff@1" => {
+                    let m = world(&items, id);
+                    layer.puffs.push(puff(id, params, origin(&m), &path)?);
+                    puffs += 1;
+                }
                 "light.sun@1" if sun.is_none() => {
                     // A light shines along its local −Z, glTF's convention for lights.
                     let m = world(&items, id);
@@ -1927,19 +2033,11 @@ pub(crate) fn evaluate_compiled(
                             .get("shadow")
                             .and_then(Value::as_bool)
                             .unwrap_or(false),
+                        cascades: cascades(params, &path)?,
                     });
                 }
                 "sky@1" if sky.is_none() => {
-                    let rgb = |k: &str| -> Result<[f64; 3], Refused> {
-                        match params.get(k) {
-                            None => Ok([0.0; 3]),
-                            Some(v) => linear3(v).ok_or(Refused {
-                                code: "out_of_range",
-                                path: format!("{path}/{k}"),
-                            }),
-                        }
-                    };
-                    sky = Some([rgb("ambient_top")?, rgb("ambient_low")?]);
+                    sky = Some(crate::sky::parse(id, params, look, assets)?);
                 }
                 "light.sun@1" | "light.point@1" | "light.spot@1" | "light.area@1" => {
                     let m = world(&items, id);
@@ -2008,6 +2106,15 @@ pub(crate) fn evaluate_compiled(
     for (layer, id) in overlay_items {
         overlays.push(overlay(&items, &layer, &id, &camera, look)?);
     }
+    // Puffs past the document's cap are refused, never dropped (#422).
+    let cap = map
+        .get("budget")
+        .and_then(|b| b.get("puffs"))
+        .and_then(Value::as_u64)
+        .unwrap_or(512);
+    if puffs > cap {
+        return refused("out_of_range", "budget/puffs");
+    }
     Ok(Scene {
         size,
         camera,
@@ -2031,6 +2138,60 @@ fn xy(v: Option<&Value>) -> Option<[f64; 2]> {
         return None;
     }
     Some([num(a.first())?, num(a.get(1))?])
+}
+
+/// A `puff@1` at `pos` (#422).
+fn puff(id: &str, params: &Value, pos: Vec3, path: &str) -> Result<Puff, Refused> {
+    let field = |k: &str, default: f64, ok: fn(f64) -> bool| -> Result<f64, Refused> {
+        match params.get(k) {
+            None => Ok(default),
+            Some(v) => num(Some(v)).filter(|x| ok(*x)).ok_or(Refused {
+                code: "out_of_range",
+                path: format!("{path}/{k}"),
+            }),
+        }
+    };
+    let radius = field("radius", 1.0, |r| r > 0.0)?;
+    let light = params.get("light");
+    let on = |k: &str, yes: &str| -> Result<bool, Refused> {
+        match light.and_then(|l| l.get(k)) {
+            None => Ok(true),
+            Some(Value::String(s)) if s == yes => Ok(true),
+            Some(Value::String(s)) if s == "none" => Ok(false),
+            Some(_) => refused("out_of_range", format!("{path}/light/{k}")),
+        }
+    };
+    let lf = |k: &str, default: f64| -> Result<f64, Refused> {
+        match light.and_then(|l| l.get(k)) {
+            None => Ok(default),
+            Some(v) => num(Some(v)).filter(|x| (0.0..=1.0).contains(x)).ok_or(Refused {
+                code: "out_of_range",
+                path: format!("{path}/light/{k}"),
+            }),
+        }
+    };
+    let near_fade = match params.get("near_fade") {
+        None => radius,
+        Some(Value::String(s)) if s == "auto" => radius,
+        Some(v) => num(Some(v)).filter(|x| *x >= 0.0).ok_or(Refused {
+            code: "out_of_range",
+            path: format!("{path}/near_fade"),
+        })?,
+    };
+    Ok(Puff {
+        id: id.to_string(),
+        pos,
+        radius,
+        aspect: field("aspect", 1.6, |a| a > 0.0)?,
+        density: field("density", 0.5, |d| (0.0..=1.0).contains(&d))?,
+        bright: field("bright", 1.0, |b| b >= 0.0)?,
+        seed: params.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32,
+        sun: on("sun", "key")?,
+        ambient: on("ambient", "sky")?,
+        phase: lf("phase", 0.5)?,
+        shade: lf("shade", 0.6)?,
+        near_fade,
+    })
 }
 
 /// An `overlay.frame@1`: its frame's shapes, placed at its anchor's projection plus its offset.

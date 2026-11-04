@@ -85,10 +85,17 @@ struct Light {
 struct Lights {
     // xyz: the eye (perspective) or toward the viewer (orthographic); w: 1 for perspective.
     view: vec4<f32>,
-    // x: how many lights; y: 1 + the light the shadow map is of, 0 for none.
+    // x: how many lights; y: 1 + the key sun its cascades shadow, 0 for none; z: #422's planted
+    // shading bits ([`PREMIX`], [`NO_COMP`], [`ENV_COMP_ONLY`]); w: how many cascades.
     count: vec4<u32>,
-    // World to the shadow map's clip space (depth 0 nearest the light).
-    shadow: mat4x4<f32>,
+    // Each cascade's far end, as a distance along the view's forward axis (#422).
+    splits: vec4<f32>,
+    // Each cascade's texel, in m across the light.
+    texels: vec4<f32>,
+    // xyz: the view's forward axis; w: 1 to blend across cascade edges.
+    forward: vec4<f32>,
+    // World to each cascade's clip space (depth 0 nearest the light).
+    cascades: array<mat4x4<f32>, 4>,
     items: array<Light, 32>,
 };
 
@@ -96,9 +103,53 @@ struct Lights {
 // 32 × 32 entries, cos(view) across and roughness down, two to a vec4: (A, B) with the
 // directional albedo F0·A + F90·B of the specular lobe.
 @group(1) @binding(1) var<uniform> dfg: array<vec4<f32>, 512>;
-// The key light's shadow map, which a shadow catcher reads (a texel's stand-in before one is
-// drawn).
-@group(1) @binding(2) var shadow_map: texture_depth_2d;
+// The key sun's cascades (#422), one layer each (a texel's stand-in before one is drawn).
+@group(1) @binding(2) var shadow_map: texture_depth_2d_array;
+
+// The environment (#422; Sky `sky@1`: environment): its prefiltered cubes, each mip a roughness,
+// and their irradiance ÷ π as nine SH coefficients.
+struct Env {
+    sh: array<vec4<f32>, 9>,
+    // The mix's second environment.
+    sh_to: array<vec4<f32>, 9>,
+    // x: 1 with an environment; y: the last mip; z: intensity; w: rotation in rad.
+    k: vec4<f32>,
+    // x: the mix's `by`.
+    m: vec4<f32>,
+    // The sky (#422): clip to world, for each pixel's view ray; the eye, w 1 for perspective.
+    inv: mat4x4<f32>,
+    eye: vec4<f32>,
+    // The gradient's top (w: the stars) and low (w: 1 with a sky); the moon's direction and the
+    // cosine of its radius (w 2 with none).
+    top: vec4<f32>,
+    low: vec4<f32>,
+    moon: vec4<f32>,
+    // Fog: density (1/m), curve (0 exp, 1 exp2), height fog's top (m) and density (1/m).
+    fog: vec4<f32>,
+    // Its color; w 1 to mix toward what the background shows instead.
+    fog_color: vec4<f32>,
+    // x: 1 when the background shows the environment; y: its blur's mip; z, w: its ground's
+    // height and radius (w 0 for none).
+    bg: vec4<f32>,
+    // The sun the sky follows: toward it and the cosine of its disk's radius (w 2 for none); its
+    // disk's radiance.
+    sun: vec4<f32>,
+    sun_color: vec4<f32>,
+};
+
+@group(1) @binding(3) var env_cube: texture_cube<f32>;
+@group(1) @binding(4) var env_sampler: sampler;
+@group(1) @binding(5) var<uniform> env: Env;
+@group(1) @binding(6) var env_cube_to: texture_cube<f32>;
+// The cascades' depth comparison: lit where the point lies no deeper than the map holds.
+@group(1) @binding(7) var shadow_cmp: sampler_comparison;
+
+// #422's planted shading: one F0 premixed from metallic; no multiple-scattering compensation;
+// compensation on environment light only.
+const NO_RECEIVE: u32 = 2u;
+const PREMIX: u32 = 1u;
+const NO_COMP: u32 = 2u;
+const ENV_COMP_ONLY: u32 = 4u;
 
 const PI: f32 = 3.14159265;
 // A solid record's flags: no shadow cast or received (#420); shaded by its material; its world
@@ -314,8 +365,8 @@ fn mapped(in: MeshOut, n: vec3<f32>, s0: Surface, g: array<vec4<f32>, 2>) -> Map
 
 // The DFG table at (cos view, roughness), bilinear.
 fn dfg_at(nv: f32, rough: f32) -> vec2<f32> {
-    let x = clamp(nv * 32.0 - 0.5, 0.0, 31.0);
-    let y = clamp(rough * 32.0 - 0.5, 0.0, 31.0);
+    let x = clamp(nv * 31.0, 0.0, 31.0);
+    let y = clamp(rough * 31.0, 0.0, 31.0);
     let x0 = u32(floor(x));
     let y0 = u32(floor(y));
     let x1 = min(x0 + 1u, 31u);
@@ -357,24 +408,59 @@ fn ggx(nh: f32, a2: f32) -> f32 {
     return a2 / (PI * dd * dd);
 }
 
+// One specular lobe from F0 to F90, with the energy single scattering loses restored
+// (Kulla-Conty's and Fdez-Agüera's compensation), and what it reflects at this view.
+fn spec_lobe(f0: vec3<f32>, f90: f32, d_vis: f32, fc5: f32, dfg_v: vec2<f32>) -> vec3<f32> {
+    let f = f0 + (f90 - f0) * fc5;
+    return d_vis * f * compensation(f0, dfg_v, (lights.count.z & (NO_COMP | ENV_COMP_ONLY)) != 0u);
+}
+
+// The factor that restores what a lobe's single scattering loses, 1 + F0 (1 ÷ E − 1), with E
+// the lobe's directional albedo from the DFG table; 1 when `off`.
+fn compensation(f0: vec3<f32>, dfg_v: vec2<f32>, off: bool) -> vec3<f32> {
+    if off {
+        return vec3<f32>(1.0);
+    }
+    return 1.0 + f0 * (1.0 / max(dfg_v.x + dfg_v.y, 1e-4) - 1.0);
+}
+
+// The two ends a material mixes by metallic (#422: the glTF BRDF's mix, taken after each is
+// shaded, never through one F0 premixed from metallic): a dielectric's F0 and F90, and a metal's.
+fn dielectric_f0(s: Surface) -> vec3<f32> {
+    return min(0.08 * s.level, 1.0) * s.specular;
+}
+
+fn dielectric_f90(s: Surface) -> f32 {
+    return min(2.0 * s.level, 1.0);
+}
+
 fn lobes(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, s: Surface, a2: f32, dfg_v: vec2<f32>) -> Lobes {
-    let f0 = mix(min(0.08 * s.level, 1.0) * s.specular, s.base, s.metallic);
-    let f90 = mix(min(2.0 * s.level, 1.0), 1.0, s.metallic);
     let h = normalize(l + v);
     let nh = max(dot(n, h), 0.0);
     let nl = max(dot(n, l), 1e-4);
     let nv = max(dot(n, v), 1e-4);
     let vh = max(dot(v, h), 0.0);
     let fc5 = pow(1.0 - vh, 5.0);
-    let f = f0 + (f90 - f0) * fc5;
     let vis = 0.5 / max(nl * sqrt(nv * nv * (1.0 - a2) + a2) + nv * sqrt(nl * nl * (1.0 - a2) + a2), 1e-6);
-    let single = ggx(nh, a2) * vis * f;
-    // Kulla-Conty's and Fdez-Agüera's compensation: the energy single scattering loses, back.
-    let albedo = max(dfg_v.x + dfg_v.y, 1e-4);
-    var spec = single * (1.0 + f0 * (1.0 / albedo - 1.0));
-    // What the specular lobe reflects at this view leaves the diffuse.
-    let e = f0 * dfg_v.x + f90 * dfg_v.y;
-    var diffuse = s.base * (1.0 - s.metallic) * (1.0 - e) / PI;
+    let d_vis = ggx(nh, a2) * vis;
+    var spec: vec3<f32>;
+    var diffuse: vec3<f32>;
+    if (lights.count.z & PREMIX) != 0u {
+        // #422's planted wrong program: one F0 premixed from metallic before shading.
+        let f0 = mix(dielectric_f0(s), s.base, s.metallic);
+        let f90 = mix(dielectric_f90(s), 1.0, s.metallic);
+        spec = spec_lobe(f0, f90, d_vis, fc5, dfg_v);
+        let e = f0 * dfg_v.x + f90 * dfg_v.y;
+        diffuse = s.base * (1.0 - s.metallic) * (1.0 - e) / PI;
+    } else {
+        let f0 = dielectric_f0(s);
+        let f90 = dielectric_f90(s);
+        // glTF's fresnel_mix: what the dielectric's Fresnel at v·h reflects leaves its diffuse.
+        let fd = f0 + (f90 - f0) * fc5;
+        let metal = spec_lobe(s.base, 1.0, d_vis, fc5, dfg_v);
+        spec = mix(spec_lobe(f0, f90, d_vis, fc5, dfg_v), metal, s.metallic);
+        diffuse = s.base * (1.0 - s.metallic) * (1.0 - max(fd.r, max(fd.g, fd.b))) / PI;
+    }
     if s.coat > 0.0 {
         let ca = max(s.coat_rough * s.coat_rough, 0.002);
         let fc = (0.04 + 0.96 * fc5) * s.coat;
@@ -385,24 +471,52 @@ fn lobes(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, s: Surface, a2: f32, dfg_v: v
     return Lobes(diffuse, spec);
 }
 
-// The key light's visibility at `world`: the share of a 3 × 3 texel neighbourhood of the shadow
-// map that doesn't block it (1 outside the map).
-fn lit_share(world: vec3<f32>) -> f32 {
-    let lp = lights.shadow * vec4<f32>(world, 1.0);
+// The key sun's visibility at `world` from cascade `i`: the share of a 3 × 3 texel
+// neighbourhood that doesn't block it, the point first pushed along its normal by a texel and a
+// half (1 outside the cascade).
+fn cascade_lit(i: u32, world: vec3<f32>, n: vec3<f32>) -> f32 {
+    let p = world + n * (1.5 * lights.texels[i]);
+    let lp = lights.cascades[i] * vec4<f32>(p, 1.0);
     let uv = lp.xy * vec2<f32>(0.5, -0.5) + 0.5;
-    if any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) {
+    if any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) || lp.z > 1.0 {
         return 1.0;
     }
-    let size = vec2<f32>(textureDimensions(shadow_map));
-    let px = vec2<i32>(floor(uv * size));
+    // Four bilinear comparisons half a texel apart: a 3 × 3 texel tent.
+    let texel = 0.5 / vec2<f32>(textureDimensions(shadow_map));
+    let z = lp.z - 1e-4;
     var lit = 0.0;
-    for (var y = -1; y <= 1; y++) {
-        for (var x = -1; x <= 1; x++) {
-            let at = clamp(px + vec2<i32>(x, y), vec2<i32>(0), vec2<i32>(size) - 1);
-            lit += select(0.0, 1.0, textureLoad(shadow_map, at, 0) >= lp.z - 0.002);
+    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(-texel.x, -texel.y), i32(i), z);
+    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(texel.x, -texel.y), i32(i), z);
+    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(-texel.x, texel.y), i32(i), z);
+    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(texel.x, texel.y), i32(i), z);
+    return lit * 0.25;
+}
+
+// The key sun's visibility at `world` (#422): the cascade its view depth falls in, blended with
+// the next across the last tenth of its range when fade is on; 1 past the last cascade.
+fn lit_share(world: vec3<f32>, n: vec3<f32>) -> f32 {
+    let count = lights.count.w;
+    if count == 0u {
+        return 1.0;
+    }
+    let d = dot(world - lights.view.xyz, lights.forward.xyz);
+    for (var i = 0u; i < count; i++) {
+        let far = lights.splits[i];
+        if d <= far {
+            let lit = cascade_lit(i, world, n);
+            let near = select(0.0, lights.splits[max(i, 1u) - 1u], i > 0u);
+            let edge = far - 0.1 * (far - near);
+            if lights.forward.w > 0.5 && d > edge {
+                var next = 1.0;
+                if i + 1u < count {
+                    next = cascade_lit(i + 1u, world, n);
+                }
+                return mix(lit, next, (d - edge) / max(far - edge, 1e-6));
+            }
+            return lit;
         }
     }
-    return lit / 9.0;
+    return 1.0;
 }
 
 // The illuminance an area light (a one-sided Lambertian rect or disk) gives at `p` on a surface
@@ -649,11 +763,14 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32) -> Direct {
     // Geometric specular antialiasing (Kaplanyan): the normal's change across the pixel widens
     // the lobe.
     let dn = dot(dpdx(n), dpdx(n)) + dot(dpdy(n), dpdy(n));
+    // The lobe is never narrower than the pixel's footprint in slope space (#422): a lobe under a
+    // pixel wide is point-sampled at pixel centers, and a mirror's sun loses up to a fifth of its
+    // light between them. A rough lobe is left exactly as it is.
     // Toksvig's (#423): a normal map's normals that spread under the pixel shorten their mean,
     // and the lobe widens by the vMF lobe that mean fits, α² += 2 ÷ κ, κ = (3l − l³) ÷ (1 − l²).
     let l = spread;
     let tok = select(0.0, 2.0 * (1.0 - l * l) / max(3.0 * l - l * l * l, 1e-4), l < 0.9999);
-    let a2 = clamp(rough * rough * rough * rough + min(0.5 * dn, 0.18) + min(tok, 1.0), 0.0, 1.0);
+    let a2 = clamp(max(rough * rough * rough * rough, min(dn, 0.18)) + min(tok, 1.0), 0.0, 1.0);
     let dfg_v = dfg_at(max(dot(n, v), 1e-4), rough);
     let catches = (in.flags & CATCH) != 0u;
     var out = vec3<f32>(0.0);
@@ -684,14 +801,20 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32) -> Direct {
                 add = (b.diffuse + b.spec) * e * nl;
             }
         }
-        out += add;
+        // The key sun's cascades shadow what receives (#422); a catcher keeps the light and
+        // reports the share its shadow removes.
+        var lit = 1.0;
+        if lights.count.y == i + 1u && (in.flags & NO_RECEIVE) == 0u {
+            lit = lit_share(in.world, n);
+        }
         if catches {
             let y = dot(add, vec3<f32>(0.2126, 0.7152, 0.0722));
             total += y;
-            if lights.count.y == i + 1u {
-                removed += y * (1.0 - lit_share(in.world));
-            }
+            removed += y * (1.0 - lit);
+        } else {
+            add = add * lit;
         }
+        out += add;
     }
     return Direct(out, select(0.0, removed / total, total > 0.0));
 }
@@ -768,8 +891,15 @@ fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
         if (in.flags & CATCH) != 0u {
             return Targets(vec4<f32>(0.0, 0.0, 0.0, d.removed * alpha * in.base.w), in.pick);
         }
-        let ambient = sky_light(in, facing, s) * m.occlusion;
-        return Targets(see_through(d.color + ambient + m.emission, alpha, mode), in.pick);
+        var ambient: vec3<f32>;
+        if env.k.x > 0.0 {
+            ambient = env_light(in, facing, s);
+        } else {
+            ambient = sky_light(in, facing, s);
+        }
+        // A map's occlusion scales the ambient term alone (#423).
+        let lit = fogged(d.color + ambient * m.occlusion + m.emission, in.world);
+        return Targets(see_through(lit, alpha, mode), in.pick);
     }
     let facing = max(dot(n, frame.light.xyz), 0.0);
     // A sun (w > 0) lights by its illuminance over an ambient quarter; with none, the view's own
@@ -782,10 +912,14 @@ fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
         ambient = mix(frame.sky_low.rgb, frame.sky_top.rgb, n.y * 0.5 + 0.5);
         direct = select(0.0, frame.light.w * facing, frame.light.w > 0.0);
     }
+    // Under the key sun's cascades (#422) a painted solid is shadowed as a material is.
+    if lights.count.w > 0u && (in.flags & NO_RECEIVE) == 0u {
+        direct = direct * lit_share(in.world, n);
+    }
     let albedo = paint(in.color);
     let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
     let a = in.emission.w;
-    return Targets(vec4<f32>((albedo * lit + in.emission.rgb) * a, a), in.pick);
+    return Targets(vec4<f32>(fogged(albedo * lit + in.emission.rgb, in.world) * a, a), in.pick);
 }
 
 // The ao prepass (#418): an opaque solid's world normal; its depth goes to the prepass's own
@@ -810,15 +944,83 @@ fn sky_light(in: MeshOut, n: vec3<f32>, s: Surface) -> vec3<f32> {
     let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
     let rough = clamp(s.rough, 0.045, 1.0);
     let dfg_v = dfg_at(max(dot(n, v), 1e-4), rough);
-    let f0 = mix(min(0.08 * s.level, 1.0) * s.specular, s.base, s.metallic);
-    let f90 = mix(min(2.0 * s.level, 1.0), 1.0, s.metallic);
-    let e = f0 * dfg_v.x + f90 * dfg_v.y;
-    let spec = e * (1.0 + f0 * (1.0 / max(dfg_v.x + dfg_v.y, 1e-4) - 1.0));
+    let albedo = max(dfg_v.x + dfg_v.y, 1e-4);
+    let f0 = dielectric_f0(s);
+    let e = f0 * dfg_v.x + dielectric_f90(s) * dfg_v.y;
+    let metal = s.base * dfg_v.x + dfg_v.y;
+    var spec = mix(e * (1.0 + f0 * (1.0 / albedo - 1.0)), metal * (1.0 + s.base * (1.0 / albedo - 1.0)), s.metallic);
     let r = reflect(-v, n);
     // A rough lobe sees the sky's average over the hemisphere, as a diffuse one does.
     let reflected = mix(sky_at(r), sky_at(n), rough * rough);
     let diffuse = s.base * (1.0 - s.metallic) * (1.0 - e);
     return diffuse * sky_at(n) * occlusion(in.pos.xy, diffuse) + spec * reflected;
+}
+
+// The environment's light on a material (#422): its irradiance by the normal on the diffuse
+// lobe under ambient occlusion, and its prefiltered radiance along the mirror direction at the
+// lobe's roughness on the specular lobes, each through the DFG table with the multiple
+// scattering restored, the dielectric and metal lobes shaded apart and mixed by metallic.
+fn env_light(in: MeshOut, n: vec3<f32>, s: Surface) -> vec3<f32> {
+    let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
+    let rough = clamp(s.rough, 0.045, 1.0);
+    let dfg_v = dfg_at(max(dot(n, v), 1e-4), rough);
+    let off = (lights.count.z & NO_COMP) != 0u;
+    let f0 = dielectric_f0(s);
+    let e = f0 * dfg_v.x + dielectric_f90(s) * dfg_v.y;
+    var spec: vec3<f32>;
+    if (lights.count.z & PREMIX) != 0u {
+        let pf0 = mix(f0, s.base, s.metallic);
+        let pf90 = mix(dielectric_f90(s), 1.0, s.metallic);
+        spec = (pf0 * dfg_v.x + pf90 * dfg_v.y) * compensation(pf0, dfg_v, off);
+    } else {
+        let metal = (s.base * dfg_v.x + dfg_v.y) * compensation(s.base, dfg_v, off);
+        spec = mix(e * compensation(f0, dfg_v, off), metal, s.metallic);
+    }
+    let diffuse = s.base * (1.0 - s.metallic) * (1.0 - e);
+    let r = reflect(-v, n);
+    let lod = rough * env.k.y;
+    return (diffuse * env_irradiance(n) * occlusion(in.pos.xy, diffuse) + spec * env_radiance(r, lod)) * env.k.z;
+}
+
+// A direction turned into the environment's own frame: back by its rotation about +Y.
+fn env_dir(d: vec3<f32>) -> vec3<f32> {
+    let c = cos(env.k.w);
+    let s = sin(env.k.w);
+    return vec3<f32>(c * d.x - s * d.z, d.y, s * d.x + c * d.z);
+}
+
+// The prefiltered radiance along `d` at mip `lod`, mixed toward the second environment by `by`.
+fn env_radiance(d: vec3<f32>, lod: f32) -> vec3<f32> {
+    let e = env_dir(d);
+    let a = textureSampleLevel(env_cube, env_sampler, e, lod).rgb;
+    if env.m.x <= 0.0 {
+        return a;
+    }
+    return mix(a, textureSampleLevel(env_cube_to, env_sampler, e, lod).rgb, env.m.x);
+}
+
+// The irradiance ÷ π a surface facing `n` gets, from the nine coefficients.
+fn env_irradiance(n: vec3<f32>) -> vec3<f32> {
+    let d = env_dir(n);
+    let b0 = 0.282095;
+    let b = array<f32, 9>(
+        b0,
+        0.488603 * d.y,
+        0.488603 * d.z,
+        0.488603 * d.x,
+        1.092548 * d.x * d.y,
+        1.092548 * d.y * d.z,
+        0.315392 * (3.0 * d.z * d.z - 1.0),
+        1.092548 * d.x * d.z,
+        0.546274 * (d.x * d.x - d.y * d.y),
+    );
+    var a = vec3<f32>(0.0);
+    var t = vec3<f32>(0.0);
+    for (var k = 0u; k < 9u; k++) {
+        a += env.sh[k].rgb * b[k];
+        t += env.sh_to[k].rgb * b[k];
+    }
+    return max(mix(a, t, env.m.x), vec3<f32>(0.0));
 }
 
 // The sky's ambient light along `d`, from below to above.
@@ -1055,4 +1257,187 @@ fn text_fs(in: TextOut) -> Targets {
     }
     let shown = select(a, 0.0, in.later != 0u);
     return Targets(vec4<f32>(paint(in.color) * shown, shown), select(0u, in.pick, a >= 0.5));
+}
+
+// ---- the sky (#422): drawn first, behind everything, and what fog mixes toward
+
+@vertex
+fn sky_vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+    let x = f32(i32(i & 1u) * 4 - 1);
+    let y = f32(i32(i >> 1u) * 4 - 1);
+    // The far plane: 0 under reversed Z, 1 under the planted forward Z.
+    return vec4<f32>(x, y, frame.px.w, 1.0);
+}
+
+// The view ray through pixel `px` of this target.
+fn view_ray(px: vec2<f32>) -> vec3<f32> {
+    let ndc = vec2<f32>(px.x / frame.viewport.x * 2.0 - 1.0, 1.0 - px.y / frame.viewport.y * 2.0);
+    if env.eye.w < 0.5 {
+        return normalize(lights.forward.xyz);
+    }
+    let p = env.inv * vec4<f32>(ndc, 0.5, 1.0);
+    return normalize(p.xyz / p.w - env.eye.xyz);
+}
+
+fn star(d: vec3<f32>, density: f32) -> f32 {
+    let cell = vec3<i32>(floor(d * 160.0));
+    var h = 0x9e3779b9u;
+    for (var k = 0u; k < 3u; k++) {
+        h = h ^ bitcast<u32>(cell[k]);
+        h = h * 0x85ebca6bu;
+        h = h ^ (h >> 13u);
+    }
+    let r = f32(h % 10000u) / 10000.0;
+    let cut = density * 0.02;
+    return select(0.0, 0.5 + 2.0 * r / max(cut, 1e-9), r < cut);
+}
+
+// The sky's own fields along `d`: the gradient, the moon and the stars (env.rs's
+// `sky_radiance`).
+fn sky_fields(d: vec3<f32>) -> vec3<f32> {
+    var c = mix(env.low.rgb, env.top.rgb, sqrt(max(d.y, 0.0)));
+    if env.moon.w <= 1.0 && dot(d, env.moon.xyz) >= env.moon.w {
+        let k = max(1.0, 4.0 * max(env.top.r, max(env.top.g, env.top.b)));
+        c = vec3<f32>(k * 0.95, k * 0.97, k);
+    }
+    if env.top.w > 0.0 && d.y > 0.0 {
+        c += vec3<f32>(star(d, env.top.w));
+    }
+    if env.sun.w <= 1.0 && dot(d, env.sun.xyz) >= env.sun.w {
+        c = env.sun_color.rgb;
+    }
+    return c;
+}
+
+// What the background shows along `d` from the eye: the environment (on its ground when it has
+// one, at its blur) or the sky's own fields.
+fn background(d: vec3<f32>) -> vec3<f32> {
+    if env.bg.x < 0.5 {
+        return sky_fields(d);
+    }
+    var dir = d;
+    if env.bg.w > 0.0 {
+        let c = vec3<f32>(0.0, env.bg.z, 0.0);
+        let o = env.eye.xyz - c;
+        let b = dot(o, d);
+        let t = -b + sqrt(max(b * b - (dot(o, o) - env.bg.w * env.bg.w), 0.0));
+        var p = env.eye.xyz + d * t;
+        if p.y < 0.0 && d.y < 0.0 {
+            p = env.eye.xyz + d * (-env.eye.y / d.y);
+        }
+        dir = normalize(p - c);
+    }
+    return env_radiance(dir, env.bg.y) * env.k.z;
+}
+
+@fragment
+fn sky_fs(@builtin(position) pos: vec4<f32>) -> Targets {
+    return Targets(vec4<f32>(background(view_ray(pos.xy)), 1.0), 0u);
+}
+
+// Fog on a lit surface at `world` (#422; Sky `sky@1` and its height fog): the distance fog by
+// its curve, and the mist below the height fog's top along the ray's length beneath it, mixed
+// toward the fog's color or what the background shows along the ray.
+fn fogged(c: vec3<f32>, world: vec3<f32>) -> vec3<f32> {
+    if env.low.w < 0.5 || (env.fog.x <= 0.0 && env.fog.w <= 0.0) {
+        return c;
+    }
+    let ray = world - env.eye.xyz;
+    let dist = length(ray);
+    let a = env.fog.x * dist;
+    var keep = select(exp(-a), exp(-a * a), env.fog.y > 0.5);
+    if env.fog.w > 0.0 {
+        // The share of the ray below the top, from the eye to the surface.
+        let y0 = env.eye.y;
+        let y1 = world.y;
+        var below = 0.0;
+        if y0 <= env.fog.z && y1 <= env.fog.z {
+            below = 1.0;
+        } else if y0 <= env.fog.z || y1 <= env.fog.z {
+            let cross = (env.fog.z - y0) / (y1 - y0);
+            below = select(1.0 - cross, cross, y0 <= env.fog.z);
+        }
+        keep *= exp(-env.fog.w * dist * below);
+    }
+    var tint = env.fog_color.rgb;
+    if env.fog_color.w > 0.5 {
+        tint = background(ray / max(dist, 1e-6));
+    }
+    return mix(tint, c, keep);
+}
+
+// ---- puffs (#422; Puff `puff@1`): soft cloud sprites, back to front after the solids
+
+struct PuffOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) q: vec2<f32>,
+    @location(1) world: vec3<f32>,
+    @location(2) @interpolate(flat) center: vec4<f32>,
+    @location(3) @interpolate(flat) shape: vec4<f32>,
+    @location(4) @interpolate(flat) light: vec4<f32>,
+};
+
+@vertex
+fn puff_vs(
+    @builtin(vertex_index) vi: u32,
+    // xyz: where it is; w: its radius.
+    @location(0) center: vec4<f32>,
+    // Aspect, density, brightness and its seed.
+    @location(1) shape: vec4<f32>,
+    // Phase, shade, near fade, and bit 0: lit by the sun, bit 1: by the sky.
+    @location(2) light: vec4<f32>,
+) -> PuffOut {
+    var out: PuffOut;
+    let c = corner(vi) * 2.0 - 1.0;
+    let world = center.xyz + frame.right.xyz * (c.x * center.w * shape.x) + frame.up.xyz * (c.y * center.w);
+    out.pos = frame.clip * vec4<f32>(world, 1.0);
+    out.q = c;
+    out.world = world;
+    out.center = center;
+    out.shape = shape;
+    out.light = light;
+    return out;
+}
+
+@fragment
+fn puff_fs(in: PuffOut) -> Targets {
+    let r2 = dot(in.q, in.q);
+    if r2 >= 1.0 {
+        discard;
+    }
+    // Lumps from the puff's seed, the same in every frame: two crossed waves at phases its
+    // seed's hash sets.
+    let h = hash3(vec3<i32>(i32(in.shape.w), 7, 13), 422u);
+    let lump = 1.0 + 0.25 * sin(in.q.x * 4.1 + h * 6.28318) * sin(in.q.y * 3.7 + h * 17.0);
+    var alpha = clamp(in.shape.y * (1.0 - r2) * (1.0 - r2) * lump, 0.0, 1.0);
+    if alpha < 0.002 {
+        discard;
+    }
+    let eye = lights.view.xyz;
+    let dist = length(in.center.xyz - eye) - in.center.w;
+    if in.light.z > 0.0 {
+        alpha *= clamp(dist / in.light.z, 0.0, 1.0);
+    }
+    // The sphere's normal under the sprite, facing the eye.
+    let back = -normalize(cross(frame.right.xyz, frame.up.xyz));
+    let n = normalize(frame.right.xyz * in.q.x + frame.up.xyz * in.q.y - back * sqrt(1.0 - r2));
+    let flags = u32(in.light.w);
+    var c = vec3<f32>(0.0);
+    if (flags & 1u) != 0u && frame.light.w > 0.0 {
+        let l = frame.light.xyz;
+        let lit = mix(1.0, max(dot(n, l), 0.0) * 0.8 + 0.2, in.light.y);
+        // Brighter toward the sun by a forward-scattering phase.
+        let toward = max(dot(normalize(in.world - eye), l), 0.0);
+        let phase = 1.0 + in.light.x * 3.0 * pow(toward, 8.0);
+        c += vec3<f32>(frame.light.w * lit * phase);
+    }
+    if (flags & 2u) != 0u {
+        if env.k.x > 0.0 {
+            c += env_irradiance(n) * env.k.z;
+        } else if frame.sky_top.w > 0.0 {
+            c += mix(frame.sky_low.rgb, frame.sky_top.rgb, n.y * 0.5 + 0.5);
+        }
+    }
+    c = fogged(c * in.shape.z * 0.9, in.world);
+    return Targets(vec4<f32>(c * alpha, alpha), 0u);
 }
