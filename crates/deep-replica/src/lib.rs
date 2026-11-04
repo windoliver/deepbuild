@@ -65,7 +65,10 @@ pub fn panel_dir(name: &str) -> PathBuf {
     repo_root().join("crates/deep-app/panels").join(name)
 }
 
-/// `--view <id> --out <out>` from the command line, the view a shipped one, and where `appearance`
+/// The view name `--first-screen` stands for: the app's first screen, Home, drawn for the HOME it runs with.
+pub const FIRST_SCREEN: &str = "first-screen";
+
+/// `--view <id> --out <out>` from the command line, the view a shipped one (or `--first-screen`), and where `appearance`
 /// takes it, `--appearance <light|dark>` as whether macOS is set to dark (#882); else the usage error
 /// is printed under `bin`'s name and the exit code is 2.
 pub fn view_args(
@@ -78,6 +81,8 @@ pub fn view_args(
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--view" => view = args.next(),
+            // #1002: the app's first screen as a launch shows it for this HOME, over its own record, not the fixture.
+            "--first-screen" => view = Some(FIRST_SCREEN.to_owned()),
             "--out" => path = args.next().map(PathBuf::from),
             "--appearance" if appearance => match args.next().as_deref() {
                 Some("light") => dark = Some(false),
@@ -97,7 +102,7 @@ pub fn view_args(
         eprintln!("usage: {bin} --view <id> --out <{out}>");
         return Err(2);
     };
-    if !deep_app::views::SHIPPED_VIEWS.contains(&view.as_str()) {
+    if view != FIRST_SCREEN && !deep_app::views::SHIPPED_VIEWS.contains(&view.as_str()) {
         let shipped = deep_app::views::SHIPPED_VIEWS;
         eprintln!("{bin}: {view} is not a shipped view; the views are {shipped:?}");
         return Err(2);

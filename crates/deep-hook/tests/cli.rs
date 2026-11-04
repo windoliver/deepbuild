@@ -576,3 +576,35 @@ fn a_print_mode_agents_waiter_exits_at_once() {
         "under an interactive `claude` the waiter must keep waiting"
     );
 }
+
+#[test]
+fn a_hook_the_agent_runs_through_sh_names_the_agent_as_its_parent() {
+    // Claude Code runs a hook entry as `/bin/sh -c <command>`; dash, Linux's /bin/sh, stays as the hook's parent
+    // (#992). With no hub the request is spooled, and its ppid is this process, the agent's stand-in.
+    let home = fresh_home(format!("/tmp/dh992-sh-{}", std::process::id()).into());
+    let command = format!(
+        "'{}' claude-code Notification",
+        env!("CARGO_BIN_EXE_deep-hook")
+    );
+    let mut child = Command::new("/bin/sh")
+        .args(["-c", &command])
+        .env_clear()
+        .env("HOME", &home)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    feed(
+        &mut child,
+        br#"{"session_id":"s","cwd":"/tmp","hook_event_name":"Notification","message":"m","notification_type":"idle_prompt"}"#,
+    );
+    child.wait().unwrap();
+    let spooled =
+        std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
+    let _ = std::fs::remove_dir_all(&home);
+    assert!(
+        spooled.contains(&format!("\"ppid\":{},", std::process::id())),
+        "the spooled request names this process as the agent: {spooled}"
+    );
+}

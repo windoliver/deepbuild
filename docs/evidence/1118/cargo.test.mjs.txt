@@ -1,0 +1,14 @@
+// #1118 e2e (untracked, scratch): builds the workspace's Linux crates where the proof runs it and logs what cargo compiled.
+import { spawnSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+test('#1118.1f06c2df the workspace builds where the proof runs it', () => {
+  const skip = ['deep-app', 'deep-panel-host', 'deep-gpu-layer', 'deep-replica', 'deep-show', 'deep-text-render', 'deep-marks-render'];
+  const r = spawnSync('cargo', ['build', '--workspace', ...skip.flatMap((p) => ['--exclude', p]), '--all-targets', '--message-format=json'], { encoding: 'utf8', maxBuffer: 1 << 28 });
+  const artifacts = r.stdout.split('\n').filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)).filter((m) => m.reason === 'compiler-artifact');
+  const compiled = [...new Set(artifacts.filter((m) => !m.fresh).map((m) => m.target.name))];
+  appendFileSync(process.env.E2E_LOG, JSON.stringify({ cwd: process.cwd(), status: r.status, artifacts: artifacts.length, compiled, compiling: r.stderr.split('\n').filter((l) => /^\s*Compiling /.test(l)).length }) + '\n');
+  assert.equal(r.status, 0, r.stderr.slice(-2000));
+});
