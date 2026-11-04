@@ -33,6 +33,7 @@
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, join, normalize, sep } from 'node:path';
 import type { Asks, Delivery } from '@deepbuild/asks';
+import type { PaidKind } from '@deepbuild/gate';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { RecordError, ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { solveLine } from '@deepbuild/gate';
@@ -121,7 +122,7 @@ const issueNumber = (source_id: string): number | undefined => { const m = /(\d+
 
 // ---- Definitions handed to the kernel, and the work source's readings.
 
-interface Requirement { expected_ms?: number; deadline_ms?: number; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; targets?: string[] }
+interface Requirement { expected_ms?: number; deadline_ms?: number; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; targets?: string[]; paid?: PaidKind }
 interface Author { handle: string; role: string; automated?: boolean }
 interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[] }
 /** A work source's work.item@2 reading: the test source's and the GitHub source's carry their body as text; an item carries the readings it came with (its comments among them). */
@@ -138,6 +139,8 @@ interface Early { claim: string; session: string; agent: string; cwd: string }
 /** The roles whose text can remove or waive a requirement; an automated account's never does, whatever its membership. */
 const TRUSTED = new Set(['you', 'owner', 'collaborator']);
 const trusted = (a: Author): boolean => TRUSTED.has(a.role) && a.automated !== true;
+/** The kinds of spend a check can cost (#325). */
+const PAID = new Set<string>(['live call', 'hosted browser run', 'model job']);
 /** Where each definition's drafted checks are kept, behind the `.deepbuild/` guard. */
 const DRAFTED = '.deepbuild/';
 /** A declared surface: #31's shape, without the check, which is the requirement's own; only the fields the lock records. */
@@ -180,13 +183,15 @@ export interface AskTaskOptions {
   pin(cwd: string, question: string): Promise<Obj>;
   /** Keeps bytes in the evidence store, answering their SHA-256. */
   keep(bytes: Uint8Array, source: string): Promise<string>;
+  /** A definition just locked: its paid checks are priced and the issue's budget asked for once (#325). */
+  locked?(d: { session: string; agent: string; task_ref: string; requirements: { id: string; check: string | null; paid?: PaidKind }[] }): Promise<void>;
   /**
    * Hands a claim's checks to the gate runner (#29), from the bytes the store keeps under each one's approved digest:
    * it takes the claim's snapshot and checkout, and starts the fast lane's checks, the repo's spec checks beside them.
    * `definition` says whether the task's definition is locked; `joins` that the claim's checks already started once,
    * before its definition locked, and these join them.
    */
-  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string })[]; definition: DefinitionState; joins?: boolean }): Promise<void>;
+  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean }): Promise<void>;
   /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
   invalid(claim: string, commit: string, reason: string): Promise<void>;
   /** The targets of a claim's requirements that didn't resolve before its runs (#323): each verdict made on it is INVALID, naming them. */
@@ -364,6 +369,8 @@ export class AskTasks {
         ...(typeof r.expected_ms === 'number' ? { expected_ms: r.expected_ms } : {}), ...(typeof r.deadline_ms === 'number' ? { deadline_ms: r.deadline_ms } : {}),
         ...(references.length ? { references } : {}), ...(typeof r.command === 'string' && r.command ? { command: r.command } : {}), ...(typeof r.criterion === 'string' && r.criterion ? { criterion: r.criterion } : {}),
         ...(targets.length ? { targets } : {}),
+        // A check that costs money says what it spends on (#325), so the lock prices it.
+        ...(check && PAID.has(String(r.paid)) ? { paid: r.paid as PaidKind } : {}),
       });
     }
     // A waiver counts only from you or a repo collaborator; any other's leaves the requirement in, and makes the
@@ -427,14 +434,16 @@ export class AskTasks {
     // A definition with nothing to meet locks nothing: a claim on it would pass with no check run.
     if (!definition.requirements.length) throw Error('it has no requirements left to lock');
     const ts = this.o.now();
+    let fresh = true;
     try {
       await this.o.append(this.o.connection(session, agent), {
-        v: 6, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
+        v: 7, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
         data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
       });
     } catch (error) {
       // The lock is in the log already under this ID (its ts differs, so a replayed hook or a second lock racing the first conflicts): the first lock stands.
       if (!(error instanceof RecordError && error.code === 'conflict')) throw error;
+      fresh = false;
     }
     // What the definition shows of itself before any claim (#323): its one solve line, and each journey with no
     // negative case, whose check nothing shows can fail.
@@ -443,6 +452,8 @@ export class AskTasks {
     await this.o.append(this.o.connection(session, agent), {
       v: 1, id: derivedId(at, `${definition.task_ref}:${handed}:checked`), kind: 'definition.checked', ts, data: { task_ref: definition.task_ref, solved: solve.solved, solve: solve.line, flags },
     }).catch((error: unknown) => { if (!(error instanceof RecordError && error.code === 'conflict')) throw error; });
+    // Its paid checks are priced now, and the issue's one budget asked for once (#325).
+    if (fresh) await this.o.locked?.({ session, agent, task_ref: definition.task_ref, requirements: definition.requirements }).catch((error: unknown) => process.stderr.write(`deep hub: ${definition.task_ref}'s paid checks were not priced: ${error instanceof Error ? error.message : String(error)}\n`));
     // A claim made before the lock is judged against the definition now (#322).
     const early = this.early.get(definition.task_ref);
     if (early) {
@@ -646,7 +657,7 @@ export class AskTasks {
     const checks = stored.flatMap((r) => (r.check && r.check_sha256 ? [{
       check: r.check, approved: r.check_sha256, on_base: onBase(r), asserts: r.asserts, req: r.id, surface: r.surface ?? null,
       ...(r.expected_ms !== undefined ? { expected_ms: r.expected_ms } : {}), ...(r.deadline_ms !== undefined ? { deadline_ms: r.deadline_ms } : {}),
-      ...(r.references?.length ? { references: r.references } : {}), ...(r.command ? { command: r.command } : {}),
+      ...(r.references?.length ? { references: r.references } : {}), ...(r.command ? { command: r.command } : {}), ...(r.paid ? { paid: r.paid } : {}),
     }] : []));
     // Each requirement by its handle (req:<task>#R<n>, as verdict.made names them), with the check that covers it.
     const handles = stored.map((r, i) => ({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, id: r.id, text: r.criterion ? `${r.criterion}, ${r.text}` : r.text, depth: r.depth, oracle: r.oracle, on_base: onBase(r), check: r.check }));
@@ -679,14 +690,18 @@ export class AskTasks {
     const rows = (await this.o.raw(`SELECT t.task_ref FROM tasks t WHERE t.state != 'closed' AND t.thread = ${this.threadSql(session)} ORDER BY t.created`)) as { task_ref: string }[];
     const task = rows.map((r) => String(r.task_ref)).find((ref) => !ref.startsWith('session:') && issueNumber(ref) === issue);
     if (!task) return undefined;
+    const left = await this.leftOf(task);
+    if (!left) return { task_ref: task, left: [], locked: false };
+    return { task_ref: task, left: left.map((r) => ({ id: r.id, text: r.criterion ? `${r.criterion}, "${r.text}"` : `"${r.text}"` })), locked: true };
+  }
+  /** The requirements of a task's locked definition that its newest verdict didn't pass; undefined while none is locked. */
+  async leftOf(task: string): Promise<Requirement[] | undefined> {
     const [definition] = (await this.o.raw(`SELECT requirements FROM definitions WHERE task_ref = ? AND state IN ('locked', 'revised') LIMIT 1`, [task])) as { requirements: string }[];
-    if (!definition) return { task_ref: task, left: [], locked: false };
+    if (!definition) return undefined;
     const requirements = JSON.parse(definition.requirements) as Requirement[];
     const [verdict] = (await this.o.raw(`SELECT v.requirements FROM verdicts v JOIN claims c ON c.id = v.claim_id WHERE c.subject_ref = ? AND v.stale = 0 ORDER BY v.created DESC LIMIT 1`, [task])) as { requirements: string }[];
     const passed = new Set((verdict ? JSON.parse(verdict.requirements) as { req: string; outcome: string }[] : []).filter((r) => r.outcome === 'PASS').map((r) => r.req.slice(r.req.indexOf('#') + 1)));
-    const left = requirements.map((r, i) => ({ r, handle: /^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}` })).filter(({ handle }) => !passed.has(handle))
-      .map(({ r }) => ({ id: r.id, text: r.criterion ? `${r.criterion}, "${r.text}"` : `"${r.text}"` }));
-    return { task_ref: task, left, locked: true };
+    return requirements.filter((r, i) => !passed.has(/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`));
   }
 
   /** What SessionStart sends again after a compaction or a resume: the open asks' requirement IDs, in one short block. */
