@@ -36,15 +36,14 @@ function repository(t, checks) {
   const cache = join(box, 'cache');
   for (const directory of [cwd, cache]) mkdirSync(directory);
   mkdirSync(join(cwd, 'benchmarks'));
-  // perf imports scripts beside it, and through them packages of this checkout's node_modules.
+  // perf imports scripts beside it, and nothing from node_modules: a fixture, as other issues' tests make, has none.
   cpSync(fileURLToPath(scripts), join(cwd, 'scripts'), { recursive: true });
-  symlinkSync(fileURLToPath(new URL('../node_modules', import.meta.url)), join(cwd, 'node_modules'));
   const files = {
     'scripts/checks.mjs': checks(cwd),
     'package.json': JSON.stringify({ name: 'fixture', private: true, scripts: { build: `node -e "require('node:fs').writeFileSync('warm', '')"` } }),
     'package-lock.json': JSON.stringify({ name: 'fixture', lockfileVersion: 3, requires: true, packages: { '': { name: 'fixture' } } }),
     'benchmarks/budgets.json': JSON.stringify({ preflight: { margin: 0.5, limits: { elapsedMs: 300_000 }, initialReason: 'Fixture base.' }, tasks: [] }),
-    '.gitignore': 'warm\nnode_modules\n',
+    '.gitignore': 'warm\nnode_modules/\n',
   };
   for (const [path, content] of Object.entries(files)) writeFileSync(join(cwd, path), content);
   const git = (...args) => execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd });
