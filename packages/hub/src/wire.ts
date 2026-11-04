@@ -215,6 +215,8 @@ export interface CoreOptions {
   drafts?: string;
   /** The test work source's work.item@1 readings, from DEEP_HUB_TEST_WORK; only tests set it. */
   work?: string;
+  /** Paid checks' prices and their runs' cost readings, a file named by DEEP_HUB_TEST_PRICES; only tests set it (#325). */
+  prices?: string;
   /** The GitHub API's recorded answers, a file named by DEEP_HUB_TEST_GITHUB; only tests set it (#322). */
   github?: string;
   /** A file of runs for the background job `test` (#909), from DEEP_HUB_TEST_FAIL_JOB: a line `fail` throws, `ok` passes; only tests set it. */
