@@ -1087,6 +1087,18 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #1098 first measurement: the merge base places no target of a plan. One process opens a record with an evidence store and the asks core, archives a session transcript of 5,000 tool results, and raises one authority ask whose step names eight targets of every kind, until its card shows each placed, with no model in the path; p50 includes Node's start, so the issue's 20 ms limit stays in tests/acceptance/1098/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-operator-data-view",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "operator",
+        "data_view"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #429 first measurement: the merge base draws no operator item. One process opens the data_view class's fixture (benchmarks/canvas/data_view.json) with a composed pass that tints the frame at the class's half resolution in `deep-gpu`'s live window, five runs of 300 frames after 30 of warm-up, each run the p95 of the operator's own pass, held to the class's 0.5 ms in tests/acceptance/429/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }
