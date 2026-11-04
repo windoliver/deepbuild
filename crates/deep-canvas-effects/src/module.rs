@@ -228,8 +228,174 @@ fn register(r: &mut Registrar) {
     }
     // Headless, the kit proves the scene the effects draw on reaches the check with no issue;
     // its pixels need the GPU, and the acceptance suite draws them there.
+    // #429's planted documents, each raising the one code it names: a check that holds on any
+    // machine reading a same-machine operator's readback, and a composed pass in a core view.
+    r.fixture("same-machine-check", same_machine_check(), None)
+        .sidecar(json!({"codes": ["not_exact"], "covers": {"kinds": ["gpu.compute@1"], "fields": ["gpu.compute@1/params/outputs"]}}));
+    r.fixture("composed-in-core-view", composed_in_core_view(), None)
+        .sidecar(json!({"codes": ["operator_budget_class"], "covers": {"kinds": ["gpu.pass@1"], "fields": ["gpu.pass@1/params/steps"]}}));
+    r.fixture("live-only-material", live_only_material(), None)
+        .sidecar(json!({"codes": ["live_only_canonical"], "covers": {"kinds": ["gpu.material@1"], "fields": ["gpu.material@1/params/fallback"]}}));
+    r.fixture("scattered-write", scattered_write(), None)
+        .sidecar(json!({"codes": ["operator_kind_rule"], "covers": {"kinds": ["gpu.compute@1"], "fields": ["gpu.compute@1/params/steps"]}}));
+    // A tint with one step changed for each of the check's other codes.
+    for (code, steps, cost) in planted_tints() {
+        r.fixture(&format!("tint-{}", code.replace('_', "-")), tint_figure(steps, cost), None)
+            .sidecar(json!({"codes": [code], "covers": {"kinds": ["gpu.pass@1"], "fields": ["gpu.pass@1/params/steps"]}}));
+    }
     r.fixture("shadowed-box", shadowed_box(), None)
         .sidecar(json!({"codes": [], "covers": {"kinds": ["light.sun@1"], "fields": ["light.sun@1/params/shadow"]}}));
+}
+
+/// A figure of one box, its camera and `extra` items, in budget class `class`.
+fn box_figure(title: &str, class: &str, extra: Value) -> Value {
+    let mut items = json!({
+        "cam": {"id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+                "params": {"projection": "perspective", "position": [0, 2, 6], "target": [0, 0, 0], "fov": 40}},
+        "block": {"id": "block", "kind": "mark.box@1", "name": "Block", "order": "a1",
+                  "params": {"size": [1, 1, 1], "paint": {"fill": {"role": "accent"}}}}
+    });
+    if let (Some(i), Some(e)) = (items.as_object_mut(), extra.as_object()) {
+        i.extend(e.clone());
+    }
+    json!({
+        "format": 1, "profile": "figure", "title": title,
+        "description": "A #429 planted document of the effects module.",
+        "size": [320, 180], "camera": "cam", "budget": {"class": class},
+        "requires": {"modules": {"scene3d": "^1", "effects": "^1"}}, "items": items
+    })
+}
+
+/// A check that holds on any machine reading back a compute operator with an f32 step.
+fn same_machine_check() -> Value {
+    let mut doc = box_figure("A check on a same-machine readback", "figure", json!({
+        "sum": {"id": "sum", "kind": "gpu.compute@1", "name": "Sum", "order": "b0", "params": {
+            "about": "One word, squared as an f32, for a check to read back.", "origin": "composed", "inputs": {},
+            "steps": {
+                "e": {"op": "element@1", "args": {}},
+                "x": {"op": "bitcast@1", "args": {"x": "e", "to": "f32"}},
+                "m": {"op": "mul@1", "args": {"a": "x", "b": "x"}},
+                "b": {"op": "bitcast@1", "args": {"x": "m", "to": "u32"}},
+                "w": {"op": "write@1", "args": {"buf": "total", "i": "e", "v": "b"}}
+            },
+            "outputs": {"total": {"readback": {"type": "u32", "count": 1, "bytes": 4}}},
+            "elements": 1, "workgroup": 64, "cost": {"ns_per_element": 1000}
+        }}
+    }));
+    doc["checks"] = json!({"total_ok": {"kind": "honest_numbers", "probe": "items/sum/outputs/total", "expect": 0, "machines": "any"}});
+    doc
+}
+
+/// A material declared live only with no fallback, which canonical renders couldn't draw.
+fn live_only_material() -> Value {
+    box_figure("A live-only material with no fallback", "figure", json!({
+        "glow": {"id": "glow", "kind": "gpu.material@1", "name": "Glow", "order": "b0", "params": {
+            "about": "Emits red, live only, with no fallback.", "origin": "composed", "inputs": {},
+            "steps": {"e": {"op": "const@1", "args": {"value": [1, 0, 0], "type": "vec3"}}},
+            "outputs": {"emission": "e"}, "determinism": "live_only", "fallback": "none",
+            "cost": {"ns_per_px": 50}
+        }}
+    }))
+}
+
+/// A compute write at hash(i) % n, not the element's own index.
+fn scattered_write() -> Value {
+    box_figure("A compute write at another element's index", "figure", json!({
+        "scatter": {"id": "scatter", "kind": "gpu.compute@1", "name": "Scatter", "order": "b0", "params": {
+            "about": "Writes 1 at hash(i) % 64.", "origin": "composed", "inputs": {},
+            "steps": {
+                "e": {"op": "element@1", "args": {}},
+                "n": {"op": "const@1", "args": {"value": 64, "type": "u32"}},
+                "one": {"op": "const@1", "args": {"value": 1, "type": "u32"}},
+                "h": {"op": "hash@1", "args": {"a": "e"}},
+                "i": {"op": "rem@1", "args": {"a": "h", "b": "n"}},
+                "w": {"op": "write@1", "args": {"buf": "out", "i": "i", "v": "one"}}
+            },
+            "outputs": {"out": {"storage": {"type": "u32", "count": 64}}},
+            "elements": 64, "workgroup": 64, "cost": {"ns_per_element": 1000}
+        }}
+    }))
+}
+
+/// A figure with one composed pass of `steps` (its output the step `out`), declared at `cost` ns
+/// a pixel.
+fn tint_figure(steps: Value, cost: f64) -> Value {
+    box_figure("A composed pass the check refuses", "figure", json!({
+        "tint": {"id": "tint", "kind": "gpu.pass@1", "name": "Tint", "order": "b0", "params": {
+            "about": "A tint with one defect.", "origin": "composed",
+            "inputs": {
+                "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+                "n": {"type": "u32", "from": {"param": "params/n"}}
+            },
+            "steps": steps, "outputs": {"color": "out"}, "chain": "effects", "order": "a0",
+            "resolution": "full", "cost": {"ns_per_px": cost}, "fallback": "look"
+        }}
+    }))
+}
+
+/// Each of the check's codes with a tint whose steps raise it alone, and its declared cost.
+fn planted_tints() -> Vec<(&'static str, Value, f64)> {
+    let base = |extra: Value| {
+        let mut s = json!({
+            "uv": {"op": "screen_uv@1", "args": {}},
+            "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0}},
+            "red": {"op": "const@1", "args": {"value": [0.6, 0, 0, 0], "type": "vec4"}},
+            "out": {"op": "add@1", "args": {"a": "c", "b": "red"}}
+        });
+        if let (Some(o), Some(e)) = (s.as_object_mut(), extra.as_object()) {
+            o.extend(e.clone());
+        }
+        s
+    };
+    vec![
+        ("operator_status_color", base(json!({
+            "r": {"op": "role@1", "args": {"name": "fail"}},
+            "out": {"op": "add@1", "args": {"a": "c", "b": "r"}}
+        })), 50.0),
+        ("cost_understated", base(json!({})), 1e-6),
+        ("operator_cycle", base(json!({
+            "a": {"op": "add@1", "args": {"a": "b", "b": 1.0}},
+            "b": {"op": "add@1", "args": {"a": "a", "b": 1.0}},
+            "out": {"op": "add@1", "args": {"a": "c", "b": "a"}}
+        })), 50.0),
+        ("operator_limit", base(json!({
+            "w": {"op": "split@1", "args": {"x": "uv", "pick": "w"}},
+            "out": {"op": "add@1", "args": {"a": "c", "b": "w"}}
+        })), 50.0),
+        ("operator_source", base(json!({
+            "out": {"op": "add@1", "args": {"a": "c", "b": "red"}, "wgsl": "return c + red;"}
+        })), 50.0),
+        ("operator_type", base(json!({
+            "yes": {"op": "const@1", "args": {"value": true}},
+            "out": {"op": "add@1", "args": {"a": "c", "b": "yes"}}
+        })), 50.0),
+        ("operator_unbounded", base(json!({
+            "sum": {"op": "repeat@1", "args": {"count": "n", "accumulate": {"acc": [0, 0, 0, 0]},
+                    "body": {"acc": {"op": "add@1", "args": {"a": "acc", "b": "c"}}}}},
+            "out": {"op": "add@1", "args": {"a": "c", "b": "sum.acc"}}
+        })), 50.0),
+        ("operator_unknown_op", base(json!({
+            "out": {"op": "magic@1", "args": {"a": "c"}}
+        })), 50.0),
+    ]
+}
+
+/// A composed pass in a core view, which runs shipped operators only.
+fn composed_in_core_view() -> Value {
+    box_figure("A composed pass in a core view", "core_view", json!({
+        "tint": {"id": "tint", "kind": "gpu.pass@1", "name": "Tint", "order": "b0", "params": {
+            "about": "Adds red to the frame.", "origin": "composed",
+            "inputs": {"src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}}},
+            "steps": {
+                "uv": {"op": "screen_uv@1", "args": {}},
+                "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0}},
+                "red": {"op": "const@1", "args": {"value": [0.6, 0, 0, 0], "type": "vec4"}},
+                "out": {"op": "add@1", "args": {"a": "c", "b": "red"}}
+            },
+            "outputs": {"color": "out"}, "chain": "effects", "order": "a0", "resolution": "full",
+            "cost": {"ns_per_px": 50}, "fallback": "look"
+        }}
+    }))
 }
 
 /// The module's fixture: a box on a floor under a sun that casts its shadow.
