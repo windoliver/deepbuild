@@ -6,9 +6,8 @@
 //
 // It runs the record from its TypeScript source, through a loader that strips types with the repo's own
 // TypeScript, so it never runs a stale build.
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
@@ -50,13 +49,14 @@ const HOUR = 3_600_000;
 
 /** One seeded run: its log, as the record holds it, and the check of the record's tables against the tables' states. */
 export async function simulate(seed) {
-  const { openRecord, ulid } = await import(pathToFileURL(join(root, 'packages/record/src/index.ts')).href);
-  const dir = mkdtempSync(join(tmpdir(), 'deep-lifecycle-sim-'));
-  const path = join(dir, 'record.db');
+  const { openRecord, testStorage, ulid } = await import(pathToFileURL(join(root, 'packages/record/src/index.ts')).href);
+  // The record's in-memory storage: a reopen without a power cut is a restart, holding what was committed.
+  const storage = testStorage();
+  const path = 'lifecycle-sim.db';
   const rand = random(seed);
   const pick = (list) => list[Math.floor(rand() * list.length)];
   let t = 1_760_013_451_123;
-  let record = await openRecord({ path, now: () => t });
+  let record = await openRecord({ path, storage, now: () => t });
   const who = { actor: 'you', scope: 'you' };
   const as = (writer, session) => ({ writer, ...who, ...(session ? { session, agent: 'claude-code' } : {}) });
   const WRITERS = [as('core'), as('app'), as('cli'), as('hook', 'S1'), as('mcp:S1', 'S1')];
@@ -112,14 +112,13 @@ export async function simulate(seed) {
     t += 1 + Math.floor(rand() * HOUR / 8);
     // The clock steps back once, past a deadline; the hub restarts once, from its log.
     if (!backed && i > STEPS / 3 && rand() < 0.05) { t -= HOUR; backed = true; }
-    if (!restarted && i > STEPS / 2 && rand() < 0.05) { await record.close(); record = await openRecord({ path, now: () => t }); restarted = true; }
+    if (!restarted && i > STEPS / 2 && rand() < 0.05) { await record.close(); record = await openRecord({ path, storage, now: () => t }); restarted = true; }
     await pick(steps)();
   }
   const events = (await record.read({ after: 0, limit: 1_000_000 })).map((e) => ({ ...e, log_pos: Number(e.log_pos) }));
   const rows = {};
   for (const name of ['asks', 'tasks', 'leases', 'claims', 'open_items']) rows[name] = (await record.table(name)).rows;
   await record.close();
-  rmSync(dir, { recursive: true, force: true });
   const check = (objects) => {
     const problems = [];
     const same = (object, held) => {
