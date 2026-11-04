@@ -89,7 +89,52 @@ pub fn open(
     (handle, tab)
 }
 
-/// The screenshot the spec asks for, written as a PNG to its `path`: the whole reference window.
+/// The part of the window a screenshot shows, in device pixels: a session's row with its readings
+/// (`part: "row"`), else the terminal tab's slot.
+fn part_of(spec: &Value, window: &Window) -> Option<[i64; 4]> {
+    let scale = window.scale_factor();
+    if spec["part"] != "row" {
+        let b = deep_app::views::slot_bounds()?;
+        let d = |v: Pixels| (f32::from(v) * scale).round() as i64;
+        return Some([
+            d(b.origin.x),
+            d(b.origin.y),
+            d(b.size.width),
+            d(b.size.height),
+        ]);
+    }
+    let session = spec["session"].as_str()?;
+    let (_, title, _) = deep_app::views::sidebar()
+        .into_iter()
+        .find(|(s, ..)| s == session)?;
+    let readings =
+        deep_app::record::with_view(|v| v.table().readings(session).to_vec()).unwrap_or_default();
+    let snapshot = crate::snapshot::from_observed(window);
+    let nodes = snapshot.flatten();
+    let at = nodes.iter().position(|n| {
+        n.role == "button" && n.name.as_deref().is_some_and(|t| t.contains(&title))
+    })?;
+    let [mut x0, mut y0, w, h] = nodes[at].bounds;
+    let (mut x1, mut y1) = (x0 + w, y0 + h);
+    // The row's readings are the labels drawn under it, in order.
+    for n in nodes[at + 1..]
+        .iter()
+        .take_while(|n| n.name.as_ref().is_some_and(|t| readings.contains(t)))
+    {
+        let [x, y, w, h] = n.bounds;
+        (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + w), y1.max(y + h));
+    }
+    let pad = (8. * scale) as i64;
+    Some([
+        (x0 - pad).max(0),
+        (y0 - pad).max(0),
+        x1 - x0 + 2 * pad,
+        y1 - y0 + 2 * pad,
+    ])
+}
+
+/// The screenshot the spec asks for, written as a PNG to its `path`: the part of the reference
+/// window it names.
 pub fn screenshot(spec: &Value) -> Result<Value, String> {
     let path = spec["path"].as_str().ok_or("the spec names no path")?;
     let mut cx = crate::headless_context();
@@ -100,9 +145,17 @@ pub fn screenshot(spec: &Value) -> Result<Value, String> {
         cx.update_window(handle, |_, window, cx| window.render_frame(cx))
             .map_err(|e| e.to_string())?;
     }
-    let image = cx
+    let part = cx
+        .update_window(handle, |_, window, _| part_of(spec, window))
+        .map_err(|e| e.to_string())?
+        .ok_or("the window doesn't draw the part the spec names")?;
+    let whole = cx
         .capture_screenshot(handle)
         .map_err(|e| format!("offscreen rendering isn't available: {e}"))?;
+    let [x, y, w, h] = part.map(|v| v.max(0) as u32);
+    let (x, y) = (x.min(whole.width()), y.min(whole.height()));
+    let (w, h) = (w.min(whole.width() - x), h.min(whole.height() - y));
+    let image = image::imageops::crop_imm(&whole, x, y, w, h).to_image();
     if let Some(dir) = Path::new(path).parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }

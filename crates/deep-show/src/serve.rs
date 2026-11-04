@@ -1133,27 +1133,37 @@ impl Serve {
     /// What the app draws for a call naming a `terminal` or a `session`: that terminal's screen and
     /// your composition (a session's, its hosted terminal), and the record's events, which the
     /// sidebar's session rows read with their readings.
-    fn app_spec(&mut self, c: &Map<String, Value>) -> Value {
+    fn app_spec(&mut self, c: &Map<String, Value>) -> Result<Value, Value> {
         let s = |k: &str| c.get(k).and_then(Value::as_str).map(str::to_string);
         let terminal = s("terminal").or_else(|| {
             let panel = format!("session:{}", s("session")?);
             self.term_of_panel(&panel).map(str::to_string)
         });
-        let terminal = terminal.map(|id| {
-            let screen = self.ask(&id, &json!({"q": "screen"}));
-            let preedit = self
-                .terms
-                .get(&id)
-                .map(|t| t.preedit.clone())
-                .filter(|p| !p.is_empty());
-            json!({"cols": screen["cols"], "rows": screen["rows"], "screen": screen["screen"], "preedit": preedit})
-        });
+        let terminal = match terminal {
+            None => None,
+            Some(id) => {
+                let screen = self.ask(&id, &json!({"q": "screen"}));
+                if screen.get("code").is_some() {
+                    return Err(screen);
+                }
+                let preedit = self
+                    .terms
+                    .get(&id)
+                    .map(|t| t.preedit.clone())
+                    .filter(|p| !p.is_empty());
+                Some(
+                    json!({"cols": screen["cols"], "rows": screen["rows"], "screen": screen["screen"], "preedit": preedit}),
+                )
+            }
+        };
         let events = self
             .record
             .as_deref()
             .map(record_events)
             .unwrap_or_default();
-        json!({"terminal": terminal, "events": events})
+        Ok(
+            json!({"terminal": terminal, "events": events, "session": s("session"), "part": s("part")}),
+        )
     }
 
     /// A PNG of the app at the reference window, drawing what the call names (macOS).
@@ -1164,9 +1174,13 @@ impl Serve {
         if !cfg!(target_os = "macos") {
             return json!({"code": "unsupported_platform"});
         }
-        let mut spec = self.app_spec(c);
-        spec["path"] = json!(path);
-        shoot(&spec)
+        match self.app_spec(c) {
+            Ok(mut spec) => {
+                spec["path"] = json!(path);
+                shoot(&spec)
+            }
+            Err(e) => e,
+        }
     }
 
     /// The terminal tab as accessibility reads it in the real app window (macOS), which stays up,
@@ -1175,7 +1189,10 @@ impl Serve {
         if !cfg!(target_os = "macos") {
             return json!({"code": "unsupported_platform"});
         }
-        let spec = self.app_spec(c);
+        let spec = match self.app_spec(c) {
+            Ok(spec) => spec,
+            Err(e) => return e,
+        };
         let path = std::env::temp_dir().join(format!(
             "deep-990-ax-{}-{}.json",
             std::process::id(),
@@ -1195,11 +1212,24 @@ impl Serve {
             Ok(c) => c,
             Err(e) => return json!({"code": "spawn_failed", "what": e.to_string()}),
         };
-        let mut line = String::new();
+        // Its one line once the window has drawn, or nothing: a window that never draws (no
+        // display session, a prompt over it) is ended after a minute and a half.
+        let (tx, rx) = std::sync::mpsc::channel();
         if let Some(out) = child.stdout.take() {
-            let _ = BufReader::new(out).read_line(&mut line);
+            thread::spawn(move || {
+                let mut line = String::new();
+                let _ = BufReader::new(out).read_line(&mut line);
+                let _ = tx.send(line);
+            });
         }
+        let line = rx.recv_timeout(Duration::from_secs(90));
         let _ = std::fs::remove_file(&path);
+        let Ok(line) = line else {
+            // SAFETY: kill on a PID this process started and has not reaped.
+            unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGKILL) };
+            let _ = child.wait();
+            return json!({"code": "ax_timeout", "what": "the app window drew nothing to read in 90 s"});
+        };
         self.windows.push(child);
         serde_json::from_str(&line).unwrap_or_else(|_| json!({"code": "ax_failed", "what": line}))
     }
