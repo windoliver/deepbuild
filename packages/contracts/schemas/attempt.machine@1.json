@@ -1,0 +1,52 @@
+{
+  "id": "attempt.machine@1",
+  "description": "An attempt's life: active from its claim until a newer attempt at its task replaces it or its session ends.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "states": [
+    "active",
+    "replaced",
+    "ended"
+  ],
+  "initial": "active",
+  "final": [
+    "replaced",
+    "ended"
+  ],
+  "moves": [
+    {
+      "from": "active",
+      "event": "claim.made",
+      "guard": "newer_attempt",
+      "to": "replaced"
+    },
+    {
+      "from": "active",
+      "event": "session.end",
+      "guard": "own_session",
+      "to": "ended"
+    },
+    {
+      "from": "active",
+      "event": "session.gone",
+      "guard": "own_session",
+      "to": "ended"
+    }
+  ],
+  "conflicts": [
+    {
+      "name": "replaced_or_ended",
+      "events": [
+        "claim.made",
+        "session.end"
+      ]
+    },
+    {
+      "name": "replaced_or_gone",
+      "events": [
+        "claim.made",
+        "session.gone"
+      ]
+    }
+  ]
+}

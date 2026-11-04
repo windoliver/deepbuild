@@ -6,7 +6,7 @@
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 
 use crate::curve::Bezier;
-use crate::ease::Named;
+use deep_canvas::ease::Named;
 use crate::spring::Spring;
 
 /// How a transition moves from where the value is to its new target.
@@ -225,7 +225,7 @@ mod tests {
     fn a_transition_interrupted_midway_starts_from_where_the_value_is() {
         let model = Model::Transition {
             span: S / 5,
-            along: Along::Ease(crate::ease::named("out_cubic", None).unwrap()),
+            along: Along::Ease(deep_canvas::ease::named("out_cubic", None).unwrap()),
         };
         let f = Follow::new(model, 17.0, &[(S, 47.0), (S + S / 10, 17.0)]);
         assert_eq!(f.at(S).value, 17.0);
