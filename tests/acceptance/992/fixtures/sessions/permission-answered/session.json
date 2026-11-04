@@ -1,0 +1,8 @@
+{
+  "schema": "corpus.session@1",
+  "agent": "claude-code",
+  "version": "2.1.308",
+  "surface": "terminal",
+  "recorded": "stand-in",
+  "scenario": "a Write whose permission prompt is answered yes, then the idle prompt"
+}

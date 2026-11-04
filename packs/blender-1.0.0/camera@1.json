@@ -1,0 +1,117 @@
+{
+  "id": "blender.camera",
+  "version": "1.0",
+  "title": "Camera",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "Blender's perspective camera: lens (mm) on the sensor it fits to our fov across the wider side; location and rotation_euler (radians, XYZ) in Blender's Z-up frame to ours; it looks along its −Z.",
+  "inputs": {
+    "lens": {
+      "type": "number",
+      "default": 50,
+      "unit": "mm",
+      "min": 1,
+      "about": ""
+    },
+    "sensor_width": {
+      "type": "number",
+      "default": 36,
+      "unit": "mm",
+      "min": 1,
+      "about": ""
+    },
+    "sensor_height": {
+      "type": "number",
+      "default": 24,
+      "unit": "mm",
+      "min": 1,
+      "about": ""
+    },
+    "sensor_fit": {
+      "type": "choice",
+      "default": "AUTO",
+      "options": [
+        "AUTO",
+        "HORIZONTAL",
+        "VERTICAL"
+      ],
+      "about": ""
+    },
+    "aspect": {
+      "type": "number",
+      "default": 1.7777777777777777,
+      "min": 0.0001,
+      "about": "the render's width ÷ height"
+    },
+    "location": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "m",
+      "about": ""
+    },
+    "rotation_euler": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "rad",
+      "about": ""
+    }
+  },
+  "let": {
+    "cx": "cos(rotation_euler[0])",
+    "sx": "sin(rotation_euler[0])",
+    "cy": "cos(rotation_euler[1])",
+    "sy": "sin(rotation_euler[1])",
+    "cz": "cos(rotation_euler[2])",
+    "sz": "sin(rotation_euler[2])",
+    "m01": "cz * sy * sx - sz * cx",
+    "m11": "sz * sy * sx + cz * cx",
+    "m21": "cy * sx",
+    "m02": "cz * sy * cx + sz * sx",
+    "m12": "sz * sy * cx - cz * sx",
+    "m22": "cy * cx",
+    "f0": "-m02",
+    "f1": "-m22",
+    "f2": "m12",
+    "g0": "m01",
+    "g1": "m21",
+    "g2": "-m11",
+    "across": "sensor_fit == AUTO ? 2 * atan(sensor_width / (2 * lens)) : (sensor_fit == HORIZONTAL ? 2 * atan(sensor_width / (2 * lens)) : 2 * atan(sensor_height / (2 * lens)))",
+    "wide": "sensor_fit == AUTO ? deg(across) : (sensor_fit == HORIZONTAL ? (aspect >= 1 ? deg(across) : 2 * deg(atan(tan(across / 2) / aspect))) : (aspect <= 1 ? deg(across) : 2 * deg(atan(tan(across / 2) * aspect))))",
+    "r0": "-f2",
+    "r2": "f0",
+    "rl": "sqrt(r0 * r0 + r2 * r2)",
+    "u0": "-r2 * f1 / rl",
+    "u1": "(r2 * f0 - r0 * f2) / rl",
+    "u2": "r0 * f1 / rl",
+    "roll": "rl > 0.000000001 ? -deg(atan2((g0 * r0 + g2 * r2) / rl, g0 * u0 + g1 * u1 + g2 * u2)) : 0"
+  },
+  "steps": {
+    "camera": {
+      "op": "item",
+      "kind": "camera@1",
+      "params": {
+        "projection": "perspective",
+        "fov": "wide",
+        "roll": "roll",
+        "position": [
+          "location[0]",
+          "location[2]",
+          "-location[1]"
+        ],
+        "target": [
+          "location[0] + f0",
+          "location[2] + f1",
+          "-location[1] + f2"
+        ]
+      }
+    }
+  }
+}
