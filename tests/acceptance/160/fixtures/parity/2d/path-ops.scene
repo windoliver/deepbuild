@@ -1,0 +1,204 @@
+{
+  "format": 1,
+  "id": "parity-path-ops",
+  "profile": "figure",
+  "title": "Path ops",
+  "description": "One item per path op, each with a reference computed analytically in the tests: a trim of a 100 u then 300 u polyline, rounded corners, an offset outline, a zig zag of 5 ridges, a bloat, a twist about a star's centre and a repeater of three copies.",
+  "size": [
+    980,
+    400
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "trim": {
+      "id": "trim",
+      "kind": "path@1",
+      "layer": "main",
+      "name": "Trimmed polyline",
+      "order": "a00",
+      "params": {
+        "d": "M 20 40 L 120 40 L 120 340",
+        "ops": [
+          {
+            "trim": {
+              "start": 0.1,
+              "end": 0.6
+            }
+          }
+        ],
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 4
+          }
+        }
+      }
+    },
+    "round": {
+      "id": "round",
+      "kind": "path@1",
+      "layer": "main",
+      "name": "Rounded square",
+      "order": "a01",
+      "params": {
+        "d": "M 160 40 L 260 40 L 260 140 L 160 140 Z",
+        "ops": [
+          {
+            "round_corners": {
+              "radius": 10
+            }
+          }
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      }
+    },
+    "offset": {
+      "id": "offset",
+      "kind": "path@1",
+      "layer": "main",
+      "name": "Offset square",
+      "order": "a02",
+      "params": {
+        "d": "M 310 60 L 390 60 L 390 140 L 310 140 Z",
+        "ops": [
+          {
+            "offset_path": {
+              "amount": 10,
+              "join": "miter",
+              "miter_limit": 4
+            }
+          }
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      }
+    },
+    "zigzag": {
+      "id": "zigzag",
+      "kind": "path@1",
+      "layer": "main",
+      "name": "Zig zag line",
+      "order": "a03",
+      "params": {
+        "d": "M 440 100 L 640 100",
+        "ops": [
+          {
+            "zigzag": {
+              "size": 10,
+              "ridges": 5,
+              "points": "corner"
+            }
+          }
+        ],
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 4
+          }
+        }
+      }
+    },
+    "pucker": {
+      "id": "pucker",
+      "kind": "path@1",
+      "layer": "main",
+      "name": "Bloated square",
+      "order": "a04",
+      "params": {
+        "d": "M 680 40 L 780 40 L 780 140 L 680 140 Z",
+        "ops": [
+          {
+            "pucker": {
+              "amount": 0.5
+            }
+          }
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      }
+    },
+    "twist": {
+      "id": "twist",
+      "kind": "star@1",
+      "layer": "main",
+      "name": "Twisted star",
+      "order": "a05",
+      "params": {
+        "center": [
+          0,
+          0
+        ],
+        "points": 6,
+        "outer_r": 100,
+        "inner_r": 40,
+        "ops": [
+          {
+            "twist": {
+              "angle": 30,
+              "center": [
+                0,
+                0
+              ]
+            }
+          }
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          860,
+          280,
+          0
+        ]
+      }
+    },
+    "repeater": {
+      "id": "repeater",
+      "kind": "path@1",
+      "layer": "main",
+      "name": "Repeated triangle",
+      "order": "a06",
+      "params": {
+        "d": "M 160 260 L 190 260 L 175 230 Z",
+        "ops": [
+          {
+            "repeater": {
+              "copies": 3,
+              "at": {
+                "pos": [
+                  40,
+                  0
+                ]
+              }
+            }
+          }
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      }
+    }
+  }
+}

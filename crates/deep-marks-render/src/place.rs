@@ -151,6 +151,7 @@ pub(crate) fn evaluated(
     let mut state = program.state();
     program.evaluate(t, eval::Validity::Full, &mut state);
     let mut items = eval::items(doc, program, &state);
+    lagged(doc, program, t, &mut items);
     if !places(doc) {
         return Ok(items);
     }
@@ -178,4 +179,34 @@ pub(crate) fn evaluated(
     )
     .map_err(refusal)?;
     Ok(items)
+}
+
+/// Issue #160: an item whose ops hold a lagging repeater carries its earlier selves, the item as
+/// the same program evaluates it k × lag earlier for each copy k from 1, under
+/// [`scene::LAGGED`], so copy k's children evaluate at t − k × lag, as an echo's do.
+fn lagged(doc: &Map<String, Value>, program: &Program, t: i64, items: &mut Map<String, Value>) {
+    let wanted: Vec<(String, i64, usize)> = items
+        .iter()
+        .filter_map(|(id, item)| {
+            let params = object_or_empty(item.get("params"));
+            let ops = deep_canvas_marks::pathops::read(params.get("ops"), "").ok()?;
+            let (_, r) = deep_canvas_marks::pathops::lagged_repeater(&ops)?;
+            Some((id.clone(), r.lag, r.copies.ceil() as usize))
+        })
+        .collect();
+    for (id, lag, copies) in wanted {
+        let mut earlier = Vec::with_capacity(copies.saturating_sub(1));
+        for k in 1..copies {
+            let back = k as i64 * lag;
+            let mut state = program.state();
+            program.evaluate(t - back, eval::Validity::Full, &mut state);
+            let then = eval::items(doc, program, &state);
+            if let Some(it) = then.get(&id) {
+                earlier.push(it.clone());
+            }
+        }
+        if let Some(Value::Object(params)) = items.get_mut(&id).and_then(|i| i.get_mut("params")) {
+            params.insert(scene::LAGGED.to_string(), Value::Array(earlier));
+        }
+    }
 }
