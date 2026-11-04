@@ -6,6 +6,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSyn
 import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { isBay } from './bays.mjs';
 import { acquire, release } from './throttle.mjs';
 import { addedLines, git, isTestFile, listFiles, named, outsideTests, RUNNER_CONFIG, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
 
@@ -155,6 +156,9 @@ export function changeCopy(root, change) {
  */
 export function undoBuild(root, directory, keep = [], modules = root) {
   const held = listFiles(root).filter((path) => !keep.includes(path));
+  // A bay keeps its own builds and packages, and a file that already holds the change's bytes keeps its mtime, so
+  // nothing is rebuilt for it.
+  const bay = isBay(directory);
   // Names compare in lower case, as a disk that ignores case resolves Support.json for support.json.
   const tracked = new Set(listFiles(root).map((path) => path.toLowerCase()));
   const heldName = (path) => tracked.has(path.toLowerCase());
@@ -164,7 +168,7 @@ export function undoBuild(root, directory, keep = [], modules = root) {
   const walk = (folder) => {
     for (const entry of readdirSync(join(directory, folder), { withFileTypes: true })) {
       const path = folder ? `${folder}/${entry.name}` : entry.name;
-      if (path === '.git') continue;
+      if (path === '.git' || (bay && (path === 'target' || path === 'node_modules'))) continue;
       // The copy's node_modules links to the repository's packages, scope by scope, as copyChange laid it.
       // An entry the build replaced, as with a folder of its own, is linked anew.
       if (folder === 'node_modules' || /^node_modules\/@[^/]+$/.test(folder)) {
@@ -184,7 +188,21 @@ export function undoBuild(root, directory, keep = [], modules = root) {
     }
   };
   walk('');
-  for (const path of held) copy(root, path, directory);
+  for (const path of held) {
+    if (bay && same(join(root, path), join(directory, path))) continue;
+    copy(root, path, directory);
+  }
+}
+
+/** Whether two files hold the same bytes, or two links the same target, not following either. */
+function same(a, b) {
+  try {
+    const [one, two] = [lstatSync(a), lstatSync(b)];
+    if (one.isSymbolicLink() || two.isSymbolicLink()) return one.isSymbolicLink() && two.isSymbolicLink() && readlinkSync(a) === readlinkSync(b);
+    return one.isFile() && two.isFile() && one.mode === two.mode && readFileSync(a).equals(readFileSync(b));
+  } catch {
+    return false;
+  }
 }
 
 /** The merge base installed and prepared in a temporary checkout: its directory, and why it can't run there, or null. */
@@ -394,7 +412,7 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   const empty = () => ({ results: new Map(), fileErrors: new Map(), unrunnable: new Map() });
   const runs = { files, tests: [], twins: new Map(), head: empty(), base: empty() };
   if (!files.length) return runs;
-  const timed = timedSet(root, files);
+  const timed = runs.timed = timedSet(root, files);
   runs.coverage = coverage ? temporary('deep-proof-coverage-') : null;
   // The merge base, with the change's test code: every file under the test paths (tests, helpers
   // wherever they are and however they're imported, fixtures, goldens, twins and setup files), never
@@ -507,6 +525,7 @@ function wrongProgram(runs, test) {
 /** The before lane's lines; returns the tests that failed on a wrong program. */
 export function before(runs, kills, say, print) {
   const proven = new Set();
+  if (runs.timed?.length) print(`before: the timed set, from the timed list in scripts/lanes.mjs, run only under a timed grant (${runs.timed.length}): ${runs.timed.join(' ')}`);
   for (const [path, cause] of runs.head.fileErrors) say('FAIL', 'before', `${path}: fails on the change outside its tests (${cause})`, BEFORE_FIX);
   for (const [path, cause] of runs.head.unrunnable) say('BLOCKED', 'before', `${path}: cannot run on the change: ${cause}`, BEFORE_FIX);
   for (const key of runs.unrun ?? []) say('FAIL', 'before', `${key}: declared and not skipped, but the runner never reported it on the change`, BEFORE_FIX);

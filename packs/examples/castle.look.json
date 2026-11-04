@@ -1,0 +1,25 @@
+{
+  "id": "castle-dusk",
+  "format": 1,
+  "basis": "physical",
+  "license": "Apache-2.0",
+  "description": "The castle's look (#422): dusk, a filmic curve at EV100 9, and bloom on the lit windows.",
+  "palette": {"night": "#0d1018", "slate": "#5d6470", "stone": "#9a958c", "moss": "#5f7a45", "ember": "#c8743a", "ink": "#22252b"},
+  "roles": {"ground": "night", "ink": "ink", "muted": "stone", "accent": "moss", "stone": "stone", "warm": "ember"},
+  "themes": {"light": {}, "dark": {}},
+  "fonts": {
+    "body": {"family": "Inter", "file": "Inter-Regular.ttf", "license": "OFL-1.1", "embed": true, "single_line": false},
+    "mono": {"family": "JetBrains Mono", "file": "JetBrainsMono-Regular.ttf", "license": "OFL-1.1", "embed": true, "single_line": false}
+  },
+  "tone_map": "filmic",
+  "exposure": 9,
+  "finish": [],
+  "deband": "none",
+  "bloom": {"intensity": 0.06, "radius": 0.85},
+  "ground_3d": {"kind": "none"},
+  "status": {"pass": "#007429", "fail": "#bf232b", "invalid": "#8645b0", "blocked": "#a44700", "inconclusive": "#666600", "running": "#0063b8", "needs_you": "#8a5900", "stale": "#326c6f", "idle": "#636464"},
+  "status_treatment": {"core_min_px": 4, "glyph": {"pass": "✓", "fail": "✗", "invalid": "⊘", "blocked": "■", "inconclusive": "?", "running": "↻", "needs_you": "!", "stale": "◇", "idle": "○"}},
+  "min_distance": 0.1,
+  "attention_treatment": {"line": "dashed", "role": "ink", "glyph": "⚠"},
+  "legend": "auto"
+}
