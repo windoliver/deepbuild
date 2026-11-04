@@ -175,6 +175,8 @@ struct Serve {
     clipboard: String,
     record: Option<String>,
     plant: Plant,
+    /// The app windows `ax` left up, ended with the rest by their PIDs.
+    windows: Vec<Child>,
 }
 
 fn bad() -> Value {
@@ -356,6 +358,7 @@ impl Serve {
             },
             record: optional(input.get("record"), |r| Some(r.as_str()?.to_string()))?,
             plant,
+            windows: Vec::new(),
         })
     }
 
@@ -375,6 +378,8 @@ impl Serve {
             "install" => self.install(c),
             "terminal_open" => self.open(c),
             "terminal_restart" => self.restart(c),
+            "screenshot" => self.screenshot(c),
+            "ax" => self.ax(c),
             "terminal_resize" => self.resize(c),
             "input" => self.input(c),
             "focus" => json!({"kb_focus": self.focus}),
@@ -1125,8 +1130,87 @@ impl Serve {
                "what": format!("raw input comes only from your focused panel; {writer} is an agent's session")})
     }
 
+    /// What the app draws for a call naming a `terminal` or a `session`: that terminal's screen and
+    /// your composition (a session's, its hosted terminal), and the record's events, which the
+    /// sidebar's session rows read with their readings.
+    fn app_spec(&mut self, c: &Map<String, Value>) -> Value {
+        let s = |k: &str| c.get(k).and_then(Value::as_str).map(str::to_string);
+        let terminal = s("terminal").or_else(|| {
+            let panel = format!("session:{}", s("session")?);
+            self.term_of_panel(&panel).map(str::to_string)
+        });
+        let terminal = terminal.map(|id| {
+            let screen = self.ask(&id, &json!({"q": "screen"}));
+            let preedit = self
+                .terms
+                .get(&id)
+                .map(|t| t.preedit.clone())
+                .filter(|p| !p.is_empty());
+            json!({"cols": screen["cols"], "rows": screen["rows"], "screen": screen["screen"], "preedit": preedit})
+        });
+        let events = self
+            .record
+            .as_deref()
+            .map(record_events)
+            .unwrap_or_default();
+        json!({"terminal": terminal, "events": events})
+    }
+
+    /// A PNG of the app at the reference window, drawing what the call names (macOS).
+    fn screenshot(&mut self, c: &Map<String, Value>) -> Value {
+        let Some(path) = c.get("path").and_then(Value::as_str).map(str::to_string) else {
+            return bad();
+        };
+        if !cfg!(target_os = "macos") {
+            return json!({"code": "unsupported_platform"});
+        }
+        let mut spec = self.app_spec(c);
+        spec["path"] = json!(path);
+        shoot(&spec)
+    }
+
+    /// The terminal tab as accessibility reads it in the real app window (macOS), which stays up,
+    /// its tab focused, until serve ends.
+    fn ax(&mut self, c: &Map<String, Value>) -> Value {
+        if !cfg!(target_os = "macos") {
+            return json!({"code": "unsupported_platform"});
+        }
+        let spec = self.app_spec(c);
+        let path = std::env::temp_dir().join(format!(
+            "deep-990-ax-{}-{}.json",
+            std::process::id(),
+            self.windows.len()
+        ));
+        if std::fs::write(&path, spec.to_string()).is_err() {
+            return json!({"code": "spec_unwritten"});
+        }
+        let child = Command::new(std::env::current_exe().unwrap_or_default())
+            .arg("term-ax")
+            .arg(&path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn();
+        let mut child = match child {
+            Ok(c) => c,
+            Err(e) => return json!({"code": "spawn_failed", "what": e.to_string()}),
+        };
+        let mut line = String::new();
+        if let Some(out) = child.stdout.take() {
+            let _ = BufReader::new(out).read_line(&mut line);
+        }
+        let _ = std::fs::remove_file(&path);
+        self.windows.push(child);
+        serde_json::from_str(&line).unwrap_or_else(|_| json!({"code": "ax_failed", "what": line}))
+    }
+
     /// Ends every host and program it started, by the PIDs it holds.
     fn close(&mut self) {
+        for mut window in std::mem::take(&mut self.windows) {
+            // SAFETY: kill on a PID this process started and has not reaped.
+            unsafe { libc::kill(window.id() as libc::pid_t, libc::SIGKILL) };
+            let _ = window.wait();
+        }
         for (_, mut t) in std::mem::take(&mut self.terms) {
             let mut program = t.program.lock().expect("program").take();
             for child in std::iter::once(&mut t.host).chain(program.as_mut()) {
@@ -1181,6 +1265,41 @@ fn record_lines(path: &str, pending: &mut Vec<u8>) {
     }
     sql.push_str("COMMIT;");
     let _ = Command::new("sqlite3").arg(path).arg(sql).output();
+}
+
+#[cfg(target_os = "macos")]
+fn shoot(spec: &Value) -> Value {
+    deep_replica::terminal::screenshot(spec)
+        .unwrap_or_else(|what| json!({"code": "screenshot_failed", "what": what}))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn shoot(_: &Value) -> Value {
+    json!({"code": "unsupported_platform"})
+}
+
+/// The record's events, in log order, as the app reads them: kind, writer, session, time, data.
+fn record_events(path: &str) -> Vec<Value> {
+    let out = Command::new("sqlite3")
+        .arg("-json")
+        .arg(path)
+        .arg("SELECT log_pos, ts, kind, writer, session_id AS session, data FROM events ORDER BY log_pos")
+        .output();
+    let rows: Vec<Value> = out
+        .ok()
+        .and_then(|o| serde_json::from_slice(&o.stdout).ok())
+        .unwrap_or_default();
+    rows.into_iter()
+        .map(|mut row| {
+            if let Some(data) = row["data"]
+                .as_str()
+                .and_then(|d| serde_json::from_str(d).ok())
+            {
+                row["data"] = data;
+            }
+            row
+        })
+        .collect()
 }
 
 /// A program-status report (`state[;text]`) as a reading on its session in the record: a signal
