@@ -11,6 +11,11 @@
       "development": "./src/index.ts",
       "default": "./dist/index.js"
     },
+    "./lease": {
+      "types": "./src/heavy.ts",
+      "development": "./src/heavy.ts",
+      "default": "./dist/heavy.js"
+    },
     "./mcp": {
       "types": "./src/mcp.ts",
       "development": "./src/mcp.ts",

@@ -272,6 +272,12 @@ impl Issue {
                 }
             }
         }
+        // A pack kind's rule names its own code, `<pack>.<rule>` (#490).
+        if self.code == packs::KIND_RULE {
+            if let Some(rule) = self.actual.get("rule") {
+                out.insert("code".into(), rule.clone());
+            }
+        }
         if let Some(ops) = &self.fix_ops {
             out.insert("fix_ops".into(), json!(ops));
         }

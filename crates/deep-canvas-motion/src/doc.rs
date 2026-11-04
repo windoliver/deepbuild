@@ -8,7 +8,7 @@ use serde_json::{Map, Value};
 
 use crate::constraint::What;
 use crate::curve::{Bezier, Curve, Ease, Extrapolate, Interp, Key};
-use crate::ease::{self, Named};
+use deep_canvas::ease::{self, Named};
 use crate::follow;
 use crate::modifier::{Kind as ModKind, Modifier, Rate, Shape};
 use crate::spring::Spring;
@@ -18,13 +18,15 @@ use crate::spring::Spring;
 pub struct Refused {
     pub code: &'static str,
     pub path: String,
+    /// What the refusal names past its path, such as a table's offending index or an ease
+    /// table's knot, merged into the answer.
+    pub detail: Option<Box<Value>>,
 }
 
 fn refuse<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused> {
     Err(Refused {
         code,
-        path: path.into(),
-    })
+        path: path.into(), detail: None })
 }
 
 /// What a channel writes: a field path inside an item, after the item's ID.
@@ -139,6 +141,19 @@ pub struct Driver {
     pub expr: Vec<deep_canvas::document::packs::ExprStep>,
     /// Each var's name and the document path it reads, in name order.
     pub vars: Vec<(String, Target)>,
+    /// Each var that reads no document path, in name order: `time` or a control's value.
+    pub inputs: Vec<(String, DriverInput)>,
+    /// The hard range (Driver: `range`), checked against the driver's bound.
+    pub range: Option<(f64, f64)>,
+}
+
+/// A driver var that reads no document path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DriverInput {
+    /// The time in seconds since the transport's start.
+    Time,
+    /// `controls/<id>/value`: a control's value, swept over its declared range.
+    Control(String),
 }
 
 /// Each axis's `[min, max]`, `None` for an axis a limit leaves free.
@@ -388,7 +403,17 @@ fn interp_of(value: Option<&Value>, path: &str) -> Result<Interp, Refused> {
                 return Ok(Interp::Spring(spring_of(s, &format!("{path}/spring"))?));
             }
             if let Some(e) = o.get("ease") {
-                return Ok(Interp::Ease(named_of(e, &format!("{path}/ease"))?));
+                // `{table: "<pack>.<name>"}` names a pack's ease table, resolved by the program.
+                if let Some(t) = e.get("table") {
+                    return match t {
+                        Value::String(_) if e.as_object().is_some_and(|o| o.len() == 1) => {
+                            Ok(Interp::Table)
+                        }
+                        _ => refuse("bad_interp", format!("{path}/ease/table")),
+                    };
+                }
+                let named = named_of(e, &format!("{path}/ease"))?;
+                return Ok(Interp::Ease(ease::Entry::opened(named)));
             }
             if let Some(Value::Object(a)) = o.get("auto") {
                 let clamp = match a.get("clamp") {
@@ -445,7 +470,9 @@ pub fn spring_of(s: &Map<String, Value>, path: &str) -> Result<Spring, Refused> 
     Ok(spring)
 }
 
-/// An `ease@1` entry: `{name, params}` (params a number or an object of one), or its bare name.
+/// An `ease@1` entry: `{name, params}` (params a number for the eases that take one, or an
+/// object of named params: back's `overshoot`, elastic's `amplitude` and `period`, bounce's
+/// `restitution` and `bounces`), or its bare name.
 pub fn named_of(e: &Value, path: &str) -> Result<Named, Refused> {
     let (name, params) = match e {
         Value::String(n) => (n.as_str(), None),
@@ -455,14 +482,11 @@ pub fn named_of(e: &Value, path: &str) -> Result<Named, Refused> {
         },
         _ => return refuse("bad_interp", path),
     };
-    let param = match params {
-        None | Some(Value::Null) => None,
-        Some(Value::Number(n)) => n.as_f64(),
-        Some(Value::Object(p)) if p.len() == 1 => p.values().next().and_then(Value::as_f64),
-        Some(Value::Object(p)) if p.is_empty() => None,
-        Some(_) => return refuse("out_of_range", format!("{path}/params")),
-    };
-    ease::named(name, param).map_or_else(|| refuse("bad_interp", path), Ok)
+    match ease::parse(name, params) {
+        Ok(Some(named)) => Ok(named),
+        Ok(None) => refuse("bad_interp", path),
+        Err(bad) => refuse("out_of_range", format!("{path}/params/{}", bad.param)),
+    }
 }
 
 /// A change of state's interp: `{"ease": {"name": …}}` naming an `ease@1` ease motion lands, or
@@ -764,9 +788,11 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
     let Some(Value::String(text)) = d.get("expr") else {
         return refuse("bad_doc", format!("{path}/expr"));
     };
-    let expr = deep_canvas::document::packs::postfix(text)
-        .or_else(|_| refuse("bad_doc", format!("{path}/expr")))?;
+    // The R1 subset compiles to motion's own ops; the rest of the closed function list, through
+    // the core's expressions, at compile (an empty postfix).
+    let expr = deep_canvas::document::packs::postfix(text).unwrap_or_default();
     let mut vars = Vec::new();
+    let mut inputs = Vec::new();
     for (name, v) in d
         .get("vars")
         .and_then(Value::as_object)
@@ -777,23 +803,45 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
         let Value::String(text) = v else {
             return refuse("bad_path", vpath);
         };
+        if text == "time" {
+            inputs.push((name.clone(), DriverInput::Time));
+            continue;
+        }
+        if let Some(c) = text.strip_prefix("controls/").and_then(|r| r.strip_suffix("/value")) {
+            inputs.push((name.clone(), DriverInput::Control(c.to_string())));
+            continue;
+        }
         vars.push((name.clone(), target_of(text, false, &vpath)?));
     }
     vars.sort_by(|a, b| a.0.cmp(&b.0));
+    inputs.sort_by(|a, b| a.0.cmp(&b.0));
     // Every name the expression reads is a var: a driver reads nothing it doesn't declare.
     for step in &expr {
         if let deep_canvas::document::packs::ExprStep::Name(n) = step {
-            if !vars.iter().any(|(v, _)| v == n) {
+            if !vars.iter().any(|(v, _)| v == n) && !inputs.iter().any(|(v, _)| v == n) {
                 return refuse("ref_unresolved", format!("{path}/expr"));
             }
         }
     }
+    let range = match d.get("range") {
+        None => None,
+        Some(Value::Array(r)) if r.len() == 2 => {
+            let (lo, hi) = (number(r.first(), &format!("{path}/range/0"))?, number(r.get(1), &format!("{path}/range/1"))?);
+            if lo > hi {
+                return refuse("out_of_range", format!("{path}/range"));
+            }
+            Some((lo, hi))
+        }
+        Some(_) => return refuse("bad_doc", format!("{path}/range")),
+    };
     Ok(Driver {
         id: id.to_string(),
         target,
         text: text.clone(),
         expr,
         vars,
+        inputs,
+        range,
     })
 }
 
@@ -1035,7 +1083,7 @@ fn follow_spec_of(f: &Map<String, Value>, ctx: &TimeContext, path: &str) -> Resu
             return refuse("out_of_range", format!("{mpath}/transition/span"));
         }
         let along = match interp_of(o.get("interp"), &format!("{mpath}/transition/interp"))? {
-            Interp::Ease(e) => follow::Along::Ease(e),
+            Interp::Ease(e) => follow::Along::Ease(e.ease),
             Interp::Bezier { x1, y1, x2, y2 } => follow::Along::Bezier(crate::curve::Bezier::new(x1, y1, x2, y2)),
             Interp::Linear => follow::Along::Linear,
             _ => return refuse("bad_interp", format!("{mpath}/transition/interp")),
@@ -1257,6 +1305,10 @@ fn channel_of(
             return refuse("bad_interp", format!("{kpath}/interp"));
         }
         let mut k = Key::new(kid, t, value, interp);
+        if interp == Interp::Table {
+            let name = key.get("interp").and_then(|i| i.pointer("/ease/table")).and_then(Value::as_str);
+            k.table = name.map(|n| (n.to_string(), None));
+        }
         // A spring key's starting rate, per component, in value per second.
         k.velocity = match key.get("velocity") {
             None => Vec::new(),
@@ -1568,8 +1620,7 @@ fn cuts_of(
             name.and_then(|n| placements.iter().position(|p| p.id == n))
                 .ok_or(Refused {
                     code: "ref_unresolved",
-                    path: format!("{path}/{field}"),
-                })
+                    path: format!("{path}/{field}"), detail: None })
         };
         let (from, to) = (find("from")?, find("to")?);
         let span = |p: &Placement| clips.iter().find(|c| c.id == p.clip).map_or(1, |c| c.span);
