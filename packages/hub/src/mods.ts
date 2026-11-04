@@ -91,9 +91,20 @@ interface Plugin { plugin: string; folder: string }
 /**
  * The plugins a home loads, as `claude plugin list --json` reports them (installed, skills-dir and project ones, each
  * with the folder its code is read from); where that can't be read, the registry and the skills folder, each turned off
- * only by `enabledPlugins` saying false. A registry that isn't JSON is unread.
+ * only by `enabledPlugins` saying false. A registry that isn't JSON is unread, whatever the list says.
  */
 async function plugins(home: string, claude: string, env: NodeJS.ProcessEnv, cwd?: string): Promise<Plugin[] | string> {
+  // Claude Code lists nothing from a registry it can't parse, so what it would load from there can't be known.
+  const registry = join(home, 'plugins', 'installed_plugins.json');
+  let installed: Obj = {};
+  if (existsSync(registry)) {
+    try {
+      const parsed = JSON.parse(readFileSync(registry, 'utf8')) as unknown;
+      installed = isObj(parsed) && isObj(parsed.plugins) ? parsed.plugins : {};
+    } catch (error) {
+      return `${registry} couldn't be read: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
   const ran = await run(claude, ['plugin', 'list', '--json'], { ...env, CLAUDE_CONFIG_DIR: home }, cwd);
   try {
     const list = JSON.parse(ran?.code === 0 ? ran.out : '') as unknown;
@@ -108,20 +119,10 @@ async function plugins(home: string, claude: string, env: NodeJS.ProcessEnv, cwd
     if (isObj(settings) && isObj(settings.enabledPlugins)) enabled = settings.enabledPlugins;
   } catch { /* no settings: every installed plugin counts as loaded */ }
   const found: Plugin[] = [];
-  const registry = join(home, 'plugins', 'installed_plugins.json');
-  if (existsSync(registry)) {
-    let installed: Obj;
-    try {
-      const parsed = JSON.parse(readFileSync(registry, 'utf8')) as unknown;
-      installed = isObj(parsed) && isObj(parsed.plugins) ? parsed.plugins : {};
-    } catch (error) {
-      return `${registry} couldn't be read: ${error instanceof Error ? error.message : String(error)}`;
-    }
-    for (const [plugin, entries] of Object.entries(installed)) {
-      const entry = Array.isArray(entries) ? entries.find(isObj) : undefined;
-      if (typeof entry?.installPath !== 'string') return `${registry} names no folder for ${plugin}`;
-      found.push({ plugin, folder: entry.installPath });
-    }
+  for (const [plugin, entries] of Object.entries(installed)) {
+    const entry = Array.isArray(entries) ? entries.find(isObj) : undefined;
+    if (typeof entry?.installPath !== 'string') return `${registry} names no folder for ${plugin}`;
+    found.push({ plugin, folder: entry.installPath });
   }
   const skills = join(home, 'skills');
   for (const name of existsSync(skills) ? readdirSync(skills) : []) {
