@@ -631,6 +631,12 @@ impl Program {
                     let channel = &motion.channels[c];
                     let (slot, width) = self.channels[c];
                     let run = &mut state.values[self.values[c]..self.values[c] + width];
+                    // A channel on an item a time remap targets reads the item's own time.
+                    let doc_t = if motion.remaps.is_empty() {
+                        doc_t
+                    } else {
+                        motion.item_time(&channel.target.owner, doc_t)
+                    };
                     if let Some(follow) = &self.channel_follows[c] {
                         let out = if self.options.planted == Planted::FollowStepsFromPreviousFrame {
                             follow.step_from(state.last[c], doc_t)

@@ -146,9 +146,11 @@
         "kind": { "type": "string" },
         "params": {},
         "at": {},
+        "material": { "type": "string" },
         "repeat": {},
         "let": { "type": "object" },
-        "when": {}
+        "when": {},
+        "channels": { "type": "object" }
       },
       "required": ["op"],
       "additionalProperties": false

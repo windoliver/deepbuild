@@ -1,0 +1,202 @@
+//! Material operators in the 3D renderer (issue #429; canvas primitives: GPU operator, Operator
+//! output): a solid whose material names a `gpu.material@1` draws through a pipeline of its own,
+//! compiled once per operator when a scene that holds it is prepared, whose fragment stage runs
+//! the core's WGSL for the checked operator and lays its outputs over the material's values.
+
+use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
+
+use deep_canvas_effects::graph::{From, Ty};
+use deep_canvas_effects::{check, emit, graph, interp, module};
+use deep_canvas_scene3d::scene::SolidOp;
+
+use crate::{bind_group, buffer_entry, draw_pipeline, mesh_buffers};
+
+/// The bind group the operator's inputs take, after the frame, the lights and ambient occlusion.
+const INPUTS_GROUP: u32 = 3;
+/// A group no layout holds: the operator's frame there becomes a private the entry fills.
+const FRAME_GROUP: u32 = 9;
+const ENTRY: &str = include_str!("op.wgsl");
+
+/// One material operator on the GPU: its pipeline and its inputs' bind group.
+pub(crate) struct MatOp {
+    pub pipeline: wgpu::RenderPipeline,
+    pub bind: wgpu::BindGroup,
+}
+
+/// What a solid's operator is keyed by: its item as the operator check reads it, so equal
+/// operators share one pipeline. Never 0, which the solids without one take.
+pub(crate) fn key(op: &SolidOp) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    op.id.hash(&mut h);
+    op.item.to_string().hash(&mut h);
+    h.finish() | 1
+}
+
+/// The solid's seed for `seed@1`: a hash of the document's seed and its ID, as the GPU layer keys
+/// an item's effects (Effect: `seed: item`).
+pub(crate) fn seed(doc_seed: u64, id: &str) -> u32 {
+    let mut h =
+        interp::hash1(doc_seed as u32) ^ interp::hash1((doc_seed >> 32) as u32 ^ 0x9e37_79b9);
+    for b in id.bytes() {
+        h = interp::hash1(h ^ u32::from(b));
+    }
+    h
+}
+
+/// Checks and compiles `op` into the renderer's solid pipeline: `scene` is scene3d.wgsl, `groups`
+/// the frame's, the lights' and ambient occlusion's layouts. Refused with the reason when the
+/// operator check refuses it, it reads a texture or storage (which land with the 3D frame's
+/// targets), or the device rejects its pipeline.
+pub(crate) fn compile(
+    d: &wgpu::Device,
+    scene: &str,
+    groups: [&wgpu::BindGroupLayout; 3],
+    forward_z: bool,
+    op: &SolidOp,
+) -> Result<MatOp, String> {
+    let item = module::operator_of(&op.id, &op.item).ok_or("not a gpu.material@1 item")?;
+    let refused = |issues: Vec<graph::Issue>| {
+        let first = issues
+            .first()
+            .map_or(String::new(), |i| format!("{}: {}", i.code, i.message));
+        format!("the operator check refuses it: {first}")
+    };
+    let checked = graph::read(&item)
+        .and_then(|o| check::check(&o))
+        .map_err(refused)?;
+    if checked.op.kind != graph::Kind::Material {
+        return Err("not a material operator".into());
+    }
+    if let Some((name, _)) = checked.op.inputs.iter().find(|(_, i)| {
+        matches!(i.ty, Ty::Tex(_) | Ty::Storage(..))
+            || matches!(i.from, From::Target { .. } | From::Storage { .. })
+    }) {
+        return Err(format!(
+            "input {name}: a material operator's texture and storage inputs don't draw in 3D yet"
+        ));
+    }
+    let snippet = emit::material(
+        &checked,
+        emit::Options::default(),
+        [FRAME_GROUP, INPUTS_GROUP],
+    );
+    let frame = format!("@group({FRAME_GROUP}) @binding(0) var<uniform> op_frame: OpFrame;");
+    if !snippet.contains(&frame) {
+        return Err("the emitter's frame binding moved".into());
+    }
+    let source = format!("{scene}\n{}\n{ENTRY}", snippet.replace(&frame, ""));
+    let inputs_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("scene3d material operator"),
+        entries: &[
+            buffer_entry(
+                0,
+                wgpu::ShaderStages::FRAGMENT,
+                wgpu::BufferBindingType::Uniform,
+            ),
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    });
+    let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
+    let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("scene3d material operator"),
+        source: wgpu::ShaderSource::Wgsl(source.into()),
+    });
+    let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("scene3d material operator"),
+        bind_group_layouts: &[
+            Some(groups[0]),
+            Some(groups[1]),
+            Some(groups[2]),
+            Some(&inputs_layout),
+        ],
+        immediate_size: 0,
+    });
+    let pipeline = draw_pipeline(
+        d,
+        &module,
+        &layout,
+        forward_z,
+        "mesh_vs",
+        "op_mesh_fs",
+        &mesh_buffers(),
+    );
+    if let Some(e) = block_on(scope.pop()) {
+        return Err(format!("the device rejects its pipeline: {e}"));
+    }
+    let values = interp::inputs(&checked, &BTreeMap::new(), &BTreeMap::new());
+    let buffer = wgpu::util::DeviceExt::create_buffer_init(
+        d,
+        &wgpu::util::BufferInitDescriptor {
+            label: Some("scene3d material operator inputs"),
+            contents: &emit::input_bytes(&checked, &values),
+            usage: wgpu::BufferUsages::UNIFORM,
+        },
+    );
+    let sampler = d.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("scene3d material operator"),
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
+    });
+    let bind = bind_group(
+        d,
+        "scene3d material operator",
+        &inputs_layout,
+        [
+            buffer.as_entire_binding(),
+            wgpu::BindingResource::Sampler(&sampler),
+        ],
+    );
+    Ok(MatOp { pipeline, bind })
+}
+
+/// An error scope's result, which resolves at once on a device whose work is polled.
+fn block_on<F: std::future::Future>(f: F) -> F::Output {
+    let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+    let mut f = std::pin::pin!(f);
+    loop {
+        if let std::task::Poll::Ready(v) = f.as_mut().poll(&mut cx) {
+            return v;
+        }
+        std::thread::yield_now();
+    }
+}
+
+/// The inverse of a 4 × 4 matrix (rows), by Gauss-Jordan elimination with partial pivoting; zero
+/// when it is singular.
+pub(crate) fn invert(m: &[[f64; 4]; 4]) -> [[f64; 4]; 4] {
+    let mut a = *m;
+    let mut out = [[0.0; 4]; 4];
+    for (i, row) in out.iter_mut().enumerate() {
+        row[i] = 1.0;
+    }
+    for c in 0..4 {
+        let p = (c..4)
+            .max_by(|&x, &y| a[x][c].abs().total_cmp(&a[y][c].abs()))
+            .unwrap_or(c);
+        if a[p][c].abs() < 1e-300 {
+            return [[0.0; 4]; 4];
+        }
+        a.swap(c, p);
+        out.swap(c, p);
+        let k = a[c][c];
+        for j in 0..4 {
+            a[c][j] /= k;
+            out[c][j] /= k;
+        }
+        for r in (0..4).filter(|&r| r != c) {
+            let f = a[r][c];
+            for j in 0..4 {
+                a[r][j] -= f * a[c][j];
+                out[r][j] -= f * out[c][j];
+            }
+        }
+    }
+    out
+}

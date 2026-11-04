@@ -273,6 +273,36 @@ pub fn material<'a>(
     }))
 }
 
+/// The material operator of the `material@1` item `item` names (#429; Material: `op`): the ID
+/// and item of the `gpu.material@1` its `params.op` names, `None` when it names none.
+pub fn material_op<'a>(
+    item: &Value,
+    named: impl Fn(&str) -> Option<&'a Value>,
+) -> Result<Option<(&'a str, &'a Value)>, Refused> {
+    let Some(m) = item.get("material").and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    let Some(op) = named(m)
+        .and_then(|m| m.get("params"))
+        .and_then(|p| p.get("op"))
+        .filter(|o| !o.is_null())
+    else {
+        return Ok(None);
+    };
+    let found = op.as_str().and_then(|id| {
+        let o = named(id)
+            .filter(|o| o.get("kind").and_then(Value::as_str) == Some("gpu.material@1"))?;
+        Some((o.get("id").and_then(Value::as_str).unwrap_or(id), o))
+    });
+    match found {
+        Some(f) => Ok(Some(f)),
+        None => Err(Refused {
+            code: "ref_unresolved",
+            path: format!("items/{m}/params/op"),
+        }),
+    }
+}
+
 /// A color field's role: a bare name, or `{role}` as #418 reads it.
 fn role_of(v: Option<&Value>) -> Option<&str> {
     match v? {
