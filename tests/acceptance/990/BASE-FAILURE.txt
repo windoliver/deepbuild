@@ -1,0 +1,90 @@
+Base run of tests/acceptance/990 (issue #990), at base commit e2e6e1cc (origin/main), before any implementation.
+
+command:  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/990 --no-file-parallelism
+date:     2026-11-04T20:04:44Z (final run; a first run differed only in status.test.ts, whose record seed used the
+          session ID as a subject the record's schema refuses ("pattern at /subject"), a test mistake fixed before this
+          run: the seed now names the session by its handle, session:sessalpha)
+node:     v24.22.0   vitest: 5.0.5   cargo: 1.99.1 (5f94df478 2026-08-27)   platform: linux-arm64, bash 5.2.21, /bin/sh = dash
+exit:     1   (8 files, 22 tests: 21 fail, 1 passes)
+tsc:      npx tsc -p tests/acceptance/990/tsconfig.json  ->  exit 0, no errors
+
+ Test Files  8 failed (8)
+      Tests  21 failed | 1 passed (22)
+
+The one test that passes is "AC1 the table reads as the bytes it means": it reads only the table in keys.test.ts (spot
+rows spelled out, 19 keys x 7 modifier sets x 4 modes = 532), no program; it proves the table, not the terminal.
+
+Why each test fails at the base (the missing behavior, never a test mistake):
+
+keys.test.ts
+  AC1 matrix: 511 of 532 key presses read other bytes than the table names, the first
+    "Shift+Enter in normal mode: the program read "\x0d", the table names "\x1b[27;2;13~"".
+    The base's key_bytes ignores modifiers and modes: Enter is CR with any modifier, arrows are CSI A–D even in
+    application-cursor mode, F1–F12 are sent as the letters "f1" … "f12", and pushed keyboard flags change nothing. The 21
+    that match are the unmodified presses whose legacy bytes the table keeps: Enter, Tab, Backspace and the arrows in
+    normal mode (7), Enter, Tab and Backspace in application-cursor mode (3), the same seven with flags 1 (7), and the
+    arrows with flags 31 (4). This is the Proof's "the base failing at Shift+Enter".
+  AC1 planted shift_enter_bare_cr: deep-show serve accepts the setup ... got {"ok":false,"code":"bad_input"}: the base
+    knows no such planted value (the implementation adds it).
+  SCOPE physical keys: [ '\xd1\x81', '\xd0\xb2', 'c' ] instead of [ '\x03', '\x04', '\x03' ]: the base sends a key's
+    character and drops Control, so Control+с under a Russian layout reaches the program as с.
+
+paste.test.ts
+  AC2: the base wraps the paste without removing the marker inside it, so bash's paste ends at it and the rest runs
+    as typed keys: "the paste "touch ~/pasted-ran\n\u001b[201~rm -rf ~/planted\n" ended early at its ESC[201~:
+    rm -rf ~/planted ran and deleted the planted folder" and "... ran touch ~/pasted-ran". (The control, a typed
+    command, ran: the shell is live, so this is the base's paste, not a dead shell.) The base is the criterion's wrong
+    program here, and the check names the paste as the planted twin must.
+  AC2 planted paste_keeps_end_marker: setup bad_input (unknown planted value).
+  SCOPE no marker: the program read "touch ~/pasted-ran\x0a\x1b[201~rm -rf ~/planted\x0a": into a program without
+    bracketed paste the base sends the text as is, the end marker inside it included.
+
+queries.test.ts
+  AC3: "no answer to the device attributes (DA1, CSI c) query in its place: wanted CSI ? Ps ; … c, the program read ""
+    and printed "timeout"": the base's host has no way to write to the program and answers no query. This is the
+    Proof's "the base failing at the first query".
+  AC3 planted queries_dropped: setup bad_input (unknown planted value).
+  SCOPE answers before keys: the program read only "k": the key arrived and no answer ever did (the first missing named:
+    device attributes).
+
+status.test.ts
+  AC4: "alpha's terminal: the terminal opens ... {"ok":false,"code":"bad_input"}": the base's serve opens terminals only
+    for a plug-in panel, not for a session (`session`), and answers no OSC 7501 and writes no reading. (The record seed,
+    alpha waiting on a permission prompt with a recorded verdict, was checked in a scratch test, deleted after: after a
+    replay the session view reads status waiting and a session.reading shows in its readings.)
+  AC4 planted status_sets_state: setup bad_input (unknown planted value).
+
+modes.test.ts
+  AC5: six failures: "bracketed paste is still on: the shell read the paste as
+    "\x1b[<0;26;11M\x1b[<0;26;11m\x1b[200~PASTED-990\x1b[201~\x1b[A\x1b"", "mouse reporting is still on: ...", "the
+    alternate screen is still on after the program exited", and the grid's bracketed_paste, app_cursor and mouse modes
+    still on. The base resets nothing when a program exits, so the shell's `read` got the escape codes: the base is the
+    criterion's wrong host, and the check names each mode. (Keyboard flags don't show: the base's emulator ignores
+    CSI > 1 u, so Escape stayed plain.)
+  AC5 planted modes_left_on: setup bad_input (unknown planted value).
+  SCOPE restart: "the host restarts the program ... {"ok":false,"code":"bad_input"}": no terminal_restart call.
+
+ime.test.ts
+  AC6: "composing "n" is answered, not refused: {"ok":false,"code":"bad_input"}": the seam has no preedit (marked text)
+    event and the grid no composition.
+  AC6 planted ime_sends_composing: setup bad_input (unknown planted value).
+  SCOPE drawn cell size: "A's grid: the grid says where and how big it draws its cells (cells: drawn {x, y, w, h},
+    window px): expected undefined to be defined": the base maps the mouse by a fixed 8 x 16 and reports no drawn size,
+    and takes no font size.
+
+access.test.ts
+  AC7 insert: "Superwhisper's insert of 200 characters is answered, not refused: {"ok":false,"code":"bad_input"}": the
+    seam has no insert event and the terminal no box.
+  AC7 planted insert_dropped / insert_typed_straight: setup bad_input (unknown planted value).
+  AC7 VoiceOver: "INCONCLUSIVE: the VoiceOver test needs a person at the reference Mac with VoiceOver on; run with
+    DEEP_990_LIVE=1": linux, no person; never a pass.
+
+taste.test.ts
+  AC8: "INCONCLUSIVE: the screenshots are taken from the app at the reference window on the reference Mac; this is
+    linux, not macOS": never a pass without the app's screenshots and the owner's recorded call.
+
+Not run: every planted-twin half (each fails at its setup at the base, since the base knows none of the planted values),
+so each "fails, naming ..." check has been seen to name its target only where the base itself is the wrong program
+(AC1 Shift+Enter, AC2 the paste, AC3 the first query, AC5 the mode). AC4's, AC6's and AC7's checks, the restart, the
+drawn-cell clicks, AC3's color cross-check and 50 ms reading, and the macOS-only `ax` and `screenshot` halves are
+exercised first by the implementer's run.
