@@ -118,7 +118,7 @@ async function run(args) {
   mkdirSync(evals(), { recursive: true });
   const kept = join(evals(), `${digest}.json`);
   writeFileSync(kept, `${JSON.stringify(report, null, 2)}\n`);
-  console.log(`${report.after.outcome} config eval: ${report.after.reason}\n  before the cutoff: ${report.before.outcome}; ${report.runs.length} runs in ${(report.usage.ms / 60_000).toFixed(1)} min, plan share ${report.usage.plan_share ?? 'unread'}\n${kept}`);
+  console.log(`${report.after.outcome} config eval: ${report.after.reason}\n  before the cutoff: ${report.before.outcome}; ${report.runs.length} runs in ${(report.usage.ms / 60_000).toFixed(1)} min, plan share ${report.usage.plan_share ?? 'unread'}${report.diverged.length ? `; diverged (a call not in the recording): ${report.diverged.map((d) => d.task).join(', ')}` : ''}\n${kept}`);
   return report.after.outcome === 'refused' ? 3 : report.held ? 1 : 0;
 }
 
