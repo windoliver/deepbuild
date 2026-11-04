@@ -666,6 +666,15 @@ impl View {
         }
     }
 
+    /// Hands the shown slot its finished frame: a copy slot reads its frame back here, so its
+    /// pixels are the frame's only after this.
+    pub fn finish(&self, device: &Device) -> Result<(), String> {
+        match self.shown {
+            Some(s) => self.slots[s].finish(device),
+            None => Ok(()),
+        }
+    }
+
     /// The slot's pixels, BGRA rows top-down, after its frame finished.
     pub fn pixels(&self) -> Option<Vec<u8>> {
         Some(self.slots[self.shown?].read())

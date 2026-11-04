@@ -2311,8 +2311,10 @@ fn render_canonical(
     }
     device.queue.submit([encoder.finish()]);
     memory::drain(device);
+    // A canonical render reads its frame through a copy slot, which holds the frame's pixels
+    // only once it is finished (before #429 every canonical render hashed an empty slot).
     let pixels = (device.backend != Backend::Noop)
-        .then(|| view.pixels())
+        .then(|| view.finish(device).ok().and_then(|()| view.pixels()))
         .flatten();
     let mut operators: Vec<Value> = Vec::new();
     let mut seen = BTreeSet::new();
