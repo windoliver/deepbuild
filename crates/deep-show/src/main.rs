@@ -1123,6 +1123,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "background_at_live_priority" => Planted::BackgroundAtLivePriority,
                 "accepts_every_sample_rate_8_to_192k" => Planted::AcceptsEverySampleRate8To192k,
                 "prefix_reads_final" => Planted::PrefixReadsFinal,
+                "relation_from_previous_box" => Planted::RelationFromPreviousBox,
                 "why_names_operator_only" => Planted::WhyNamesOperatorOnly,
                 "why_names_key_only" => Planted::WhyNamesKeyOnly,
                 "cuts_by_row_order" => Planted::CutsByRowOrder,
