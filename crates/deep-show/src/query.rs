@@ -189,6 +189,7 @@ impl Hub<'_> {
             &skipped,
         );
         self.keep_instances(&document, &result.expansions, &mut drawn);
+        let _ = self.inline_tables(&mut drawn);
         Some(Revision {
             rev,
             doc: document,
