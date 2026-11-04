@@ -2248,6 +2248,7 @@ version = "0.0.0"
 dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
+ "serde_json",
  "vello_cpu",
 ]
 
@@ -2315,6 +2316,7 @@ name = "deep-scene3d-render"
 version = "0.0.0"
 dependencies = [
  "bytemuck",
+ "deep-canvas-effects",
  "deep-canvas-scene3d",
  "deep-gpu",
  "serde_json",

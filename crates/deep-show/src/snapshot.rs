@@ -69,7 +69,19 @@ impl Drawn {
                     spec.width.unwrap_or(spec.size),
                     1.3 * spec.size,
                 ],
-                Mark::Path { .. } | Mark::Shape { .. } => continue,
+                // An outline's box is its tight box where it draws (#1162: a vector's path).
+                Mark::Path { d, offset, .. } => {
+                    let Some(b) = deep_canvas_marks::path::parse(d)
+                        .and_then(|v| deep_canvas_marks::relations::tight(&v))
+                    else {
+                        continue;
+                    };
+                    [b[0] + offset[0], b[1] + offset[1], b[2], b[3]]
+                }
+                Mark::Shape { verbs, .. } => match deep_canvas_marks::relations::tight(verbs) {
+                    Some(b) => b,
+                    None => continue,
+                },
             };
             let id = drawn
                 .mark
@@ -105,6 +117,20 @@ pub const VISIBLE_ROWS: usize = 200;
 
 /// A snapshot's table of visible items: each item whose box, scaled into the snapshot's pixels,
 /// covers some of it, as `{id, box: [x, y, w, h]}`, sorted by ID, at most [`VISIBLE_ROWS`].
+/// `top` (straight-alpha RGBA) drawn over `base` (RGBA) in place, source over.
+pub fn over(base: &mut [u8], top: &[u8]) {
+    for (b, t) in base.chunks_exact_mut(4).zip(top.chunks_exact(4)) {
+        let a = u32::from(t[3]);
+        if a == 0 {
+            continue;
+        }
+        for c in 0..3 {
+            b[c] = ((u32::from(t[c]) * a + u32::from(b[c]) * (255 - a) + 127) / 255) as u8;
+        }
+        b[3] = (a + u32::from(b[3]) * (255 - a) / 255) as u8;
+    }
+}
+
 pub fn visible(boxes: Vec<(String, [f64; 4])>, scale: f64, size: [u16; 2]) -> Value {
     let (w, h) = (f64::from(size[0]), f64::from(size[1]));
     let mut rows: Vec<(String, [f64; 4])> = boxes

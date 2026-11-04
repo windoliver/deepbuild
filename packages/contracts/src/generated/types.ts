@@ -2744,6 +2744,62 @@ export interface ClaimSentBack {
   evidence?: Array<string>;
 }
 
+/** claim.sized@1 */
+export interface ClaimSized {
+  v: 1;
+  id: string;
+  kind: "claim.sized";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    claim: string;
+    task_ref: string;
+    kind: string | null;
+    lines: {
+      added: number;
+      removed: number;
+    };
+    files: number;
+    usual: {
+      lines: number;
+      files: number;
+      n: number;
+    } | null;
+    over: boolean;
+    biggest: Array<{
+      path: string;
+      lines: number;
+    }>;
+    dependencies: Array<{
+      name: string;
+      from: string;
+    }>;
+    folders: Array<{
+      name: string;
+      from: string;
+    }>;
+    resources: Array<{
+      name: string;
+      from: string;
+    }>;
+    duplicated: number;
+    unreached: Array<string> | null;
+    items: Array<{
+      doc: string;
+      id: string;
+      change: "added" | "changed" | "removed";
+    }>;
+    sent_back: Array<string>;
+    asked: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
 /** claim.stalled@1 */
 export interface ClaimStalled {
   v: 1;
@@ -3854,6 +3910,14 @@ export interface Guard {
   fail_closed: boolean;
 }
 
+/** heavy.command@1 */
+export interface HeavyCommand {
+  name: string;
+  argv_prefix: Array<string>;
+  kinds: Array<string>;
+  jobs: string;
+}
+
 /** hook.ack@1 */
 export interface HookAck {
   ack: string;
@@ -3936,6 +4000,11 @@ export interface HookRequestV3 {
   matched: Array<string>;
   notes?: { [key: string]: string };
   stage?: { [key: string]: Array<string> };
+  heavy?: {
+    name: string;
+    kinds: Array<string>;
+    form: string;
+  };
   payload: unknown;
   late?: boolean;
   billing?: { [key: string]: boolean };

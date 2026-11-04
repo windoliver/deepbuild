@@ -245,8 +245,10 @@ pub(crate) fn refused(code: &str) -> Value {
     json!({"ok": false, "code": code})
 }
 
-/// Draws the window the scenario's calls left and writes it to `out` as a PNG.
-pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
+/// Draws the window the scenario's calls left and writes it to `out` as a PNG: each document at
+/// `t` (flicks), on a display of `scale` device pixels per point (#1162: the reference window
+/// is 1512 × 982 points at 2×).
+pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f64) -> Value {
     let [w, h] = hub.scenario.window.expect("screen has a window");
     let palette = hub.look.light.clone();
     let role = |name: &str| palette.get(name).copied().unwrap_or([0; 3]);
@@ -288,7 +290,13 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
                 Err(_) => (panel, None),
             },
         };
-        let size = crate::snapshot::px([panel[2], panel[3]]);
+        let size = crate::snapshot::px([panel[2] * scale, panel[3] * scale]);
+        // A document a session holds draws from it at `t` (its tables and vectors inlined, #1162).
+        let session_drawn = if hub.shown(doc).is_none() {
+            hub.live_drawn(doc, t)
+        } else {
+            None
+        };
         let rgba = if deep_canvas_scene3d::scene::has_3d(&Value::Object(stamped.clone())) {
             // A 3D writer layer draws natively on the GPU (#378), its frame scaled to fit the
             // panel from the top left as a 2D layer's is.
@@ -301,14 +309,20 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
             let Some(gpu) = hub.gpu3() else {
                 return refused("unsupported_platform");
             };
-            let Ok((drawn, scene)) =
-                gpu.draw(&Value::Object(stamped.clone()), 0, &palette, drawn_size)
+            let Ok((mut drawn, scene)) =
+                gpu.draw(&Value::Object(stamped.clone()), t, &palette, drawn_size)
             else {
                 continue;
             };
             for (id, b) in scene.boxes() {
+                let b = b.map(|v| v / scale);
                 let at = [panel[0] + b[0], panel[1] + b[1], b[2], b[3]];
                 items.push(json!({"id": id, "layer": row.layer, "box": at}));
+            }
+            // Its 2D items over the 3D frame, as render-back draws them.
+            if let Some(d) = &session_drawn {
+                let over = hub.renderer.raster(d, drawn_size, None);
+                crate::snapshot::over(&mut drawn, &over);
             }
             let (pw, dw) = (usize::from(size[0]) * 4, usize::from(drawn_size[0]) * 4);
             let mut rgba = vec![0u8; pw * usize::from(size[1])];
@@ -317,17 +331,21 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
             }
             rgba
         } else {
-            let Ok(drawn) = hub.renderer.prepare(
-                &stamped,
-                0,
-                &palette,
-                hub.look.status.as_ref(),
-                &record,
-                &hub.scenario.evidence,
-            ) else {
-                continue;
+            let drawn = match session_drawn {
+                Some(d) => d,
+                None => match hub.renderer.prepare(
+                    &stamped,
+                    t,
+                    &palette,
+                    hub.look.status.as_ref(),
+                    &record,
+                    &hub.scenario.evidence,
+                ) {
+                    Ok(d) => d,
+                    Err(_) => continue,
+                },
             };
-            let scale = drawn.scale(size);
+            let scale = drawn.scale(size) / scale;
             for (id, b) in drawn.boxes() {
                 let at = [
                     panel[0] + b[0] * scale,
@@ -399,7 +417,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
     }) else {
         return refused("no_window");
     };
-    cx.simulate_scale_factor_change(handle, 1.);
+    cx.simulate_scale_factor_change(handle, scale as f32);
     // Two frames: the first uploads the pictures and glyph pages, the second draws from them warm.
     for _ in 0..2 {
         if cx

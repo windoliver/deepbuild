@@ -417,7 +417,19 @@ fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
     for kind in deep_canvas_marks::scene::KINDS {
         if !named.iter().any(|n| n == kind) {
             named.push(kind.to_string());
-            push(kind.to_string(), marks.into(), None, &mut out);
+            // The data module's kinds, in a build without it: listed, unavailable, naming why.
+            let owner = deep_canvas_marks::scene::module_of(kind);
+            if owner == "data" && marks == "marks2d" && !drawn_by(owner) {
+                push(kind.to_string(), owner.into(), None, &mut out);
+                if let Some(e) = out.last_mut().map(|r| &mut r.entry) {
+                    e["available"] = json!(false);
+                    e["code"] = json!("module_missing");
+                    e["kit"] = json!({"verdict": "BLOCKED", "rules": [{"rule": "sealed", "verdict": "BLOCKED"}]});
+                }
+                continue;
+            }
+            let module = if marks == "marks2d" { owner } else { marks };
+            push(kind.to_string(), module.into(), None, &mut out);
         }
     }
     if drawn_by("scene3d") {
@@ -922,7 +934,8 @@ fn listing(
     let header = json!({
         "core_version": core_name(),
         "module_set": sealed.set_digest,
-        "modules": sealed.modules.iter().map(|m| json!({"name": m.name, "version": m.version.to_string()})).collect::<Vec<_>>(),
+        "modules": sealed.modules.iter().map(|m| json!({"name": m.name, "version": m.version.to_string(),
+            "kit": crate::kit::ledger::kit_of(&m.name, m.digest.as_str())})).collect::<Vec<_>>(),
         "interfaces": interfaces,
     });
     Listing {

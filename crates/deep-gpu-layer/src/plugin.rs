@@ -37,7 +37,7 @@ fn entry(dir: &Path, planted: Option<(&str, &str)>) -> Result<PathBuf, String> {
 }
 
 /// The shipped build's canvas modules, the list `deep_show`'s full build holds: every module of
-/// the core, r1 (#137) and r2 sets. The live view's set is this list but effects.
+/// the core, r1 (#137) and r2 sets, which the live view also seals (#429).
 pub(crate) fn shipped_modules() -> Vec<Module> {
     vec![
         deep_canvas_marks::modules::text(),

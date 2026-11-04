@@ -7,6 +7,7 @@
 //! resolves the window's frames into the linear target. What the view allocates is counted at
 //! the sizes the device reports. Once warm, a frame allocates nothing on the core's side.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -19,6 +20,8 @@ use deep_gpu::alloc::outside;
 use deep_gpu::device::Device;
 use deep_gpu::memory;
 use deep_gpu::meter::{Rung, MAX_PASSES};
+use deep_effects_render::docops::{DocOps, Row, Times};
+use deep_effects_render::runner::Frame;
 use deep_gpu::surface::{allocate, Handoff, Path};
 use deep_scene3d_render::surface::{Filter, Surface, LABEL_PASS, OUTLINE_PASS};
 pub use deep_scene3d_render::surface::{Upscale, SHARPEN_PASS as SHARPEN, UPSCALE_PASS as UPSCALE};
@@ -529,8 +532,40 @@ pub struct View {
     /// How the last frame drew (its rung and internal scale) and how many frames it has drawn
     /// since its scene last changed: a still scene settles once its history is full (#421).
     still: Option<(Rung, f64, u32)>,
+    /// The document's composed pass and compute operators (#429), each at the resolution its
+    /// writer's meter gives it, and what each drew last frame.
+    pub ops: DocOps,
+    pub op_resolution: BTreeMap<String, f64>,
+    pub op_rows: Vec<Row>,
+    /// #429's planted render-back, which draws live-only operators as the live view does.
+    pub canonical_draws_live_only: bool,
     #[cfg(feature = "test-meter")]
     pub test: crate::testgpu::Items,
+}
+
+/// The live meter's timer as the operators' [`Times`], each pass charged to `session`.
+struct LiveTimes<'a> {
+    timer: &'a mut Timer,
+    session: usize,
+}
+
+impl Times for LiveTimes<'_> {
+    fn start(&mut self, mark: &'static str, _: &mut wgpu::CommandEncoder) -> Option<usize> {
+        self.timer.start(mark, self.session)
+    }
+    fn render(&self, i: Option<usize>) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
+        self.timer.writes(i)
+    }
+    fn compute(&self, i: Option<usize>) -> Option<wgpu::ComputePassTimestampWrites<'_>> {
+        self.timer.writes(i).map(|w| wgpu::ComputePassTimestampWrites {
+            query_set: w.query_set,
+            beginning_of_pass_write_index: w.beginning_of_pass_write_index,
+            end_of_pass_write_index: w.end_of_pass_write_index,
+        })
+    }
+    fn end(&mut self, i: Option<usize>, _: &mut wgpu::CommandEncoder) {
+        self.timer.end(i);
+    }
 }
 
 impl View {
@@ -579,6 +614,10 @@ impl View {
             history: None,
             base_bytes,
             still: None,
+            ops: DocOps::empty(),
+            op_resolution: BTreeMap::new(),
+            op_rows: Vec::new(),
+            canonical_draws_live_only: false,
             #[cfg(feature = "test-meter")]
             test: crate::testgpu::Items::default(),
         })
@@ -624,6 +663,15 @@ impl View {
             0
         } else {
             self.window
+        }
+    }
+
+    /// Hands the shown slot its finished frame: a copy slot reads its frame back here, so its
+    /// pixels are the frame's only after this.
+    pub fn finish(&self, device: &Device) -> Result<(), String> {
+        match self.shown {
+            Some(s) => self.slots[s].finish(device),
+            None => Ok(()),
         }
     }
 
@@ -765,7 +813,44 @@ impl View {
             session,
         );
         #[cfg(not(feature = "test-meter"))]
-        let _ = (clip, &linear, drawing.effects_resolution);
+        let _ = drawing.effects_resolution;
+        if !self.ops.ops.is_empty() {
+            // Column-major, as the operators' frame holds it.
+            let flat: [f64; 16] = std::array::from_fn(|i| clip[i % 4][i / 4]);
+            let frame = Frame {
+                clip: flat.map(|x| x as f32),
+                inverse_clip: deep_effects_render::reference::inverse(&flat).map(|x| x as f32),
+                eye: [0.0; 4],
+                t: (t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64) as f32,
+                seed: 0,
+            };
+            let roles: BTreeMap<String, [f64; 3]> = look
+                .roles
+                .iter()
+                .map(|(k, c)| (k.clone(), crate::effects::linear_of(*c)))
+                .collect();
+            let res = &self.op_resolution;
+            let canonical = drawing.canonical && !self.canonical_draws_live_only;
+            let (rows, recs, out) = self.ops.plan(
+                device,
+                &linear,
+                None,
+                None,
+                internal,
+                &frame,
+                &roles,
+                &|i| res.get(i).copied().unwrap_or(1.0),
+                canonical,
+            );
+            let mut times = LiveTimes { timer, session };
+            for r in &recs {
+                outside(|| r.record(encoder, &mut times));
+            }
+            if let Some(o) = out {
+                outside(|| self.ops.blit_into(device, encoder, &o, &linear, internal));
+            }
+            self.op_rows = rows;
+        }
         if self.window > 0 && !drawing.canonical {
             self.resolve_history(
                 device,

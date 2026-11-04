@@ -1,0 +1,49 @@
+{
+  "title": "heavy.command@1",
+  "description": "A command heavy enough to share the machine through one lease (#1015): a full build or test suite an agent runs. DeepBuild ships entries for the common build and test runners; a repo adds its own in done.yaml's heavy_commands, and a plug-in can add more. A shell call is matched against them only by its argument prefix, in deep-hook, without waiting on the hub, and runs under `deep lease` with the entry's kinds. An entry can never match a command by anything but its argument prefix, make deep-hook wait on the hub, or stop a process.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "The entry's name, such as cargo test."
+    },
+    "argv_prefix": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "minItems": 1,
+      "maxItems": 16,
+      "description": "The program and the words a matched command starts with; every word after them must be an option, or the run is focused and matches no entry unless one names it."
+    },
+    "kinds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)*(:(shared|exclusive))?$",
+        "maxLength": 128
+      },
+      "maxItems": 32,
+      "description": "The lease kinds it holds beside its cpu.slot, such as browser, gpu or stack; gpu:shared or gpu:exclusive names the GPU lease's mode."
+    },
+    "jobs": {
+      "type": "string",
+      "pattern": "^(jobserver|none|[1-9][0-9]{0,3})$",
+      "maxLength": 16,
+      "description": "How many jobs it runs at once: jobserver (it takes them from a jobserver), a fixed number n, or none of its own."
+    }
+  },
+  "required": [
+    "name",
+    "argv_prefix",
+    "kinds",
+    "jobs"
+  ],
+  "additionalProperties": false
+}

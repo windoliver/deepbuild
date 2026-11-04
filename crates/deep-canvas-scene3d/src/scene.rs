@@ -92,6 +92,31 @@ pub struct Solid {
     pub emission: [f64; 3],
     /// Its material's texture maps (#423), which the renderer samples from the scene's `texels`.
     pub maps: Option<Arc<crate::light::Maps>>,
+    /// The material operator its material names (#429), which shades it per pixel.
+    pub op: Option<SolidOp>,
+}
+
+/// A material operator on one solid (#429): the `gpu.material@1` item as evaluated, and the
+/// solid's own time, which its `t@1` reads: inside a time-remapped recipe instance, child time.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SolidOp {
+    pub id: String,
+    pub item: Arc<Value>,
+    /// Seconds from the document's start, on the item's own clock.
+    pub t: f64,
+    /// The document's seed, which with the solid's ID keys its `seed@1`.
+    pub doc_seed: u64,
+}
+
+impl Solid {
+    /// Where it reaches in world space: a builder's mesh's vertices through its model, or the
+    /// unit shape's eight corners (#1162).
+    pub fn points(&self) -> Vec<Vec3> {
+        match &self.mesh {
+            Some(m) => m.positions.iter().map(|p| apply(&self.model, *p)).collect(),
+            None => corners(&self.model),
+        }
+    }
 }
 
 /// An object's outline: its silhouette drawn `width` device px wide in `color`, which a status
@@ -1684,6 +1709,8 @@ fn asset_scene(
                 sort_bias: 0.0,
                 alpha,
                 maps,
+                // An imported material names no operator.
+                op: None,
             });
         }
     }
@@ -1713,6 +1740,29 @@ fn tones(map: &Map<String, Value>) -> Result<(), Refused> {
         }
     }
     Ok(())
+}
+
+/// The material operator a solid's material names, on the solid's own clock (#429): inside a
+/// time-remapped recipe instance, child time.
+fn solid_op(
+    items: &Items<'_>,
+    map: &Map<String, Value>,
+    program: &Program,
+    t: i64,
+    id: &str,
+    item: &Value,
+) -> Result<Option<SolidOp>, Refused> {
+    let Some((op, op_item)) = light::material_op(item, |m| items.get(m))? else {
+        return Ok(None);
+    };
+    let motion = &program.motion;
+    let own = motion.item_time(id, eval::position(motion, t).0) - motion.transport.start;
+    Ok(Some(SolidOp {
+        id: op.to_string(),
+        item: Arc::new(op_item.clone()),
+        t: own as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64,
+        doc_seed: map.get("seed").and_then(Value::as_u64).unwrap_or(0),
+    }))
 }
 
 /// [`evaluate`] of a document whose motion program is compiled already.
@@ -1856,6 +1906,7 @@ pub(crate) fn evaluate_compiled(
                         sort_bias: num(item.get("sort_bias")).unwrap_or(0.0),
                         alpha: surface.alpha,
                         emission: surface.emission,
+                        op: solid_op(&items, map, program, t, id, item)?,
                     });
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
@@ -1938,6 +1989,7 @@ pub(crate) fn evaluate_compiled(
                         sort_bias: num(item.get("sort_bias")).unwrap_or(0.0),
                         alpha: surface.alpha,
                         emission: surface.emission,
+                        op: solid_op(&items, map, program, t, id, item)?,
                     });
                 }
                 // A curve draws nothing; what follows it (particles along it, #420) reads it
@@ -2331,7 +2383,7 @@ impl Scene {
         let proj = |p: Vec3| cam.project(p).map(|q| [q[0], q[1]]);
         for layer in &self.layers {
             for s in &layer.solids {
-                let pts: Vec<[f64; 2]> = corners(&s.model).into_iter().filter_map(proj).collect();
+                let pts: Vec<[f64; 2]> = s.points().into_iter().filter_map(proj).collect();
                 if let Some(b) = boxed(&pts) {
                     out.push((s.id.clone(), b));
                 }

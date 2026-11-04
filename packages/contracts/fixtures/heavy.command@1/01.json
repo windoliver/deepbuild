@@ -1,0 +1,9 @@
+{
+  "name": "cargo test",
+  "argv_prefix": [
+    "cargo",
+    "test"
+  ],
+  "kinds": [],
+  "jobs": "jobserver"
+}

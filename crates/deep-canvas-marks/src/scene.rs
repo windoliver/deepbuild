@@ -41,6 +41,19 @@ pub const KINDS: &[&str] = &[
     "group@1", "star@1", "frame@1", "series@1",
 ];
 
+/// The kinds of [`KINDS`] the data module owns: R1's mark sets, scales and axes, which marks2d
+/// draws for it (the data module's manifest). A build without the data module lacks them.
+pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1"];
+
+/// The canvas module that owns one of [`KINDS`]: the data module's, or marks2d's.
+pub fn module_of(kind: &str) -> &'static str {
+    if DATA_KINDS.contains(&kind) {
+        "data"
+    } else {
+        "marks2d"
+    }
+}
+
 /// An sRGB-encoded color, 0–255 per channel, as the look's roles resolve for a 2D writer layer.
 pub type Rgb = [u8; 3];
 
@@ -2705,7 +2718,25 @@ pub fn bound_text(
 ) -> Result<Option<Shown>, Refused> {
     if let Some(template) = template_of(item) {
         // A template shows each slot's value at its own precision (Text `text@1`, `template`).
-        let text = deep_canvas::template::expand(&Value::Object(doc.clone()), template)
+        // A keyed data value shows as the frame evaluated it (`params/data/<name>`, motion@1).
+        let mut at_t = doc.clone();
+        if let Some(values) = item.pointer("/params/data").and_then(Value::as_object) {
+            for (name, x) in values {
+                let entry = at_t
+                    .entry("data")
+                    .or_insert_with(|| json!({}))
+                    .as_object_mut()
+                    .and_then(|d| d.get_mut(name));
+                match entry {
+                    Some(Value::Object(e)) => {
+                        e.insert("value".into(), x.clone());
+                    }
+                    Some(e) => *e = x.clone(),
+                    None => {}
+                }
+            }
+        }
+        let text = deep_canvas::template::expand(&Value::Object(at_t), template)
             .or_else(|_| refuse("ref_unresolved", format!("items/{id}/params/template")))?;
         return Ok(Some(Shown {
             bound: "template".into(),
@@ -2887,6 +2918,16 @@ pub fn status_marks(
             ["items", id, "params", "paint", "badge"] => (*id, Slot::Badge),
             _ => return refuse("bad_doc", format!("{path}/target")),
         };
+        // An item another canvas module draws, such as a solid in depth, takes its status from
+        // that module (scene3d outlines it), never from a 2D status mark (#1162).
+        let written = doc
+            .get("items")
+            .and_then(|i| i.get(id))
+            .and_then(|i| i.get("kind"))
+            .and_then(Value::as_str);
+        if written.is_some_and(|k| !KINDS.contains(&k)) {
+            continue;
+        }
         let Some(item) = items.get(id) else {
             return refuse("ref_unresolved", format!("{path}/target"));
         };
@@ -3315,7 +3356,7 @@ thread_local! {
 /// `items` with their frames' auto layout applied (#375): each frame that lays out, and each item
 /// one lays out, moved to its solved box, and a frame or a boxed mark sized to it. A text keeps its
 /// own box, which the layout measured it by.
-fn laid_out<'a>(
+pub(crate) fn laid_out<'a>(
     doc: &Map<String, Value>,
     items: &'a Map<String, Value>,
 ) -> Result<Cow<'a, Map<String, Value>>, Refused> {
@@ -3338,6 +3379,7 @@ fn laid_out<'a>(
             path: format!("items/{}", r.item),
         })?;
     let mut out = items.clone();
+    let mut moved: BTreeMap<String, [f64; 2]> = BTreeMap::new();
     for (id, [x, y, w, h]) in boxes {
         let parent = items
             .get(&id)
@@ -3350,14 +3392,86 @@ fn laid_out<'a>(
             continue;
         }
         let at = item.entry("at").or_insert_with(|| json!({}));
-        let z = num(at.get("pos").and_then(|p| p.get(2))).unwrap_or(0.0);
+        let pos = at.get("pos");
+        let was = [0, 1].map(|i| num(pos.and_then(|p| p.get(i))).unwrap_or(0.0));
+        let z = num(pos.and_then(|p| p.get(2))).unwrap_or(0.0);
         at["pos"] = json!([x, y, z]);
+        moved.insert(id.clone(), [x - was[0], y - was[1]]);
         if item.get("kind").and_then(Value::as_str) != Some("text@1") {
             let params = item.entry("params").or_insert_with(|| json!({}));
             params["box"] = json!([0.0, 0.0, w, h]);
         }
     }
+    // What hangs from a laid-out item and isn't laid out itself moves with it (#1162): a chart's
+    // marks ride the chart where the row put it, by its nearest laid-out ancestor's move.
+    let parent_of = |id: &str| items.get(id)?.get("parent")?.as_str();
+    for (id, item) in out.iter_mut() {
+        if moved.contains_key(id) {
+            continue;
+        }
+        let mut up = parent_of(id);
+        let by = loop {
+            match up {
+                None => break None,
+                Some(p) if moved.contains_key(p) => break moved.get(p).copied(),
+                Some(p) => up = parent_of(p),
+            }
+        };
+        let (Some([dx, dy]), Some(item)) = (by, item.as_object_mut()) else {
+            continue;
+        };
+        let at = item.entry("at").or_insert_with(|| json!({}));
+        let pos = at.get("pos");
+        let p = [0, 1, 2].map(|i| num(pos.and_then(|p| p.get(i))).unwrap_or(0.0));
+        at["pos"] = json!([p[0] + dx, p[1] + dy, p[2]]);
+    }
     Ok(Cow::Owned(out))
+}
+
+/// A module's item the core lowers to a group (a kind that registered nothing to draw as, such
+/// as `vector@1`) keeps its kind and params as the document writes them, so its own box (a
+/// vector's `size`) is read from them (#1162).
+pub fn as_written(doc: &Map<String, Value>, items: &mut Map<String, Value>) {
+    let written = doc.get("items").and_then(Value::as_object);
+    for (id, item) in items.iter_mut() {
+        if item.get("kind").and_then(Value::as_str) != Some("group@1") {
+            continue;
+        }
+        let Some(w) = written.and_then(|w| w.get(id)) else { continue };
+        if w.get("kind") == item.get("kind") {
+            continue;
+        }
+        if let Some(map) = item.as_object_mut() {
+            for k in ["kind", "params"] {
+                if let Some(v) = w.get(k) {
+                    map.insert(k.into(), v.clone());
+                }
+            }
+        }
+    }
+}
+
+/// Each item's evaluated box in document units, `[x, y, w, h]` (#1162): `items` as evaluated at
+/// t, each at its world transform with its relation's place applied, its frames laid out (#375),
+/// for every item whose kind has a box of its own (`relations::own_box`).
+pub fn item_boxes(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+) -> Result<BTreeMap<String, [f64; 4]>, Refused> {
+    let mut items = items.clone();
+    as_written(doc, &mut items);
+    let items = laid_out(doc, &items)?;
+    let mut out = BTreeMap::new();
+    for (id, item) in items.iter() {
+        let kind = item.get("kind").and_then(Value::as_str).unwrap_or_default();
+        let Some(local) = crate::relations::own_box(kind, object_or_empty(item.get("params")))
+        else {
+            continue;
+        };
+        let place = crate::relations::place_of(item, Some(local));
+        out.insert(id.clone(), crate::relations::placed(local, place));
+    }
+    Ok(out)
 }
 
 /// Each item's box as its frames' auto layout solves it (#375), for an item it lays out; none when
@@ -3821,7 +3935,28 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             path: format!("{path}/params/center"),
         })
     };
-    let path_data = || -> Result<(&String, Vec<Verb>), Refused> {
+    let path_data = || -> Result<(String, Vec<Verb>), Refused> {
+        // #490: a path function in place of `d`, drawn from its samples; its text keys it.
+        if let Some(f) = params.get("fn") {
+            let drawn = crate::function::draw(f).map_err(|r| Refused {
+                code: "bad_doc",
+                path: format!("{path}/params/fn/{}", r.field),
+            })?;
+            let verbs = drawn
+                .subpaths
+                .iter()
+                .flat_map(|s| {
+                    s.iter().enumerate().map(|(i, p)| {
+                        if i == 0 {
+                            Verb::Move(*p)
+                        } else {
+                            Verb::Line(*p)
+                        }
+                    })
+                })
+                .collect();
+            return Ok((format!("fn:{f}"), verbs));
+        }
         let Some(Value::String(d)) = params.get("d") else {
             return refuse("bad_doc", format!("{path}/params/d"));
         };
@@ -3829,7 +3964,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             code: "bad_path_data",
             path: format!("{path}/params/d"),
         })?;
-        Ok((d, verbs))
+        Ok((d.clone(), verbs))
     };
     // R1's rect, circle and path draw an item that only moves, in the paint R1 knows.
     // Issue #160: a path with ops, ends, an attachment or a bend, or a stroke that tapers or
@@ -4086,7 +4221,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 let color = role(ctx.palette, color_role, &format!("{path}/params/paint"))?;
                 Mark::Path {
                     item: id.clone(),
-                    d: d.clone(),
+                    d,
                     geometry: Geometry {
                         verbs,
                         stroke: stroke.map(|s| num(s.get("width")).unwrap_or(1.0)),
