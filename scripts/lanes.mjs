@@ -53,14 +53,20 @@ export const alone = ['tests/acceptance/20/', 'tests/acceptance/1202/', 'tests/a
  * edits approved on 2026-11-03 (tests/acceptance/824/sessions/README.md), runs in its place.
  * #14's first AC6 redraft is kept as written, by hand only: it allows no event but the ones it
  * appended, and since #570 the record also appends the core's move.refused for each move a lifecycle table refuses;
- * its blind redraft, ac6-redraft-2/, runs in its place (the owner's call on PR #1232).
+ * its blind redraft, ac6-redraft-2/, runs in its place (the owner's call on PR #1232). #37's first AC18 draft is kept
+ * as written, by hand only: its two line assertions search the journey file for a flow-style substring that the suite's
+ * own YAML rewrite never writes, so they expect line 0; its blind redraft, redraft/, runs in its place. #37's first AC16
+ * draft is kept by hand too: it counts the stack's start and teardown as the runner's addition; its blind redraft,
+ * redraft-ac16/, runs in its place. #37's first AC7 draft, moved unchanged into receipt-first-draft.test.ts (the owner's
+ * call on PR #1153), is kept by hand: its precondition needs a first step slower than a frame; redraft-ac7/ runs in its place.
  */
 export const byHand = ['tests/acceptance/685/', 'tests/acceptance/1202/session.live.test.ts', 'tests/acceptance/666/session.live.test.ts', 'tests/acceptance/668/session.live.test.ts', 'tests/acceptance/567/session.live.test.ts', 'tests/acceptance/669/session.live.test.ts', 'tests/acceptance/18/mapping/record.live.test.ts', 'tests/acceptance/18/install/tamper.live.test.ts', 'tests/acceptance/21/sessions.live.test.ts',
   'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/112/live.test.ts', 'tests/acceptance/27/session.live.test.ts', 'tests/acceptance/27/desktop.test.ts', 'tests/acceptance/27/desktop-redraft/', 'tests/acceptance/27/outcomes.test.ts', 'tests/acceptance/806/live.test.ts',
   'tests/acceptance/124/ac1-agents.live.test.ts', 'tests/acceptance/124/ac5-budgets.live.test.ts', 'tests/proof/883/', 'tests/acceptance/366/ac1-build.live.test.ts', 'tests/acceptance/140/gpu/color.live.test.ts',
   'tests/acceptance/140/gpu/capture.live.test.ts', ...['empty', 'invalid', 'starts'].map((f) => `tests/acceptance/874/${f}.test.ts`),
   'tests/acceptance/824/budgets.long.test.ts', 'tests/acceptance/824/redraft-ac1/budgets.long.test.ts', 'tests/acceptance/824/sessions/budgets.long.test.ts',
-  'tests/acceptance/824/sessions/redraft-readings/', 'tests/acceptance/14/ac6-redraft.test.ts'];
+  'tests/acceptance/824/sessions/redraft-readings/', 'tests/acceptance/14/ac6-redraft.test.ts', 'tests/acceptance/37/assertions.test.ts',
+  'tests/acceptance/37/budgets.test.ts', 'tests/acceptance/37/receipt-first-draft.test.ts'];
 
 /**
  * Test files whose verdict reads the machine's load or timing (docs/parallel-proof.md, section 7), which run only under
@@ -100,6 +106,7 @@ export const timed = [
   'tests/acceptance/315/budgets-overhead-redraft.test.ts', 'tests/acceptance/315/budgets.test.ts',
   'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/325/timing.test.ts',
   'tests/acceptance/331/budgets.test.ts', 'tests/acceptance/34/budgets.test.ts',
+  'tests/acceptance/37/budgets.test.ts', 'tests/acceptance/37/redraft-ac16/budgets.test.ts',
   'tests/acceptance/340/flow/budgets.test.ts', 'tests/acceptance/348/budgets.test.ts',
   'tests/acceptance/356/budgets.test.ts', 'tests/acceptance/356/click.test.ts',
   'tests/acceptance/358/spike.live.test.mjs', 'tests/acceptance/365/budgets.test.ts',
