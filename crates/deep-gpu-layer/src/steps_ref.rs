@@ -610,7 +610,7 @@ fn build(def: &Def, plan: &Plan, end: &End) -> Option<(Value, Data)> {
                     }
                     g.at(0)
                 }
-                "i" | "key" => g.seeded(port, &Ty::U32, imax),
+                "i" | "key" | "seed" => g.seeded(port, &Ty::U32, imax),
                 "uv" => g.seeded(port, &Ty::V(Sc::F32, 2), imax),
                 "ixy" => g.seeded(port, &Ty::V(Sc::I32, 2), imax),
                 "lod" => g.seeded(port, &Ty::F32, imax),
