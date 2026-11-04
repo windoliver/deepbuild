@@ -398,8 +398,8 @@ class SqliteRecord implements RecordStore {
     // Every session still active at that commit may have lost its tail, a claim of its own included: its
     // next claim, surviving here or replayed from a spool, reads INVALID.
     // Ended means nothing of the session reached the log after its end and no turn of it is open: a finish
-    // that landed late, after it resumed, exempts nothing.
-    const active = this.db.prepare("SELECT id FROM sessions s WHERE NOT (status IN ('finished', 'failed') AND ended_log_pos IS NOT NULL AND ended_log_pos <= ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.id AND e.log_pos > s.ended_log_pos) AND NOT EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.stopped = 0))").all(lastFull) as { id: string }[];
+    // that landed late, after it resumed, exempts nothing. The core's reading of its state and its finding the process gone (#992) are none of it.
+    const active = this.db.prepare("SELECT id FROM sessions s WHERE NOT (status IN ('finished', 'failed') AND ended_log_pos IS NOT NULL AND ended_log_pos <= ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.id AND e.log_pos > s.ended_log_pos AND e.kind NOT IN ('session.state', 'session.gone')) AND NOT EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.stopped = 0))").all(lastFull) as { id: string }[];
     const mark = this.db.prepare('INSERT OR IGNORE INTO lost_sessions (session) VALUES (?)');
     this.backend.commit(this.db, 'normal', () => { for (const { id } of active) mark.run(id); });
     for (const { id } of active) this.lost.add(id);

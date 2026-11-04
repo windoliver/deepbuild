@@ -157,14 +157,19 @@ fn at_object(item: &mut Map<String, Value>) -> &mut Map<String, Value> {
     at.as_object_mut().expect("an object")
 }
 
-/// Writes `value` at `field` inside `item`, making objects and growing arrays on the way.
+/// Writes `value` at `field` inside `item`, making objects and growing arrays on the way. A
+/// step under `params/ops/<i>` reaches through the op's one key, its kind (Path `path@1`: ops),
+/// so `ops/0/angle` writes the twist's angle.
 fn write(item: &mut Value, field: &[String], value: Value) {
     let Some((last, rest)) = field.split_last() else {
         *item = value;
         return;
     };
     let mut at = item;
-    for name in rest {
+    for (depth, name) in rest.iter().enumerate() {
+        if depth == 3 && rest[0] == "params" && rest[1] == "ops" {
+            at = through_op(at);
+        }
         at = match at {
             Value::Array(list) => match name.parse::<usize>() {
                 Ok(i) => {
@@ -186,6 +191,9 @@ fn write(item: &mut Value, field: &[String], value: Value) {
             }
         };
     }
+    if rest.len() == 3 && rest[0] == "params" && rest[1] == "ops" {
+        at = through_op(at);
+    }
     match at {
         Value::Array(list) => {
             if let Ok(i) = last.parse::<usize>() {
@@ -206,19 +214,32 @@ fn write(item: &mut Value, field: &[String], value: Value) {
     }
 }
 
+/// A path op's params: the value under its one key, made an object when it isn't one.
+fn through_op(op: &mut Value) -> &mut Value {
+    let one = matches!(op, Value::Object(map) if map.len() == 1);
+    if !one {
+        return op;
+    }
+    let Value::Object(map) = op else {
+        unreachable!("checked above")
+    };
+    let inner = map.values_mut().next().expect("one key");
+    if !inner.is_object() {
+        *inner = Value::Object(Map::new());
+    }
+    inner
+}
+
 /// The frame's `valid_until`: the earliest `t` at which anything it shows changes next.
 pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validity) -> Option<i64> {
-    let channels = motion
-        .channels
-        .iter()
-        .filter_map(|c| {
-            // A modified channel may change at every flick.
-            if c.modifiers.is_empty() {
-                c.curve.next_change(doc_t)
-            } else {
-                Some(doc_t + 1)
-            }
-        });
+    let channels = motion.channels.iter().filter_map(|c| {
+        // A modified channel may change at every flick.
+        if c.modifiers.is_empty() {
+            c.curve.next_change(doc_t)
+        } else {
+            Some(doc_t + 1)
+        }
+    });
     let placements = motion
         .placements
         .iter()
