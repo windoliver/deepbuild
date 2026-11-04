@@ -342,6 +342,11 @@ pub fn shape(
             }
             f => set_brush(ctx, f, bounds, l.opacity),
         }
+        if let Some(profile) = &l.profile {
+            profiled(ctx, &path, l, profile, zoom);
+            ctx.reset_paint_transform();
+            return;
+        }
         ctx.set_stroke(stroke(l.width));
         match l.dashes {
             Some(n) => ctx.stroke_path(&dash(&path, n)),
@@ -349,6 +354,160 @@ pub fn shape(
         }
     }
     ctx.reset_paint_transform();
+}
+
+/// Issue #160: a stroke whose width follows its profile along its length (Paint: taper and
+/// wave; a hand-drawn stroke's per-point widths). The flattened path's points each take the
+/// width at their arc length, and the stroke draws as the filled outline those widths sweep,
+/// its joins mitred within the stroke's limit; a run whose width falls under 1 device px draws
+/// at 1 px with its alpha scaled by its width, as a hairline stroke does.
+fn profiled(
+    ctx: &mut impl Canvas,
+    path: &BezPath,
+    line: &Line,
+    profile: &paint::Profile,
+    zoom: f64,
+) {
+    let subs = subpaths(path);
+    let total: f64 = subs
+        .iter()
+        .flat_map(|(points, _)| points.windows(2).map(|w| w[0].distance(w[1])))
+        .sum();
+    if total <= 0.0 {
+        return;
+    }
+    let thin = 1.0 / zoom;
+    // The width is sampled every device pixel along each straight run, so a long segment follows
+    // its profile rather than its ends alone.
+    let step = thin;
+    let subs: Vec<(Vec<Point>, bool)> = subs
+        .into_iter()
+        .map(|(points, closed)| {
+            let mut fine = Vec::with_capacity(points.len());
+            for (i, p) in points.iter().enumerate() {
+                if i > 0 {
+                    let a = points[i - 1];
+                    let pieces = ((a.distance(*p) / step).ceil() as usize).max(1);
+                    for k in 1..pieces {
+                        fine.push(a.lerp(*p, k as f64 / pieces as f64));
+                    }
+                }
+                fine.push(*p);
+            }
+            (fine, closed)
+        })
+        .collect();
+    let mut at = 0.0;
+    for (points, closed) in &subs {
+        let n = points.len();
+        if n < 2 {
+            continue;
+        }
+        // Each point's arc length and width.
+        let mut s = Vec::with_capacity(n);
+        let mut w = Vec::with_capacity(n);
+        for (i, p) in points.iter().enumerate() {
+            if i > 0 {
+                at += points[i - 1].distance(*p);
+            }
+            s.push(at);
+            w.push(profile.width(line.width, at, total));
+        }
+        // Runs of segments wide enough to outline, and thin ones stroked as hairlines.
+        let mut i = 0;
+        while i + 1 < n {
+            let wide = |k: usize| (w[k] + w[k + 1]) / 2.0 >= thin;
+            let start = i;
+            let is_wide = wide(i);
+            while i + 1 < n && wide(i) == is_wide {
+                i += 1;
+            }
+            let run = &points[start..=i];
+            let widths = &w[start..=i];
+            if is_wide {
+                let outline = sweep(run, widths, *closed && start == 0 && i + 1 == n);
+                ctx.fill_path(&outline);
+            } else {
+                for k in 0..run.len() - 1 {
+                    let mut seg = BezPath::new();
+                    seg.move_to(run[k]);
+                    seg.line_to(run[k + 1]);
+                    ctx.set_stroke(stroke(((widths[k] + widths[k + 1]) / 2.0).max(1e-6)));
+                    ctx.stroke_path(&seg);
+                }
+            }
+        }
+    }
+}
+
+/// The outline a polyline sweeps with a width at each point: the left edge forward, the right
+/// edge back, each vertex offset along the mitred normal (bevelled past a limit of 4, as the
+/// stroke's joins are).
+fn sweep(points: &[Point], widths: &[f64], closed: bool) -> BezPath {
+    let n = points.len();
+    let dir = |i: usize| -> Option<vello_cpu::kurbo::Vec2> {
+        let d = points[(i + 1) % n] - points[i];
+        (d.hypot() > 0.0).then(|| d / d.hypot())
+    };
+    let mut left = Vec::with_capacity(n);
+    let mut right = Vec::with_capacity(n);
+    let count = if closed { n - 1 } else { n };
+    for i in 0..count {
+        let before = if i > 0 {
+            dir(i - 1)
+        } else if closed {
+            dir(n - 2)
+        } else {
+            None
+        };
+        let after = if i + 1 < n { dir(i) } else { None };
+        let d = match (before, after) {
+            (Some(a), Some(b)) => {
+                let m = a + b;
+                if m.hypot() > 1e-9 {
+                    m / m.hypot()
+                } else {
+                    a
+                }
+            }
+            (Some(a), None) | (None, Some(a)) => a,
+            (None, None) => continue,
+        };
+        let normal = vello_cpu::kurbo::Vec2::new(d.y, -d.x);
+        // The miter reach: half the width over the cosine of the half turn, within the limit.
+        let reach = match (before, after) {
+            (Some(a), Some(b)) => {
+                let cos_half = ((a.dot(b) + 1.0) / 2.0).max(0.0).sqrt();
+                (1.0 / cos_half.max(1e-9)).min(4.0)
+            }
+            _ => 1.0,
+        };
+        let h = widths[i] / 2.0 * reach;
+        left.push(points[i] + normal * h);
+        right.push(points[i] - normal * h);
+    }
+    let mut out = BezPath::new();
+    if left.is_empty() {
+        return out;
+    }
+    out.move_to(left[0]);
+    for p in &left[1..] {
+        out.line_to(*p);
+    }
+    if closed {
+        out.close_path();
+        out.move_to(right[0]);
+        for p in &right[1..] {
+            out.line_to(*p);
+        }
+        out.close_path();
+    } else {
+        for p in right.iter().rev() {
+            out.line_to(*p);
+        }
+        out.close_path();
+    }
+    out
 }
 
 /// A flattened path's sub-paths as their points and whether each closes; a closed one ends on its
@@ -682,6 +841,11 @@ impl Scopes {
                 Scope::Opacity { alpha, blend, .. } => {
                     let mode = blend.filter(|b| *b != Blend::Normal).map(blend_mode);
                     ctx.push_layer(None, mode, Some(*alpha as f32), None);
+                    self.offscreen += 1;
+                    Close::Layer
+                }
+                Scope::Shape { verbs, .. } => {
+                    ctx.push_layer(Some(&bez(verbs, [0.0, 0.0], 1.0)), None, None, None);
                     self.offscreen += 1;
                     Close::Layer
                 }

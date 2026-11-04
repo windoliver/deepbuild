@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { claudeCommand, ourGroups } from '../src/claude-settings.js';
+import { withEntries } from '../src/codex-settings.js';
 import { programOf } from '../src/hook-programs.js';
 
 const DASH = ['/bin/dash', '/usr/bin/dash'].find((p) => existsSync(p));
@@ -40,5 +41,50 @@ describe('Claude Code hook entries', () => {
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+  });
+});
+
+// Codex runs an entry's command with `<your login shell> -c`, the shell your passwd names (bash, zsh or sh, else bash),
+// so a login shell of /bin/sh is dash on Debian and Ubuntu, and the same holds there.
+describe('Codex hook entries', () => {
+  it('run their program as a child of the process that runs the command, under dash and /bin/sh', () => {
+    if (!DASH) throw Error('BLOCKED: no dash on this machine, the shell that runs a lone command in a child');
+    const tmp = realpathSync(mkdtempSync(join(tmpdir(), 'hook-parent-')));
+    try {
+      const stub = join(tmp, "it's", 'deep-hook');
+      mkdirSync(join(tmp, "it's"));
+      writeFileSync(stub, '#!/bin/sh\nps -o ppid= -p $$\n');
+      chmodSync(stub, 0o755);
+      const hooks = JSON.parse(withEntries('', stub)).hooks as Record<string, { hooks: { command: string }[] }[]>;
+      const entries = Object.entries(hooks).flatMap(([event, gs]) => gs.flatMap((g) => g.hooks.map((h) => ({ event, command: h.command }))));
+      expect(entries.length).toBeGreaterThan(10);
+      const wrong: string[] = [];
+      for (const shell of [DASH, '/bin/sh']) {
+        for (const { event, command } of entries) {
+          // This process stands for Codex: it starts your login shell, the shell runs the entry.
+          const r = spawnSync(shell, ['-c', command], { encoding: 'utf8' });
+          const parent = Number(r.stdout.trim());
+          if (r.status !== 0 || parent !== process.pid) wrong.push(`${shell}: ${event} \`${command}\` ran under ${parent || r.stderr.trim()}, not ${process.pid}`);
+        }
+      }
+      expect(wrong).toEqual([]);
+      expect([...new Set(entries.map((e) => programOf(e.command)))]).toEqual([stub]);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('Codex hook entries setup wrote before they exec deep-hook', () => {
+  it('give way to the exec entries on the next setup, leaving yours, so each hook runs deep-hook once', () => {
+    const hook = "/r/it's/bin/deep-hook";
+    const old = (event: string) => `'/r/it'\\''s/bin/deep-hook' codex ${event}`;
+    const yours = { type: 'command', command: 'my-hook' };
+    const before = JSON.stringify({ hooks: { Stop: [{ hooks: [yours] }, { hooks: [{ type: 'command', command: old('Stop'), timeout: 2700 }] }], SessionStart: [{ hooks: [{ type: 'command', command: old('SessionStart') }, yours] }] } });
+    const hooks = JSON.parse(withEntries(before, hook)).hooks as Record<string, { hooks: { command: string }[] }[]>;
+    const commands = (event: string) => hooks[event]!.flatMap((g) => g.hooks.map((h) => h.command));
+    expect(commands('Stop')).toEqual(['my-hook', `exec ${old('Stop')}`]);
+    expect(commands('SessionStart')).toEqual(['my-hook', `exec ${old('SessionStart')}`]);
+    expect(withEntries(withEntries(before, hook), hook)).toBe(withEntries(before, hook));
   });
 });

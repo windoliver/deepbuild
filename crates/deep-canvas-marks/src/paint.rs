@@ -585,3 +585,338 @@ impl Adjust {
         code(self.color(unit(c)))
     }
 }
+
+// ---------------------------------------------------------------------------------------------------
+// Issue #160: stroke taper, wave and per-point widths (Paint: stroke gradients, taper and wave;
+// Path `path@1`: per-point `width`), as widths from arc length at tessellation.
+
+/// A length along a stroke: in u, or as a fraction of its length.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Along {
+    U(f64),
+    Fraction(f64),
+}
+
+impl Along {
+    fn u(self, total: f64) -> f64 {
+        match self {
+            Along::U(u) => u,
+            Along::Fraction(f) => f * total,
+        }
+    }
+
+    /// `0` (none) or a number: at most 1 a fraction of the length, above 1 u.
+    fn read(v: Option<&Value>, path: &str) -> Result<Along, Refused> {
+        match v {
+            None | Some(Value::Null) => Ok(Along::U(0.0)),
+            Some(Value::Number(n)) => {
+                let n = n
+                    .as_f64()
+                    .filter(|n| n.is_finite() && *n >= 0.0)
+                    .ok_or(Refused {
+                        code: "out_of_range",
+                        path: path.to_string(),
+                    })?;
+                Ok(if n <= 1.0 {
+                    Along::Fraction(n)
+                } else {
+                    Along::U(n)
+                })
+            }
+            Some(_) => refuse("bad_doc", path.to_string()),
+        }
+    }
+}
+
+/// `taper {start, end, start_width, end_width, ease}`: the first `start` and the last `end` of the
+/// stroke narrow to their widths along an ease, 0 straight and 1 smooth.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Taper {
+    pub start: Along,
+    pub end: Along,
+    pub start_width: f64,
+    pub end_width: f64,
+    pub ease: f64,
+}
+
+/// `wave {amount, wavelength, phase}`: the width varies by `amount` of itself along the length.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Wave {
+    pub amount: f64,
+    pub wavelength: f64,
+    pub phase: f64,
+}
+
+/// A stroke's width along its length: its taper and wave, and the per-point widths a hand-drawn
+/// stroke carries, each at the arc length of its point.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Profile {
+    pub taper: Option<Taper>,
+    pub wave: Option<Wave>,
+    pub points: Vec<(f64, f64)>,
+}
+
+impl Profile {
+    /// The width at `s` u along a stroke `total` u long whose paint width is `base`.
+    pub fn width(&self, base: f64, s: f64, total: f64) -> f64 {
+        let mut w = if self.points.is_empty() {
+            base
+        } else {
+            let pts = &self.points;
+            let i = pts
+                .partition_point(|(at, _)| *at <= s)
+                .clamp(1, pts.len() - 1);
+            let (s0, w0) = pts[i - 1];
+            let (s1, w1) = pts[i];
+            let f = if s1 > s0 {
+                ((s - s0) / (s1 - s0)).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            w0 + (w1 - w0) * f
+        };
+        if let Some(t) = &self.taper {
+            let eased = |f: f64| {
+                let f = f.clamp(0.0, 1.0);
+                let smooth = f * f * (3.0 - 2.0 * f);
+                f + (smooth - f) * t.ease
+            };
+            let a = t.start.u(total);
+            if a > 0.0 && s < a {
+                w *= t.start_width + (1.0 - t.start_width) * eased(s / a);
+            }
+            let b = t.end.u(total);
+            if b > 0.0 && s > total - b {
+                w *= t.end_width + (1.0 - t.end_width) * eased((total - s) / b);
+            }
+        }
+        if let Some(v) = &self.wave {
+            if v.wavelength > 0.0 {
+                let phase = ops::rad(v.phase);
+                w *= 1.0
+                    + v.amount * ops::sin(2.0 * std::f64::consts::PI * s / v.wavelength + phase);
+            }
+        }
+        w.max(0.0)
+    }
+
+    pub fn feed(&self, k: &mut crate::key::KeyBuilder) {
+        match &self.taper {
+            Some(t) => {
+                k.text("taper");
+                for a in [t.start, t.end] {
+                    match a {
+                        Along::U(u) => k.text("u").number(u),
+                        Along::Fraction(f) => k.text("fraction").number(f),
+                    };
+                }
+                k.number(t.start_width).number(t.end_width).number(t.ease);
+            }
+            None => {
+                k.text("no taper");
+            }
+        }
+        match &self.wave {
+            Some(v) => {
+                k.text("wave")
+                    .number(v.amount)
+                    .number(v.wavelength)
+                    .number(v.phase);
+            }
+            None => {
+                k.text("no wave");
+            }
+        }
+        k.int(self.points.len() as i64);
+        for (s, w) in &self.points {
+            k.number(*s).number(*w);
+        }
+    }
+}
+
+fn unit_field(
+    m: &Map<String, Value>,
+    name: &str,
+    default: f64,
+    path: &str,
+) -> Result<f64, Refused> {
+    match m.get(name) {
+        None | Some(Value::Null) => Ok(default),
+        Some(v) => {
+            let n = num(Some(v)).ok_or(Refused {
+                code: "bad_doc",
+                path: format!("{path}/{name}"),
+            })?;
+            if !(0.0..=1.0).contains(&n) {
+                return refuse("out_of_range", format!("{path}/{name}"));
+            }
+            Ok(n)
+        }
+    }
+}
+
+/// The stroke's profile from its `taper` and `wave` and the item's per-point `width` column
+/// (`widths`, one per anchor point at its arc length), or `None` for a plain stroke.
+pub fn profile(
+    stroke: &Map<String, Value>,
+    path: &str,
+    widths: Vec<(f64, f64)>,
+) -> Result<Option<Profile>, Refused> {
+    let taper = match stroke.get("taper") {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(t)) => {
+            let path = format!("{path}/taper");
+            Some(Taper {
+                start: Along::read(t.get("start"), &format!("{path}/start"))?,
+                end: Along::read(t.get("end"), &format!("{path}/end"))?,
+                start_width: unit_field(t, "start_width", 1.0, &path)?,
+                end_width: unit_field(t, "end_width", 1.0, &path)?,
+                ease: unit_field(t, "ease", 0.0, &path)?,
+            })
+        }
+        Some(_) => return refuse("bad_doc", format!("{path}/taper")),
+    };
+    let wave = match stroke.get("wave") {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(w)) => {
+            let path = format!("{path}/wave");
+            let wavelength = match w.get("wavelength") {
+                None | Some(Value::Null) => 20.0,
+                Some(v) => num(Some(v)).filter(|n| *n > 0.0).ok_or(Refused {
+                    code: "out_of_range",
+                    path: format!("{path}/wavelength"),
+                })?,
+            };
+            let phase = match w.get("phase") {
+                None | Some(Value::Null) => 0.0,
+                Some(v) => num(Some(v)).ok_or(Refused {
+                    code: "bad_doc",
+                    path: format!("{path}/phase"),
+                })?,
+            };
+            Some(Wave {
+                amount: unit_field(w, "amount", 0.0, &path)?,
+                wavelength,
+                phase,
+            })
+        }
+        Some(_) => return refuse("bad_doc", format!("{path}/wave")),
+    };
+    if taper.is_none() && wave.is_none() && widths.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(Profile {
+        taper,
+        wave,
+        points: widths,
+    }))
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Issue #160: a crescent shade (Paint: shade): a darker flat of the shape, offset away from the
+// light and clipped to the shape, with an optional highlight toward it and a rim along its edge.
+
+/// `shade {kind, role, offset, light, opacity, mode, highlight, rim}` as read; `blur`, `choke`
+/// and `kind: inner` wait for the pass that blurs (Paint: glow, bevel and satin).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Shade {
+    pub color: Rgb,
+    /// The shade's move away from the light, in u.
+    pub offset: f64,
+    /// The direction the light comes from, in degrees (0 is +x, 90 is +y), −135 by default.
+    pub light: f64,
+    pub opacity: f64,
+    pub multiply: bool,
+    /// The highlight's color and its move toward the light.
+    pub highlight: Option<(Rgb, f64)>,
+    /// The rim's color and its width inside the edge.
+    pub rim: Option<(Rgb, f64)>,
+}
+
+impl Shade {
+    /// Reads `paint.shade` at `path`; `None` when absent.
+    pub fn read(
+        palette: &Palette,
+        v: Option<&Value>,
+        path: &str,
+    ) -> Result<Option<Shade>, Refused> {
+        let sh = match v {
+            None | Some(Value::Null) => return Ok(None),
+            Some(Value::Object(o)) => o,
+            Some(_) => return refuse("bad_doc", path.to_string()),
+        };
+        let color = |m: &Map<String, Value>, at: &str| -> Result<Rgb, Refused> {
+            let name = m.get("role").and_then(Value::as_str).ok_or(Refused {
+                code: "bad_paint",
+                path: format!("{at}/role"),
+            })?;
+            palette.get(name).copied().ok_or(Refused {
+                code: "role_unresolved",
+                path: format!("{at}/role"),
+            })
+        };
+        let number =
+            |m: &Map<String, Value>, name: &str, default: f64, at: &str| -> Result<f64, Refused> {
+                match m.get(name) {
+                    None | Some(Value::Null) => Ok(default),
+                    Some(v) => num(Some(v)).ok_or(Refused {
+                        code: "bad_doc",
+                        path: format!("{at}/{name}"),
+                    }),
+                }
+            };
+        match sh.get("kind").and_then(Value::as_str) {
+            None | Some("crescent" | "step") => {}
+            Some("inner") => return refuse("module_missing", format!("{path}/kind")),
+            Some(_) => return refuse("bad_doc", format!("{path}/kind")),
+        }
+        if number(sh, "blur", 0.0, path)? > 0.0 {
+            return refuse("module_missing", format!("{path}/blur"));
+        }
+        if number(sh, "choke", 0.0, path)? > 0.0 {
+            return refuse("module_missing", format!("{path}/choke"));
+        }
+        let light = match sh.get("light") {
+            None | Some(Value::Null) => -135.0,
+            Some(Value::String(s)) if s == "look" => -135.0,
+            Some(v) => num(Some(v)).ok_or(Refused {
+                code: "bad_doc",
+                path: format!("{path}/light"),
+            })?,
+        };
+        let opacity = number(sh, "opacity", 1.0, path)?;
+        if !(0.0..=1.0).contains(&opacity) {
+            return refuse("out_of_range", format!("{path}/opacity"));
+        }
+        let multiply = match sh.get("mode").and_then(Value::as_str) {
+            None | Some("normal") => false,
+            Some("multiply") => true,
+            Some(_) => return refuse("bad_doc", format!("{path}/mode")),
+        };
+        let sub = |name: &str, field: &str, default: f64| -> Result<Option<(Rgb, f64)>, Refused> {
+            match sh.get(name) {
+                None | Some(Value::Null) => Ok(None),
+                Some(Value::Object(m)) => {
+                    let at = format!("{path}/{name}");
+                    Ok(Some((color(m, &at)?, number(m, field, default, &at)?)))
+                }
+                Some(_) => refuse("bad_doc", format!("{path}/{name}")),
+            }
+        };
+        Ok(Some(Shade {
+            color: color(sh, path)?,
+            offset: number(sh, "offset", 6.0, path)?,
+            light,
+            opacity,
+            multiply,
+            highlight: sub("highlight", "offset", 6.0)?,
+            rim: sub("rim", "width", 2.0)?,
+        }))
+    }
+
+    /// The shade's move: `offset` u away from the light.
+    pub fn away(&self, offset: f64) -> [f64; 2] {
+        let a = ops::rad(self.light);
+        [-offset * ops::cos(a), -offset * ops::sin(a)]
+    }
+}

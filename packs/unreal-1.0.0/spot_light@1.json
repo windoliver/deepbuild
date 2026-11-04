@@ -1,0 +1,77 @@
+{
+  "id": "unreal.spot_light",
+  "version": "1.0",
+  "title": "Spot light",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "Unreal's SpotLightComponent: lumens over its cone become ours by × 2 ÷ (1 − cos θ_outer), candela × 4π; cone angles are half angles; it shines along Unreal's +X, our +Z.",
+  "inputs": {
+    "Location": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "cm",
+      "about": ""
+    },
+    "Intensity": {
+      "type": "number",
+      "default": 8,
+      "min": 0,
+      "about": ""
+    },
+    "IntensityUnits": {
+      "type": "choice",
+      "default": "Candelas",
+      "options": [
+        "Candelas",
+        "Lumens"
+      ],
+      "about": ""
+    },
+    "OuterConeAngle": {
+      "type": "number",
+      "default": 44,
+      "unit": "deg",
+      "min": 1,
+      "max": 80,
+      "about": ""
+    },
+    "InnerConeAngle": {
+      "type": "number",
+      "default": 0,
+      "unit": "deg",
+      "min": 0,
+      "max": 80,
+      "about": ""
+    }
+  },
+  "let": {
+    "lm": "IntensityUnits == Lumens ? Intensity * 2 / (1 - cos(rad(OuterConeAngle))) : Intensity * 4 * pi"
+  },
+  "steps": {
+    "light": {
+      "op": "item",
+      "kind": "light.spot@1",
+      "params": {
+        "power": "lm",
+        "outer": "OuterConeAngle",
+        "inner": "min(InnerConeAngle, OuterConeAngle)"
+      },
+      "at": {
+        "pos": [
+          "-Location[1] / 100",
+          "Location[2] / 100",
+          "Location[0] / 100"
+        ],
+        "rot": [
+          0,
+          180,
+          0
+        ]
+      }
+    }
+  }
+}

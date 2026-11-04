@@ -1,0 +1,26 @@
+# AC2 live: Claude Code 2.1.308 with approve-all via --plugin-dir. Turn 1 (typed in a pty) ran `git push origin main`,
+# which completed; its process was then killed before Stop, cutting the turn off. Turn 2 (claude -p --resume, same
+# session) made the same push: the gate denied it as the cut-off turn's completed send (#85's repeated-send rule), the
+# mod approved it past the deny, and it ran (transcript: permissionDecision accept, source hook). The hub recorded
+# guard.overridden and raised exactly one ask naming the send. Screenshots 4 and 5.
+
+12 session.start fab2d871-a2b6-4142-a36b-d02a1845f23f  {"agent":"claude-code","worktree":"<world>/repo","branch":null,"thread":"fab2d871-a2b6-4142-a36b-d02a1845f23f","loads":[],"billing":{"ANTHROPIC_API_KEY":false,"ANTHROPIC_AUTH_TOKEN":false,"CLAUDE_CODE_USE_BEDROCK":false,"CLAUDE_CODE_USE_VERTEX":false,"OPENAI_API_KEY":false}}
+41 session.reading fab2d871-a2b6-4142-a36b-d02a1845f23f  {"reading":"This session's Claude Code home (~/.claude) loads the mod approve-all, which handles tool.check, so it can approve a call DeepBuild's guard denied at PreToolUse: its holds and blocks are watch-only until the mod is gone or the setup holds the deny (managed settings, or a Team or Enterprise login)."}
+54 user.ask fab2d871-a2b6-4142-a36b-d02a1845f23f  {"msg":0,"text":"Run exactly `git push origin main` with the Bash tool, then reply done.","tasks":[],"from":"unknown"}
+80 tool.before fab2d871-a2b6-4142-a36b-d02a1845f23f  {"kind":"shell","paths":[],"command":"git push origin main","call":"toolu_01TkZ3Tx45NXesumsUg47BQS","matched":["authority-push"]}
+81 tool.after fab2d871-a2b6-4142-a36b-d02a1845f23f  {"kind":"shell","paths":[],"command":"git push origin main","call":"toolu_01TkZ3Tx45NXesumsUg47BQS","outcome":"ok"}
+201 session.start fab2d871-a2b6-4142-a36b-d02a1845f23f  {"agent":"claude-code","worktree":"<world>/repo","branch":null,"thread":"fab2d871-a2b6-4142-a36b-d02a1845f23f","loads":[],"billing":{"ANTHROPIC_API_KEY":false,"ANTHROPIC_AUTH_TOKEN":false,"CLAUDE_CODE_USE_BEDROCK":false,"CLAUDE_CODE_USE_VERTEX":false,"OPENAI_API_KEY":false}}
+202 user.ask fab2d871-a2b6-4142-a36b-d02a1845f23f  {"msg":1,"text":"Run exactly `git push origin main` with the Bash tool once more, then reply done.","tasks":[],"from":"unknown"}
+203 session.reading fab2d871-a2b6-4142-a36b-d02a1845f23f  {"reading":"This session's Claude Code home (~/.claude) loads the mod approve-all, which handles tool.check, so it can approve a call DeepBuild's guard denied at PreToolUse: its holds and blocks are watch-only until the mod is gone or the setup holds the deny (managed settings, or a Team or Enterprise login)."}
+213 tool.before fab2d871-a2b6-4142-a36b-d02a1845f23f  {"kind":"shell","paths":[],"command":"git push origin main","call":"toolu_019qbRf52GKC6wXoWPbkHNEy","matched":["authority-push"]}
+214 tool.after fab2d871-a2b6-4142-a36b-d02a1845f23f  {"kind":"shell","paths":[],"command":"git push origin main","call":"toolu_019qbRf52GKC6wXoWPbkHNEy","outcome":"ok"}
+215 guard.overridden fab2d871-a2b6-4142-a36b-d02a1845f23f session:fab2d871a2b64142a36bd02a1845f23f {"call":"toolu_019qbRf52GKC6wXoWPbkHNEy","tool":"Bash","label":"git push origin main","guard":"the gate's repeated-send rule (#85)","send":true,"mods":["approve-all"],"mods_unread":null}
+216 session.reading fab2d871-a2b6-4142-a36b-d02a1845f23f  {"reading":"DeepBuild denied git push origin main (the gate's repeated-send rule (#85)) and it ran anyway, approved past the deny by approve-all: this session's claims can't pass on its own checks."}
+217 ask.created fab2d871-a2b6-4142-a36b-d02a1845f23f  {"kind":"exception","question":"A send DeepBuild denied ran anyway: git push origin main (call toolu_019qbRf52GKC6wXoWPbkHNEy), approved past the deny by approve-all. It may already have left. Check whether it went out?","options":[{"id":"checked","label":"I checked it","decision":"none"},{"id":"later","label":"Not now","decision":"none"}],"recommended":"checked","deadline":1793943320959,"fallback
+232 agent.stop fab2d871-a2b6-4142-a36b-d02a1845f23f session:fab2d871a2b64142a36bd02a1845f23f {"turn":1,"did_work":true,"claim":true,"outcome":"finished","cause":"unknown","usage":{"covers":"turn","model":"claude-haiku-5-5","input":{"value":24742,"exact":true},"cached":{"value":24508,"exact":true},"output":{"value":196,"exact":true},"context_fill":null,"cost":{"usd":null,"basis":"unpriced"}}}
+234 claim.made fab2d871-a2b6-4142-a36b-d02a1845f23f  {"task_ref":"session:fab2d871a2b64142a36bd02a1845f23f#0","attempt":1,"commit":"b5d33d83d2bfce864652dffd0fcf1c35b4f13e28","scope":"session","predictions":[]}
+
+# deep status and deep inbox
+  fab2d871  needs you  claude-code  an ask open for 1m
+      DeepBuild denied git push origin main (the gate's repeated-send rule (#85)) and it ran anyway, approved past the deny by approve-all: this session's claims can't pass on its own checks.
+ask:01M6JGW0DD5ZQJATKYRAVQ8KD7  exception  fab2d871-a2b6-4142-a36b-d02a1845f23f  1m  shown  A send DeepBuild denied ran anyway: git push origin main (call toolu_019qbRf52GKC6wXoWPbkHNEy), approved past the deny by approve-all. It may already have left. Check whether it went out?  [checked | later]
