@@ -607,7 +607,8 @@ impl Hub<'_> {
                     p.evaluate(shows, Validity::Full, &mut state);
                     state.valid_until
                 });
-            let mut frame = json!({"vsync": vsync, "rev": rev, "camera": view.camera});
+            // `t`: the document's time the frame shows (#1162: a readout reads its values there).
+            let mut frame = json!({"vsync": vsync, "rev": rev, "t": shows, "camera": view.camera});
             if let Some(before) = view.compare {
                 frame["before"] = json!(before);
             }

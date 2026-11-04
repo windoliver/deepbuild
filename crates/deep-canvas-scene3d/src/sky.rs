@@ -82,9 +82,21 @@ pub struct Sky {
     pub background_blur: f64,
     /// The ground an HDR background lies on: the photo camera's height and the floor's reach.
     pub background_ground: Option<(f64, f64)>,
+    /// Whether the sky names a background field of its own (`top`, `low`, `stars`, `moon`).
+    pub painted: bool,
 }
 
 impl Sky {
+    /// Whether the sky draws a background behind the scene (#1162): any but `auto`; `auto` with
+    /// an environment or a background field of its own. A sky that only sets the ambient light
+    /// leaves the look's ground behind the scene.
+    pub fn draws_background(&self) -> bool {
+        match self.background {
+            Background::Auto => self.painted || self.environment.is_some(),
+            _ => true,
+        }
+    }
+
     /// Whether the background shows the environment rather than the sky's own fields.
     pub fn shows_environment(&self) -> bool {
         match (&self.background, &self.environment) {
@@ -313,6 +325,9 @@ pub fn parse(
         background,
         background_blur,
         background_ground,
+        painted: ["top", "low", "stars", "moon"]
+            .iter()
+            .any(|k| params.get(*k).is_some_and(|v| !v.is_null())),
     };
     // A video's frames can't be blurred or laid on a ground, and a ground needs a background
     // that shows the environment; each refused naming its field.
