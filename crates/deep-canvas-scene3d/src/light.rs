@@ -60,6 +60,223 @@ impl AlphaMode {
     }
 }
 
+/// How a map's texture coordinates wrap on one axis (Material: texture maps, `wrap`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Wrap {
+    Repeat,
+    Clamp,
+    Mirror,
+}
+
+impl Wrap {
+    fn read(v: &Value) -> Option<Wrap> {
+        Some(match v.as_str()? {
+            "repeat" => Wrap::Repeat,
+            "clamp" => Wrap::Clamp,
+            "mirror" => Wrap::Mirror,
+            _ => return None,
+        })
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Wrap::Repeat => "repeat",
+            Wrap::Clamp => "clamp",
+            Wrap::Mirror => "mirror",
+        }
+    }
+}
+
+/// One texture map of a material (#423; Material: texture maps): its image by hash, the uv set
+/// it reads (0 or 1), its uv transform as two rows of an affine map (KHR_texture_transform's
+/// translation × rotation × scale), its wrap on s and t and its most taps (`None`: the look's).
+#[derive(Clone, Debug, PartialEq)]
+pub struct MapSlot {
+    pub sha: String,
+    pub uv: u8,
+    pub transform: [[f64; 3]; 2],
+    pub wrap: [Wrap; 2],
+    pub taps: Option<u8>,
+}
+
+/// A material's texture maps, keyed by everything they hold, so materials with equal maps share
+/// one bind group.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Maps {
+    pub key: String,
+    pub base_color: Option<MapSlot>,
+    pub metallic_roughness: Option<MapSlot>,
+    pub normal: Option<MapSlot>,
+    pub occlusion: Option<MapSlot>,
+    pub emission: Option<MapSlot>,
+    pub normal_scale: f64,
+    pub occlusion_strength: f64,
+    pub alpha_cutoff: f64,
+}
+
+impl Maps {
+    /// Each map with its field's name, in the shader's order.
+    pub fn slots(&self) -> [(&'static str, &Option<MapSlot>); 5] {
+        [
+            ("maps/base_color", &self.base_color),
+            ("maps/metallic_roughness", &self.metallic_roughness),
+            ("normal_map", &self.normal),
+            ("maps/occlusion", &self.occlusion),
+            ("maps/emission", &self.emission),
+        ]
+    }
+}
+
+/// A map's texels as the decode worker made them for the GPU (#423): its format in WebGPU's name,
+/// size, mip count and every mip end to end, largest first.
+#[derive(Clone, PartialEq)]
+pub struct Texels {
+    pub format: String,
+    pub size: [u32; 2],
+    pub mips: u32,
+    pub data: std::sync::Arc<Vec<u8>>,
+}
+
+impl std::fmt::Debug for Texels {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Texels({} {:?} {} mips)",
+            self.format, self.size, self.mips
+        )
+    }
+}
+
+/// One map field: a SHA-256, or `{sha256, uv, transform: {offset, scale, rotation: deg}, wrap,
+/// filter_taps}`; refused at its field's path.
+fn map_slot(v: &Value, field: &str) -> Result<MapSlot, Refused> {
+    let bad = |k: &str| Refused {
+        code: "out_of_range",
+        path: if k.is_empty() {
+            field.to_string()
+        } else {
+            format!("{field}/{k}")
+        },
+    };
+    let sha_ok = |s: &str| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit());
+    if let Some(sha) = v.as_str() {
+        if !sha_ok(sha) {
+            return Err(bad(""));
+        }
+        return Ok(MapSlot {
+            sha: sha.to_string(),
+            uv: 0,
+            transform: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            wrap: [Wrap::Repeat; 2],
+            taps: None,
+        });
+    }
+    let o = v.as_object().ok_or_else(|| bad(""))?;
+    let sha = o
+        .get("sha256")
+        .and_then(Value::as_str)
+        .filter(|s| sha_ok(s))
+        .ok_or_else(|| bad("sha256"))?;
+    let uv = match o.get("uv").and_then(Value::as_str) {
+        None | Some("uv0") if o.get("uv").is_none_or(Value::is_string) => 0,
+        Some("uv1") => 1,
+        _ => return Err(bad("uv")),
+    };
+    let t = o.get("transform");
+    let pair = |k: &str, d: [f64; 2]| -> Result<[f64; 2], Refused> {
+        match t.and_then(|t| t.get(k)) {
+            None => Ok(d),
+            Some(p) => {
+                let a = p.as_array().filter(|a| a.len() == 2);
+                let x = a
+                    .and_then(|a| num(a.first()))
+                    .ok_or_else(|| bad(&format!("transform/{k}")))?;
+                let y = a
+                    .and_then(|a| num(a.get(1)))
+                    .ok_or_else(|| bad(&format!("transform/{k}")))?;
+                Ok([x, y])
+            }
+        }
+    };
+    let offset = pair("offset", [0.0, 0.0])?;
+    let scale = pair("scale", [1.0, 1.0])?;
+    let rotation = match t.and_then(|t| t.get("rotation")) {
+        None => 0.0,
+        Some(r) => num(Some(r)).ok_or_else(|| bad("transform/rotation"))?,
+    };
+    let (sn, cs) = rotation.to_radians().sin_cos();
+    let wrap = match o.get("wrap") {
+        None => [Wrap::Repeat; 2],
+        Some(Value::Array(a)) if a.len() == 2 => [
+            Wrap::read(&a[0]).ok_or_else(|| bad("wrap"))?,
+            Wrap::read(&a[1]).ok_or_else(|| bad("wrap"))?,
+        ],
+        Some(w) => [Wrap::read(w).ok_or_else(|| bad("wrap"))?; 2],
+    };
+    let taps = match o.get("filter_taps").map(Value::as_u64) {
+        None => None,
+        Some(Some(n @ (1 | 2 | 4 | 8 | 16))) => Some(n as u8),
+        Some(_) => return Err(bad("filter_taps")),
+    };
+    Ok(MapSlot {
+        sha: sha.to_string(),
+        uv,
+        // KHR_texture_transform: T × R × S, R = [[cos, sin], [−sin, cos]].
+        transform: [
+            [cs * scale[0], sn * scale[1], offset[0]],
+            [-sn * scale[0], cs * scale[1], offset[1]],
+        ],
+        wrap,
+        taps,
+    })
+}
+
+/// The texture maps of the `material@1` that `item` names (#423), or `None` with none.
+pub fn maps<'a>(
+    item: &Value,
+    named: impl Fn(&str) -> Option<&'a Value>,
+) -> Result<Option<std::sync::Arc<Maps>>, Refused> {
+    let Some(name) = item.get("material").and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    let Some(p) = named(name).and_then(|m| m.get("params")) else {
+        return Ok(None);
+    };
+    let field = |k: &str| format!("items/{name}/params/{k}");
+    let slot = |v: Option<&Value>, k: &str| -> Result<Option<MapSlot>, Refused> {
+        match v {
+            None | Some(Value::Null) => Ok(None),
+            Some(v) => map_slot(v, &field(k)).map(Some),
+        }
+    };
+    let m = p.get("maps");
+    if m.is_some_and(|m| !m.is_object() && !m.is_null()) {
+        return Err(Refused {
+            code: "out_of_range",
+            path: field("maps"),
+        });
+    }
+    let at = |k: &str| m.and_then(|m| m.get(k));
+    let mut out = Maps {
+        key: String::new(),
+        base_color: slot(at("base_color"), "maps/base_color")?,
+        metallic_roughness: slot(at("metallic_roughness"), "maps/metallic_roughness")?,
+        emission: slot(at("emission"), "maps/emission")?,
+        occlusion: slot(at("occlusion"), "maps/occlusion")?,
+        normal: slot(p.get("normal_map"), "normal_map")?,
+        normal_scale: num(p.get("normal_scale")).unwrap_or(1.0),
+        occlusion_strength: num(p.get("occlusion_strength"))
+            .unwrap_or(1.0)
+            .clamp(0.0, 1.0),
+        alpha_cutoff: num(p.get("alpha_cutoff")).unwrap_or(0.5),
+    };
+    if out.slots().iter().all(|(_, s)| s.is_none()) {
+        return Ok(None);
+    }
+    out.key = format!("{out:?}");
+    Ok(Some(std::sync::Arc::new(out)))
+}
+
 /// The procedural patterns a material may carry, in the order the shader numbers them from 1.
 pub const PATTERNS: [&str; 10] = [
     "plaster",
