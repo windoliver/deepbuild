@@ -75,8 +75,8 @@ fn adjust_issue(
 
 /// Every number the document's mark sets and axes show, with what each traces to (Honest numbers,
 /// the check), and the issues tracing finds: a table's cell whose kept bytes differ from the
-/// file's (`table_cell_changed`, naming its row), and a table an agent wrote shown where a status
-/// or a reading is bound (`number_unsourced`: its numbers are story numbers).
+/// file's (`table_cell_changed`, naming its row), and a table an agent wrote or a template's story
+/// number shown where a status or a reading is bound (`number_unsourced`: story numbers).
 pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
     let items = object_or_empty(doc.get("items"));
     let binds = ["status_bindings", "bound_values"].iter().any(|k| {
@@ -106,6 +106,15 @@ pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
         }
         shown.extend(found);
         shown.extend(text_numbers(doc, id, item));
+        // A story number a template shows is unsourced where a status or a reading is bound.
+        if let (true, Some(Value::String(t))) = (binds, item.pointer("/params/template")) {
+            let whole = Value::Object(doc.clone());
+            if item.get("kind").and_then(Value::as_str) == Some("text@1")
+                && item.pointer("/params/name") != Some(&Value::Bool(true))
+            {
+                deep_canvas::document::story_issues(&whole, id, t, &mut issues);
+            }
+        }
         issues.extend(changed_cells(id, item));
     }
     (shown, issues)
