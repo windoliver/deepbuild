@@ -1,0 +1,14 @@
+{
+  "issue": 1162,
+  "criterion": "AC7",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), judging at the owner Tao Feng's request in the session (\"you check for me\"); not the owner's own call",
+  "when": "2026-11-04T17:57:42.494Z",
+  "files": {
+    "chart-formula.png": "16d20a5295b9d8a764ccb6c6e7a454fa52007d1b4b483572ac9d6ef912d213bb",
+    "frame-3d.png": "ed0cb888001b92d484ffef230d0551fe2fcae11cdfce72051d9540cdfbb54b1f",
+    "spring.png": "d9854edf4fa30e62a0078fc464c0e36c4e708c362cd070c352484f1a3ea3bc79",
+    "spring-sweep.mp4": "8071b3f1316ad50b05a93a53657a8f6db7b3b21599e8188634f50ad2a25dc757"
+  },
+  "note": "Judged on the second capture. The first capture looked wrong: the formula drew fully written from 0 s, so write_on was added to the hub's frames and the stills and recording were taken again. Now the chart reads with its five stepped bars, the value labels and the gradient sheen, and the formula sits beside it, written on term by term over 1.2 s (outline, then fill). The star springs from nothing and overshoots; at 0.2 s its cell masks the overshoot, as the document asks (pivot 0, overflow mask). The count steps 3 to 4 at 2 s, and the wood frame keeps its shading in the finished look. Weak points, none of them a #1162 defect: the 3D title label draws at 28 device px, so in the 2x window it is small and sits under the chart where the piece places it; the formula's glyphs are the fixture's solid boxes."
+}

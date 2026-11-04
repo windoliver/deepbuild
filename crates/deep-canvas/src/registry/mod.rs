@@ -72,7 +72,7 @@ const MACHINES: &[&str] = &["any", "same"];
 const TOOLS: &[&str] = &["deep_show", "deep_query", "deep_kinds", "deep_patch"];
 
 /// The core kinds the core draws a module's kind as, until modules draw their own.
-const DRAWS_AS: &[&str] = &["rect@1"];
+const DRAWS_AS: &[&str] = &["rect@1", "path@1"];
 
 /// An array's domain (Array and table).
 const DOMAINS: &[&str] = &["item", "row", "element", "document"];
@@ -154,6 +154,11 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("curve", "scene3d"),
     ("material", "scene3d"),
     ("sky", "scene3d"),
+    ("vector", "vector"),
+    // R1's mark sets, scales and axes are the data module's, which marks2d draws.
+    ("marks", "data"),
+    ("axis", "data"),
+    ("scale", "data"),
     ("puff", "scene3d"),
 ];
 
@@ -1043,7 +1048,16 @@ pub enum Fault {
     /// Hashes each implementation's pins into its interface's digest, so another patch of a
     /// pinned crate changes it (#238).
     DigestCoversPins,
+    /// Opens `ease@1` with its entries renumbered, so a key's content key changes (#490).
+    EaseRenumbered,
+    /// Declares `ease@1` in the motion module instead of the core (#490): the core declares
+    /// none, so a build without motion has no eases.
+    EaseInMotion,
 }
+
+/// The module that declares `ease@1` in the planted layout that moves it out of the core, which
+/// a build that lacks it names as missing (#490).
+pub const EASES_OUTSIDE_CORE: &str = "motion";
 
 /// The type an array declares when it holds JSON, which only a check phase writes (#855).
 pub const JSON: &str = "json";
@@ -2765,11 +2779,20 @@ impl Registry {
         // Registries (#200): every one the core and the modules declare, every entry a module
         // or the core fills, and every step a pass compiles from.
         let started = self.clock.map(|c| c());
-        let mut core_registries = core_lists::registries();
+        let eases = self.fault != Some(Fault::EaseInMotion);
+        let mut core_registries = core_lists::registries_with(eases);
         core_registries.extend(self.declared.iter().cloned());
+        let mut core_entries: Vec<lists::EntryDef> =
+            core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere))
+                .into_iter()
+                .filter(|e| e.registry != "ease@1")
+                .collect();
+        if eases {
+            core_entries.extend(core_lists::ease_entries(self.fault == Some(Fault::EaseRenumbered)));
+        }
         let (registries, parts) = lists::seal(
             core_registries,
-            core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere)),
+            core_entries,
             &shapes,
             self.admits_all.as_deref(),
             self.fault,

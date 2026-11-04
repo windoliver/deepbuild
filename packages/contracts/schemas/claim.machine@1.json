@@ -1,0 +1,128 @@
+{
+  "id": "claim.machine@1",
+  "description": "A claim's life, as the record's claims table holds it: pending until its checks start, checked again whenever a check runs on it, judged by its verdict, sent back to the agent for a FAIL's round, or stalled, where runs and later stall rules leave it.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "states": [
+    "pending",
+    "checking",
+    "judged",
+    "sent_back",
+    "stalled"
+  ],
+  "initial": "pending",
+  "final": [
+    "judged",
+    "stalled"
+  ],
+  "moves": [
+    {
+      "from": "pending",
+      "event": "run.started",
+      "to": "checking"
+    },
+    {
+      "from": "checking",
+      "event": "run.started",
+      "to": "checking"
+    },
+    {
+      "from": "sent_back",
+      "event": "run.started",
+      "to": "checking"
+    },
+    {
+      "from": "pending",
+      "event": "verdict.made",
+      "to": "judged"
+    },
+    {
+      "from": "checking",
+      "event": "verdict.made",
+      "to": "judged"
+    },
+    {
+      "from": "judged",
+      "event": "verdict.made",
+      "to": "judged"
+    },
+    {
+      "from": "sent_back",
+      "event": "verdict.made",
+      "to": "judged"
+    },
+    {
+      "from": "judged",
+      "event": "claim.sent_back",
+      "to": "sent_back"
+    },
+    {
+      "from": "sent_back",
+      "event": "claim.sent_back",
+      "to": "sent_back"
+    },
+    {
+      "from": "pending",
+      "event": "claim.stalled",
+      "to": "stalled"
+    },
+    {
+      "from": "checking",
+      "event": "claim.stalled",
+      "to": "stalled"
+    },
+    {
+      "from": "judged",
+      "event": "claim.stalled",
+      "to": "stalled"
+    },
+    {
+      "from": "sent_back",
+      "event": "claim.stalled",
+      "to": "stalled"
+    },
+    {
+      "from": "judged",
+      "event": "run.started",
+      "to": "checking"
+    },
+    {
+      "from": "stalled",
+      "event": "run.started",
+      "to": "stalled"
+    },
+    {
+      "from": "checking",
+      "event": "claim.sent_back",
+      "to": "sent_back"
+    },
+    {
+      "from": "stalled",
+      "event": "claim.stalled",
+      "to": "stalled"
+    }
+  ],
+  "conflicts": [
+    {
+      "name": "judged_again_or_sent_back",
+      "events": [
+        "verdict.made",
+        "claim.sent_back"
+      ]
+    },
+    {
+      "name": "run_or_verdict",
+      "events": [
+        "run.started",
+        "verdict.made"
+      ]
+    },
+    {
+      "name": "run_or_sent_back",
+      "events": [
+        "run.started",
+        "claim.sent_back"
+      ]
+    }
+  ]
+}

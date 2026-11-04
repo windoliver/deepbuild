@@ -1,0 +1,319 @@
+#1162 acceptance tests, run at the base
+=======================================
+
+Base commit: 5f63620c ("Merge pull request #1221 from windoliver/worktree-github-issue-669-f74ae6"), with only
+tests/acceptance/1162/ added.
+Command:     CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 npx vitest run tests/acceptance/1162 --no-file-parallelism --testTimeout=600000
+             (after npm ci and npm run build --workspaces; every build in the README's table succeeded)
+Machine:     Mac15,7 (a reference Mac), macOS 26.7.1, node v23.9.0, cargo and rustc 1.99.1.
+Type-check:  npx tsc -p tests/acceptance/1162/tsconfig.json exits 0.
+Paths:       the home folder is redacted as ~, the temporary folder as $TMPDIR.
+
+Result: 13 of 13 tests fail; none passes at the base.
+
+Why each fails. The base refuses the piece itself, with one error: `bad_path` at `channels/count/target`
+("`data/count`: a path names at least one field below the ID"), where the design's path grammar says "A channel may
+key `data/<name>`". It also skips 12 of the piece's items with `unknown_kind` notices (text@1, rect@1, frame@1, star@1,
+marks@1, scale@1, vector@1 and sky@1 are not in the kind registry of the full build). So every test that needs the
+piece presented stops there, on a missing surface:
+
+- AC1 (present.test.ts), first test: "AC1: the piece is presented": `refused`, the error above.
+- AC1, second test (the build without data): "the rest of the piece is presented, not refused whole": `refused`, with
+  the error above and `module_missing` at `requires/modules/data` for the whole document.
+- AC2 (renderback.test.ts), both tests: "the piece at 0s is presented" / "the piece is presented": `refused`. The
+  planted `seeds_noise_from_clock` (which exists) is not reached.
+- AC3 (query.test.ts): the summary test, "the piece is presented": `refused`; the sampled-times test: deep_query
+  answers `no_revision` (no revision of the piece was ever presented), so `values` is missing; the glyph-run test:
+  `read` answers `ref_unresolved` for the same reason. The new planted `relation_from_previous_box` is not reached
+  (the base would answer it `bad_input`).
+- AC4 (status.test.ts), all three tests: "the piece is presented" / "the bound piece is presented": `refused`.
+  `deep-gpu`'s `status_before_tone_map` (which exists) is not reached.
+- AC5 (app.test.ts): the Driver's first step (scope before the first click) finds the piece `refused`.
+- AC6 (ask.test.ts): deep_query of the formula's bounds at 1.5 s answers `no_revision`.
+- AC7 (shown.test.ts): no check run has written $TMPDIR/deep-1162-proof/ac7/chart-formula.png; it fails (missing
+  files fail; only a missing or stale taste call is INCONCLUSIVE).
+
+What lies behind the first refusal, found by two debug runs with piece.json changed by hand and then restored
+(regenerated from the same generator; no expectation was changed by them): with the channel's target written
+`data/count/value` the base still refuses it ("motion.compile can't evaluate this"); with the `count` channel removed
+it refused a star@1 placed straight in the row (`no_box`), which is why the badge sits in a fixed 64 × 64 frame, #375's
+form for a row child (this changed the fixture before this run); with that, it refuses the mark sets' table columns
+(`asset_missing` at `items/bars/params/columns/key/from`): the hub's deep show doesn't read an imported table yet.
+
+The run follows.
+------------------------------------------------------------------------------------------------------------------------
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1162-6d3d20/agent-ac539c960c156048a
+
+ ❯ tests/acceptance/1162/query.test.ts (3 tests | 3 failed) 6912ms
+   ❯ AC3 the piece read back by deep_query and deep_kinds (3)
+     × AC3 deep_query's summary equals the document's counts by kind, writer layer and canvas module, and deep_kinds lists each module with its version and a passing kit 2454ms
+     × AC3 at 120 sampled times the formula's west side reads 24 u ± 0.5 px from the chart's east side and the badge's scale follows the spring within 1e-12, seeked and played; a relation solved from the previous frame's box fails, naming the formula 85ms
+     × AC3 the label in depth shapes to the 2D title's glyph runs 77ms
+ ❯ tests/acceptance/1162/status.test.ts (3 tests | 3 failed) 8085ms
+   ❯ AC4 honest numbers and the status outline (3)
+     × AC4 with no status binding honest numbers passes, each bar label traced to the agent's table 1830ms
+     × AC4 with a verdict binding on the frame honest numbers fails naming each label's row; a revision writing the fail color on the frame's material is refused naming the item, and the last good revision stays shown 79ms
+     × AC4 with a verdict binding on the frame its outline draws in the exact status color after tone map and bloom; a finish that tone-maps the status outline fails, naming the frame 62ms
+ ❯ tests/acceptance/1162/present.test.ts (2 tests | 2 failed) 6464ms
+   ❯ AC1 the piece through deep show, held to its checks (2)
+     × AC1 the piece is presented with no issues, its checks PASS keyed to the revision's hash, and a patch to one bar's table value makes that PASS stale 1848ms
+     × AC1 in a test build without the data module the rest still draws, deep_kinds lists the data module's kinds unavailable with module_missing, and the claim reads BLOCKED naming the chart's kind 1909ms
+ ❯ tests/acceptance/1162/app.test.ts (1 test | 1 failed) 3199ms
+   ❯ AC5 the piece in the app: its accessibility tree, a view popped out to another display, and the card (1)
+     × AC5 one node per part and control with its name and role, exactly one announcement '4', the view popped out to B presents at B's rate, and the card opens on the display you're using 1854ms
+ ❯ tests/acceptance/1162/renderback.test.ts (2 tests | 2 failed) 3572ms
+   ❯ AC2 render-back the same every run, seeking equals playing, and nothing drawn once nothing moves (2)
+     × AC2 render-back at 0, 1, 2 and 4 s gives equal hashes on a second run and in a fresh process, blank guard first; the planted clock-seeded renderer fails, naming the snapshot 1973ms
+     × AC2 seeking to each time equals playing to it, and from 4 s no frame is presented for 2 s 77ms
+ ❯ tests/acceptance/1162/ask.test.ts (1 test | 1 failed) 3457ms
+   ❯ AC6 point and ask in the popped-out window (1)
+     × AC6 pointing at #eq paused at 1.5 s and typing "too small" gives one message with the handle, t, doc_rev and precision id, your words apart and the title's text only as quote; planted boxes that drop doc_rev or fold the quote fail, naming the field 1844ms
+ ❯ tests/acceptance/1162/shown.test.ts (1 test | 1 failed) 4ms
+   ❯ AC7 shown to you, with one taste call recorded (1)
+     × AC7 the check run wrote the screenshots at the reference window and the recording, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right 3ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1162/app.test.ts > AC5 the piece in the app: its accessibility tree, a view popped out to another display, and the card > AC5 one node per part and control with its name and role, exactly one announcement '4', the view popped out to B presents at B's rate, and the card opens on the display you're using
+AssertionError: AC5 the first click: scope: the piece is presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["badge"],"path":"items/badge/kind","actual":"star@1","what":"kind `star@1` is not registered in this build; the item is skipped","close":[{"name":"slab@1"}]},{"code":"unknown_kind","severity":"notice","ids":["badge-cell"],"path":"items/badge-cell/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["bars"],"path":"items/bars/kind","actual":"marks@1","what":"kind `marks@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["chart"],"path":"items/chart/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","se: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ Driver.step tests/acceptance/1162/helpers.ts:342:84
+    340|     const sorted = arr(s['calls'], 'calls');
+    341|     const shown0 = replies![sorted.findIndex((c) => isObject(c) && c['…
+    342|     expect(shown0['outcome'], `${what}: the piece is presented: ${show…
+       |                                                                                    ^
+    343|     this.calls = [...this.calls, ...fresh];
+    344|     return fresh.map((c) => replies![sorted.indexOf(c)]!);
+ ❯ Driver.one tests/acceptance/1162/helpers.ts:346:65
+ ❯ clickPanel tests/acceptance/1162/helpers.ts:352:23
+ ❯ tests/acceptance/1162/app.test.ts:29:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  tests/acceptance/1162/ask.test.ts > AC6 point and ask in the popped-out window > AC6 pointing at #eq paused at 1.5 s and typing "too small" gives one message with the handle, t, doc_rev and precision id, your words apart and the title's text only as quote; planted boxes that drop doc_rev or fold the quote fail, naming the field
+AssertionError: AC6 point and ask: values ({"code":"no_revision","core":"core@0.0.0","set_digest":"c3ab3dfbb0f7d3f8bde87ab3a53fcb4b59394344b255cc454ddde67040b9f4f5"}) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj tests/acceptance/1162/helpers.ts:33:72
+     31| }
+     32| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     33|   expect(isObject(value), `${what} is an object, got ${shown(value)}`)…
+       |                                                                        ^
+     34|   return value as JsonObject;
+     35| }
+ ❯ ask tests/acceptance/1162/ask.test.ts:40:23
+ ❯ tests/acceptance/1162/ask.test.ts:84:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  tests/acceptance/1162/present.test.ts > AC1 the piece through deep show, held to its checks > AC1 the piece is presented with no issues, its checks PASS keyed to the revision's hash, and a patch to one bar's table value makes that PASS stale
+AssertionError: AC1: the piece is presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["badge"],"path":"items/badge/kind","actual":"star@1","what":"kind `star@1` is not registered in this build; the item is skipped","close":[{"name":"slab@1"}]},{"code":"unknown_kind","severity":"notice","ids":["badge-cell"],"path":"items/badge-cell/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["bars"],"path":"items/bars/kind","actual":"marks@1","what":"kind `marks@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["chart"],"path":"items/chart/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","se: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ tests/acceptance/1162/present.test.ts:44:89
+     42|     expect(obj(imported!['asset'], `AC1 table_import: asset (${shown(i…
+     43|     expect(obj(importedAgain!['asset'], 'AC1 the second table_import: …
+     44|     expect(shownReply!['outcome'], `AC1: the piece is presented: ${sho…
+       |                                                                                         ^
+     45|     expect(issues(shownReply!['issues'], 'AC1 the piece').map((i) => i…
+     46|     // A notice is an issue's severity too: an `unknown_kind` notice m…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL  tests/acceptance/1162/present.test.ts > AC1 the piece through deep show, held to its checks > AC1 in a test build without the data module the rest still draws, deep_kinds lists the data module's kinds unavailable with module_missing, and the claim reads BLOCKED naming the chart's kind
+AssertionError: AC1 without data: the rest of the piece is presented, not refused whole: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["badge"],"path":"items/badge/kind","actual":"star@1","what":"kind `star@1` is not registered in this build; the item is skipped","close":[{"name":"slab@1"}]},{"code":"unknown_kind","severity":"notice","ids":["badge-cell"],"path":"items/badge-cell/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["bars"],"path":"items/bars/kind","actual":"marks@1","what":"kind `marks@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["chart"],"path":"items/chart/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["formula"],"path":"items/formula/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["labels"],"path":"items/labels/kind","actual":"marks@1","what":"kind `marks@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["readout"],"path":"items/readout/kind","actual":"text@1","what":"kind `text@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["row"],"path":"items/row/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["sheen"],"path":"items/sheen/kind","actual":"rect@1","what":"kind `rect@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["sky"],"path":"items/sky/kind","actual":"sky@1","what":"kind `sky@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["title"],"path":"items/title/kind","actual":"text@1","what":"kind `text@1` is not regist: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ tests/acceptance/1162/present.test.ts:73:139
+     71|     const [, shownReply, verdict] = r!;
+     72|     keepProof('ac1-no-data-replies.json', r!);
+     73|     expect(shownReply!['outcome'], `AC1 without data: the rest of the …
+       |                                                                                                                                           ^
+     74|     const [snap] = snapshots(shownReply!, 'AC1 without data');
+     75|     expect(snap, 'AC1 without data: a snapshot of what still draws').t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL  tests/acceptance/1162/query.test.ts > AC3 the piece read back by deep_query and deep_kinds > AC3 deep_query's summary equals the document's counts by kind, writer layer and canvas module, and deep_kinds lists each module with its version and a passing kit
+AssertionError: AC3: the piece is presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["badge"],"path":"items/badge/kind","actual":"star@1","what":"kind `star@1` is not registered in this build; the item is skipped","close":[{"name":"slab@1"}]},{"code":"unknown_kind","severity":"notice","ids":["badge-cell"],"path":"items/badge-cell/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["bars"],"path":"items/bars/kind","actual":"marks@1","what":"kind `marks@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["chart"],"path":"items/chart/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","se: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ tests/acceptance/1162/query.test.ts:38:87
+     36|     keepProof('ac3-summary.json', q!);
+     37|     keepProof('ac3-kinds-listing.json', listing!);
+     38|     expect(presented!['outcome'], `AC3: the piece is presented: ${show…
+       |                                                                                       ^
+     39|     const items = Object.values(itemsOf(piece()));
+     40|     const kindOf = obj(registry!['kinds'], `AC3 registry: kinds (${sho…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL  tests/acceptance/1162/query.test.ts > AC3 the piece read back by deep_query and deep_kinds > AC3 at 120 sampled times the formula's west side reads 24 u ± 0.5 px from the chart's east side and the badge's scale follows the spring within 1e-12, seeked and played; a relation solved from the previous frame's box fails, naming the formula
+AssertionError: AC3 sampled times, played: values ({"code":"no_revision","core":"core@0.0.0","set_digest":"c3ab3dfbb0f7d3f8bde87ab3a53fcb4b59394344b255cc454ddde67040b9f4f5"}) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj tests/acceptance/1162/helpers.ts:33:72
+     31| }
+     32| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     33|   expect(isObject(value), `${what} is an object, got ${shown(value)}`)…
+       |                                                                        ^
+     34|   return value as JsonObject;
+     35| }
+ ❯ valuesAt tests/acceptance/1162/helpers.ts:523:20
+ ❯ v tests/acceptance/1162/query.test.ts:78:45
+ ❯ sample tests/acceptance/1162/query.test.ts:79:40
+ ❯ readings tests/acceptance/1162/query.test.ts:89:20
+ ❯ tests/acceptance/1162/query.test.ts:105:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL  tests/acceptance/1162/query.test.ts > AC3 the piece read back by deep_query and deep_kinds > AC3 the label in depth shapes to the 2D title's glyph runs
+AssertionError: read: the document ({"outcome":"refused","code":"ref_unresolved","core":"core@0.0.0","set_digest":"c3ab3dfbb0f7d3f8bde87ab3a53fcb4b59394344b255cc454ddde67040b9f4f5"}) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj tests/acceptance/1162/helpers.ts:33:72
+     31| }
+     32| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     33|   expect(isObject(value), `${what} is an object, got ${shown(value)}`)…
+       |                                                                        ^
+     34|   return value as JsonObject;
+     35| }
+ ❯ storedDoc tests/acceptance/1162/helpers.ts:534:15
+ ❯ tests/acceptance/1162/query.test.ts:120:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL  tests/acceptance/1162/renderback.test.ts > AC2 render-back the same every run, seeking equals playing, and nothing drawn once nothing moves > AC2 render-back at 0, 1, 2 and 4 s gives equal hashes on a second run and in a fresh process, blank guard first; the planted clock-seeded renderer fails, naming the snapshot
+AssertionError: AC2 render-back, first: the piece at 0s is presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["badge"],"path":"items/badge/kind","actual":"star@1","what":"kind `star@1` is not registered in this build; the item is skipped","close":[{"name":"slab@1"}]},{"code":"unknown_kind","severity":"notice","ids":["badge-cell"],"path":"items/badge-cell/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["bars"],"path":"items/bars/kind","actual":"marks@1","what":"kind `marks@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["chart"],"path":"items/chart/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","se: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ hashes tests/acceptance/1162/renderback.test.ts:40:100
+     38|     for (const [i, t] of TIMES.entries()) {
+     39|       const reply = replies[i + 1]!;
+     40|       expect(reply['outcome'], `${what}, ${run}: the piece at ${t} is …
+       |                                                                                                    ^
+     41|       const [snap] = snapshots(reply, `${what}, ${run}, ${t}`);
+     42|       if (!snap) { out.push(undefined); continue; }
+ ❯ renderBack tests/acceptance/1162/renderback.test.ts:51:25
+ ❯ tests/acceptance/1162/renderback.test.ts:56:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+ FAIL  tests/acceptance/1162/renderback.test.ts > AC2 render-back the same every run, seeking equals playing, and nothing drawn once nothing moves > AC2 seeking to each time equals playing to it, and from 4 s no frame is presented for 2 s
+AssertionError: AC2: the piece is presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["badge"],"path":"items/badge/kind","actual":"star@1","what":"kind `star@1` is not registered in this build; the item is skipped","close":[{"name":"slab@1"}]},{"code":"unknown_kind","severity":"notice","ids":["badge-cell"],"path":"items/badge-cell/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["bars"],"path":"items/bars/kind","actual":"marks@1","what":"kind `marks@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["chart"],"path":"items/chart/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","se: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ tests/acceptance/1162/renderback.test.ts:78:87
+     76|     keepProof('ac2-determinism.json', det!);
+     77|     keepProof('ac2-play.json', play!);
+     78|     expect(presented!['outcome'], `AC2: the piece is presented: ${show…
+       |                                                                                       ^
+     79|     expect(det!['outcome'], `AC2: the time core compares play and seek…
+     80|     const frames = arr(det!['frames'], 'AC2 determinism: frames').map(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
+
+ FAIL  tests/acceptance/1162/shown.test.ts > AC7 shown to you, with one taste call recorded > AC7 the check run wrote the screenshots at the reference window and the recording, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+AssertionError: AC7: the check run wrote the screenshot chart-formula.png into $TMPDIR/deep-1162-proof/ac7: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1162/shown.test.ts:29:99
+     27|     for (const name of SCREENSHOTS) {
+     28|       const path = join(AC7_DIR, name);
+     29|       expect(existsSync(path), `AC7: the check run wrote the screensho…
+       |                                                                                                   ^
+     30|       const png = readFileSync(path);
+     31|       expect(png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 1…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯
+
+ FAIL  tests/acceptance/1162/status.test.ts > AC4 honest numbers and the status outline > AC4 with no status binding honest numbers passes, each bar label traced to the agent's table
+AssertionError: AC4: the piece is presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["badge"],"path":"items/badge/kind","actual":"star@1","what":"kind `star@1` is not registered in this build; the item is skipped","close":[{"name":"slab@1"}]},{"code":"unknown_kind","severity":"notice","ids":["badge-cell"],"path":"items/badge-cell/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["bars"],"path":"items/bars/kind","actual":"marks@1","what":"kind `marks@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["chart"],"path":"items/chart/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["formula"],"path":"items/formula/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["labels"],"path":"items/labels/kind","actual":"marks@1","what":"kind `marks@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["readout"],"path":"items/readout/kind","actual":"text@1","what":"kind `text@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["row"],"path":"items/row/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["sheen"],"path":"items/sheen/kind","actual":"rect@1","what":"kind `rect@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["sky"],"path":"items/sky/kind","actual":"sky@1","what":"kind `sky@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["title"],"path":"items/title/kind","actual":"text@1","what":"kind `text@1` is not regist: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ tests/acceptance/1162/status.test.ts:38:85
+     36|     const [r] = runShow(builds.bin('deep-show'), [scenario(evidence, […
+     37|     keepProof('ac4-unbound-replies.json', r!);
+     38|     expect(r![1]!['outcome'], `AC4: the piece is presented: ${shown(r!…
+       |                                                                                     ^
+     39|     const row = verdictOf(r![2], 'AC4 the verdict').rows.find((x) => x…
+     40|     expect(row, 'AC4: the verdict has the honest_numbers row').toBeDef…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯
+
+ FAIL  tests/acceptance/1162/status.test.ts > AC4 honest numbers and the status outline > AC4 with a verdict binding on the frame honest numbers fails naming each label's row; a revision writing the fail color on the frame's material is refused naming the item, and the last good revision stays shown
+AssertionError: AC4: the bound piece is presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["badge"],"path":"items/badge/kind","actual":"star@1","what":"kind `star@1` is not registered in this build; the item is skipped","close":[{"name":"slab@1"}]},{"code":"unknown_kind","severity":"notice","ids":["badge-cell"],"path":"items/badge-cell/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["bars"],"path":"items/bars/kind","actual":"marks@1","what":"kind `marks@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["chart"],"path":"items/chart/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["formula"],"path":"items/formula/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["labels"],"path":"items/labels/kind","actual":"marks@1","what":"kind `marks@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["readout"],"path":"items/readout/kind","actual":"text@1","what":"kind `text@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["row"],"path":"items/row/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["sheen"],"path":"items/sheen/kind","actual":"rect@1","what":"kind `rect@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["sky"],"path":"items/sky/kind","actual":"sky@1","what":"kind `sky@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["title"],"path":"items/title/kind","actual":"text@1","what":"kind `text@1` is not regist: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ tests/acceptance/1162/status.test.ts:61:99
+     59|     keepProof('ac4-bound-replies.json', r!);
+     60|     const [, presented, verdict, before, refused, after] = r!;
+     61|     expect(presented!['outcome'], `AC4: the bound piece is presented: …
+       |                                                                                                   ^
+     62|     const row = verdictOf(verdict, 'AC4 the bound verdict').rows.find(…
+     63|     expect(row?.result, `AC4: honest numbers fails once status can sho…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/13]⎯
+
+ FAIL  tests/acceptance/1162/status.test.ts > AC4 honest numbers and the status outline > AC4 with a verdict binding on the frame its outline draws in the exact status color after tone map and bloom; a finish that tone-maps the status outline fails, naming the frame
+AssertionError: AC4: the bound piece is presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["badge"],"path":"items/badge/kind","actual":"star@1","what":"kind `star@1` is not registered in this build; the item is skipped","close":[{"name":"slab@1"}]},{"code":"unknown_kind","severity":"notice","ids":["badge-cell"],"path":"items/badge-cell/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["bars"],"path":"items/bars/kind","actual":"marks@1","what":"kind `marks@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["chart"],"path":"items/chart/kind","actual":"frame@1","what":"kind `frame@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","se: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ outlineProblems tests/acceptance/1162/status.test.ts:76:85
+     74|     seedStore(evidence);
+     75|     const [r] = runShow(builds.bin('deep-show'), [scenario(evidence, […
+     76|     expect(r![1]!['outcome'], `AC4: the bound piece is presented: ${sh…
+       |                                                                                     ^
+     77|     const { path } = storedDoc(r![2]!, evidence);
+     78|     const call = { call: 'view3d', doc: path, look: LOOK, size: SIZE, …
+ ❯ tests/acceptance/1162/status.test.ts:121:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/13]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  13 failed (13)
+   Start at  21:12:24
+   Duration  32.50s (tests 99%)
+

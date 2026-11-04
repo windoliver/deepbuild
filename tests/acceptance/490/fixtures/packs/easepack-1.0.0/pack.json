@@ -1,0 +1,15 @@
+{
+  "name": "easepack",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #490 acceptance suite: one probe kind whose rule reads ease(in_out_cubic, x). It needs marks2d and not motion.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "easepack.probe@1": "easepack.probe@1.json"
+  }
+}

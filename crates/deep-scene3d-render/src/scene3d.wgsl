@@ -15,6 +15,10 @@ struct Frame {
     // A sky's ambient light from above and below (#418), w 1 with a sky.
     sky_top: vec4<f32>,
     sky_low: vec4<f32>,
+    // Clip to world, and the eye with the near plane in w: what a material operator's camera
+    // step reads (#429).
+    inverse_clip: mat4x4<f32>,
+    eye: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -164,6 +168,74 @@ const CATCH: u32 = 64u;
 const MASK: u32 = 1u;
 const ADD: u32 = 3u;
 const ALPHA_CUTOFF: f32 = 0.5;
+// Its material samples texture maps (#423): group 3 holds them.
+const MAPS: u32 = 8192u;
+
+// Issue #423: a material's texture maps (canvas primitives: Material: texture maps), in the order
+// base color, metallic-roughness, normal, occlusion, emission. Each map's uv transform is two
+// rows of an affine map, KHR_texture_transform's translation × rotation × scale.
+struct MapSlot {
+    u: vec4<f32>,
+    v: vec4<f32>,
+};
+
+struct Maps {
+    slots: array<MapSlot, 5>,
+    // x: which maps it has (bit k for map k); y: which read uv1 (bit k); z: 1 to rebuild a
+    // normal map's z and skip its stored one.
+    has: vec4<u32>,
+    // x: the normal map's scale; y: the occlusion strength; z: the alpha cutoff (mask);
+    // w: the alpha mode's coverage from the base color factor alone.
+    values: vec4<f32>,
+};
+
+@group(3) @binding(0) var<uniform> maps: Maps;
+@group(3) @binding(1) var map_base: texture_2d<f32>;
+@group(3) @binding(2) var map_mr: texture_2d<f32>;
+@group(3) @binding(3) var map_normal: texture_2d<f32>;
+@group(3) @binding(4) var map_occlusion: texture_2d<f32>;
+@group(3) @binding(5) var map_emission: texture_2d<f32>;
+@group(3) @binding(6) var sampler_base: sampler;
+@group(3) @binding(7) var sampler_mr: sampler;
+@group(3) @binding(8) var sampler_normal: sampler;
+@group(3) @binding(9) var sampler_occlusion: sampler;
+@group(3) @binding(10) var sampler_emission: sampler;
+
+fn map_uv(k: u32, uv: vec4<f32>) -> vec2<f32> {
+    let t = select(uv.xy, uv.zw, (maps.has.y & (1u << k)) != 0u);
+    let s = maps.slots[k];
+    return vec2<f32>(dot(s.u.xyz, vec3<f32>(t, 1.0)), dot(s.v.xyz, vec3<f32>(t, 1.0)));
+}
+
+// A uv derivative through map k's transform: its linear part alone.
+fn map_d(k: u32, d: vec4<f32>) -> vec2<f32> {
+    let t = select(d.xy, d.zw, (maps.has.y & (1u << k)) != 0u);
+    let s = maps.slots[k];
+    return vec2<f32>(dot(s.u.xy, t), dot(s.v.xy, t));
+}
+
+// Map k's texels at this pixel, filtered along the footprint the derivatives give, so its
+// sampler's anisotropy applies outside uniform control flow.
+fn fetch(k: u32, t: texture_2d<f32>, sm: sampler, uv: vec4<f32>, g: array<vec4<f32>, 2>) -> vec4<f32> {
+    return textureSampleGrad(t, sm, map_uv(k, uv), map_d(k, g[0]), map_d(k, g[1]));
+}
+
+fn has_map(k: u32) -> bool {
+    return (maps.has.x & (1u << k)) != 0u;
+}
+
+// What the maps make of a surface at a pixel: its surface, its coverage, its normal, the
+// occlusion its ambient light takes and its emission.
+struct Mapped {
+    s: Surface,
+    alpha: f32,
+    n: vec3<f32>,
+    occlusion: f32,
+    emission: vec3<f32>,
+    // The normal map's mean length at this footprint (1 without one): Toksvig's measure of how
+    // much the normals under the pixel spread, which widens the specular lobe.
+    spread: f32,
+};
 
 struct MeshOut {
     @builtin(position) pos: vec4<f32>,
@@ -179,6 +251,13 @@ struct MeshOut {
     @location(8) @interpolate(flat) emission: vec4<f32>,
     // Where it is in its part's own space, in m: what a pattern reads.
     @location(9) local: vec3<f32>,
+    // uv0 and uv1 (#423), and the tangent in the world with its handedness in w.
+    @location(10) uv: vec4<f32>,
+    @location(11) tangent: vec4<f32>,
+    // Its normal in its mesh's own space; its material operator's time (f32 bits), seed and the
+    // item's opacity (f32 bits), which a material operator reads (#429).
+    @location(12) object_n: vec3<f32>,
+    @location(13) @interpolate(flat) op: vec4<u32>,
 };
 
 @vertex
@@ -196,8 +275,15 @@ fn mesh_vs(
     @location(10) base: vec4<f32>,
     @location(11) surface: vec4<f32>,
     @location(12) specular: vec4<f32>,
+    // uv0 in xy and uv1 in zw (#423), one attribute so that the 16 a device holds take the
+    // material operator's (#429).
+    @location(13) uv: vec4<f32>,
+    @location(14) tangent: vec4<f32>,
+    @location(15) op: vec4<u32>,
 ) -> MeshOut {
     var out: MeshOut;
+    out.object_n = n;
+    out.op = op;
     out.emission = emission;
     let world = vec3<f32>(dot(r0.xyz, p) + r0.w, dot(r1.xyz, p) + r1.w, dot(r2.xyz, p) + r2.w);
     out.pos = frame.clip * vec4<f32>(world, 1.0);
@@ -239,7 +325,54 @@ fn mesh_vs(
         dot(o, c1) / max(length(c1), 1e-9),
         dot(o, c2) / max(length(c2), 1e-9),
     );
+    out.uv = uv;
+    // The tangent moves with the surface (the model matrix, not its inverse transpose); a mirror
+    // turns the bitangent over with the winding.
+    let tw = vec3<f32>(dot(r0.xyz, tangent.xyz), dot(r1.xyz, tangent.xyz), dot(r2.xyz, tangent.xyz));
+    out.tangent = vec4<f32>(tw, tangent.w * sign(dot(c0, cross(c1, c2))));
     return out;
+}
+
+// The maps' surface at a pixel (#423). Base color and emission maps are sampled from sRGB
+// formats, so they read linear here; every other map reads as stored. A normal map's x and y
+// come from its first two channels, z rebuilt where its format keeps two.
+fn mapped(in: MeshOut, n: vec3<f32>, s0: Surface, g: array<vec4<f32>, 2>) -> Mapped {
+    var s = s0;
+    var alpha = in.emission.w;
+    var out_n = n;
+    var occlusion = 1.0;
+    var emission = in.emission.rgb;
+    var spread = 1.0;
+    if has_map(0u) {
+        let c = fetch(0u, map_base, sampler_base, in.uv, g);
+        s.base = s.base * c.rgb;
+        alpha = alpha * c.a;
+    }
+    if has_map(1u) {
+        let c = fetch(1u, map_mr, sampler_mr, in.uv, g);
+        s.rough = s.rough * c.g;
+        s.metallic = s.metallic * c.b;
+    }
+    if has_map(2u) {
+        let c = fetch(2u, map_normal, sampler_normal, in.uv, g).xyz * 2.0 - 1.0;
+        var m = vec3<f32>(c.xy * maps.values.x, c.z);
+        if maps.has.z != 0u {
+            m.z = sqrt(max(1.0 - dot(c.xy, c.xy), 0.0));
+        } else {
+            spread = clamp(length(c), 1e-3, 1.0);
+        }
+        let t = normalize(in.tangent.xyz - n * dot(n, in.tangent.xyz));
+        let b = cross(n, t) * select(1.0, -1.0, in.tangent.w < 0.0);
+        out_n = normalize(t * m.x + b * m.y + n * m.z);
+    }
+    if has_map(3u) {
+        let o = fetch(3u, map_occlusion, sampler_occlusion, in.uv, g).r;
+        occlusion = 1.0 + maps.values.y * (o - 1.0);
+    }
+    if has_map(4u) {
+        emission = emission * fetch(4u, map_emission, sampler_emission, in.uv, g).rgb;
+    }
+    return Mapped(s, alpha, out_n, occlusion, emission, spread);
 }
 
 // The DFG table at (cos view, roughness), bilinear.
@@ -636,7 +769,7 @@ struct Direct {
     removed: f32,
 };
 
-fn direct(in: MeshOut, n: vec3<f32>, s: Surface) -> Direct {
+fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32) -> Direct {
     let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
     let rough = clamp(s.rough, 0.045, 1.0);
     // Geometric specular antialiasing (Kaplanyan): the normal's change across the pixel widens
@@ -645,7 +778,11 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface) -> Direct {
     // The lobe is never narrower than the pixel's footprint in slope space (#422): a lobe under a
     // pixel wide is point-sampled at pixel centers, and a mirror's sun loses up to a fifth of its
     // light between them. A rough lobe is left exactly as it is.
-    let a2 = clamp(max(rough * rough * rough * rough, min(dn, 0.18)), 0.0, 1.0);
+    // Toksvig's (#423): a normal map's normals that spread under the pixel shorten their mean,
+    // and the lobe widens by the vMF lobe that mean fits, α² += 2 ÷ κ, κ = (3l − l³) ÷ (1 − l²).
+    let l = spread;
+    let tok = select(0.0, 2.0 * (1.0 - l * l) / max(3.0 * l - l * l * l, 1e-4), l < 0.9999);
+    let a2 = clamp(max(rough * rough * rough * rough, min(dn, 0.18)) + min(tok, 1.0), 0.0, 1.0);
     let dfg_v = dfg_at(max(dot(n, v), 1e-4), rough);
     let catches = (in.flags & CATCH) != 0u;
     var out = vec3<f32>(0.0);
@@ -727,31 +864,55 @@ fn occlusion(pos: vec2<f32>, albedo: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
-    let n = normalize(in.normal);
+    // The texture coordinates' derivatives, while every pixel of the quad still runs (#423).
+    let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
     // Derivatives first, while every pixel of the quad still runs: the face's normal in its
     // part's own space, which a pattern reads.
     let local_n = normalize(cross(dpdx(in.local), dpdy(in.local)) + vec3<f32>(0.0, 1e-9, 0.0));
+    return shade(in, front, local_n, g, false);
+}
+
+// `keyed`: with no light, no sky and no environment, a material takes the view's own key light, as
+// a solid without a material does; only a material operator's solid asks for it (#429).
+fn shade(in: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, keyed: bool) -> Targets {
+    let n = normalize(in.normal);
     if (in.flags & MATERIAL) != 0u {
         // Its back faces are culled; a negative determinant turns its winding over.
         if (front == ((in.flags & MIRRORED) != 0u)) && (in.flags & DOUBLE_SIDED) == 0u {
             discard;
         }
         let mode = (in.flags >> 7u) & 3u;
-        // Its coverage: the material's alpha times the item's opacity (#418).
-        let alpha = in.emission.w;
-        if mode == MASK && alpha < ALPHA_CUTOFF {
-            discard;
+        let geometric = select(-n, n, front != ((in.flags & MIRRORED) != 0u));
+        var m = Mapped(surface_of(in, local_n), in.emission.w, geometric, 1.0, in.emission.rgb, 1.0);
+        var cutoff = ALPHA_CUTOFF;
+        if (in.flags & MAPS) != 0u {
+            m = mapped(in, geometric, m.s, g);
+            cutoff = maps.values.z;
         }
-        let facing = select(-n, n, front != ((in.flags & MIRRORED) != 0u));
-        let s = surface_of(in, local_n);
+        // Its coverage: the material's alpha (times its base color map's) times the item's
+        // opacity (#418). A mask with maps keeps its coverage here, from the map.
+        var alpha = m.alpha;
+        if mode == MASK {
+            if alpha < cutoff {
+                discard;
+            }
+            alpha = 1.0;
+        }
+        let s = m.s;
+        let facing = m.n;
         if (in.flags & UNLIT) != 0u {
-            return Targets(see_through(s.base + in.emission.rgb, alpha, mode), in.pick);
+            return Targets(see_through(s.base + m.emission, alpha, mode), in.pick);
         }
-        let d = direct(in, facing, s);
+        let d = direct(in, facing, s, m.spread);
         // A shadow catcher writes black, as opaque as the share of light its shadow removes, at
         // its strength.
         if (in.flags & CATCH) != 0u {
             return Targets(vec4<f32>(0.0, 0.0, 0.0, d.removed * alpha * in.base.w), in.pick);
+        }
+        if keyed && lights.count.x == 0u && frame.sky_top.w <= 0.0 && env.k.x <= 0.0 {
+            let key = 0.45 * occlusion(in.pos.xy, s.base) + 0.55 * max(dot(facing, frame.light.xyz), 0.0);
+            let unlit = fogged(s.base * key + in.emission.rgb, in.world);
+            return Targets(see_through(unlit, alpha, mode), in.pick);
         }
         var ambient: vec3<f32>;
         if env.k.x > 0.0 {
@@ -759,7 +920,8 @@ fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
         } else {
             ambient = sky_light(in, facing, s);
         }
-        let lit = fogged(d.color + ambient + in.emission.rgb, in.world);
+        // A map's occlusion scales the ambient term alone (#423).
+        let lit = fogged(d.color + ambient * m.occlusion + m.emission, in.world);
         return Targets(see_through(lit, alpha, mode), in.pick);
     }
     let facing = max(dot(n, frame.light.xyz), 0.0);

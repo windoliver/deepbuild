@@ -9,7 +9,9 @@
 
 pub mod ao;
 pub mod env;
+pub mod maps;
 mod mesh;
+mod op;
 pub mod shadow;
 pub mod status;
 pub mod surface;
@@ -88,6 +90,9 @@ pub struct Planted {
     pub spot_counts_cone: bool,
     /// #421: status outlines drawn through the tone map.
     pub status_before_tone_map: bool,
+    /// #423: every mipmapped map sampled at anisotropy 1, so the mip follows the footprint's
+    /// long axis.
+    pub anisotropy_one: bool,
     /// #422: the shading core mixes metallic into one F0 before shading.
     pub premixed_metallic: bool,
     /// #422: the specular lobes lose single scattering's missing energy.
@@ -120,6 +125,9 @@ pub struct Counts {
     pub lights_left_out: Vec<String>,
     /// The lights asking for a shadow that the shadow budget left without one, by ID (#421).
     pub shadows_dropped: Vec<String>,
+    /// Each material operator this frame couldn't draw, `(operator, why)`: its solids draw with
+    /// their material's own values, and a caller refuses the frame (#429).
+    pub operators_refused: Vec<(String, String)>,
     /// The key sun's cascades drawn this frame, by index; a cached one isn't (#422).
     pub cascades_drawn: Vec<u32>,
     /// How many environment cubes the renderer has prefiltered (#422).
@@ -300,6 +308,9 @@ struct FrameUniform {
     /// The sky's ambient light from above and below, linear RGB, w 1 with a sky (#418).
     sky_top: [f32; 4],
     sky_low: [f32; 4],
+    /// Clip to world (column-major), and the eye with the near plane in w (#429).
+    inverse_clip: [[f32; 4]; 4],
+    eye: [f32; 4],
 }
 
 /// scene3d.wgsl's `Lights`: the view, the light count and the lights the policy shades (#421).
@@ -424,6 +435,9 @@ struct SolidRecord {
     base: [f32; 4],
     surface: [f32; 4],
     specular: [f32; 4],
+    /// Its material operator's time in seconds (f32 bits), its seed, and the item's opacity (f32
+    /// bits), which the operator's alpha multiplies (#429).
+    op: [u32; 4],
 }
 
 /// A solid the shadow pass leaves out (`cast_shadow: false`).
@@ -439,6 +453,8 @@ const DOUBLE_SIDED: u32 = 32;
 /// A shadow catcher; its alpha mode from bit 7; its pattern from bit 9 and its seed from bit 16
 /// (scene3d.wgsl).
 const CATCH: u32 = 64;
+/// Its material samples texture maps (#423), its group 3.
+const MAPS: u32 = 8192;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -481,7 +497,7 @@ struct TextRecord {
 
 /// A solid's instance record: `tie` its rank by ID, `winding` false for the planted program that
 /// ignores its determinant.
-fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool) -> SolidRecord {
+fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool, maps: bool) -> SolidRecord {
     let m = &s.model;
     let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
         - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
@@ -502,6 +518,7 @@ fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool) -> SolidRecord {
             | if mat.unlit { UNLIT } else { 0 }
             | if mat.double_sided { DOUBLE_SIDED } else { 0 }
             | if mat.catch.is_some() { CATCH } else { 0 }
+            | if maps { MAPS } else { 0 }
             | mode << 7
             | mat.pattern << 9
             | (mat.pattern_seed & 0xffff) << 16;
@@ -512,6 +529,20 @@ fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool) -> SolidRecord {
         surface = f([mat.metallic, mat.roughness, mat.specular_level], mat.coat);
         specular = f(mat.specular_color, mat.coat_roughness);
     }
+    let op = s.op.as_ref().map_or([0; 4], |o| {
+        let alpha = s.material.map_or(1.0, |m| m.base[3]);
+        let opacity = if alpha > 0.0 {
+            (s.alpha / alpha).min(1.0)
+        } else {
+            1.0
+        };
+        [
+            (o.t as f32).to_bits(),
+            op::seed(o.doc_seed, &s.id),
+            (opacity as f32).to_bits(),
+            0,
+        ]
+    });
     SolidRecord {
         rows: m.map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]),
         color: pack(s.color),
@@ -522,6 +553,7 @@ fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool) -> SolidRecord {
         base,
         surface,
         specular,
+        op,
     }
 }
 
@@ -828,22 +860,28 @@ impl Set {
     }
 }
 
+/// A solid's set key (shape, maps (0: none; #423), material operator (0: none; #429)), its
+/// record's place in that set, its pick ID and its tie rank.
+type Slot = ((Shape, u32, u64), u32, u32, u32);
+
 /// A 3D writer layer's batch: its instance sets and its encoding.
 #[derive(Default)]
 struct Batch {
-    solids: BTreeMap<Shape, Set>,
+    /// The opaque solids by shape, material maps (0: none; #423) and material operator
+    /// ([`op::key`]; 0 for none; #429).
+    solids: BTreeMap<(Shape, u32, u64), Set>,
     lines: Set,
     points: Set,
     /// One record per inked glyph of its labels.
     labels: Set,
     bundle: Option<wgpu::RenderBundle>,
-    /// Each solid's shape, its record's place in that shape's set, its pick ID and its tie
-    /// rank, in the layer's solid order.
-    solid_slots: Vec<(Shape, u32, u32, u32)>,
+    /// Each solid's set, its record's place in that set, its pick ID and its tie rank, in the
+    /// layer's solid order.
+    solid_slots: Vec<Slot>,
     /// The see-through solids' records back to front, and each one's shape and whether it adds
     /// (#421: Object: see-through order).
     clear: Set,
-    clear_draws: Vec<(Shape, bool)>,
+    clear_draws: Vec<((Shape, u32), bool)>,
     /// The resources and draws the bundle binds and records, as it was encoded, and this
     /// frame's, gathered in a buffer kept from frame to frame.
     key: Vec<u64>,
@@ -909,8 +947,17 @@ pub type Camera = ([f64; 16], [f64; 3], f64);
 pub struct Renderer {
     planted: Planted,
     epoch: u64,
+    /// The material maps' textures and bind groups (#423), and the look's default taps.
+    maps: maps::Store,
+    filter_taps: u8,
     frame_buffer: wgpu::Buffer,
     frame_bind: wgpu::BindGroup,
+    frame_layout: wgpu::BindGroupLayout,
+    /// Each material operator's pipeline, by [`op::key`], compiled the first time a prepared
+    /// scene holds it, or why it can't draw (#429).
+    materials: BTreeMap<u64, Result<op::MatOp, String>>,
+    /// Each material operator's group with one solid's maps, by (operator, maps) key.
+    op_binds: BTreeMap<(u64, u32), wgpu::BindGroup>,
     /// The lights this frame's policy shades and the DFG table, for the solids' shading (#421).
     lights_buffer: wgpu::Buffer,
     lights_bind: wgpu::BindGroup,
@@ -1060,6 +1107,105 @@ fn silhouette(
     out
 }
 
+/// A builder's mesh's contour as seen from `cam` (#1162): in world space, each edge between a
+/// triangle that faces the camera and one that doesn't, and each edge only one triangle holds
+/// when that one faces it. Vertices at one position are one, so a mesh with split normals has
+/// the same edges as its welded form.
+fn contour(
+    mesh: &deep_canvas_scene3d::geom::Mesh,
+    model: &[[f64; 4]; 3],
+    cam: &deep_canvas_scene3d::scene::Camera,
+) -> Vec<[[f64; 3]; 2]> {
+    use std::collections::BTreeMap;
+    let at = |l: [f64; 3]| {
+        let mut p = [0.0; 3];
+        for (r, v) in p.iter_mut().enumerate() {
+            *v = model[r][0] * l[0] + model[r][1] * l[1] + model[r][2] * l[2] + model[r][3];
+        }
+        p
+    };
+    let world: Vec<[f64; 3]> = mesh.positions.iter().map(|p| at(*p)).collect();
+    // One index per distinct position, by its bits.
+    let mut weld: BTreeMap<[u64; 3], u32> = BTreeMap::new();
+    let ids: Vec<u32> = world
+        .iter()
+        .enumerate()
+        .map(|(i, p)| *weld.entry(p.map(f64::to_bits)).or_insert(i as u32))
+        .collect();
+    let sub = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    let mut faces_by_edge: BTreeMap<(u32, u32), Vec<bool>> = BTreeMap::new();
+    for t in mesh.indices.chunks_exact(3) {
+        let [a, b, c] = [t[0], t[1], t[2]].map(|i| ids[i as usize]);
+        let [pa, pb, pc] = [a, b, c].map(|i| world[i as usize]);
+        let (u, v) = (sub(pb, pa), sub(pc, pa));
+        let n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        let toward = if cam.perspective {
+            sub(cam.eye, pa)
+        } else {
+            [-cam.forward[0], -cam.forward[1], -cam.forward[2]]
+        };
+        let front = n[0] * toward[0] + n[1] * toward[1] + n[2] * toward[2] > 0.0;
+        for (x, y) in [(a, b), (b, c), (c, a)] {
+            if x != y {
+                faces_by_edge
+                    .entry((x.min(y), x.max(y)))
+                    .or_default()
+                    .push(front);
+            }
+        }
+    }
+    // In screen px about the eye: an edge whose both sides the mesh covers all along it is a
+    // fold inside the outline (a mitre seen across a corner), never the outline itself.
+    let proj = |p: [f64; 3]| {
+        let d = sub(p, cam.eye);
+        let dot = |a: [f64; 3]| d[0] * a[0] + d[1] * a[1] + d[2] * a[2];
+        let k = if cam.perspective {
+            cam.scale / dot(cam.forward).max(1e-9)
+        } else {
+            cam.scale
+        };
+        [dot(cam.right) * k, dot(cam.up) * k]
+    };
+    let flat: Vec<[[f64; 2]; 3]> = mesh
+        .indices
+        .chunks_exact(3)
+        .map(|t| [t[0], t[1], t[2]].map(|i| proj(world[ids[i as usize] as usize])))
+        .collect();
+    let covered = |q: [f64; 2]| {
+        flat.iter().any(|[a, b, c]| {
+            let side = |p: [f64; 2], r: [f64; 2]| (r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0]);
+            let (x, y, z) = (side(*a, *b), side(*b, *c), side(*c, *a));
+            (x >= 0.0 && y >= 0.0 && z >= 0.0) || (x <= 0.0 && y <= 0.0 && z <= 0.0)
+        })
+    };
+    let outer = |a: [f64; 3], b: [f64; 3]| {
+        let (pa, pb) = (proj(a), proj(b));
+        let (dx, dy) = (pb[0] - pa[0], pb[1] - pa[1]);
+        let len = (dx * dx + dy * dy).sqrt();
+        if len < 1e-9 {
+            return false;
+        }
+        let n = [-dy / len * 1.5, dx / len * 1.5];
+        [0.125, 0.375, 0.625, 0.875].iter().any(|s| {
+            let m = [pa[0] + dx * s, pa[1] + dy * s];
+            !covered([m[0] + n[0], m[1] + n[1]]) || !covered([m[0] - n[0], m[1] - n[1]])
+        })
+    };
+    faces_by_edge
+        .into_iter()
+        .filter(|(_, f)| match f.as_slice() {
+            [one] => *one,
+            many => many.iter().any(|x| *x) && many.iter().any(|x| !*x),
+        })
+        .map(|((a, b), _)| [world[a as usize], world[b as usize]])
+        .filter(|[a, b]| outer(*a, *b))
+        .collect()
+}
+
 fn rgb4(v: [f64; 3]) -> [f32; 4] {
     [v[0] as f32, v[1] as f32, v[2] as f32, 0.0]
 }
@@ -1082,12 +1228,17 @@ fn shape_code(s: Shape) -> u64 {
     }
 }
 
-const MESH_VERTEX: [wgpu::VertexAttribute; 2] =
-    wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
-// Location 8 is the solid's tie rank, which the vertex stage reads (#421).
-const SOLID: [wgpu::VertexAttribute; 11] = wgpu::vertex_attr_array![
+// Position and normal, then (#423) uv0 and uv1 as one attribute and the tangent at 13 and 14,
+// after the records'.
+const MESH_VERTEX: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
+    0 => Float32x3, 1 => Float32x3, 13 => Float32x4, 14 => Float32x4
+];
+// Location 8 is the solid's tie rank, which the vertex stage reads (#421); 15 its material
+// operator's time, seed and opacity (#429).
+const SOLID: [wgpu::VertexAttribute; 12] = wgpu::vertex_attr_array![
     2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Uint32, 6 => Uint32, 7 => Uint32,
-    8 => Uint32, 9 => Float32x4, 10 => Float32x4, 11 => Float32x4, 12 => Float32x4
+    8 => Uint32, 9 => Float32x4, 10 => Float32x4, 11 => Float32x4, 12 => Float32x4,
+    15 => Uint32x4
 ];
 const SEGMENT: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
     0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32
@@ -1103,7 +1254,7 @@ const TEXT: [wgpu::VertexAttribute; 8] = wgpu::vertex_attr_array![
 fn mesh_buffers() -> [Option<wgpu::VertexBufferLayout<'static>>; 2] {
     [
         Some(wgpu::VertexBufferLayout {
-            array_stride: 24,
+            array_stride: (mesh::FLOATS * 4) as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &MESH_VERTEX,
         }),
@@ -1542,7 +1693,13 @@ impl Renderer {
             &env,
         );
         let ao = ao::Passes::new(device);
-        let mesh_layout = layout(&[Some(&frame_layout), Some(&lights_layout), Some(&ao.shade_layout)]);
+        let maps = maps::Store::new(d, &device.queue);
+        let mesh_layout = layout(&[
+            Some(&frame_layout),
+            Some(&lights_layout),
+            Some(&ao.shade_layout),
+            Some(&maps.layout),
+        ]);
         let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
         let mesh_buffers = mesh_buffers();
@@ -1727,6 +1884,9 @@ impl Renderer {
             epoch: device.epoch,
             frame_buffer,
             frame_bind,
+            frame_layout: frame_layout.clone(),
+            materials: BTreeMap::new(),
+            op_binds: BTreeMap::new(),
             lights_buffer,
             lights_bind,
             lights_layout,
@@ -1760,6 +1920,8 @@ impl Renderer {
             puffs: None,
             puff_pipeline: None,
             solid_layout: mesh_layout.clone(),
+            maps,
+            filter_taps: 8,
             clear_pipelines: [None, None],
             ties: BTreeMap::new(),
             flip: false,
@@ -2291,7 +2453,8 @@ impl Renderer {
                     l.radius as f32,
                 ],
                 [l.cone[0] as f32, l.cone[1] as f32, 0.0, 0.0],
-                l.area.map_or([0.0; 4], |a| v4(a.right, if a.disk { 1.0 } else { 0.0 })),
+                l.area
+                    .map_or([0.0; 4], |a| v4(a.right, if a.disk { 1.0 } else { 0.0 })),
                 l.area.map_or([0.0; 4], |a| v4(a.up, 0.0)),
             ];
         }
@@ -2332,7 +2495,11 @@ impl Renderer {
             } else {
                 &mut o.strokes
             };
-            for [a, b] in silhouette(&s.model, cam) {
+            let edges = match &s.mesh {
+                Some(m) => contour(m, &s.model, cam),
+                None => silhouette(&s.model, cam),
+            };
+            for [a, b] in edges {
                 let record = SegmentRecord {
                     a: v4(a, stroke.width),
                     b: v4(b, stroke.width),
@@ -2364,6 +2531,43 @@ impl Renderer {
             e.insert(Mesh::of(device, m));
             self.counts.meshes_built += 1;
         }
+    }
+
+    /// The set a solid's material operator draws it in (#429), the operator's pipeline compiled
+    /// the first time a prepared scene holds it: 0, its material's own values, with none, or with
+    /// one that can't draw, which this frame's counts name.
+    fn material_op(&mut self, device: &Device, s: &Solid, see_through: bool) -> u64 {
+        let Some(o) = &s.op else { return 0 };
+        let key = op::key(o);
+        if !self.materials.contains_key(&key) {
+            let layouts = [
+                &self.frame_layout,
+                &self.lights_layout,
+                &self.ao.shade_layout,
+            ];
+            let made = op::compile(&device.device, SHADER, layouts, self.planted.forward_z, o);
+            if made.is_ok() {
+                self.compiled += 1;
+                self.names.push("scene3d.material_op");
+            }
+            self.materials.insert(key, made);
+        }
+        let why = match &self.materials[&key] {
+            Err(e) => e.clone(),
+            Ok(_) if see_through => {
+                "a see-through part's operator lands with see-through materials".into()
+            }
+            Ok(_) => return key,
+        };
+        if !self
+            .counts
+            .operators_refused
+            .iter()
+            .any(|(id, _)| *id == o.id)
+        {
+            self.counts.operators_refused.push((o.id.clone(), why));
+        }
+        0
     }
 
     /// Uploads each atlas page whose generation the GPU doesn't hold.
@@ -2451,13 +2655,19 @@ impl Renderer {
             let Some(batch) = self.batches.get_mut(&layer.id) else {
                 continue;
             };
-            let (Some(s), Some(&(shape, at, pick, tie))) =
+            let (Some(s), Some(&(set_key, at, pick, tie))) =
                 (layer.solids.get(i), batch.solid_slots.get(i))
             else {
                 continue;
             };
-            if let Some(set) = batch.solids.get_mut(&shape) {
-                let record = solid_record(s, pick, tie, !self.planted.winding_ignores_determinant);
+            if let Some(set) = batch.solids.get_mut(&set_key) {
+                let record = solid_record(
+                    s,
+                    pick,
+                    tie,
+                    !self.planted.winding_ignores_determinant,
+                    set_key.1 != 0,
+                );
                 set.write(
                     device,
                     at as usize,
@@ -2486,7 +2696,20 @@ impl Renderer {
         } else {
             Depth::Reversed
         };
-        let rows = cam.clip(depth);
+        let mut rows = cam.clip(depth);
+        // Look: samples (#423): a sub-sample's offset moves the projection by a fraction of a
+        // pixel, right and down.
+        let [jx, jy] = [
+            2.0 * scene.jitter[0] / f64::from(scene.size[0].max(1)),
+            -2.0 * scene.jitter[1] / f64::from(scene.size[1].max(1)),
+        ];
+        let w = rows[3];
+        for (c, wc) in w.iter().enumerate() {
+            rows[0][c] += jx * wc;
+            rows[1][c] += jy * wc;
+        }
+        self.maps.texels.clone_from(&scene.texels);
+        self.filter_taps = look.filter_taps;
         let mut clip = [[0f32; 4]; 4];
         let mut camera = [0.0; 16];
         for (r, row) in rows.iter().enumerate() {
@@ -2539,6 +2762,11 @@ impl Renderer {
             px: [k as f32, if below { 1.0 } else { 0.0 }, 1.0, forward],
             sky_top: scene.sky.as_ref().map_or([0.0; 4], |s| v4(s.ambient[0], 1.0)),
             sky_low: scene.sky.as_ref().map_or([0.0; 4], |s| v4(s.ambient[1], 1.0)),
+            inverse_clip: {
+                let inv = op::invert(&rows);
+                std::array::from_fn(|c| std::array::from_fn(|r| inv[r][c] as f32))
+            },
+            eye: v4(cam.eye, cam.near),
         };
         // The outline pass over the full-size slot, and over the internal size for the planted
         // programs that draw there.
@@ -2573,7 +2801,7 @@ impl Renderer {
             .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
         self.prepare_cascades(device, scene, &frame);
         self.prepare_env(device, scene, &camera);
-        self.sky = scene.sky.is_some();
+        self.sky = scene.sky.as_ref().is_some_and(|s| s.draws_background());
         self.prepare_puffs(device, scene);
         if self.sky && self.sky_pipeline.is_none() {
             self.sky_pipeline = Some(sky_pipeline(
@@ -2655,7 +2883,9 @@ impl Renderer {
         };
         for (k, add) in [(0, false), (1, true)] {
             let wanted = layer.solids.iter().any(|s| {
-                clear(s) && s.material.is_some_and(|m| (m.alpha_mode == AlphaMode::Add) == add)
+                clear(s)
+                    && s.material
+                        .is_some_and(|m| (m.alpha_mode == AlphaMode::Add) == add)
             });
             if wanted && self.clear_pipelines[k].is_none() {
                 self.clear_pipelines[k] = Some(clear_pipeline(
@@ -2666,7 +2896,8 @@ impl Renderer {
                     add,
                 ));
                 self.compiled += 1;
-                self.names.push(if add { "scene3d.add" } else { "scene3d.blend" });
+                self.names
+                    .push(if add { "scene3d.add" } else { "scene3d.blend" });
             }
         }
         let mut written = 0u32;
@@ -2682,13 +2913,40 @@ impl Renderer {
                 .solid_slots,
         );
         slots.clear();
+        let taps = if self.planted.anisotropy_one {
+            1
+        } else {
+            self.filter_taps
+        };
         for s in &layer.solids {
             match &s.mesh {
                 Some(m) => self.built_mesh(device, s.shape, m),
                 None => self.mesh(device, s.shape),
             }
             let tie = self.ties.get(&s.id).copied().unwrap_or(0);
-            slots.push((s.shape, 0, self.pick(&s.id), tie));
+            let op = self.material_op(device, s, clear(s));
+            let maps = match (&s.maps, &s.material) {
+                (Some(m), Some(_)) => self.maps.group(&device.device, &device.queue, m, taps),
+                _ => 0,
+            };
+            // A material operator binds its inputs with the solid's maps, once per pair.
+            if let (Some(Ok(m)), false) = (
+                self.materials.get(&op),
+                self.op_binds.contains_key(&(op, maps)),
+            ) {
+                let none = light::Maps::default();
+                let source = s.maps.as_deref().filter(|_| maps != 0).unwrap_or(&none);
+                let g = self.maps.bind_with(
+                    &device.device,
+                    &device.queue,
+                    source,
+                    taps,
+                    &m.layout,
+                    m.entries(),
+                );
+                self.op_binds.insert((op, maps), g);
+            }
+            slots.push(((s.shape, maps, op), 0, self.pick(&s.id), tie));
         }
         for l in &layer.lines {
             self.pick(&l.id);
@@ -2705,8 +2963,7 @@ impl Renderer {
             set.begin();
         }
         let winding = !self.planted.winding_ignores_determinant;
-        let mut order: Vec<(&Solid, &mut (Shape, u32, u32, u32))> =
-            layer.solids.iter().zip(&mut slots).collect();
+        let mut order: Vec<(&Solid, &mut Slot)> = layer.solids.iter().zip(&mut slots).collect();
         // The planted ties_by_submission: the opaque draws' order turns over each frame.
         if self.planted.ties_by_submission && self.flip {
             order.reverse();
@@ -2715,25 +2972,27 @@ impl Renderer {
         // view depth plus their sort_bias, ties by ID.
         let mut see_through = Vec::new();
         for (s, slot) in order {
-            let record = solid_record(s, slot.2, slot.3, winding);
+            let record = solid_record(s, slot.2, slot.3, winding, slot.0 .1 != 0);
             if clear(s) {
                 let c = [s.model[0][3], s.model[1][3], s.model[2][3]];
-                let depth = (0..3).map(|k| (c[k] - cam.eye[k]) * cam.forward[k]).sum::<f64>();
-                see_through.push((depth + s.sort_bias, s, record));
+                let depth = (0..3)
+                    .map(|k| (c[k] - cam.eye[k]) * cam.forward[k])
+                    .sum::<f64>();
+                see_through.push((depth + s.sort_bias, s, record, (slot.0 .0, slot.0 .1)));
                 slot.1 = u32::MAX;
                 continue;
             }
-            let set = batch.solids.entry(s.shape).or_default();
+            let set = batch.solids.entry(slot.0).or_default();
             slot.1 = set.count as u32;
             set.push(&s.id, bytemuck::bytes_of(&record));
         }
         see_through.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
         batch.clear.begin();
         batch.clear_draws.clear();
-        for (_, s, record) in &see_through {
+        for (_, s, record, key) in &see_through {
             batch.clear.push(&s.id, bytemuck::bytes_of(record));
             let add = s.material.is_some_and(|m| m.alpha_mode == AlphaMode::Add);
-            batch.clear_draws.push((s.shape, add));
+            batch.clear_draws.push((*key, add));
         }
         batch.clear.finish(device, &mut next, &mut written);
         batch.solid_slots = slots;
@@ -2819,10 +3078,14 @@ impl Renderer {
         if !batch.solids.is_empty() {
             batch.next_key.extend([20, self.ao.generation]);
         }
-        for (shape, set) in &batch.solids {
-            batch
-                .next_key
-                .extend([shape_code(*shape), set.generation, u64::from(set.len())]);
+        for ((shape, maps, op), set) in &batch.solids {
+            batch.next_key.extend([
+                shape_code(*shape),
+                u64::from(*maps),
+                *op,
+                set.generation,
+                u64::from(set.len()),
+            ]);
         }
         for (family, set) in [(10, &batch.lines), (11, &batch.points), (12, &batch.labels)] {
             if set.len() > 0 {
@@ -2833,8 +3096,10 @@ impl Renderer {
         }
         if !batch.clear_draws.is_empty() {
             batch.next_key.extend([13, batch.clear.generation]);
-            for (shape, add) in &batch.clear_draws {
-                batch.next_key.extend([shape_code(*shape), u64::from(*add)]);
+            for ((shape, maps), add) in &batch.clear_draws {
+                batch
+                    .next_key
+                    .extend([shape_code(*shape), u64::from(*maps), u64::from(*add)]);
             }
         }
         // The lights' bind group, once it reads the drawn shadow map.
@@ -2872,24 +3137,35 @@ impl Renderer {
         enc.set_bind_group(0, &self.frame_bind, &[]);
         enc.set_bind_group(1, &self.lights_bind, &[]);
         enc.set_bind_group(2, self.ao.shade(), &[]);
-        for (shape, set) in &batch.solids {
+        for ((shape, maps, op), set) in &batch.solids {
             let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
                 continue;
             };
-            enc.set_pipeline(&self.mesh_pipeline);
+            match (self.materials.get(op), self.op_binds.get(&(*op, *maps))) {
+                (Some(Ok(m)), Some(g)) => {
+                    enc.set_pipeline(&m.pipeline);
+                    enc.set_bind_group(3, g, &[]);
+                }
+                _ => {
+                    enc.set_pipeline(&self.mesh_pipeline);
+                    enc.set_bind_group(3, self.maps.by_index(*maps), &[]);
+                }
+            }
             enc.set_vertex_buffer(0, mesh.vertices.slice(..));
             enc.set_vertex_buffer(1, buffer.slice(..));
             enc.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
             enc.draw_indexed(0..mesh.count, 0, 0..set.len());
         }
         if let Some(buffer) = &batch.clear.buffer {
-            for (k, (shape, add)) in batch.clear_draws.iter().enumerate() {
-                let (Some(mesh), Some(pipeline)) =
-                    (self.meshes.get(shape), &self.clear_pipelines[usize::from(*add)])
-                else {
+            for (k, ((shape, maps), add)) in batch.clear_draws.iter().enumerate() {
+                let (Some(mesh), Some(pipeline)) = (
+                    self.meshes.get(shape),
+                    &self.clear_pipelines[usize::from(*add)],
+                ) else {
                     continue;
                 };
                 let k = k as u32;
+                enc.set_bind_group(3, self.maps.by_index(*maps), &[]);
                 enc.set_pipeline(pipeline);
                 enc.set_vertex_buffer(0, mesh.vertices.slice(..));
                 enc.set_vertex_buffer(1, buffer.slice(..));
@@ -2930,7 +3206,7 @@ impl Renderer {
             .iter()
             .filter_map(|id| self.batches.get(id))
             .flat_map(|b| &b.solids)
-            .filter_map(|(shape, set)| {
+            .filter_map(|((shape, _, _), set)| {
                 let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.get(shape)?);
                 Some((
                     mesh.vertices.clone(),
@@ -2976,7 +3252,7 @@ impl Renderer {
         let mut draws = Vec::new();
         for id in &self.order {
             let batch = &self.batches[id];
-            for (shape, set) in &batch.solids {
+            for ((shape, _, _), set) in &batch.solids {
                 if let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) {
                     draws.push((
                         mesh.vertices.clone(),
@@ -2989,7 +3265,7 @@ impl Renderer {
             }
             // See-through parts cast as their `shadow` says (the record's no-cast flag).
             if let Some(buffer) = &batch.clear.buffer {
-                for (k, (shape, _)) in batch.clear_draws.iter().enumerate() {
+                for (k, ((shape, _), _)) in batch.clear_draws.iter().enumerate() {
                     if let Some(mesh) = self.meshes.get(shape) {
                         let k = k as u32;
                         draws.push((
@@ -3656,7 +3932,11 @@ pub fn tone(device: &Device, map: ToneMap, input: &[f32], size: [u32; 2]) -> Opt
         label: Some("scene3d tone"),
         entries: &[
             texture_entry(),
-            buffer_entry(1, wgpu::ShaderStages::FRAGMENT, wgpu::BufferBindingType::Uniform),
+            buffer_entry(
+                1,
+                wgpu::ShaderStages::FRAGMENT,
+                wgpu::BufferBindingType::Uniform,
+            ),
         ],
     });
     let pipeline_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -3703,7 +3983,11 @@ pub fn tone(device: &Device, map: ToneMap, input: &[f32], size: [u32; 2]) -> Opt
         deband: 0.0,
         saturation: 1.0,
         graded: 0,
-        wb: [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]],
+        wb: [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+        ],
         slope: [1.0; 4],
         offset: [0.0; 4],
         power: [1.0; 4],
@@ -4176,7 +4460,7 @@ mod tests {
     fn records(r: &Renderer) -> Vec<(String, Shape, Vec<u8>)> {
         let mut out = Vec::new();
         for (id, b) in &r.batches {
-            for (shape, set) in &b.solids {
+            for ((shape, _, _), set) in &b.solids {
                 out.push((id.clone(), *shape, set.records.clone()));
             }
         }

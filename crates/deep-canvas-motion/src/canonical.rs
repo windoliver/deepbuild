@@ -5,10 +5,9 @@ use deep_canvas::schedule::Canonical;
 
 use crate::curve::{Curve, Ease, Interp, Key};
 use crate::doc::{
-    Binding, Channel, Clip, Constraint, Control, Cut, Driver, Extend, Follow, Kind, Limit, Marker,
+    Binding, Channel, Clip, Constraint, Control, Cut, Driver, DriverInput, Extend, Follow, Kind, Limit, Marker,
     Motion, Placement, Shot, Target, Transport, ValueType,
 };
-use crate::ease::Named;
 use crate::follow;
 use crate::modifier::{Kind as ModKind, Modifier, Rate, Shape};
 use crate::input::{Change, Inputs, Moves};
@@ -36,24 +35,8 @@ impl Canonical for Interp {
                 (clamp, smoothness).encode(out);
             }
             Interp::CatmullRom => out.push(6),
+            Interp::Table => out.push(7),
         }
-    }
-}
-
-impl Canonical for Named {
-    fn encode(&self, out: &mut Vec<u8>) {
-        let (tag, param) = match *self {
-            Named::Penner(f, side) => (16 * f as u8 + side as u8, 0.0),
-            Named::Smoothstep => (200, 0.0),
-            Named::Smootherstep => (201, 0.0),
-            Named::Sigmoid(k) => (202, k),
-            Named::RushIn(k) => (203, k),
-            Named::RushOut(k) => (204, k),
-            Named::DoubleSigmoid(k) => (205, k),
-            Named::RunningStart(p) => (206, p),
-            Named::ExpDecay(t) => (207, t),
-        };
-        (tag, param).encode(out);
     }
 }
 
@@ -79,7 +62,9 @@ impl Canonical for Modifier {
                 match *shape {
                     Shape::ThereAndBack => (0u8, 0.0).encode(out),
                     Shape::Pause(v) => (1u8, v).encode(out),
-                    Shape::Wiggle(v) => (2u8, v).encode(out),
+                    // #490: the wiggle turned at twice Manim's frequency under tag 2; at its
+                    // frequency now, it keys apart, so no cache serves the old frames.
+                    Shape::Wiggle(v) => (3u8, v).encode(out),
                 }
                 ease.encode(out);
             }
@@ -191,6 +176,13 @@ impl deep_canvas::schedule::Canonical for Key {
             ),
             out,
         );
+        // A pack's ease table: its name and its knots, so another table keys another program.
+        if let Some((name, table)) = &self.table {
+            name.encode(out);
+            if let Some(t) = table {
+                (&t.table.x, &t.table.y).encode(out);
+            }
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Curve {
@@ -270,6 +262,18 @@ impl deep_canvas::schedule::Canonical for Driver {
             &(&self.id, &self.target, &self.text, &self.vars),
             out,
         );
+        // #490's driver inputs and hard range, only where a driver has them, so every earlier
+        // driver keys as it did.
+        if !self.inputs.is_empty() || self.range.is_some() {
+            for (name, input) in &self.inputs {
+                name.encode(out);
+                match input {
+                    DriverInput::Time => out.push(0),
+                    DriverInput::Control(c) => (1u8, c).encode(out),
+                }
+            }
+            self.range.encode(out);
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Limit {
@@ -332,6 +336,10 @@ impl deep_canvas::schedule::Canonical for Motion {
             &(&self.follows, &self.controls, &self.shots, &self.cameras),
             out,
         );
+        // A document without time remaps keeps the key it had before they landed (#429).
+        if !self.remaps.is_empty() {
+            deep_canvas::schedule::Canonical::encode(&self.remaps, out);
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Field {
@@ -374,6 +382,10 @@ impl Canonical for Op {
             Op::World(i, k) => {
                 out.push(5);
                 (i, k).encode(out);
+            }
+            Op::Core(c) => {
+                out.push(6);
+                c.encode(out);
             }
         }
     }

@@ -21,6 +21,7 @@ import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
 import { installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
+import { heavyDenial } from './heavy.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
 import { plantedStart } from './plant.js';
 import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type VfsSettings } from './wire.js';
@@ -49,7 +50,9 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A run of a destructive command undone from the copy staged before it ran (#347).
   ['staged.undo', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
-  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
+  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']],
+  // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
+  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
   // Setup reads your history into the wiki (#356).
   ['wiki.build', ['cli']],
@@ -356,6 +359,7 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_FORGE ? { forge: process.env.DEEP_HUB_TEST_FORGE } : {}),
       ...(process.env.DEEP_HUB_TEST_SORTER ? { sorter: process.env.DEEP_HUB_TEST_SORTER } : {}),
       ...(process.env.DEEP_HUB_TEST_DRAFTS ? { drafts: process.env.DEEP_HUB_TEST_DRAFTS } : {}),
+      ...(process.env.DEEP_HUB_TEST_ACCEPTED ? { accepted: process.env.DEEP_HUB_TEST_ACCEPTED } : {}),
       ...(process.env.DEEP_HUB_TEST_WORK ? { work: process.env.DEEP_HUB_TEST_WORK } : {}),
       ...(process.env.DEEP_HUB_TEST_PRICES ? { prices: process.env.DEEP_HUB_TEST_PRICES } : {}),
       ...(process.env.DEEP_HUB_TEST_GITHUB ? { github: process.env.DEEP_HUB_TEST_GITHUB } : {}),
@@ -423,6 +427,31 @@ class Hub {
   }
 
   // ---- Long waits (#120): the lines at each hook, the in-call route, and the timer for what is due.
+
+  /**
+   * A heavy command (#1015), which deep-hook matched against the heavy.command@1 entries, runs under `deep lease`:
+   * rewritten where the agent's adapter can rewrite a call, otherwise denied once with the leased command to run
+   * instead, which deep-hook matches no more. A reply that already denies the call stands, and `deep off` leaves it.
+   */
+  private leased(meta: HookMeta, ruled: string): string {
+    if (meta.event !== 'PreToolUse' || this.off) return ruled;
+    const command = typeof meta.call?.input.command === 'string' ? meta.call.input.command : undefined;
+    const rewrites = this.rewrites(meta.agent);
+    // The planted wrong program for AC2 denies the leased form too, so the agent's retry is denied again.
+    const retried = this.plant === 'denies-every-retry' && !rewrites && command !== undefined && /^\s*deep lease\b/.test(command);
+    if ((!meta.heavy && !retried) || command === undefined || this.plant === 'runs-matched-as-written') return ruled;
+    const reply = ruled === EMPTY_REPLY ? { exit: 0, stdout: '', stderr: '' } : JSON.parse(ruled) as { exit: number; stdout: string; stderr: string };
+    if (reply.exit !== 0) return ruled;
+    const form = retried ? command : meta.heavy!.form;
+    if (!rewrites) {
+      return line({ exit: 2, stdout: '', stderr: `${heavyDenial(command, form, meta.heavy?.name ?? 'deep lease')}\n` });
+    }
+    const out = reply.stdout ? JSON.parse(reply.stdout) as Record<string, unknown> : {};
+    const specific = isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : { hookEventName: 'PreToolUse' };
+    specific.updatedInput = { ...meta.call!.input, ...(isObj(specific.updatedInput) ? specific.updatedInput : {}), command: form };
+    out.hookSpecificOutput = specific;
+    return line({ exit: 0, stdout: JSON.stringify(out), stderr: reply.stderr });
+  }
 
   /** Whether an agent's adapter can rewrite a call's input, so a deadline can be attached to a command that never ends. */
   private rewrites(agent: string): boolean {
@@ -644,6 +673,7 @@ class Hub {
       if (wait.message) this.core.post({ op: 'line', session: meta.session, agent: meta.agent, text: wait.message });
       ruled = withWaits(ruled, meta.event, wait);
       this.arm();
+      ruled = this.leased(meta, ruled);
     }
     // A call that may need your authority, or that a standing rule decides, and no guard entry blocks, is held for
     // the core's gate first (#321, #23); a warn entry's words go out with the gate's reply.

@@ -40,6 +40,47 @@ pub fn module() -> Module {
     }
 }
 
+/// The planted layout of #490: the motion module declaring `ease@1` and filling it with the
+/// named eases, as if the eases were motion's rather than the core's.
+pub fn declaring_eases() -> Module {
+    Module {
+        register: |r| {
+            r.registry(deep_canvas::registry::core_lists::ease_registry());
+            for e in deep_canvas::registry::core_lists::ease_entries(false) {
+                r.entry("ease@1", &e.name, e.value, &e.since);
+            }
+            register(r);
+        },
+        ..module()
+    }
+}
+
+/// The planted opening of #490 (`test-ease-renumbered`): motion built against an `ease@1` whose
+/// entries are renumbered, so its programs encode other entry numbers. A module that computes
+/// differently is another version, which every key its operators make holds.
+pub fn renumbered() -> Module {
+    let mut m = Module {
+        register: |r| register_compiling(r, crate::kit::Planted::None, compile_renumbered),
+        ..module()
+    };
+    m.manifest.version.patch = 1;
+    m
+}
+
+fn compile_renumbered(v: &mut View<'_>) -> Result<(), OpError> {
+    let canonical = canonical_value(v.document()?, &NoShape)
+        .map_err(|e| OpError::new("out_of_range", e.path))?;
+    let Value::Object(doc) = &canonical else {
+        return Err(OpError::new("bad_doc", ""));
+    };
+    let options = crate::program::Options {
+        planted: crate::program::Planted::EaseRenumbered,
+        ..Default::default()
+    };
+    let program = Program::compile_with(doc, options).map_err(|r| OpError::new(r.code, r.path))?;
+    v.write("motion.program", Val::typed(Arc::new(program)))
+}
+
 /// The motion module with a planted constraint solve, whose `constraint@1` entry the
 /// constraint kit must refuse at the seal, naming the kind.
 pub fn planted(planted: crate::kit::Planted) -> Module {
@@ -105,6 +146,15 @@ fn register(r: &mut Registrar) {
 }
 
 fn register_with(r: &mut Registrar, planted: crate::kit::Planted) {
+    register_compiling(r, planted, compile);
+}
+
+/// The module's registration, with `compile` the operator that compiles a revision's motion.
+fn register_compiling(
+    r: &mut Registrar,
+    planted: crate::kit::Planted,
+    compile: fn(&mut View<'_>) -> Result<(), OpError>,
+) {
     // #489: motion's kinds in the core's `constraint@1`, each with its kit fixture.
     for (name, value) in crate::kit::entries(planted, cycle_through) {
         r.entry("constraint@1", name, value, "R6");
@@ -141,7 +191,7 @@ fn register_with(r: &mut Registrar, planted: crate::kit::Planted) {
     r.operator(
         "channels",
         "items",
-        &["motion.program", "t", "view(reduced_motion)"],
+        &["motion.program", "t", "view(reduced_motion)", "self"],
         &["motion.at", "motion.fields"],
     )
     .applies(is_target)
@@ -227,7 +277,7 @@ fn has_motion(doc: &Value, _: &str, _: &Value) -> bool {
 }
 
 /// An item a document channel or driver targets, a limit constraint holds or a placement binds.
-fn is_target(doc: &Value, id: &str, _: &Value) -> bool {
+fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
     let prefix = format!("items/{id}/");
     let targets = |section: &str| {
         doc.get(section)
@@ -240,7 +290,7 @@ fn is_target(doc: &Value, id: &str, _: &Value) -> bool {
                     .is_some_and(|t| t.starts_with(&prefix))
             })
     };
-    let channel = targets("channels") || targets("drivers");
+    let channel = targets("channels") || targets("drivers") || !keyed_data(doc, item).is_empty();
     let held = doc
         .get("constraints")
         .and_then(Value::as_object)
@@ -267,6 +317,45 @@ fn is_target(doc: &Value, id: &str, _: &Value) -> bool {
             _ => false,
         });
     channel || held || bound
+}
+
+/// The data names a text template's slots read (`{data/<name>}`), each once.
+fn data_slots(template: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for part in deep_canvas::template::parts(template).unwrap_or_default() {
+        if let deep_canvas::template::Part::Slot(slot) = part {
+            if let Some(name) = slot.strip_prefix("data/").filter(|n| !out.iter().any(|o| o == n)) {
+                out.push(name.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// The keyed data values an item's text template reads (Text `text@1`, `template`), each with
+/// the channel that keys it: `(name, channel)`. Its text shows the value at the frame's time.
+fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
+    let Some(template) = item.pointer("/params/template").and_then(Value::as_str) else {
+        return Vec::new();
+    };
+    let Ok(parts) = deep_canvas::template::parts(template) else {
+        return Vec::new();
+    };
+    let channels = doc.get("channels").and_then(Value::as_object);
+    let mut out = Vec::new();
+    for part in parts {
+        let deep_canvas::template::Part::Slot(slot) = part else { continue };
+        let Some(name) = slot.strip_prefix("data/") else { continue };
+        let keyed = channels.into_iter().flatten().find(|(_, c)| {
+            c.get("target").and_then(Value::as_str) == Some(slot)
+        });
+        if let Some((channel, _)) = keyed {
+            if !out.iter().any(|(n, _)| n == name) {
+                out.push((name.to_string(), channel.clone()));
+            }
+        }
+    }
+    out
 }
 
 /// The revision's motion, compiled once at check.
@@ -306,9 +395,23 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
     }
     let mut state = program.state();
     program.evaluate_local(t, Validity::Full, &mut state);
-    let Some((transform, fields)) = program.item_values(&state, &id) else {
+    let Some((transform, mut fields)) = program.item_values(&state, &id) else {
         return Ok(());
     };
+    // A text whose template reads a keyed data value shows it at t: the value rides on the
+    // evaluated item as `params/data/<name>`, which the template reads before the document's.
+    let template = v
+        .item()?
+        .pointer("/params/template")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    for name in template.iter().flat_map(|t| data_slots(t)) {
+        let owner = format!("data/{name}");
+        let keyed = program.motion.channels.iter().find(|c| c.target.owner == owner);
+        if let Some(x) = keyed.and_then(|c| program.channel_value(&state, &c.id)) {
+            fields.push((vec!["params".into(), "data".into(), name], Datum::Num(x)));
+        }
+    }
     let set = |name: &str, from: usize| Edit {
         add: false,
         path: vec![name.to_string()],
