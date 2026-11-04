@@ -214,6 +214,12 @@ export function acquire(cls, { wait = 30 } = {}) {
   }
 }
 
+/** Whether this process or an ancestor holds a grant of `cls`, by the table; DEEP_THROTTLE, which a child can drop, isn't read. */
+export const holds = (cls) => locked((table, procs) => {
+  const mine = chain(procs, process.pid);
+  return table.grants.some((grant) => grant.class === cls && mine.includes(grant.pid));
+});
+
 /**
  * Gives a grant back; a passed-through one is its ancestor's to release. A release the table can't take is tried for
  * two seconds, then thrown: a holder that can't give timed back must not run on holding it, and its exit frees it.
