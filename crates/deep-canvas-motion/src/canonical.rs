@@ -336,6 +336,10 @@ impl deep_canvas::schedule::Canonical for Motion {
             &(&self.follows, &self.controls, &self.shots, &self.cameras),
             out,
         );
+        // A document without time remaps keeps the key it had before they landed (#429).
+        if !self.remaps.is_empty() {
+            deep_canvas::schedule::Canonical::encode(&self.remaps, out);
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Field {

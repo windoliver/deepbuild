@@ -85,6 +85,8 @@ pub struct Env<'a> {
     pub eye: [f64; 4],
     pub inputs: BTreeMap<String, Val>,
     pub textures: BTreeMap<String, &'a Image>,
+    /// A material's surface normal in object, world and view space, where `normal@1` reads it.
+    pub normals: [[f64; 3]; 3],
 }
 
 /// The fixed hash, as [`crate::emit::HASH`] writes it.
@@ -353,6 +355,10 @@ struct Prog<'a> {
     storage: Vec<(String, Vec<f64>)>,
     size: [u32; 2],
     env: &'a Env<'a>,
+    /// The fragment's own normal, where a material harness sweeps it per pixel.
+    normal_at: Option<[f64; 3]>,
+    /// Whether a `discard_if` fired in this fragment.
+    discarded: bool,
 }
 
 fn slot(slots: &mut BTreeMap<String, usize>, name: &str) -> usize {
@@ -377,6 +383,8 @@ impl<'a> Prog<'a> {
             storage: storage.into_iter().collect(),
             size,
             env,
+            normal_at: None,
+            discarded: false,
         };
         for (name, out) in &c.op.storage {
             if !p.storage.iter().any(|(n, _)| n == name) {
@@ -399,7 +407,7 @@ impl<'a> Prog<'a> {
                     p.images.push(img);
                     V::T(p.images.len() - 1)
                 }
-                From::Storage { .. } => {
+                From::Storage { .. } | From::Column { .. } | From::Attribute { .. } => {
                     let i = p
                         .storage
                         .iter()
@@ -641,9 +649,12 @@ impl<'a> Prog<'a> {
             return Ok(());
         }
         if name == "discard_if" {
+            if self.arg(regs, p, "cond").0.l().v[0] != 0.0 {
+                self.discarded = true;
+            }
             return Ok(());
         }
-        if name == "write" {
+        if name == "write" || name.starts_with("atomic_") {
             let guarded =
                 p.s.when
                     .as_ref()
@@ -660,7 +671,21 @@ impl<'a> Prog<'a> {
             if let Some((_, words)) = self.storage.iter_mut().find(|(n, _)| n == buf) {
                 let at = i.min(words.len().saturating_sub(1));
                 if let Some(w) = words.get_mut(at) {
-                    *w = v;
+                    // The words' 32 bits (an i32's two's complement), min and max signed on i32.
+                    let (x, y) = (*w as i64 as u32, v as i64 as u32);
+                    let signed = sc == Sc::I32;
+                    let r = match name {
+                        "atomic_add" => Some(x.wrapping_add(y)),
+                        "atomic_min" if signed => Some((x as i32).min(y as i32) as u32),
+                        "atomic_max" if signed => Some((x as i32).max(y as i32) as u32),
+                        "atomic_min" => Some(x.min(y)),
+                        "atomic_max" => Some(x.max(y)),
+                        "atomic_and" => Some(x & y),
+                        "atomic_or" => Some(x | y),
+                        "atomic_xor" => Some(x ^ y),
+                        _ => None,
+                    };
+                    *w = r.map_or(v, |r| wrap(sc, f64::from(r)));
                 }
             }
             return Ok(());
@@ -920,6 +945,28 @@ impl<'a> Prog<'a> {
                 }
                 one(Sc::U32, f64::from(h))
             }
+            "noise" | "fbm" => {
+                let f = crate::check::seeded_fields(p.s).map_err(|e| format!("{name}: {e}"))?;
+                let q = as_l(g("p"), Sc::F32, 2).v;
+                let seed = as_l(g("seed"), Sc::U32, 1).v[0] as u32;
+                let at = [q[0], q[1]];
+                one(
+                    Sc::F32,
+                    if name == "noise" {
+                        deep_canvas::steps::noise2(at, seed, f.period)
+                    } else {
+                        // The GPU holds the lacunarity and gain in f32.
+                        deep_canvas::steps::fbm2(
+                            at,
+                            seed,
+                            f.octaves,
+                            f32r(f.lacunarity),
+                            f32r(f.gain),
+                            f.period,
+                        )
+                    },
+                )
+            }
             "rand" => {
                 let k = as_l(g("key"), Sc::U32, 1).v[0] as u32;
                 one(Sc::F32, f64::from(hash1(k) >> 8) * 5.960_464_5e-8)
@@ -945,6 +992,17 @@ impl<'a> Prog<'a> {
                 Some("position") => V::N(Sc::F32, L::of(&self.env.eye[..3])),
                 _ => one(Sc::F32, self.env.eye[3]),
             },
+            "role" => g("x"),
+            "normal" => {
+                let space = p.s.fields.get("space").and_then(Value::as_str);
+                let k = match space {
+                    Some("world") => 1,
+                    Some("view") => 2,
+                    _ => 0,
+                };
+                let n3 = self.normal_at.unwrap_or(self.env.normals[k]);
+                V::N(Sc::F32, L::of(&n3))
+            }
             "luminance" => {
                 let c = as_l(g("rgb"), Sc::F32, 3).v;
                 one(Sc::F32, 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2])
@@ -993,13 +1051,12 @@ impl<'a> Prog<'a> {
                     return Err(format!("step {}: read names a storage input", p.id));
                 };
                 let words = &self.storage[b].1;
-                one(
-                    sc,
-                    words
-                        .get(i.min(words.len().saturating_sub(1)))
-                        .copied()
-                        .unwrap_or(0.0),
-                )
+                // An element of n lanes at its packed stride, the index clamped into the elements.
+                let at = i.min((words.len() / n).saturating_sub(1)) * n;
+                let lanes: Vec<f64> = (at..at + n)
+                    .map(|k| words.get(k).copied().unwrap_or(0.0))
+                    .collect();
+                V::N(sc, L::of(&lanes))
             }
             "bitcast" => {
                 let from = sc_of(&gt("x")).0;
@@ -1009,9 +1066,15 @@ impl<'a> Prog<'a> {
                         _ => v as i64 as u32,
                     }
                 };
+                let xl = g("x").l();
+                let xl = if xl.n == 1 && n > 1 {
+                    L { v: [xl.v[0]; 4], n }
+                } else {
+                    xl
+                };
                 V::N(
                     sc,
-                    g("x").l().map(|v| match sc {
+                    xl.map(|v| match sc {
                         Sc::F32 => f64::from(f32::from_bits(bitsof(v))),
                         Sc::I32 => f64::from(bitsof(v) as i32),
                         _ => f64::from(bitsof(v)),
@@ -1059,7 +1122,10 @@ pub fn inputs(
     let mut out = BTreeMap::new();
     for (name, input) in &c.op.inputs {
         let v = match &input.from {
-            From::Target { .. } | From::Storage { .. } => Val::T(name.clone()),
+            From::Target { .. }
+            | From::Storage { .. }
+            | From::Column { .. }
+            | From::Attribute { .. } => Val::T(name.clone()),
             From::Role(r) => Val::N(
                 Sc::F32,
                 roles
@@ -1093,20 +1159,146 @@ pub fn pass_rows(
     let mut prog = Prog::new(c, env, size, BTreeMap::new())?;
     let color = prog_src(&mut prog, &c.op.outputs["color"]);
     let coverage = c.op.outputs.get("coverage").map(|a| prog_src(&mut prog, a));
+    shade(prog, size, rows, false, |prog, regs| {
+        let mut px = as_l(prog.get(regs, color), Sc::F32, 4).v;
+        if let Some(cov) = coverage {
+            let k = as_l(prog.get(regs, cov), Sc::F32, 1).v[0];
+            px.iter_mut().for_each(|v| *v *= k);
+        }
+        px
+    })
+}
+
+/// Runs a checked material operator as `emit::material_harness` draws it: a full-screen surface
+/// whose normal at uv is `normalize(uv × 2 − 1, 1)` in every space, each pixel its base color
+/// plus its emission with alpha 1, and a discarded pixel left clear.
+pub fn material_rows(
+    c: &Checked,
+    env: &Env<'_>,
+    size: [u32; 2],
+    rows: std::ops::Range<u32>,
+) -> Result<Vec<[f64; 4]>, String> {
+    let mut prog = Prog::new(c, env, size, BTreeMap::new())?;
+    let base =
+        c.op.outputs
+            .get("base_color")
+            .map(|a| prog_src(&mut prog, a));
+    let emission = c.op.outputs.get("emission").map(|a| prog_src(&mut prog, a));
+    shade(prog, size, rows, true, |prog, regs| {
+        let lanes = |s: Option<Src>| s.map_or([0.0; 4], |s| as_l(prog.get(regs, s), Sc::F32, 3).v);
+        let (b, e) = (lanes(base), lanes(emission));
+        [b[0] + e[0], b[1] + e[1], b[2] + e[2], 1.0]
+    })
+}
+
+/// Whether a top-level step reads its neighbours' values (a derivative), so the graph runs a
+/// 2 × 2 quad at a time.
+fn reads_quad(c: &Checked) -> bool {
+    c.order
+        .iter()
+        .any(|id| matches!(c.op.steps[id].op.as_str(), "ddx@1" | "ddy@1" | "fwidth@1"))
+}
+
+/// Every pixel of rows `rows`, each read out by `px` once its steps ran; a discarded pixel is
+/// clear. A graph with a derivative runs whole 2 × 2 quads in step, each derivative the fine
+/// difference across its quad's row or column (WGSL lets a GPU take the fine or the coarse
+/// difference, which agree where a value's change along x doesn't depend on y, and the
+/// reverse). `material` sweeps the normal as the material harness does.
+fn shade(
+    mut prog: Prog<'_>,
+    size: [u32; 2],
+    rows: std::ops::Range<u32>,
+    material: bool,
+    px: impl Fn(&Prog<'_>, &[V]) -> [f64; 4],
+) -> Result<Vec<[f64; 4]>, String> {
     let steps = std::mem::take(&mut prog.steps);
+    let normal = |pos: [f64; 2]| -> Option<[f64; 3]> {
+        material.then(|| {
+            let n = [
+                pos[0] / f64::from(size[0]) * 2.0 - 1.0,
+                pos[1] / f64::from(size[1]) * 2.0 - 1.0,
+                1.0,
+            ];
+            let len = ops::sqrt(n.iter().map(|v| v * v).sum());
+            n.map(|v| v / len)
+        })
+    };
     let mut out = Vec::with_capacity(rows.len() * size[0] as usize);
-    let mut regs = prog.base.clone();
-    for y in rows {
-        for x in 0..size[0] {
-            let pos = [f64::from(x) + 0.5, f64::from(y) + 0.5];
-            regs.copy_from_slice(&prog.base);
-            prog.run(&steps, &mut regs, pos, 0)?;
-            let mut px = as_l(prog.get(&regs, color), Sc::F32, 4).v;
-            if let Some(cov) = coverage {
-                let k = as_l(prog.get(&regs, cov), Sc::F32, 1).v[0];
-                px.iter_mut().for_each(|v| *v *= k);
+    if !reads_quad(prog.c) {
+        let mut regs = prog.base.clone();
+        for y in rows {
+            for x in 0..size[0] {
+                let pos = [f64::from(x) + 0.5, f64::from(y) + 0.5];
+                regs.copy_from_slice(&prog.base);
+                prog.normal_at = normal(pos);
+                prog.discarded = false;
+                prog.run(&steps, &mut regs, pos, 0)?;
+                out.push(if prog.discarded {
+                    [0.0; 4]
+                } else {
+                    px(&prog, &regs)
+                });
             }
-            out.push(px);
+        }
+        return Ok(out);
+    }
+    let mut quad: [Vec<V>; 4] = std::array::from_fn(|_| prog.base.clone());
+    let y0 = rows.start & !1;
+    for qy in (y0..rows.end).step_by(2) {
+        let mut lines = [Vec::new(), Vec::new()];
+        for qx in (0..size[0]).step_by(2) {
+            let pos: [[f64; 2]; 4] = std::array::from_fn(|q| {
+                [
+                    f64::from(qx + (q as u32 & 1)) + 0.5,
+                    f64::from(qy + (q as u32 >> 1)) + 0.5,
+                ]
+            });
+            for r in &mut quad {
+                r.copy_from_slice(&prog.base);
+            }
+            let mut gone = [false; 4];
+            for p in &steps {
+                if matches!(p.name, "ddx" | "ddy" | "fwidth") {
+                    let x: [L; 4] = std::array::from_fn(|q| {
+                        let v = prog.arg(&quad[q], p, "x").0;
+                        as_l(v, Sc::F32, v.l().n)
+                    });
+                    for (q, regs) in quad.iter_mut().enumerate() {
+                        let dx = x[q | 1].zip(x[q & 2], |b, a| b - a);
+                        let dy = x[q | 2].zip(x[q & 1], |b, a| b - a);
+                        regs[p.out] = V::N(
+                            Sc::F32,
+                            match p.name {
+                                "ddx" => dx,
+                                "ddy" => dy,
+                                _ => dx.zip(dy, |a, b| a.abs() + b.abs()),
+                            },
+                        );
+                    }
+                    continue;
+                }
+                for q in 0..4 {
+                    prog.normal_at = normal(pos[q]);
+                    prog.discarded = gone[q];
+                    prog.step(p, &mut quad[q], pos[q], 0)?;
+                    gone[q] = prog.discarded;
+                }
+            }
+            for q in 0..4 {
+                if qx + (q as u32 & 1) < size[0] {
+                    let v = if gone[q] {
+                        [0.0; 4]
+                    } else {
+                        px(&prog, &quad[q])
+                    };
+                    lines[q >> 1].push(v);
+                }
+            }
+        }
+        for (k, line) in lines.into_iter().enumerate() {
+            if rows.contains(&(qy + k as u32)) {
+                out.extend(line);
+            }
         }
     }
     Ok(out)

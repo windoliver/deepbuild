@@ -11,6 +11,7 @@ pub mod ao;
 pub mod env;
 pub mod maps;
 mod mesh;
+mod op;
 pub mod shadow;
 pub mod status;
 pub mod surface;
@@ -124,6 +125,9 @@ pub struct Counts {
     pub lights_left_out: Vec<String>,
     /// The lights asking for a shadow that the shadow budget left without one, by ID (#421).
     pub shadows_dropped: Vec<String>,
+    /// Each material operator this frame couldn't draw, `(operator, why)`: its solids draw with
+    /// their material's own values, and a caller refuses the frame (#429).
+    pub operators_refused: Vec<(String, String)>,
     /// The key sun's cascades drawn this frame, by index; a cached one isn't (#422).
     pub cascades_drawn: Vec<u32>,
     /// How many environment cubes the renderer has prefiltered (#422).
@@ -304,6 +308,9 @@ struct FrameUniform {
     /// The sky's ambient light from above and below, linear RGB, w 1 with a sky (#418).
     sky_top: [f32; 4],
     sky_low: [f32; 4],
+    /// Clip to world (column-major), and the eye with the near plane in w (#429).
+    inverse_clip: [[f32; 4]; 4],
+    eye: [f32; 4],
 }
 
 /// scene3d.wgsl's `Lights`: the view, the light count and the lights the policy shades (#421).
@@ -428,6 +435,9 @@ struct SolidRecord {
     base: [f32; 4],
     surface: [f32; 4],
     specular: [f32; 4],
+    /// Its material operator's time in seconds (f32 bits), its seed, and the item's opacity (f32
+    /// bits), which the operator's alpha multiplies (#429).
+    op: [u32; 4],
 }
 
 /// A solid the shadow pass leaves out (`cast_shadow: false`).
@@ -519,6 +529,20 @@ fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool, maps: bool) -> So
         surface = f([mat.metallic, mat.roughness, mat.specular_level], mat.coat);
         specular = f(mat.specular_color, mat.coat_roughness);
     }
+    let op = s.op.as_ref().map_or([0; 4], |o| {
+        let alpha = s.material.map_or(1.0, |m| m.base[3]);
+        let opacity = if alpha > 0.0 {
+            (s.alpha / alpha).min(1.0)
+        } else {
+            1.0
+        };
+        [
+            (o.t as f32).to_bits(),
+            op::seed(o.doc_seed, &s.id),
+            (opacity as f32).to_bits(),
+            0,
+        ]
+    });
     SolidRecord {
         rows: m.map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]),
         color: pack(s.color),
@@ -529,6 +553,7 @@ fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool, maps: bool) -> So
         base,
         surface,
         specular,
+        op,
     }
 }
 
@@ -835,21 +860,23 @@ impl Set {
     }
 }
 
-/// A solid's (shape, maps) key, its record's place in that key's set, its pick ID and tie rank.
-type Slot = ((Shape, u32), u32, u32, u32);
+/// A solid's set key (shape, maps (0: none; #423), material operator (0: none; #429)), its
+/// record's place in that set, its pick ID and its tie rank.
+type Slot = ((Shape, u32, u64), u32, u32, u32);
 
 /// A 3D writer layer's batch: its instance sets and its encoding.
 #[derive(Default)]
 struct Batch {
-    /// Opaque solids by shape and material maps (0: none; #423).
-    solids: BTreeMap<(Shape, u32), Set>,
+    /// The opaque solids by shape, material maps (0: none; #423) and material operator
+    /// ([`op::key`]; 0 for none; #429).
+    solids: BTreeMap<(Shape, u32, u64), Set>,
     lines: Set,
     points: Set,
     /// One record per inked glyph of its labels.
     labels: Set,
     bundle: Option<wgpu::RenderBundle>,
-    /// Each solid's shape, its record's place in that shape's set, its pick ID and its tie
-    /// rank, in the layer's solid order.
+    /// Each solid's set, its record's place in that set, its pick ID and its tie rank, in the
+    /// layer's solid order.
     solid_slots: Vec<Slot>,
     /// The see-through solids' records back to front, and each one's shape and whether it adds
     /// (#421: Object: see-through order).
@@ -925,6 +952,12 @@ pub struct Renderer {
     filter_taps: u8,
     frame_buffer: wgpu::Buffer,
     frame_bind: wgpu::BindGroup,
+    frame_layout: wgpu::BindGroupLayout,
+    /// Each material operator's pipeline, by [`op::key`], compiled the first time a prepared
+    /// scene holds it, or why it can't draw (#429).
+    materials: BTreeMap<u64, Result<op::MatOp, String>>,
+    /// Each material operator's group with one solid's maps, by (operator, maps) key.
+    op_binds: BTreeMap<(u64, u32), wgpu::BindGroup>,
     /// The lights this frame's policy shades and the DFG table, for the solids' shading (#421).
     lights_buffer: wgpu::Buffer,
     lights_bind: wgpu::BindGroup,
@@ -1195,14 +1228,17 @@ fn shape_code(s: Shape) -> u64 {
     }
 }
 
-// Position and normal, then (#423) uv0, uv1 and the tangent at 13 to 15, after the records'.
-const MESH_VERTEX: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
-    0 => Float32x3, 1 => Float32x3, 13 => Float32x2, 14 => Float32x2, 15 => Float32x4
+// Position and normal, then (#423) uv0 and uv1 as one attribute and the tangent at 13 and 14,
+// after the records'.
+const MESH_VERTEX: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
+    0 => Float32x3, 1 => Float32x3, 13 => Float32x4, 14 => Float32x4
 ];
-// Location 8 is the solid's tie rank, which the vertex stage reads (#421).
-const SOLID: [wgpu::VertexAttribute; 11] = wgpu::vertex_attr_array![
+// Location 8 is the solid's tie rank, which the vertex stage reads (#421); 15 its material
+// operator's time, seed and opacity (#429).
+const SOLID: [wgpu::VertexAttribute; 12] = wgpu::vertex_attr_array![
     2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Uint32, 6 => Uint32, 7 => Uint32,
-    8 => Uint32, 9 => Float32x4, 10 => Float32x4, 11 => Float32x4, 12 => Float32x4
+    8 => Uint32, 9 => Float32x4, 10 => Float32x4, 11 => Float32x4, 12 => Float32x4,
+    15 => Uint32x4
 ];
 const SEGMENT: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
     0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32
@@ -1848,6 +1884,9 @@ impl Renderer {
             epoch: device.epoch,
             frame_buffer,
             frame_bind,
+            frame_layout: frame_layout.clone(),
+            materials: BTreeMap::new(),
+            op_binds: BTreeMap::new(),
             lights_buffer,
             lights_bind,
             lights_layout,
@@ -2494,6 +2533,43 @@ impl Renderer {
         }
     }
 
+    /// The set a solid's material operator draws it in (#429), the operator's pipeline compiled
+    /// the first time a prepared scene holds it: 0, its material's own values, with none, or with
+    /// one that can't draw, which this frame's counts name.
+    fn material_op(&mut self, device: &Device, s: &Solid, see_through: bool) -> u64 {
+        let Some(o) = &s.op else { return 0 };
+        let key = op::key(o);
+        if !self.materials.contains_key(&key) {
+            let layouts = [
+                &self.frame_layout,
+                &self.lights_layout,
+                &self.ao.shade_layout,
+            ];
+            let made = op::compile(&device.device, SHADER, layouts, self.planted.forward_z, o);
+            if made.is_ok() {
+                self.compiled += 1;
+                self.names.push("scene3d.material_op");
+            }
+            self.materials.insert(key, made);
+        }
+        let why = match &self.materials[&key] {
+            Err(e) => e.clone(),
+            Ok(_) if see_through => {
+                "a see-through part's operator lands with see-through materials".into()
+            }
+            Ok(_) => return key,
+        };
+        if !self
+            .counts
+            .operators_refused
+            .iter()
+            .any(|(id, _)| *id == o.id)
+        {
+            self.counts.operators_refused.push((o.id.clone(), why));
+        }
+        0
+    }
+
     /// Uploads each atlas page whose generation the GPU doesn't hold.
     fn upload_pages(&mut self, device: &Device, pages: &[AtlasPage]) {
         for (i, page) in pages.iter().enumerate().take(PAGES) {
@@ -2579,18 +2655,18 @@ impl Renderer {
             let Some(batch) = self.batches.get_mut(&layer.id) else {
                 continue;
             };
-            let (Some(s), Some(&(shape, at, pick, tie))) =
+            let (Some(s), Some(&(set_key, at, pick, tie))) =
                 (layer.solids.get(i), batch.solid_slots.get(i))
             else {
                 continue;
             };
-            if let Some(set) = batch.solids.get_mut(&shape) {
+            if let Some(set) = batch.solids.get_mut(&set_key) {
                 let record = solid_record(
                     s,
                     pick,
                     tie,
                     !self.planted.winding_ignores_determinant,
-                    shape.1 != 0,
+                    set_key.1 != 0,
                 );
                 set.write(
                     device,
@@ -2686,6 +2762,11 @@ impl Renderer {
             px: [k as f32, if below { 1.0 } else { 0.0 }, 1.0, forward],
             sky_top: scene.sky.as_ref().map_or([0.0; 4], |s| v4(s.ambient[0], 1.0)),
             sky_low: scene.sky.as_ref().map_or([0.0; 4], |s| v4(s.ambient[1], 1.0)),
+            inverse_clip: {
+                let inv = op::invert(&rows);
+                std::array::from_fn(|c| std::array::from_fn(|r| inv[r][c] as f32))
+            },
+            eye: v4(cam.eye, cam.near),
         };
         // The outline pass over the full-size slot, and over the internal size for the planted
         // programs that draw there.
@@ -2843,11 +2924,29 @@ impl Renderer {
                 None => self.mesh(device, s.shape),
             }
             let tie = self.ties.get(&s.id).copied().unwrap_or(0);
+            let op = self.material_op(device, s, clear(s));
             let maps = match (&s.maps, &s.material) {
                 (Some(m), Some(_)) => self.maps.group(&device.device, &device.queue, m, taps),
                 _ => 0,
             };
-            slots.push(((s.shape, maps), 0, self.pick(&s.id), tie));
+            // A material operator binds its inputs with the solid's maps, once per pair.
+            if let (Some(Ok(m)), false) = (
+                self.materials.get(&op),
+                self.op_binds.contains_key(&(op, maps)),
+            ) {
+                let none = light::Maps::default();
+                let source = s.maps.as_deref().filter(|_| maps != 0).unwrap_or(&none);
+                let g = self.maps.bind_with(
+                    &device.device,
+                    &device.queue,
+                    source,
+                    taps,
+                    &m.layout,
+                    m.entries(),
+                );
+                self.op_binds.insert((op, maps), g);
+            }
+            slots.push(((s.shape, maps, op), 0, self.pick(&s.id), tie));
         }
         for l in &layer.lines {
             self.pick(&l.id);
@@ -2864,8 +2963,7 @@ impl Renderer {
             set.begin();
         }
         let winding = !self.planted.winding_ignores_determinant;
-        let mut order: Vec<(&Solid, &mut Slot)> =
-            layer.solids.iter().zip(&mut slots).collect();
+        let mut order: Vec<(&Solid, &mut Slot)> = layer.solids.iter().zip(&mut slots).collect();
         // The planted ties_by_submission: the opaque draws' order turns over each frame.
         if self.planted.ties_by_submission && self.flip {
             order.reverse();
@@ -2880,7 +2978,7 @@ impl Renderer {
                 let depth = (0..3)
                     .map(|k| (c[k] - cam.eye[k]) * cam.forward[k])
                     .sum::<f64>();
-                see_through.push((depth + s.sort_bias, s, record, slot.0));
+                see_through.push((depth + s.sort_bias, s, record, (slot.0 .0, slot.0 .1)));
                 slot.1 = u32::MAX;
                 continue;
             }
@@ -2980,10 +3078,11 @@ impl Renderer {
         if !batch.solids.is_empty() {
             batch.next_key.extend([20, self.ao.generation]);
         }
-        for ((shape, maps), set) in &batch.solids {
+        for ((shape, maps, op), set) in &batch.solids {
             batch.next_key.extend([
                 shape_code(*shape),
                 u64::from(*maps),
+                *op,
                 set.generation,
                 u64::from(set.len()),
             ]);
@@ -3038,12 +3137,20 @@ impl Renderer {
         enc.set_bind_group(0, &self.frame_bind, &[]);
         enc.set_bind_group(1, &self.lights_bind, &[]);
         enc.set_bind_group(2, self.ao.shade(), &[]);
-        for ((shape, maps), set) in &batch.solids {
+        for ((shape, maps, op), set) in &batch.solids {
             let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
                 continue;
             };
-            enc.set_bind_group(3, self.maps.by_index(*maps), &[]);
-            enc.set_pipeline(&self.mesh_pipeline);
+            match (self.materials.get(op), self.op_binds.get(&(*op, *maps))) {
+                (Some(Ok(m)), Some(g)) => {
+                    enc.set_pipeline(&m.pipeline);
+                    enc.set_bind_group(3, g, &[]);
+                }
+                _ => {
+                    enc.set_pipeline(&self.mesh_pipeline);
+                    enc.set_bind_group(3, self.maps.by_index(*maps), &[]);
+                }
+            }
             enc.set_vertex_buffer(0, mesh.vertices.slice(..));
             enc.set_vertex_buffer(1, buffer.slice(..));
             enc.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
@@ -3099,7 +3206,7 @@ impl Renderer {
             .iter()
             .filter_map(|id| self.batches.get(id))
             .flat_map(|b| &b.solids)
-            .filter_map(|((shape, _), set)| {
+            .filter_map(|((shape, _, _), set)| {
                 let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.get(shape)?);
                 Some((
                     mesh.vertices.clone(),
@@ -3145,7 +3252,7 @@ impl Renderer {
         let mut draws = Vec::new();
         for id in &self.order {
             let batch = &self.batches[id];
-            for ((shape, _), set) in &batch.solids {
+            for ((shape, _, _), set) in &batch.solids {
                 if let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) {
                     draws.push((
                         mesh.vertices.clone(),
@@ -4353,7 +4460,7 @@ mod tests {
     fn records(r: &Renderer) -> Vec<(String, Shape, Vec<u8>)> {
         let mut out = Vec::new();
         for (id, b) in &r.batches {
-            for ((shape, _), set) in &b.solids {
+            for ((shape, _, _), set) in &b.solids {
                 out.push((id.clone(), *shape, set.records.clone()));
             }
         }
