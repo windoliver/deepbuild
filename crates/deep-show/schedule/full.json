@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "8873d02eeda1e4a76e4da9e76f7849b6e0d1321e67e13ac06507304f53b8afd3",
+  "set_digest": "24c0d4e750b52c3daff4b6d091b8352e0b09a88593a439ae409a4c84192726c0",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -63,7 +63,7 @@
       }
     },
     "data@1": {
-      "digest": "4bdd0190573c6a2fd523ce32e4fe42192c0199e4448e5896f9b99b5653a1e5ca",
+      "digest": "a743bfa040d3d697e65bb0de3eb2c4a6065d7ee983c1eb51dcd25cee5161cf49",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -306,7 +306,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "7b2d9855f0aefd5059c4a4551de2695922bd1f469ba9294eec57e7dfd6bc7e8e",
+      "digest": "73b4b3f5c3013115637da8ecdcee94b264979b94e781a8116ffb17596a5fc675",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -393,7 +393,7 @@
       }
     },
     "vector@1": {
-      "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+      "digest": "9562a2c63d098fcdd42fad55cebcbc5ea742203ee4488eca36925762d425f996",
       "reference": "vector",
       "kit": [
         "fixtures",
@@ -583,6 +583,18 @@
         "per": "item"
       },
       {
+        "operator": "data.decimate",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.decimated"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "data.scale",
         "module": "data",
         "version": "1.0.0",
@@ -644,6 +656,20 @@
           "scene3d.built"
         ],
         "per": "item"
+      },
+      {
+        "operator": "scene3d.lights",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t",
+          "look"
+        ],
+        "writes": [
+          "scene3d.lights"
+        ],
+        "per": "document"
       },
       {
         "operator": "scene3d.mark",
@@ -782,6 +808,18 @@
         ],
         "writes": [
           "text.animated"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "vector.paint",
+        "module": "vector",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "vector.paint"
         ],
         "per": "item"
       }

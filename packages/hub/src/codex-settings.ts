@@ -44,8 +44,10 @@ export function fixedHook(root: string, built: string): string {
 }
 
 type Group = { hooks: Obj[] };
+// Codex runs a command with your login shell's `-c`, and `exec` keeps deep-hook Codex's own child, whose parent the
+// hub checks a hook by: dash, a /bin/sh login shell on Debian and Ubuntu, runs a lone command in a new shell's child.
 function ourGroups(hook: string): Record<string, Group> {
-  return Object.fromEntries(HOOKS.map((event) => [event, { hooks: [{ type: 'command', command: `${q(hook)} codex ${event}`, ...(event === 'Stop' ? { timeout: STOP_TIMEOUT_S } : {}) }] }]));
+  return Object.fromEntries(HOOKS.map((event) => [event, { hooks: [{ type: 'command', command: `exec ${q(hook)} codex ${event}`, ...(event === 'Stop' ? { timeout: STOP_TIMEOUT_S } : {}) }] }]));
 }
 const present = (groups: unknown, command: string): boolean => Array.isArray(groups) && groups.some((g) => isObj(g) && Array.isArray(g.hooks) && g.hooks.some((h) => isObj(h) && h.command === command));
 
@@ -61,7 +63,14 @@ export function withEntries(text: string, hook: string): string {
   let changed = false;
   for (const [event, group] of Object.entries(groups)) {
     if (present(hooks[event], String(group.hooks[0]!.command))) continue;
-    hooks[event] = [...(Array.isArray(hooks[event]) ? hooks[event] as unknown[] : []), group];
+    // Our entry from before it exec'd deep-hook gives way, so the hook runs it once; Codex asks to trust the new one.
+    const before = `${q(hook)} codex ${event}`;
+    const kept = (Array.isArray(hooks[event]) ? hooks[event] as unknown[] : []).flatMap((g) => {
+      if (!isObj(g) || !Array.isArray(g.hooks)) return [g];
+      const left = g.hooks.filter((h) => !(isObj(h) && h.command === before));
+      return left.length ? [{ ...g, hooks: left }] : [];
+    });
+    hooks[event] = [...kept, group];
     changed = true;
   }
   return changed ? `${JSON.stringify({ ...parsed.value, hooks }, null, 2)}\n` : text;

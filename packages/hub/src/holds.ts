@@ -50,6 +50,8 @@ const ANSWERS: Record<string, [string, string]> = {
   push: ['Push it', 'Hold the push'], merge: ['Merge it', 'Hold the merge'], dispatch: ['Dispatch it', 'Hold the dispatch'],
   send: ['Send it', 'Hold it'], delete: ['Delete it', 'Keep it'],
 };
+/** A reply to a pull request's review comment, which posts in your name on a reviewer's thread (#323). */
+const THREAD_REPLY = /\/pulls\/\d+\/comments\/\d+\/replies\b/;
 
 export class Holds {
   constructor(private readonly o: HoldOptions) {}
@@ -145,12 +147,16 @@ export class Holds {
     const classes = call.classes.filter((c) => AUTHORITY.has(c));
     if (!classes.length || this.o.plant === 'proceed-covers-turn') return undefined;
     const turn = await this.proceeding(meta.session);
-    if (!turn) return undefined;
+    // A reply to a reviewer's thread is a send in your name, held in any turn, by one ask however often it's tried (#323).
+    const reply = classes.includes('send') && THREAD_REPLY.test(call.label);
+    if (!turn && !reply) return undefined;
     const source = `effect.${classes[0]!}`;
-    const k = key({ source, session: meta.session, turn: turn.id, call: call.label });
+    const k = key({ source, session: meta.session, turn: turn?.id ?? null, call: call.label });
     const asked = await this.askOf(k);
     if (asked) return asked.decision === 'allow' ? undefined : `ask:${asked.id}`;
-    const question = `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`;
+    const question = turn
+      ? `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`
+      : `Run \`${call.label}\`? It replies in your name to a reviewer's thread on the pull request, a send that needs your authority.`;
     return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label]));
   }
 

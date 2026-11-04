@@ -8,6 +8,7 @@
 //! target and writes the slot.
 
 pub mod ao;
+pub mod env;
 mod mesh;
 pub mod shadow;
 pub mod status;
@@ -17,17 +18,19 @@ use std::collections::BTreeMap;
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 
 use bytemuck::{Pod, Zeroable};
-use deep_canvas_scene3d::label::{AtlasPage, PAGE, PAGES};
+use deep_canvas_scene3d::label::{half_fraction, AtlasPage, PAGE, PAGES};
+use deep_canvas_scene3d::light::{self, AlphaMode, LightKind, SHADED};
 use deep_canvas_scene3d::look::{Look3, ToneMap};
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{Depth, Facing, Layer3, PointShape, Scene, Shape, Solid};
+use deep_canvas_scene3d::sky::{Curve, Fog};
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
 use deep_gpu::render::{Determinism, Pass, RenderModule, Resolution, Target};
 use deep_gpu::surface::FORMAT;
 
 use crate::mesh::Mesh;
-use crate::surface::{Low, Surface, Upscale, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
+use crate::surface::{Low, Surface, Upscale, LABEL_PASS, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
 
 /// The 3D writer layers' linear target: what the output pass reads.
 pub const LINEAR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -41,8 +44,14 @@ const SHADER: &str = include_str!("scene3d.wgsl");
 const OUTPUT: &str = include_str!("output.wgsl");
 const OUTLINE: &str = include_str!("outline.wgsl");
 const BUSY: &str = include_str!("busy.wgsl");
+const LABEL: &str = include_str!("label.wgsl");
 /// The pass that draws the key light's shadow map, in the frame's shadows place.
 pub const SHADOW_PASS: &str = "scene3d.shadow";
+/// The sky's pipeline, drawn first in the geometry pass behind everything (#422).
+pub const SKY_PASS: &str = "scene3d.sky";
+/// The puffs' pipeline (#422).
+pub const PUFF_PASS: &str = "scene3d.puff";
+pub use deep_canvas_scene3d::module::CASCADE_PASS;
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -70,6 +79,32 @@ pub struct Planted {
     pub status_before_upscale: bool,
     /// #386: status outlines draw with no depth test.
     pub status_without_depth: bool,
+    /// #421: a solid's front faces chosen without its world determinant's sign.
+    pub winding_ignores_determinant: bool,
+    /// #421: opaque solids submitted in an order that turns over each frame, ties left to the
+    /// depth test.
+    pub ties_by_submission: bool,
+    /// #421: a spot's lumens spread over its cone, cd = lm ÷ 2π(1 − cos outer).
+    pub spot_counts_cone: bool,
+    /// #421: status outlines drawn through the tone map.
+    pub status_before_tone_map: bool,
+    /// #422: the shading core mixes metallic into one F0 before shading.
+    pub premixed_metallic: bool,
+    /// #422: the specular lobes lose single scattering's missing energy.
+    pub uncompensated_lobe: bool,
+    /// #422: only environment light is compensated.
+    pub compensates_environment_only: bool,
+    /// #422: every final target black.
+    pub draws_black: bool,
+    /// #422: the puffs aren't drawn.
+    pub drops_clouds: bool,
+    /// #422: a cascade's map reused while the scene's solid count holds.
+    pub cascade_cache_keeps_stale: bool,
+    /// #422: the environment prefiltered one roughness mip per frame from the session's first.
+    pub prefilter_over_frames: bool,
+    /// #1174: screen-size labels draw in the geometry pass at the internal size, before the
+    /// upscale, as the base drew them.
+    pub labels_before_upscale: bool,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -81,6 +116,17 @@ pub struct Counts {
     pub replayed: u32,
     pub instances_written: u32,
     pub meshes_built: u32,
+    /// The lights the light policy left out of this frame's view, by ID (#421).
+    pub lights_left_out: Vec<String>,
+    /// The lights asking for a shadow that the shadow budget left without one, by ID (#421).
+    pub shadows_dropped: Vec<String>,
+    /// The key sun's cascades drawn this frame, by index; a cached one isn't (#422).
+    pub cascades_drawn: Vec<u32>,
+    /// How many environment cubes the renderer has prefiltered (#422).
+    pub env_builds: u32,
+    /// This frame's cascade split distances along the view axis, from the near plane to the
+    /// last cascade's far end (#422).
+    pub cascade_splits: Vec<f64>,
 }
 
 /// The key light's direction, toward the light: what the solids are shaded by and what casts the
@@ -145,6 +191,8 @@ pub struct OutlineDraw {
     pipeline: wgpu::RenderPipeline,
     output: wgpu::BindGroup,
     frame: wgpu::BindGroup,
+    /// The glyph atlas, for the label pass's draw (#1174).
+    atlas: Option<wgpu::BindGroup>,
     sets: Vec<(wgpu::Buffer, u32)>,
     statuses: Vec<(wgpu::Buffer, u32)>,
 }
@@ -157,6 +205,7 @@ impl OutlineDraw {
             pipeline: self.pipeline.clone(),
             output: self.output.clone(),
             frame: self.frame.clone(),
+            atlas: None,
             sets: statuses,
             statuses: Vec::new(),
         });
@@ -171,8 +220,13 @@ impl OutlineDraw {
         timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
         deep_gpu::alloc::outside(|| {
+            let label = if self.atlas.is_some() {
+                LABEL_PASS
+            } else {
+                OUTLINE_PASS
+            };
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some(OUTLINE_PASS),
+                label: Some(label),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: target,
                     resolve_target: None,
@@ -188,6 +242,9 @@ impl OutlineDraw {
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.output, &[]);
             pass.set_bind_group(1, &self.frame, &[]);
+            if let Some(atlas) = &self.atlas {
+                pass.set_bind_group(2, atlas, &[]);
+            }
             for (buffer, n) in self.sets.iter().chain(&self.statuses) {
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..6, 0..*n);
@@ -245,6 +302,89 @@ struct FrameUniform {
     sky_low: [f32; 4],
 }
 
+/// scene3d.wgsl's `Lights`: the view, the light count and the lights the policy shades (#421).
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct LightsUniform {
+    view: [f32; 4],
+    count: [u32; 4],
+    /// Each cascade's far end along the view's forward axis, and its texel in m (#422).
+    splits: [f32; 4],
+    texels: [f32; 4],
+    forward: [f32; 4],
+    cascades: [[[f32; 4]; 4]; 4],
+    items: [[[f32; 4]; 6]; SHADED],
+}
+
+/// scene3d.wgsl's `Env` (#422): the environment's irradiance coefficients, its mix's, and how to
+/// read its cubes.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct EnvUniform {
+    sh: [[f32; 4]; 9],
+    sh_to: [[f32; 4]; 9],
+    k: [f32; 4],
+    m: [f32; 4],
+    inv: [[f32; 4]; 4],
+    eye: [f32; 4],
+    top: [f32; 4],
+    low: [f32; 4],
+    moon: [f32; 4],
+    fog: [f32; 4],
+    fog_color: [f32; 4],
+    bg: [f32; 4],
+    /// The sun the sky follows: toward it, the cosine of its disk's radius (w 2 with none); its
+    /// disk's radiance.
+    sun: [f32; 4],
+    sun_color: [f32; 4],
+}
+
+/// Our DFG table (#421): for 32 cosines of the view angle across and 32 roughnesses down, the
+/// GGX lobe's directional albedo split as F0·A + F90·B, by Hammersley importance sampling in
+/// f64, two entries to a vec4. Its samples include both ends, so roughness 1 and a view along the
+/// normal are read exactly (#422's white furnace).
+fn dfg_table() -> Vec<[f32; 4]> {
+    const N: u32 = 1024;
+    let mut out = vec![[0f32; 4]; 512];
+    for j in 0..32u32 {
+        let rough = f64::from(j) / 31.0;
+        let a = (rough * rough).max(1e-4);
+        let a2 = a * a;
+        for i in 0..32u32 {
+            let nv = (f64::from(i) / 31.0).max(1.0 / 64.0);
+            let v = [(1.0 - nv * nv).sqrt(), 0.0, nv];
+            let (mut sa, mut sb) = (0.0, 0.0);
+            for k in 0..N {
+                let u = (f64::from(k) + 0.5) / f64::from(N);
+                let w = f64::from(k.reverse_bits()) / 4_294_967_296.0;
+                let phi = std::f64::consts::TAU * u;
+                let cos_t = ((1.0 - w) / (1.0 + (a2 - 1.0) * w)).sqrt();
+                let sin_t = (1.0 - cos_t * cos_t).sqrt();
+                let h = [sin_t * phi.cos(), sin_t * phi.sin(), cos_t];
+                let vh = v[0] * h[0] + v[1] * h[1] + v[2] * h[2];
+                let nl = 2.0 * vh * h[2] - v[2];
+                if nl <= 0.0 || vh <= 0.0 {
+                    continue;
+                }
+                let gv = nl * (nv * nv * (1.0 - a2) + a2).sqrt();
+                let gl = nv * (nl * nl * (1.0 - a2) + a2).sqrt();
+                // V × 4 n·l v·h ÷ n·h: the sample's weight under GGX importance sampling.
+                let g = 0.5 / (gv + gl) * 4.0 * nl * vh / h[2];
+                let fc = (1.0 - vh).powi(5);
+                sa += (1.0 - fc) * g;
+                sb += fc * g;
+            }
+            let e = (j * 32 + i) as usize;
+            let at = &mut out[e / 2][(e % 2) * 2..(e % 2) * 2 + 2];
+            at[0] = (sa / f64::from(N)) as f32;
+            at[1] = (sb / f64::from(N)) as f32;
+        }
+    }
+    out
+}
+
+/// A text record's flag: the label pass draws its color after the upscale (scene3d.wgsl).
+const LATER: u32 = 256;
 /// A segment record's flags in the outline pass (outline.wgsl).
 const EXACT: u32 = 2;
 const UNTESTED: u32 = 4;
@@ -273,17 +413,32 @@ struct SolidRecord {
     rows: [[f32; 4]; 3],
     color: u32,
     pick: u32,
-    /// Object's shadow flags: [`NO_CAST`] and [`NO_RECEIVE`] (#420).
+    /// Object's shadow flags: [`NO_CAST`] and [`NO_RECEIVE`] (#420); its material's (#421).
     flags: u32,
-    pad: u32,
+    /// Its rank among the frame's solids by ID, which breaks coplanar depth ties (#421).
+    tie: u32,
     /// Its material's emission, linear RGB, and its coverage in w (#418).
     emission: [f32; 4],
+    /// Its material's base color (linear) and its pattern's scale (a catcher's strength);
+    /// metallic, roughness, specular level and coat; specular color and coat roughness (#421).
+    base: [f32; 4],
+    surface: [f32; 4],
+    specular: [f32; 4],
 }
 
 /// A solid the shadow pass leaves out (`cast_shadow: false`).
 const NO_CAST: u32 = 1;
 /// A solid no shadow falls on (`receive_shadow: false`), for the passes that shade one.
 const NO_RECEIVE: u32 = 2;
+/// A solid its material shades under the lights; whose world determinant is negative; unlit;
+/// seen from both sides (scene3d.wgsl).
+const MATERIAL: u32 = 4;
+const MIRRORED: u32 = 8;
+const UNLIT: u32 = 16;
+const DOUBLE_SIDED: u32 = 32;
+/// A shadow catcher; its alpha mode from bit 7; its pattern from bit 9 and its seed from bit 16
+/// (scene3d.wgsl).
+const CATCH: u32 = 64;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -309,8 +464,9 @@ struct PointRecord {
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 /// One glyph of a label: the label's anchor and em, the glyph's quad from the label's centre in
-/// ems (x right, y down), its texels on its atlas page, the label's axes, and `flags`: world
-/// size, facing, and the page.
+/// ems (x right, y down), its texels on its atlas page, the label's axes (each `w` the fraction
+/// of half its box on that axis, for the label pass), and `flags`: world size, facing, the page,
+/// and [`LATER`].
 struct TextRecord {
     p: [f32; 4],
     rect: [f32; 4],
@@ -323,17 +479,49 @@ struct TextRecord {
     pad: u32,
 }
 
-fn solid_record(s: &Solid, pick: u32) -> SolidRecord {
+/// A solid's instance record: `tie` its rank by ID, `winding` false for the planted program that
+/// ignores its determinant.
+fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool) -> SolidRecord {
+    let m = &s.model;
+    let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+        - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+        + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    let mut flags =
+        if s.cast_shadow { 0 } else { NO_CAST } | if s.receive_shadow { 0 } else { NO_RECEIVE };
+    let f = |v: [f64; 3], w: f64| [v[0] as f32, v[1] as f32, v[2] as f32, w as f32];
+    let (mut base, mut surface, mut specular) = ([0.0; 4], [0.0; 4], [0.0; 4]);
+    if let Some(mat) = &s.material {
+        let mode = match mat.alpha_mode {
+            AlphaMode::Opaque => 0,
+            AlphaMode::Mask => 1,
+            AlphaMode::Blend => 2,
+            AlphaMode::Add => 3,
+        };
+        flags |= MATERIAL
+            | if winding && det < 0.0 { MIRRORED } else { 0 }
+            | if mat.unlit { UNLIT } else { 0 }
+            | if mat.double_sided { DOUBLE_SIDED } else { 0 }
+            | if mat.catch.is_some() { CATCH } else { 0 }
+            | mode << 7
+            | mat.pattern << 9
+            | (mat.pattern_seed & 0xffff) << 16;
+        // Its coverage is the record's emission.w (#418); its base's w carries the pattern's
+        // scale, or a catcher's strength.
+        let b = [mat.base[0], mat.base[1], mat.base[2]];
+        base = f(b, mat.catch.unwrap_or(mat.pattern_scale));
+        surface = f([mat.metallic, mat.roughness, mat.specular_level], mat.coat);
+        specular = f(mat.specular_color, mat.coat_roughness);
+    }
     SolidRecord {
-        rows: s
-            .model
-            .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]),
+        rows: m.map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]),
         color: pack(s.color),
         pick,
-        flags: if s.cast_shadow { 0 } else { NO_CAST }
-            | if s.receive_shadow { 0 } else { NO_RECEIVE },
-        pad: 0,
+        flags,
+        tie,
         emission: v4(s.emission, s.alpha),
+        base,
+        surface,
+        specular,
     }
 }
 
@@ -649,9 +837,13 @@ struct Batch {
     /// One record per inked glyph of its labels.
     labels: Set,
     bundle: Option<wgpu::RenderBundle>,
-    /// Each solid's shape, its record's place in that shape's set, and its pick ID, in the
-    /// layer's solid order.
-    solid_slots: Vec<(Shape, u32, u32)>,
+    /// Each solid's shape, its record's place in that shape's set, its pick ID and its tie
+    /// rank, in the layer's solid order.
+    solid_slots: Vec<(Shape, u32, u32, u32)>,
+    /// The see-through solids' records back to front, and each one's shape and whether it adds
+    /// (#421: Object: see-through order).
+    clear: Set,
+    clear_draws: Vec<(Shape, bool)>,
     /// The resources and draws the bundle binds and records, as it was encoded, and this
     /// frame's, gathered in a buffer kept from frame to frame.
     key: Vec<u64>,
@@ -685,6 +877,32 @@ struct Shadow {
     clip: Option<[f64; 16]>,
 }
 
+/// The key sun's cascades (#422): one depth layer each, drawn only when its key changes.
+struct Cascaded {
+    texture: Option<(wgpu::TextureView, Vec<wgpu::TextureView>)>,
+    /// Each cascade's light frame, which the shadow pipeline's vertex stage reads.
+    frames: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
+    /// What each cascade's drawn layer was made from: the sun's direction, its snapped
+    /// projection, and every caster inside it.
+    keys: [Option<u64>; 4],
+    /// This frame's cascades, and the ones to draw.
+    list: Vec<shadow::Cascade>,
+    stale: Vec<usize>,
+    fade: bool,
+}
+
+/// The environment's prefilter and what it made (#422).
+struct EnvState {
+    prefilter: env::Prefilter,
+    buffer: wgpu::Buffer,
+    sampler: wgpu::Sampler,
+    /// The cascades' comparison sampler (#422), kept here beside the lights' other sampler.
+    compare: wgpu::Sampler,
+    stub: wgpu::TextureView,
+    cube: Option<env::Cube>,
+    to: Option<env::Cube>,
+}
+
 /// A camera as the effects read it: world to clip (column-major), the eye and the near plane.
 pub type Camera = ([f64; 16], [f64; 3], f64);
 
@@ -693,6 +911,31 @@ pub struct Renderer {
     epoch: u64,
     frame_buffer: wgpu::Buffer,
     frame_bind: wgpu::BindGroup,
+    /// The lights this frame's policy shades and the DFG table, for the solids' shading (#421).
+    lights_buffer: wgpu::Buffer,
+    lights_bind: wgpu::BindGroup,
+    lights_layout: wgpu::BindGroupLayout,
+    dfg_buffer: wgpu::Buffer,
+    /// Bumped whenever the lights' bind group is made again (the cascades' texture, the
+    /// environment's cubes): a new bind group is a new resource in the draw key.
+    lights_generation: u64,
+    /// The key sun's cascades (#422).
+    cascaded: Cascaded,
+    /// The environment's prefilter and cubes (#422).
+    env: EnvState,
+    /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422).
+    sky: bool,
+    sky_pipeline: Option<wgpu::RenderPipeline>,
+    /// This frame's puffs, back to front, and their pipeline once compiled (#422).
+    puffs: Option<(wgpu::Buffer, u32)>,
+    puff_pipeline: Option<wgpu::RenderPipeline>,
+    /// The see-through solids' pipelines, blend and add, each compiled the first time a batch
+    /// draws one.
+    solid_layout: wgpu::PipelineLayout,
+    clear_pipelines: [Option<wgpu::RenderPipeline>; 2],
+    /// Each solid's rank by ID; and which way the planted ties_by_submission submits this frame.
+    ties: BTreeMap<String, u32>,
+    flip: bool,
     tone_buffer: wgpu::Buffer,
     output_layout: wgpu::BindGroupLayout,
     /// What the passes after the finish cover this frame (their layer, which the view holds), as
@@ -745,6 +988,8 @@ pub struct Renderer {
 /// The pass that draws thin lines and outlines at full size after the upscale (#386).
 struct Outlines {
     pipeline: wgpu::RenderPipeline,
+    /// The screen-size labels' pass after the upscale, over the same frame and depth (#1174).
+    labels: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     /// The camera over the full-size slot, and over the internal size (the planted programs').
     display: wgpu::Buffer,
@@ -839,11 +1084,10 @@ fn shape_code(s: Shape) -> u64 {
 
 const MESH_VERTEX: [wgpu::VertexAttribute; 2] =
     wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
-// Location 8 is the record's padding word, which no shader reads; it keeps the emission at its
-// offset.
-const SOLID: [wgpu::VertexAttribute; 8] = wgpu::vertex_attr_array![
+// Location 8 is the solid's tie rank, which the vertex stage reads (#421).
+const SOLID: [wgpu::VertexAttribute; 11] = wgpu::vertex_attr_array![
     2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Uint32, 6 => Uint32, 7 => Uint32,
-    8 => Uint32, 9 => Float32x4
+    8 => Uint32, 9 => Float32x4, 10 => Float32x4, 11 => Float32x4, 12 => Float32x4
 ];
 const SEGMENT: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
     0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32
@@ -880,6 +1124,120 @@ fn instance(
 
 /// A draw pipeline into the linear and object-ID targets with reversed-Z depth (or the planted
 /// forward Z).
+/// The lights' bind group: the lights, the DFG table, the key sun's cascades and the
+/// environment's cubes.
+fn lights_bind(
+    d: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    [lights, dfg]: [&wgpu::Buffer; 2],
+    cascades: &wgpu::TextureView,
+    env: &EnvState,
+) -> wgpu::BindGroup {
+    let cube = env.cube.as_ref().map_or(&env.stub, |c| &c.view);
+    let to = env.to.as_ref().map_or(&env.stub, |c| &c.view);
+    bind_group(
+        d,
+        "scene3d lights",
+        layout,
+        [
+            lights.as_entire_binding(),
+            dfg.as_entire_binding(),
+            wgpu::BindingResource::TextureView(cascades),
+            wgpu::BindingResource::TextureView(cube),
+            wgpu::BindingResource::Sampler(&env.sampler),
+            env.buffer.as_entire_binding(),
+            wgpu::BindingResource::TextureView(to),
+            wgpu::BindingResource::Sampler(&env.compare),
+        ],
+    )
+}
+
+/// A fragment-stage layout entry for a filterable cube texture.
+fn cube_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::Cube,
+            multisampled: false,
+        },
+        count: None,
+    }
+}
+
+/// One texel of one cascade layer: the stand-in before the key sun's cascades are drawn.
+fn cascade_stub(d: &wgpu::Device) -> wgpu::TextureView {
+    texture2d(
+        d,
+        "scene3d cascade stub",
+        [1, 1],
+        shadow::FORMAT,
+        wgpu::TextureUsages::TEXTURE_BINDING,
+    )
+    .create_view(&wgpu::TextureViewDescriptor {
+        dimension: Some(wgpu::TextureViewDimension::D2Array),
+        ..Default::default()
+    })
+}
+
+/// A see-through solid's pipeline: depth-tested with no depth write and no object ID, blending
+/// premultiplied over what's behind it, or adding to it.
+fn clear_pipeline(
+    d: &wgpu::Device,
+    module: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    forward_z: bool,
+    add: bool,
+) -> wgpu::RenderPipeline {
+    let depth = wgpu::DepthStencilState {
+        format: DEPTH,
+        depth_write_enabled: Some(false),
+        depth_compare: Some(if forward_z {
+            wgpu::CompareFunction::Less
+        } else {
+            wgpu::CompareFunction::GreaterEqual
+        }),
+        stencil: Default::default(),
+        bias: Default::default(),
+    };
+    let blend = if add {
+        wgpu::BlendState {
+            color: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Add,
+            },
+            alpha: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::Zero,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Add,
+            },
+        }
+    } else {
+        wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING
+    };
+    let targets = [
+        target(LINEAR, Some(blend)),
+        Some(wgpu::ColorTargetState {
+            format: IDS,
+            blend: None,
+            write_mask: wgpu::ColorWrites::empty(),
+        }),
+    ];
+    let buffers = mesh_buffers();
+    let label = if add { "scene3d.add" } else { "scene3d.blend" };
+    pipeline(
+        d,
+        label,
+        Some(layout),
+        module,
+        ("mesh_vs", &buffers),
+        Some(("mesh_fs", &targets)),
+        Some(depth),
+    )
+}
+
 fn draw_pipeline(
     d: &wgpu::Device,
     module: &wgpu::ShaderModule,
@@ -911,6 +1269,37 @@ fn draw_pipeline(
         module,
         (vs, buffers),
         Some((fs, &targets)),
+        Some(depth),
+    )
+}
+
+/// The sky's pipeline: a full-screen triangle at the far plane, behind everything, writing no
+/// depth and no object ID.
+fn sky_pipeline(
+    d: &wgpu::Device,
+    module: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    forward_z: bool,
+) -> wgpu::RenderPipeline {
+    let depth = wgpu::DepthStencilState {
+        format: DEPTH,
+        depth_write_enabled: Some(false),
+        depth_compare: Some(if forward_z {
+            wgpu::CompareFunction::LessEqual
+        } else {
+            wgpu::CompareFunction::GreaterEqual
+        }),
+        stencil: Default::default(),
+        bias: Default::default(),
+    };
+    let targets = [target(LINEAR, None), target(IDS, None)];
+    pipeline(
+        d,
+        SKY_PASS,
+        Some(layout),
+        module,
+        ("sky_vs", &[]),
+        Some(("sky_fs", &targets)),
         Some(depth),
     )
 }
@@ -1083,8 +1472,77 @@ impl Renderer {
             })
         };
         let draw_layout = layout(&[Some(&frame_layout)]);
+        let lights_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("scene3d lights"),
+            entries: &[
+                uniform(0, wgpu::ShaderStages::FRAGMENT),
+                uniform(1, wgpu::ShaderStages::FRAGMENT),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                cube_entry(3),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                uniform(5, wgpu::ShaderStages::FRAGMENT),
+                cube_entry(6),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 7,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                    count: None,
+                },
+            ],
+        });
+        let lights_buffer = uniform_buffer("scene3d lights", std::mem::size_of::<LightsUniform>());
+        let dfg_buffer = wgpu::util::DeviceExt::create_buffer_init(
+            d,
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("scene3d dfg"),
+                contents: bytemuck::cast_slice(&dfg_table()),
+                usage: wgpu::BufferUsages::UNIFORM,
+            },
+        );
+        let env = EnvState {
+            prefilter: env::Prefilter::new(d),
+            buffer: uniform_buffer("scene3d env", std::mem::size_of::<EnvUniform>()),
+            sampler: d.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("scene3d env"),
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                mipmap_filter: wgpu::MipmapFilterMode::Linear,
+                ..Default::default()
+            }),
+            compare: d.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("scene3d cascades"),
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                compare: Some(wgpu::CompareFunction::LessEqual),
+                ..Default::default()
+            }),
+            stub: env::Prefilter::stub(d),
+            cube: None,
+            to: None,
+        };
+        let lights_bind = lights_bind(
+            d,
+            &lights_layout,
+            [&lights_buffer, &dfg_buffer],
+            &cascade_stub(d),
+            &env,
+        );
         let ao = ao::Passes::new(device);
-        let mesh_layout = layout(&[Some(&frame_layout), None, Some(&ao.shade_layout)]);
+        let mesh_layout = layout(&[Some(&frame_layout), Some(&lights_layout), Some(&ao.shade_layout)]);
         let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
         let mesh_buffers = mesh_buffers();
@@ -1138,7 +1596,7 @@ impl Renderer {
         // core's depth target to test against (#386).
         let outline_module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(OUTLINE_PASS),
-            source: wgpu::ShaderSource::Wgsl(format!("{OUTPUT}\n{OUTLINE}").into()),
+            source: wgpu::ShaderSource::Wgsl(format!("{OUTPUT}\n{OUTLINE}\n{LABEL}").into()),
         });
         let outline_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(OUTLINE_PASS),
@@ -1177,8 +1635,34 @@ impl Renderer {
             )),
             None,
         );
+        let label_pipeline = pipeline(
+            d,
+            LABEL_PASS,
+            Some(&layout(&[
+                Some(&output_layout),
+                Some(&outline_layout),
+                Some(&mask_layout),
+            ])),
+            &outline_module,
+            (
+                "label_vs",
+                &[Some(instance(
+                    std::mem::size_of::<TextRecord>() as u64,
+                    &TEXT,
+                ))],
+            ),
+            Some((
+                "label_fs",
+                &[target(
+                    FORMAT,
+                    Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                )],
+            )),
+            None,
+        );
         let outlines = Outlines {
             pipeline: outline_pipeline,
+            labels: label_pipeline,
             layout: outline_layout,
             display: uniform_buffer("scene3d outlines", std::mem::size_of::<FrameUniform>()),
             internal: uniform_buffer(
@@ -1243,6 +1727,42 @@ impl Renderer {
             epoch: device.epoch,
             frame_buffer,
             frame_bind,
+            lights_buffer,
+            lights_bind,
+            lights_layout,
+            dfg_buffer,
+            lights_generation: 0,
+            cascaded: Cascaded {
+                texture: None,
+                frames: (0..4)
+                    .map(|_| {
+                        let b = uniform_buffer(
+                            "scene3d cascade",
+                            std::mem::size_of::<FrameUniform>(),
+                        );
+                        let g = bind_group(
+                            d,
+                            "scene3d cascade",
+                            &frame_layout,
+                            [b.as_entire_binding()],
+                        );
+                        (b, g)
+                    })
+                    .collect(),
+                keys: [None; 4],
+                list: Vec::new(),
+                stale: Vec::new(),
+                fade: true,
+            },
+            env,
+            sky: false,
+            sky_pipeline: None,
+            puffs: None,
+            puff_pipeline: None,
+            solid_layout: mesh_layout.clone(),
+            clear_pipelines: [None, None],
+            ties: BTreeMap::new(),
+            flip: false,
             tone_buffer,
             output_layout,
             covered: (None, uncovered),
@@ -1268,6 +1788,7 @@ impl Renderer {
                 "scene3d.output",
                 "scene3d.output_f32",
                 OUTLINE_PASS,
+                LABEL_PASS,
             ],
             meshes: BTreeMap::new(),
             batches: BTreeMap::new(),
@@ -1458,6 +1979,341 @@ impl Renderer {
         self.low.as_ref().map_or(0, |_| self.low_bytes.unwrap_or(0))
     }
 
+    /// The key sun's cascades at this frame's view (#422): each fitted in closed form, keyed by
+    /// everything it reads, and marked to draw when its key changed since its layer was drawn.
+    fn prepare_cascades(&mut self, device: &Device, scene: &Scene, frame: &FrameUniform) {
+        self.counts.cascades_drawn.clear();
+        self.counts.cascade_splits.clear();
+        let c = &mut self.cascaded;
+        c.list.clear();
+        c.stale.clear();
+        let Some(sun) = scene.sun.as_ref().filter(|_| scene.cascaded()) else {
+            return;
+        };
+        if !scene.camera.perspective {
+            // An orthographic view has one depth range: one cascade over it.
+            c.list = shadow::light_clip(scene, sun.toward, 0.0)
+                .map(|clip| shadow::Cascade {
+                    near: 0.0,
+                    far: f64::MAX,
+                    center: [0.0; 3],
+                    radius: 1.0 / (clip[0] * clip[0] + clip[4] * clip[4] + clip[8] * clip[8]).sqrt(),
+                    clip,
+                })
+                .into_iter()
+                .collect();
+        } else {
+            c.list = shadow::cascades(scene, sun.toward, &sun.cascades, shadow::SIZE);
+        }
+        c.fade = sun.cascades.fade;
+        if let Some(first) = c.list.first() {
+            self.counts.cascade_splits = std::iter::once(first.near)
+                .chain(c.list.iter().map(|k| k.far))
+                .collect();
+        }
+        let stale_plant = self.planted.cascade_cache_keeps_stale;
+        let solid_count = scene.layers.iter().map(|l| l.solids.len()).sum::<usize>();
+        let casters = shadow::caster_corners(scene);
+        let solids: BTreeMap<&str, &Solid> = scene
+            .layers
+            .iter()
+            .flat_map(|l| &l.solids)
+            .map(|s| (s.id.as_str(), s))
+            .collect();
+        for (i, cascade) in c.list.iter().enumerate() {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            for v in sun.toward.iter().chain(&cascade.clip) {
+                v.to_bits().hash(&mut h);
+            }
+            for (id, corners) in &casters {
+                if !shadow::inside(&cascade.clip, corners) {
+                    continue;
+                }
+                let s = solids[id.as_str()];
+                id.hash(&mut h);
+                shape_code(s.shape).hash(&mut h);
+                for v in s.model.iter().flatten() {
+                    v.to_bits().hash(&mut h);
+                }
+            }
+            // The planted wrong program keys a map by the scene's solid count alone.
+            let key = if stale_plant { solid_count as u64 } else { h.finish() };
+            if c.keys[i] != Some(key) {
+                c.keys[i] = Some(key);
+                c.stale.push(i);
+            }
+        }
+        if c.stale.is_empty() {
+            return;
+        }
+        if c.texture.is_none() {
+            let t = device.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(CASCADE_PASS),
+                size: wgpu::Extent3d {
+                    width: shadow::SIZE,
+                    height: shadow::SIZE,
+                    depth_or_array_layers: 4,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: shadow::FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let array = t.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2Array),
+                ..Default::default()
+            });
+            let layers = (0..4)
+                .map(|z| {
+                    t.create_view(&wgpu::TextureViewDescriptor {
+                        dimension: Some(wgpu::TextureViewDimension::D2),
+                        base_array_layer: z,
+                        array_layer_count: Some(1),
+                        ..Default::default()
+                    })
+                })
+                .collect();
+            c.texture = Some((array, layers));
+            self.rebind_lights(device);
+        }
+        let c = &self.cascaded;
+        for &i in &c.stale {
+            let m = c.list[i].clip;
+            let mut f = *frame;
+            for col in 0..4 {
+                for r in 0..4 {
+                    f.clip[col][r] = m[col * 4 + r] as f32;
+                }
+            }
+            // The shadow pass's mark (scene3d.wgsl's `mesh_vs`): it leaves out what casts none.
+            f.light[3] = -1.0;
+            deep_gpu::alloc::outside(|| {
+                device
+                    .queue
+                    .write_buffer(&c.frames[i].0, 0, bytemuck::bytes_of(&f))
+            });
+        }
+        self.counts.cascades_drawn = c.stale.iter().map(|&i| i as u32).collect();
+    }
+
+    /// The lights' bind group again, after a texture it binds changed.
+    fn rebind_lights(&mut self, device: &Device) {
+        let stub;
+        let cascades = match &self.cascaded.texture {
+            Some((array, _)) => array,
+            None => {
+                stub = cascade_stub(&device.device);
+                &stub
+            }
+        };
+        self.lights_bind = lights_bind(
+            &device.device,
+            &self.lights_layout,
+            [&self.lights_buffer, &self.dfg_buffer],
+            cascades,
+            &self.env,
+        );
+        self.lights_generation += 1;
+    }
+
+    /// The environment's cubes (#422): prefiltered again only when its key changes, never per
+    /// frame or from a moving camera; and the uniform the sky pass, the fog and the solids read.
+    fn prepare_env(&mut self, device: &Device, scene: &Scene, camera: &[f64; 16]) {
+        let mut u = EnvUniform::zeroed();
+        u.moon[3] = 2.0;
+        let wanted = scene.sky.as_ref().and_then(|s| {
+            let e = s.environment.as_ref()?;
+            Some((env::key(s, &e.from, e.size), e))
+        });
+        let mut rebuilt = false;
+        match wanted {
+            None => {
+                rebuilt = self.env.cube.take().is_some() | self.env.to.take().is_some();
+            }
+            Some((key, e)) => {
+                let sky = scene.sky.as_ref().expect("an environment is a sky's");
+                // #422's planted prefilter_over_frames fills one more roughness mip each frame.
+                let partial = self.planted.prefilter_over_frames;
+                let behind = self.env.cube.as_ref().is_some_and(|c| c.filled < c.mips);
+                if self.env.cube.as_ref().map(|c| c.key) != Some(key) || (partial && behind) {
+                    let source = env::source(sky, &e.from);
+                    let filled = match (&self.env.cube, partial) {
+                        (Some(c), true) if c.key == key => Some(c.filled + 1),
+                        (_, true) => Some(1),
+                        _ => None,
+                    };
+                    self.env.cube =
+                        Some(self.env.prefilter.build(device, key, &source, e.size, filled));
+                    rebuilt = true;
+                }
+                let to_key = e.mix.as_ref().map(|(to, _)| env::key(sky, to, e.size));
+                if self.env.to.as_ref().map(|c| c.key) != to_key {
+                    self.env.to = e.mix.as_ref().zip(to_key).map(|((to, _), k)| {
+                        let source = env::source(sky, to);
+                        self.env.prefilter.build(device, k, &source, e.size, None)
+                    });
+                    rebuilt = true;
+                }
+                let cube = self.env.cube.as_ref().expect("built above");
+                u.sh = cube.sh;
+                if let Some(to) = &self.env.to {
+                    u.sh_to = to.sh;
+                    u.m[0] = e.mix.as_ref().map_or(0.0, |m| m.1) as f32;
+                }
+                let last = (cube.mips - 1) as f32;
+                u.k = [1.0, last, e.intensity as f32, e.rotation.to_radians() as f32];
+                u.bg[1] = sky.background_blur as f32 * last;
+            }
+        }
+        if rebuilt {
+            self.rebind_lights(device);
+        }
+        self.counts.env_builds = self.env.prefilter.builds;
+        if let Some(sky) = &scene.sky {
+            let inv = ao::invert(camera);
+            for c in 0..4 {
+                for r in 0..4 {
+                    u.inv[c][r] = inv[c * 4 + r] as f32;
+                }
+            }
+            let cam = &scene.camera;
+            u.eye = v4(cam.eye, if cam.perspective { 1.0 } else { 0.0 });
+            u.top = v4(sky.top, sky.stars);
+            u.low = v4(sky.low, 1.0);
+            if let Some([az, el, radius]) = sky.moon {
+                u.moon = v4(env::direction(az, el), radius.to_radians().cos());
+            }
+            let (h_top, h_density) = sky.fog_height.unwrap_or((0.0, 0.0));
+            let curve = match sky.fog_curve {
+                Curve::Exp => 0.0,
+                Curve::Exp2 => 1.0,
+            };
+            u.fog = [sky.fog_density as f32, curve, h_top as f32, h_density as f32];
+            u.fog_color = match sky.fog {
+                Fog::Color(c) => v4(c, 0.0),
+                Fog::Background => [0.0, 0.0, 0.0, 1.0],
+            };
+            u.bg[0] = if sky.shows_environment() { 1.0 } else { 0.0 };
+            if let Some((h, r)) = sky.background_ground {
+                u.bg[2] = h as f32;
+                u.bg[3] = r as f32;
+            }
+            // The sun it follows draws its disk in the sky's own fields, 0.53° across: its
+            // illuminance over the disk's solid angle (never in the environment, which the light
+            // itself already lights).
+            u.sun[3] = 2.0;
+            if let Some(l) = sky
+                .sun
+                .as_ref()
+                .and_then(|id| scene.lights.iter().find(|l| &l.id == id && l.kind == LightKind::Sun))
+            {
+                let radius = (0.53f64 / 2.0).to_radians();
+                let omega = std::f64::consts::TAU * (1.0 - radius.cos());
+                u.sun = v4([-l.dir[0], -l.dir[1], -l.dir[2]], radius.cos());
+                u.sun_color = v4(l.color.map(|c| c * l.intensity / omega), 0.0);
+            }
+        }
+        deep_gpu::alloc::outside(|| {
+            device
+                .queue
+                .write_buffer(&self.env.buffer, 0, bytemuck::bytes_of(&u))
+        });
+    }
+
+    /// The lights the light policy shades at this frame's view, each with its weight (#421).
+    fn prepare_lights(&mut self, device: &Device, scene: &Scene) {
+        let policy = light::policy(&scene.lights, &scene.camera);
+        let cam = &scene.camera;
+        let view = if cam.perspective {
+            [cam.eye[0], cam.eye[1], cam.eye[2], 1.0]
+        } else {
+            [-cam.forward[0], -cam.forward[1], -cam.forward[2], 0.0]
+        };
+        let planted = if self.planted.premixed_metallic { 1 } else { 0 }
+            | if self.planted.uncompensated_lobe { 2 } else { 0 }
+            | if self.planted.compensates_environment_only { 4 } else { 0 };
+        let mut u = LightsUniform {
+            view: view.map(|v| v as f32),
+            count: [policy.shaded.len() as u32, 0, planted, 0],
+            splits: [0.0; 4],
+            texels: [0.0; 4],
+            forward: v4(cam.forward, if self.cascaded.fade { 1.0 } else { 0.0 }),
+            cascades: [[[0.0; 4]; 4]; 4],
+            items: [[[0.0; 4]; 6]; SHADED],
+        };
+        // The key sun's cascades, which every receiving material reads (#422).
+        if let (Some(sun), false) = (&scene.sun, self.cascaded.list.is_empty()) {
+            if let Some(k) = policy.shaded.iter().position(|&(i, _)| scene.lights[i].id == sun.id) {
+                u.count[1] = k as u32 + 1;
+                u.count[3] = self.cascaded.list.len() as u32;
+                for (i, c) in self.cascaded.list.iter().enumerate() {
+                    u.splits[i] = c.far.min(f64::from(f32::MAX)) as f32;
+                    u.texels[i] = (2.0 * c.radius / f64::from(shadow::SIZE)) as f32;
+                    for col in 0..4 {
+                        for r in 0..4 {
+                            u.cascades[i][col][r] = c.clip[col * 4 + r] as f32;
+                        }
+                    }
+                }
+            }
+        }
+        for (slot, &(i, weight)) in u.items.iter_mut().zip(&policy.shaded) {
+            let l = &scene.lights[i];
+            let kind = match l.kind {
+                LightKind::Sun => 0.0,
+                LightKind::Point => 1.0,
+                LightKind::Spot => 2.0,
+                LightKind::Area => 3.0,
+            };
+            let mut intensity = l.intensity * weight;
+            if l.kind == LightKind::Spot && self.planted.spot_counts_cone {
+                // The planted wrong program: lm ÷ 2π(1 − cos outer) in place of lm ÷ 4π.
+                intensity *= 2.0 / (1.0 - l.cone[0]).max(1e-6);
+            }
+            let range = if l.range.is_finite() { l.range } else { 0.0 };
+            *slot = [
+                [l.pos[0] as f32, l.pos[1] as f32, l.pos[2] as f32, kind],
+                [
+                    l.dir[0] as f32,
+                    l.dir[1] as f32,
+                    l.dir[2] as f32,
+                    range as f32,
+                ],
+                [
+                    (l.color[0] * intensity) as f32,
+                    (l.color[1] * intensity) as f32,
+                    (l.color[2] * intensity) as f32,
+                    l.radius as f32,
+                ],
+                [l.cone[0] as f32, l.cone[1] as f32, 0.0, 0.0],
+                l.area.map_or([0.0; 4], |a| v4(a.right, if a.disk { 1.0 } else { 0.0 })),
+                l.area.map_or([0.0; 4], |a| v4(a.up, 0.0)),
+            ];
+        }
+        // Only the key sun has a shadow map yet; the spot maps the budget would keep land with
+        // local shadows (#446), so every other light asking is reported as dropped.
+        let (_, mut dropped) = light::shadowed(&scene.lights, &policy);
+        for &(i, _) in &policy.shaded {
+            let l = &scene.lights[i];
+            if l.shadow && l.kind == LightKind::Spot && !dropped.contains(&l.id) {
+                dropped.push(l.id.clone());
+            }
+        }
+        dropped.sort();
+        self.counts.shadows_dropped = dropped;
+        self.counts.lights_left_out = policy.left_out;
+        deep_gpu::alloc::outside(|| {
+            device
+                .queue
+                .write_buffer(&self.lights_buffer, 0, bytemuck::bytes_of(&u))
+        });
+    }
+
     /// The outline of each solid with a stroke: its silhouette's edges, as seen from this
     /// frame's camera, the stroke's ones and the status outlines' apart (#386).
     fn prepare_outlines(&mut self, device: &Device, scene: &Scene) {
@@ -1468,9 +2324,9 @@ impl Renderer {
         for s in scene.layers.iter().flat_map(|l| &l.solids) {
             let Some(stroke) = s.stroke else { continue };
             let untested = stroke.exact && self.planted.status_without_depth;
-            let flags = OUTLINED
-                | if stroke.exact { EXACT } else { 0 }
-                | if untested { UNTESTED } else { 0 };
+            let exact = stroke.exact && !self.planted.status_before_tone_map;
+            let flags =
+                OUTLINED | if exact { EXACT } else { 0 } | if untested { UNTESTED } else { 0 };
             let set = if stroke.exact {
                 &mut o.statuses
             } else {
@@ -1532,8 +2388,23 @@ impl Renderer {
     /// whose draw key changed encoded again. What it did is in [`Renderer::counts`].
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.prepare_frame(device, scene, look);
+        // Each solid's rank by ID across the frame: coplanar opaque ties go to the first (#421).
+        // Ranked again only when the frame's solids change, so a frame that moves them allocates
+        // nothing.
+        let solids = scene.layers.iter().flat_map(|l| &l.solids);
+        let same = solids.clone().count() == self.ties.len()
+            && solids.clone().all(|s| self.ties.contains_key(&s.id));
+        if !same && !self.planted.ties_by_submission {
+            let mut ids: Vec<&str> = solids.map(|s| s.id.as_str()).collect();
+            ids.sort_unstable();
+            self.ties.clear();
+            for (rank, id) in ids.into_iter().enumerate() {
+                self.ties.insert(id.to_string(), rank as u32);
+            }
+        }
+        self.flip = !self.flip;
         for layer in &scene.layers {
-            self.prepare_batch(device, layer);
+            self.prepare_batch(device, layer, &scene.camera);
         }
         let same = self.order.len() == scene.layers.len()
             && self
@@ -1558,7 +2429,11 @@ impl Renderer {
         look: &Look3,
         moved: &[(usize, usize)],
     ) {
-        if self.planted.encodes_every_frame || self.order.len() != scene.layers.len() {
+        // See-through parts reorder as the camera moves, so a frame holding one prepares whole.
+        if self.planted.encodes_every_frame
+            || self.order.len() != scene.layers.len()
+            || self.batches.values().any(|b| !b.clear_draws.is_empty())
+        {
             return self.prepare(device, scene, look);
         }
         let generation = self.ao.generation;
@@ -1566,7 +2441,7 @@ impl Renderer {
         if self.ao.generation != generation {
             // The solids' ao bind group changed: every batch with solids encodes again.
             for layer in &scene.layers {
-                self.prepare_batch(device, layer);
+                self.prepare_batch(device, layer, &scene.camera);
             }
             return;
         }
@@ -1576,13 +2451,13 @@ impl Renderer {
             let Some(batch) = self.batches.get_mut(&layer.id) else {
                 continue;
             };
-            let (Some(s), Some(&(shape, at, pick))) =
+            let (Some(s), Some(&(shape, at, pick, tie))) =
                 (layer.solids.get(i), batch.solid_slots.get(i))
             else {
                 continue;
             };
             if let Some(set) = batch.solids.get_mut(&shape) {
-                let record = solid_record(s, pick);
+                let record = solid_record(s, pick, tie, !self.planted.winding_ignores_determinant);
                 set.write(
                     device,
                     at as usize,
@@ -1662,8 +2537,8 @@ impl Renderer {
             ],
             light,
             px: [k as f32, if below { 1.0 } else { 0.0 }, 1.0, forward],
-            sky_top: scene.sky.map_or([0.0; 4], |s| v4(s[0], 1.0)),
-            sky_low: scene.sky.map_or([0.0; 4], |s| v4(s[1], 1.0)),
+            sky_top: scene.sky.as_ref().map_or([0.0; 4], |s| v4(s.ambient[0], 1.0)),
+            sky_low: scene.sky.as_ref().map_or([0.0; 4], |s| v4(s.ambient[1], 1.0)),
         };
         // The outline pass over the full-size slot, and over the internal size for the planted
         // programs that draw there.
@@ -1688,11 +2563,29 @@ impl Renderer {
             q.write_buffer(&self.outlines.internal, 0, bytemuck::bytes_of(&inside));
         });
         self.prepare_outlines(device, scene);
+        // A scene of materials shades the key sun's shadow through its cascades (#422); one of
+        // painted solids alone keeps the single fitted map the effects' shadow reads.
+        let cascaded = scene.cascaded();
         self.shadow.clip = scene
             .sun
             .as_ref()
-            .filter(|s| s.shadow)
+            .filter(|s| s.shadow && !cascaded)
             .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
+        self.prepare_cascades(device, scene, &frame);
+        self.prepare_env(device, scene, &camera);
+        self.sky = scene.sky.is_some();
+        self.prepare_puffs(device, scene);
+        if self.sky && self.sky_pipeline.is_none() {
+            self.sky_pipeline = Some(sky_pipeline(
+                &device.device,
+                &self.scene_module,
+                &self.solid_layout,
+                self.planted.forward_z,
+            ));
+            self.compiled += 1;
+            self.names.push(SKY_PASS);
+        }
+        self.prepare_lights(device, scene);
         if let Some(m) = self.shadow.clip {
             let mut light_frame = frame;
             for c in 0..4 {
@@ -1713,7 +2606,8 @@ impl Renderer {
             other => (other.code(), 16.29, 1.25),
         };
         let tone = ToneUniform {
-            exposure: look.exposure as f32,
+            // #422's planted draws_black: nothing reaches the final target.
+            exposure: if self.planted.draws_black { 0.0 } else { look.exposure as f32 },
             map,
             white: white as f32,
             contrast: contrast as f32,
@@ -1748,8 +2642,33 @@ impl Renderer {
         ];
     }
 
-    fn prepare_batch(&mut self, device: &Device, layer: &Layer3) {
+    fn prepare_batch(
+        &mut self,
+        device: &Device,
+        layer: &Layer3,
+        cam: &deep_canvas_scene3d::scene::Camera,
+    ) {
         self.compiled += self.families.ensure(&device.device, layer, &mut self.names);
+        let clear = |s: &Solid| {
+            s.material
+                .is_some_and(|m| m.alpha_mode.see_through() || m.catch.is_some())
+        };
+        for (k, add) in [(0, false), (1, true)] {
+            let wanted = layer.solids.iter().any(|s| {
+                clear(s) && s.material.is_some_and(|m| (m.alpha_mode == AlphaMode::Add) == add)
+            });
+            if wanted && self.clear_pipelines[k].is_none() {
+                self.clear_pipelines[k] = Some(clear_pipeline(
+                    &device.device,
+                    &self.families.module,
+                    &self.solid_layout,
+                    self.planted.forward_z,
+                    add,
+                ));
+                self.compiled += 1;
+                self.names.push(if add { "scene3d.add" } else { "scene3d.blend" });
+            }
+        }
         let mut written = 0u32;
         let mut next = self.next_generation;
         if !self.batches.contains_key(&layer.id) {
@@ -1768,7 +2687,8 @@ impl Renderer {
                 Some(m) => self.built_mesh(device, s.shape, m),
                 None => self.mesh(device, s.shape),
             }
-            slots.push((s.shape, 0, self.pick(&s.id)));
+            let tie = self.ties.get(&s.id).copied().unwrap_or(0);
+            slots.push((s.shape, 0, self.pick(&s.id), tie));
         }
         for l in &layer.lines {
             self.pick(&l.id);
@@ -1784,12 +2704,38 @@ impl Renderer {
         for set in batch.solids.values_mut() {
             set.begin();
         }
-        for (s, slot) in layer.solids.iter().zip(&mut slots) {
-            let record = solid_record(s, slot.2);
+        let winding = !self.planted.winding_ignores_determinant;
+        let mut order: Vec<(&Solid, &mut (Shape, u32, u32, u32))> =
+            layer.solids.iter().zip(&mut slots).collect();
+        // The planted ties_by_submission: the opaque draws' order turns over each frame.
+        if self.planted.ties_by_submission && self.flip {
+            order.reverse();
+        }
+        // See-through parts and shadow catchers draw after the opaque ones, back to front by
+        // view depth plus their sort_bias, ties by ID.
+        let mut see_through = Vec::new();
+        for (s, slot) in order {
+            let record = solid_record(s, slot.2, slot.3, winding);
+            if clear(s) {
+                let c = [s.model[0][3], s.model[1][3], s.model[2][3]];
+                let depth = (0..3).map(|k| (c[k] - cam.eye[k]) * cam.forward[k]).sum::<f64>();
+                see_through.push((depth + s.sort_bias, s, record));
+                slot.1 = u32::MAX;
+                continue;
+            }
             let set = batch.solids.entry(s.shape).or_default();
             slot.1 = set.count as u32;
             set.push(&s.id, bytemuck::bytes_of(&record));
         }
+        see_through.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
+        batch.clear.begin();
+        batch.clear_draws.clear();
+        for (_, s, record) in &see_through {
+            batch.clear.push(&s.id, bytemuck::bytes_of(record));
+            let add = s.material.is_some_and(|m| m.alpha_mode == AlphaMode::Add);
+            batch.clear_draws.push((s.shape, add));
+        }
+        batch.clear.finish(device, &mut next, &mut written);
         batch.solid_slots = slots;
         batch.solids.retain(|_, set| set.count > 0);
         for set in batch.solids.values_mut() {
@@ -1838,6 +2784,7 @@ impl Renderer {
                 Facing::Upright => 1,
                 Facing::Fixed => 2,
             };
+            let half = half_fraction(l.bounds).map(f64::from);
             for g in &l.glyphs {
                 let Some(a) = g.atlas else { continue };
                 let texel = |v: u32| v as f32 / PAGE as f32;
@@ -1845,11 +2792,18 @@ impl Renderer {
                     p: v4(l.pos, l.em),
                     rect: g.rect,
                     uv: [texel(a.x), texel(a.y), texel(a.x + a.w), texel(a.y + a.h)],
-                    right: v4(l.axes[0], 0.0),
-                    up: v4(l.axes[1], 0.0),
+                    right: v4(l.axes[0], half[0]),
+                    up: v4(l.axes[1], half[1]),
                     color: pack(l.color),
                     pick: picks[&l.id],
-                    flags: u32::from(l.world) | (facing << 1) | (a.page << 3),
+                    flags: u32::from(l.world)
+                        | (facing << 1)
+                        | (a.page << 3)
+                        | if l.world || self.planted.labels_before_upscale {
+                            0
+                        } else {
+                            LATER
+                        },
                     pad: 0,
                 };
                 batch.labels.push(&l.id, bytemuck::bytes_of(&record));
@@ -1877,6 +2831,14 @@ impl Renderer {
                     .extend([family, set.generation, u64::from(set.len())]);
             }
         }
+        if !batch.clear_draws.is_empty() {
+            batch.next_key.extend([13, batch.clear.generation]);
+            for (shape, add) in &batch.clear_draws {
+                batch.next_key.extend([shape_code(*shape), u64::from(*add)]);
+            }
+        }
+        // The lights' bind group, once it reads the drawn shadow map.
+        batch.next_key.push(self.lights_generation);
         let unchanged = batch.bundle.is_some() && batch.key == batch.next_key;
         let keeps_stale = self.planted.replays_after_add && batch.bundle.is_some();
         if (unchanged || keeps_stale) && !self.planted.encodes_every_frame {
@@ -1908,6 +2870,7 @@ impl Renderer {
                     multiview: None,
                 });
         enc.set_bind_group(0, &self.frame_bind, &[]);
+        enc.set_bind_group(1, &self.lights_bind, &[]);
         enc.set_bind_group(2, self.ao.shade(), &[]);
         for (shape, set) in &batch.solids {
             let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
@@ -1918,6 +2881,21 @@ impl Renderer {
             enc.set_vertex_buffer(1, buffer.slice(..));
             enc.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
             enc.draw_indexed(0..mesh.count, 0, 0..set.len());
+        }
+        if let Some(buffer) = &batch.clear.buffer {
+            for (k, (shape, add)) in batch.clear_draws.iter().enumerate() {
+                let (Some(mesh), Some(pipeline)) =
+                    (self.meshes.get(shape), &self.clear_pipelines[usize::from(*add)])
+                else {
+                    continue;
+                };
+                let k = k as u32;
+                enc.set_pipeline(pipeline);
+                enc.set_vertex_buffer(0, mesh.vertices.slice(..));
+                enc.set_vertex_buffer(1, buffer.slice(..));
+                enc.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                enc.draw_indexed(0..mesh.count, 0, k..k + 1);
+            }
         }
         for (pipeline, set) in [
             (&self.families.line, &batch.lines),
@@ -1971,10 +2949,9 @@ impl Renderer {
     }
 
     /// The key light's shadow map: the solids of every batch drawn depth-only from the light.
-    fn shadow_job(&mut self, device: &Device) -> Option<Job> {
-        self.shadow.clip?;
-        let view = self
-            .shadow
+    /// The key light's shadow map, made the first time a frame draws it.
+    fn shadow_view(&mut self, device: &Device) -> wgpu::TextureView {
+        self.shadow
             .view
             .get_or_insert_with(|| {
                 texture2d(
@@ -1988,55 +2965,102 @@ impl Renderer {
                 )
                 .create_view(&Default::default())
             })
-            .clone();
-        let pipeline = self.shadow.pipeline.clone();
-        let bind = self.shadow.bind.clone();
+            .clone()
+    }
+
+    /// Every caster's draw: its mesh, its instances and their range, in batch order.
+    #[allow(clippy::type_complexity)]
+    fn caster_draws(
+        &self,
+    ) -> Vec<(wgpu::Buffer, wgpu::Buffer, u32, wgpu::Buffer, std::ops::Range<u32>)> {
         let mut draws = Vec::new();
         for id in &self.order {
-            for (shape, set) in &self.batches[id].solids {
+            let batch = &self.batches[id];
+            for (shape, set) in &batch.solids {
                 if let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) {
                     draws.push((
                         mesh.vertices.clone(),
                         mesh.indices.clone(),
                         mesh.count,
                         buffer.clone(),
-                        set.len(),
+                        0..set.len(),
                     ));
                 }
             }
-        }
-        let profiler = self.profiler.clone();
-        Some(Box::new(move |encoder| {
-            timed(
-                &profiler,
-                SHADOW_PASS,
-                encoder,
-                |encoder, timestamp_writes| {
-                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some(SHADOW_PASS),
-                        color_attachments: &[],
-                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                            view: &view,
-                            depth_ops: Some(wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(1.0),
-                                store: wgpu::StoreOp::Store,
-                            }),
-                            stencil_ops: None,
-                        }),
-                        timestamp_writes,
-                        ..Default::default()
-                    });
-                    pass.set_pipeline(&pipeline);
-                    pass.set_bind_group(0, &bind, &[]);
-                    for (vertices, indices, count, instances, n) in &draws {
-                        pass.set_vertex_buffer(0, vertices.slice(..));
-                        pass.set_vertex_buffer(1, instances.slice(..));
-                        pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
-                        pass.draw_indexed(0..*count, 0, 0..*n);
+            // See-through parts cast as their `shadow` says (the record's no-cast flag).
+            if let Some(buffer) = &batch.clear.buffer {
+                for (k, (shape, _)) in batch.clear_draws.iter().enumerate() {
+                    if let Some(mesh) = self.meshes.get(shape) {
+                        let k = k as u32;
+                        draws.push((
+                            mesh.vertices.clone(),
+                            mesh.indices.clone(),
+                            mesh.count,
+                            buffer.clone(),
+                            k..k + 1,
+                        ));
                     }
-                },
-            );
-        }))
+                }
+            }
+        }
+        draws
+    }
+
+    fn shadow_job(&mut self, device: &Device) -> Option<Job> {
+        self.shadow.clip?;
+        let view = self.shadow_view(device);
+        let bind = self.shadow.bind.clone();
+        Some(self.depth_job(SHADOW_PASS, view, bind))
+    }
+
+    /// The casters drawn depth-only into `view` under the light frame `bind` holds.
+    fn depth_job(&self, label: &'static str, view: wgpu::TextureView, bind: wgpu::BindGroup) -> Job {
+        let draws = self.caster_draws();
+        let pipeline = self.shadow.pipeline.clone();
+        let profiler = self.profiler.clone();
+        Box::new(move |encoder| {
+            timed(&profiler, label, encoder, |encoder, timestamp_writes| {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some(label),
+                    color_attachments: &[],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    timestamp_writes,
+                    ..Default::default()
+                });
+                pass.set_pipeline(&pipeline);
+                pass.set_bind_group(0, &bind, &[]);
+                for (vertices, indices, count, instances, range) in &draws {
+                    pass.set_vertex_buffer(0, vertices.slice(..));
+                    pass.set_vertex_buffer(1, instances.slice(..));
+                    pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..*count, 0, range.clone());
+                }
+            });
+        })
+    }
+
+    /// One depth pass per stale cascade, each into its own layer (#422).
+    fn cascade_jobs(&self) -> Vec<(String, Job)> {
+        let c = &self.cascaded;
+        let Some((_, layers)) = &c.texture else {
+            return Vec::new();
+        };
+        c.stale
+            .iter()
+            .map(|&i| {
+                (
+                    CASCADE_PASS.to_string(),
+                    self.depth_job(CASCADE_PASS, layers[i].clone(), c.frames[i].1.clone()),
+                )
+            })
+            .collect()
     }
 
     /// The frame's passes, each one encode: the geometry pass replays every batch into the
@@ -2053,6 +3077,7 @@ impl Renderer {
             Some(p) if p.shadows() => self.shadow_job(device),
             _ => None,
         };
+        let cascades = self.cascade_jobs();
         let Some(t) = self.targets.as_ref() else {
             return Vec::new();
         };
@@ -2067,6 +3092,8 @@ impl Renderer {
             t.depth_view.clone(),
         );
         let (ground, clear_depth) = (self.ground, self.clear_depth());
+        let sky = self.sky_draw();
+        let puffs = self.puff_draw();
         let profiler = self.profiler.clone();
         let geometry: Job = Box::new(move |encoder| {
             timed(&profiler, GEOMETRY_PASS, encoder, |encoder, timestamps| {
@@ -2075,7 +3102,9 @@ impl Renderer {
                     [&linear, &ids, &depth],
                     ground,
                     clear_depth,
+                    sky.as_ref(),
                     bundles.iter(),
+                    puffs.as_ref(),
                     timestamps,
                 )
             })
@@ -2084,6 +3113,7 @@ impl Renderer {
         if let Some(s) = shadow {
             jobs.push((SHADOW_PASS.into(), s));
         }
+        jobs.extend(cascades);
         if let Some(ao) = self.ao_frame() {
             let profiler = self.profiler.clone();
             jobs.push((
@@ -2215,33 +3245,36 @@ impl Renderer {
                 }),
             ));
         }
-        if let Some(draw) = self.outline_draw(false) {
-            // Status outlines draw as the status colors, where the frame has them.
-            let (draw, statuses) = if colors.is_empty() {
-                (draw, None)
-            } else {
-                draw.split()
-            };
+        // Status outlines draw as the status colors, where the frame has them, over the labels.
+        let (outlines, statuses) = match self.outline_draw(false) {
+            Some(draw) if !colors.is_empty() => {
+                let (draw, statuses) = draw.split();
+                (Some(draw), statuses)
+            }
+            draw => (draw, None),
+        };
+        for (name, draw) in [(OUTLINE_PASS, outlines), (LABEL_PASS, self.label_draw())] {
+            let Some(draw) = draw else { continue };
             let (profiler, target) = (self.profiler.clone(), slot.clone());
             jobs.push((
-                OUTLINE_PASS.into(),
+                name.into(),
                 Box::new(move |encoder| {
-                    timed(&profiler, OUTLINE_PASS, encoder, |e, ts| {
+                    timed(&profiler, name, encoder, |e, ts| {
                         draw.record(e, &target, ts)
                     })
                 }),
             ));
-            if let Some(statuses) = statuses {
-                let (profiler, slot) = (self.profiler.clone(), slot.clone());
-                jobs.push((
-                    status::COLORS_PASS.into(),
-                    Box::new(move |encoder| {
-                        timed(&profiler, status::COLORS_PASS, encoder, |e, ts| {
-                            statuses.record(e, &slot, ts)
-                        })
-                    }),
-                ));
-            }
+        }
+        if let Some(statuses) = statuses {
+            let (profiler, slot) = (self.profiler.clone(), slot.clone());
+            jobs.push((
+                status::COLORS_PASS.into(),
+                Box::new(move |encoder| {
+                    timed(&profiler, status::COLORS_PASS, encoder, |e, ts| {
+                        statuses.record(e, &slot, ts)
+                    })
+                }),
+            ));
         }
         jobs.extend(colors);
         jobs
@@ -2342,8 +3375,38 @@ impl Renderer {
             pipeline: self.outlines.pipeline.clone(),
             output: t.output_bind.clone(),
             frame: binds[usize::from(early)].clone(),
+            atlas: None,
             sets,
             statuses,
+        })
+    }
+
+    /// The label pass: every layer's screen-size labels at full size, after the upscale (#1174);
+    /// `None` with no labels, or when the planted program drew them in the geometry pass.
+    pub fn label_draw(&self) -> Option<OutlineDraw> {
+        if self.planted.labels_before_upscale {
+            return None;
+        }
+        let t = self.targets.as_ref()?;
+        let binds = self.outlines.binds.as_ref()?;
+        let sets: Vec<(wgpu::Buffer, u32)> = self
+            .order
+            .iter()
+            .filter_map(|id| {
+                let set = &self.batches.get(id)?.labels;
+                Some((set.buffer.clone()?, set.len())).filter(|(_, n)| *n > 0)
+            })
+            .collect();
+        if sets.is_empty() {
+            return None;
+        }
+        Some(OutlineDraw {
+            pipeline: self.outlines.labels.clone(),
+            output: t.output_bind.clone(),
+            frame: binds[0].clone(),
+            atlas: Some(self.atlas.bind.clone()),
+            sets,
+            statuses: Vec::new(),
         })
     }
 
@@ -2399,6 +3462,9 @@ impl Renderer {
         let Some(t) = self.targets.as_ref() else {
             return;
         };
+        for (_, job) in self.cascade_jobs() {
+            job(encoder);
+        }
         if let Some(ao) = self.ao_frame() {
             ao.record(encoder);
         }
@@ -2411,9 +3477,114 @@ impl Renderer {
             [&t.linear_view, &t.ids_view, &t.depth_view],
             self.ground,
             self.clear_depth(),
+            self.sky_draw().as_ref(),
             bundles,
+            self.puff_draw().as_ref(),
             timestamps,
         );
+    }
+
+    /// The puffs' draw this frame, when it has any (#422).
+    fn puff_draw(&self) -> Option<PuffDraw> {
+        let (buffer, count) = self.puffs.clone().filter(|p| p.1 > 0)?;
+        let p = self.puff_pipeline.clone()?;
+        Some((
+            p,
+            [
+                self.frame_bind.clone(),
+                self.lights_bind.clone(),
+                self.ao.shade().clone(),
+            ],
+            buffer,
+            count,
+        ))
+    }
+
+    /// Every puff's record, sorted back to front from this frame's eye, then by ID.
+    fn prepare_puffs(&mut self, device: &Device, scene: &Scene) {
+        let eye = scene.camera.eye;
+        let mut all: Vec<&deep_canvas_scene3d::scene::Puff> =
+            scene.layers.iter().flat_map(|l| &l.puffs).collect();
+        if all.is_empty() || self.planted.drops_clouds {
+            self.puffs = None;
+            return;
+        }
+        let d2 = |p: &deep_canvas_scene3d::scene::Puff| {
+            (0..3).map(|i| (p.pos[i] - eye[i]).powi(2)).sum::<f64>()
+        };
+        all.sort_by(|a, b| d2(b).total_cmp(&d2(a)).then_with(|| a.id.cmp(&b.id)));
+        let records: Vec<PuffRecord> = all
+            .iter()
+            .map(|p| PuffRecord {
+                center: v4(p.pos, p.radius),
+                shape: [p.aspect as f32, p.density as f32, p.bright as f32, (p.seed % 65_536) as f32],
+                light: [
+                    p.phase as f32,
+                    p.shade as f32,
+                    p.near_fade as f32,
+                    (u32::from(p.sun) | u32::from(p.ambient) << 1) as f32,
+                ],
+            })
+            .collect();
+        let buffer = wgpu::util::DeviceExt::create_buffer_init(
+            &device.device,
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("scene3d puffs"),
+                contents: bytemuck::cast_slice(&records),
+                usage: wgpu::BufferUsages::VERTEX,
+            },
+        );
+        if self.puff_pipeline.is_none() {
+            let blend = wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING;
+            let targets = [
+                target(LINEAR, Some(blend)),
+                Some(wgpu::ColorTargetState {
+                    format: IDS,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::empty(),
+                }),
+            ];
+            let layout = [Some(wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<PuffRecord>() as u64,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &PUFF,
+            })];
+            self.puff_pipeline = Some(pipeline(
+                &device.device,
+                PUFF_PASS,
+                Some(&self.solid_layout),
+                &self.scene_module,
+                ("puff_vs", &layout),
+                Some(("puff_fs", &targets)),
+                Some(wgpu::DepthStencilState {
+                    format: DEPTH,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(if self.planted.forward_z {
+                        wgpu::CompareFunction::Less
+                    } else {
+                        wgpu::CompareFunction::GreaterEqual
+                    }),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+            ));
+            self.compiled += 1;
+            self.names.push(PUFF_PASS);
+        }
+        self.puffs = Some((buffer, records.len() as u32));
+    }
+
+    /// The sky's draw this frame, when it has one (#422).
+    fn sky_draw(&self) -> Option<SkyDraw> {
+        let p = self.sky_pipeline.clone().filter(|_| self.sky)?;
+        Some((
+            p,
+            [
+                self.frame_bind.clone(),
+                self.lights_bind.clone(),
+                self.ao.shade().clone(),
+            ],
+        ))
     }
 
     /// The output pass, tone-mapping the linear target into `target`.
@@ -2632,12 +3803,31 @@ pub(crate) fn read_texture(
     Some(out)
 }
 
+/// The sky's draw: its pipeline and the solids' three bind groups.
+type SkyDraw = (wgpu::RenderPipeline, [wgpu::BindGroup; 3]);
+/// The puffs' draw: their pipeline, the solids' bind groups, and their instances back to front.
+type PuffDraw = (wgpu::RenderPipeline, [wgpu::BindGroup; 3], wgpu::Buffer, u32);
+
+/// A puff's instance record (scene3d.wgsl's `puff_vs`).
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct PuffRecord {
+    center: [f32; 4],
+    shape: [f32; 4],
+    light: [f32; 4],
+}
+
+const PUFF: [wgpu::VertexAttribute; 3] =
+    wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4, 2 => Float32x4];
+
 fn geometry_pass<'a>(
     encoder: &mut wgpu::CommandEncoder,
     [linear, ids, depth]: [&wgpu::TextureView; 3],
     [r, g, b, a]: [f64; 4],
     clear_depth: f64,
+    sky: Option<&SkyDraw>,
     bundles: impl Iterator<Item = &'a wgpu::RenderBundle>,
+    puffs: Option<&PuffDraw>,
     timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
 ) {
     deep_gpu::alloc::outside(|| {
@@ -2674,7 +3864,24 @@ fn geometry_pass<'a>(
             timestamp_writes: timestamps,
             ..Default::default()
         });
+        // The sky first, behind everything (#422).
+        if let Some((pipeline, binds)) = sky {
+            pass.set_pipeline(pipeline);
+            for (i, b) in binds.iter().enumerate() {
+                pass.set_bind_group(i as u32, b, &[]);
+            }
+            pass.draw(0..3, 0..1);
+        }
         pass.execute_bundles(bundles);
+        // The puffs last, back to front over everything they're in front of (#422).
+        if let Some((pipeline, binds, buffer, count)) = puffs {
+            pass.set_pipeline(pipeline);
+            for (i, b) in binds.iter().enumerate() {
+                pass.set_bind_group(i as u32, b, &[]);
+            }
+            pass.set_vertex_buffer(0, buffer.slice(..));
+            pass.draw(0..6, 0..*count);
+        }
     });
 }
 
@@ -2806,6 +4013,14 @@ impl RenderModule for Module3 {
             0.01,
             Determinism::SameMachine,
         ));
+        passes.push(pass(
+            LABEL_PASS,
+            3,
+            vec!["depth"],
+            vec!["slot"],
+            0.01,
+            Determinism::SameMachine,
+        ));
         if let Some(after) = s.after.as_ref() {
             passes.extend(after.passes());
         }
@@ -2871,6 +4086,17 @@ impl Module3 {
     /// scene3d's own passes: geometry and the output.
     fn own_passes(&self) -> Vec<Pass> {
         vec![
+            // The key sun's cascades (#422), each drawn only when its key changed.
+            Pass {
+                name: CASCADE_PASS.into(),
+                place: "shadows",
+                order: 1,
+                reads: Vec::new(),
+                writes: vec!["cascades"],
+                resolution: Resolution::Full,
+                ns_per_px: 0.05,
+                determinism: Determinism::SameMachine,
+            },
             // Ambient occlusion (#418), drawn only while the look has it on: its cost counts the
             // depth and normal prepass with the occlusion and the blur.
             Pass {

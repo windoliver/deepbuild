@@ -44,6 +44,8 @@ export type Plant =
   // substitutes on every allowed host, and the run's CA added to the login keychain.
   | 'standin-value-in-env' | 'env-loads-by-value' | 'standin-every-host' | 'run-ca-in-login-keychain'
   | 'runs-disk-bytes'
+  // #325's: a stalled-claim rule that counts any new run as new evidence, and one that counts the stops a question holds.
+  | 'new-run-is-evidence' | 'counts-waiting-stops'
   // #120's: the long-wait lines wait for the turn's stop, so a long turn of short calls shows none while it runs.
   | 'line-at-stop'
   // #340's: a note the waiter delivered recorded as nothing, and the app's words taken for yours with no request ID.
@@ -61,6 +63,9 @@ export type Plant =
   // a socket, timer or child left per cycle, and a hub that can't give a full collection or its resident memory.
   | 'churn-keeps-ended-session' | 'churn-keeps-reload-listener' | 'churn-leaves-socket' | 'churn-leaves-timer' | 'churn-leaves-child'
   | 'churn-no-full-collection' | 'churn-no-resident-read'
+  // #824's per-session reading: deep mcp loading the whole hub package, a waiter keeping its session's transcript, and
+  // a platform that reads no process's memory.
+  | 'mcp-loads-hub' | 'waiter-keeps-transcript' | 'sessions-no-memory-read'
   // #27's: deep_ask raised without its subject, so a repeated question reaches you.
   | 'repeat-reaches-you'
   // #823's: deep_wait reading its ask every 100 ms, and a stopping hub answering waiting calls as a success.
@@ -73,6 +78,8 @@ export type Plant =
   | 'any-nonzero-base-exit'
   // #124's: deep_drive launching replicas without the replica lease.
   | 'deep-drive-no-lease'
+  // #55's: an answer handed to paseo's plugin while deep-hook's waiter for the session is live, so it goes in twice.
+  | 'paseo-delivers-beside-waiter'
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
   | 'signature-covers-anything'
   // #909's: a hub that never checks its lock again once it holds it.
@@ -90,13 +97,22 @@ export type Plant =
   // starting nothing, no grace window, no 30-minute cap or one timed from the first stop, and facts read only at stops.
   | 'starts-on-every-green-stop' | 'holds-every-loop-check' | 'holds-claim-stop-for-loop' | 'words-only-at-turn-start'
   | 'no-grace-window' | 'holds-background-without-limit' | 'caps-from-first-stop' | 'rechecks-facts-at-stops-only'
+  // #992's: a reading that checks waiting before gone, an adapter that opens an ask from a Notification hook, and an
+  // app that reads a session waiting on you as working.
+  | 'waiting-first' | 'ask-from-notification' | 'waiting-as-working'
   // #997's: loop facts read as the merge base did, with no monitor's watch.
   | 'monitor-unread'
   // #322's: criteria read from the GitHub API alone, a comment author's role from the comment's text, every author a
   // collaborator, an app's membership taken as collaborator, an early claim judged on the repo spec alone, a lint that
   // only looks for a number, and a gate that runs no check before the definition locks.
   | 'criteria-from-github-api' | 'role-from-comment-text' | 'every-author-collaborator' | 'app-membership-as-collaborator'
-  | 'spec-only-judges-early-claim' | 'lint-number-only' | 'lock-before-any-check';
+  | 'spec-only-judges-early-claim' | 'lint-number-only' | 'lock-before-any-check'
+  // #323's: open items' normalizer that drops numbers, a gate that reads only the PR body, one that counts every
+  // resolved review thread as closed, and one that closes an item the agent marked completed in its task list.
+  | 'normalizer-drops-numbers' | 'pr-body-only' | 'resolved-counts-closed' | 'completed-closes-item'
+  // #669's: a command check's runner that reads a masked exit as a clean pass, a stop reply whose line says PASS with no
+  // verdict behind it, and a status question sent on to the model.
+  | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -121,6 +137,7 @@ const PLANTS: readonly string[] = [
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
+  'new-run-is-evidence', 'counts-waiting-stops',
   'line-at-stop',
   'app-note-unrecorded', 'app-note-as-person',
   'brief-full-text', 'brief-at-startup-only', 'queue-shows-newest', 'continuation-as-person', 'continuation-by-likeness',
@@ -129,11 +146,13 @@ const PLANTS: readonly string[] = [
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
   'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',
   'churn-no-full-collection', 'churn-no-resident-read',
+  'mcp-loads-hub', 'waiter-keeps-transcript', 'sessions-no-memory-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
   'silent-deprecated',
   'deep-drive-no-lease',
+  'paseo-delivers-beside-waiter',
   'signature-covers-anything',
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
@@ -143,8 +162,11 @@ const PLANTS: readonly string[] = [
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only', 'monitor-unread',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
+  'waiting-first', 'ask-from-notification', 'waiting-as-working',
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
+  'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
+  'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

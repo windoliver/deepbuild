@@ -7,12 +7,14 @@ import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMe
 
 export type CoreRequest =
   | { op: 'call'; method: string; params: unknown; context: CallContext }
-  | { op: 'mcp-hello'; parent: { pid: number; start: string } }
+  | { op: 'mcp-hello'; parent: { pid: number; start: string } | undefined; paseo?: string }
   | { op: 'health' }
   | { op: 'extension-hook'; data: unknown }
   | { op: 'hook-reply'; meta: HookMeta; until: number }
   | { op: 'tool-gate'; meta: HookMeta; call: Gated }
-  | { op: 'permission'; meta: HookMeta }
+  | { op: 'permission'; meta: HookMeta; until?: number; inPaseo?: boolean }
+  | { op: 'paseo-owner'; meta: HookMeta }
+  | { op: 'paseo-app-answer'; meta: HookMeta }
   | { op: 'subscribe'; sub: string; after: number }
   | { op: 'waits' }
   | { op: 'lock-lost'; path: string }
@@ -28,18 +30,22 @@ export type CoreMessage =
   // A line the chat showed of a wait (#120): kept as the session's reading.
   | { op: 'line'; session: string; agent: string; text: string }
   | { op: 'unsubscribe'; sub: string }
+  // A PreToolUse the gate's reply denied (#1033): what denied it, for a PostToolUse that shows it ran anyway.
+  | { op: 'denied'; session: string; call: string; guard: string; label: string }
   | (CoreRequest & { n: number });
 
 /** Runs one request against the core: the core's answer, or the refusal to write back. */
 export async function answer(core: Core, request: CoreRequest): Promise<unknown> {
   switch (request.op) {
     case 'call': return core.call(request.method, request.params, request.context);
-    case 'mcp-hello': return core.mcpHello(request.parent);
+    case 'mcp-hello': return core.mcpHello(request.parent, request.paseo);
     case 'health': return core.health();
     case 'extension-hook': return core.extensionHook(request.data);
     case 'hook-reply': return core.hookReply(request.meta, request.until);
     case 'tool-gate': return core.toolGate(request.meta, request.call);
-    case 'permission': return core.permission(request.meta);
+    case 'permission': return core.permission(request.meta, request.until, request.inPaseo);
+    case 'paseo-owner': return core.paseoOwner(request.meta);
+    case 'paseo-app-answer': return core.paseoAppAnswer(request.meta);
     case 'subscribe': return core.subscribe(request.sub, request.after);
     case 'waits': return core.waitsState();
     case 'lock-lost': return core.lockLost(request.path);
@@ -63,6 +69,7 @@ if (parentPort && workerData?.core) {
     if (message.op === 'later') return core.later(message.session, message.cwd, message.text);
     if (message.op === 'line') return void core.line(message.session, message.agent, message.text).catch(() => undefined);
     if (message.op === 'unsubscribe') return core.unsubscribe(message.sub);
+    if (message.op === 'denied') return core.denied(message.session, message.call, { guard: message.guard, label: message.label });
     const { n } = message;
     answer(core, message).then((result) => port.postMessage({ n, result }), (error: unknown) => port.postMessage({ n, error: asRefusal(error) }));
   });
