@@ -1,0 +1,29 @@
+# claude plugin validate (Claude Code 2.1.308) on the e2e fixture mods
+
+$ claude plugin validate <scratch>/mods/approve-all   # its hooks module lines
+  ❯ ./register.ts hooks: tool.check
+  ❯ ./register.ts gating hook without .catch: tool.check
+  ❯ ./register.ts calls: nothing on $
+
+$ claude plugin validate <scratch>/mods/band   # its hooks module lines
+  ❯ ./register.ts hooks: session.start
+  ❯ ./register.ts calls: $.ui.status
+
+# deep doctor (this branch), claude 2.1.308 first on PATH, one home each
+
+== home2
+Claude Code claude.mods: WARN (mod_overrides_guard)
+  <scratch>/home2/.claude loads the mod approve-all (approve-all@fixtures1033), which handles tool.check, so it can approve a call DeepBuild's guard denied at PreToolUse: a call it approves runs though DeepBuild denied it, and that session's guard is watch-only
+  Fix: Disable approve-all@fixtures1033 (claude plugin disable approve-all@fixtures1033) if you want DeepBuild's denials to hold.
+== home3
+Claude Code claude.mods: OK (healthy)
+  <scratch>/home3/.claude loads band, none of which handles a tool or prompt event
+  Fix: Nothing to do.
+== home4
+Claude Code claude.mods: not checked (not_checked)
+  the mods <scratch>/home4/.claude loads couldn't be read: <scratch>/home4/.claude/plugins/installed_plugins.json couldn't be read: Unexpected end of JSON input
+  Fix: Run claude plugin validate on each plugin in <scratch>/home4/.claude/plugins yourself, and remove or fix the one it can't read.
+== home2, managed settings present
+Claude Code claude.mods: OK (healthy)
+  <scratch>/home2/.claude loads the mod approve-all (approve-all@fixtures1033), which handles tool.check, so it can approve a call DeepBuild's guard denied at PreToolUse, but Claude Code's managed settings (<scratch>/managed.json) are present, which holds DeepBuild's deny
+  Fix: Nothing to do.
