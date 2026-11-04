@@ -27,7 +27,7 @@ import { assertMotion, assertReducedMotion } from './motion.js';
 import { comparePixels as compareImages, decodePng, encodePng, highlight, paintMasks, type Box, type Image } from './png.js';
 import { quoteIn } from './reading.js';
 import { embeddedJourney, saveScript } from './replay.js';
-import { discard, drive, playwrightVersion, PROFILE, type DriverRun, type Job, type Profile, type Report } from './run.js';
+import { cancel, discard, drive, playwrightVersion, prestart, PROFILE, type DriverRun, type Job, type Prestarted, type Profile, type Report } from './run.js';
 import { baseDisagreement, describeLocator, domDelta, masked, renderKey, resolveMask, routesOf, sideBySide, smallestHolding, type Capture, type Delta, type Difference, type MaskAsk, type Render } from './screens.js';
 
 export { reviewJourney } from './journey.js';
@@ -176,9 +176,12 @@ const cwdOf = (pid: number, fallback: string): string => { try { return realpath
 
 // ---- The stack: env-local's, from the checkout, on ports this kind leases, torn down by run after the run.
 interface Stack { run: string; pid: number; ports: Record<string, number>; url: string; processes: { name: string; pid: number; cwd: string }[] }
-async function up(host: Host, checkout: string): Promise<{ stack: Stack } | { cause: string }> {
+async function leasePorts(checkout: string): Promise<Record<string, number>> {
   const ports: Record<string, number> = {};
   for (const name of environmentBlock(checkout).ports) ports[name] = await freePort();
+  return ports;
+}
+async function up(host: Host, checkout: string, ports: Record<string, number>): Promise<{ stack: Stack } | { cause: string }> {
   const run = newRun();
   const result = await upStack(host, { run, folder: checkout, ports }).catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }));
   if (result.status === 'BLOCKED') { await down(host, run); return { cause: result.cause }; }
@@ -232,8 +235,11 @@ async function runInternal(o: JourneyRunOptions, extra: Internal): Promise<Ran> 
   const scrub = (s: string): string => (held.length ? scrubValues(s, { env: o.secrets ?? {}, held }) : s);
   const run = empty(o.run, { depth: journey.depth, reducedMotion });
   run.steps = unrun(journey);
-  const brought = await up(o.host, o.checkout);
-  if ('cause' in brought) return { run: { ...run, outcome: 'missing', cause: brought.cause }, report: null, render: null };
+  const ports = await leasePorts(o.checkout);
+  // A browser journey's driver boots while the stack comes up, and waits for its job until the stack is ready.
+  const pre = journey.api ? null : prestart({ host: o.host, run: o.run, hosts: Object.values(ports).map((p) => `127.0.0.1:${p}`), deadline: browserDeadline(o, journey, extra) + STACK_WAIT_MS, ...(o.secrets ? { secrets: o.secrets } : {}), ...(o.stop ? { stop: o.stop } : {}) });
+  const brought = await up(o.host, o.checkout, ports);
+  if ('cause' in brought) { if (pre) await cancel(pre); return { run: { ...run, outcome: 'missing', cause: brought.cause }, report: null, render: null }; }
   const stack = brought.stack;
   // The run's time is the runner's, from the stack being ready to its teardown: env-local's start and stop are its own (#331).
   const ready = Date.now();
@@ -244,7 +250,7 @@ async function runInternal(o: JourneyRunOptions, extra: Internal): Promise<Ran> 
   let out: { report: Report | null; render: Render | null } = { report: null, render: null };
   try {
     if (journey.api) await runApi(o, journey, text, stack.url, run, scrub, writer);
-    else out = await runBrowser(o, journey, text, stack, run, writer, scrub, records, swaps, reducedMotion, extra);
+    else out = await runBrowser(o, journey, text, stack, run, writer, scrub, records, swaps, reducedMotion, extra, pre!);
   } finally {
     run.timing.total = Date.now() - ready;
     for (const s of swaps) await down(o.host, s);
@@ -296,16 +302,22 @@ async function keepScript(o: JourneyRunOptions, journey: Journey, text: string, 
 }
 
 /** A browser journey through the driver, its report read as the run's record and its files stored as evidence. */
-async function runBrowser(o: JourneyRunOptions, journey: Journey, text: string, stack: Stack, run: JourneyRun, writer: Writer, scrub: (s: string) => string, records: StackRecords, swaps: string[], reducedMotion: 'reduce' | 'no-preference', extra: Internal): Promise<{ report: Report | null; render: Render | null }> {
+/** A step's deadline; the planted runner sets it under its expect's timeout. */
+const stepDeadline = (o: JourneyRunOptions, s: Journey['steps'][number]): number => (o.plant === 'deadline-under-expect' ? Math.floor(s.timeoutMs / 2) : s.deadlineMs);
+const browserDeadline = (o: JourneyRunOptions, journey: Journey, extra: Internal): number =>
+  journey.steps.reduce((sum, s) => sum + stepDeadline(o, s), 0) + 30_000 + journey.endState.length * 3000 + (extra.settle ? journey.steps.length * 5000 : 0);
+/** How long a prestarted driver may wait for its stack, beyond the run's own deadline. */
+const STACK_WAIT_MS = 120_000;
+async function runBrowser(o: JourneyRunOptions, journey: Journey, text: string, stack: Stack, run: JourneyRun, writer: Writer, scrub: (s: string) => string, records: StackRecords, swaps: string[], reducedMotion: 'reduce' | 'no-preference', extra: Internal, pre: Prestarted): Promise<{ report: Report | null; render: Render | null }> {
   const plantedDeadline = o.plant === 'deadline-under-expect';
-  const deadlineOf = (s: Journey['steps'][number]): number => (plantedDeadline ? Math.floor(s.timeoutMs / 2) : s.deadlineMs);
+  const deadlineOf = (s: Journey['steps'][number]): number => stepDeadline(o, s);
   const job: Job = {
     url: stack.url, profile: { ...PROFILE, reducedMotion }, video: true, trace: true, settle: extra.settle ?? false, settleMs: 4000, hold: o.environment?.plant === 'swap-partway', masks: journey.masks.map((m) => toDriver(m)!),
     // The planted runner sets each step's deadline under its expect's timeout, so an element that never shows overruns the step.
     steps: journey.steps.map((s) => ({ id: s.id, line: s.line, deadlineMs: deadlineOf(s), timeoutMs: plantedDeadline ? s.timeoutMs : timeoutUnder(s.deadlineMs, s.timeoutMs), actions: s.actions, expects: s.expects })),
     endState: journey.endState.filter((c) => !c.readback).map((c) => ({ id: c.id, line: c.line, oracle: c.oracle, ...(c.driverLocator ? { locator: c.driverLocator } : {}), ...(c.text !== undefined ? { text: c.text } : {}), ...(c.visible !== undefined ? { visible: c.visible } : {}) })),
   };
-  const deadline = journey.steps.reduce((sum, s) => sum + deadlineOf(s), 0) + 30_000 + journey.endState.length * 3000 + (extra.settle ? journey.steps.length * 5000 : 0);
+  const deadline = browserDeadline(o, journey, extra);
   // The planted environment: once the first step has run, the stack's app is served from another tree, as a newer snapshot would be.
   const between = o.environment?.plant === 'swap-partway' ? async (out: string, report: () => Report | null, exited: () => boolean): Promise<void> => {
     const to = o.environment!.to;
@@ -319,7 +331,7 @@ async function runBrowser(o: JourneyRunOptions, journey: Journey, text: string, 
     if (started.status === 'started') { records.processes.push({ name: 'sh', pid: started.pid, cwd: cwdOf(started.pid, to), reads: [] }); await healthy(stack.url, 10_000); }
     for (let i = 1; i < journey.steps.length; i++) writeFileSync(join(out, `go-${i}`), '');
   } : undefined;
-  const driven = await drive({ host: o.host, run: o.run, job, deadline, ...(o.secrets ? { secrets: o.secrets } : {}), ...(o.stop ? { stop: o.stop } : {}), ...(between ? { between } : {}) });
+  const driven = await drive({ host: o.host, run: o.run, job, deadline, pre, ...(o.secrets ? { secrets: o.secrets } : {}), ...(o.stop ? { stop: o.stop } : {}), ...(between ? { between } : {}) });
   // The tree the stack served, from the records of every process it ran, placed by the core: a run whose stack
   // served another tree is uncounted, naming the process and the tree; the planted runner takes the checkout it asked for.
   run.served = o.plant === 'checkout-as-asked' ? { served: 'checkout' } : attributeStack(records, o.trees);

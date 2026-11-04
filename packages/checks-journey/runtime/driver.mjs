@@ -11,7 +11,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
 
-const job = JSON.parse(readFileSync(process.env.DEEP_JOURNEY_JOB, 'utf8'));
+// Started while the stack comes up, the driver waits for its job; a stop file instead means the stack never came up.
+const JOB = process.env.DEEP_JOURNEY_JOB;
+while (!existsSync(JOB)) {
+  if (existsSync(`${JOB}.stop`)) process.exit(0);
+  await new Promise((r) => setTimeout(r, 5));
+}
+const job = JSON.parse(readFileSync(JOB, 'utf8'));
 const out = job.out;
 mkdirSync(out, { recursive: true });
 const secret = (name) => process.env[`DEEP_JOURNEY_SECRET_${name}`];
