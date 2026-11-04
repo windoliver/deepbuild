@@ -153,12 +153,30 @@ const ELEMENTS = `(() => {
   for (const el of document.body.querySelectorAll('*')) {
     if (['SCRIPT', 'STYLE'].includes(el.tagName)) continue;
     const r = el.getBoundingClientRect(); if (r.width <= 0 || r.height <= 0) continue;
-    out.push({ ...control(el), label: el.getAttribute('aria-label'), explicitRole: el.getAttribute('role'), tag: el.tagName.toLowerCase(), box: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } });
+    // Every pixel the element touches, a partly covered edge included.
+    const x = Math.floor(r.x), y = Math.floor(r.y);
+    out.push({ ...control(el), label: el.getAttribute('aria-label'), explicitRole: el.getAttribute('role'), tag: el.tagName.toLowerCase(), box: { x, y, width: Math.ceil(r.right) - x, height: Math.ceil(r.bottom) - y } });
     if (out.length >= 3000) break;
   }
   return out;
 })()`;
 const evaluate = async (script, fallback) => { try { return await page.evaluate(script); } catch { return fallback; } };
+/** Each element's box over several frames: the union of where it was, so a box covers an element whose size changes (a clock's text). */
+function spanning(frames) {
+  const merged = new Map();
+  for (const elements of frames) {
+    const seen = new Map();
+    for (const e of elements) {
+      const id = `${e.tag}|${e.role}|${e.name}|${e.label ?? ''}|${e.testId ?? ''}`;
+      const n = seen.get(id) ?? 0; seen.set(id, n + 1);
+      const k = `${id}#${n}`, m = merged.get(k);
+      if (!m) { merged.set(k, { ...e, box: { ...e.box } }); continue; }
+      const x = Math.min(m.box.x, e.box.x), y = Math.min(m.box.y, e.box.y);
+      m.box = { x, y, width: Math.max(m.box.x + m.box.width, e.box.x + e.box.width) - x, height: Math.max(m.box.y + m.box.height, e.box.y + e.box.height) - y };
+    }
+  }
+  return [...merged.values()];
+}
 const key = (c) => `${c.role}|${c.name}|${c.testId ?? ''}`;
 const bare = ({ role, name, testId }) => ({ role, name, ...(testId ? { testId } : {}) });
 function changed(before, after) {
@@ -239,19 +257,22 @@ async function settled(name, masks) {
   const boxes = masks.flatMap((m) => (m.box ? [m.box] : []));
   const until = Date.now() + Math.max(300, job.settleMs ?? 3000);
   let last = null, lastPix = null, unstable = null;
+  // The elements as each frame was taken, so a mask on one covers it in the frames compared, not at a later moment.
+  const frames = [];
   while (Date.now() < until) {
     const bytes = await page.screenshot({ timeout: 5000 }).catch(() => null);
     if (!bytes) break;
+    frames.push(await evaluate(ELEMENTS, []));
     const pix = decodePng(bytes);
     if (lastPix) {
       unstable = differs(lastPix, pix, boxes);
-      if (!unstable) { writeFileSync(join(out, `${name}.png`), bytes); return { file: `${name}.png`, still: true, unstable: null }; }
+      if (!unstable) { writeFileSync(join(out, `${name}.png`), bytes); return { file: `${name}.png`, still: true, unstable: null, elements: spanning(frames.slice(-2)) }; }
     }
     last = bytes; lastPix = pix;
     await sleep(120);
   }
   if (last) writeFileSync(join(out, `${name}.png`), last);
-  return { file: last ? `${name}.png` : null, still: false, unstable };
+  return { file: last ? `${name}.png` : null, still: false, unstable, elements: spanning(frames) };
 }
 
 // ---- One step: its actions, then its expects, under its deadline; an expect's timeout stays under the deadline.
@@ -293,11 +314,11 @@ async function runStep(step, index) {
   entry.masks = await maskBoxes();
   if (job.settle) {
     const s = await settled(`step-${index + 1}-${step.id}`, entry.masks);
-    entry.screenshot = s.file; entry.still = s.still; entry.unstable = s.unstable;
+    entry.screenshot = s.file; entry.still = s.still; entry.unstable = s.unstable; entry.elements = s.elements;
   } else entry.screenshot = await shot(`step-${index + 1}-${step.id}`);
   entry.snapshot = await snapshot();
   entry.dom = await evaluate(DOM, []);
-  entry.elements = await evaluate(ELEMENTS, []);
+  if (!job.settle) entry.elements = await evaluate(ELEMENTS, []);
   current = null;
   flush();
   return entry.outcome === 'passed';
