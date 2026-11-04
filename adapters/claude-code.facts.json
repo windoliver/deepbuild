@@ -48,7 +48,7 @@
   "modelFamily": {
     "readBy": "which rate card and context window a model name belongs to",
     "conformance": "claude/modelFamily/known-names",
-    "families": { "claude-opus-5-5": "opus", "claude-sonnet-5-5": "sonnet", "claude-haiku-5-5": "haiku", "claude-fable-5-1": "fable" }
+    "families": { "claude-opus-5-5": "opus", "claude-sonnet-5-5": "sonnet", "claude-haiku-5-5": "haiku", "claude-fable-5-1": "fable", "claude-opus-4-1": "opus", "claude-sonnet-4-5": "sonnet", "claude-haiku-4-5": "haiku" }
   },
   "billing": {
     "readBy": "whether a session bills a plan or an API account: set, these variables mean the API",
@@ -906,6 +906,15 @@
       "NotebookEdit": "tool_input.notebook_path"
     },
     "mcp": { "tool": "tool" }
+  },
+  "taskList": {
+    "readBy": "the session's own task list: the newest TodoWrite call of the turn's transcript, whose todos each name their content and status",
+    "conformance": "claude/taskList/open-at-stop",
+    "tool": "TodoWrite",
+    "items": "todos",
+    "text": "content",
+    "status": "status",
+    "open": ["pending", "in_progress"]
   },
   "readUsage": {
     "readBy": "a turn's usage from the transcript: the model that answered, tokens by the agent's own count, a cost only with its basis",

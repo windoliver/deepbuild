@@ -81,7 +81,7 @@ export interface JobRecord {
   start?: string;
   /** The session ID read from its own output. */
   session?: string;
-  /** The model that answered, from its output as the facts say, or 'unknown'. */
+  /** The model that answered, from its output as the facts say: the one with the most output tokens in its usage, or 'unknown'. */
   model?: string;
   stop?: { cause: StopCause };
   usage?: { input: number; cached: number; output: number };
@@ -97,7 +97,7 @@ export interface JobRecord {
  *  (`five_hour`/`seven_day`: `used_percentage`, `resets_at` in Unix seconds); a Codex token event's `rate_limits`. */
 export interface WindowReport { agent: Agent; account: string; rate_limits: unknown }
 /** The planted wrong programs the acceptance tests select; tests only. */
-export type Plant = 'records-launched-model' | 'checkout-of-session-head' | 'worktree-of-mirror' | 'widens-range-on-smoke';
+export type Plant = 'records-launched-model' | 'checkout-of-session-head' | 'worktree-of-mirror' | 'widens-range-on-smoke' | 'first-model-listed';
 export interface RunnerOptions {
   record: RecordStore;
   asks: Asks;

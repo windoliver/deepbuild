@@ -881,6 +881,48 @@
     "readUsage": {
       "$ref": "#/$defs/operation"
     },
+    "taskList": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "tool": {
+          "$ref": "#/$defs/text",
+          "description": "The tool call that writes the agent's own task list, whole each time."
+        },
+        "items": {
+          "$ref": "#/$defs/text",
+          "description": "The call's input field that holds the list."
+        },
+        "text": {
+          "$ref": "#/$defs/text",
+          "description": "Each item's field that holds its words."
+        },
+        "status": {
+          "$ref": "#/$defs/text",
+          "description": "Each item's field that holds its state."
+        },
+        "open": {
+          "$ref": "#/$defs/texts",
+          "description": "The states an item left at a stop is still open in."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "tool",
+        "items",
+        "text",
+        "status",
+        "open"
+      ],
+      "additionalProperties": false,
+      "description": "The agent's own task list (#323): at a stop, each item its newest list leaves in an open state is an open item; one it marked completed closes nothing, since that is its word."
+    },
     "tokenizer": {
       "type": "object",
       "properties": {

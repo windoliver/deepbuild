@@ -1,0 +1,30 @@
+{
+  "claim": "session-load",
+  "diff": "diff --git a/src/session.ts b/src/session.ts\nindex 97e5b32..784664f 100644\n--- a/src/session.ts\n+++ b/src/session.ts\n@@ -1,6 +1,7 @@\n import { store } from './store';\n+import { parseSession } from './schema';\n \n export function load(raw: string) {\n-  const data = JSON.parse(raw);\n+  const data = parseSession(raw);\n   return store.get(data.id);\n }\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [],
+    "overall_correctness": "patch is correct",
+    "overall_explanation": "The parse now goes through the schema validator; no further issues in this change.",
+    "overall_confidence_score": 0.86
+  },
+  "since": [
+    {
+      "rule": "unchecked-parse",
+      "sites": [
+        {
+          "file": "src/session.ts",
+          "line": 4,
+          "quote": "const data = JSON.parse(raw);"
+        }
+      ]
+    }
+  ]
+}

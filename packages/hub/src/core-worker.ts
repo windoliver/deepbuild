@@ -7,12 +7,14 @@ import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMe
 
 export type CoreRequest =
   | { op: 'call'; method: string; params: unknown; context: CallContext }
-  | { op: 'mcp-hello'; parent: { pid: number; start: string } }
+  | { op: 'mcp-hello'; parent: { pid: number; start: string } | undefined; paseo?: string }
   | { op: 'health' }
   | { op: 'extension-hook'; data: unknown }
   | { op: 'hook-reply'; meta: HookMeta; until: number }
   | { op: 'tool-gate'; meta: HookMeta; call: Gated }
-  | { op: 'permission'; meta: HookMeta }
+  | { op: 'permission'; meta: HookMeta; until?: number; inPaseo?: boolean }
+  | { op: 'paseo-owner'; meta: HookMeta }
+  | { op: 'paseo-app-answer'; meta: HookMeta }
   | { op: 'subscribe'; sub: string; after: number }
   | { op: 'waits' }
   | { op: 'lock-lost'; path: string }
@@ -36,12 +38,14 @@ export type CoreMessage =
 export async function answer(core: Core, request: CoreRequest): Promise<unknown> {
   switch (request.op) {
     case 'call': return core.call(request.method, request.params, request.context);
-    case 'mcp-hello': return core.mcpHello(request.parent);
+    case 'mcp-hello': return core.mcpHello(request.parent, request.paseo);
     case 'health': return core.health();
     case 'extension-hook': return core.extensionHook(request.data);
     case 'hook-reply': return core.hookReply(request.meta, request.until);
     case 'tool-gate': return core.toolGate(request.meta, request.call);
-    case 'permission': return core.permission(request.meta);
+    case 'permission': return core.permission(request.meta, request.until, request.inPaseo);
+    case 'paseo-owner': return core.paseoOwner(request.meta);
+    case 'paseo-app-answer': return core.paseoAppAnswer(request.meta);
     case 'subscribe': return core.subscribe(request.sub, request.after);
     case 'waits': return core.waitsState();
     case 'lock-lost': return core.lockLost(request.path);
