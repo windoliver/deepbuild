@@ -23,7 +23,8 @@ export type CheckoutPlant =
   | 'links-dependencies' | 'stands-in-always' | 'stamps-time' | 'keeps-every-snapshot' | 'drops-decisions' | 'removes-at-session-end'
   | 'snapshot-unbounded' | 'snapshots-one-at-a-time' | 'git-inherits-env';
 export interface CheckoutsOptions { store: string; root: string; kinds: CheckRunnerFill[]; host: Supervisor; leases: LeaseTable; now(): number; plant?: CheckoutPlant }
-export interface Snapshot { commit: string; wrote: boolean }
+/** `tree` is the snapshot's tree: the same tree on another HEAD is another snapshot, but the same inputs for a check (#45). */
+export interface Snapshot { commit: string; wrote: boolean; tree: string }
 /**
  * One claim's budget for its snapshot and its checkout together: 8 s of git work from `since`, and no stage restarts
  * the clock. Past it, every git process it started is stopped by its PID and the work ends with an `OverBudget`.
@@ -287,16 +288,16 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
       const links = untracked.filter((p) => INSTALLS.includes(basename(p)) && lstatSync(join(worktree, p)).isSymbolicLink());
       if (links.length) await git(worktree, ['update-index', '--force-remove', '-z', '--stdin'], env, links.join('\0'));
       const tree = await git(worktree, ['write-tree'], env);
-      if (tree === await git(worktree, ['rev-parse', `${head}^{tree}`])) return { commit: head, wrote: false };
+      if (tree === await git(worktree, ['rev-parse', `${head}^{tree}`])) return { commit: head, wrote: false, tree };
       const date = o.plant === 'stamps-time' ? new Date().toISOString() : FIXED_DATE;
       const commit = await git(worktree, ['commit-tree', tree, '-p', head, '-m', 'deep snapshot'], { ...env, ...FIXED, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date });
-      if (o.plant === 'snapshot-into-repo') return { commit, wrote: true };
+      if (o.plant === 'snapshot-into-repo') return { commit, wrote: true, tree };
       const known = await refOf(commit);
       // Written again: its 30 days start over, so a new claim on old bytes never loses its snapshot.
       if (known) await inStore(['update-ref', '-d', known]);
       await inStore(['update-ref', `${SNAPSHOTS}${Math.floor(o.now())}/${commit}`, commit]);
-      if (known) return { commit, wrote: false };
-      return { commit, wrote: true };
+      if (known) return { commit, wrote: false, tree };
+      return { commit, wrote: true, tree };
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
