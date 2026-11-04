@@ -1016,9 +1016,9 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     json!("octa"),
                 ),
                 ranged(
-                    p("detail", "u8", "", json!(1), G, json!(1), json!(2)),
+                    p("detail", "u8", "", json!(0), G, json!(1), json!(2)),
                     0.0,
-                    6.0,
+                    5.0,
                 ),
                 shade(),
                 paint(),

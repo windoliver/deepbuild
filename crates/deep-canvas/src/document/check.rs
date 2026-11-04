@@ -2319,7 +2319,14 @@ pub(crate) fn resolve(
             let mut cursor = member(target, "params").and_then(|p| member(p, name));
             for field in rest {
                 cursor = match cursor {
-                    Some(Value::Object(map)) => map.get(*field),
+                    // A path op is an object with one key, its kind (Path `path@1`: ops), so a
+                    // step that names one of its fields reaches through that key.
+                    Some(Value::Object(map)) => map.get(*field).or_else(|| {
+                        let (only, inner) = (map.len() == 1).then(|| map.iter().next())??;
+                        (*name == "ops" && !only.is_empty())
+                            .then(|| inner.get(*field))
+                            .flatten()
+                    }),
                     Some(Value::Array(list)) => {
                         field.parse::<usize>().ok().and_then(|i| list.get(i))
                     }

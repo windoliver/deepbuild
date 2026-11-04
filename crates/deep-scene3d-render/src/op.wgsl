@@ -7,6 +7,8 @@ var<private> op_frame: OpFrame;
 
 @fragment
 fn op_mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
+    // The texture coordinates' derivatives, while every pixel of the quad still runs (#423).
+    let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
     let local_n = normalize(cross(dpdx(in.local), dpdy(in.local)) + vec3<f32>(0.0, 1e-9, 0.0));
     // The operator's frame: this target's camera and size, and the solid's own time and seed.
     let size = frame.viewport.xy;
@@ -40,5 +42,6 @@ fn op_mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
     if (o.wrote.x & 16u) != 0u {
         m.surface.y = clamp(o.mr.y, 0.0, 1.0);
     }
-    return shade(m, front, local_n);
+    // With no light, no sky and no environment it takes the view's key light.
+    return shade(m, front, local_n, g, true);
 }
