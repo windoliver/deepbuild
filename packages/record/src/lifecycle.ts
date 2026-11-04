@@ -39,7 +39,8 @@ const GUARDS: Readonly<Record<string, (e: Moving, row: Record<string, unknown>, 
   core: (e) => e.writer === 'core',
   not_agent: (e) => !isAgent(e.writer),
   trusted_path: (e) => e.writer === 'app' || e.writer === 'cli',
-  past_deadline: (e, row) => typeof row.deadline !== 'number' || e.ts >= row.deadline,
+  // A projection reads no clock: that the deadline passed comes from the core's event that says so.
+  past_deadline: (e) => e.writer === 'core',
   // The leases kernel proves the end before it releases; the record holds it to events already in the log.
   proven_ended: (e, _row, read) => {
     const proof = isObj(e.data) && Array.isArray(e.data.proof) ? e.data.proof : [];
@@ -57,7 +58,7 @@ const ASK_KINDS = new Set(table('ask').moves.map((m) => m.event));
 function targets(e: Moving, read: ReadRow): Target[] {
   const d: Obj = isObj(e.data) ? e.data : {};
   const ask = (id: string | null): Target[] => {
-    const row = id ? read('SELECT status, deadline FROM asks WHERE id = ?', id) : undefined;
+    const row = id ? read('SELECT status FROM asks WHERE id = ?', id) : undefined;
     return row ? [{ table: 'ask', object: `ask:${id}`, state: String(row.status), row }] : [];
   };
   const claim = (id: string | null): Target[] => {
