@@ -81,7 +81,7 @@ export async function namesOf(dir: string): Promise<string> {
   return sha(out.sort().join('\0'));
 }
 /** The stem of a key: everything but the files' contents. */
-export const stemOf = (facts: { repo: string; check: string; approved: string; command: string; deadline_ms: number | null; held_out: unknown; references?: unknown; installs: string; names: string | null; base: string | null; session?: string }): string =>
+export const stemOf = (facts: { repo: string; check: string; approved: string | null; command: string; deadline_ms: number | null; held_out: unknown; references?: unknown; installs: string; names: string | null; base: string | null; session?: string }): string =>
   sha(JSON.stringify([facts.repo, hostname(), facts.check, facts.approved, facts.command, facts.deadline_ms, facts.held_out ?? null, facts.references ?? null, facts.installs, facts.names, facts.base, facts.session ?? null]));
 /** Whether a run's record is whole in run.finished, so a restarted hub may read it again (KeyFacts.plain). */
 export const plain = (r: RecordedRun): boolean => !r.attempts.length && !r.seeded.some((s) => s.standIn) && r.failures.every((f) => f.assertion) && r.contract === null && r.mask === null;
