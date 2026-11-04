@@ -2074,6 +2074,16 @@ pub fn status_marks(
             ["items", id, "params", "paint", "badge"] => (*id, Slot::Badge),
             _ => return refuse("bad_doc", format!("{path}/target")),
         };
+        // An item another canvas module draws, such as a solid in depth, takes its status from
+        // that module (scene3d outlines it), never from a 2D status mark (#1162).
+        let written = doc
+            .get("items")
+            .and_then(|i| i.get(id))
+            .and_then(|i| i.get("kind"))
+            .and_then(Value::as_str);
+        if written.is_some_and(|k| !KINDS.contains(&k)) {
+            continue;
+        }
         let Some(item) = items.get(id) else {
             return refuse("ref_unresolved", format!("{path}/target"));
         };
