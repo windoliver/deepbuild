@@ -134,6 +134,8 @@ pub enum Planted {
     StatusBeforeUpscale,
     StatusWithoutDepth,
     OutlinesBeforeUpscale,
+    /// #1174's wrong program: screen-size labels drawn in the geometry pass, before the upscale.
+    LabelsBeforeUpscale,
     /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
     /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on
     /// whatever its spike record says; each sector of a group composited on its own.
@@ -150,6 +152,13 @@ pub enum Planted {
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
+    /// #421's wrong programs (tests/acceptance/421/README.md: Planted programs): front faces
+    /// chosen without the world determinant; coplanar ties left to a submission order that turns
+    /// over each frame; a spot's lumens spread over its cone; status outlines tone mapped.
+    WindingIgnoresDeterminant,
+    TiesBySubmission,
+    SpotCountsCone,
+    StatusBeforeToneMap,
     /// #418's: the bloom's lens dirt laid over the frame instead of multiplying its light.
     DirtOverlay,
 }
@@ -217,6 +226,7 @@ impl Planted {
             "status_before_upscale" => Planted::StatusBeforeUpscale,
             "status_without_depth" => Planted::StatusWithoutDepth,
             "outlines_before_upscale" => Planted::OutlinesBeforeUpscale,
+            "labels_before_upscale" => Planted::LabelsBeforeUpscale,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
@@ -226,6 +236,10 @@ impl Planted {
             "edges_skip_depth" => Planted::EdgesSkipDepth,
             "releases_at_revision" => Planted::ReleasesAtRevision,
             "stops_at_request" => Planted::StopsAtRequest,
+            "winding_ignores_determinant" => Planted::WindingIgnoresDeterminant,
+            "ties_by_submission" => Planted::TiesBySubmission,
+            "spot_counts_cone" => Planted::SpotCountsCone,
+            "status_before_tone_map" => Planted::StatusBeforeToneMap,
             "dirt_overlay" => Planted::DirtOverlay,
             _ => return None,
         })

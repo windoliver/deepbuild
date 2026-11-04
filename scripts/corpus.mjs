@@ -5,7 +5,8 @@
 // folder of its own, so a new set joins the corpus only through a diff you approve.
 import { execFile, spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir, userInfo } from 'node:os';
+import { homedir } from 'node:os';
+import { redactor } from './corpus-redact.mjs';
 import { delimiter, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -256,13 +257,6 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
 
 // Redaction: your home folder, user name and any email address never reach the corpus; transcript
 // entries that carry your instructions, memory, account or system prompts are left out whole.
-function redactor() {
-  const home = homedir(), user = userInfo().username;
-  const swap = (text) => text.split(home).join('~').replaceAll(`-Users-${user}-`, '-Users-user-').replaceAll(`/Users/${user}`, '/Users/user')
-    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, 'user@example.com');
-  const walk = (value) => (typeof value === 'string' ? swap(value) : Array.isArray(value) ? value.map(walk) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, walk(inner)])) : value);
-  return walk;
-}
 const PRIVATE = ['base_instructions', 'user_instructions', 'developer_instructions', 'instructions', 'systemPrompt'];
 function keepEntry(agent, entry) {
   if (agent === 'claude-code') return ['user', 'assistant', 'system', 'queue-operation'].includes(entry.type) && entry.subtype !== 'prompt_snapshot';

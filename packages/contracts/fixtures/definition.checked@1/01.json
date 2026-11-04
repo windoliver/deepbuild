@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "definition.checked",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "task_ref": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+    "solved": false,
+    "solve": "not solved: R2 has no check (\"The e2e test passes\")",
+    "flags": [
+      "R2 is a journey with no negative case"
+    ]
+  }
+}
