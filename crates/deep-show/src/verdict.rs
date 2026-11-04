@@ -105,6 +105,54 @@ impl<'a> Hub<'a> {
         blocked_rows(by_kind)
     }
 
+    /// What a canvas module this build lacks blocks in a `deep show --check` whose claim names
+    /// the document (#1162): each item of a kind that module evaluates is kept as written and
+    /// never drawn, as an unknown kind's is (#403), and blocks the claim naming its kind; the
+    /// rest still draws. The module's own `requires` entry stops refusing once its items are set
+    /// apart. Outside such a claim the document is refused with `module_missing` (#305).
+    pub fn missing_in_claim(
+        &self,
+        show: &Show,
+        issues: &mut Vec<Issue>,
+        skipped: &mut Vec<String>,
+    ) -> Vec<Value> {
+        let in_claim = show.check
+            && show
+                .claim
+                .as_ref()
+                .and_then(|h| self.scenario.claims.get(h))
+                .is_some_and(|c| c.deliverables.contains(&show.doc));
+        if !in_claim {
+            return Vec::new();
+        }
+        let item_kind = |i: &Issue| {
+            (i.code == "module_missing" && i.path.starts_with("items/") && i.path.ends_with("/kind"))
+                .then(|| i.actual.as_str().map(str::to_string))
+                .flatten()
+        };
+        let mut by_kind: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for i in issues.iter() {
+            if let Some(kind) = item_kind(i) {
+                by_kind.entry(kind).or_default().extend(i.ids.iter().cloned());
+            }
+        }
+        if by_kind.is_empty() {
+            return Vec::new();
+        }
+        issues.retain(|i| {
+            item_kind(i).is_none()
+                && !(i.code == "module_missing" && i.path.starts_with("requires/modules/"))
+        });
+        let mut rows = Vec::new();
+        for (kind, ids) in by_kind {
+            skipped.extend(ids.iter().cloned());
+            rows.push(json!({"code": "module_missing", "kind": kind, "ids": ids}));
+        }
+        skipped.sort();
+        skipped.dedup();
+        rows
+    }
+
     /// A document's current revision: a shared document's, or a session's. A view of the record
     /// has no revisions (Revision), so it is no deliverable a verdict can be keyed by.
     fn current_of(&self, doc: &str) -> Option<Current<'_>> {
@@ -331,7 +379,11 @@ impl<'a> Hub<'a> {
             // A document that requires a canvas module the build lacks is BLOCKED, never a
             // FAIL (#305), naming the module where the `requires/modules/<module>` path does.
             for i in checked.issues.iter().filter(|i| i.code == "module_missing") {
-                let mut b = json!({"code": "module_missing", "kind": kind, "ids": i.ids});
+                // An item of a kind whose module the build lacks names that kind (#1162).
+                let item_kind = (i.path.ends_with("/kind") && i.path.starts_with("items/"))
+                    .then(|| i.actual.as_str())
+                    .flatten();
+                let mut b = json!({"code": "module_missing", "kind": item_kind.unwrap_or(&kind), "ids": i.ids});
                 if let Some(module) = i.path.strip_prefix("requires/modules/") {
                     b["module"] = json!(module);
                 }

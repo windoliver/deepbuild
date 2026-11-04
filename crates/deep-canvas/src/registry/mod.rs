@@ -155,6 +155,10 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("material", "scene3d"),
     ("sky", "scene3d"),
     ("vector", "vector"),
+    // R1's mark sets, scales and axes are the data module's, which marks2d draws.
+    ("marks", "data"),
+    ("axis", "data"),
+    ("scale", "data"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
