@@ -60,15 +60,15 @@ export const byHand = ['tests/acceptance/685/', 'tests/acceptance/666/session.li
  * Test files whose verdict reads the machine's load or timing (docs/parallel-proof.md, section 7), which run only under
  * a timed grant: affected.mjs with --timed, and the before and trace lanes. They are the files that call
  * environmentProblem(, judgeTiming, judgeLimit, referenceMacProblem or notReference, or gate on a helper's
- * `status === 'INCONCLUSIVE'`, and those that gate on the load or a reference Mac through a helper of another name, as
- * #120's inconclusiveIfLoaded and #34's notReferenceMac, named one by one; a rule by what a file imports marks 386
- * files, so none is used.
+ * `status === 'INCONCLUSIVE'`; those that gate on the load or a reference Mac through a helper of another name, as
+ * #120's inconclusiveIfLoaded, #34's notReferenceMac, #104's judge, #25's judgeP95 and #906's mustBeHeld; and those
+ * judging a wall-clock budget, named one by one. A rule by what a file imports marks 386 files, so none is used.
  */
 export const timed = [
-  'tests/acceptance/103/budgets.test.ts', 'tests/acceptance/105/budgets.test.ts',
-  'tests/acceptance/105/live.test.ts', 'tests/acceptance/1097/budgets.test.ts',
-  'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/111/budgets.test.ts',
-  'tests/acceptance/1113/load.test.mjs', 'tests/acceptance/112/live.test.ts',
+  'tests/acceptance/103/budgets.test.ts', 'tests/acceptance/104/budgets.test.ts',
+  'tests/acceptance/105/budgets.test.ts', 'tests/acceptance/105/live.test.ts',
+  'tests/acceptance/1097/budgets.test.ts', 'tests/acceptance/1098/budgets.test.ts',
+  'tests/acceptance/111/budgets.test.ts', 'tests/acceptance/1113/load.test.mjs', 'tests/acceptance/112/live.test.ts',
   'tests/acceptance/120/budgets-idle-redraft.test.ts', 'tests/acceptance/120/budgets.test.ts',
   'tests/acceptance/124/ac5-budgets.live.test.ts', 'tests/acceptance/138/budgets.test.ts',
   'tests/acceptance/139/budgets.test.ts', 'tests/acceptance/14/budgets.test.ts',
@@ -83,36 +83,43 @@ export const timed = [
   'tests/acceptance/236/budgets.test.ts', 'tests/acceptance/237/budgets.test.ts',
   'tests/acceptance/238/budgets.test.ts', 'tests/acceptance/24/budgets.test.ts',
   'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/25/live/budgets.test.ts',
-  'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/26/budgets.test.ts',
+  'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/routes/twenty-minutes.test.ts',
+  'tests/acceptance/25/routes/wake.test.ts', 'tests/acceptance/26/budgets.test.ts',
   'tests/acceptance/262/budgets.test.ts', 'tests/acceptance/27/budgets.test.ts',
   'tests/acceptance/28/budgets.test.ts', 'tests/acceptance/29/budgets.test.ts',
   'tests/acceptance/30/budgets.test.ts', 'tests/acceptance/303/budgets.test.ts',
   'tests/acceptance/304/budgets.test.ts', 'tests/acceptance/305/budgets.test.ts',
-  'tests/acceptance/306/budgets.test.ts', 'tests/acceptance/31/budgets.test.ts',
-  'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/315/budgets-overhead-redraft.test.ts',
-  'tests/acceptance/315/budgets.test.ts', 'tests/acceptance/319/budgets.test.ts',
+  'tests/acceptance/306/budgets.test.ts', 'tests/acceptance/31/budget-snapshot.test.ts',
+  'tests/acceptance/31/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts',
+  'tests/acceptance/315/budgets-overhead-redraft.test.ts', 'tests/acceptance/315/budgets.test.ts',
+  'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/325/timing.test.ts',
   'tests/acceptance/331/budgets.test.ts', 'tests/acceptance/34/budgets.test.ts',
   'tests/acceptance/340/flow/budgets.test.ts', 'tests/acceptance/348/budgets.test.ts',
   'tests/acceptance/356/budgets.test.ts', 'tests/acceptance/356/click.test.ts',
   'tests/acceptance/358/spike.live.test.mjs', 'tests/acceptance/365/budgets.test.ts',
-  'tests/acceptance/377/budgets.test.ts', 'tests/acceptance/380/budgets.test.ts',
-  'tests/acceptance/383/city.test.ts', 'tests/acceptance/385/spike.test.ts', 'tests/acceptance/386/budgets.test.ts',
-  'tests/acceptance/387/budgets.test.ts', 'tests/acceptance/39/budgets.test.ts',
-  'tests/acceptance/397/candles.test.ts', 'tests/acceptance/40/budgets.test.ts',
-  'tests/acceptance/401/budgets.test.ts', 'tests/acceptance/412/budgets.test.ts',
+  'tests/acceptance/377/budgets.test.ts', 'tests/acceptance/379/reasons.test.ts',
+  'tests/acceptance/380/budgets.test.ts', 'tests/acceptance/383/city.test.ts', 'tests/acceptance/385/spike.test.ts',
+  'tests/acceptance/386/budgets.test.ts', 'tests/acceptance/387/budgets.test.ts',
+  'tests/acceptance/39/budgets.test.ts', 'tests/acceptance/397/candles.test.ts',
+  'tests/acceptance/40/budgets.test.ts', 'tests/acceptance/401/budgets.test.ts',
+  'tests/acceptance/402/budgets.test.ts', 'tests/acceptance/412/budgets.test.ts',
   'tests/acceptance/417/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts',
   'tests/acceptance/489/budgets.test.ts', 'tests/acceptance/55/budgets.test.ts',
   'tests/acceptance/568/judge.test.mjs', 'tests/acceptance/572/budgets.test.ts',
   'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/63/budgets.test.ts',
-  'tests/acceptance/69/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts',
+  'tests/acceptance/68/budgets.test.ts', 'tests/acceptance/69/budgets.test.ts',
+  'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/wait.test.ts',
   'tests/acceptance/824/budgets.long.test.ts', 'tests/acceptance/824/redraft-ac1/budgets.long.test.ts',
   'tests/acceptance/83/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/854/idle.test.ts',
   'tests/acceptance/854/patch.test.ts', 'tests/acceptance/854/replica.test.ts',
   'tests/acceptance/854/scene-read.test.ts', 'tests/acceptance/855/costs.test.ts',
   'tests/acceptance/855/keying.test.ts', 'tests/acceptance/857/background.test.ts',
-  'tests/acceptance/857/speedup.test.ts', 'tests/acceptance/880/redraft/touch-id.test.ts',
+  'tests/acceptance/857/speedup.test.ts', 'tests/acceptance/87/models/budgets.test.ts',
+  'tests/acceptance/87/numbers/budget.test.ts', 'tests/acceptance/880/redraft/touch-id.test.ts',
   'tests/acceptance/880/touch-id.test.ts', 'tests/acceptance/881/latency.test.ts',
-  'tests/acceptance/896/dirty.test.ts', 'tests/acceptance/896/settled.test.ts', 'tests/benchmark.test.mjs'
+  'tests/acceptance/896/dirty.test.ts', 'tests/acceptance/896/settled.test.ts',
+  'tests/acceptance/906/prompt.test.ts', 'tests/acceptance/906/stop.test.ts', 'tests/acceptance/96/budgets.test.ts',
+  'tests/benchmark.test.mjs'
 ];
 
 export const checks = [
