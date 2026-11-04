@@ -7,7 +7,7 @@
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas::ops;
 
-use crate::ease::Named;
+use deep_canvas::ease::Named;
 
 /// How a wave or a noise counts its cycles.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -140,6 +140,58 @@ impl Modifier {
     }
 }
 
+impl Modifier {
+    /// The range a value in `[lo, hi]` keeps once this modifier applies, from its amplitude, its
+    /// pulse's shape (its ease's extremes) or its limits, by its influence, which may be negative.
+    pub fn bound(&self, lo: f64, hi: f64) -> (f64, f64) {
+        let k = self.influence;
+        // `k · s` for s in [a, b], either sign of k.
+        let scaled = |a: f64, b: f64| {
+            let (p, q) = (k * a, k * b);
+            (p.min(q), p.max(q))
+        };
+        match &self.kind {
+            Kind::Wave {
+                amplitude, offset, ..
+            } => {
+                let (a, b) = scaled(offset - amplitude.abs(), offset + amplitude.abs());
+                (lo + a, hi + b)
+            }
+            Kind::Noise { amplitude, .. } => {
+                let (a, b) = scaled(-amplitude.abs(), amplitude.abs());
+                (lo + a, hi + b)
+            }
+            Kind::Pulse {
+                amount,
+                shape,
+                ease,
+                ..
+            } => {
+                // The shape reads the ease up and back, so it keeps the ease's extremes, with 0.
+                let (e0, e1) = ease.extremes();
+                let (s0, s1) = match shape {
+                    Shape::Wiggle(_) => {
+                        let m = e0.abs().max(e1.abs());
+                        (-m, m)
+                    }
+                    _ => (e0.min(0.0), e1.max(1.0)),
+                };
+                let (a, b) = scaled(amount * s0, amount * s1);
+                (lo + a.min(0.0), hi + b.max(0.0))
+            }
+            Kind::Limits { min, max } => {
+                // value + k(clamp(value) − value): the clamp's move, mixed by k, from each end.
+                let at = |v: f64| v + k * (v.clamp(*min, *max) - v);
+                let ends = [at(lo), at(hi), at(min.clamp(lo, hi)), at(max.clamp(lo, hi))];
+                ends.iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| {
+                        (a.min(*v), b.max(*v))
+                    })
+            }
+        }
+    }
+}
+
 /// A pulse's shape at u in (0, 1): 0 at both ends, 1 at its height.
 fn shape_at(shape: Shape, ease: &Named, u: f64) -> f64 {
     let there_and_back = |u: f64| {
@@ -159,7 +211,8 @@ fn shape_at(shape: Shape, ease: &Named, u: f64) -> f64 {
                 ease.at((1.0 - u) / rise)
             }
         }
-        Shape::Wiggle(count) => there_and_back(u) * ops::sin(ops::TAU * count * u),
+        // math@1's wiggle (Manim's): sin(count · π · u), count half-turns over the span.
+        Shape::Wiggle(count) => there_and_back(u) * ops::sin(ops::PI * count * u),
     }
 }
 

@@ -13,6 +13,7 @@ fn refused<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused>
     Err(Refused {
         code,
         path: path.into(),
+        detail: None,
     })
 }
 
@@ -68,7 +69,11 @@ pub fn insert(doc: &Value, channel: &str, t: i64) -> Result<(Value, String), Ref
         }
         // A spring is solved from its start, an ease or an auto span over its whole span: no key
         // splits one on its own curve.
-        Interp::Spring(_) | Interp::Ease(_) | Interp::Auto { .. } | Interp::CatmullRom => {
+        Interp::Spring(_)
+        | Interp::Ease(_)
+        | Interp::Table
+        | Interp::Auto { .. }
+        | Interp::CatmullRom => {
             return refused("bad_interp", format!("channels/{channel}/keys/{}", a.id))
         }
     };
