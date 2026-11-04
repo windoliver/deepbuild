@@ -7,7 +7,6 @@
 //
 //   DEEP_JOURNEY_JOB     the job file (JSON, the shape run.ts writes), read once
 //   DEEP_JOURNEY_SECRET_<name>   a secret's value, by the name the journey references; never in the job file
-import { chromium } from 'playwright';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
@@ -23,12 +22,21 @@ const failure = (step, line, assertion, message, extra = {}) => ({ step: step.id
 const ARGS = ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'];
 const report = {
   started: null, steps: [], endState: [], requests: [], errors: [], console: [], video: null, trace: null,
-  redaction: { state: 'complete', since: null }, secretTyped: false, bundle: {}, ended: null, died: null, playwright: { started: 0, ended: 0 },
+  redaction: { state: 'complete', since: null }, secretTyped: false, bundle: {}, ended: null, died: null, playwright: { started: 0, ended: 0, own: 0 },
 };
 let page, context, browser;
 let t0 = 0;
 const now = () => Date.now() - t0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/**
+ * Playwright's own time (AC16): what a plain Playwright script of this journey spends inside Playwright, loading it,
+ * launching the browser, opening the context and its video, each step's navigation, action and expect, and closing.
+ * Everything else the driver asks of the page (records, screenshots, snapshots) is the runner's, not counted here.
+ */
+async function own(work) {
+  const started = performance.now();
+  try { return await work(); } finally { report.playwright.own += performance.now() - started; }
+}
 const flush = () => writeFileSync(join(out, 'report.json'), JSON.stringify(report));
 // A run that dies keeps what it captured: the report is written after every step, and once more on any exit.
 process.on('uncaughtException', (e) => { report.died = String(e?.stack ?? e); flush(); process.exit(70); });
@@ -116,10 +124,7 @@ const RECORDER = `(() => {
   take();
   document.addEventListener('animationstart', take, true); document.addEventListener('transitionstart', take, true);
 })();`;
-async function animationsSince(mark) {
-  try { return (await page.evaluate(() => window.__deepAnimations ?? [])).filter((a) => a.at >= mark).map(({ at, ...a }) => a); } catch { return []; }
-}
-const pageNow = async () => { try { return await page.evaluate(() => performance.now()); } catch { return 0; } };
+const since = (animations, mark) => animations.filter((a) => a.at >= mark).map(({ at, ...a }) => a);
 
 // ---- The controls on the page, by role, name and test ID with their state; a step records which appeared, went
 // away or changed state. The whole DOM, one line per element, so a claim's DOM diff names the element that changed.
@@ -238,8 +243,16 @@ function differs(a, b, masks) {
   }
   return maxX < 0 ? null : { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
 }
+let session = null;
+const cdp = async () => (session ??= await context.newCDPSession(page));
 async function shot(name) {
   const file = `${name}.png`;
+  // Chromium's own capture, encoded for speed (the PNG is lossless either way); Playwright's when it can't.
+  try {
+    const { data } = await (await cdp()).send('Page.captureScreenshot', { format: 'png', optimizeForSpeed: true });
+    writeFileSync(join(out, file), Buffer.from(data, 'base64'));
+    return file;
+  } catch { /* fall through */ }
   try { await page.screenshot({ path: join(out, file), timeout: 5000 }); return file; } catch { return null; }
 }
 /** The masks' boxes on the page now, each by its selector, with how many elements it matched. */
@@ -278,16 +291,17 @@ async function settled(name, masks) {
 // ---- One step: its actions, then its expects, under its deadline; an expect's timeout stays under the deadline.
 async function runStep(step, index) {
   current = step;
-  const before = await evaluate(CONTROLS, []);
-  const mark = await pageNow();
+  // One round trip each side of the step: the controls and the page's clock before, the controls and its animations after.
+  const { controls: before, now: mark } = await evaluate(`({ controls: ${CONTROLS}, now: performance.now() })`, { controls: [], now: 0 });
   const timeout = step.timeoutMs;
   const entry = { id: step.id, index, startMs: now(), endMs: null, outcome: 'passed', failure: null, route: null, controls: null, screenshot: null, snapshot: '', dom: [], animations: [], firstFrame: null, masks: [], still: true, unstable: null, expects: [], elements: [] };
   report.steps.push(entry);
   let timer;
   const overran = new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(Error(`step ${step.id} overran its deadline of ${step.deadlineMs} ms`), { overran: true })), step.deadlineMs); });
   const body = (async () => {
-    for (const a of step.actions ?? []) await act(step, a, timeout, entry);
-    for (const e of step.expects ?? []) await expectOne(step, e, timeout, entry);
+    // The step's own navigation, actions and expects are Playwright's time; the records around them are the runner's.
+    for (const a of step.actions ?? []) await own(() => act(step, a, timeout, entry));
+    for (const e of step.expects ?? []) await own(() => expectOne(step, e, timeout, entry));
   })();
   try {
     await Promise.race([body, overran]);
@@ -309,16 +323,16 @@ async function runStep(step, index) {
     flush();
     return false;
   }
-  entry.controls = changed(before, await evaluate(CONTROLS, []));
-  entry.animations = await animationsSince(mark);
-  entry.masks = await maskBoxes();
+  const after = await evaluate(`({ controls: ${CONTROLS}, animations: window.__deepAnimations ?? [] })`, { controls: [], animations: [] });
+  entry.controls = changed(before, after.controls);
+  entry.animations = since(after.animations, mark);
   if (job.settle) {
+    // A screen compared with the merge base: settled, with its masks, elements and DOM, which only a comparison reads.
+    entry.masks = await maskBoxes();
     const s = await settled(`step-${index + 1}-${step.id}`, entry.masks);
     entry.screenshot = s.file; entry.still = s.still; entry.unstable = s.unstable; entry.elements = s.elements;
+    entry.dom = await evaluate(DOM, []);
   } else entry.screenshot = await shot(`step-${index + 1}-${step.id}`);
-  entry.snapshot = await snapshot();
-  entry.dom = await evaluate(DOM, []);
-  if (!job.settle) entry.elements = await evaluate(ELEMENTS, []);
   current = null;
   flush();
   return entry.outcome === 'passed';
@@ -448,7 +462,6 @@ async function endState(c, index) {
     entry.outcome = 'failed';
     entry.message = first(e?.message ?? e);
   } finally {
-    entry.screenshot = await shot(`end-${index + 1}-${c.id}`);
     flush();
   }
 }
@@ -462,16 +475,19 @@ async function held(index) {
 // ---- The run.
 try {
   report.playwright.started = Date.now();
-  browser = await chromium.launch({ headless: true, args: ARGS });
+  const { chromium } = await own(() => import('playwright'));
+  browser = await own(() => chromium.launch({ headless: true, args: ARGS }));
   const p = job.profile;
-  context = await browser.newContext({
+  context = await own(() => browser.newContext({
     viewport: { width: p.width, height: p.height }, locale: p.locale, timezoneId: p.timezone, colorScheme: p.colorScheme,
     reducedMotion: p.reducedMotion, serviceWorkers: 'block', deviceScaleFactor: 1,
-    ...(job.video ? { recordVideo: { dir: out, size: { width: p.width, height: p.height } } } : {}),
-  });
-  if (job.trace) await context.tracing.start({ screenshots: true, snapshots: true });
+  }));
+  // The trace's actions, calls and requests; the video and each step's screenshot already hold the screen.
+  if (job.trace) await context.tracing.start({ screenshots: false, snapshots: false });
   await context.addInitScript(RECORDER);
-  page = await context.newPage();
+  page = await own(() => context.newPage());
+  // The video at 720p and 15 fps (AC16), the frame the viewport is; its time 0 is the run's.
+  if (job.video) await own(() => page.screencast.start({ path: join(out, 'video.webm'), size: { width: p.width, height: p.height }, fps: 15 }));
   t0 = Date.now();
   report.started = new Date(t0).toISOString();
   watch();
@@ -483,14 +499,17 @@ try {
   }
   // The end state is read whatever the steps showed, so a reading or a readback stands beside a failed step; only a
   // step that overran, whose page may never answer, leaves it unread.
-  if (ok || report.steps.at(-1)?.outcome === 'failed') for (const [i, c] of (job.endState ?? []).entries()) await endState(c, i);
+  if (ok || report.steps.at(-1)?.outcome === 'failed') {
+    for (const [i, c] of (job.endState ?? []).entries()) await endState(c, i);
+    // The end state's one screen, taken once the checks have read it: every check looked at this page, unchanged.
+    if (report.endState.length) { const file = await shot('end-state'); for (const e of report.endState) e.screenshot = file; flush(); }
+  }
   for (const e of report.requests) if (e.ended === null) e.unfinished = true;
   report.ended = now();
   if (job.trace) { await context.tracing.stop({ path: join(out, 'trace.zip') }); report.trace = 'trace.zip'; }
-  const video = page.video();
-  await context.close();
-  if (video) { const path = await video.path(); report.video = path.slice(out.length + 1); }
-  await browser.close();
+  if (job.video) { await own(() => page.screencast.stop()); if (existsSync(join(out, 'video.webm'))) report.video = 'video.webm'; }
+  await own(() => context.close());
+  await own(() => browser.close());
   report.playwright.ended = Date.now();
 } catch (e) {
   report.died = String(e?.stack ?? e);

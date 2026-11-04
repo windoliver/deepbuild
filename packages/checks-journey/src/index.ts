@@ -217,7 +217,6 @@ export async function runJourney(o: JourneyRunOptions): Promise<JourneyRun> {
 }
 async function runInternal(o: JourneyRunOptions, extra: Internal): Promise<Ran> {
   const reducedMotion = o.reducedMotion ?? 'reduce';
-  const started = Date.now();
   let text: string;
   try { text = journeyText(o.checkout, o.journey); } catch (error) { return { run: { ...empty(o.run, { depth: 'journey', reducedMotion }), outcome: 'missing', cause: (error as Error).message }, report: null, render: null }; }
   let journey: Journey;
@@ -236,6 +235,8 @@ async function runInternal(o: JourneyRunOptions, extra: Internal): Promise<Ran> 
   const brought = await up(o.host, o.checkout);
   if ('cause' in brought) return { run: { ...run, outcome: 'missing', cause: brought.cause }, report: null, render: null };
   const stack = brought.stack;
+  // The run's time is the runner's, from the stack being ready to its teardown: env-local's start and stop are its own (#331).
+  const ready = Date.now();
   run.stack = { run: stack.run, pid: stack.pid, ports: stack.ports };
   const writer = o.evidence.connect({ role: 'deepbuild', via: 'journey' });
   const records: StackRecords = { processes: stack.processes.map((p) => ({ ...p, reads: [] })), containers: [] };
@@ -245,10 +246,10 @@ async function runInternal(o: JourneyRunOptions, extra: Internal): Promise<Ran> 
     if (journey.api) await runApi(o, journey, text, stack.url, run, scrub, writer);
     else out = await runBrowser(o, journey, text, stack, run, writer, scrub, records, swaps, reducedMotion, extra);
   } finally {
+    run.timing.total = Date.now() - ready;
     for (const s of swaps) await down(o.host, s);
     await down(o.host, stack.run);
   }
-  run.timing.total = Date.now() - started;
   return { run, ...out };
 }
 
@@ -346,7 +347,8 @@ async function record(o: JourneyRunOptions, journey: Journey, text: string, url:
   const file = o.journey;
   const stopped = driven.exit.cause === 'stop';
   const uncounted = run.served.served !== 'checkout';
-  run.timing.playwright = report ? Math.max(0, (report.playwright.ended || Date.now()) - report.playwright.started) : 0;
+  // Playwright's own time, as the driver counted it: what a plain Playwright script of the journey would spend in it.
+  run.timing.playwright = report ? Math.round(report.playwright.own) : 0;
   if (driven.exit.failed) { run.outcome = 'missing'; run.cause = driven.exit.failed; return; }
   if (!report) { run.outcome = stopped ? 'stopped' : 'failed'; run.cause = `the driver wrote no report (exit ${driven.exit.code})`; run.failures.push({ test: journey.id, file, line: 0, stack: scrub(driven.exit.output.slice(-2000)) || null, assertion: false, message: run.cause }); return; }
   const incompleteFrom = report.redaction.state === 'incomplete' ? report.steps.findIndex((s) => s.id === report.redaction.since) : -1;

@@ -37,7 +37,7 @@ export interface ReportRequest { url: string; method: string; type: string; star
 export interface Report {
   started: string | null; steps: ReportStep[]; endState: ReportEnd[]; requests: ReportRequest[]; errors: ReportError[]; console: { text: string; at: number; step: string | null }[];
   video: string | null; trace: string | null; redaction: { state: 'complete' | 'incomplete'; since: string | null; sinceMs?: number; field?: string }; secretTyped: boolean; bundle: Record<string, number>;
-  ended: number | null; died: string | null; playwright: { started: number; ended: number };
+  ended: number | null; died: string | null; playwright: { started: number; ended: number; own: number };
 }
 /** A file the run wrote, kept with its digest and size, checked when read. */
 export interface Artifact { name: string; path: string; sha256: string; size: number; kind: 'png' | 'webm' | 'zip' | 'json' }
