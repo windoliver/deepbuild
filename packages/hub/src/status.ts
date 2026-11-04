@@ -1,19 +1,23 @@
 // `deep status` (#19): every session from every agent and repo, grouped by repo, with what needs you, what's stuck and
 // what's flagged first and the quiet ones folded into one line a repo, and the hub it read. A session whose turn
-// finished lists that turn's tool calls and commits (#668). With the hub up it asks the hub (`status.read`); with the
+// finished lists that turn's tool calls and commits (#668), and a session with a claim its newest claim's line, the
+// one its chat showed (#669). With the hub up it asks the hub (`status.read`); with the
 // hub down it opens the hub's database read-only and reads the same tables.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import { call } from './client.js';
 import { CAN_RUN, CANT_RUN } from './hook-programs.js';
+import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { rowReadings } from './codex-loops.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime } from './promises.js';
+import { claimState, newestClaim } from './verdict-chat.js';
+import { verdictLine } from '@deepbuild/verdicts';
 
 export type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
 /** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
-export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; note?: string; calls?: string[]; commits?: string[]; readings?: string[] }
+export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; note?: string; verdict?: string; calls?: string[]; commits?: string[]; readings?: string[] }
 const ORDER: readonly State[] = ['needs you', 'stuck', 'flagged', 'working', 'finished', 'quiet'];
 /** A session with no hook for this long, whatever its last state, reads quiet. */
 const QUIET_MS = 24 * 3_600_000;
@@ -53,18 +57,22 @@ export async function sessionStates(query: (sql: string) => Promise<unknown[]>, 
   // A process gone, unless the session started again since, as a resume does in a new process.
   const gone = new Set(((await query(`SELECT DISTINCT g.session_id FROM ${events('g')} WHERE g.kind = 'session.gone' AND g.session_id IS NOT NULL${of('g.session_id')} AND NOT EXISTS (SELECT 1 FROM events s WHERE s.session_id = g.session_id AND s.kind = 'session.start' AND s.log_pos > g.log_pos)`)) as { session_id: string }[]).map((r) => r.session_id));
   const due = await duePromises(query, events(), of('session_id'));
-  // The newest reading that says why a session's holds don't apply (#39): watch-only past its facts, or a stop not held.
-  const noted = ((await query(`SELECT session_id, json_extract(data, '$.reading') AS text FROM ${events()} WHERE kind = 'session.reading' AND session_id IS NOT NULL${of('session_id')} AND (json_extract(data, '$.reading') LIKE '%watch-only%' OR json_extract(data, '$.reading') LIKE 'Hooks can run again%' OR (json_extract(data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = events.session_id AND later.log_pos > events.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) ORDER BY log_pos`)) as { session_id: string; text: string }[]);
+  // The newest reading that says why a session's holds don't apply (#39): watch-only past its facts, a stop not held,
+  // or a call DeepBuild denied that ran anyway (#1033).
+  const noted = ((await query(`SELECT session_id, json_extract(data, '$.reading') AS text FROM ${events()} WHERE kind = 'session.reading' AND session_id IS NOT NULL${of('session_id')} AND (json_extract(data, '$.reading') LIKE '%watch-only%' OR json_extract(data, '$.reading') LIKE 'DeepBuild denied % and it ran anyway%' OR json_extract(data, '$.reading') LIKE 'Its Claude Code home loads no mod%' OR json_extract(data, '$.reading') LIKE 'Hooks can run again%' OR (json_extract(data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = events.session_id AND later.log_pos > events.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) ORDER BY log_pos`)) as { session_id: string; text: string }[]);
   // Hooks that can run again (#993) take back each "hooks can't run" before them, and show nothing of their own.
   const notes = new Map<string, string>();
   const shown = new Map<string, string[]>();
   for (const r of noted) {
     const kept = shown.get(r.session_id) ?? [];
-    shown.set(r.session_id, r.text.startsWith(CAN_RUN) ? kept.filter((t) => !t.startsWith(CANT_RUN)) : [...kept, r.text]);
+    // A home that no longer loads an overriding mod takes back its watch-only line the same way (#1033).
+    shown.set(r.session_id, r.text.startsWith(CAN_RUN) ? kept.filter((t) => !t.startsWith(CANT_RUN)) : r.text.startsWith(MODS_GONE) ? kept.filter((t) => !t.startsWith(MODS_WATCH)) : [...kept, r.text]);
     const last = shown.get(r.session_id)!.at(-1);
     if (last) notes.set(r.session_id, last);
     else notes.delete(r.session_id);
   }
+  // A session waiting on its monitor (#997): the newest of its monitor readings says so, with no stop of its own or end since.
+  const watching = new Map(((await query(`SELECT r.session_id, json_extract(r.data, '$.reading') AS text FROM ${events('r')} WHERE r.kind = 'session.reading' AND r.session_id IS NOT NULL${of('r.session_id')} AND json_extract(r.data, '$.reading') LIKE 'Waiting on its monitor%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND (later.kind = 'session.end' OR (later.kind = 'agent.stop' AND json_extract(later.data, '$.child') IS NULL) OR (later.kind = 'session.reading' AND json_extract(later.data, '$.reading') LIKE 'Its monitor%')))`)) as { session_id: string; text: string }[]).map((r) => [r.session_id, r.text]));
   // A turn you interrupted, with no prompt since (#39).
   const interrupted = new Set(((await query(`SELECT e.session_id FROM ${events('e')} WHERE e.kind = 'session.reading'${of('e.session_id')} AND json_extract(e.data, '$.reading') LIKE 'Interrupt:%' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = e.session_id AND a.kind = 'user.ask' AND a.log_pos > e.log_pos)`)) as { session_id: string }[]).map((r) => r.session_id));
   // Each session's newest stop: a hook after it, such as Claude Code's idle-prompt notification, is no later stop.
@@ -87,6 +95,8 @@ export async function sessionStates(query: (sql: string) => Promise<unknown[]>, 
       : s.status === 'failed' ? ['flagged', 'failed', `its turn ended failed, with no claim${s.cause ? ` (${s.cause})` : ''}`]
       : midTurn ? ['flagged', 'gone', 'its process is gone mid-turn']
       : s.status === 'unknown' || s.status === 'waiting' || now - (s.last_seen ?? 0) > QUIET_MS ? ['quiet', 'quiet', `last seen ${ago(s.last_seen)} ago`]
+      // A session waiting on its monitor (#997) is still at work.
+      : s.status === 'finished' && watching.has(s.id) ? ['working', 'working', watching.get(s.id)!]
       : s.status === 'finished' && interrupted.has(s.id) ? ['finished', 'interrupted', `its turn was interrupted ${ago(s.last_seen)} ago`]
       : s.status === 'finished' ? ['finished', 'finished', `its turn stopped ${ago(stops.get(s.id) ?? s.last_seen)} ago`]
       : ['working', 'working', `last seen ${ago(s.last_seen)} ago`];
@@ -100,6 +110,13 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const rows = sessions.map((s): StatusRow => {
     return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state: s.state, why: s.why, ...(s.note ? { note: s.note } : {}) };
   });
+  // The newest claim's line, from the record's claims, verdicts and runs, as the chat shows it (#83, #669).
+  for (const row of rows) {
+    // A database older than the claims tables has none to show.
+    const claim = await newestClaim(query, row.id).catch(() => undefined);
+    const state = claim === undefined ? undefined : await claimState(query, claim, new Map()).catch(() => undefined);
+    if (state) row.verdict = verdictLine(state.state);
+  }
   const finished = rows.filter((r) => r.state === 'finished');
   if (finished.length) await lastTurns(query, finished, new Map(sessions.map((s) => [s.id, s.worktree])));
   const codex = rows.filter((r) => r.agent === 'codex');
@@ -212,6 +229,7 @@ export function render(rows: readonly StatusRow[], from: string): string {
       for (const r of shown.filter((m) => m.repo === repo).sort((a, b) => rank(a) - rank(b))) {
         out.push(`  ${r.id.slice(0, 8)}  ${r.state.padEnd(9)}  ${r.agent.padEnd(11)}  ${r.why}`);
         if (r.note) out.push(`      ${r.note}`);
+        if (r.verdict) out.push(`      ${r.verdict}`);
         for (const reading of r.readings ?? []) out.push(`      ${reading}`);
         for (const call of r.calls ?? []) out.push(`      ${call}`);
         // The planted wrong program lists the turn's tool calls and leaves its commits out.

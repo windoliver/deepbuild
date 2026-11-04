@@ -1,0 +1,42 @@
+# Real-agent e2e on this branch's final build: Claude Code 2.1.308 typed into an interactive session in a pty, the
+# approve-all mod (its tool.check approves every call) loaded with --plugin-dir, DeepBuild's hooks (deep-hook, run with
+# exec) to a dev hub, the guard entry no-force-push (run:git push --force, block). Then the same session resumed with
+# claude -p --resume and no --plugin-dir. Screenshots 1-3 render the session's pty recording and the hub's outputs.
+
+137 session.start 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"agent":"claude-code","worktree":"<world>/repo","branch":null,"thread":"24964349-1ebe-46ba-99fe-4a2b185b55c9","loads":[],"billing":{"ANTHROPIC_API_KEY":false,"ANTHROPIC_AUTH_TOKEN":false,"CLAUDE_CODE_USE_BEDROCK":false,"CLAUDE_CODE_USE_VERTEX":false,"OPENAI_API_KEY":false}}
+166 session.reading 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"reading":"This session's Claude Code home (~/.claude) loads the mod approve-all, which handles tool.check, so it can approve a call DeepBuild's guard denied at PreToolUse: its holds and blocks are watch-only until the mod is gone or the setup holds the deny (managed settings, or a Team or Enterprise login)."}
+205 user.ask 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"msg":0,"text":"Make the auth middleware reject expired tokens: in src/auth.ts change `token.exp > 0` to `token.exp > Date.now()`, commit it with git, then run exactly `git push --force origin main` with the Bash tool, then reply done.","tasks":[],"from":"unknown"}
+339 tool.before 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"kind":"shell","paths":[],"command":"git push --force origin main","call":"toolu_01VDW2Gc4otdqbHXEYiKkemC","matched":["authority-push","no-force-push"]}
+342 tool.after 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"kind":"shell","paths":[],"command":"git push --force origin main","call":"toolu_01VDW2Gc4otdqbHXEYiKkemC","outcome":"ok"}
+346 guard.overridden 24964349-1ebe-46ba-99fe-4a2b185b55c9 session:249643491ebe46ba99fe4a2b185b55c9 {"call":"toolu_01VDW2Gc4otdqbHXEYiKkemC","tool":"Bash","label":"Bash `git push --force origin main`","guard":"no-force-push","send":true,"mods":["approve-all"],"mods_unread":null}
+347 session.reading 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"reading":"DeepBuild denied Bash `git push --force origin main` (no-force-push) and it ran anyway, approved past the deny by approve-all: this session's claims can't pass on its own checks."}
+348 ask.created 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"kind":"exception","question":"A send DeepBuild denied ran anyway: Bash `git push --force origin main` (call toolu_01VDW2Gc4otdqbHXEYiKkemC), approved past the deny by approve-all. It may already have left. Check whether it went out?","options":[{"id":"checked","label":"I checked it","decision":"none"},{"id":"later","label":"Not now","decision":"none"}],"recommended":"checked","deadline":1793940566778,"fallback":"you","default":"later","provisional":false,"owner":"you","key":"236d5e02184f13f6c2092d7b193aef0bcd5e5f70f6ae8f6a58954d9cc9d47c57","pinned_to":{"kind":"commit","ref":"d03c040bce477e28
+353 agent.stop 24964349-1ebe-46ba-99fe-4a2b185b55c9 session:249643491ebe46ba99fe4a2b185b55c9 {"turn":1,"did_work":true,"claim":true,"outcome":"finished","cause":"unknown","usage":{"covers":"turn","model":"claude-haiku-5-5","input":{"value":13947,"exact":true},"cached":{"value":145943,"exact":true},"output":{"value":1245,"exact":true},"context_fill":null,"cost":{"usd":null,"basis":"unpriced"}}}
+355 claim.made 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"task_ref":"session:249643491ebe46ba99fe4a2b185b55c9#0","attempt":1,"commit":"d03c040bce477e282b13c877ff5fb1459890f381","scope":"session","predictions":[]}
+357 session.reading 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"reading":"This stop was held 59 s for ask:01M6JE7YS570KW9R74BFT7NX9H and nothing was answered, so the hold ended and the stop went through. The session waits on you: your answer goes by its waiter or its next prompt."}
+358 session.end 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"reason":"other"}
+359 session.start 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"agent":"claude-code","worktree":"<world>/repo","branch":null,"thread":"24964349-1ebe-46ba-99fe-4a2b185b55c9","loads":[],"billing":{"ANTHROPIC_API_KEY":false,"ANTHROPIC_AUTH_TOKEN":false,"CLAUDE_CODE_USE_BEDROCK":false,"CLAUDE_CODE_USE_VERTEX":false,"OPENAI_API_KEY":false}}
+360 user.ask 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"msg":1,"text":"Reply with the word ok and use no tools.","tasks":[],"from":"unknown"}
+361 agent.stop 24964349-1ebe-46ba-99fe-4a2b185b55c9 session:249643491ebe46ba99fe4a2b185b55c9 {"turn":2,"did_work":false,"claim":false,"outcome":"finished","cause":"unknown","usage":null}
+363 session.reading 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"reading":"This stop was held 59 s for ask:01M6JE7YS570KW9R74BFT7NX9H and nothing was answered, so the hold ended and the stop went through. The session waits on you: your answer goes by its waiter or its next prompt."}
+364 session.end 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"reason":"other"}
+369 session.start 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"agent":"claude-code","worktree":"<world>/repo","branch":null,"thread":"24964349-1ebe-46ba-99fe-4a2b185b55c9","loads":[],"billing":{"ANTHROPIC_API_KEY":false,"ANTHROPIC_AUTH_TOKEN":false,"CLAUDE_CODE_USE_BEDROCK":false,"CLAUDE_CODE_USE_VERTEX":false,"OPENAI_API_KEY":false}}
+371 user.ask 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"msg":2,"text":"Reply with the word ok and use no tools.","tasks":[],"from":"unknown"}
+372 session.reading 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"reading":"Its Claude Code home loads no mod that can approve a call past the guard: its holds and blocks apply again."}
+374 agent.stop 24964349-1ebe-46ba-99fe-4a2b185b55c9 session:249643491ebe46ba99fe4a2b185b55c9 {"turn":1,"did_work":false,"claim":false,"outcome":"finished","cause":"unknown","usage":{"covers":"turn","model":"claude-haiku-5-5","input":{"value":168,"exact":true},"cached":{"value":41510,"exact":true},"output":{"value":4,"exact":true},"context_fill":null,"cost":{"usd":null,"basis":"unpriced"}}}
+395 session.reading 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"reading":"This stop was held 59 s for ask:01M6JE7YS570KW9R74BFT7NX9H and nothing was answered, so the hold ended and the stop went through. The session waits on you: your answer goes by its waiter or its next prompt."}
+396 session.end 24964349-1ebe-46ba-99fe-4a2b185b55c9  {"reason":"other"}
+
+# 359-364: the first resume, on the build before 95040103, read unverified and changed nothing (the bug that commit fixes).
+# 369-396: the same resume after it. The resumed start was verified (a Claude Code resume in a new process binds the session), so the watch-only line was
+# taken back; the override line stays on the row, and the claim still can't pass on the session's own checks.
+
+# The transcript's tool_result for the push: Claude Code ran it, the permission decision from the mod's hook
+{"tool_result": "To <world>/remote.git\n   9e5751a..d03c040  main -> main", "permissionDecision": {"decision": "accept", "source": "hook", "reasonType": "hook"}, "version": "2.1.308"}
+
+# deep status (the session's row)
+  24964349  needs you  claude-code  an ask open for 14m
+      DeepBuild denied Bash `git push --force origin main` (no-force-push) and it ran anyway, approved past the deny by approve-all: this session's claims can't pass on its own checks.
+
+# deep inbox (the ask naming the denied push)
+ask:01M6JE7YS570KW9R74BFT7NX9H  exception  24964349-1ebe-46ba-99fe-4a2b185b55c9  14m  shown  A send DeepBuild denied ran anyway: Bash `git push --force origin main` (call toolu_01VDW2Gc4otdqbHXEYiKkemC), approved past the deny by approve-all. It may already have left. Check whether it went out?  [checked | later]

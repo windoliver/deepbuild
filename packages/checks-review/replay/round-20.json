@@ -1,0 +1,19 @@
+{
+  "claim": "format-money",
+  "diff": "diff --git a/src/format.ts b/src/format.ts\nindex db9dfe7..54cda44 100644\n--- a/src/format.ts\n+++ b/src/format.ts\n@@ -1 +1 @@\n-export const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;\n+export const money = (cents: number, sign = '$') => `${sign}${(cents / 100).toFixed(2)}`;\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [],
+    "overall_correctness": "patch is correct",
+    "overall_explanation": "Adds a currency sign parameter; nothing to flag.",
+    "overall_confidence_score": 0.86
+  },
+  "since": []
+}

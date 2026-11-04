@@ -1,0 +1,44 @@
+{
+  "id": "godot.omni_light_3d",
+  "version": "1.0",
+  "title": "OmniLight3D",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "Godot 4's OmniLight3D in physical units: light_intensity_lumens kept, over the whole sphere as ours.",
+  "inputs": {
+    "position": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "m",
+      "about": ""
+    },
+    "light_intensity_lumens": {
+      "type": "number",
+      "default": 1000,
+      "unit": "lm",
+      "min": 0,
+      "about": ""
+    }
+  },
+  "let": {},
+  "steps": {
+    "light": {
+      "op": "item",
+      "kind": "light.point@1",
+      "params": {
+        "power": "light_intensity_lumens"
+      },
+      "at": {
+        "pos": [
+          "position[0]",
+          "position[1]",
+          "position[2]"
+        ]
+      }
+    }
+  }
+}
