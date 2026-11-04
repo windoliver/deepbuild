@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "7632ae30dd80ad671eef30bdf5ef862a7ec52e44921dcb734cc125fd6211b913",
+  "set_digest": "ddf20b8b00c5b88b1ea155851a7c64e5e40eeb1f219ad1ee9b498f20e26aa37d",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -63,7 +63,7 @@
       }
     },
     "data@1": {
-      "digest": "4bdd0190573c6a2fd523ce32e4fe42192c0199e4448e5896f9b99b5653a1e5ca",
+      "digest": "a743bfa040d3d697e65bb0de3eb2c4a6065d7ee983c1eb51dcd25cee5161cf49",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -306,7 +306,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "400d288cdc3424a538ec36fccc029be44a8f6630a92b0ea4472a4a9ac10da41d",
+      "digest": "0389bd6103116570ac018b91b8fd0dd6d55ade6d0b1bdd2ce7a9687d97dada6e",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -393,7 +393,7 @@
       }
     },
     "vector@1": {
-      "digest": "250382a1424ae48a0df34043a07fef2243e9700d25260a89db3204ef0b830e95",
+      "digest": "69f3afc6fddede15eca7dc55b08b4f9e635da29e3510bb3dcd7b3f26c6162f0d",
       "reference": "vector",
       "kit": [
         "fixtures",
@@ -580,6 +580,18 @@
         ],
         "writes": [
           "core.world"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.decimate",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.decimated"
         ],
         "per": "item"
       },
@@ -797,6 +809,18 @@
         ],
         "writes": [
           "text.animated"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "vector.paint",
+        "module": "vector",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "vector.paint"
         ],
         "per": "item"
       }

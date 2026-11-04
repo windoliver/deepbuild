@@ -1051,11 +1051,26 @@ fn roles_board() -> Value {
 pub fn data() -> Module {
     Module {
         manifest: manifest("data", &["marks2d"]),
-        register: register_data,
+        register: |r| register_data(r, decimate),
     }
 }
 
-fn register_data(r: &mut Registrar) {
+/// A planted implementation of data@1 (#399's `test-data-m4-drops-last`): declared bit and
+/// canonical, under its own name, whose m4 decimation drops each pixel column's last row, so the
+/// kit's bit part fails it and a release build refuses it.
+pub fn data_m4_drops_last() -> Module {
+    let mut m = manifest("data", &["marks2d"]);
+    m.implementation = deep_canvas::registry::Implementation::reference(
+        "data.m4_drops_last",
+        Semver::parse("1.0.0").expect("a version"),
+    );
+    Module {
+        manifest: m,
+        register: |r| register_data(r, decimate_drops_last),
+    }
+}
+
+fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), OpError>) {
     // #397: the data module's columns as the first entries of the core's column view (Array and
     // table: column view): data, const and table columns, each pure in t, so a seek equals a
     // clean evaluation and no rows change between steps.
@@ -1086,6 +1101,11 @@ fn register_data(r: &mut Registrar) {
     r.operator("scale", "items", &["core.fields"], &["data.scale"])
         .applies(is_scale)
         .run(scale);
+    // #399: each line series' decimation, the rows it keeps in its window, column by column.
+    r.array("data.decimated", "rows", "item", "geometry", "items");
+    r.operator("decimate", "items", &["core.fields"], &["data.decimated"])
+        .applies(is_line_series)
+        .run(decimate);
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({
@@ -1094,6 +1114,71 @@ fn register_data(r: &mut Registrar) {
         "codes": ["unknown_kind"],
         "twin": {"path": "items/x/params/domain", "value": [0, 20]},
     }));
+    // #399: a line of four rows in each of its three pixel columns, each column's first, min,
+    // max and last rows distinct, so m4 keeps all four.
+    r.fixture("decimated", decimated_board(), None)
+        .sidecar(json!({
+            "checks": [{"kind": "document.validate"}],
+            "oracles": ["analytic"],
+            "codes": [],
+        }));
+}
+
+/// A `series@1` item drawn as a line, not as candles.
+fn is_line_series(_: &Value, _: &str, item: &Value) -> bool {
+    let p = item.get("params");
+    item.get("kind").and_then(Value::as_str) == Some("series@1")
+        && p.and_then(|p| p.get("decimate")).and_then(Value::as_str) != Some("ohlc")
+        && !p
+            .and_then(|p| p.get("marks"))
+            .and_then(Value::as_array)
+            .is_some_and(|m| m.iter().any(|m| m == "candle"))
+}
+
+/// The rows a line series keeps, in draw order (`data.decimated`): m4's per pixel column, or
+/// every row under `decimate: "none"`.
+fn decimated_rows(v: &mut View<'_>, m4: crate::data::Decimate) -> Result<(), OpError> {
+    let fields = fields_of(v)?;
+    let id = v.id().unwrap_or_default();
+    let how = match fields["params"]["decimate"].as_str() {
+        Some("none") => crate::data::Decimate::None,
+        _ => m4,
+    };
+    let d = crate::data::decimated(id, &fields, how).map_err(refused)?;
+    let rows: Vec<u64> = d.rows().into_iter().map(|r| r as u64).collect();
+    v.write("data.decimated", Val::typed(rows))
+}
+
+fn decimate(v: &mut View<'_>) -> Result<(), OpError> {
+    decimated_rows(v, crate::data::Decimate::M4)
+}
+
+/// The planted decimation: m4 without each column's last row.
+fn decimate_drops_last(v: &mut View<'_>) -> Result<(), OpError> {
+    decimated_rows(v, crate::data::Decimate::DropsLast)
+}
+
+fn decimated_board() -> Value {
+    // Twelve rows at t = 1..12 flicks over the window [0, 12], three columns of four; in each,
+    // v runs 0.5, 0, 1, 0.25.
+    let le = |bytes: Vec<u8>| deep_canvas::base64::encode(&bytes);
+    let t: Vec<u8> = (1..=12i64).flat_map(i64::to_le_bytes).collect();
+    let v: Vec<u8> = (0..12)
+        .map(|i| [0.5f32, 0.0, 1.0, 0.25][i % 4])
+        .flat_map(f32::to_le_bytes)
+        .collect();
+    json!({
+        "format": 1, "profile": "board", "seed": 399, "title": "Decimated",
+        "description": "A line of twelve rows in three pixel columns, decimated by m4: the data module's decimation fixture.",
+        "size": [320, 200],
+        "items": {
+            "line": {"id": "line", "kind": "series@1", "name": "Line", "order": "a0",
+                     "params": {"t": {"dtype": "i64", "len": 12, "data": le(t)},
+                                "v": {"dtype": "f32", "len": 12, "data": le(v)},
+                                "window": [0, 12], "decimate": "m4", "bucket": "1px",
+                                "marks": ["line"], "box": [20, 20, 3, 60]}}
+        }
+    })
 }
 
 fn is_scale(_: &Value, _: &str, item: &Value) -> bool {
