@@ -1,0 +1,51 @@
+{
+  "claim": "price-total",
+  "diff": "diff --git a/src/price.ts b/src/price.ts\nindex 592e044..a2213ce 100644\n--- a/src/price.ts\n+++ b/src/price.ts\n@@ -1,6 +1,6 @@\n export function total(items: Item[]): number {\n   let sum = 0;\n-  for (let i = 0; i <= items.length; i++) sum += items[i].price;\n+  for (let i = 0; i < items.length; i++) sum += items[i].price;\n   const extra = JSON.parse(localStorage.getItem('extra'));\n   return sum + extra;\n }\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [
+      {
+        "title": "[P2] Unvalidated parse of stored value",
+        "body": "Still parses the stored value without a guard.",
+        "priority": 2,
+        "confidence_score": 0.63,
+        "file": "src/price.ts",
+        "line": 4,
+        "rule": "unchecked-parse",
+        "quote": "JSON.parse(localStorage.getItem('extra'))"
+      }
+    ],
+    "overall_correctness": "patch is incorrect",
+    "overall_explanation": "The bound is fixed; the parse is not.",
+    "overall_confidence_score": 0.7
+  },
+  "since": [
+    {
+      "rule": "unchecked-parse",
+      "sites": [
+        {
+          "file": "src/price.ts",
+          "line": 4,
+          "quote": "JSON.parse(localStorage.getItem('extra'))"
+        }
+      ]
+    },
+    {
+      "rule": "off-by-one",
+      "sites": [
+        {
+          "file": "src/price.ts",
+          "line": 3,
+          "quote": "i <= items.length"
+        }
+      ]
+    }
+  ]
+}

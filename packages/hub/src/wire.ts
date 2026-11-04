@@ -91,6 +91,8 @@ export interface HookMeta {
   payloadWriter?: string;
   /** Why the adapter can't read this patch's paths, so its PreToolUse is denied before it runs (#39). */
   denied?: string;
+  /** Set by the server on a PreToolUse its guard entries blocked: the entries, by name, for a PostToolUse that shows it ran anyway (#1033). */
+  blockedBy?: string[];
   /** What a hook said beside its turn, for the core to append as a session.reading (#39). */
   reading?: string;
   /** A caller name the payload's own fields contradict, for the core to append once per session as a reading (#993). */
@@ -217,6 +219,8 @@ export interface CoreOptions {
   accepted?: string;
   /** The test work source's work.item@1 readings, from DEEP_HUB_TEST_WORK; only tests set it. */
   work?: string;
+  /** Paid checks' prices and their runs' cost readings, a file named by DEEP_HUB_TEST_PRICES; only tests set it (#325). */
+  prices?: string;
   /** The GitHub API's recorded answers, a file named by DEEP_HUB_TEST_GITHUB; only tests set it (#322). */
   github?: string;
   /** A file of runs for the background job `test` (#909), from DEEP_HUB_TEST_FAIL_JOB: a line `fail` throws, `ok` passes; only tests set it. */

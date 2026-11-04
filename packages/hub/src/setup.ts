@@ -15,7 +15,7 @@ import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
 import { confirmed } from './authority.js';
 import { Confirmer } from './confirm.js';
-import { claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
+import { claudeCommand, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, hasCodex, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
 import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
@@ -96,7 +96,7 @@ async function install(cli: string, quiet = false): Promise<number> {
     editConfig(root, (c) => { c.hook = { binary: hook }; });
     // The waiter waits as long as your longest ask deadline, so an answer in time can still wake the session.
     const longest = longestDeadline(root) ?? 0;
-    const waiter = plant() === 'waiter-polls' ? `'${process.execPath}' '${cli}' waiter` : `${q(hook)} claude-code waiter`;
+    const waiter = plant() === 'waiter-polls' ? `'${process.execPath}' '${cli}' waiter` : claudeCommand(hook, 'waiter');
     const groups = ourGroups(hook, waiter, Math.max(600, Math.ceil(longest / 1000)));
     for (const file of [settingsFile, userFile]) keepOriginal(root, record, file);
     saveRecord(root, record);
@@ -115,8 +115,9 @@ async function install(cli: string, quiet = false): Promise<number> {
     if (plant() === 'setup-writes-project-settings') writeJson(join(process.cwd(), '.claude', 'settings.json'), withHooks(root, {}, groups));
     const user = planned.get(userFile)!;
     const servers = isObj(user.mcpServers) ? user.mcpServers : {};
-    // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools.
-    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: process.execPath, args: [cli, 'mcp'] }, 'deep-actions': { type: 'stdio', command: process.execPath, args: [cli, 'mcp', 'actions'] } } });
+    // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools. deep-hook
+    // serves it, so a session runs one Node server, not two (#824's memory per session).
+    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: process.execPath, args: [cli, 'mcp'] }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } } });
     noteWritten(record, userFile);
     const skill = skillDir();
     if (!existsSync(skill) || record.created.includes(skill)) {
@@ -159,17 +160,25 @@ async function readHistory(quiet: boolean): Promise<number> {
     return 4;
   }
 }
-/** deep-hook as this checkout built it; from a checkout with none, setup builds it once (a release ships it built, #41). */
+/**
+ * deep-hook as this checkout built it; from a checkout with none, or one built before it served deep-actions (#824),
+ * setup builds it once (a release ships it built, #41).
+ */
 function builtHook(): string {
+  // Whether a build lists deep-actions; undefined when its --help can't be read, which is no reason to rebuild.
+  const serves = (hook: string) => { try { return execFileSync(hook, ['--help'], { encoding: 'utf8', timeout: 10_000 }).includes('mcp actions'); } catch { return undefined; } };
   try {
-    return deepHook();
-  } catch {
-    // Cargo and rustup live in your account's home, whatever HOME a script runs setup with.
-    const home = userInfo().homedir;
-    const env = { ...process.env, CARGO_HOME: process.env.CARGO_HOME ?? join(home, '.cargo'), RUSTUP_HOME: process.env.RUSTUP_HOME ?? join(home, '.rustup') };
-    execFileSync('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { cwd: REPO, env, stdio: 'ignore', timeout: 900_000 });
-    return deepHook();
-  }
+    const hook = deepHook();
+    if (serves(hook) !== false) return hook;
+  } catch { /* none built */ }
+  // Cargo and rustup live in your account's home, whatever HOME a script runs setup with.
+  const home = userInfo().homedir;
+  const env = { ...process.env, CARGO_HOME: process.env.CARGO_HOME ?? join(home, '.cargo'), RUSTUP_HOME: process.env.RUSTUP_HOME ?? join(home, '.rustup') };
+  execFileSync('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { cwd: REPO, env, stdio: 'ignore', timeout: 900_000 });
+  // The build just made, even where an older release build is newer on disk.
+  const built = join(REPO, 'target', 'debug', 'deep-hook');
+  if (serves(built) === false) throw Error(`${built} doesn't serve deep-actions after cargo build -p deep-hook`);
+  return built;
 }
 function lenient(text: string): { value: Obj } | { refused: string } {
   try {

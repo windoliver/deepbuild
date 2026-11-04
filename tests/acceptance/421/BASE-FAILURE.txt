@@ -1,0 +1,24 @@
+# #421 acceptance suite at the base, 881e2ed4 (Merge pull request #1136), before any implementation.
+#
+# Not run at the base. The owner asked for a fast job; this worktree has no cargo build (target/ is empty) and the
+# Mac's load average was about 29, so a cold build of deep-gpu and deep-show was skipped. What was checked instead:
+#
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/421/tsconfig.json   -> exit 0, no errors
+#
+# Why each test fails at the base, read from the base's code (crates/deep-gpu-layer, crates/deep-show,
+# crates/deep-canvas-scene3d, crates/deep-scene3d-render); none of these names occurs there:
+#
+#   still.test.ts      AC1  live draws every frame of a session (rung base: drawn = true), so the still block shows
+#                           drawn frames and submit fences in frames 9-29 and 38-59. The control (moving block)
+#                           would pass at the base.
+#   winding.test.ts    AC2  material@1 is not a kind (skipped, unknown_kind); deep-gpu refuses the unknown
+#                           --planted names winding_ignores_determinant and ties_by_submission at startup.
+#   photometry.test.ts AC3  light.point@1, light.spot@1 and material@1 are not kinds (skipped, unknown_kind): the
+#                           point and spot renders read no light; --planted spot_counts_cone is refused.
+#   spatial.test.ts    AC4  deep-show run has no spatial call (bad_input); the scenario planted values
+#                           cull_by_center and bounds_children_only are unknown.
+#   outline.test.ts    AC5  the outline half: --planted status_before_tone_map is refused, and material@1 is skipped;
+#                           the refusal half: the fill binding is refused status_slot_kind at path
+#                           status_bindings/b1/target, which doesn't name the item crate.
+#
+# A run at the base, when one is made, is recorded beside this note by the job that runs it.

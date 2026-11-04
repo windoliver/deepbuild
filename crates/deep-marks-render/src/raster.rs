@@ -56,6 +56,8 @@ pub struct Request {
     /// Each `vector@1` item's import, and how its write draws (#398).
     pub vectors: crate::Vectors,
     pub write: deep_canvas_vector::Write,
+    /// #399: `false` draws the whole frame without antialiasing.
+    pub antialias: bool,
 }
 
 /// The Vello CPU version Cargo.lock holds, which every answer names (a test holds it to the lock).
@@ -459,16 +461,52 @@ impl<C: Glyphs> Painter<'_, C> {
 }
 
 /// The document's evaluated items at `t`, placed by their relations (#221), each vector item
-/// drawn as marks2d's items (#398).
+/// drawn as marks2d's items (#398), and each graph laid out and drawn as them (#399), with each
+/// graph's view.
 fn items_at(
     doc: &Map<String, Value>,
     t: i64,
     vectors: &crate::Vectors,
     write: deep_canvas_vector::Write,
-) -> Result<Map<String, Value>, Value> {
+    router: deep_canvas_graph::view::Router,
+) -> Result<(Map<String, Value>, crate::graphs::Graphs), Value> {
     let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
     let items = crate::place::evaluated(doc, &program, t, vectors)?;
-    Ok(deep_canvas_vector::lower_items(&items, vectors, write))
+    let items = deep_canvas_vector::lower_items(&items, vectors, write);
+    crate::graphs::lower(doc, &items, vectors, router)
+}
+
+/// The labels of `doc` at `t`, aimed at their targets, against everything else it draws (#399).
+pub fn label_board(
+    doc: &Map<String, Value>,
+    look: &Look,
+    t: i64,
+    vectors: &crate::Vectors,
+) -> Result<crate::graphs::Board, Value> {
+    let (items, graphs) = items_at(
+        doc,
+        t,
+        vectors,
+        deep_canvas_vector::Write::Honest,
+        Default::default(),
+    )?;
+    let mut bare = items.clone();
+    bare.retain(|_, i| i["kind"] != "label@1");
+    let theme = crate::Theme::Light;
+    let record = Record {
+        pinned: t,
+        ..Record::default()
+    };
+    let under = scene::frame_planted(
+        doc,
+        &bare,
+        (palette_of(look, theme), crate::type_of(look, theme)),
+        &record,
+        1.0,
+        Planted::None,
+    )
+    .map_err(|r| refused(r.code, &r.path))?;
+    crate::graphs::board(doc, &items, &graphs, &under)
 }
 
 /// Draws a `raster` request and writes its PNG.
@@ -479,7 +517,8 @@ pub fn answer(req: Request) -> Value {
 }
 
 fn draw(req: &Request) -> Result<Value, Value> {
-    let items = items_at(&req.doc, req.t, &req.vectors, req.write)?;
+    let (mut items, graphs) =
+        items_at(&req.doc, req.t, &req.vectors, req.write, Default::default())?;
     let palette = palette_of(&req.look, req.view.theme);
     let record = Record {
         pinned: req.t,
@@ -487,6 +526,16 @@ fn draw(req: &Request) -> Result<Value, Value> {
     };
     let zoom = req.view.zoom;
     let ty = crate::type_of(&req.look, req.view.theme);
+    // #399: labels place against everything else the frame draws, then draw as texts.
+    if items.values().any(|i| i["kind"] == "label@1") {
+        let mut bare = items.clone();
+        bare.retain(|_, i| i["kind"] != "label@1");
+        let under = scene::frame_planted(&req.doc, &bare, (palette, ty), &record, 1.0, req.planted)
+            .map_err(|r| refused(r.code, &r.path))?;
+        let board = crate::graphs::board(&req.doc, &items, &graphs, &under)?;
+        board.draw(&mut bare, crate::graphs::Placer::Honest);
+        items = bare;
+    }
     let frame = scene::frame_planted(&req.doc, &items, (palette, ty), &record, zoom, req.planted)
         .map_err(|r| refused(r.code, &r.path))?;
     let marks = scene::status_marks(&req.doc, &items, &record, req.look.status.as_ref(), palette)
@@ -514,6 +563,10 @@ fn draw(req: &Request) -> Result<Value, Value> {
             },
         );
         ctx.set_transform(Affine::scale(zoom));
+        // #399: a frame drawn without antialiasing paints a pixel whole or not at all.
+        if !req.antialias {
+            ctx.set_aliasing_threshold(Some(127));
+        }
         ctx
     };
     let mut p = Painter {
@@ -761,14 +814,25 @@ fn any_roles(value: &Value, palette: &mut scene::Palette) {
 
 /// An item's outline at `t` as subpaths of verbs and points in u, its offset applied, with its
 /// box and box points (#221).
-pub fn geometry(doc: &Map<String, Value>, item: &str, t: i64, vectors: &crate::Vectors) -> Value {
+pub fn geometry(
+    doc: &Map<String, Value>,
+    item: &str,
+    t: i64,
+    vectors: &crate::Vectors,
+    router: deep_canvas_graph::view::Router,
+) -> Value {
     let run = || -> Result<Value, Value> {
         let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
         let placed = crate::place::evaluated(doc, &program, t, vectors)?;
         let items =
             deep_canvas_vector::lower_items(&placed, vectors, deep_canvas_vector::Write::Honest);
+        // #399: graphs drawn as marks2d's items; labels draw only in a view.
+        let (mut items, graphs) = crate::graphs::lower(doc, &items, vectors, router)?;
+        items.retain(|_, i| i["kind"] != "label@1");
         let mut palette = scene::Palette::new();
         palette.insert("ground".into(), [255, 255, 255]);
+        // The role a text without a paint takes (#399: a card's lines).
+        palette.insert("ink".into(), [0, 0, 0]);
         any_roles(&Value::Object(doc.clone()), &mut palette);
         // And those of the items a vector draws as.
         any_roles(&Value::Object(items.clone()), &mut palette);
@@ -789,6 +853,26 @@ pub fn geometry(doc: &Map<String, Value>, item: &str, t: i64, vectors: &crate::V
             };
             subpaths.extend(subpaths_of(&verbs, by));
         }
+        // A frame's border box, where its layout and every contribution put it (#399: a node's
+        // place among them), whether or not it paints.
+        if items.get(item).is_some_and(|i| i["kind"] == "frame@1") {
+            let solved =
+                scene::laid_out_boxes(doc, &items).map_err(|r| refused(r.code, &r.path))?;
+            let b = solved
+                .get(item)
+                .copied()
+                .or_else(|| crate::place::box_of(doc, &items, vectors, item));
+            if let Some([x, y, w, h]) = b {
+                let outline = [
+                    Verb::Move([x, y]),
+                    Verb::Line([x + w, y]),
+                    Verb::Line([x + w, y + h]),
+                    Verb::Line([x, y + h]),
+                    Verb::Close,
+                ];
+                subpaths.extend(subpaths_of(&outline, [0.0, 0.0]));
+            }
+        }
         let mut answer = json!({"ok": true, "subpaths": subpaths});
         // Its evaluated box at t, geometry only, and the nine box points on it (#221).
         if let Some(b) = crate::place::box_of(doc, &placed, vectors, item) {
@@ -804,7 +888,61 @@ pub fn geometry(doc: &Map<String, Value>, item: &str, t: i64, vectors: &crate::V
             answer["parts"] =
                 deep_canvas_vector::parts_json(v, found, |verbs| subpaths_of(verbs, [0.0, 0.0]));
         }
+        // A graph's laid-out nodes, its groups' boxes and titles, and its routes (#399).
+        if let Some(g) = graphs.get(item) {
+            let boxes = |m: &std::collections::BTreeMap<String, [f64; 4]>| {
+                Value::Object(m.iter().map(|(k, b)| (k.clone(), json!(b))).collect())
+            };
+            answer["graph"] = json!({
+                "nodes": boxes(&g.nodes),
+                "groups": Value::Object(g.groups.iter().map(|(k, b)| {
+                    (k.clone(), json!({"box": b.rect, "title": b.title}))
+                }).collect()),
+                "routes": Value::Object(g.routes.iter().map(|(k, r)| {
+                    (k.clone(), json!(r.iter().map(|p| [p.0, p.1]).collect::<Vec<_>>()))
+                }).collect()),
+            });
+        }
+        // A series' rows behind the vertices its line draws, in draw order (#399).
+        if let Some(s) = placed.get(item).filter(|i| i["kind"] == "series@1") {
+            let how = match s["params"]["decimate"].as_str() {
+                Some("none") => deep_canvas_marks::data::Decimate::None,
+                _ => deep_canvas_marks::data::Decimate::M4,
+            };
+            let d = deep_canvas_marks::data::decimated(item, s, how)
+                .map_err(|r| refused(r.code, &r.path))?;
+            answer["series"] = json!({"rows": d.rows()});
+        }
         Ok(answer)
+    };
+    match run() {
+        Ok(v) | Err(v) => v,
+    }
+}
+
+/// `crosshair`: a series' crosshair at `x` u, snapped to the nearest raw row by time (#399).
+pub fn crosshair(doc: &Map<String, Value>, item: &str, x: f64) -> Value {
+    let run = || -> Result<Value, Value> {
+        let s = doc
+            .get("items")
+            .and_then(|i| i.get(item))
+            .filter(|i| i["kind"] == "series@1")
+            .ok_or_else(|| refused("ref_unresolved", "item"))?;
+        let d = deep_canvas_marks::data::decimated(item, s, deep_canvas_marks::data::Decimate::M4)
+            .map_err(|r| refused(r.code, &r.path))?;
+        let b = &s["params"]["box"];
+        let pos = s
+            .pointer("/at/pos/0")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0);
+        let (bx, bw) = (
+            b[0].as_f64().unwrap_or(0.0) + pos,
+            b[2].as_f64().unwrap_or(0.0),
+        );
+        let (t0, t1) = d.window;
+        let at = t0 + (x - bx) / bw.max(f64::MIN_POSITIVE) * (t1 - t0);
+        let row = d.nearest(at).ok_or_else(|| refused("out_of_range", "x"))?;
+        Ok(json!({"ok": true, "row": row, "t": d.t[row], "v": d.v[row]}))
     };
     match run() {
         Ok(v) | Err(v) => v,
@@ -838,4 +976,147 @@ fn subpaths_of(verbs: &[Verb], by: [f64; 2]) -> Vec<Value> {
         .into_iter()
         .map(|(names, points, closed)| json!({"closed": closed, "verbs": names, "points": points}))
         .collect()
+}
+
+/// #160: a `path` line (tests/acceptance/160/README.md, The surface under test): the item's
+/// frames at each time, with its copies, ends, anchors, columns and tessellation digest.
+pub struct PathRequest {
+    pub doc: Map<String, Value>,
+    pub item: String,
+    pub times: Vec<i64>,
+    pub anchors: Vec<String>,
+    pub timing: bool,
+    pub planted: Planted,
+    pub look: Option<crate::look::Look>,
+    pub vectors: crate::Vectors,
+}
+
+/// A `path` line's planted value, or `None` for one the surface doesn't name.
+pub fn planted_path(name: &str) -> Option<Planted> {
+    const OPS: [&str; 7] = [
+        "trim",
+        "round_corners",
+        "offset_path",
+        "zigzag",
+        "pucker",
+        "twist",
+        "repeater",
+    ];
+    match name {
+        "merge_zero_fills" => Some(Planted::MergeZeroFills),
+        "repeater_evaluates_at_t" => Some(Planted::RepeaterEvaluatesAtT),
+        _ => {
+            let op = name.strip_prefix("moved:")?;
+            OPS.iter().find(|o| **o == op).map(|o| Planted::Moved(o))
+        }
+    }
+}
+
+/// Answers a `path` line: one frame per time, in order; `built` holds the digests this process
+/// built so far, so a frame says whether it rebuilt or reused the item's tessellation.
+pub fn path_answer(
+    req: PathRequest,
+    built: &mut std::collections::BTreeSet<deep_canvas_marks::key::ContentKey>,
+) -> Value {
+    let mut run = || -> Result<Value, Value> {
+        let program = Program::compile(&req.doc).map_err(|r| refused(r.code, &r.path))?;
+        let (palette, ty): (scene::Palette, scene::Type) = match &req.look {
+            Some(look) => (
+                palette_of(look, crate::Theme::Light).clone(),
+                crate::type_of(look, crate::Theme::Light).clone(),
+            ),
+            None => {
+                let mut palette = scene::Palette::new();
+                palette.insert("ground".into(), [255, 255, 255]);
+                any_roles(&Value::Object(req.doc.clone()), &mut palette);
+                (palette, scene::Type::default())
+            }
+        };
+        let (palette, ty) = (&palette, &ty);
+        let mut frames = Vec::with_capacity(req.times.len());
+        for &t in &req.times {
+            let placed = crate::place::evaluated(&req.doc, &program, t, &req.vectors)?;
+            let items = deep_canvas_vector::lower_items(
+                &placed,
+                &req.vectors,
+                deep_canvas_vector::Write::Honest,
+            );
+            // The build alone is timed: the item through its ops, its heads and its digest (a
+            // first pass over the frame only when an attachment needs other items' boxes).
+            let started = std::time::Instant::now();
+            let report =
+                scene::path_report(&req.doc, &items, (palette, ty), &req.item, req.planted)
+                    .map_err(|r| refused(r.code, &r.path))?
+                    .ok_or_else(|| refused("ref_unresolved", &format!("items/{}", req.item)))?;
+            let ms = started.elapsed().as_secs_f64() * 1000.0;
+            let rebuilt = built.insert(report.digest);
+            let subpaths: Vec<Value> = report
+                .placed
+                .iter()
+                .flat_map(|v| subpaths_of(v, [0.0, 0.0]))
+                .collect();
+            let mut frame = json!({
+                "t": t,
+                "subpaths": subpaths,
+                "segments": report.segments,
+                "declared": report.declared,
+                "tessellation": report.digest.hex(),
+                "rebuilt": rebuilt,
+            });
+            if let Some(copies) = &report.copies {
+                let lag = report.built.as_ref().map_or(0, |b| b.lag);
+                frame["copies"] = Value::Array(
+                    copies
+                        .iter()
+                        .map(|(m, opacity, k)| {
+                            json!({"transform": m, "opacity": opacity, "t": t - (*k as i64) * lag})
+                        })
+                        .collect(),
+                );
+            }
+            if !report.ends.is_empty() {
+                let mut ends = Map::new();
+                for h in &report.ends {
+                    ends.insert(
+                        h.at.to_string(),
+                        json!({"kind": h.kind, "tip": h.tip, "angle": h.angle, "length": h.length, "width": h.width}),
+                    );
+                }
+                frame["ends"] = Value::Object(ends);
+            }
+            if !req.anchors.is_empty() {
+                let whole: Vec<deep_canvas_marks::path::Verb> =
+                    report.placed.iter().flatten().copied().collect();
+                let mut anchors = Map::new();
+                for name in &req.anchors {
+                    let value = if name == "#length" {
+                        json!(deep_canvas_marks::pathops::length(&whole))
+                    } else if let Some(f) = name
+                        .strip_prefix("#at:")
+                        .and_then(|f| f.parse::<f64>().ok())
+                    {
+                        match deep_canvas_marks::pathops::at(&whole, f) {
+                            Some((p, angle)) => json!({"point": p, "angle": angle}),
+                            None => Value::Null,
+                        }
+                    } else {
+                        Value::Null
+                    };
+                    anchors.insert(name.clone(), value);
+                }
+                frame["anchors"] = Value::Object(anchors);
+            }
+            if !report.columns.is_empty() {
+                frame["columns"] = json!(report.columns);
+            }
+            if req.timing {
+                frame["build_ms"] = json!(if rebuilt { ms } else { 0.0 });
+            }
+            frames.push(frame);
+        }
+        Ok(json!({"ok": true, "frames": frames}))
+    };
+    match run() {
+        Ok(v) | Err(v) => v,
+    }
 }

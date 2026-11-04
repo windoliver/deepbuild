@@ -1,0 +1,23 @@
+{
+  "diff": "diff --git a/src/orders.ts b/src/orders.ts\nindex d4eb75b..33c336d 100644\n--- a/src/orders.ts\n+++ b/src/orders.ts\n@@ -3,3 +3,8 @@ import type { Order } from './types';\n export function total(order: Order): number {\n   return order.items.reduce((s, i) => s + i.price * i.qty, 0);\n }\n+\n+export function readOrder(body: string): Order {\n+  const order = parseOrder(body);\n+  return order;\n+}\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [
+      {
+        "title": "Parse result is not checked",
+        "file": "src/orders.ts",
+        "line": 8,
+        "rule": "unchecked-parse",
+        "quote": "JSON.parse(body)"
+      }
+    ],
+    "overall_explanation": "One concern."
+  }
+}
