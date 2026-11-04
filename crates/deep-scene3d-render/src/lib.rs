@@ -1107,6 +1107,105 @@ fn silhouette(
     out
 }
 
+/// A builder's mesh's contour as seen from `cam` (#1162): in world space, each edge between a
+/// triangle that faces the camera and one that doesn't, and each edge only one triangle holds
+/// when that one faces it. Vertices at one position are one, so a mesh with split normals has
+/// the same edges as its welded form.
+fn contour(
+    mesh: &deep_canvas_scene3d::geom::Mesh,
+    model: &[[f64; 4]; 3],
+    cam: &deep_canvas_scene3d::scene::Camera,
+) -> Vec<[[f64; 3]; 2]> {
+    use std::collections::BTreeMap;
+    let at = |l: [f64; 3]| {
+        let mut p = [0.0; 3];
+        for (r, v) in p.iter_mut().enumerate() {
+            *v = model[r][0] * l[0] + model[r][1] * l[1] + model[r][2] * l[2] + model[r][3];
+        }
+        p
+    };
+    let world: Vec<[f64; 3]> = mesh.positions.iter().map(|p| at(*p)).collect();
+    // One index per distinct position, by its bits.
+    let mut weld: BTreeMap<[u64; 3], u32> = BTreeMap::new();
+    let ids: Vec<u32> = world
+        .iter()
+        .enumerate()
+        .map(|(i, p)| *weld.entry(p.map(f64::to_bits)).or_insert(i as u32))
+        .collect();
+    let sub = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    let mut faces_by_edge: BTreeMap<(u32, u32), Vec<bool>> = BTreeMap::new();
+    for t in mesh.indices.chunks_exact(3) {
+        let [a, b, c] = [t[0], t[1], t[2]].map(|i| ids[i as usize]);
+        let [pa, pb, pc] = [a, b, c].map(|i| world[i as usize]);
+        let (u, v) = (sub(pb, pa), sub(pc, pa));
+        let n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        let toward = if cam.perspective {
+            sub(cam.eye, pa)
+        } else {
+            [-cam.forward[0], -cam.forward[1], -cam.forward[2]]
+        };
+        let front = n[0] * toward[0] + n[1] * toward[1] + n[2] * toward[2] > 0.0;
+        for (x, y) in [(a, b), (b, c), (c, a)] {
+            if x != y {
+                faces_by_edge
+                    .entry((x.min(y), x.max(y)))
+                    .or_default()
+                    .push(front);
+            }
+        }
+    }
+    // In screen px about the eye: an edge whose both sides the mesh covers all along it is a
+    // fold inside the outline (a mitre seen across a corner), never the outline itself.
+    let proj = |p: [f64; 3]| {
+        let d = sub(p, cam.eye);
+        let dot = |a: [f64; 3]| d[0] * a[0] + d[1] * a[1] + d[2] * a[2];
+        let k = if cam.perspective {
+            cam.scale / dot(cam.forward).max(1e-9)
+        } else {
+            cam.scale
+        };
+        [dot(cam.right) * k, dot(cam.up) * k]
+    };
+    let flat: Vec<[[f64; 2]; 3]> = mesh
+        .indices
+        .chunks_exact(3)
+        .map(|t| [t[0], t[1], t[2]].map(|i| proj(world[ids[i as usize] as usize])))
+        .collect();
+    let covered = |q: [f64; 2]| {
+        flat.iter().any(|[a, b, c]| {
+            let side = |p: [f64; 2], r: [f64; 2]| (r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0]);
+            let (x, y, z) = (side(*a, *b), side(*b, *c), side(*c, *a));
+            (x >= 0.0 && y >= 0.0 && z >= 0.0) || (x <= 0.0 && y <= 0.0 && z <= 0.0)
+        })
+    };
+    let outer = |a: [f64; 3], b: [f64; 3]| {
+        let (pa, pb) = (proj(a), proj(b));
+        let (dx, dy) = (pb[0] - pa[0], pb[1] - pa[1]);
+        let len = (dx * dx + dy * dy).sqrt();
+        if len < 1e-9 {
+            return false;
+        }
+        let n = [-dy / len * 1.5, dx / len * 1.5];
+        [0.125, 0.375, 0.625, 0.875].iter().any(|s| {
+            let m = [pa[0] + dx * s, pa[1] + dy * s];
+            !covered([m[0] + n[0], m[1] + n[1]]) || !covered([m[0] - n[0], m[1] - n[1]])
+        })
+    };
+    faces_by_edge
+        .into_iter()
+        .filter(|(_, f)| match f.as_slice() {
+            [one] => *one,
+            many => many.iter().any(|x| *x) && many.iter().any(|x| !*x),
+        })
+        .map(|((a, b), _)| [world[a as usize], world[b as usize]])
+        .filter(|[a, b]| outer(*a, *b))
+        .collect()
+}
+
 fn rgb4(v: [f64; 3]) -> [f32; 4] {
     [v[0] as f32, v[1] as f32, v[2] as f32, 0.0]
 }
@@ -2396,7 +2495,11 @@ impl Renderer {
             } else {
                 &mut o.strokes
             };
-            for [a, b] in silhouette(&s.model, cam) {
+            let edges = match &s.mesh {
+                Some(m) => contour(m, &s.model, cam),
+                None => silhouette(&s.model, cam),
+            };
+            for [a, b] in edges {
                 let record = SegmentRecord {
                     a: v4(a, stroke.width),
                     b: v4(b, stroke.width),
@@ -2698,7 +2801,7 @@ impl Renderer {
             .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
         self.prepare_cascades(device, scene, &frame);
         self.prepare_env(device, scene, &camera);
-        self.sky = scene.sky.is_some();
+        self.sky = scene.sky.as_ref().is_some_and(|s| s.draws_background());
         self.prepare_puffs(device, scene);
         if self.sky && self.sky_pipeline.is_none() {
             self.sky_pipeline = Some(sky_pipeline(
