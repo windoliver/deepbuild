@@ -7,7 +7,7 @@
 //! As `deep-hook statusline`, Claude Code's status line command, it sends the hub the plan windows the
 //! status line reads (#159), then runs your own status line command and prints what it prints. As
 //! `deep-hook <agent> waiter`, Claude Code's background Stop entry, it waits for an answer to its session and
-//! wakes the session with it (#25).
+//! wakes the session with it (#25). As `deep-hook mcp actions`, it is the deep-actions MCP server (actions.rs).
 
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
@@ -23,6 +23,8 @@ use std::{env, io};
 use deep_contracts::{parse, Value};
 
 use deep_hook::matcher;
+
+mod actions;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -82,19 +84,8 @@ static CWD: OnceLock<PathBuf> = OnceLock::new();
 /// A worktree named in `hub.use`, `{<worktree>: "unix:<path>"}`, which `deep hub use --root` writes once the OS
 /// confirms you, sends its sessions to that dev hub instead; the longest worktree that holds the folder wins.
 fn address() -> PathBuf {
-    if let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), setting("hub", "use")) {
-        let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());
-        let chosen = uses
-            .iter()
-            .filter_map(|(worktree, value)| match value {
-                Value::String(a) if a.starts_with("unix:") => Some((Path::new(worktree), &a[5..])),
-                _ => None,
-            })
-            .filter(|(worktree, _)| real.starts_with(worktree) || cwd.starts_with(worktree))
-            .max_by_key(|(worktree, _)| worktree.as_os_str().len());
-        if let Some((_, path)) = chosen {
-            return PathBuf::from(path);
-        }
+    if let Some(path) = worktree_hub() {
+        return path;
     }
     match setting("hub", "address") {
         Some(Value::String(address)) if address.starts_with("unix:") => {
@@ -102,6 +93,22 @@ fn address() -> PathBuf {
         }
         _ => home().join("hub.sock"),
     }
+}
+
+/// The dev hub `deep hub use --root` sent this worktree to, the longest such worktree winning.
+fn worktree_hub() -> Option<PathBuf> {
+    let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), setting("hub", "use")) else {
+        return None;
+    };
+    let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());
+    uses.iter()
+        .filter_map(|(worktree, value)| match value {
+            Value::String(a) if a.starts_with("unix:") => Some((Path::new(worktree), &a[5..])),
+            _ => None,
+        })
+        .filter(|(worktree, _)| real.starts_with(worktree) || cwd.starts_with(worktree))
+        .max_by_key(|(worktree, _)| worktree.as_os_str().len())
+        .map(|(_, path)| PathBuf::from(path))
 }
 
 fn member<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
@@ -1658,7 +1665,7 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
+            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
         ),
         [arg] if arg == "statusline" => return statusline(),
         [arg] if arg == "check" => return check(),
@@ -1674,6 +1681,7 @@ fn main() -> ExitCode {
                 Err(_) => ExitCode::from(1),
             };
         }
+        [arg, server] if arg == "mcp" && server == "actions" => return actions::serve(),
         [agent, event] if !agent.starts_with('-') && event == "waiter" => return waiter(),
         [agent, event] if !agent.starts_with('-') => return forward(agent, event),
         _ => {
