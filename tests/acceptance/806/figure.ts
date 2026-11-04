@@ -4,7 +4,7 @@
 import { join } from 'node:path';
 import { expect } from 'vitest';
 import {
-  App, FIGURE, FIGURE_ITEMS, FIGURE_SIZE, Stand, World, aboutDoc, deepShow, events, makeHome, readEvidence, startHub, t26, t393, uuidOf,
+  App, FIGURE, FIGURE_ITEMS, FIGURE_SIZE, Stand, World, aboutDoc, deepShow, events, makeHome, readEvidence, showArgs, showSchema, startHub, t26, t393, uuidOf,
   type AgentKind, type Drawn, type JsonObject, type JsonValue, type Line,
 } from './helpers.ts';
 
@@ -52,11 +52,15 @@ export async function openFigures(o: { plant?: string; app: boolean }): Promise<
 export const figureDoc = (claimed?: string): JsonObject => (claimed ? { ...FIGURE, writer: claimed } : FIGURE);
 export const SHOW = { t: '0s', size: FIGURE_SIZE, include: ['issues', 'pixels'] };
 
-/** The session files its claim, then shows the figure on its document: the call, its reply and how long it took. */
+/** The session files its claim, then shows the figure on its document, each call stamped as its agent stamps it: the call, its reply and how long it took. */
 export async function showFigure(f: Figures, who: Who, doc: string, claimed?: string): Promise<{ claim: string; reply: JsonObject; ms: number }> {
   const stand = f.stands.get(who.label)!;
-  const made = t26.valueOf(await t26.callTool(stand, 'deep_claim', t26.claimArgs()), `deep_claim of the ${who.name} session`);
-  const shown = await deepShow(stand, { doc, document: figureDoc(claimed), ...SHOW }, `deep_show of the ${who.name} session`);
+  const claim = t26.claimArgs();
+  await stand.stamp(f.hub, 'deep_claim', claim);
+  const made = t26.valueOf(await t26.callTool(stand, 'deep_claim', claim), `deep_claim of the ${who.name} session`);
+  const call = { doc, document: figureDoc(claimed), ...SHOW };
+  await stand.stamp(f.hub, 'deep_show', showArgs(call, await showSchema(stand)));
+  const shown = await deepShow(stand, call, `deep_show of the ${who.name} session`);
   return { claim: String(made.claim ?? made.event), reply: shown.reply, ms: shown.ms };
 }
 
