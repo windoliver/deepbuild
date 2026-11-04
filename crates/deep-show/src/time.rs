@@ -269,9 +269,13 @@ fn default_times(doc: &Value, motion: Option<&Motion>) -> Vec<i64> {
 impl Hub<'_> {
     /// The document's current revision, or the `no_revision` refusal.
     fn current_doc(&self, doc: &str) -> Result<Value, Value> {
-        self.current(doc)
+        let mut doc = self
+            .current(doc)
             .map(|r| r.doc.clone())
-            .ok_or_else(|| refused("no_revision"))
+            .ok_or_else(|| refused("no_revision"))?;
+        let _ = self.inline_tables(&mut doc);
+        self.inline_vectors(&mut doc);
+        Ok(doc)
     }
 
     /// The whole-flick sample at `hz`, or why there is none; the planted check takes every
@@ -496,9 +500,15 @@ impl Hub<'_> {
         }
         let drawing =
             crate::frames::drawing_of(&sched, &session).ok_or_else(|| "no_drawing".to_string())?;
-        let (sha, _, _) = self
-            .canonical_png(&drawing, None)
-            .map_err(|u| u.code.to_string())?;
+        let sha = if deep_canvas_scene3d::scene::has_3d(doc) {
+            // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
+            self.canonical_png3d(doc, times.last().copied().unwrap_or(0), &drawing)
+                .map_err(|u| u.code.to_string())?
+        } else {
+            self.canonical_png(&drawing, None)
+                .map_err(|u| u.code.to_string())?
+                .0
+        };
         let nodes: Vec<Value> = session
             .nodes(&sched)
             .into_iter()

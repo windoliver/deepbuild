@@ -14,3 +14,5 @@ rust-version = "1.95"
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline"] }
+# Issue #1162: table columns inlined from the evidence store, shared with the hub.
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
