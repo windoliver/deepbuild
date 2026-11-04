@@ -295,10 +295,13 @@ async function settled(name, masks) {
 }
 
 // ---- One step: its actions, then its expects, under its deadline; an expect's timeout stays under the deadline.
+// The page as the last step left it: the next step starts from it, so it is read once, not again before that step.
+let carried = null;
 async function runStep(step, index) {
   current = step;
   // One round trip each side of the step: the controls and the page's clock before, the controls and its animations after.
-  const { controls: before, now: mark } = await evaluate(`({ controls: ${CONTROLS}, now: performance.now() })`, { controls: [], now: 0 });
+  const { controls: before, now: mark } = carried ?? await evaluate(`({ controls: ${CONTROLS}, now: performance.now() })`, { controls: [], now: 0 });
+  carried = null;
   const timeout = step.timeoutMs;
   const entry = { id: step.id, index, startMs: now(), endMs: null, outcome: 'passed', failure: null, route: null, controls: null, screenshot: null, snapshot: '', dom: [], animations: [], firstFrame: null, masks: [], still: true, unstable: null, expects: [], elements: [] };
   report.steps.push(entry);
@@ -329,16 +332,21 @@ async function runStep(step, index) {
     flush();
     return false;
   }
-  const after = await evaluate(`({ controls: ${CONTROLS}, animations: window.__deepAnimations ?? [] })`, { controls: [], animations: [] });
+  // The screenshot is taken while the controls are read: neither changes the page.
+  const [after, file] = await Promise.all([
+    evaluate(`({ controls: ${CONTROLS}, animations: window.__deepAnimations ?? [], now: performance.now() })`, { controls: [], animations: [], now: 0 }),
+    job.settle ? Promise.resolve(null) : shot(`step-${index + 1}-${step.id}`),
+  ]);
   entry.controls = changed(before, after.controls);
   entry.animations = since(after.animations, mark);
+  carried = { controls: after.controls, now: after.now };
   if (job.settle) {
     // A screen compared with the merge base: settled, with its masks, elements and DOM, which only a comparison reads.
     entry.masks = await maskBoxes();
     const s = await settled(`step-${index + 1}-${step.id}`, entry.masks);
     entry.screenshot = s.file; entry.still = s.still; entry.unstable = s.unstable; entry.elements = s.elements;
     entry.dom = await evaluate(DOM, []);
-  } else entry.screenshot = await shot(`step-${index + 1}-${step.id}`);
+  } else entry.screenshot = file;
   current = null;
   flush();
   return entry.outcome === 'passed';
