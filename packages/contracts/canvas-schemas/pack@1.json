@@ -148,7 +148,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["number", "integer", "bool", "choice", "vec3", "range", "text", "ID"],
+          "enum": ["number", "integer", "bool", "choice", "vec3", "range", "text", "ID", "records", "record"],
           "x-closure": {
             "closed": "record",
             "reopens_if": "a recipe input needs a value type the document envelope adds",

@@ -172,7 +172,7 @@ const SCHEMA_VERSION = 1;
 /** Events a replay reads at a time. */
 const REPLAY_PAGE = 5000;
 /** The kinds that record a decision: only the core appends them, and each commits FULL, in its own commit. */
-const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'definition.locked', 'definition.revised', 'definition.stood_in', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
+const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
   'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set']);
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
@@ -185,9 +185,12 @@ const STORE_ITEM = 'store.item@1';
 const TEXT_FIELD: Readonly<Record<string, string>> = { 'tool.before': 'command', 'tool.after': 'command', 'permission.request': 'command', 'user.ask': 'text', 'task.completed': 'title' };
 /** What content-free mode keeps of each text field: nothing its schema allows. */
 const BLANK: Readonly<Record<string, string | null>> = { command: null, text: '', title: '-' };
-/** An event's content-free fields only: its text field kept as content-free mode keeps it (#363, a record grant without text). */
+/** The fields of a run's spec a run.started carries since v3 (#996): what it runs, its folder, environment and grant. */
+const RUN_SPEC = ['argv', 'cwd', 'env', 'command', 'grant', 'stand_ins'];
+/** An event's content-free fields only: its text field kept as content-free mode keeps it (#363, a record grant without text), and no run's spec. */
 export function contentFree(event: Event): Event {
   const field = TEXT_FIELD[event.kind];
+  if (event.kind === 'run.started' && isObj(event.data)) return { ...event, data: Object.fromEntries(Object.entries(event.data).filter(([k]) => !RUN_SPEC.includes(k))) };
   return field && isObj(event.data) ? { ...event, data: { ...event.data, [field]: BLANK[field] ?? null } } : event;
 }
 

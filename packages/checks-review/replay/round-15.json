@@ -1,0 +1,30 @@
+{
+  "claim": "upload-save",
+  "diff": "diff --git a/src/upload.ts b/src/upload.ts\nindex 4d10dc4..f2a2a32 100644\n--- a/src/upload.ts\n+++ b/src/upload.ts\n@@ -1,3 +1,4 @@\n-export function save(file: File) {\n-  return disk.write(file.name, file.data);\n+export async function save(file: File) {\n+  disk.write(file.name, file.data);\n+  return { saved: true };\n }\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [
+      {
+        "title": "[P1] Write is not awaited",
+        "body": "`save` reports success before the write finishes, and a failed write is lost.",
+        "priority": 1,
+        "confidence_score": 0.83,
+        "file": "src/upload.ts",
+        "line": 2,
+        "rule": "missing-await",
+        "quote": "disk.write(file.name, file.data);"
+      }
+    ],
+    "overall_correctness": "patch is incorrect",
+    "overall_explanation": "Success is returned before the write completes.",
+    "overall_confidence_score": 0.8
+  },
+  "since": []
+}

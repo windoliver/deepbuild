@@ -18,17 +18,20 @@
 //! span or a step by position reads boxes, so a frame that has one is built twice: once for every
 //! item's box, then with them.
 
-use std::cell::Cell;
+use std::borrow::Cow;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
 
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 
 use crate::data;
+use crate::ends;
 use crate::key::{ContentKey, KeyBuilder};
 use crate::outline::{self, Star};
 use crate::paint::{self, Adjust, By, Over, Ramp, Span, Steps};
 use crate::path::{self, Mesh, Verb};
+use crate::pathops;
 use crate::relations;
 use deep_canvas::schedule::{Key, KeyTree};
 
@@ -168,6 +171,9 @@ pub enum Scope {
     /// `verbs` is the union of the fills inside, which draw inside it with no antialiasing of
     /// their own, so a shared edge shows neither of them partly and nothing under it.
     Cover { item: String, verbs: Arc<Vec<Verb>> },
+    /// A clip to an outline, antialiased as the outline's own fill is (#160: a shade clipped to
+    /// its shape).
+    Shape { item: String, verbs: Arc<Vec<Verb>> },
 }
 
 /// A group's blend (Frame and group: blend modes): the 16 W3C modes and add, which R2 draws.
@@ -255,7 +261,8 @@ impl Scope {
             Scope::Clip { item, .. }
             | Scope::Mask { item, .. }
             | Scope::Opacity { item, .. }
-            | Scope::Cover { item, .. } => item,
+            | Scope::Cover { item, .. }
+            | Scope::Shape { item, .. } => item,
         }
     }
 
@@ -287,8 +294,12 @@ impl Scope {
                     k.text(b.name());
                 }
             }
-            Scope::Cover { verbs, .. } => {
-                k.text("cover");
+            Scope::Cover { verbs, .. } | Scope::Shape { verbs, .. } => {
+                k.text(if matches!(self, Scope::Cover { .. }) {
+                    "cover"
+                } else {
+                    "shape"
+                });
                 for v in verbs.iter() {
                     verb_points(v).iter().for_each(|p| {
                         k.number(p[0]).number(p[1]);
@@ -461,9 +472,9 @@ fn text_runs(
     Ok(out)
 }
 
-/// What a text mark is shaped from: `text@1`'s text, font role, size, weight, box width and
-/// alignment, and (#417) the family its font sets it in, the look's fallback families and its
-/// language.
+/// What a text mark is shaped from: `text@1`'s text, font role, size, weight, box width, line
+/// limit, overflow and alignment, and (#417) the family its font sets it in, the look's fallback
+/// families and its language.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextSpec {
     pub text: String,
@@ -476,6 +487,10 @@ pub struct TextSpec {
     pub size: f64,
     pub weight: u16,
     pub width: Option<f64>,
+    /// `max_lines`: lines past it are cut with an ellipsis, or masked.
+    pub max_lines: Option<u16>,
+    /// `overflow: mask`: text that doesn't fit draws whole, clipped to its box.
+    pub mask: bool,
     pub align: Align,
     /// A bound value: tabular figures, never cut short.
     pub bound: bool,
@@ -504,6 +519,11 @@ impl TextSpec {
             None => k.text("auto"),
         };
         k.text(if self.bound { "bound" } else { "free" });
+        match self.max_lines {
+            Some(n) => k.text("lines").int(i64::from(n)),
+            None => k.text("all"),
+        };
+        k.text(if self.mask { "mask" } else { "ellipsis" });
         k.int(self.align as i64);
         k.finish()
     }
@@ -568,6 +588,19 @@ pub fn text_spec_in(
             .and_then(|w| u16::try_from(w).ok())
             .unwrap_or(400),
         width: params.get("box").and_then(|b| num(b.get("w"))),
+        max_lines: match params.get("max_lines") {
+            None => None,
+            Some(n) => match n.as_u64().and_then(|n| u16::try_from(n).ok()) {
+                Some(n) => Some(n),
+                None => return refuse("bad_doc", format!("{path}/params/max_lines")),
+            },
+        },
+        mask: match params.get("overflow") {
+            None => false,
+            Some(Value::String(o)) if o == "ellipsis" => false,
+            Some(Value::String(o)) if o == "mask" => true,
+            Some(_) => return refuse("bad_doc", format!("{path}/params/overflow")),
+        },
         bound: shown.is_some() || params.get("numerals").and_then(Value::as_str) == Some("tabular"),
         align: match params.get("align").and_then(Value::as_str) {
             None | Some("start") => Align::Start,
@@ -590,7 +623,7 @@ impl TextSpec {
             weight: self.weight,
             line_height: None,
             width: self.width.map(|w| w as f32),
-            max_lines: None,
+            max_lines: self.max_lines,
             align: match self.align {
                 Align::Start => deep_text::Align::Start,
                 Align::Center => deep_text::Align::Center,
@@ -598,7 +631,7 @@ impl TextSpec {
             },
             bound: self.bound,
             tabular: self.bound,
-            mask: false,
+            mask: self.mask,
         })
     }
 }
@@ -670,6 +703,9 @@ pub struct Line {
     pub paint: Fill,
     pub opacity: f64,
     pub dashes: Option<u16>,
+    /// Issue #160: the width along the stroke's length, when it tapers, waves or is drawn per
+    /// point; `None` for one width throughout.
+    pub profile: Option<Box<paint::Profile>>,
 }
 
 /// A mark with the rect its rect masks clip it to, if any (Mask `mask@1`: a rect mask is a
@@ -824,6 +860,12 @@ impl Mark {
                         k.text("stroke").number(l.width).number(l.opacity);
                         k.int(l.dashes.map_or(-1, i64::from));
                         l.paint.feed(k);
+                        match &l.profile {
+                            Some(p) => p.feed(k),
+                            None => {
+                                k.text("no profile");
+                            }
+                        }
                     }
                     None => {
                         k.text("no stroke");
@@ -1341,16 +1383,82 @@ impl Paints<'_> {
         })
     }
 
+    /// Issue #160: the marks of a path-like item built through its ops ([`build_path`]): one
+    /// [`Mark::Shape`] per copy, each at its copy's opacity, a repeater's copies composited
+    /// below (the first on top) or above, and each copy's heads after it in the stroke's paint.
+    fn shapes(
+        &self,
+        id: &str,
+        built: &PathBuilt,
+        place: Place,
+        paint: &Map<String, Value>,
+        path: &str,
+    ) -> Result<Vec<Mark>, Refused> {
+        let mut order: Vec<usize> = (0..built.copies.len()).collect();
+        if built.below {
+            order.reverse();
+        }
+        let mut out = Vec::new();
+        for k in order {
+            let copy = &built.copies[k];
+            let mut mark = self.shape_with(
+                id,
+                copy.verbs.clone(),
+                place,
+                paint,
+                path,
+                (built.widths.clone(), built.alphas.clone()),
+            )?;
+            if copy.opacity < 1.0 {
+                if let Mark::Shape { fill, stroke, .. } = &mut mark {
+                    fill.iter_mut().for_each(|(_, o)| *o *= copy.opacity);
+                    stroke.iter_mut().for_each(|l| l.opacity *= copy.opacity);
+                }
+            }
+            out.push(mark);
+            let Some(s) = paint.get("stroke").and_then(Value::as_object) else {
+                continue;
+            };
+            let heads = built.ends.iter().filter(|(c, _)| *c == k);
+            if heads.clone().next().is_none() {
+                continue;
+            }
+            let width = num(s.get("width")).unwrap_or(1.0);
+            let stroke_path = format!("{path}/stroke");
+            let fill = self.paint(id, s, &stroke_path, bounds_of(&copy.verbs), place, true)?;
+            let alpha = opacity(paint.get("opacity"), &format!("{path}/opacity"))?
+                * opacity(s.get("opacity"), &format!("{stroke_path}/opacity"))?
+                * copy.opacity;
+            for (_, h) in heads {
+                out.push(Mark::Shape {
+                    item: format!("{id}#ends.{}", h.at),
+                    verbs: place.verbs(h.verbs.clone()),
+                    fill: h.filled.then(|| (fill.clone(), alpha)),
+                    stroke: (!h.filled).then(|| Line {
+                        width,
+                        paint: fill.clone(),
+                        opacity: alpha,
+                        dashes: None,
+                        profile: None,
+                    }),
+                });
+            }
+        }
+        Ok(out)
+    }
+
     /// A path-like item's outline as a [`Mark::Shape`] where it draws: `verbs` in the item's own
     /// space, its fill and its stroke each a role, a stepped color or a gradient over the
-    /// outline's box, at their opacity.
-    fn shape(
+    /// outline's box, at their opacity; with (#160) a hand-drawn stroke's per-point widths and
+    /// opacities at their arc lengths.
+    fn shape_with(
         &self,
         id: &str,
         verbs: Vec<Verb>,
         place: Place,
         paint: &Map<String, Value>,
         path: &str,
+        (widths, alphas): (Column, Column),
     ) -> Result<Mark, Refused> {
         let bounds = bounds_of(&verbs);
         let all = opacity(paint.get("opacity"), &format!("{path}/opacity"))?;
@@ -1388,11 +1496,17 @@ impl Paints<'_> {
                         })?)
                     }
                 };
+                let mut stroke_paint = self.paint(id, s, &path, bounds, place, true)?;
+                // A per-point opacity column paints the stroke along its length (#160).
+                if let Fill::Solid(c) = &stroke_paint {
+                    stroke_paint = along_alphas(*c, &alphas);
+                }
                 Some(Line {
                     width: num(s.get("width")).unwrap_or(1.0) * k,
-                    paint: self.paint(id, s, &path, bounds, place, true)?,
+                    paint: stroke_paint,
                     opacity: all * opacity(s.get("opacity"), &format!("{path}/opacity"))?,
                     dashes,
+                    profile: paint::profile(s, &path, widths)?.map(Box::new),
                 })
             }
             None => None,
@@ -1404,6 +1518,759 @@ impl Paints<'_> {
             stroke,
         })
     }
+}
+
+/// A per-point column at each point's arc length (#160).
+pub type Column = Vec<(f64, f64)>;
+
+/// `color` painted along a stroke's length at each point's opacity from `alphas`, or solid when
+/// there is no opacity column.
+fn along_alphas(color: Rgb, alphas: &Column) -> Fill {
+    let Some((last, _)) = alphas.last() else {
+        return Fill::Solid(color);
+    };
+    let total = last.max(1e-12);
+    Fill::Ramp(paint::Ramp {
+        geometry: paint::Geometry::Along,
+        extend: paint::Extend::Pad,
+        stops: alphas
+            .iter()
+            .map(|(s, a)| (s / total, paint::unit(color), *a))
+            .collect(),
+        transform: paint::IDENTITY,
+    })
+}
+
+/// A path-like item built through its ops (#160): what the `path` surface reports and the marks
+/// draw from. Copies are in copy order (copy 0 first) in the item's own space, with each one's
+/// heads; `placed` holds each copy where it draws.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PathBuilt {
+    pub copies: Vec<pathops::Copy>,
+    pub placed: Vec<Vec<Verb>>,
+    /// Each head with the index of the copy it ends, in the item's own space.
+    pub ends: Vec<(usize, ends::Built)>,
+    /// The segment count the ops declared from their params before building.
+    pub declared: u64,
+    /// The segments built, across every copy.
+    pub segments: u64,
+    pub widths: Column,
+    pub alphas: Column,
+    /// The tessellation's key: everything it builds from, in the item's own space.
+    pub digest: ContentKey,
+    /// A repeater's copies draw below (the first on top) rather than above.
+    pub below: bool,
+    /// Flicks each repeater copy lags the one before, 0 for none.
+    pub lag: i64,
+}
+
+/// Builds `verbs` (after any attachment, in the item's own space) through the item's ops, with
+/// its per-point columns and its ends. The declared segments are checked before anything builds.
+fn build_path(
+    ctx: &ItemCtx<'_>,
+    id: &str,
+    verbs: Vec<Verb>,
+    params: &Map<String, Value>,
+    paint: &Map<String, Value>,
+    place: Place,
+) -> Result<PathBuilt, Refused> {
+    let ops_path = format!("items/{id}/params/ops");
+    let ops = pathops::read(params.get("ops"), &ops_path)?;
+    let (widths, alphas) = columns(ctx, id, params, &verbs)?;
+    let ends = ends::Ends::read(params.get("ends"), &format!("items/{id}/params/ends"))?;
+    let (declared, over) = pathops::declared(&ops, &verbs);
+    if let Some(i) = over {
+        return refuse("segment_budget", format!("{ops_path}/{i}"));
+    }
+    let (below, lag) = match pathops::lagged_repeater(&ops) {
+        Some((_, r)) => (r.composite == pathops::Composite::Below, r.lag),
+        None => (
+            ops.iter().any(|o| matches!(o, pathops::Op::Repeater(r) if r.composite == pathops::Composite::Below)),
+            0,
+        ),
+    };
+    let mut copies = if ops.is_empty() {
+        vec![pathops::Copy {
+            verbs,
+            opacity: 1.0,
+            copy: None,
+            transform: pathops::IDENTITY,
+        }]
+    } else {
+        // A lagging repeater's earlier sources (#160): the item's geometry as it was k × lag
+        // earlier, which whoever evaluates the document supplies under `#lagged`.
+        let lagged: Vec<Vec<Verb>> = match ctx.planted {
+            Planted::RepeaterEvaluatesAtT => Vec::new(),
+            _ => params
+                .get(LAGGED)
+                .and_then(Value::as_array)
+                .map(|list| {
+                    list.iter()
+                        .filter_map(|it| {
+                            let p = object_or_empty(it.get("params"));
+                            base_verbs(it.get("kind").and_then(Value::as_str)?, p)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+        };
+        let moved = match ctx.planted {
+            Planted::Moved(op) => Some(op),
+            _ => None,
+        };
+        pathops::apply_planted(&ops, &verbs, &lagged, moved)
+    };
+    // Copy order: copy 0 first, whatever the composite.
+    copies.sort_by_key(|c| c.copy.map_or(0, |(k, _)| k));
+    let stroke_width = paint
+        .get("stroke")
+        .and_then(|s| num(s.get("width")))
+        .unwrap_or(1.0);
+    let mut heads = Vec::new();
+    if let Some(e) = &ends {
+        for (k, copy) in copies.iter().enumerate() {
+            for h in ends::build(&copy.verbs, e, stroke_width) {
+                heads.push((k, h));
+            }
+        }
+    }
+    let segments = copies.iter().map(|c| pathops::segments(&c.verbs)).sum();
+    let mut k = KeyBuilder::new("tessellate@marks2d.160");
+    for c in &copies {
+        k.int(c.verbs.len() as i64).number(c.opacity);
+        for v in &c.verbs {
+            for p in verb_points(v) {
+                k.number(p[0]).number(p[1]);
+            }
+        }
+    }
+    for (_, h) in &heads {
+        k.text(h.kind)
+            .number(h.tip[0])
+            .number(h.tip[1])
+            .number(h.length)
+            .number(h.width);
+    }
+    k.number(stroke_width);
+    // The stroke's taper and wave set widths at tessellation too.
+    for field in ["taper", "wave"] {
+        let v = paint.get("stroke").and_then(|s| s.get(field));
+        k.text(&v.map_or(String::new(), Value::to_string));
+    }
+    for (s, w) in widths.iter().chain(&alphas) {
+        k.number(*s).number(*w);
+    }
+    let placed = copies
+        .iter()
+        .map(|c| place.verbs(c.verbs.clone()))
+        .collect();
+    Ok(PathBuilt {
+        ends: heads,
+        copies,
+        placed,
+        declared,
+        segments,
+        widths,
+        alphas,
+        digest: k.finish(),
+        below,
+        lag,
+    })
+}
+
+/// The anchor points of a path: its M and L points and each curve's end.
+fn anchors_of(verbs: &[Verb]) -> Vec<[f64; 2]> {
+    verbs
+        .iter()
+        .filter_map(|v| match v {
+            Verb::Move(p) | Verb::Line(p) | Verb::Quad(_, p) | Verb::Cubic(_, _, p) => Some(*p),
+            Verb::Close => None,
+        })
+        .collect()
+}
+
+/// A per-point column's values as written: a list of numbers, or a column `{dtype, len, data}`;
+/// `None` when absent. Refused with `column_length` when its length differs from `points`.
+fn column_values(
+    id: &str,
+    params: &Map<String, Value>,
+    name: &str,
+    points: usize,
+) -> Result<Option<Vec<f64>>, Refused> {
+    let path = format!("items/{id}/params/{name}");
+    let values: Vec<f64> = match params.get(name) {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::Array(list)) => list
+            .iter()
+            .map(|v| num(Some(v)))
+            .collect::<Option<Vec<f64>>>()
+            .ok_or(Refused {
+                code: "bad_doc",
+                path: path.clone(),
+            })?,
+        Some(Value::Object(c)) => {
+            let len = c.get("len").and_then(Value::as_u64).unwrap_or(0) as usize;
+            match data::column_of(&Value::Object(c.clone()), len, &path)? {
+                data::Column::Numbers(v) => v,
+                _ => return refuse("bad_doc", path),
+            }
+        }
+        Some(_) => return refuse("bad_doc", path),
+    };
+    if values.len() != points {
+        return refuse("column_length", path);
+    }
+    if values.iter().any(|v| !v.is_finite() || *v < 0.0) {
+        return refuse("out_of_range", path);
+    }
+    Ok(Some(values))
+}
+
+/// Each anchor's arc length along `verbs`, by the segments between them.
+fn anchor_lengths(verbs: &[Verb], count: usize) -> Vec<f64> {
+    let mut at = Vec::with_capacity(count);
+    let mut s = 0.0;
+    at.push(0.0);
+    for sub in pathops::subs_of(verbs) {
+        for (i, seg) in sub.segs.iter().enumerate() {
+            let closing = sub.closed && i + 1 == sub.segs.len() && seg.end() == sub.segs[0].start();
+            s += seg.length();
+            if !closing {
+                at.push(s);
+            }
+        }
+    }
+    at.truncate(count);
+    while at.len() < count {
+        at.push(s);
+    }
+    at
+}
+
+/// The outlined group `id` draws inside, if any, with whether a sibling under it carries `name`.
+fn joined_under(ctx: &ItemCtx<'_>, id: &str, name: &str) -> Option<bool> {
+    let parent = ctx.items.get(id)?.get("parent").and_then(Value::as_str)?;
+    let group = ctx.items.get(parent)?;
+    if group.get("kind").and_then(Value::as_str) != Some("group@1")
+        || group
+            .get("params")
+            .and_then(|p| p.get("outline"))
+            .is_none_or(Value::is_null)
+    {
+        return None;
+    }
+    Some(ctx.items.iter().any(|(cid, c)| {
+        cid != id
+            && c.get("parent").and_then(Value::as_str) == Some(parent)
+            && c.get("params")
+                .and_then(|p| p.get(name))
+                .is_some_and(|v| !v.is_null())
+    }))
+}
+
+/// A path's per-point `width` and `opacity` columns (#160), each at its anchor's arc length. A
+/// column whose length differs from the path's point count is refused with `column_length`,
+/// naming the column, and neither is ever zero-filled: a part of a union outline that lacks a
+/// column its siblings have takes the column's default (an opacity of 1), which the planted
+/// `merge_zero_fills` gives 0 instead.
+fn columns(
+    ctx: &ItemCtx<'_>,
+    id: &str,
+    params: &Map<String, Value>,
+    verbs: &[Verb],
+) -> Result<(Column, Column), Refused> {
+    let anchors = anchors_of(verbs);
+    let at = anchor_lengths(verbs, anchors.len());
+    let read = |name: &str| -> Result<Column, Refused> {
+        let values = match column_values(id, params, name, anchors.len())? {
+            Some(v) => v,
+            None => match (ctx.planted, joined_under(ctx, id, name)) {
+                (Planted::MergeZeroFills, Some(true)) => vec![0.0; anchors.len()],
+                _ => return Ok(Vec::new()),
+            },
+        };
+        Ok(at.iter().copied().zip(values).collect())
+    };
+    Ok((read("width")?, read("opacity")?))
+}
+
+/// The path's ends moved by its `attach` (Path `path@1`: `attach`), and its line bent by its
+/// `bend`. An end that names an item stops where the line toward the other end meets that
+/// item's box (`edge`), its true outline (`outline`) or its centre, less its gap; one that names
+/// `#at:<f>` lands on that point of the target path. Boxes come from the frame's first pass, so
+/// the first pass leaves the path as it is.
+fn attached(
+    ctx: &ItemCtx<'_>,
+    verbs: Vec<Verb>,
+    params: &Map<String, Value>,
+    path: &str,
+) -> Result<Vec<Verb>, Refused> {
+    let bend = match params.get("bend") {
+        None | Some(Value::Null) => 0.0,
+        Some(v) => num(Some(v)).ok_or(Refused {
+            code: "bad_doc",
+            path: format!("{path}/params/bend"),
+        })?,
+    };
+    let attach = match params.get("attach") {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(a)) => Some(a),
+        Some(_) => return refuse("bad_doc", format!("{path}/params/attach")),
+    };
+    let first = verbs.iter().find_map(|v| match v {
+        Verb::Move(p) => Some(*p),
+        _ => None,
+    });
+    let last = verbs.iter().rev().find_map(|v| match v {
+        Verb::Move(p) | Verb::Line(p) | Verb::Quad(_, p) | Verb::Cubic(_, _, p) => Some(*p),
+        Verb::Close => None,
+    });
+    let (Some(mut start), Some(mut end)) = (first, last) else {
+        return Ok(verbs);
+    };
+    let mut moved = false;
+    if let Some(a) = attach {
+        let apath = format!("{path}/params/attach");
+        let at = match a.get("at").and_then(Value::as_str) {
+            None => "edge",
+            Some(s @ ("edge" | "center" | "outline")) => s,
+            Some(_) => return refuse("bad_doc", format!("{apath}/at")),
+        };
+        let gap = match a.get("gap") {
+            None | Some(Value::Null) => 4.0,
+            Some(v) => num(Some(v)).filter(|g| *g >= 0.0).ok_or(Refused {
+                code: "out_of_range",
+                path: format!("{apath}/gap"),
+            })?,
+        };
+        let target = |name: &str| -> Result<Option<String>, Refused> {
+            match a.get(name) {
+                None | Some(Value::Null) => Ok(None),
+                Some(Value::String(t)) if !t.is_empty() => Ok(Some(t.clone())),
+                Some(_) => refuse("bad_doc", format!("{apath}/{name}")),
+            }
+        };
+        let (ts, te) = (target("start")?, target("end")?);
+        // Where the other end points from: its own point, or its target's centre.
+        let centre_of = |t: &str| -> Result<Option<[f64; 2]>, Refused> {
+            let (tid, part) = t.split_once('#').map_or((t, None), |(i, p)| (i, Some(p)));
+            if let Some(f) = part.and_then(|p| p.strip_prefix("at:")) {
+                let f: f64 = f.parse().map_err(|_| Refused {
+                    code: "bad_doc",
+                    path: apath.clone(),
+                })?;
+                let outline = item_outline(ctx.items, tid).ok_or(Refused {
+                    code: "ref_unresolved",
+                    path: apath.clone(),
+                })?;
+                return Ok(pathops::at(&outline, f).map(|(p, _)| p));
+            }
+            let key = part.map_or(tid.to_string(), |p| format!("{tid}#{p}"));
+            let boxed = ctx
+                .paints
+                .box_of(&key, &apath)
+                .or_else(|_| ctx.paints.box_of(tid, &apath))?;
+            Ok(boxed.map(|b| [b[0] + b[2] / 2.0, b[1] + b[3] / 2.0]))
+        };
+        let solve = |t: &str, from: [f64; 2]| -> Result<Option<[f64; 2]>, Refused> {
+            let (tid, part) = t.split_once('#').map_or((t, None), |(i, p)| (i, Some(p)));
+            if part.is_some_and(|p| p.starts_with("at:")) {
+                return centre_of(t);
+            }
+            let key = part.map_or(tid.to_string(), |p| format!("{tid}#{p}"));
+            let Some(b) = ctx
+                .paints
+                .box_of(&key, &apath)
+                .or_else(|_| ctx.paints.box_of(tid, &apath))?
+            else {
+                return Ok(None);
+            };
+            let centre = [b[0] + b[2] / 2.0, b[1] + b[3] / 2.0];
+            let hit = match at {
+                "center" => return Ok(Some(centre)),
+                "outline" => match item_outline(ctx.items, tid) {
+                    Some(o) if part.is_none() => {
+                        first_hit(&o, from, centre).unwrap_or_else(|| box_hit(b, from))
+                    }
+                    _ => box_hit(b, from),
+                },
+                _ => box_hit(b, from),
+            };
+            let d = [from[0] - hit[0], from[1] - hit[1]];
+            let l = deep_canvas::ops::hypot(d[0], d[1]);
+            Ok(Some(if l > 0.0 {
+                [hit[0] + d[0] / l * gap, hit[1] + d[1] / l * gap]
+            } else {
+                hit
+            }))
+        };
+        let from_end = match &te {
+            Some(t) => centre_of(t)?.unwrap_or(end),
+            None => end,
+        };
+        let from_start = match &ts {
+            Some(t) => centre_of(t)?.unwrap_or(start),
+            None => start,
+        };
+        if let Some(t) = &ts {
+            if let Some(p) = solve(t, from_end)? {
+                start = p;
+                moved = true;
+            }
+        }
+        if let Some(t) = &te {
+            if let Some(p) = solve(t, from_start)? {
+                end = p;
+                moved = true;
+            }
+        }
+    }
+    let two = matches!(verbs.as_slice(), [Verb::Move(_), Verb::Line(_)]);
+    if bend != 0.0 && two {
+        return Ok(pathops::bent(start, end, bend));
+    }
+    if !moved {
+        return Ok(verbs);
+    }
+    if two {
+        return Ok(vec![Verb::Move(start), Verb::Line(end)]);
+    }
+    // A longer path keeps its shape and moves its first and last anchors.
+    let n = verbs.len();
+    let mut out = verbs;
+    if let Some(Verb::Move(p)) = out.first_mut() {
+        *p = start;
+    }
+    if let Some(Verb::Line(p) | Verb::Quad(_, p) | Verb::Cubic(_, _, p)) = out.get_mut(n - 1) {
+        *p = end;
+    }
+    Ok(out)
+}
+
+/// A child's ring for a union outline: its outline filled and stroked `2 × reach` out in the
+/// role, or for a stroked path its stroke widened by as much; with the child's per-point
+/// opacities when it has them, so a part drawn faint rings faint.
+fn ring_mark(
+    ctx: &ItemCtx<'_>,
+    item: String,
+    cid: &str,
+    verbs: Vec<Verb>,
+    color: Rgb,
+    reach: f64,
+) -> Result<Mark, Refused> {
+    let child = &ctx.items[cid];
+    let params = object_or_empty(child.get("params"));
+    let paint = object_or_empty(params.get("paint"));
+    let fill = paint.get("fill").is_some_and(|f| !f.is_null());
+    let stroke_width = paint
+        .get("stroke")
+        .and_then(|s| num(s.get("width")))
+        .unwrap_or(0.0);
+    let (_, alphas) = columns(ctx, cid, params, &verbs)?;
+    let paint = along_alphas(color, &alphas);
+    Ok(Mark::Shape {
+        item,
+        verbs,
+        fill: fill.then(|| (paint.clone(), 1.0)),
+        stroke: Some(Line {
+            width: stroke_width + 2.0 * reach,
+            paint,
+            opacity: 1.0,
+            dashes: None,
+            profile: None,
+        }),
+    })
+}
+
+/// The children of a group `id`, in draw order.
+fn children_in_order(ctx: &ItemCtx<'_>, id: &str) -> Vec<(String, Rank)> {
+    let mut out: Vec<(String, Rank)> = ctx
+        .items
+        .iter()
+        .filter(|(cid, c)| {
+            c.get("visible") != Some(&Value::Bool(false))
+                && ancestors(ctx.items, cid).iter().any(|a| a == id)
+        })
+        .map(|(cid, c)| (cid.clone(), rank_of(ctx.items, cid, c)))
+        .collect();
+    out.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+    out
+}
+
+/// A group's union outline (Frame and group: union outline, #160): each descendant's outline
+/// ringed `width` + `offset` out in the role, drawn under the children so only the ring outside
+/// their union shows; and, after the children, each slit child's own ring and the child again
+/// over it, so its line shows inside the union.
+fn union_outline(
+    ctx: &ItemCtx<'_>,
+    id: &str,
+    params: &Map<String, Value>,
+    path: &str,
+) -> Result<(Vec<Mark>, Vec<Mark>), Refused> {
+    let opath = format!("{path}/params/outline");
+    let Some(o) = params.get("outline").and_then(Value::as_object) else {
+        return refuse("bad_doc", opath);
+    };
+    if o.get("kind")
+        .and_then(Value::as_str)
+        .is_some_and(|k| k != "union")
+    {
+        return refuse("bad_doc", format!("{opath}/kind"));
+    }
+    let width = num(o.get("width")).unwrap_or(3.0);
+    let offset = num(o.get("offset")).unwrap_or(0.0);
+    if width < 0.0 || offset < 0.0 {
+        return refuse("out_of_range", format!("{opath}/width"));
+    }
+    let color = role(ctx.palette, o.get("role"), &format!("{opath}/role"))?;
+    let slits: Vec<&str> = o
+        .get("slits")
+        .and_then(Value::as_array)
+        .map(|l| l.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    let layer = ctx.items.get(id).and_then(|i| i.get("layer"));
+    let mut under = Vec::new();
+    let mut after = Vec::new();
+    for (cid, _) in children_in_order(ctx, id) {
+        let child = &ctx.items[&cid];
+        // An outline never crosses writer layers.
+        if child.get("layer") != layer {
+            return refuse("outline_writer", format!("{opath}: {cid}"));
+        }
+        let Some(verbs) = item_outline(ctx.items, &cid) else {
+            continue;
+        };
+        under.push(ring_mark(
+            ctx,
+            format!("{id}#outline"),
+            &cid,
+            verbs.clone(),
+            color,
+            width + offset,
+        )?);
+        if slits.contains(&cid.as_str()) {
+            after.push(ring_mark(
+                ctx,
+                format!("{id}#slit.{cid}"),
+                &cid,
+                verbs,
+                color,
+                width,
+            )?);
+            if let Some(own) = placed(ctx, &cid, child)? {
+                after.extend(own.drawn.iter().map(|d| d.mark.clone()));
+            }
+        }
+    }
+    Ok((under, after))
+}
+
+/// The joined per-point columns of a group with a union outline (#160): its children's rows in
+/// draw order, each child's points in path order, for every column any child has; a child that
+/// lacks one takes the column's default (an opacity of 1, a width of its stroke's), or 0 under
+/// the planted `merge_zero_fills`.
+fn joined_columns(ctx: &ItemCtx<'_>, id: &str) -> Result<BTreeMap<String, Vec<f64>>, Refused> {
+    let children = children_in_order(ctx, id);
+    let mut out: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    for name in ["width", "opacity"] {
+        let any = children.iter().any(|(cid, _)| {
+            ctx.items[cid]
+                .get("params")
+                .and_then(|p| p.get(name))
+                .is_some_and(|v| !v.is_null())
+        });
+        if !any {
+            continue;
+        }
+        let mut rows = Vec::new();
+        for (cid, _) in &children {
+            let child = &ctx.items[cid];
+            let params = object_or_empty(child.get("params"));
+            let Some(verbs) = base_verbs(
+                child.get("kind").and_then(Value::as_str).unwrap_or(""),
+                params,
+            ) else {
+                continue;
+            };
+            let n = anchors_of(&verbs).len();
+            match column_values(cid, params, name, n)? {
+                Some(v) => rows.extend(v),
+                None => {
+                    let default = match (ctx.planted, name) {
+                        (Planted::MergeZeroFills, _) => 0.0,
+                        (_, "width") => params
+                            .get("paint")
+                            .and_then(|p| p.get("stroke"))
+                            .and_then(|s| num(s.get("width")))
+                            .unwrap_or(1.0),
+                        _ => 1.0,
+                    };
+                    rows.extend(std::iter::repeat_n(default, n));
+                }
+            }
+        }
+        out.insert(name.to_string(), rows);
+    }
+    Ok(out)
+}
+
+/// What the `path` surface reports of an item (#160): a path-like item built through its ops,
+/// or a group with a union outline as its children's outlines in draw order.
+#[derive(Clone, Debug)]
+pub struct PathReport {
+    /// Each copy's sub-paths where they draw.
+    pub placed: Vec<Vec<Verb>>,
+    pub built: Option<PathBuilt>,
+    /// Each copy's repeater transform, opacity and lag, copy 0 first, for a repeater's item.
+    pub copies: Option<Vec<(pathops::Affine, f64, usize)>>,
+    /// Each head where it draws.
+    pub ends: Vec<ends::Built>,
+    pub columns: BTreeMap<String, Vec<f64>>,
+    pub segments: u64,
+    pub declared: u64,
+    pub digest: ContentKey,
+}
+
+/// [`PathReport`] of `id` among evaluated `items`, placed as a frame places them (boxes from a
+/// first pass, so attachments resolve).
+pub fn path_report(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+    (palette, ty): (&Palette, &Type),
+    id: &str,
+    planted: Planted,
+) -> Result<Option<PathReport>, Refused> {
+    let bound = BTreeMap::new();
+    let row_readings = BTreeMap::new();
+    // Only an attachment reads other items' boxes, which take a first pass over the frame.
+    let attaches = items
+        .get(id)
+        .and_then(|i| i.get("params"))
+        .and_then(|p| p.get("attach"))
+        .is_some_and(|a| !a.is_null());
+    let boxes = if attaches {
+        let (frame, _, _) = build(
+            doc,
+            (items, &[]),
+            (palette, ty),
+            (&bound, &row_readings),
+            1.0,
+            planted,
+            None,
+        )?;
+        Some(boxes_of(&frame, items))
+    } else {
+        None
+    };
+    let scopes = scopes_of(doc, items, palette)?;
+    let paints = Paints {
+        doc,
+        items,
+        palette,
+        boxes: boxes.as_ref(),
+        wants_boxes: Cell::new(false),
+    };
+    let ctx = ItemCtx {
+        items,
+        palette,
+        ty,
+        paints: &paints,
+        scopes: &scopes,
+        bound: &bound,
+        row_readings: &row_readings,
+        planted,
+    };
+    let Some(item) = items.get(id) else {
+        return Ok(None);
+    };
+    let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+    let params = object_or_empty(item.get("params"));
+    if kind == "group@1" && params.get("outline").is_some_and(|o| !o.is_null()) {
+        let placed: Vec<Vec<Verb>> = children_in_order(&ctx, id)
+            .iter()
+            .filter_map(|(cid, _)| item_outline(items, cid))
+            .collect();
+        let segments = placed.iter().map(|v| pathops::segments(v)).sum();
+        let mut k = KeyBuilder::new("tessellate@marks2d.160");
+        for v in placed.iter().flatten() {
+            for p in verb_points(v) {
+                k.number(p[0]).number(p[1]);
+            }
+        }
+        return Ok(Some(PathReport {
+            placed,
+            built: None,
+            copies: None,
+            ends: Vec::new(),
+            columns: joined_columns(&ctx, id)?,
+            segments,
+            declared: segments,
+            digest: k.finish(),
+        }));
+    }
+    let Some(verbs) = base_verbs(kind, params) else {
+        return Ok(None);
+    };
+    let path = format!("items/{id}");
+    let verbs = if kind == "path@1" {
+        attached(&ctx, verbs, params, &path)?
+    } else {
+        verbs
+    };
+    let place = Place::of(item);
+    let paint = object_or_empty(params.get("paint"));
+    let built = build_path(&ctx, id, verbs, params, paint, place)?;
+    let has_repeater = pathops::read(params.get("ops"), "")
+        .map(|ops| ops.iter().any(|o| matches!(o, pathops::Op::Repeater(_))))
+        .unwrap_or(false);
+    let copies = has_repeater.then(|| {
+        built
+            .copies
+            .iter()
+            .map(|c| (c.transform, c.opacity, c.copy.map_or(0, |(k, _)| k)))
+            .collect()
+    });
+    let ends = built
+        .ends
+        .iter()
+        .map(|(_, h)| ends::Built {
+            verbs: place.verbs(h.verbs.clone()),
+            tip: place.at(h.tip),
+            ..h.clone()
+        })
+        .collect();
+    let mut columns = BTreeMap::new();
+    if !built.widths.is_empty() {
+        columns.insert(
+            "width".to_string(),
+            built.widths.iter().map(|(_, w)| *w).collect(),
+        );
+    }
+    if !built.alphas.is_empty() {
+        columns.insert(
+            "opacity".to_string(),
+            built.alphas.iter().map(|(_, a)| *a).collect(),
+        );
+    }
+    Ok(Some(PathReport {
+        placed: built.placed.clone(),
+        copies,
+        ends,
+        columns,
+        segments: built.segments,
+        declared: built.declared,
+        digest: built.digest,
+        built: Some(built),
+    }))
+}
+
+/// The segments the ops of `id` declare, for a refusal that names the count.
+pub fn declared_of(items: &Map<String, Value>, id: &str) -> Option<u64> {
+    let item = items.get(id)?;
+    let params = object_or_empty(item.get("params"));
+    let verbs = base_verbs(item.get("kind").and_then(Value::as_str)?, params)?;
+    let ops = pathops::read(params.get("ops"), "").ok()?;
+    Some(pathops::declared(&ops, &verbs).0)
 }
 
 /// True when `paint` holds only what R1's marks draw: no opacity, dash or `scale_stroke`.
@@ -2080,9 +2947,9 @@ pub fn status_marks(
     Ok(out)
 }
 
-/// A mark with its item's order key and ID, which sort it within its layer.
-/// A mark in its layer's draw order: its item's order key, its row, its item's ID.
-type Ordered<'a> = (&'a str, usize, &'a str, &'a Arc<Drawn>, ContentKey);
+/// A mark in its layer's draw order: its item's rank (#160: z, then the tree by band, order key
+/// and ID), its row, its item's ID.
+type Ordered<'a> = (Rank, usize, &'a str, &'a Arc<Drawn>, ContentKey);
 
 /// The most masks that may clip one item (Mask: "nest deeper than 4" it can never).
 const MASK_DEPTH: usize = 4;
@@ -2440,6 +3307,85 @@ fn cover(built: &mut [(&str, Placed)], items: &Map<String, Value>) {
     }
 }
 
+thread_local! {
+    /// The shaper auto layout measures text leaves with (#375).
+    static LAYOUT_SHAPER: RefCell<deep_text::Shaper> = RefCell::new(deep_text::Shaper::new());
+}
+
+/// `items` with their frames' auto layout applied (#375): each frame that lays out, and each item
+/// one lays out, moved to its solved box, and a frame or a boxed mark sized to it. A text keeps its
+/// own box, which the layout measured it by.
+fn laid_out<'a>(
+    doc: &Map<String, Value>,
+    items: &'a Map<String, Value>,
+) -> Result<Cow<'a, Map<String, Value>>, Refused> {
+    let lays_out = |id: &str| {
+        items.get(id).is_some_and(|i| {
+            i.get("kind").and_then(Value::as_str) == Some("frame@1")
+                && i.get("params")
+                    .and_then(|p| p.get("layout"))
+                    .is_some_and(|l| l.as_str() != Some("none"))
+        })
+    };
+    if !items.keys().any(|id| lays_out(id)) {
+        return Ok(Cow::Borrowed(items));
+    }
+    let input = json!({"items": items, "bound_values": doc.get("bound_values")});
+    let boxes = LAYOUT_SHAPER
+        .with(|s| crate::layout::solve(&input, &mut s.borrow_mut()))
+        .map_err(|r| Refused {
+            code: r.code,
+            path: format!("items/{}", r.item),
+        })?;
+    let mut out = items.clone();
+    for (id, [x, y, w, h]) in boxes {
+        let parent = items
+            .get(&id)
+            .and_then(|i| i.get("parent"))
+            .and_then(Value::as_str);
+        let Some(item) = out.get_mut(&id).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        if !lays_out(&id) && !parent.is_some_and(lays_out) {
+            continue;
+        }
+        let at = item.entry("at").or_insert_with(|| json!({}));
+        let z = num(at.get("pos").and_then(|p| p.get(2))).unwrap_or(0.0);
+        at["pos"] = json!([x, y, z]);
+        if item.get("kind").and_then(Value::as_str) != Some("text@1") {
+            let params = item.entry("params").or_insert_with(|| json!({}));
+            params["box"] = json!([0.0, 0.0, w, h]);
+        }
+    }
+    Ok(Cow::Owned(out))
+}
+
+/// Each item's box as its frames' auto layout solves it (#375), for an item it lays out; none when
+/// no frame lays out (#399: a frame's drawn box where a graph node placed it).
+pub fn laid_out_boxes(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+) -> Result<BTreeMap<String, [f64; 4]>, Refused> {
+    let laid = laid_out(doc, items)?;
+    let mut out = BTreeMap::new();
+    if let Cow::Owned(laid) = laid {
+        for (id, item) in &laid {
+            let (Some(pos), Some(b)) = (
+                item.pointer("/at/pos").and_then(Value::as_array),
+                item.pointer("/params/box").and_then(Value::as_array),
+            ) else {
+                continue;
+            };
+            let n = |v: Option<&Value>| v.and_then(Value::as_f64).unwrap_or(0.0);
+            out.insert(
+                id.clone(),
+                [n(pos.first()), n(pos.get(1)), n(b.get(2)), n(b.get(3))],
+            );
+        }
+    }
+    Ok(out)
+}
+
 /// The rect a mark's scissors leave it, for a renderer that clips only by rect.
 fn clip_of(scopes: &[Scope]) -> Option<[f64; 4]> {
     scopes.iter().fold(None, |acc, s| {
@@ -2465,6 +3411,16 @@ pub enum Planted {
     ArcClosedAlongChord,
     /// #385 AC8's twin: a group's fills that share an edge draw each on its own, source-over.
     SectorsSourceOver,
+    /// #160 AC5's twin: the named op's output moved 0.02 u along +x.
+    Moved(&'static str),
+    /// #160 AC8's twin: a union's join gives a missing column 0 instead of its default.
+    MergeZeroFills,
+    /// #160 AC17's twin: a repeater that evaluates every copy at t, ignoring its lag.
+    RepeaterEvaluatesAtT,
+    /// #399 AC6's twins: a series line that keeps only each column's first and last rows, or
+    /// only its min and max.
+    DecimateFirstLast,
+    DecimateMinMax,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
@@ -2565,12 +3521,252 @@ fn frame_shown(
     .0)
 }
 
+/// An item's place in its layer's draw order (#160): by z, then by the tree, each level as its
+/// draw-order band (back 0, body 1, front 2), its order key and its ID. A prefix sorts first, so a
+/// group's own marks draw under its children's.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Rank {
+    pub z: f64,
+    pub chain: Vec<(u8, String, String)>,
+}
+
+impl Eq for Rank {}
+
+impl PartialOrd for Rank {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Rank {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.z
+            .total_cmp(&other.z)
+            .then_with(|| self.chain.cmp(&other.chain))
+    }
+}
+
+impl Rank {
+    /// The rank just past every child of this one.
+    fn after_children(&self) -> Rank {
+        let mut chain = self.chain.clone();
+        chain.push((3, String::new(), String::new()));
+        Rank { z: self.z, chain }
+    }
+}
+
+/// The draw-order band of an item: `back`, `body` or `front`, `auto` as body.
+fn band_of(item: &Value) -> u8 {
+    match item
+        .get("params")
+        .and_then(|p| p.get("draw_order"))
+        .and_then(Value::as_str)
+    {
+        Some("back") => 0,
+        Some("front") => 2,
+        _ => 1,
+    }
+}
+
+/// An item's `z` (a channel on any 2D item), 0 when unset.
+fn z_of(item: &Value) -> f64 {
+    num(item.get("params").and_then(|p| p.get("z"))).unwrap_or(0.0)
+}
+
+/// Whether a group renders isolated, as one unit at its own z: below opacity 1, in a blend
+/// mode, with passes, or asked to.
+fn isolated(item: &Value) -> bool {
+    if item.get("kind").and_then(Value::as_str) != Some("group@1") {
+        return false;
+    }
+    let p = object_or_empty(item.get("params"));
+    num(p.get("opacity")).is_some_and(|o| o < 1.0)
+        || p.get("blend")
+            .and_then(Value::as_str)
+            .is_some_and(|b| b != "normal")
+        || p.get("isolate") == Some(&Value::Bool(true))
+        || p.get("passes")
+            .and_then(Value::as_array)
+            .is_some_and(|l| !l.is_empty())
+}
+
+/// The ancestors of `id`, outermost first, bounded so a cycle the check refuses can't spin.
+fn ancestors(items: &Map<String, Value>, id: &str) -> Vec<String> {
+    let mut chain = Vec::new();
+    let mut at = items
+        .get(id)
+        .and_then(|i| i.get("parent"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    while let Some(p) = at {
+        if chain.len() > items.len() || p == id || chain.contains(&p) {
+            break;
+        }
+        at = items
+            .get(&p)
+            .and_then(|i| i.get("parent"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        chain.push(p);
+    }
+    chain.reverse();
+    chain
+}
+
+/// `id`'s rank among `items`: its z, or inside an isolated group that group's, then its chain.
+fn rank_of(items: &Map<String, Value>, id: &str, item: &Value) -> Rank {
+    let node = |i: &str, it: &Value| {
+        (
+            band_of(it),
+            it.get("order")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            i.to_string(),
+        )
+    };
+    let mut z = z_of(item);
+    let mut chain = Vec::new();
+    for a in ancestors(items, id) {
+        let Some(it) = items.get(&a) else { continue };
+        if isolated(it) && chain.iter().all(|(_, _, i)| !isolated(&items[i])) {
+            z = z_of(it);
+        }
+        chain.push(node(&a, it));
+    }
+    chain.push(node(id, item));
+    Rank { z, chain }
+}
+
+/// Each item whose own z would lift it out of the isolated group it draws inside, with that
+/// group (the notice `z_inside_isolated`, Frame and group: draw order).
+pub fn lifted(items: &Map<String, Value>) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for (id, item) in items {
+        let own = z_of(item);
+        let Some(group) = ancestors(items, id)
+            .into_iter()
+            .find(|a| items.get(a).is_some_and(isolated))
+        else {
+            continue;
+        };
+        if own != z_of(&items[&group]) {
+            out.push((id.clone(), group));
+        }
+    }
+    out
+}
+
+/// The params key under which an evaluated item carries its earlier selves for a lagging
+/// repeater (#160): a list of the item as evaluated k × lag earlier, k from 1. Only an evaluator
+/// writes it; a document never holds it.
+pub const LAGGED: &str = "#lagged";
+
+/// A 2D item's outline in its own space, before its ops: a rect, a circle, a star or a path.
+pub fn base_verbs(kind: &str, params: &Map<String, Value>) -> Option<Vec<Verb>> {
+    Some(match kind {
+        "rect@1" => outline::rect(
+            four(params.get("box"))?,
+            num(params.get("radius")).unwrap_or(0.0),
+        ),
+        "circle@1" => outline::circle(
+            pair(params.get("center"))?,
+            num(params.get("r")).unwrap_or(0.0),
+            num(params.get("inner_r")).unwrap_or(0.0),
+        ),
+        "star@1" => {
+            let p = |k: &str| num(params.get(k));
+            Star {
+                center: pair(params.get("center"))?,
+                points: p("points").unwrap_or(5.0),
+                outer_r: p("outer_r").unwrap_or(0.0),
+                inner_r: p("inner_r").unwrap_or(0.0),
+                outer_round: p("outer_round").unwrap_or(0.0),
+                inner_round: p("inner_round").unwrap_or(0.0),
+                polygon: params.get("polygon") == Some(&Value::Bool(true)),
+            }
+            .verbs("")
+            .ok()?
+        }
+        "path@1" => path::parse(params.get("d")?.as_str()?)?,
+        _ => return None,
+    })
+}
+
+/// A 2D item's outline where it draws, for a union outline or an attachment at `outline`: a
+/// rect, a circle, a star or a path through its ops.
+fn item_outline(items: &Map<String, Value>, id: &str) -> Option<Vec<Verb>> {
+    let item = items.get(id)?;
+    let kind = item.get("kind").and_then(Value::as_str)?;
+    let params = object_or_empty(item.get("params"));
+    let verbs = base_verbs(kind, params)?;
+    let verbs = match pathops::read(params.get("ops"), "").ok() {
+        Some(ops) if !ops.is_empty() => pathops::apply(&ops, &verbs).into_iter().next()?.verbs,
+        _ => verbs,
+    };
+    Some(Place::of(item).verbs(verbs))
+}
+
+/// Where the segment from `from` to `to` first meets the polyline edges of `verbs`, nearest to
+/// `from`.
+fn first_hit(verbs: &[Verb], from: [f64; 2], to: [f64; 2]) -> Option<[f64; 2]> {
+    let d = [to[0] - from[0], to[1] - from[1]];
+    let mut best: Option<(f64, [f64; 2])> = None;
+    for line in path::flatten(verbs, 0.05) {
+        let n = line.points.len();
+        let edges = if line.closed { n } else { n.saturating_sub(1) };
+        for i in 0..edges {
+            let (a, b) = (line.points[i], line.points[(i + 1) % n]);
+            let e = [b[0] - a[0], b[1] - a[1]];
+            let den = d[0] * e[1] - d[1] * e[0];
+            if den.abs() < 1e-12 {
+                continue;
+            }
+            let w = [a[0] - from[0], a[1] - from[1]];
+            let t = (w[0] * e[1] - w[1] * e[0]) / den;
+            let u = (w[0] * d[1] - w[1] * d[0]) / den;
+            if (0.0..=1.0).contains(&t)
+                && (0.0..=1.0).contains(&u)
+                && best.is_none_or(|(bt, _)| t < bt)
+            {
+                best = Some((t, [from[0] + d[0] * t, from[1] + d[1] * t]));
+            }
+        }
+    }
+    best.map(|(_, p)| p)
+}
+
+/// Where the segment from `from` to the box's centre meets the box's edge.
+fn box_hit(b: [f64; 4], from: [f64; 2]) -> [f64; 2] {
+    let c = [b[0] + b[2] / 2.0, b[1] + b[3] / 2.0];
+    let d = [c[0] - from[0], c[1] - from[1]];
+    // The largest t in 0..1 at which the segment is still outside the box.
+    let mut t_in: f64 = 0.0;
+    for k in 0..2 {
+        if d[k].abs() < 1e-12 {
+            continue;
+        }
+        let (lo, hi) = (b[k], b[k] + b[k + 2]);
+        let t0 = (lo - from[k]) / d[k];
+        let t1 = (hi - from[k]) / d[k];
+        t_in = t_in.max(t0.min(t1));
+    }
+    let t = t_in.clamp(0.0, 1.0);
+    [from[0] + d[0] * t, from[1] + d[1] * t]
+}
+
 /// What one item draws, as a frame places it: its layer, its order key, and its marks with the
 /// clip and scopes each draws inside.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Placed {
     pub layer: String,
     pub order: String,
+    /// Issue #160: where the item draws in its layer: its z, then its place in the tree by
+    /// draw-order band, order key and ID at each level (Frame and group: draw order).
+    pub rank: Rank,
+    /// Marks drawn after the item's children (a union outline's slits, #160), at the rank just
+    /// past every child's.
+    pub after: Vec<Arc<Drawn>>,
     pub drawn: Vec<Arc<Drawn>>,
     /// Each mark's key at the zoom bucket of a frame at zoom 1, when the item's own node made
     /// them (#857); a frame computes any other.
@@ -2653,15 +3849,33 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         Ok((d.clone(), verbs))
     };
     // R1's rect, circle and path draw an item that only moves, in the paint R1 knows.
-    let r1 = place.moves() && r1_paint(paint);
+    // Issue #160: a path with ops, ends, an attachment or a bend, or a stroke that tapers or
+    // waves, is an outline the R1 marks can't draw.
+    let kinetic = ["ops", "ends", "attach", "bend", "width", "opacity"]
+        .iter()
+        .any(|k| params.get(*k).is_some_and(|v| !v.is_null()))
+        || stroke.is_some_and(|s| s.contains_key("taper") || s.contains_key("wave"))
+        || paint.get("shade").is_some_and(|v| !v.is_null())
+        || joined_under(ctx, id, "opacity").is_some();
+    let r1 = place.moves() && r1_paint(paint) && !kinetic;
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
     let adjust = Adjust::read(item, ctx.palette, id)?;
+    let mut after: Vec<Mark> = Vec::new();
     let mut marks: Vec<Mark> = match kind {
-        // A scale, a mask and a group draw nothing themselves, and a camera is the view a
-        // document is seen through, not a mark (#378: a 3D figure's camera). A graph, a
-        // salience level and a sheet are the graph, record and sheet modules' (#388), which
-        // lay them out and draw nothing yet.
-        "scale@1" | "mask@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" => {
+        // A scale draws only its legend. A mask and a group draw nothing themselves, and a
+        // camera is the view a document is seen through, not a mark (#378: a 3D figure's
+        // camera). A graph, a salience level and a sheet are the graph, record and sheet
+        // modules' (#388), which lay them out and draw nothing yet.
+        "scale@1" => match data::legend(id, item, ctx.items, ctx.palette, pos)? {
+            legend if legend.is_empty() => return Ok(None),
+            legend => legend,
+        },
+        "group@1" if params.get("outline").is_some_and(|o| !o.is_null()) => {
+            let (under, slits) = union_outline(ctx, id, params, &path)?;
+            after = slits;
+            under
+        }
+        "mask@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" => {
             return Ok(None)
         }
         "star@1" => {
@@ -2676,7 +3890,23 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 polygon: params.get("polygon") == Some(&Value::Bool(true)),
             };
             let verbs = star.verbs(&format!("{path}/params"))?;
-            vec![ctx.paints.shape(id, verbs, place, paint, &paint_path)?]
+            {
+                let built = build_path(ctx, id, verbs, params, paint, place)?;
+                ctx.paints.shapes(id, &built, place, paint, &paint_path)?
+            }
+        }
+        "frame@1" if stroke.is_some() => {
+            // A stroked frame draws as a stroked rect does.
+            let radius = num(params.get("radius")).unwrap_or(0.0);
+            let verbs = outline::rect(frame_box(id, item)?, radius);
+            vec![ctx.paints.shape_with(
+                id,
+                verbs,
+                place,
+                paint,
+                &paint_path,
+                (Vec::new(), Vec::new()),
+            )?]
         }
         "frame@1" => {
             // A frame draws its background; its overflow mask scopes its children.
@@ -2718,7 +3948,10 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 to,
                 close,
             );
-            vec![ctx.paints.shape(id, verbs, place, paint, &paint_path)?]
+            {
+                let built = build_path(ctx, id, verbs, params, paint, place)?;
+                ctx.paints.shapes(id, &built, place, paint, &paint_path)?
+            }
         }
         "path@1"
             if !r1
@@ -2728,10 +3961,13 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                     .any(|p| p.contains_key("gradient") || p.contains_key("steps")) =>
         {
             let (_, verbs) = path_data()?;
-            vec![ctx.paints.shape(id, verbs, place, paint, &paint_path)?]
+            let verbs = attached(ctx, verbs, params, &path)?;
+            let built = build_path(ctx, id, verbs, params, paint, place)?;
+            ctx.paints.shapes(id, &built, place, paint, &paint_path)?
         }
         "rect@1" | "circle@1"
             if !r1
+                || kinetic
                 || stroke.is_some()
                 || (kind == "circle@1" && fill.is_some_and(|f| !f.contains_key("role"))) =>
         {
@@ -2751,7 +3987,10 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             if fill.is_none() && stroke.is_none() {
                 return Ok(None);
             }
-            vec![ctx.paints.shape(id, verbs, place, paint, &paint_path)?]
+            {
+                let built = build_path(ctx, id, verbs, params, paint, place)?;
+                ctx.paints.shapes(id, &built, place, paint, &paint_path)?
+            }
         }
         "marks@1" => data::mark_set(
             id,
@@ -2764,7 +4003,14 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 .unwrap_or(&data::BoundRows::new()),
         )?,
         "axis@1" => data::axis(id, item, ctx.items, ctx.palette, pos)?,
-        "series@1" => data::series(id, item, ctx.palette, pos)?,
+        "series@1" => {
+            let how = match ctx.planted {
+                Planted::DecimateFirstLast => data::Decimate::FirstLast,
+                Planted::DecimateMinMax => data::Decimate::MinMax,
+                _ => data::Decimate::M4,
+            };
+            data::series(id, item, ctx.palette, pos, how)?
+        }
         "image@1" => {
             let Some(Value::String(asset)) = params.get("asset") else {
                 return refuse("bad_doc", format!("{path}/params/asset"));
@@ -2895,6 +4141,21 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     };
     let order = item.get("order").and_then(Value::as_str).unwrap_or("");
     let mut scopes = ctx.scopes.get(id).cloned().unwrap_or_default();
+    // Masked text draws whole, clipped to its box: its width, and its height or its line limit's.
+    if let [Mark::Text { spec, origin, .. }] = marks.as_slice() {
+        let side = |k: &str| params.get("box").and_then(|b| num(b.get(k)));
+        let lines = spec
+            .max_lines
+            .zip(spec.shaper_spec())
+            .map(|(n, s)| f64::from(n) * f64::from(s.line_height()));
+        if let (true, Some(w), Some(h)) = (spec.mask, side("w"), side("h").or(lines)) {
+            scopes.push(Scope::Clip {
+                item: format!("{id}#box"),
+                rect: [origin[0], origin[1], w, h],
+                radius: 0.0,
+            });
+        }
+    }
     if adjust.opacity < 1.0 {
         scopes.push(Scope::Opacity {
             item: format!("{id}#adjust"),
@@ -2906,11 +4167,8 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     if !adjust.is_identity() {
         marks.iter_mut().for_each(|m| m.adjust(&adjust));
     }
-    Ok(Some(Placed {
-        keys: Vec::new(),
-        layer: layer.to_string(),
-        order: order.to_string(),
-        drawn: marks
+    let drawn = |marks: Vec<Mark>| -> Vec<Arc<Drawn>> {
+        marks
             .into_iter()
             .map(|mark| {
                 Arc::new(Drawn {
@@ -2919,8 +4177,149 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                     scopes: scopes.clone(),
                 })
             })
+            .collect()
+    };
+    // A shade (Paint: shade, #160) draws between the shape's fill and its stroke, clipped to it.
+    let shade = paint::Shade::read(
+        ctx.palette,
+        paint.get("shade"),
+        &format!("{paint_path}/shade"),
+    )?;
+    let drawn_marks = match &shade {
+        None => drawn(marks),
+        Some(shade) => marks
+            .into_iter()
+            .flat_map(|mark| shaded(id, mark, shade, &scopes, clip))
             .collect(),
+    };
+    Ok(Some(Placed {
+        keys: Vec::new(),
+        layer: layer.to_string(),
+        order: order.to_string(),
+        rank: rank_of(ctx.items, id, item),
+        after: drawn(after),
+        drawn: drawn_marks,
     }))
+}
+
+/// A filled outline with its shade: the fill, then the shade (the shape less a copy of it moved
+/// toward the light, so a crescent of shade sits on the far side), the highlight (the shape less a
+/// copy moved away from the light: a crescent on the near side) and the rim (a band inside the
+/// edge), each clipped to the shape, then the stroke. Any other mark draws as it is.
+fn shaded(
+    id: &str,
+    mark: Mark,
+    shade: &paint::Shade,
+    scopes: &[Scope],
+    clip: Option<[f64; 4]>,
+) -> Vec<Arc<Drawn>> {
+    let plain = |mark: Mark| {
+        Arc::new(Drawn {
+            mark,
+            clip,
+            scopes: scopes.to_vec(),
+        })
+    };
+    // Only the item's own outline is shaded, never its heads (`<id>#ends.*`).
+    let Mark::Shape {
+        item,
+        verbs,
+        fill: Some(fill),
+        stroke,
+    } = mark
+    else {
+        return vec![plain(mark)];
+    };
+    if item != id {
+        return vec![plain(Mark::Shape {
+            item,
+            verbs,
+            fill: Some(fill),
+            stroke,
+        })];
+    }
+    let outline = Arc::new(verbs.clone());
+    let mut inside = scopes.to_vec();
+    inside.push(Scope::Shape {
+        item: format!("{id}#shade"),
+        verbs: Arc::clone(&outline),
+    });
+    if shade.multiply {
+        inside.push(Scope::Opacity {
+            item: format!("{id}#shade.multiply"),
+            alpha: 1.0,
+            blend: Some(Blend::Multiply),
+        });
+    }
+    let clipped = |mark: Mark| {
+        Arc::new(Drawn {
+            mark,
+            clip,
+            scopes: inside.clone(),
+        })
+    };
+    // The shape with a copy of itself moved by `by` cut out of it: the copy traced the other way
+    // winds against the shape, so under the non-zero rule their overlap is a hole and what shows,
+    // inside the clip, is the crescent the move uncovers.
+    let less_moved = |by: [f64; 2]| -> Vec<Verb> {
+        let m = |p: [f64; 2]| [p[0] + by[0], p[1] + by[1]];
+        let copy: Vec<Verb> = verbs
+            .iter()
+            .map(|v| match *v {
+                Verb::Move(p) => Verb::Move(m(p)),
+                Verb::Line(p) => Verb::Line(m(p)),
+                Verb::Quad(a, b) => Verb::Quad(m(a), m(b)),
+                Verb::Cubic(a, b, c) => Verb::Cubic(m(a), m(b), m(c)),
+                Verb::Close => Verb::Close,
+            })
+            .collect();
+        let mut out = verbs.clone();
+        out.extend(pathops::reversed(&copy));
+        out
+    };
+    let mut out = vec![plain(Mark::Shape {
+        item: item.clone(),
+        verbs: verbs.clone(),
+        fill: Some(fill),
+        stroke: None,
+    })];
+    out.push(clipped(Mark::Shape {
+        item: format!("{id}#shade"),
+        verbs: less_moved(shade.away(-shade.offset)),
+        fill: Some((Fill::Solid(shade.color), shade.opacity)),
+        stroke: None,
+    }));
+    if let Some((color, offset)) = shade.highlight {
+        out.push(clipped(Mark::Shape {
+            item: format!("{id}#highlight"),
+            verbs: less_moved(shade.away(offset)),
+            fill: Some((Fill::Solid(color), shade.opacity)),
+            stroke: None,
+        }));
+    }
+    if let Some((color, width)) = shade.rim {
+        out.push(clipped(Mark::Shape {
+            item: format!("{id}#rim"),
+            verbs: verbs.clone(),
+            fill: None,
+            stroke: Some(Line {
+                width: 2.0 * width,
+                paint: Fill::Solid(color),
+                opacity: shade.opacity,
+                dashes: None,
+                profile: None,
+            }),
+        }));
+    }
+    if stroke.is_some() {
+        out.push(plain(Mark::Shape {
+            item,
+            verbs,
+            fill: None,
+            stroke,
+        }));
+    }
+    out
 }
 
 /// What `item` draws when it reads nothing beyond itself, the palette and what its bound value
@@ -3035,6 +4434,7 @@ fn build(
     planted: Planted,
     boxes: Option<&BTreeMap<String, [f64; 4]>>,
 ) -> Result<(Frame, bool, Places), Refused> {
+    let items = &*laid_out(doc, items)?;
     let size = pair(doc.get("size")).ok_or(Refused {
         code: "bad_doc",
         path: "size".into(),
@@ -3057,6 +4457,30 @@ fn build(
             if rows > data::MAX_DOCUMENT_ROWS {
                 return refuse("out_of_range", format!("items/{id}/params/n"));
             }
+        }
+    }
+    // Path ops' declared segments across the document (#160), before any path builds; the
+    // document's budget names the op of the path that crosses it.
+    let mut segments: u64 = 0;
+    for (id, item) in items {
+        let params = object_or_empty(item.get("params"));
+        let Some(ops_value) = params.get("ops").filter(|o| !o.is_null()) else {
+            continue;
+        };
+        let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+        let Some(verbs) = base_verbs(kind, params) else {
+            continue;
+        };
+        let ops_path = format!("items/{id}/params/ops");
+        let ops = pathops::read(Some(ops_value), &ops_path)?;
+        let (n, over) = pathops::declared(&ops, &verbs);
+        if let Some(i) = over {
+            return refuse("segment_budget", format!("{ops_path}/{i}"));
+        }
+        segments += n;
+        if segments > pathops::MAX_DOCUMENT_SEGMENTS {
+            let last = ops.len().saturating_sub(1);
+            return refuse("segment_budget", format!("{ops_path}/{last}"));
         }
     }
     let scopes = scopes_of(doc, items, palette)?;
@@ -3116,7 +4540,17 @@ fn build(
                 drawn.key(bucket)
             };
             // A generated row keeps its set's place, in row order.
-            slot.2.push((&placed.order, k, id, drawn, key));
+            slot.2.push((placed.rank.clone(), k, id, drawn, key));
+        }
+        let later = placed.rank.after_children();
+        for (k, drawn) in placed.after.iter().enumerate() {
+            slot.2.push((
+                later.clone(),
+                placed.drawn.len() + k,
+                id,
+                drawn,
+                drawn.key(bucket),
+            ));
         }
     }
     layers.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
@@ -3126,7 +4560,7 @@ fn build(
         .into_iter()
         .enumerate()
         .map(|(li, (_, id, mut marks))| {
-            marks.sort_by(|a, b| (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)));
+            marks.sort_by(|a, b| (&a.0, a.1, a.2).cmp(&(&b.0, b.1, b.2)));
             for (k, m) in marks.iter().enumerate() {
                 let Some(places) = at.as_mut() else { break };
                 let e = places
@@ -3489,5 +4923,108 @@ mod tests {
         let mut by_path = ok.clone();
         by_path["items"]["shot"]["params"]["asset"] = json!("/tmp/shot.png");
         assert_eq!(draw(&by_path).unwrap_err().code, "bad_asset");
+    }
+    /// The non-zero winding of `verbs` about `p`, from its sub-paths flattened at 64 points a
+    /// segment.
+    fn winding(verbs: &[Verb], p: [f64; 2]) -> i32 {
+        let mut w = 0;
+        for sub in pathops::subs_of(verbs) {
+            let mut pts: Vec<[f64; 2]> = Vec::new();
+            for seg in &sub.segs {
+                for i in 0..64 {
+                    pts.push(seg.at(i as f64 / 64.0));
+                }
+            }
+            let n = pts.len();
+            for i in 0..n {
+                let (a, b) = (pts[i], pts[(i + 1) % n]);
+                if a[1] <= p[1] {
+                    if b[1] > p[1] && (b[0] - a[0]) * (p[1] - a[1]) > (p[0] - a[0]) * (b[1] - a[1])
+                    {
+                        w += 1;
+                    }
+                } else if b[1] <= p[1]
+                    && (b[0] - a[0]) * (p[1] - a[1]) < (p[0] - a[0]) * (b[1] - a[1])
+                {
+                    w -= 1;
+                }
+            }
+        }
+        w
+    }
+
+    #[test]
+    fn a_crescent_shade_sits_on_the_far_side_and_its_highlight_on_the_near_side() {
+        // #160, Paint: shade: a 40 u circle lit from the left (light 180°) shaded by 8 u with a
+        // 10 u highlight. The shade covers a point near the right edge and none near the left
+        // edge; the highlight the other way round; the middle keeps the fill.
+        let doc = board(json!({
+            "ball": {"kind": "circle@1", "layer": "main", "order": "a0", "params": {
+                "center": [100, 50], "r": 40,
+                "paint": {"fill": {"role": "ink"}, "shade": {"kind": "crescent", "role": "ink", "offset": 8, "light": 180,
+                    "highlight": {"role": "ground", "offset": 10}}}}},
+        }));
+        let f = draw(&doc).unwrap();
+        let verbs_of = |item: &str| -> Vec<Verb> {
+            f.layers[0]
+                .marks
+                .iter()
+                .find_map(|m| match &m.mark {
+                    Mark::Shape { item: i, verbs, .. } if i == item => Some(verbs.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{item} is drawn"))
+        };
+        let (shade, highlight) = (verbs_of("ball#shade"), verbs_of("ball#highlight"));
+        let (far, near, middle) = ([136.0, 50.0], [64.0, 50.0], [100.0, 50.0]);
+        assert_ne!(winding(&shade, far), 0, "the shade covers the far side");
+        assert_eq!(winding(&shade, near), 0, "the shade leaves the near side");
+        assert_eq!(winding(&shade, middle), 0, "the shade leaves the middle");
+        assert_ne!(
+            winding(&highlight, near),
+            0,
+            "the highlight covers the near side"
+        );
+        assert_eq!(
+            winding(&highlight, far),
+            0,
+            "the highlight leaves the far side"
+        );
+        assert_eq!(
+            winding(&highlight, middle),
+            0,
+            "the highlight leaves the middle"
+        );
+    }
+
+    #[test]
+    fn marks_draw_by_z_then_by_the_tree_not_by_flat_order_keys() {
+        // #160: a group's child draws with its group, after an earlier top-level item, whatever
+        // its own order key says; a z above lifts it over everything in the layer.
+        let doc = |z: f64| {
+            board(json!({
+                "r": {"kind": "rect@1", "layer": "main", "order": "a3", "params": {"box": [0, 0, 10, 10], "paint": {"fill": {"role": "ink"}}}},
+                "g": {"kind": "group@1", "layer": "main", "order": "a5", "params": {}},
+                "c": {"kind": "rect@1", "layer": "main", "order": "a0", "parent": "g", "params": {"box": [5, 5, 10, 10], "z": z, "paint": {"fill": {"role": "ink"}}}},
+                "d": {"kind": "rect@1", "layer": "main", "order": "a1", "params": {"box": [50, 50, 10, 10], "z": -1, "paint": {"fill": {"role": "ink"}}}},
+            }))
+        };
+        let order = |z: f64| -> Vec<String> {
+            draw(&doc(z)).unwrap().layers[0]
+                .marks
+                .iter()
+                .map(|m| m.mark.item().to_string())
+                .collect()
+        };
+        assert_eq!(order(0.0), ["d", "r", "c"]);
+        assert_eq!(order(1.0), ["d", "r", "c"]);
+        let mut below = doc(0.0);
+        below["items"]["r"]["params"]["z"] = json!(2);
+        let marks: Vec<String> = draw(&below).unwrap().layers[0]
+            .marks
+            .iter()
+            .map(|m| m.mark.item().to_string())
+            .collect();
+        assert_eq!(marks, ["d", "c", "r"]);
     }
 }

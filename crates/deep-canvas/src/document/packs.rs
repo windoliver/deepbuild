@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Map, Value};
 
 use super::{member, Issue};
+use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 
@@ -199,7 +200,7 @@ pub struct Pack {
 const STEP_OPS: &[&str] = &["mark", "item", "builder", "recipe"];
 /// The input types this slice reads.
 const INPUT_TYPES: &[&str] = &[
-    "number", "integer", "bool", "choice", "vec3", "range", "text", "ID",
+    "number", "integer", "bool", "choice", "vec3", "range", "text", "ID", "records", "record",
 ];
 
 /// The pack check (Pack: checked once per version). Refuses with the issues at the manifest's
@@ -370,7 +371,11 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
             ));
         }
     }
-    let assets = fields.get("assets").and_then(Value::as_array).cloned().unwrap_or_default();
+    let assets = fields
+        .get("assets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let entries = match fields.get("entries") {
         None => Vec::new(),
         Some(e) => check_entries(&id, e, &assets, sealed, &mut issues),
@@ -536,7 +541,10 @@ fn check_entries(
             let judged = match reg.def.program {
                 None => value.clone(),
                 Some(_) => {
-                    let sha = value.get("program").and_then(Value::as_str).unwrap_or_default();
+                    let sha = value
+                        .get("program")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
                     let Some(hex) = assets
                         .iter()
                         .find(|a| a.get("sha256").and_then(Value::as_str) == Some(sha))
@@ -809,7 +817,8 @@ fn check_recipe(
                 // fixed at check, never `t`.
                 let unfixed = |v: &Value| {
                     Template::of(v)
-                        .names()
+                        .reads()
+                        .0
                         .iter()
                         .any(|n| !inputs.contains_key(n) && !lets.iter().any(|(l, _)| l == n))
                 };
@@ -860,7 +869,7 @@ fn check_recipe(
                             // A count is fixed at check (Recipe: "repeats have counts fixed at
                             // check"): it reads only the recipe's inputs and lets, never `t`.
                             (Some(c), Some(_))
-                                if Template::of(&c).names().iter().any(|n| {
+                                if Template::of(&c).reads().0.iter().any(|n| {
                                     !inputs.contains_key(n) && !lets.iter().any(|(l, _)| l == n)
                                 }) =>
                             {
@@ -1113,6 +1122,9 @@ fn input_fault(input: &Input, value: &Value) -> Option<String> {
             (!ok).then(|| what.to_string())
         }
         "text" | "ID" => (!value.is_string()).then(|| "not a string".to_string()),
+        // A list of rows, such as points, and one row, such as another tool's mesh (#433).
+        "records" => (!value.is_array()).then(|| "not a list".to_string()),
+        "record" => (!value.is_object()).then(|| "not an object".to_string()),
         _ => None,
     }
 }
@@ -2011,8 +2023,9 @@ fn expand_one(
             fields.insert("layer".into(), layer.clone());
             fields.insert("name".into(), json!(derived_id));
             fields.insert("order".into(), order_key.clone());
-            // A derived item hides, picks and hangs as its instance does.
-            for key in ["visible", "pickable", "parent", "adjust"] {
+            // A derived item hides, picks and hangs as its instance does, and wears the
+            // material it names (#433).
+            for key in ["visible", "pickable", "parent", "adjust", "material"] {
                 if let Some(v) = member(&item, key) {
                     fields.insert(key.into(), v.clone());
                 }
@@ -2242,6 +2255,56 @@ enum Form {
     Literal,
     List(Vec<Template>),
     Map(Vec<(String, Template)>),
+    /// `{"repeat": {count | over, as, let?, of}}`: a list of `of`, once per index (or element),
+    /// its count fixed at check like a step's repeat, at most [`MAX_REPEAT`] (#433).
+    Repeat(Box<ListRepeat>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct ListRepeat {
+    /// `count`, an expression, or `over`, an expression giving a list.
+    count: Option<Expr>,
+    over: Option<Expr>,
+    as_: String,
+    lets: Vec<(String, Expr)>,
+    of: Template,
+}
+
+impl ListRepeat {
+    fn of(r: &Value) -> Option<ListRepeat> {
+        let o = r.as_object()?;
+        if o.keys()
+            .any(|k| !["count", "over", "as", "let", "of"].contains(&k.as_str()))
+        {
+            return None;
+        }
+        let expr = |k: &str| -> Option<Option<Expr>> {
+            match o.get(k) {
+                None => Some(None),
+                Some(Value::String(t)) => Expr::parse(t).ok().map(Some),
+                Some(Value::Number(n)) => n.as_f64().map(|n| Some(Expr::Num(n))),
+                Some(_) => None,
+            }
+        };
+        let (count, over) = (expr("count")?, expr("over")?);
+        if count.is_some() == over.is_some() {
+            return None;
+        }
+        let as_ = o.get("as")?.as_str().filter(|a| well_named(a))?.to_string();
+        let mut lets = Vec::new();
+        if let Some(l) = o.get("let") {
+            for (k, v) in l.as_object()? {
+                lets.push((k.clone(), Expr::parse(v.as_str()?).ok()?));
+            }
+        }
+        Some(ListRepeat {
+            count,
+            over,
+            as_,
+            lets,
+            of: Template::of(o.get("of")?),
+        })
+    }
 }
 
 impl Template {
@@ -2252,11 +2315,17 @@ impl Template {
                 Err(_) => Form::Literal,
             },
             Value::Array(list) => Form::List(list.iter().map(Template::of).collect()),
-            Value::Object(map) => Form::Map(
-                map.iter()
-                    .map(|(k, v)| (k.clone(), Template::of(v)))
-                    .collect(),
-            ),
+            Value::Object(map) => match map.get("repeat").filter(|_| map.len() == 1) {
+                Some(r) => match ListRepeat::of(r) {
+                    Some(r) => Form::Repeat(Box::new(r)),
+                    None => Form::Literal,
+                },
+                None => Form::Map(
+                    map.iter()
+                        .map(|(k, v)| (k.clone(), Template::of(v)))
+                        .collect(),
+                ),
+            },
             _ => Form::Literal,
         };
         Template {
@@ -2270,28 +2339,42 @@ impl Template {
         &self.source
     }
 
-    /// The names its expressions read.
+    /// The names its expressions read and don't bind themselves, words included.
     pub fn names(&self) -> Vec<String> {
-        fn walk(e: &Expr, out: &mut Vec<String>) {
-            match e {
-                Expr::Num(_) => {}
-                Expr::Name(n) => out.push(n.clone()),
-                Expr::Neg(a) => walk(a, out),
-                Expr::Bin(_, a, b) => {
-                    walk(a, out);
-                    walk(b, out);
+        let (mut reads, words) = self.reads();
+        reads.extend(words);
+        reads
+    }
+
+    /// The names its expressions read and don't bind themselves, and apart from them the bare
+    /// names that read as their own text when nothing binds them (`type == POINT`).
+    pub fn reads(&self) -> (Vec<String>, Vec<String>) {
+        let (mut out, mut words) = (Vec::new(), Vec::new());
+        self.walk(&mut Vec::new(), &mut out, &mut words);
+        (out, words)
+    }
+
+    fn walk(&self, bound: &mut Vec<String>, out: &mut Vec<String>, words: &mut Vec<String>) {
+        match &self.form {
+            Form::Expr(e) => e.free(bound, out, words),
+            Form::Literal => {}
+            Form::List(l) => l.iter().for_each(|t| t.walk(bound, out, words)),
+            Form::Map(m) => m.iter().for_each(|(_, t)| t.walk(bound, out, words)),
+            Form::Repeat(r) => {
+                let depth = bound.len();
+                for e in r.count.iter().chain(&r.over) {
+                    e.free(bound, out, words);
                 }
-                Expr::Call(_, args) => args.iter().for_each(|a| walk(a, out)),
+                bound.push(r.as_.clone());
+                bound.push("i".into());
+                for (name, e) in &r.lets {
+                    e.free(bound, out, words);
+                    bound.push(name.clone());
+                }
+                r.of.walk(bound, out, words);
+                bound.truncate(depth);
             }
         }
-        let mut out = Vec::new();
-        match &self.form {
-            Form::Expr(e) => walk(e, &mut out),
-            Form::Literal => {}
-            Form::List(l) => l.iter().for_each(|t| out.extend(t.names())),
-            Form::Map(m) => m.iter().for_each(|(_, t)| out.extend(t.names())),
-        }
-        out
     }
 
     pub fn eval(&self, scope: &[(String, Value)]) -> Result<Value, String> {
@@ -2299,7 +2382,7 @@ impl Template {
             Form::Expr(Expr::Name(name)) if !scope.iter().any(|(k, _)| k == name) => {
                 Ok(self.source.clone())
             }
-            Form::Expr(expr) => expr.eval(scope).map(number),
+            Form::Expr(expr) => expr.value(scope),
             Form::Literal => Ok(self.source.clone()),
             Form::List(list) => list
                 .iter()
@@ -2312,6 +2395,40 @@ impl Template {
                     out.insert(k.clone(), t.eval(scope)?);
                 }
                 Ok(Value::Object(out))
+            }
+            Form::Repeat(r) => {
+                let elements: Vec<Value> = match (&r.count, &r.over) {
+                    (Some(c), _) => {
+                        let n = c.eval(scope)?;
+                        if !(0.0..=MAX_REPEAT as f64).contains(&n) || n.fract() != 0.0 {
+                            return Err(format!("a repeat counts 0 to {MAX_REPEAT}, not {n}"));
+                        }
+                        (0..n as u64).map(|i| json!(i)).collect()
+                    }
+                    (_, Some(o)) => match o.value(scope)? {
+                        Value::Array(a) if a.len() as u64 <= MAX_REPEAT => a,
+                        other => {
+                            return Err(format!(
+                                "a repeat is over a list of at most {MAX_REPEAT}, not {other}"
+                            ))
+                        }
+                    },
+                    _ => Vec::new(),
+                };
+                let mut inner = scope.to_vec();
+                let base = inner.len();
+                let mut out = Vec::with_capacity(elements.len());
+                for (i, e) in elements.into_iter().enumerate() {
+                    inner.truncate(base);
+                    inner.push(("i".into(), json!(i)));
+                    inner.push((r.as_.clone(), e));
+                    for (name, l) in &r.lets {
+                        let v = l.value(&inner)?;
+                        inner.push((name.clone(), v));
+                    }
+                    out.push(r.of.eval(&inner)?);
+                }
+                Ok(Value::Array(out))
             }
         }
     }
@@ -2339,96 +2456,277 @@ pub enum ExprStep {
     Call(String, usize),
 }
 
-/// `text` parsed as a recipe expression, in postfix order.
+/// `text` parsed as a recipe expression, in postfix order. The forms only a recipe reads at
+/// check (comparisons, conditions, indexes, members, `len`, `sum`) have no postfix form.
 pub fn postfix(text: &str) -> Result<Vec<ExprStep>, String> {
-    fn walk(e: &Expr, out: &mut Vec<ExprStep>) {
+    fn walk(e: &Expr, out: &mut Vec<ExprStep>) -> Result<(), String> {
         match e {
             Expr::Num(n) => out.push(ExprStep::Num(*n)),
             Expr::Name(n) => out.push(ExprStep::Name(n.clone())),
             Expr::Neg(a) => {
-                walk(a, out);
+                walk(a, out)?;
                 out.push(ExprStep::Neg);
             }
             Expr::Bin(op, a, b) => {
-                walk(a, out);
-                walk(b, out);
+                walk(a, out)?;
+                walk(b, out)?;
                 out.push(ExprStep::Bin(*op));
             }
-            Expr::Call(name, args) => {
-                args.iter().for_each(|a| walk(a, out));
+            Expr::Call(name, args) if !matches!(name.as_str(), "len" | "sum" | "unmapped") => {
+                for a in args {
+                    walk(a, out)?;
+                }
                 out.push(ExprStep::Call(name.clone(), args.len()));
             }
+            _ => return Err("a comparison, condition, index or member has no postfix form".into()),
         }
+        Ok(())
     }
     let mut out = Vec::new();
-    walk(&Expr::parse(text)?, &mut out);
+    walk(&Expr::parse(text)?, &mut out)?;
     Ok(out)
 }
 
-/// An expression: numbers, names, `+ - * / %`, unary minus, parentheses and the functions
-/// `min`, `max`, `floor`, `ceil`, `round` and `abs`.
+/// An expression: numbers, names, `+ - * / %`, unary minus, parentheses, the functions `min`,
+/// `max`, `floor`, `ceil`, `round` and `abs`, and the closed function list's powers and angles
+/// (`sqrt pow sin cos tan asin acos atan atan2 deg rad`, constants `pi tau`) in its pinned math.
+/// For a familiar-names pack's stated conversions (#433) a recipe also reads the list's logic,
+/// `== != < <= > >= && || !` and `c ? a : b`; `a[i]` and `a.name` into a list or record input;
+/// `len(list)`; the bounded sum `sum(k, a, b, term)` (at most 256 terms); and `unmapped()`, which
+/// refuses the value it stands for. `==` and `!=` compare text too, a bare name nothing binds
+/// being its own text, so `units == Lumens` reads a choice.
 #[derive(Clone, Debug, PartialEq)]
 enum Expr {
     Num(f64),
     Name(String),
     Neg(Box<Expr>),
+    Not(Box<Expr>),
+    /// One of `+ - * / %`.
     Bin(char, Box<Expr>, Box<Expr>),
+    /// One of `== != < <= > >= && ||`.
+    Logic(&'static str, Box<Expr>, Box<Expr>),
+    Cond(Box<Expr>, Box<Expr>, Box<Expr>),
+    Index(Box<Expr>, Box<Expr>),
+    Member(Box<Expr>, String),
     Call(String, Vec<Expr>),
 }
+
+/// The most terms a bounded sum adds (The closed function list: bounded sums).
+const MAX_SUM: f64 = 256.0;
 
 impl Expr {
     fn parse(text: &str) -> Result<Expr, String> {
         let tokens = tokenize(text)?;
         let mut p = Parser { tokens, at: 0 };
-        let e = p.sum()?;
+        let e = p.cond()?;
         if p.at != p.tokens.len() {
             return Err(format!("unexpected `{}`", p.tokens[p.at]));
         }
         Ok(e)
     }
 
-    fn eval(&self, scope: &[(String, Value)]) -> Result<f64, String> {
-        Ok(match self {
-            Expr::Num(n) => *n,
-            Expr::Name(name) => {
-                let v = scope.iter().rev().find(|(k, _)| k == name).map(|(_, v)| v);
-                match v {
-                    Some(v) => match v {
-                        Value::Number(n) => n.as_f64().unwrap_or(f64::NAN),
-                        Value::Bool(b) => f64::from(u8::from(*b)),
-                        _ => return Err(format!("`{name}` is not a number")),
-                    },
-                    None => return Err(format!("`{name}` is not in scope")),
+    /// The names it reads that `bound` doesn't hold, into `out`, and each bare name that is text
+    /// when nothing binds it (a side of `==` or `!=`, a branch of a condition) into `words`.
+    fn free(&self, bound: &mut Vec<String>, out: &mut Vec<String>, words: &mut Vec<String>) {
+        let word =
+            |e: &Expr, bound: &mut Vec<String>, out: &mut Vec<String>, words: &mut Vec<String>| {
+                match e {
+                    Expr::Name(n) if !bound.contains(n) => words.push(n.clone()),
+                    _ => e.free(bound, out, words),
+                }
+            };
+        match self {
+            Expr::Num(_) => {}
+            Expr::Name(n) => {
+                if !bound.contains(n) {
+                    out.push(n.clone());
                 }
             }
-            Expr::Neg(e) => -e.eval(scope)?,
+            Expr::Neg(a) | Expr::Not(a) | Expr::Member(a, _) => a.free(bound, out, words),
+            Expr::Logic("==" | "!=", a, b) => {
+                word(a, bound, out, words);
+                word(b, bound, out, words);
+            }
+            Expr::Bin(_, a, b) | Expr::Logic(_, a, b) | Expr::Index(a, b) => {
+                a.free(bound, out, words);
+                b.free(bound, out, words);
+            }
+            Expr::Cond(c, a, b) => {
+                c.free(bound, out, words);
+                word(a, bound, out, words);
+                word(b, bound, out, words);
+            }
+            Expr::Call(name, args) if name == "sum" && args.len() == 4 => {
+                args[1].free(bound, out, words);
+                args[2].free(bound, out, words);
+                if let Expr::Name(k) = &args[0] {
+                    bound.push(k.clone());
+                    args[3].free(bound, out, words);
+                    bound.pop();
+                }
+            }
+            Expr::Call(_, args) => args.iter().for_each(|a| a.free(bound, out, words)),
+        }
+    }
+
+    /// Its value as a number (a bool reads 1 or 0).
+    fn eval(&self, scope: &[(String, Value)]) -> Result<f64, String> {
+        match self.value(scope)? {
+            Value::Number(n) => Ok(n.as_f64().unwrap_or(f64::NAN)),
+            Value::Bool(b) => Ok(f64::from(u8::from(b))),
+            other => Err(format!("`{}` is not a number", shown(&other))),
+        }
+    }
+
+    /// Its value: a number, or what a name, index or member reads.
+    fn value(&self, scope: &[(String, Value)]) -> Result<Value, String> {
+        let n = |x: f64| -> Result<Value, String> { Ok(number(x)) };
+        match self {
+            Expr::Num(x) => n(*x),
+            Expr::Name(name) => scope
+                .iter()
+                .rev()
+                .find(|(k, _)| k == name)
+                .map(|(_, v)| v.clone())
+                .ok_or_else(|| format!("`{name}` is not in scope")),
+            Expr::Index(a, i) => {
+                let list = a.value(scope)?;
+                let k = i.eval(scope)?;
+                let item = list
+                    .as_array()
+                    .filter(|_| k >= 0.0 && k.fract() == 0.0)
+                    .and_then(|l| l.get(k as usize));
+                item.cloned()
+                    .ok_or_else(|| format!("no element {k} of `{}`", shown(&list)))
+            }
+            Expr::Member(a, name) => {
+                let record = a.value(scope)?;
+                record
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| format!("no `{name}` in `{}`", shown(&record)))
+            }
+            Expr::Neg(e) => n(-e.eval(scope)?),
+            Expr::Not(e) => n(f64::from(u8::from(e.eval(scope)? == 0.0))),
+            Expr::Cond(c, a, b) => {
+                let picked = if c.eval(scope)? != 0.0 { a } else { b };
+                match &**picked {
+                    // A bare name nothing binds is its own text, such as a choice's word.
+                    Expr::Name(w) if !scope.iter().any(|(k, _)| k == w) => Ok(json!(w)),
+                    e => e.value(scope),
+                }
+            }
+            Expr::Logic(op @ ("==" | "!="), a, b) => {
+                // A bare name nothing binds is its own text, so a choice compares to a word.
+                let side = |e: &Expr| -> Result<Value, String> {
+                    match e {
+                        Expr::Name(w) if !scope.iter().any(|(k, _)| k == w) => Ok(json!(w)),
+                        _ => e.value(scope),
+                    }
+                };
+                let (a, b) = (side(a)?, side(b)?);
+                let same = match (a.as_f64(), b.as_f64()) {
+                    (Some(x), Some(y)) => x == y,
+                    _ => a == b,
+                };
+                n(f64::from(u8::from(same == (*op == "=="))))
+            }
+            Expr::Logic(op, a, b) => {
+                let x = a.eval(scope)?;
+                // `&&` and `||` read their right side only when they need it.
+                let truth = match *op {
+                    "&&" => x != 0.0 && b.eval(scope)? != 0.0,
+                    "||" => x != 0.0 || b.eval(scope)? != 0.0,
+                    _ => {
+                        let y = b.eval(scope)?;
+                        match *op {
+                            "<" => x < y,
+                            "<=" => x <= y,
+                            ">" => x > y,
+                            _ => x >= y,
+                        }
+                    }
+                };
+                n(f64::from(u8::from(truth)))
+            }
             Expr::Bin(op, a, b) => {
                 let (a, b) = (a.eval(scope)?, b.eval(scope)?);
-                match op {
+                n(match op {
                     '+' => a + b,
                     '-' => a - b,
                     '*' => a * b,
                     _ if b == 0.0 => return Err("division by zero".into()),
                     '/' => a / b,
                     _ => a % b,
+                })
+            }
+            Expr::Call(name, args) if name == "unmapped" && args.is_empty() => {
+                Err("the pack maps no such value: refused, never guessed".into())
+            }
+            Expr::Call(name, args) if name == "len" && args.len() == 1 => {
+                match args[0].value(scope)? {
+                    Value::Array(a) => n(a.len() as f64),
+                    other => Err(format!("`{}` is not a list", shown(&other))),
                 }
+            }
+            Expr::Call(name, args) if name == "sum" && args.len() == 4 => {
+                let Expr::Name(k) = &args[0] else {
+                    return Err("sum(k, a, b, term) binds a name k".into());
+                };
+                let (a, b) = (args[1].eval(scope)?, args[2].eval(scope)?);
+                if a.fract() != 0.0 || b.fract() != 0.0 || b - a + 1.0 > MAX_SUM {
+                    return Err(format!("a sum runs over at most {MAX_SUM} whole k"));
+                }
+                let mut inner = scope.to_vec();
+                let mut total = 0.0;
+                let mut i = a;
+                while i <= b {
+                    inner.push((k.clone(), number(i)));
+                    total += args[3].eval(&inner)?;
+                    inner.pop();
+                    i += 1.0;
+                }
+                n(total)
             }
             Expr::Call(name, args) => {
                 let vals = args
                     .iter()
                     .map(|a| a.eval(scope))
                     .collect::<Result<Vec<_>, _>>()?;
-                match (name.as_str(), vals.as_slice()) {
+                n(match (name.as_str(), vals.as_slice()) {
                     ("min", [a, b]) => a.min(*b),
                     ("max", [a, b]) => a.max(*b),
                     ("floor", [a]) => a.floor(),
                     ("ceil", [a]) => a.ceil(),
                     ("round", [a]) => a.round(),
                     ("abs", [a]) => a.abs(),
+                    ("sqrt", [a]) => ops::sqrt(*a),
+                    ("pow", [a, b]) => ops::pow(*a, *b),
+                    ("sin", [a]) => ops::sin(*a),
+                    ("cos", [a]) => ops::cos(*a),
+                    ("tan", [a]) => ops::tan(*a),
+                    ("asin", [a]) => ops::asin(*a),
+                    ("acos", [a]) => ops::acos(*a),
+                    ("atan", [a]) => ops::atan(*a),
+                    ("atan2", [a, b]) => ops::atan2(*a, *b),
+                    ("deg", [a]) => ops::deg(*a),
+                    ("rad", [a]) => ops::rad(*a),
                     _ => return Err(format!("no function `{name}` of {} arguments", vals.len())),
-                }
+                })
             }
-        })
+        }
+    }
+}
+
+fn shown(v: &Value) -> String {
+    let s = v.to_string();
+    if s.len() > 80 {
+        format!(
+            "{}…",
+            &s[..s.char_indices().nth(80).map_or(s.len(), |(i, _)| i)]
+        )
+    } else {
+        s
     }
 }
 
@@ -2438,11 +2736,10 @@ fn tokenize(text: &str) -> Result<Vec<String>, String> {
     let mut i = 0;
     while i < chars.len() {
         let c = chars[i];
+        let next = chars.get(i + 1).copied();
         if c.is_whitespace() {
             i += 1;
-        } else if c.is_ascii_digit()
-            || (c == '.' && chars.get(i + 1).is_some_and(char::is_ascii_digit))
-        {
+        } else if c.is_ascii_digit() || (c == '.' && next.is_some_and(|d| d.is_ascii_digit())) {
             let start = i;
             while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
                 i += 1;
@@ -2454,7 +2751,13 @@ fn tokenize(text: &str) -> Result<Vec<String>, String> {
                 i += 1;
             }
             out.push(chars[start..i].iter().collect());
-        } else if "+-*/%(),".contains(c) {
+        } else if let Some(two) = next
+            .map(|d| format!("{c}{d}"))
+            .filter(|t| ["==", "!=", "<=", ">=", "&&", "||"].contains(&t.as_str()))
+        {
+            out.push(two);
+            i += 2;
+        } else if "+-*/%(),[].?:<>!".contains(c) {
             out.push(c.to_string());
             i += 1;
         } else {
@@ -2480,6 +2783,53 @@ impl Parser {
         t
     }
 
+    fn cond(&mut self) -> Result<Expr, String> {
+        let c = self.or()?;
+        if self.peek() != Some("?") {
+            return Ok(c);
+        }
+        self.at += 1;
+        let a = self.cond()?;
+        if self.take().as_deref() != Some(":") {
+            return Err("missing `:`".into());
+        }
+        let b = self.cond()?;
+        Ok(Expr::Cond(Box::new(c), Box::new(a), Box::new(b)))
+    }
+
+    fn or(&mut self) -> Result<Expr, String> {
+        let mut left = self.and()?;
+        while self.peek() == Some("||") {
+            self.at += 1;
+            left = Expr::Logic("||", Box::new(left), Box::new(self.and()?));
+        }
+        Ok(left)
+    }
+
+    fn and(&mut self) -> Result<Expr, String> {
+        let mut left = self.compare()?;
+        while self.peek() == Some("&&") {
+            self.at += 1;
+            left = Expr::Logic("&&", Box::new(left), Box::new(self.compare()?));
+        }
+        Ok(left)
+    }
+
+    fn compare(&mut self) -> Result<Expr, String> {
+        let left = self.sum()?;
+        let op = match self.peek() {
+            Some("==") => "==",
+            Some("!=") => "!=",
+            Some("<") => "<",
+            Some("<=") => "<=",
+            Some(">") => ">",
+            Some(">=") => ">=",
+            _ => return Ok(left),
+        };
+        self.at += 1;
+        Ok(Expr::Logic(op, Box::new(left), Box::new(self.sum()?)))
+    }
+
     fn sum(&mut self) -> Result<Expr, String> {
         let mut left = self.product()?;
         while let Some(op @ ("+" | "-")) = self.peek() {
@@ -2503,11 +2853,44 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<Expr, String> {
-        if self.peek() == Some("-") {
-            self.at += 1;
-            return Ok(Expr::Neg(Box::new(self.unary()?)));
+        match self.peek() {
+            Some("-") => {
+                self.at += 1;
+                Ok(Expr::Neg(Box::new(self.unary()?)))
+            }
+            Some("!") => {
+                self.at += 1;
+                Ok(Expr::Not(Box::new(self.unary()?)))
+            }
+            _ => self.postfix(),
         }
-        self.atom()
+    }
+
+    /// An atom with its indexes and members, `a[i].b`.
+    fn postfix(&mut self) -> Result<Expr, String> {
+        let mut e = self.atom()?;
+        loop {
+            match self.peek() {
+                Some("[") => {
+                    self.at += 1;
+                    let i = self.cond()?;
+                    if self.take().as_deref() != Some("]") {
+                        return Err("missing `]`".into());
+                    }
+                    e = Expr::Index(Box::new(e), Box::new(i));
+                }
+                Some(".") => {
+                    self.at += 1;
+                    match self.take() {
+                        Some(name) if well_named_member(&name) => {
+                            e = Expr::Member(Box::new(e), name)
+                        }
+                        _ => return Err("a member is a name".into()),
+                    }
+                }
+                _ => return Ok(e),
+            }
+        }
     }
 
     fn atom(&mut self) -> Result<Expr, String> {
@@ -2515,7 +2898,7 @@ impl Parser {
             return Err("expression ends early".into());
         };
         if t == "(" {
-            let e = self.sum()?;
+            let e = self.cond()?;
             if self.take().as_deref() != Some(")") {
                 return Err("missing `)`".into());
             }
@@ -2524,16 +2907,18 @@ impl Parser {
         if let Ok(n) = t.parse::<f64>() {
             return Ok(Expr::Num(n));
         }
-        if t.chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-        {
+        match t.as_str() {
+            "pi" => return Ok(Expr::Num(std::f64::consts::PI)),
+            "tau" => return Ok(Expr::Num(std::f64::consts::TAU)),
+            _ => {}
+        }
+        if well_named_member(&t) {
             if self.peek() == Some("(") {
                 self.at += 1;
                 let mut args = Vec::new();
                 if self.peek() != Some(")") {
                     loop {
-                        args.push(self.sum()?);
+                        args.push(self.cond()?);
                         match self.take().as_deref() {
                             Some(",") => continue,
                             Some(")") => break,
@@ -2549,6 +2934,13 @@ impl Parser {
         }
         Err(format!("unexpected `{t}`"))
     }
+}
+
+/// A name token: a letter or `_` first.
+fn well_named_member(t: &str) -> bool {
+    t.chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
 }
 
 #[cfg(test)]
@@ -2589,10 +2981,22 @@ mod tests {
         };
         let defs = &schema["$defs"];
         assert_eq!(keys(&schema), sorted(PACK_KEYS), "a pack's keys");
-        assert_eq!(keys(&defs["recipe"]), sorted(RECIPE_KEYS), "a recipe's keys");
+        assert_eq!(
+            keys(&defs["recipe"]),
+            sorted(RECIPE_KEYS),
+            "a recipe's keys"
+        );
         assert_eq!(keys(&defs["step"]), sorted(STEP_KEYS), "a step's keys");
-        assert_eq!(list(&defs["step"]["properties"]["op"]), STEP_OPS, "step ops");
-        assert_eq!(list(&defs["input"]["properties"]["type"]), INPUT_TYPES, "input types");
+        assert_eq!(
+            list(&defs["step"]["properties"]["op"]),
+            STEP_OPS,
+            "step ops"
+        );
+        assert_eq!(
+            list(&defs["input"]["properties"]["type"]),
+            INPUT_TYPES,
+            "input types"
+        );
     }
 
     fn scope() -> Vec<(String, Value)> {

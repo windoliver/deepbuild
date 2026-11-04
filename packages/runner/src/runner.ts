@@ -1072,9 +1072,12 @@ class LocalRunner implements Runner {
       for (const cancel of job.timers) cancel();
       if (typeof e.result === 'string') job.rec.result = e.result;
       if (typeof e.total_cost_usd === 'number') job.rec.cost_usd = e.total_cost_usd;
-      if (!job.answered && isObj(e.modelUsage) && this.o.plant !== 'records-launched-model') {
-        const names = Object.keys(e.modelUsage);
-        if (names.length) job.answered = names[names.length - 1]!;
+      // The model that answered is the one with the most output tokens in its usage (#87): Claude Code lists its own
+      // small calls' models there too, often first.
+      if (isObj(e.modelUsage) && this.o.plant !== 'records-launched-model') {
+        const used = Object.entries(e.modelUsage).map(([name, u]) => [name, isObj(u) ? num(u.outputTokens) : 0] as const);
+        const most = this.o.plant === 'first-model-listed' ? used[0] : [...used].sort((a, b) => b[1] - a[1])[0];
+        if (most) job.answered = most[0];
       }
       if (Array.isArray(e.permission_denials) && e.permission_denials.length) job.stopCause ??= 'refusal';
       // A result marked an error is no answer: the job stopped, for the cause an error named or for none known.

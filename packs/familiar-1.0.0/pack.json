@@ -1,0 +1,127 @@
+{
+  "name": "familiar",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "Familiar names (#433): the geometry, light and camera words agents know from web 3D libraries, with their parameter names and defaults, each a recipe over scene3d's trusted builders with its conversion stated. A word or value with no mapping is refused, never guessed.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "scene3d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "familiar.box@1": "box@1.json",
+    "familiar.rounded_box@1": "rounded_box@1.json",
+    "familiar.sphere@1": "sphere@1.json",
+    "familiar.cylinder@1": "cylinder@1.json",
+    "familiar.cone@1": "cone@1.json",
+    "familiar.capsule@1": "capsule@1.json",
+    "familiar.torus@1": "torus@1.json",
+    "familiar.circle@1": "circle@1.json",
+    "familiar.ring@1": "ring@1.json",
+    "familiar.plane@1": "plane@1.json",
+    "familiar.shape@1": "shape@1.json",
+    "familiar.tetrahedron@1": "tetrahedron@1.json",
+    "familiar.octahedron@1": "octahedron@1.json",
+    "familiar.icosahedron@1": "icosahedron@1.json",
+    "familiar.dodecahedron@1": "dodecahedron@1.json",
+    "familiar.lathe@1": "lathe@1.json",
+    "familiar.tube@1": "tube@1.json",
+    "familiar.extrude@1": "extrude@1.json",
+    "familiar.point_light@1": "point_light@1.json",
+    "familiar.spot_light@1": "spot_light@1.json",
+    "familiar.perspective_camera@1": "perspective_camera@1.json",
+    "familiar.standard_material@1": "standard_material@1.json"
+  },
+  "aliases": {
+    "BoxGeometry": {
+      "target": "familiar.box@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot",
+      "renamed_from": "CubeGeometry"
+    },
+    "SphereGeometry": {
+      "target": "familiar.sphere@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "CylinderGeometry": {
+      "target": "familiar.cylinder@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "ConeGeometry": {
+      "target": "familiar.cone@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "TorusGeometry": {
+      "target": "familiar.torus@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "CapsuleGeometry": {
+      "target": "familiar.capsule@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "PlaneGeometry": {
+      "target": "familiar.plane@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "CircleGeometry": {
+      "target": "familiar.circle@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "RingGeometry": {
+      "target": "familiar.ring@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "TetrahedronGeometry": {
+      "target": "familiar.tetrahedron@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "OctahedronGeometry": {
+      "target": "familiar.octahedron@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "IcosahedronGeometry": {
+      "target": "familiar.icosahedron@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "DodecahedronGeometry": {
+      "target": "familiar.dodecahedron@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "TubeGeometry": {
+      "target": "familiar.tube@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "LatheGeometry": {
+      "target": "familiar.lathe@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "ExtrudeGeometry": {
+      "target": "familiar.extrude@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "ShapeGeometry": {
+      "target": "familiar.shape@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "RoundedBoxGeometry": {
+      "target": "familiar.rounded_box@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "MeshStandardMaterial": {
+      "target": "familiar.standard_material@1",
+      "conversion": "Color sRGB to linear base_color; roughness kept; metalness to metallic"
+    },
+    "PointLight": {
+      "target": "familiar.point_light@1",
+      "conversion": "power = 4π × intensity (cd), kept in lumens; Color sRGB to linear; decay 2 only"
+    },
+    "SpotLight": {
+      "target": "familiar.spot_light@1",
+      "conversion": "power × 4 (the library's spot counts π × cd, ours 4π × cd); angle the outer half angle; penumbra to inner"
+    },
+    "PerspectiveCamera": {
+      "target": "familiar.perspective_camera@1",
+      "conversion": "vertical fov to ours across the wider side, 2·atan(tan(fov/2)·aspect) when aspect ≥ 1; local −Z forward to our target"
+    }
+  }
+}

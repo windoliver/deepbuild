@@ -199,8 +199,11 @@ pub fn bindings(doc: &Value) -> Result<Vec<Binding>, Value> {
         let (item, slot) = match parts.as_slice() {
             ["items", item, "params", "paint", "badge"] => (*item, "badge"),
             ["items", item, "params", "paint", "stroke"] => (*item, "stroke"),
-            ["items", _, "params", "paint", "fill"] => {
-                return Err(refused("status_slot_kind", format!("{path}/target")))
+            // Refused naming the item, so the fix is plain without reading the target (#421).
+            ["items", item, "params", "paint", "fill"] => {
+                let mut r = refused("status_slot_kind", format!("{path}/target"));
+                r["item"] = json!(item);
+                return Err(r);
             }
             _ => return Err(refused("bad_doc", format!("{path}/target"))),
         };
@@ -436,12 +439,26 @@ fn px_box(b: [f64; 4]) -> Value {
     ])
 }
 
+/// A status glyph's or word's color on `behind`: `first` where it keeps 4.5:1 there, else black
+/// or white, whichever keeps more (The status-color rule).
+fn reads_on(first: Rgb, behind: Rgb) -> Rgb {
+    if look::contrast(first, behind) >= 4.5 {
+        return first;
+    }
+    if look::contrast([255; 3], behind) >= look::contrast([0; 3], behind) {
+        [255; 3]
+    } else {
+        [0; 3]
+    }
+}
+
 /// The status layer of a frame and its report: one mark per binding (a badge chip at the top
 /// right of the item's screen box, in the state's color with its glyph), and the legend of every
 /// state on screen in the first corner clear of the marks, top right first. `roles` is the look
-/// the scene was drawn in (its ground is what a chip sits on); `ink` is the legend's text color,
-/// the look whose legend shows (a host's on its card). A source the record doesn't hold is
-/// `ref_unresolved`, never a guess; a state outside the map is `out_of_range`.
+/// the scene was drawn in (its ground, through its finish, is what the legend sits on); `ink` is
+/// the legend's text color, the look whose legend shows (a host's on its card), unless it falls
+/// under 4.5:1 there. A source the record doesn't hold is `ref_unresolved`, never a guess; a state
+/// outside the map is `out_of_range`.
 pub fn layer(
     scene: &Scene,
     roles: &Look3,
@@ -497,6 +514,7 @@ pub fn layer(
         } else {
             ground
         };
+        let ink = reads_on(ink, color);
         let glyph = status.glyphs[state].clone();
         let run = text.run(&glyph, CHIP_TEXT);
         let ch = CHIP_HEIGHT.max(status.core_min_px);
@@ -542,6 +560,12 @@ pub fn layer(
         .filter(|s| on_screen.contains(s))
         .collect();
     if !states_shown.is_empty() {
+        // The words land on the ground as the frame draws it: through its exposure, tone map
+        // and grade.
+        let lit = ground.map(|c| finish::srgb_decode(f64::from(c) / 255.0));
+        let behind = finish::finish(roles.tone_map, roles.exposure, &roles.grade, lit)
+            .map(|v| (finish::srgb_encode(v) * 255.0).round() as u8);
+        let words = reads_on(ink_role, behind);
         let runs: Vec<Run> = states_shown
             .iter()
             .map(|s| {
@@ -582,7 +606,7 @@ pub fn layer(
                 x0 + LEGEND_SWATCH + 6.0,
                 (top + (LEGEND_ROW - run.height) / 2.0).round(),
             ];
-            canvas.text(text, run, origin, ink_role);
+            canvas.text(text, run, origin, words);
             covers.push(swatch);
             covers.push([origin[0], origin[1], run.width, run.height]);
             legend.push(json!({
@@ -647,4 +671,108 @@ pub fn report(
     out.insert("marks".into(), marks);
     out.insert("legend".into(), legend);
     Value::Object(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use deep_canvas_scene3d::scene::{evaluate, Labels};
+
+    /// The status-color rule: a status mark's glyph or word keeps 4.5:1 with what's behind it.
+    /// #382's look draws ink (#1b1d22) on a night ground (#101114); at +2 stops (#418) the ground
+    /// the legend lands on is brighter than the ink. The badge glyph sits on the fail red, the
+    /// legend's words on the ground through the frame's exposure and tone map.
+    #[test]
+    fn legend_word_and_badge_glyph_read_on_what_is_behind_them() {
+        let doc = json!({
+            "format": 1, "id": "status-contrast", "profile": "scene", "size": [480, 360],
+            "camera": "cam", "layers": {"main": {"writer": "agent-a", "order": "a0"}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "order": "a0", "layer": "main",
+                    "params": {"projection": "perspective", "target": [0, 0.6, 0],
+                        "orbit": {"azimuth": 0, "elevation": 0, "distance": 7}, "fov": 40, "near": 0.1}},
+                "lamp": {"id": "lamp", "kind": "mark.box@1", "order": "a1", "layer": "main",
+                    "params": {"size": [1.2, 1.2, 1.2], "paint": {"fill": {"role": "lamp"}}},
+                    "at": {"pos": [0, 0.6, 0]}}
+            },
+            "status_bindings": {"b-lamp": {"target": "items/lamp/params/paint/badge", "source": "verdict:v"}}
+        });
+        let glyphs = json!({"pass": "✓", "fail": "✗", "invalid": "⊘", "blocked": "■",
+            "inconclusive": "?", "running": "↻", "needs_you": "!", "stale": "◇", "idle": "○"});
+        let unit = -1.2f64.log2();
+        let mut failures = Vec::new();
+        for (tone, ev) in [("none", unit), ("none", unit - 2.0), ("filmic", unit - 2.0)] {
+            let look_json = json!({
+                "palette": {"night": "#101114", "graphite": "#1b1d22", "c-lamp": "#d9a441"},
+                "roles": {"ground": "night", "ink": "graphite", "lamp": "c-lamp"},
+                "status": {"pass": "#007429", "fail": "#bf232b", "invalid": "#8645b0",
+                    "blocked": "#a44700", "inconclusive": "#666600", "running": "#0063b8",
+                    "needs_you": "#8a5900", "stale": "#326c6f", "idle": "#636464"},
+                "status_treatment": {"core_min_px": 4, "glyph": glyphs}, "min_distance": 0.1,
+                "legend": "auto", "basis": "physical", "tone_map": tone, "exposure": ev,
+            });
+            let roles = Look3::read(&look_json).unwrap();
+            let status = status_of(&look_json).unwrap().unwrap();
+            let scene = evaluate(&doc, 0, &roles, &mut Labels::new()).unwrap();
+            let states = BTreeMap::from([("verdict:v".to_string(), "fail".to_string())]);
+            let (layer, marks, legend) = layer(
+                &scene,
+                &roles,
+                roles.role("ink").unwrap(),
+                &status,
+                &bindings(&doc).unwrap(),
+                &states,
+                &mut Text::default(),
+            )
+            .unwrap();
+            // The pixels in a box, unpremultiplied, with their coverage.
+            let pixels = |b: &Value| -> Vec<(u8, Rgb)> {
+                let b: Vec<f64> = b
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_f64().unwrap())
+                    .collect();
+                let mut out = Vec::new();
+                for y in b[1].floor() as u32..(b[1] + b[3]).ceil() as u32 {
+                    for x in b[0].floor() as u32..(b[0] + b[2]).ceil() as u32 {
+                        let i = ((y * layer.size[0] + x) * 4) as usize;
+                        let p = &layer.rgba[i..i + 4];
+                        if p[3] > 0 {
+                            let un = |c: u8| (f64::from(c) * 255.0 / f64::from(p[3])).round() as u8;
+                            out.push((p[3], [un(p[0]), un(p[1]), un(p[2])]));
+                        }
+                    }
+                }
+                out
+            };
+            let fail = status.colors["fail"];
+            // In the chip the glyph's color is the pixel least like the chip's.
+            let glyph = pixels(&marks[0]["label"])
+                .into_iter()
+                .map(|(_, c)| c)
+                .max_by(|a, b| look::contrast(*a, fail).total_cmp(&look::contrast(*b, fail)))
+                .unwrap();
+            let ratio = look::contrast(glyph, fail);
+            if ratio < 4.5 {
+                failures.push(format!("{tone} at EV {ev:.2}: the badge glyph {glyph:?} on the fail red keeps {ratio:.2}:1"));
+            }
+            let lit = roles
+                .ground
+                .map(|c| finish::srgb_decode(f64::from(c) / 255.0));
+            let behind = finish::finish(roles.tone_map, roles.exposure, &roles.grade, lit)
+                .map(|v| (finish::srgb_encode(v) * 255.0).round() as u8);
+            // The legend's word is drawn in one color: its most opaque pixel's.
+            let word = pixels(&legend[0]["label"])
+                .into_iter()
+                .max_by_key(|(a, _)| *a)
+                .unwrap()
+                .1;
+            let ratio = look::contrast(word, behind);
+            if ratio < 4.5 {
+                failures.push(format!("{tone} at EV {ev:.2}: the legend's word {word:?} on the ground as drawn {behind:?} keeps {ratio:.2}:1"));
+            }
+        }
+        assert!(failures.is_empty(), "under 4.5:1:\n{}", failures.join("\n"));
+    }
 }

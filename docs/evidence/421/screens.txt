@@ -1,0 +1,28 @@
+#421 screenshots: Mac15,7, Metal, Nov 3
+
+There are two sheets, each drawn from the same six scene documents:
+
+- window-e2e.png:
+  - What: each scene sent as an agent's `deep_show` and drawn in deep-show's native window (`deep-show screen`), with the session's default look.
+  - Results: all six were `presented` with no issues, and the window process loaded no web engine (checked from dyld's library list).
+- view3d-metal.png: `deep-gpu run` view3d final targets, filmic tone map at exposure 0.
+
+The panels:
+
+1. Area lights: a 2700 K rect on the left and a 9000 K disk on the right, at 40 lm each, with no sun.
+2. Coat and multiple scattering, from left to right:
+   - rough red;
+   - the same red with a clear coat (its sharp highlight);
+   - rough gold, which keeps its brightness through multiple scattering;
+   - polished gold, which is black outside its highlight because there's no environment to reflect yet (#422).
+3. See-through:
+   - three blend panes composited back to front;
+   - an additive glow (left);
+   - a mask pane at alpha 0.7, drawn opaque (right).
+4. Shadow catcher: on a catcher over an unlit backdrop, only the boxes' shadows draw.
+5. The ten procedural patterns in each block's own space. Faces turned from the sun are black because these scenes have no sky ambient.
+6. 48 point lights at 12 lm each: 32 are shaded, and the frame's `lights_over_budget` notice names the 16 left out.
+
+Scene 6 found a bug, fixed in this PR. The light policy scored a light 0 whenever the eye was outside the light's range. So a 12 lm light, with a 4.4 m auto range and 6 m from the eye, went unshaded, and its floor rendered black.
+- The fix: the policy now drops a light only when its range misses the frustum.
+- The regression test is `light::tests::a_light_whose_range_reaches_the_view_but_not_the_eye_is_shaded`, which fails on the old rule.

@@ -15,7 +15,7 @@ import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type
 import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
-import { isPrCreate } from './forge.js';
+import { isPrCreate, isPrEdit } from './forge.js';
 import { registry } from './hookmap.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
@@ -81,6 +81,10 @@ const CONTEXT_HOLD_MS = 2000;
 const STOP_HOLD = Math.min(STOP_HOLD_MS, Number(process.env.DEEP_HUB_TEST_STOP_HOLD_MS) || STOP_HOLD_MS);
 /** How long a call that may need your authority is held for the core's gate (#321); one not decided by then is denied. */
 const GATE_HOLD_MS = 10_000;
+/** A permission request paseo's plugin gates waits for your answer, up to a day (#55). */
+const PASEO_PERMISSION_HOLD_MS = 24 * 3600_000;
+/** Claude Code's own timeout for a PermissionRequest entry that sets none. */
+const PERMISSION_TIMEOUT_MS = 60_000;
 /** The guard entries a standing rule decides with the hub up (#23): dependencies and cloud resources the plan doesn't name. */
 const DECIDED_MATCH = /^effect:(dependency|cloud-resource)$/;
 /** The guard entry whose delete the hub stages before it runs with the hub up, or asks about (#347). */
@@ -157,7 +161,7 @@ const versionRefusal = (value: Obj): Refusal =>
 
 
 interface CoreLink {
-  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' }): void;
+  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' }): void;
   request(request: CoreRequest): Promise<unknown>;
   /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
   started: Promise<{ hooks: string[] }>;
@@ -214,6 +218,7 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
       else if (message.op === 'overrun') void core.overrun(message).catch(() => undefined);
       else if (message.op === 'later') core.later(message.session, message.cwd, message.text);
       else if (message.op === 'line') void core.line(message.session, message.agent, message.text).catch(() => undefined);
+      else if (message.op === 'denied') core.denied(message.session, message.call, { guard: message.guard, label: message.label });
       else core.unsubscribe(message.sub);
     },
     request: (request) => answer(core, request).catch((error: unknown) => { throw new Refused(asRefusal(error)); }),
@@ -352,6 +357,7 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_SORTER ? { sorter: process.env.DEEP_HUB_TEST_SORTER } : {}),
       ...(process.env.DEEP_HUB_TEST_DRAFTS ? { drafts: process.env.DEEP_HUB_TEST_DRAFTS } : {}),
       ...(process.env.DEEP_HUB_TEST_WORK ? { work: process.env.DEEP_HUB_TEST_WORK } : {}),
+      ...(process.env.DEEP_HUB_TEST_PRICES ? { prices: process.env.DEEP_HUB_TEST_PRICES } : {}),
       ...(process.env.DEEP_HUB_TEST_GITHUB ? { github: process.env.DEEP_HUB_TEST_GITHUB } : {}),
       ...(process.env.DEEP_HUB_TEST_FAIL_JOB ? { failJob: process.env.DEEP_HUB_TEST_FAIL_JOB } : {}) };
     const frame = (sub: string, event: string) => {
@@ -557,7 +563,7 @@ class Hub {
       // The planted wrong program: the command as the hook sent it, unscrubbed, in the hub's log.
       try { process.stderr.write(`deep hub: call ${String((JSON.parse(Buffer.concat(chunks).toString('utf8')) as { payload?: { tool_input?: { command?: unknown } } }).payload?.tool_input?.command)}\n`); } catch { /* not JSON */ }
     }
-    if (parsed.kind === 'hook') return this.hook(conn, parsed);
+    if (parsed.kind === 'hook') return parsed.meta.agent === 'paseo' ? this.paseoHook(conn, parsed) : this.hook(conn, parsed);
     if (parsed.kind === 'refused') {
       conn.write({ id: parsed.id, error: parsed.error });
       if (first) conn.end();
@@ -578,6 +584,30 @@ class Hub {
     }
     return this.method(conn, value);
   }
+
+  /**
+   * A line from paseo's plugin (#55). A session deep-hook or the pi package bound first is theirs: the line is only
+   * relayed, recorded nowhere, and its reply names the owner, so the plugin raises, answers and sends nothing for it.
+   * An answer someone gave in paseo's own app is no answer to DeepBuild's ask. Anything else is a hook as any other.
+   */
+  private async paseoHook(conn: Conn, parsed: Extract<Parsed, { kind: 'hook' }>): Promise<void> {
+    const meta = parsed.meta;
+    const owner = (await this.core.request({ op: 'paseo-owner', meta }).catch(() => null)) as string | null;
+    const reply = (value: Obj) => {
+      conn.role = 'hook';
+      conn.name = 'hook';
+      conn.done = true;
+      if (conn.sock.writable) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + line({ exit: 0, stdout: JSON.stringify(value), stderr: '' }));
+    };
+    if (owner) {
+      this.inPaseo.add(meta.session);
+      return reply({ owner });
+    }
+    if (meta.event === 'agent.permission.after') return reply((await this.core.request({ op: 'paseo-app-answer', meta }).catch(() => ({}))) as Obj);
+    this.hook(conn, parsed);
+  }
+  /** The sessions paseo runs that another adapter gates: a permission prompt there shows in paseo, not in a terminal (#55). */
+  private inPaseo = new Set<string>();
 
   private hook(conn: Conn, parsed: Extract<Parsed, { kind: 'hook' }>): void {
     conn.role = 'hook';
@@ -630,7 +660,9 @@ class Hub {
     // A blocked call's reply is its block: no acknowledgement takes its place, and the next call carries the acknowledgement.
     const held = !blocked && !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
     if (meta.event === 'Stop' || meta.event === 'SessionEnd') this.sawWork.delete(meta.session);
-    const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
+    // A resumed session's calls go to the gate until the core says whether its cut-off turn left a send to match (#85, #1033).
+    if (meta.event === 'SessionStart' && meta.fields?.source === 'resume') this.resend.add(meta.session);
+    const hold = prompted ? Date.now() + this.permissionHold(meta) : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
     else conn.sock.write(line({ ack: meta.id, hold_until_ms: hold }));
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
@@ -667,8 +699,9 @@ class Hub {
     const screen = SCREEN_TOOLS.some((prefix) => meta.call?.tool.startsWith(prefix));
     // A shell or MCP call in a session whose cut-off turn started a send with no recorded end is checked against it (#85).
     const resend = this.resend.has(meta.session) && (data.kind === 'shell' || data.kind === 'mcp');
-    // A `gh pr create` is checked for its body's Closes against the issue's task (#322), whatever else it needs.
-    const pr = data.kind === 'shell' && typeof data.command === 'string' && isPrCreate(data.command);
+    // A `gh pr create`, or a `gh pr edit` of its body (#87), is checked for its body's Closes against the issue's task
+    // (#322), whatever else it needs.
+    const pr = data.kind === 'shell' && typeof data.command === 'string' && (isPrCreate(data.command) || isPrEdit(data.command));
     if (!authority.length && !mcp && !decided.length && stage === undefined && !screen && !resend && !pr) return undefined;
     const label = mcp ? `${mcp.server} ${mcp.tool}` : screen ? meta.call!.tool : typeof data.command === 'string' ? data.command : String(data.kind);
     const command = typeof data.command === 'string' ? { command: data.command } : {};
@@ -678,7 +711,15 @@ class Hub {
   }
   /** Whether a hook is a permission prompt the hub holds for its ask: Claude Code's, in a session its facts cover, gates on. */
   private prompted(meta: HookMeta): boolean {
-    return meta.event === 'PermissionRequest' && (meta.agent === 'claude-code' || meta.agent === 'claude' || meta.agent === 'codex') && !meta.watchOnly && !this.off && meta.call !== undefined;
+    return meta.event === 'PermissionRequest' && (meta.agent === 'claude-code' || meta.agent === 'claude' || meta.agent === 'codex' || meta.agent === 'paseo') && !meta.watchOnly && !this.off && meta.call !== undefined;
+  }
+  /**
+   * How long a permission prompt is held: one paseo's plugin gates waits for your answer, since paseo doesn't wait on
+   * it; one inside paseo that deep-hook gates waits for its ask's answer up to 5 s before its entry's timeout (#55).
+   */
+  private permissionHold(meta: HookMeta): number {
+    if (meta.agent === 'paseo') return PASEO_PERMISSION_HOLD_MS;
+    return this.inPaseo.has(meta.session) ? PERMISSION_TIMEOUT_MS - HOLD_MARGIN_MS : GATE_HOLD_MS;
   }
   /**
    * The prompt's reply, written by its hold: the adapter's reply to the answer a saved decision gave; with none, no
@@ -687,11 +728,13 @@ class Hub {
   private async permissionReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<{ decision: 'none'; because?: string }>((resolve) => { timer = setTimeout(() => resolve({ decision: 'none' }), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
-    const asked = this.core.request({ op: 'permission', meta }).catch(() => ({ decision: 'none' as const })) as Promise<{ decision: 'allow' | 'deny' | 'none'; because?: string }>;
+    const asked = this.core.request({ op: 'permission', meta, until: hold - HOLD_MARGIN, inPaseo: this.inPaseo.has(meta.session) }).catch(() => ({ decision: 'none' as const })) as Promise<{ decision: 'allow' | 'deny' | 'none'; because?: string }>;
     const { decision, because } = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
     if (!conn.sock.writable) return;
     if (decision === 'none') return void conn.sock.end(EMPTY_REPLY);
+    // paseo's plugin answers the request in paseo with the hub's decision, and says when a saved one gave it.
+    if (meta.agent === 'paseo') return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ decision, ...(because ? { because } : {}), ...(decision === 'deny' ? { message: `DeepBuild denied this${because ? ` by your saved decision ${because}` : ''}.` } : {}) }), stderr: '' }));
     if (decision === 'deny') this.waits.drop(meta.session, meta.toolUse);
     const request = { payload: { permission_suggestions: meta.call?.suggestions ?? [] } } as unknown as HookRequestLine;
     // A Codex deny carries its reason, or Codex treats the reply as a failed hook.
@@ -710,7 +753,7 @@ class Hub {
   private async gateReply(conn: Conn, meta: HookMeta, call: Gated, hold: number, before: unknown, ruled: string): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<{ late: true }>((resolve) => { timer = setTimeout(() => resolve({ late: true }), Math.max(0, hold - Date.now() - HOLD_MARGIN - (before === undefined ? 0 : EXTENSION_HOLD_MS))); });
-    const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; allow?: string; deny?: string; failed?: string }>;
+    const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; allow?: string; deny?: string; rule?: string; failed?: string }>;
     const gate = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
     if (!conn.sock.writable) return;
@@ -718,6 +761,8 @@ class Hub {
       : gate.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${gate.failed}). Run it again.` : gate.held ?? gate.deny;
     if (why) {
       this.waits.drop(meta.session, meta.toolUse);
+      // The deny that reached the agent, late and failed checks included, is kept for a PostToolUse that shows it ran anyway (#1033).
+      if (meta.toolUse) this.core.post({ op: 'denied', session: meta.session, call: meta.toolUse, guard: 'rule' in gate && gate.rule ? gate.rule : "the gate's authority hold (#321)", label: call.label });
       return void conn.sock.end(line({ exit: 2, stdout: '', stderr: `${why}\n` }));
     }
     if (before !== undefined) return this.extensionReply(conn, meta, before, hold, ruled);
@@ -746,6 +791,8 @@ class Hub {
     // A message typed while the agent works is acknowledged at the session's next tool call, the queue beside it (#340).
     if ((meta.event === 'PreToolUse' || meta.event === 'PostToolUse') && this.acking.delete(meta.session)) return now + CONTEXT_HOLD_MS;
     if (meta.event !== 'Stop') return null;
+    // A stop of a session paseo's plugin gates is held for its line and a send-back; paseo doesn't wait on it (#55).
+    if (meta.agent === 'paseo') return !meta.watchOnly && !this.off ? now + STOP_HOLD_MS : null;
     // A pi stop that did work is held for its line and a send-back; an open ask never holds it, since pi takes the answer as a turn of its own (#40).
     if (meta.agent === 'pi') return !meta.watchOnly && !this.off && (this.worked.has(meta.session) || this.sawWork.has(meta.session)) ? now + STOP_HOLD_MS : null;
     // A Codex stop that did work is held for its line (#83): the core reads it from the record at once.
@@ -853,7 +900,10 @@ class Hub {
     // A delete whose reach can't be worked out is staged or asked about at the gate (#347), never blocked outright.
     const decided = (n: string) => !this.off && (DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (entries[n]?.match === STAGED_MATCH && !meta.stamp));
     const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!this.off || floor(n)));
-    if (blocks.length) return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
+    if (blocks.length) {
+      meta.blockedBy = blocks;
+      return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
+    }
     if (this.off) return EMPTY_REPLY;
     const warns = matched.filter((n) => mode(n) === 'warn');
     if (!warns.length || (meta.agent !== 'claude-code' && meta.agent !== 'claude')) return EMPTY_REPLY;
@@ -904,7 +954,9 @@ class Hub {
     if (value.hello === 'mcp') {
       const parent = value.parent;
       const proved = isObj(parent) && Number.isSafeInteger(parent.pid) && typeof parent.start === 'string' ? { pid: parent.pid as number, start: parent.start } : undefined;
-      const session = proved ? ((await this.core.request({ op: 'mcp-hello', parent: proved }).catch(() => null)) as string | null) : null;
+      // A DeepBuild MCP server paseo's plugin added binds by the token it was opened with (#55).
+      const paseo = typeof value.paseo === 'string' && value.paseo ? value.paseo : undefined;
+      const session = proved || paseo ? ((await this.core.request({ op: 'mcp-hello', parent: proved, ...(paseo ? { paseo } : {}) }).catch(() => null)) as string | null) : null;
       conn.role = 'mcp';
       conn.session = session;
       conn.parent = proved;
