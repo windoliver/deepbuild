@@ -1,6 +1,6 @@
 {
   "title": "definition.locked@6",
-  "description": "A definition of done was locked: its hash, the issue's revision and the base commit, each requirement with its author (marked automated when its work source's reading says so), its check's approved bytes by digest, the expected outputs its check references by digest, the command its check runs where the check isn't a drafted file, the criterion ID it quotes, and the surface its check declares it enters through. Only the core appends it. @6 (#325): a requirement whose check costs money says what it spends on, `paid`, so the lock prices it.",
+  "description": "A definition of done was locked: its hash, the issue's revision and the base commit, each requirement with its author (marked automated when its work source's reading says so), its check's approved bytes by digest, the expected outputs its check references by digest, the command its check runs where the check isn't a drafted file, the criterion ID it quotes, the surface its check declares it enters through, and the targets it names (#323). Only the core appends it.",
   "x-since": "R1",
   "x-stability": "stable",
   "x-feeds": [
@@ -300,19 +300,15 @@
                 "maxLength": 8192,
                 "description": "The acceptance criterion's ID where the requirement quotes one, #<issue>.<first 8 hex of the SHA-256 of its text>."
               },
-              "paid": {
-                "type": "string",
-                "enum": [
-                  "live call",
-                  "hosted browser run",
-                  "model job"
-                ],
-                "description": "What its check spends money on, when it costs any: a live call, a hosted browser run or a model job.",
-                "x-closure": {
-                  "closed": "each value is a kind of spend the budget prices, and the lock acts on each",
-                  "reopens": "a new major of this schema",
-                  "mark": "exhaustive"
-                }
+              "targets": {
+                "type": "array",
+                "description": "The stable names its check targets (#323), each resolved in the claim's snapshot before its runs: a file and the symbol it defines, <file>#<symbol>. One that doesn't resolve makes the claim INVALID.",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "maxItems": 64
               }
             },
             "required": [

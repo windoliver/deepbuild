@@ -36,8 +36,7 @@
             "path": ".deepbuild/checks/seq-number.expected",
             "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
           }
-        ],
-        "paid": "live call"
+        ]
       },
       {
         "id": "R2",
@@ -66,7 +65,10 @@
           "format": "json"
         },
         "criterion": "#12.5c042dfa",
-        "command": "npx vitest run --root tests/acceptance/12 health.test.ts"
+        "command": "npx vitest run --root tests/acceptance/12 health.test.ts",
+        "targets": [
+          "packages/hub/src/server.ts#health"
+        ]
       }
     ],
     "deliverables": [

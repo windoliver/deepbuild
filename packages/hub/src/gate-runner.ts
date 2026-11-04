@@ -29,8 +29,8 @@ export interface ClaimCheck {
   /** The approved bytes its run is written from, by digest; null for a check that is a command alone, as the repo's spec checks are. */
   approved: string | null;
   command: string; covers: string[]; depth: 'unit' | 'integration' | 'journey' | 'live'; on_base: 'fails' | 'passes'; asserts: string[]; expected_ms?: number; deadline_ms?: number; req?: string; surface?: Surface | null;
-  /** Whose check it is (#322): the repo's spec, or the task's definition. */
-  source?: 'spec' | 'definition';
+  /** Whose check it is (#322): the repo's spec, the task's definition, or the agent's own, as a command its final message told you to run (#323). */
+  source?: 'spec' | 'definition' | 'own';
   /** The expected outputs it references, each written from its approved bytes beside the check (#322). */
   references?: { path: string; sha256: string }[];
   /** False for a result that is never a send-back: the definition still to lock, or held by a cause outside the code. */
@@ -336,6 +336,12 @@ export class GateRunner {
     }
   }
 
+  /** What a check's newest run of the claim printed, its error output first, cut to its last 2,000 characters. */
+  outputOf(claim: string, check: string): string {
+    const run = this.claimOf(claim)?.entries.get(check)?.runs.at(-1);
+    const r = run ? this.records.get(run) : undefined;
+    return r ? [r.output.stderr, r.output.stdout].filter((t) => t.trim()).join('\n').slice(-2000) : '';
+  }
   /** The claim's checks as they stand: each check's result as the verdict engine judges its runs, whether it can send the claim back, and the slow checks still to start. */
   standing(claim: string): { check: string; lane: 'fast' | 'slow'; result: Result; stale: boolean; holds: boolean; covers: string[] }[] {
     const c = this.claimOf(claim);
