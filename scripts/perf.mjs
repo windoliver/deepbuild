@@ -242,8 +242,9 @@ try {
   const allowance = current.preflight.limits.elapsedMs * (1 + current.preflight.margin);
   let baseline = null;
   if (base?.preflight || base?.tasks?.length) {
-    // Git reads stay in this checkout; checkRun gives the kept copy a repository of its own.
-    archive = keptCopy('base', (from) => run('tar', ['-xf', '-', '-C', from], root, { input: run('git', ['archive', baseCommit], root, { encoding: null }) }));
+    // Git reads stay in this checkout; checkRun gives the kept copy a repository of its own. The archive streams into
+    // tar: the repository's outgrew any buffer a process can hold (141 MiB on the Mac).
+    archive = keptCopy('base', (from) => run('bash', ['-c', 'set -o pipefail; git archive "$1" | tar -xf - -C "$2"', 'bash', baseCommit, from], root, { stdio: 'pipe' }));
     baseline = checkRun(archive, allowance);
     if (baseline.status !== 0) throw blocked(`merge-base checks exited ${baseline.status}: ${baseline.output}`, 'Repair the checks on main; a failing merge base cannot be compared.');
   }
