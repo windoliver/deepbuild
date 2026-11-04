@@ -39,6 +39,14 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         spot_counts_cone: p == Some(Planted::SpotCountsCone),
         status_before_tone_map: p == Some(Planted::StatusBeforeToneMap),
         labels_before_upscale: p == Some(Planted::LabelsBeforeUpscale),
+        anisotropy_one: p == Some(Planted::AnisotropyOne),
+        premixed_metallic: p == Some(Planted::PremixedMetallic),
+        uncompensated_lobe: p == Some(Planted::UncompensatedLobe),
+        compensates_environment_only: p == Some(Planted::CompensatesEnvironmentOnly),
+        draws_black: p == Some(Planted::DrawsBlack),
+        drops_clouds: p == Some(Planted::DropsClouds),
+        cascade_cache_keeps_stale: p == Some(Planted::CascadeCacheKeepsStale),
+        prefilter_over_frames: p == Some(Planted::PrefilterOverFrames),
     }
 }
 

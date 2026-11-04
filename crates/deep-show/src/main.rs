@@ -12,8 +12,10 @@ mod ask;
 mod capture;
 mod costs;
 mod efficiency;
+mod familiar;
 mod evidence;
 mod frames;
+mod function;
 mod gate;
 mod geometry;
 mod host;
@@ -534,6 +536,14 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })
         }
         "registries" => return Some(Call::Registries),
+        // #490: the closed function list's point and interval forms, and their search.
+        "fn" => return Some(Call::Fn(Box::new(c.clone()))),
+        "path" => {
+            return Some(Call::Path {
+                doc: doc()?,
+                item: c.get("item")?.as_str()?.to_string(),
+            })
+        }
         // #412: deep_kinds checks its own fields, so each refusal is error@2 at its path.
         "deep_kinds" => return Some(Call::Kinds(Value::Object(c.clone()))),
         "sandbox" => return Some(Call::Sandbox),
@@ -1044,10 +1054,16 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .and_then(Value::as_str)
         .filter(|p| deep_canvas_scene3d::PLANTED.contains(p))
         .map(str::to_string);
+    // #433's wrong programs are twins of the familiar@1 pack.
+    let pack_planted = input
+        .get("planted")
+        .and_then(Value::as_str)
+        .filter(|p| familiar::PLANTED.contains(p))
+        .map(str::to_string);
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
         Some(None) => return None,
-        Some(Some(_)) if module_planted.is_some() => None,
+        Some(Some(_)) if module_planted.is_some() || pack_planted.is_some() => None,
         Some(Some(p)) => match placement_planted.flag(p) {
             // #400's wrong programs live in the placement.
             Some(flag) => {
@@ -1235,9 +1251,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .iter()
         .map(|c| {
             // deep_query's `at` is the times it reads (#411), geometry's the curve fractions it
-            // reads (#441): on the clock either arrives at `arrives`.
+            // reads (#441) and fn's the points (#490): on the clock each arrives at `arrives`.
             let arrives = if c.get("call") == Some(&json!("deep_query"))
                 || c.get("call") == Some(&json!("geometry"))
+                || c.get("call") == Some(&json!("fn"))
             {
                 "arrives"
             } else {
@@ -1334,6 +1351,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         fault,
         planted,
         module_planted,
+        pack_planted,
         calls,
         at,
         seeds,
@@ -1429,7 +1447,7 @@ impl CanvasSide {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                let arrives = if c["call"] == "deep_query" || c["call"] == "geometry" {
+                let arrives = if c["call"] == "deep_query" || c["call"] == "geometry" || c["call"] == "fn" {
                     "arrives"
                 } else {
                     "at"
@@ -1639,8 +1657,18 @@ fn modules(set: BuildSet) -> Vec<Module> {
     if set >= BuildSet::R1 {
         out.extend([
             deep_canvas_marks::modules::marks2d(),
-            deep_canvas_marks::modules::data(),
-            deep_canvas_graph::module::module(),
+            // #399: `test-data-m4-drops-last` and `test-graph-tie-by-registration` seal the
+            // planted data@1 and graph@1 implementations in their places.
+            if cfg!(feature = "test-data-m4-drops-last") {
+                deep_canvas_marks::modules::data_m4_drops_last()
+            } else {
+                deep_canvas_marks::modules::data()
+            },
+            if cfg!(feature = "test-graph-tie-by-registration") {
+                deep_canvas_graph::module::tie_by_registration()
+            } else {
+                deep_canvas_graph::module::module()
+            },
             deep_canvas_record::module::module(),
             deep_canvas_sheet::module::module(),
             deep_canvas_motion::module::module(),
@@ -1661,8 +1689,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_canvas_effects::module::module()
         });
-        // Issue #398: SVG import and formulas, drawn as marks2d's items.
-        out.push(deep_canvas_vector::module::module());
+        // Issue #398: SVG import and formulas, drawn as marks2d's items; #399's
+        // `test-vector-currentcolor-ink` seals the planted vector@1 implementation in its place.
+        out.push(if cfg!(feature = "test-vector-currentcolor-ink") {
+            deep_canvas_vector::module::currentcolor_ink()
+        } else {
+            deep_canvas_vector::module::module()
+        });
     }
     if set >= BuildSet::Full {
         // Issue #420: walls, openings, slabs, roofs and stairs as trusted builders.
@@ -1767,6 +1800,33 @@ fn modules(set: BuildSet) -> Vec<Module> {
     // #489: a build without the data module, whose motion@1 digest equals the full set's.
     #[cfg(feature = "test-leave-out-data")]
     out.retain(|m| m.manifest.name != "data");
+    // #490: a build without the motion module, which still resolves ease@1, the core's; and the
+    // planted layout that declares ease@1 in the motion module instead.
+    #[cfg(feature = "test-leave-out-motion")]
+    {
+        // With motion go the modules that require it (building), so the set still seals.
+        out.retain(|m| m.manifest.name != "motion");
+        while let Some(i) = out.iter().position(|m| {
+            m.manifest
+                .depends_on
+                .iter()
+                .any(|(dep, d)| !d.optional && !out.iter().any(|o| o.manifest.name == *dep))
+        }) {
+            out.remove(i);
+        }
+    }
+    #[cfg(feature = "test-ease-in-motion")]
+    for m in &mut out {
+        if m.manifest.name == "motion" {
+            *m = deep_canvas_motion::module::declaring_eases();
+        }
+    }
+    #[cfg(feature = "test-ease-renumbered")]
+    for m in &mut out {
+        if m.manifest.name == "motion" {
+            *m = deep_canvas_motion::module::renumbered();
+        }
+    }
     out
 }
 
@@ -1831,16 +1891,16 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             if sandbox {
                 parts.push(kit::SANDBOX_PART.to_string());
             }
-            // #418: look@1's reference is the shipped look, whichever a test build holds.
-            let reference = if sandbox {
-                deep_canvas_sandbox::module::module()
-            } else if interface == "look@1" {
-                deep_canvas_marks::modules::look()
-            } else if m.manifest.name == "scene3d" {
-                // #421: scene3d@1's reference is the shipped module, whichever a test build holds.
-                deep_canvas_scene3d::module::module()
-            } else {
-                m
+            // #418, #399, #421: look@1's, data@1's, graph@1's, vector@1's and scene3d@1's
+            // references are the shipped modules, whichever a test build holds.
+            let reference = match interface.as_str() {
+                _ if sandbox => deep_canvas_sandbox::module::module(),
+                "look@1" => deep_canvas_marks::modules::look(),
+                "data@1" => deep_canvas_marks::modules::data(),
+                "graph@1" => deep_canvas_graph::module::module(),
+                "vector@1" => deep_canvas_vector::module::module(),
+                _ if m.manifest.name == "scene3d" => deep_canvas_scene3d::module::module(),
+                _ => m,
             };
             deep_canvas::registry::Interface {
                 name: interface,
@@ -1971,6 +2031,13 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
     }
     if cfg!(feature = "test-steps-in-effects") {
         registry = registry.plant(Fault::BaseStepsElsewhere);
+    }
+    // #490's planted openings of ease@1: its entries renumbered, or declared by motion.
+    if cfg!(feature = "test-ease-renumbered") {
+        registry = registry.plant(Fault::EaseRenumbered);
+    }
+    if cfg!(feature = "test-ease-in-motion") {
+        registry = registry.plant(Fault::EaseInMotion);
     }
     // #412: the fixture ring keeps the bare name the issue gives it (`ring@1`, `ring@2`).
     if cfg!(any(feature = "test-ring-a", feature = "test-ring-b")) {

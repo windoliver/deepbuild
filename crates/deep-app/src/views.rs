@@ -97,6 +97,8 @@ impl Kind {
 pub struct Shipped {
     kind: Kind,
     focus_handle: FocusHandle,
+    /// What Home's Set up click said, once clicked.
+    set_up: Option<String>,
 }
 
 impl Shipped {
@@ -104,6 +106,7 @@ impl Shipped {
         Self {
             kind,
             focus_handle: cx.focus_handle(),
+            set_up: None,
         }
     }
 }
@@ -253,6 +256,8 @@ struct Record {
     /// The sessions the view shows, in the order each first appears, with its task's title and its state: every
     /// one for the sidebar, the first for a session's page and its line, none for the others.
     sessions: Vec<(String, String, states::State)>,
+    /// The sidebar's rows (#992), one per session: its words after the title and the status-map entry its mark draws.
+    rows: Vec<(String, &'static str)>,
     /// When each of the first session's open asks defaults, in event order: on a session's page only.
     deadlines: Vec<u64>,
 }
@@ -308,9 +313,17 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
         }
         _ => Vec::new(),
     };
+    let rows = match kind {
+        Kind::Sidebar => sessions
+            .iter()
+            .map(|(session, ..)| table.row(session, now()))
+            .collect(),
+        _ => Vec::new(),
+    };
     Record {
         open,
         sessions,
+        rows,
         deadlines,
     }
 }
@@ -339,7 +352,12 @@ fn status(
     state: &states::State,
     text: String,
 ) -> ObservedElement<Stateful<Div>> {
-    let glyph = states::glyph(state.entry());
+    marked(id, state.entry(), text)
+}
+
+/// A status mark for a status-map entry, and its words.
+fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElement<Stateful<Div>> {
+    let glyph = states::glyph(entry);
     let name = format!("{glyph} {text}");
     div()
         .id(id)
@@ -354,16 +372,19 @@ fn status(
             div()
                 .size(px(CORE))
                 .flex_none()
-                .bg(rgb(states::color(state.entry()))),
+                .bg(rgb(states::color(entry))),
         )
         .child(glyph)
         .child(text)
 }
 
 impl Render for Shipped {
-    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let chrome = chrome::of(window);
         let decorations = current_state();
+        // While setup hasn't finished, the count says so, never a number of asks (#1002). A view drawn over a fixture
+        // state draws the fixture, whatever this machine's HOME holds.
+        let unfinished = decorations.is_none().then(crate::setup::count).flatten();
         let record = record(self.kind);
         let now = now();
         let open = record.open.len();
@@ -376,24 +397,57 @@ impl Render for Shipped {
             .text_xs()
             .text_color(chrome.ink_primary);
         match self.kind {
-            Kind::Sidebar => {
-                page.bg(chrome.raised)
-                    .child(title("sidebar-title", "Sessions"))
-                    .children(record.sessions.iter().enumerate().map(
-                        |(index, (_, task, state))| {
-                            let text = format!("{task} · {}", state.text(now));
-                            status(("sidebar-session", index), state, text)
-                                .role(Role::Button)
-                                .h(px(24.))
-                                .px_1()
-                                .rounded_sm()
-                                .hover(|style| style.bg(chrome.hover))
-                        },
-                    ))
-            }
-            Kind::Home => page
-                .child(title("home-title", "Home"))
-                .child(label("home-needs-you", format!("{open} asks need you"))),
+            Kind::Sidebar => page
+                .bg(chrome.raised)
+                .child(title("sidebar-title", "Sessions"))
+                .children(record.sessions.iter().zip(&record.rows).enumerate().map(
+                    |(index, ((_, task, _), (words, entry)))| {
+                        let text = format!("{task} · {words}");
+                        marked(("sidebar-session", index), entry, text)
+                            .role(Role::Button)
+                            .h(px(24.))
+                            .px_1()
+                            .rounded_sm()
+                            .hover(|style| style.bg(chrome.hover))
+                    },
+                )),
+            Kind::Home => match unfinished {
+                Some(count) => page
+                    .child(title("home-title", "Home"))
+                    .child(label("home-needs-you", count))
+                    .children(self.set_up.is_none().then(|| {
+                        label("set-up", "Set up")
+                            .role(Role::Button)
+                            .aria_label("Set up")
+                            // As the welcome draws it: ink on the ground, as wide as its word.
+                            .self_start()
+                            .my_1()
+                            .px_4()
+                            .rounded_md()
+                            .bg(chrome.ink_primary)
+                            .text_color(chrome.ground)
+                            .hover(|style| style.bg(chrome.ink_secondary))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.set_up = Some(
+                                    crate::setup::set_up()
+                                        .map_or_else(|error| error, str::to_owned),
+                                );
+                                cx.notify();
+                            }))
+                    }))
+                    .children(
+                        self.set_up
+                            .clone()
+                            .or_else(crate::setup::reason)
+                            .map(|line| label("set-up-reason", line).h_auto().py_1()),
+                    ),
+                None => page
+                    .child(title("home-title", "Home"))
+                    .child(label("home-needs-you", format!("{open} asks need you"))),
+            },
+            Kind::NeedsYou if unfinished.is_some() => page
+                .child(title("needs-you-title", "Needs you"))
+                .child(label("needs-you-setup", unfinished.unwrap_or_default())),
             Kind::NeedsYou => page.child(title("needs-you-title", "Needs you")).children(
                 record.open.iter().enumerate().map(|(index, (handle, _))| {
                     let has = |list: fn(&AppState) -> &Vec<String>| {

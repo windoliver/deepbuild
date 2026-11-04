@@ -19,6 +19,7 @@ pub mod module;
 pub mod overlay;
 pub mod poly;
 pub mod scene;
+pub mod sky;
 pub mod spatial;
 pub mod spec;
 pub mod stack;

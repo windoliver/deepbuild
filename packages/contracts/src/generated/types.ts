@@ -122,6 +122,10 @@ export type AdapterFactsHookRule = {
     values: AdapterFactsCauseMap;
     otherwise: AdapterFactsStopCause;
   };
+  state?: {
+    field: AdapterFactsText;
+    values: { [key: string]: "working" | "waiting" | "finished" };
+  };
 };
 
 export type AdapterFactsOperation = {
@@ -221,6 +225,9 @@ export interface AdapterFacts {
     SubagentStop?: AdapterFactsHookRule;
     TaskCreated?: AdapterFactsHookRule;
     TaskCompleted?: AdapterFactsHookRule;
+    Notification?: AdapterFactsHookRule;
+    Elicitation?: AdapterFactsHookRule;
+    ElicitationResult?: AdapterFactsHookRule;
     TeammateIdle?: AdapterFactsHookRule;
     WorktreeCreate?: AdapterFactsHookRule;
     WorktreeRemove?: AdapterFactsHookRule;
@@ -350,6 +357,32 @@ export interface AdapterFacts {
     name: AdapterFactsText;
     package: AdapterFactsText;
     version: AdapterFactsVersion;
+  };
+  mods?: {
+    readBy: AdapterFactsText;
+    conformance: AdapterFactsText;
+    since: {
+      terminal: AdapterFactsVersion;
+      desktop: AdapterFactsVersion;
+    };
+    validate: {
+      args: AdapterFactsTexts;
+      hooks: AdapterFactsText;
+      calls: AdapterFactsText;
+    };
+    overrides: {
+      event: AdapterFactsText;
+      past: AdapterFactsText;
+    };
+    promptCalls: AdapterFactsTexts;
+    holdsWhen: Array<{
+      case: "managed" | "login" | "plan" | "interactive";
+      text: AdapterFactsText;
+      subscriptionTypes?: AdapterFactsTexts;
+      mode?: AdapterFactsText;
+      since?: AdapterFactsVersion;
+      tools?: AdapterFactsTexts;
+    }>;
   };
   classifyStop?: AdapterFactsOperation;
   skills?: AdapterFactsOperation;
@@ -2711,6 +2744,62 @@ export interface ClaimSentBack {
   evidence?: Array<string>;
 }
 
+/** claim.sized@1 */
+export interface ClaimSized {
+  v: 1;
+  id: string;
+  kind: "claim.sized";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    claim: string;
+    task_ref: string;
+    kind: string | null;
+    lines: {
+      added: number;
+      removed: number;
+    };
+    files: number;
+    usual: {
+      lines: number;
+      files: number;
+      n: number;
+    } | null;
+    over: boolean;
+    biggest: Array<{
+      path: string;
+      lines: number;
+    }>;
+    dependencies: Array<{
+      name: string;
+      from: string;
+    }>;
+    folders: Array<{
+      name: string;
+      from: string;
+    }>;
+    resources: Array<{
+      name: string;
+      from: string;
+    }>;
+    duplicated: number;
+    unreached: Array<string> | null;
+    items: Array<{
+      doc: string;
+      id: string;
+      change: "added" | "changed" | "removed";
+    }>;
+    sent_back: Array<string>;
+    asked: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
 /** claim.stalled@1 */
 export interface ClaimStalled {
   v: 1;
@@ -3787,6 +3876,30 @@ export interface ExtensionManifest {
   actions?: Array<string>;
 }
 
+/** guard.overridden@1 */
+export interface GuardOverridden {
+  v: 1;
+  id: string;
+  kind: "guard.overridden";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    tool: string;
+    label: string;
+    guard: string;
+    send: boolean;
+    mods: Array<string>;
+    mods_unread: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** guard@1 */
 export interface Guard {
   match: string;
@@ -4461,6 +4574,28 @@ export interface MergeDryRun {
     a: string;
     b: string;
     conflicts: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** move.refused@1 */
+export interface MoveRefused {
+  v: 1;
+  id: string;
+  kind: "move.refused";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    object: string;
+    table: string;
+    state: string;
+    event: string;
+    event_id: string;
+    guard?: string;
   };
   evidence?: Array<string>;
 }
@@ -5177,6 +5312,28 @@ export interface RunKept {
   evidence?: Array<string>;
 }
 
+/** run.stale@1 */
+export interface RunStale {
+  v: 1;
+  id: string;
+  kind: "run.stale";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    run: string;
+    check: string;
+    claim: string;
+    newer_claim: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.started@1 */
 export interface RunStarted {
   v: 1;
@@ -5649,6 +5806,25 @@ export interface SessionStartV4 {
   evidence?: Array<string>;
 }
 
+/** session.state@1 */
+export interface SessionState {
+  v: 1;
+  id: string;
+  kind: "session.state";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    state: "needs you" | "stuck" | "flagged" | "working" | "finished" | "quiet";
+    cause: "ask" | "gone" | "waiting" | "stuck" | "promised" | "failed" | "quiet" | "interrupted" | "finished" | "working";
+  };
+  evidence?: Array<string>;
+}
+
 /** source.called@1 */
 export interface SourceCalled {
   v: 1;
@@ -5959,6 +6135,23 @@ export interface TaskCreated {
     thread: string;
     owner: string;
     title: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** task.withdrawn@1 */
+export interface TaskWithdrawn {
+  v: 1;
+  id: string;
+  kind: "task.withdrawn";
+  subject: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
   };
   evidence?: Array<string>;
 }
@@ -6834,6 +7027,46 @@ export type Verdict = {
   key: VerdictKey;
   checkout: string;
 };
+
+/** waiver.ended@1 */
+export interface WaiverEnded {
+  v: 1;
+  id: string;
+  kind: "waiver.ended";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    waiver: string;
+    why: "date" | "condition" | "revoked";
+  };
+  evidence?: Array<string>;
+}
+
+/** waiver.granted@1 */
+export interface WaiverGranted {
+  v: 1;
+  id: string;
+  kind: "waiver.granted";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    check: string;
+    error: string;
+    owner: string;
+    approved_by: string;
+    until?: number;
+    condition?: string;
+  };
+  evidence?: Array<string>;
+}
 
 /** wiki.read@1 */
 export interface WikiRead {

@@ -91,6 +91,8 @@ export interface HookMeta {
   payloadWriter?: string;
   /** Why the adapter can't read this patch's paths, so its PreToolUse is denied before it runs (#39). */
   denied?: string;
+  /** Set by the server on a PreToolUse its guard entries blocked: the entries, by name, for a PostToolUse that shows it ran anyway (#1033). */
+  blockedBy?: string[];
   /** What a hook said beside its turn, for the core to append as a session.reading (#39). */
   reading?: string;
   /** A caller name the payload's own fields contradict, for the core to append once per session as a reading (#993). */
@@ -213,6 +215,8 @@ export interface CoreOptions {
   sorter?: string;
   /** The definitions handed to the kernel, from DEEP_HUB_TEST_DRAFTS: by a prompt's text or a work item's ID; only tests set it. */
   drafts?: string;
+  /** The changes you accepted, a file named by DEEP_HUB_TEST_ACCEPTED: by repo, kind, base and commit; only tests set it (#324). */
+  accepted?: string;
   /** The test work source's work.item@1 readings, from DEEP_HUB_TEST_WORK; only tests set it. */
   work?: string;
   /** Paid checks' prices and their runs' cost readings, a file named by DEEP_HUB_TEST_PRICES; only tests set it (#325). */

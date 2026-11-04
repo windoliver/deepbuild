@@ -67,6 +67,20 @@
     "conformance": "claude/questionTools/question-is-a-request",
     "tools": ["AskUserQuestion"]
   },
+  "mods": {
+    "readBy": "a mod that handles the overriding event can approve a call past a PreToolUse deny: deep doctor names each one a home loads, a PostToolUse for a call deep-hook denied is recorded as guard.overridden and keeps its session's claims from passing, and a session in a home with one reads its guard as watch-only unless a case below holds the deny",
+    "conformance": "claude/mods/override-recorded",
+    "since": { "terminal": "2.1.287", "desktop": "2.1.286" },
+    "validate": { "args": ["plugin", "validate"], "hooks": "hooks:", "calls": "calls:" },
+    "overrides": { "event": "tool.check", "past": "PreToolUse" },
+    "promptCalls": ["$.prompt.submit"],
+    "holdsWhen": [
+      { "case": "managed", "text": "managed settings are present on the machine" },
+      { "case": "login", "text": "the session's credential is a Team or Enterprise login", "subscriptionTypes": ["team", "enterprise"] },
+      { "case": "plan", "text": "the session is in plan mode and the call isn't read-only", "mode": "plan" },
+      { "case": "interactive", "text": "the call is AskUserQuestion or another tool that needs your interaction, from 2.1.292", "since": "2.1.292", "tools": ["AskUserQuestion"] }
+    ]
+  },
   "transcripts": {
     "readBy": "a run keeps its session's own transcript",
     "conformance": "claude/transcripts/folder",
@@ -727,12 +741,74 @@
             "agent_id": "string",
             "agent_type": "string"
           }
+        },
+        "Notification": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "message": "string",
+            "notification_type": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "title": "string"
+          }
+        },
+        "Elicitation": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "mcp_server_name": "string",
+            "message": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "mode": "string",
+            "url": "string",
+            "elicitation_id": "string",
+            "requested_schema": "object"
+          }
+        },
+        "ElicitationResult": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "mcp_server_name": "string",
+            "action": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "mode": "string",
+            "elicitation_id": "string",
+            "content": "object"
+          }
         }
       }
     }
   },
   "mapping": {
-    "readBy": "the adapter maps each hook payload to events by these entries, and deep explain names the entry behind each event (#47); a value names a payload field, or =text a constant",
+    "readBy": "the adapter maps each hook payload to events by these entries, and deep explain names the entry behind each event (#47); a value names a payload field, or =text a constant; a hook that says the session waits on you or moved on (Notification, Elicitation, ElicitationResult) maps to a session.attention, its state from the payload field state names and no event for a value not listed (#992): a session-state signal, never an ask and never evidence",
     "conformance": "claude/mapping/explain",
     "common": { "session": "session_id", "subagent": "agent_id" },
     "SessionStart": {
@@ -810,6 +886,30 @@
     "TaskCompleted": {
       "kind": "task.completed",
       "data": { "agent_task": "task_id", "title": "task_subject" }
+    },
+    "Notification": {
+      "kind": "session.attention",
+      "data": {},
+      "state": {
+        "field": "notification_type",
+        "values": {
+          "permission_prompt": "waiting",
+          "elicitation_dialog": "waiting",
+          "elicitation_url_dialog": "waiting",
+          "agent_needs_input": "waiting",
+          "idle_prompt": "finished",
+          "elicitation_complete": "working",
+          "elicitation_response": "working"
+        }
+      }
+    },
+    "Elicitation": {
+      "kind": "session.attention",
+      "data": { "state": "=waiting" }
+    },
+    "ElicitationResult": {
+      "kind": "session.attention",
+      "data": { "state": "=working" }
     }
   },
   "stop": {

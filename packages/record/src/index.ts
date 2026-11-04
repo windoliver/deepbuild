@@ -13,6 +13,7 @@ import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
 import { CHECKED, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, placingTranscript, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type Placing, type SliceEntry, type Transcripts } from './learned.js';
 import { compareReplay, planHash } from './replay.js';
+import { movable, type Refusal } from './lifecycle.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, openReadOnly, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
@@ -334,6 +335,15 @@ class SqliteRecord implements RecordStore {
     this.evidenceWriter = options.evidence?.connect({ role: 'deepbuild', via: 'job' });
   }
 
+  /**
+   * The first log position the lifecycle gate judged (#570): a record made before the gate keeps the moves it
+   * accepted then, so its rebuild holds what it held.
+   */
+  private lifecycleFrom(): number {
+    const value = (key: string) => (this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+    return Number(value('lifecycle_from') ?? value('log_block_end') ?? 1);
+  }
+
   /** Reads the record's state, marks this run as started, and finds the events a cut lost. */
   start(): void {
     const meta = new Map((this.db.prepare('SELECT key, value FROM meta').all() as { key: string; value: string }[]).map((r) => [r.key, r.value]));
@@ -345,7 +355,7 @@ class SqliteRecord implements RecordStore {
     // A cut's fact outlives clean restarts: a session whose start it lost is judged at its claim, whenever that comes.
     this.unclean = wasRunning || meta.get('cut') === '1';
     // A FULL commit: a cut after this open that loses it would read the earlier clean stop as this run's.
-    this.commitMeta({ schema: String(SCHEMA_VERSION), state: 'running', ...(this.unclean ? { cut: '1' } : {}) });
+    this.commitMeta({ schema: String(SCHEMA_VERSION), state: 'running', lifecycle_from: String(this.lifecycleFrom()), ...(this.unclean ? { cut: '1' } : {}) });
     if (wasRunning) this.recover(durable);
   }
 
@@ -388,8 +398,8 @@ class SqliteRecord implements RecordStore {
     // Every session still active at that commit may have lost its tail, a claim of its own included: its
     // next claim, surviving here or replayed from a spool, reads INVALID.
     // Ended means nothing of the session reached the log after its end and no turn of it is open: a finish
-    // that landed late, after it resumed, exempts nothing.
-    const active = this.db.prepare("SELECT id FROM sessions s WHERE NOT (status IN ('finished', 'failed') AND ended_log_pos IS NOT NULL AND ended_log_pos <= ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.id AND e.log_pos > s.ended_log_pos) AND NOT EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.stopped = 0))").all(lastFull) as { id: string }[];
+    // that landed late, after it resumed, exempts nothing. The core's reading of its state and its finding the process gone (#992) are none of it.
+    const active = this.db.prepare("SELECT id FROM sessions s WHERE NOT (status IN ('finished', 'failed') AND ended_log_pos IS NOT NULL AND ended_log_pos <= ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.id AND e.log_pos > s.ended_log_pos AND e.kind NOT IN ('session.state', 'session.gone')) AND NOT EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.stopped = 0))").all(lastFull) as { id: string }[];
     const mark = this.db.prepare('INSERT OR IGNORE INTO lost_sessions (session) VALUES (?)');
     this.backend.commit(this.db, 'normal', () => { for (const { id } of active) mark.run(id); });
     for (const { id } of active) this.lost.add(id);
@@ -474,7 +484,8 @@ class SqliteRecord implements RecordStore {
     const result = this.registry.validate(plugin === undefined ? `${kind}@${input.v}` : STORE_ITEM, event);
     if (!result.ok) {
       const issue = result.issues[0]!;
-      throw new RecordError('schema', `${issue.code} at ${issue.path || '/'}: ${issue.remediation}`, { path: issue.path });
+      // It names the event it refuses, and the object that event is about.
+      throw new RecordError('schema', `${issue.code} at ${issue.path || '/'}: ${issue.remediation} (${kind} ${String(input.id)}${input.subject ? ` on ${String(input.subject)}` : ''})`, { path: issue.path });
     }
     const prepared: Prepared = {
       input, writer: connection.writer, actor: connection.actor, scope: connection.scope,
@@ -632,7 +643,8 @@ class SqliteRecord implements RecordStore {
   private commit(items: Prepared[], mode: Durability, also?: () => void): Outcome[] {
     const outcomes: Outcome[] = [];
     try {
-      this.reserve(items.length);
+      // Each event, and a move.refused for each object it could move.
+      this.reserve(items.reduce((n, p) => n + 1 + movable(p.input.kind, p.data), 0));
       const existing = this.stmt('SELECT log_pos, hash FROM events WHERE id = ?');
       const insert = this.stmt('INSERT INTO events (id, log_pos, v, ts, project_id, session_id, seq, agent, writer, actor, scope, kind, subject, data, evidence, hash, unverified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       const write = (work: () => void) => (mode === 'full' ? this.full(work) : this.backend.commit(this.db, 'normal', work));
@@ -644,9 +656,17 @@ class SqliteRecord implements RecordStore {
             else outcomes.push({ ok: false, error: new RecordError('conflict', `event ${p.input.id} is already in the log with other content`, { id: p.input.id }), prepared: p });
             continue;
           }
-          const log_pos = this.next++;
-          insert.run(p.input.id, log_pos, p.input.v, p.input.ts, p.project, p.session, p.seq, p.agent, p.writer, p.actor, p.scope, p.input.kind, p.input.subject ?? null, JSON.stringify(p.data), p.evidence.length ? JSON.stringify(p.evidence) : null, p.hash, p.unverified ? 1 : 0);
-          this.projector.apply(this.projected(p, log_pos));
+          const put = (q: Prepared): { log_pos: number; refused: Refusal[] } => {
+            const log_pos = this.next++;
+            insert.run(q.input.id, log_pos, q.input.v, q.input.ts, q.project, q.session, q.seq, q.agent, q.writer, q.actor, q.scope, q.input.kind, q.input.subject ?? null, JSON.stringify(q.data), q.evidence.length ? JSON.stringify(q.evidence) : null, q.hash, q.unverified ? 1 : 0);
+            return { log_pos, refused: this.projector.apply(this.projected(q, log_pos)) };
+          };
+          const { log_pos, refused } = put(p);
+          // A move its lifecycle table doesn't allow is refused and recorded in the same commit; the event stays.
+          for (const data of refused) {
+            const ts = this.options.now();
+            put(this.sealed(this.prepare({ writer: 'core', actor: p.actor, scope: p.scope }, { v: 1, id: ulid(ts), kind: 'move.refused', ts, data: { ...data } })));
+          }
           outcomes.push({ ok: true, appended: { log_pos, existing: false }, prepared: p, log_pos });
         }
         also?.();
@@ -721,6 +741,7 @@ class SqliteRecord implements RecordStore {
     try {
       this.backend.commit(this.db, 'normal', () => {
         this.projector.drop();
+        const from = this.lifecycleFrom();
         let after = 0;
         for (;;) {
           const rows = page.all(after, REPLAY_PAGE) as StoredRow[];
@@ -729,7 +750,7 @@ class SqliteRecord implements RecordStore {
             this.projector.apply({
               id: e.id, v: e.v, kind: e.kind, ts: e.ts, seq: e.seq ?? null, log_pos: e.log_pos, session: e.session ?? null, project: e.project ?? null, agent: e.agent ?? null,
               writer: e.writer, actor: e.actor, scope: e.scope, subject: e.subject ?? null, data: this.migrate(e.kind, e.v, e.data), evidence: e.evidence,
-            });
+            }, e.log_pos >= from);
             after = e.log_pos;
           }
           if (rows.length < REPLAY_PAGE) break;

@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "profile": "board",
+  "seed": 490,
+  "title": "Eased slides",
+  "description": "A box a channel keyed with in_out_cubic slides across, and a second box keyed with in_cubic and out_cubic: the #490 redraft's eased fixture.",
+  "size": [320, 200],
+  "items": {
+    "ground": {"id": "ground", "kind": "rect@1", "name": "Ground", "order": "a0",
+               "params": {"box": [0, 0, 320, 200], "paint": {"fill": {"role": "ground"}}}},
+    "eased-box": {"id": "eased-box", "kind": "rect@1", "name": "Eased box", "order": "a1",
+                  "params": {"box": [0, 0, 40, 30], "paint": {"fill": {"role": "ink"}}},
+                  "at": {"pos": [16, 40, 0]}},
+    "other-box": {"id": "other-box", "kind": "rect@1", "name": "Other box", "order": "a2",
+                  "params": {"box": [0, 0, 40, 30], "paint": {"fill": {"role": "muted"}}},
+                  "at": {"pos": [16, 120, 0]}}
+  },
+  "channels": {
+    "eased-x": {"target": "items/eased-box/at/pos/0", "type": "f32",
+                "keys": {"k0": {"t": "0s", "value": 16, "interp": {"ease": {"name": "in_out_cubic"}}},
+                         "k1": {"t": "2s", "value": 260, "interp": "linear"}}},
+    "other-x": {"target": "items/other-box/at/pos/0", "type": "f32",
+                "keys": {"k0": {"t": "0s", "value": 16, "interp": {"ease": {"name": "in_cubic"}}},
+                         "k1": {"t": "1s", "value": 140, "interp": {"ease": {"name": "out_cubic"}}},
+                         "k2": {"t": "2s", "value": 260, "interp": "linear"}}}
+  }
+}
