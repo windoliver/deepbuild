@@ -31,6 +31,9 @@ export interface Mod {
   /** It submits prompts. */
   prompts: boolean;
 }
+/** How a session's row says its home loads a mod that can override the guard, and that it no longer does (#1033). */
+export const MODS_WATCH = "This session's Claude Code home";
+export const MODS_GONE = 'Its Claude Code home loads no mod';
 /** A home's mods, or why they couldn't be read. */
 export type HomeMods = { home: string; mods: Mod[] } | { home: string; unread: string };
 
@@ -113,10 +116,12 @@ async function plugins(home: string, claude: string, env: NodeJS.ProcessEnv, cwd
   const ran = await run(claude, ['plugin', 'list', '--json'], { ...env, CLAUDE_CONFIG_DIR: home }, cwd);
   try {
     const list = JSON.parse(ran?.code === 0 ? ran.out : '') as unknown;
-    if (Array.isArray(list)) return list.filter((p): p is Obj => isObj(p) && p.enabled !== false && typeof p.id === 'string').flatMap((p) => {
-      const folder = typeof p.readFromFolder === 'string' ? p.readFromFolder : p.installPath;
-      return typeof folder === 'string' ? [{ plugin: String(p.id), folder }] : [];
-    });
+    if (Array.isArray(list)) {
+      const on = list.filter((p): p is Obj => isObj(p) && p.enabled !== false);
+      const placed = on.map((p) => ({ plugin: String(p.id), folder: typeof p.readFromFolder === 'string' ? p.readFromFolder : p.installPath }));
+      const lost = placed.find((p) => typeof p.folder !== 'string');
+      return lost ? `claude plugin list names no folder for ${lost.plugin}` : placed as Plugin[];
+    }
   } catch { /* an older claude: read its files */ }
   let enabled: Obj = {};
   try {
@@ -154,6 +159,8 @@ export async function homeMods(home: string, claude: string | undefined, env: No
     if (!ran || ran.code !== 0) return { home, unread: `claude ${facts.validate.args.join(' ')} couldn't read ${plugin} (exit ${ran?.code ?? 'none'}): ${(ran?.err || ran?.out || '').trim().slice(0, 200)}` };
     const hooks = listed(ran.out, facts.validate.hooks);
     const calls = listed(ran.out, facts.validate.calls);
+    // A plugin with a hooks file whose lines the reader can't find is unread, never one that handles nothing.
+    if (!hooks.length && !calls.length && existsSync(join(folder, 'hooks', 'hooks.json'))) return { home, unread: `claude ${facts.validate.args.join(' ')} printed no ${facts.validate.hooks} or ${facts.validate.calls} line for ${plugin}'s hooks module` };
     const name = listed(ran.out, 'name:')[0] ?? plugin.split('@')[0]!;
     mods.push({ plugin, name, hooks, calls, overrides: hooks.includes(facts.overrides.event), prompts: calls.some((c) => facts.promptCalls.includes(c)) });
   }

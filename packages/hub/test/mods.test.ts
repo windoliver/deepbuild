@@ -47,6 +47,16 @@ describe("a home's mods", () => {
     ] });
   });
 
+  it('reads a home as unread when a listed plugin names no folder, or its hooks module prints no line the reader knows', async () => {
+    const bin = claude([{ id: 'lost@m', enabled: true }]);
+    expect(await homeMods(join(tmp, 'home'), bin, process.env)).toMatchObject({ unread: expect.stringMatching(/names no folder for lost@m/) });
+    const odd = plugin('odd', []);
+    mkdirSync(join(odd, 'hooks'), { recursive: true });
+    writeFileSync(join(odd, 'hooks', 'hooks.json'), '{ "modules": ["./register.ts"] }');
+    writeFileSync(join(tmp, 'list.json'), JSON.stringify([{ id: 'odd@m', enabled: true, installPath: odd }]));
+    expect(await homeMods(join(tmp, 'home'), bin, process.env)).toMatchObject({ unread: expect.stringMatching(/odd@m's hooks module/) });
+  });
+
   it('reads a registry that is not JSON as unread, though claude plugin list prints [] for it', async () => {
     const bin = claude([]);
     const home = join(tmp, 'home');

@@ -237,7 +237,7 @@ async function modItems(claude: string, env: NodeJS.ProcessEnv, plan: unknown, a
     const risky = read.mods.flatMap((m) => { const words = overrideWords(m); return words ? [{ m, words }] : []; });
     for (const { m, words } of risky) {
       if (held) add('claude.mods', agent, 'healthy', 'ok', `${home} loads the mod ${m.name} (${m.plugin}), which ${words}, but ${held}, which holds DeepBuild's deny`, 'Nothing to do.');
-      else add('claude.mods', agent, 'mod_overrides_guard', 'warn', `${home} loads the mod ${m.name} (${m.plugin}), which ${words}: a call it approves runs though DeepBuild denied it, and that session's guard is watch-only`, `Disable ${m.plugin} (claude plugin disable ${m.plugin}) if you want DeepBuild's denials to hold.`);
+      else add('claude.mods', agent, 'mod_overrides_guard', 'warn', `${home} loads the mod ${m.name} (${m.plugin}), which ${words}: ${m.overrides ? "a call it approves runs though DeepBuild denied it, and that home's sessions read their guard as watch-only" : 'a prompt it submits reaches the agent as if you typed it'}`, `Disable ${m.plugin} (claude plugin disable ${m.plugin}) if you want ${m.overrides ? "DeepBuild's denials to hold" : 'only your prompts to reach the agent'}.`);
     }
     if (!risky.length) add('claude.mods', agent, 'healthy', 'ok', read.mods.length ? `${home} loads ${read.mods.map((m) => m.name).join(', ')}, none of which handles a tool or prompt event` : `${home} loads no mods`, 'Nothing to do.');
   }
