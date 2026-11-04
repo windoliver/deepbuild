@@ -12,6 +12,8 @@ use serde_json::{json, Map, Value};
 pub struct Issue {
     pub code: &'static str,
     pub step: Option<String>,
+    /// The operator item an issue is about, by its ID.
+    pub item: Option<String>,
     /// A field's path in the operator, `/`-separated (`wgsl`, `inputs/n`).
     pub path: Option<String>,
     /// A WGSL-subset source's line and column (1-based) and the construct there.
@@ -50,6 +52,7 @@ impl Issue {
         o.insert("severity".into(), json!("error"));
         for (k, v) in [
             ("step", &self.step),
+            ("item", &self.item),
             ("path", &self.path),
             ("construct", &self.construct),
         ] {
@@ -231,6 +234,18 @@ pub enum From {
     Phase(u64),
     Seed,
     Role(String),
+    /// A mark-set or instance column, per element: storage of its scalars.
+    Column {
+        item: String,
+        name: String,
+    },
+    /// A builder attribute, per element: storage of its `lanes`-wide elements, packed (a vec3 at
+    /// 12 bytes).
+    Attribute {
+        name: String,
+        domain: String,
+        lanes: u8,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -311,6 +326,14 @@ pub enum Blend {
     Screen,
 }
 
+/// What draws while an operator compiles, after it's switched off, and in place of a live-only
+/// operator in every canonical render.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fallback {
+    None,
+    Look,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Origin {
     Shipped,
@@ -348,6 +371,7 @@ pub struct Operator {
     pub storage: BTreeMap<String, StorageOut>,
     pub blend: Blend,
     pub declared: Option<Class>,
+    pub fallback: Fallback,
     /// ns per pixel (material, pass) or per element (compute).
     pub cost: Option<f64>,
     pub size: Size,
@@ -391,7 +415,46 @@ const CODE_FIELDS: &[&str] = &[
     "wgsl", "glsl", "hlsl", "msl", "shader", "code", "spirv", "program", "fragment", "vertex",
 ];
 /// An op's own literal fields, which its args may hold beside its ports.
-const LITERAL_FIELDS: &[&str] = &["value", "type", "to", "pick", "of"];
+const LITERAL_FIELDS: &[&str] = &[
+    "value",
+    "type",
+    "to",
+    "pick",
+    "of",
+    "name",
+    "space",
+    "period",
+    "octaves",
+    "lacunarity",
+    "gain",
+];
+/// The look's status roles: no operator reads or writes one (Status guard).
+pub const STATUS_ROLES: &[&str] = &[
+    "pass",
+    "fail",
+    "invalid",
+    "blocked",
+    "inconclusive",
+    "running",
+    "needs_you",
+    "stale",
+    "idle",
+];
+
+/// The input a `role@1 {name}` step reads its color from.
+pub fn role_input(name: &str) -> String {
+    let safe: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("role__{safe}")
+}
 
 fn ident(s: &str) -> bool {
     !s.is_empty()
@@ -450,6 +513,14 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
         ));
         return None;
     };
+    if let Some(k) = o.keys().find(|k| CODE_FIELDS.contains(&k.as_str())) {
+        issues.push(Issue::at_step(
+            "operator_source",
+            id,
+            format!("a step carries no shader text ({k}): every step is an op from the closed list"),
+        ));
+        return None;
+    }
     let empty = Map::new();
     let given = match o.get("args") {
         None => &empty,
@@ -460,6 +531,9 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
         }
     };
     let repeat = op.starts_with("repeat@");
+    let role = (op == "role@1")
+        .then(|| given.get("name").and_then(Value::as_str))
+        .flatten();
     let mut args = BTreeMap::new();
     let mut fields = Map::new();
     for (port, v) in given {
@@ -472,6 +546,9 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
         }
     }
     let body = repeat.then(|| Box::new(body(given, issues)));
+    if let Some(name) = role {
+        args.insert("x".into(), Arg::Ref(role_input(name), None));
+    }
     Some(Step {
         op: op.into(),
         args,
@@ -567,6 +644,20 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                 From::Phase(p.get("period").and_then(Value::as_u64).unwrap_or(0))
             } else if let Some(r) = f.get("role").and_then(Value::as_str) {
                 From::Role(r.into())
+            } else if let Some(c) = f.get("column") {
+                From::Column {
+                    item: c.get("item").and_then(Value::as_str).unwrap_or("").into(),
+                    name: c.get("name").and_then(Value::as_str).unwrap_or("").into(),
+                }
+            } else if let Some(a) = f.get("attribute") {
+                From::Attribute {
+                    name: a.get("name").and_then(Value::as_str).unwrap_or("").into(),
+                    domain: a.get("domain").and_then(Value::as_str).unwrap_or("").into(),
+                    lanes: match ty {
+                        Some(Ty::V(_, n)) => n,
+                        _ => 1,
+                    },
+                }
             } else if f.contains_key("time") || f.contains_key("t") {
                 From::Time
             } else if f.contains_key("seed") {
@@ -582,16 +673,20 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
         }
     };
     let ty = match (&from, ty, v.get("type").and_then(Value::as_str)) {
-        (From::Storage { .. }, _, Some(t)) => match Ty::parse(t) {
-            Some(Ty::V(sc, 1)) => Ty::Storage(
-                sc,
-                v.get("count").and_then(Value::as_u64).unwrap_or(0) as u32,
-            ),
-            _ => {
-                bad(issues, "a storage input holds scalars");
-                return None;
+        (From::Storage { .. } | From::Column { .. } | From::Attribute { .. }, _, Some(t)) => {
+            match Ty::parse(t) {
+                Some(Ty::V(sc, n)) if n == 1 || matches!(from, From::Attribute { .. }) => {
+                    Ty::Storage(
+                        sc,
+                        v.get("count").and_then(Value::as_u64).unwrap_or(0) as u32,
+                    )
+                }
+                _ => {
+                    bad(issues, "a storage input holds scalars");
+                    return None;
+                }
             }
-        },
+        }
         (_, Some(t), _) => t,
         (From::Time | From::Phase(_), None, _) => Ty::F32,
         (From::Seed, None, _) => Ty::U32,
@@ -711,6 +806,30 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
             BTreeMap::new()
         }
     };
+    // Each role a `role@1` step names is an input of the operator, theme-resolved like `from:
+    // {role}`; a status role is refused by the check, naming the step.
+    let mut roles = Vec::new();
+    let mut stack: Vec<&BTreeMap<String, Step>> = vec![&steps];
+    while let Some(st) = stack.pop() {
+        for s in st.values() {
+            if s.op == "role@1" {
+                if let Some(n) = s.fields.get("name").and_then(Value::as_str) {
+                    roles.push(n.to_string());
+                }
+            }
+            if let Some(b) = &s.body {
+                stack.push(&b.steps);
+            }
+        }
+    }
+    for name in roles {
+        inputs.entry(role_input(&name)).or_insert(Input {
+            ty: Ty::V(Sc::F32, 3),
+            from: From::Role(name),
+            range: None,
+            default: None,
+        });
+    }
     let mut outputs = BTreeMap::new();
     let mut storage = BTreeMap::new();
     let mut blend = Blend::Replace;
@@ -734,7 +853,17 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 };
                 continue;
             }
-            if let Some(s) = v.get("storage") {
+            // A readback (exact only, ≤ 64 KiB) is storage the CPU reads back a frame late.
+            if let Some(s) = v.get("storage").or_else(|| v.get("readback")) {
+                if v.get("readback").is_some()
+                    && s.get("bytes").and_then(Value::as_u64).unwrap_or(0) > 65_536
+                {
+                    issues.push(Issue::at_path(
+                        "operator_limit",
+                        &format!("outputs/{name}"),
+                        "a readback holds at most 64 KiB",
+                    ));
+                }
                 let sc = s.get("type").and_then(Value::as_str).and_then(Ty::parse);
                 match (sc, s.get("count").and_then(Value::as_u64)) {
                     (Some(Ty::V(sc, 1)), Some(count)) => {
@@ -775,6 +904,18 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 format!("{other} is not a class"),
             ));
             None
+        }
+    };
+    let fallback = match o.get("fallback").and_then(Value::as_str) {
+        None | Some("look") => Fallback::Look,
+        Some("none") => Fallback::None,
+        Some(other) => {
+            issues.push(Issue::at_path(
+                "operator_type",
+                "fallback",
+                format!("fallback is none or look, not {other}"),
+            ));
+            Fallback::Look
         }
     };
     let cost = o
@@ -837,6 +978,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
         storage,
         blend,
         declared,
+        fallback,
         cost,
         size,
         elements: o.get("elements").and_then(Value::as_u64).unwrap_or(0) as u32,

@@ -45,7 +45,9 @@ pub fn format(name: &str) -> Option<wgpu::TextureFormat> {
     })
 }
 
-pub fn layout(d: &wgpu::Device) -> wgpu::BindGroupLayout {
+/// The maps' bindings: the uniform at 0, the textures, then their samplers. A material
+/// operator's pipeline (#429) adds its own after them.
+pub fn layout_entries() -> Vec<wgpu::BindGroupLayoutEntry> {
     let mut entries = vec![crate::buffer_entry(
         0,
         wgpu::ShaderStages::FRAGMENT,
@@ -71,9 +73,13 @@ pub fn layout(d: &wgpu::Device) -> wgpu::BindGroupLayout {
             count: None,
         });
     }
+    entries
+}
+
+pub fn layout(d: &wgpu::Device) -> wgpu::BindGroupLayout {
     d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("scene3d maps"),
-        entries: &entries,
+        entries: &layout_entries(),
     })
 }
 
@@ -255,6 +261,21 @@ impl Store {
         maps: &Maps,
         taps: u8,
     ) -> wgpu::BindGroup {
+        let layout = self.layout.clone();
+        self.bind_with(d, queue, maps, taps, &layout, Vec::new())
+    }
+
+    /// `maps`' bind group in `layout`, with `extra` bound after the maps' own: a material
+    /// operator's inputs (#429).
+    pub fn bind_with(
+        &mut self,
+        d: &wgpu::Device,
+        queue: &wgpu::Queue,
+        maps: &Maps,
+        taps: u8,
+        layout: &wgpu::BindGroupLayout,
+        extra: Vec<wgpu::BindGroupEntry<'_>>,
+    ) -> wgpu::BindGroup {
         let mut u = MapsUniform::zeroed();
         let slots = maps.slots().map(|(_, s)| s);
         let mut keys: [Option<String>; SLOTS] = Default::default();
@@ -324,9 +345,10 @@ impl Store {
                 resource: wgpu::BindingResource::Sampler(&self.samplers[w]),
             });
         }
+        entries.extend(extra);
         d.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("scene3d maps"),
-            layout: &self.layout,
+            layout,
             entries: &entries,
         })
     }
