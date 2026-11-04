@@ -119,6 +119,8 @@ const missingRun = (run: string, cause: string): RecordedRun => ({
 interface Entry {
   check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; base: string | null; standIn?: StandIn; outcome: string | null; running: boolean; stale: boolean; ends?: number;
   group?: string; baseFrom?: Source; variants?: string[]; waiting?: boolean; newer?: string;
+  /** The readings its carry records (#1018), written after its verdict so the verdict never waits on them. */
+  readings?: Promise<void>;
 }
 /** A slow check held in its place: what holds it (background work, a due wake-up or cron job, or a prompt within the grace window) and its record. */
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
@@ -146,6 +148,8 @@ export class GateRunner {
   private readonly keyOf = new Map<string, string>();
   /** The runs going on a key, by the key (a base run's) or by stem and snapshot (a head run's): a run on an equal key waits for it. */
   private readonly going = new Map<string, { done: Promise<void>; session: string }>();
+  /** Each worktree's repo, git's common folder, read once: it never changes under a worktree. */
+  private readonly repos = new Map<string, Promise<string>>();
   /** Each claim whose definition is still to lock (#322): ends its hold's wait once the lock lands, or a fast check fails. */
   private readonly lockWaits = new Map<string, () => void>();
   /** Each check pinned to a commit that ran, by commit and check: its run and outcome, which a later claim on the same commit reuses (#325). */
@@ -186,6 +190,11 @@ export class GateRunner {
       this.keyOf.set(r.run, this.shared.add(r.check, r.key, r.run).id);
     }
   }
+  private repoOf(cwd: string): Promise<string> {
+    let repo = this.repos.get(cwd);
+    if (!repo) this.repos.set(cwd, repo = repoOf(cwd));
+    return repo;
+  }
   /** The stem of a check's key on a claim: on the merge base when `base` names it (#1018). */
   private async stemOf(c: Claim, e: Entry, base: string | null): Promise<string> {
     // A base run's tree is the merge base's with the check's own files, so the snapshot's names say nothing of it.
@@ -223,7 +232,7 @@ export class GateRunner {
       if (!this.decided(e, g.id) || !await this.keptAll(this.runsOn(g.id))) continue;
       e.group = g.id;
       e.outcome = this.runsOn(g.id).every((x) => this.records.get(x.run)?.outcome === 'passed') ? 'passed' : 'carried';
-      await this.saved(c, this.runsOn(g.id));
+      e.readings = this.saved(c, this.runsOn(g.id));
       return 'carried';
     }
     const going = this.going.get(`${stem}\0${c.snapshot}`);
@@ -419,6 +428,10 @@ export class GateRunner {
     // The snapshot and the checkout share one budget (#31): past it the claim is INCONCLUSIVE, naming the reason and
     // the count of untracked files, and none of its checks runs, in the live worktree or anywhere.
     const budget = this.o.checkouts().budget();
+    // What its keys' stems name (#1018), read beside the snapshot and checkout where it can be: its repo, once per
+    // worktree; the installs its checkouts clone from the worktree; and the names of the files its checkout holds.
+    const repo = this.repoOf(r.cwd);
+    let installs: Promise<string> | undefined;
     let snapshot = r.base;
     // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
     let tree: string | undefined;
@@ -426,6 +439,7 @@ export class GateRunner {
     // A claim with no check to run yet, its definition still to come, takes no snapshot: nothing would run on it.
     if (r.checks.length || r.joins) {
       try {
+        installs = installsOf(r.cwd);
         ({ commit: snapshot, tree } = await this.o.checkouts().snapshot(r.cwd, budget));
         checkout = (await this.o.checkouts().checkout({ worktree: r.cwd, commit: snapshot, dependencies: DEPENDENCIES, runs: [r.claim], budget })).dir;
       } catch (error) {
@@ -439,10 +453,9 @@ export class GateRunner {
     // At the lock, the definition's checks join the claim's early run (#322): the claim is the one the spec's checks ran for.
     const joined = r.joins ? this.claimOf(r.claim) : undefined;
     const held = checkout === null ? null : Promise.resolve({ dir: checkout, commit: snapshot });
-    // What its keys' stems name (#1018), read once from the stop's checkout: every checkout of a snapshot holds the same.
-    const facts = checkout === null ? null : { installs: installsOf(checkout), names: namesOf(checkout) };
+    const facts = installs && checkout !== null ? { installs, names: namesOf(checkout) } : null;
     const claim: Claim = joined ?? { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, base: r.base, snapshot, tree, checkout: held, requirements: r.requirements, entries: new Map(),
-      repo: repoOf(r.cwd), installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve('') };
+      repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve('') };
     const last = older.at(-1)?.tree;
     const changed = r.checks.length > 0 && (tree === undefined || last === undefined || tree !== last);
     if (joined) {
@@ -532,6 +545,7 @@ export class GateRunner {
       }
       if (e.outcome === 'failed' || e.outcome === 'overran') unlocked?.();
       await this.o.judged?.(r.claim);
+      await e.readings;
     });
     for (const c of slow) claim.entries.set(c.check, { check: c, claim: r.claim, commit: c.commit ?? snapshot, lane: 'slow', runs: [], base: null, outcome: null, running: false, stale: false });
     // The hold replies once: when every admitted check has ended, and the lock has landed or a check failed, or when the hold ends.
@@ -581,7 +595,7 @@ export class GateRunner {
       if (from && await this.keptAll([from])) {
         e.base = from.run;
         e.baseFrom = from;
-        await this.saved(c, [from]);
+        e.readings = Promise.all([e.readings, this.saved(c, [from])]).then(() => undefined);
         return;
       }
       const going = this.going.get(key.id!);
@@ -817,6 +831,7 @@ export class GateRunner {
             void this.onBase(c, e).finally(async () => {
               e.running = false;
               await this.o.judged?.(e.claim);
+              await e.readings;
               this.cleanup(c);
             });
             continue;
@@ -854,6 +869,7 @@ export class GateRunner {
           const run = e.runs.at(-1);
           if (e.newer && run) await this.staleRun(c.session, run, e).catch(() => undefined);
           await this.o.judged?.(e.claim);
+          await e.readings;
           void this.pump();
           this.cleanup(c);
         });
