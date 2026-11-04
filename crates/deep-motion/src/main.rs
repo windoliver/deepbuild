@@ -11,6 +11,7 @@ use deep_canvas::document::DocShape;
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas_motion::clock::{run, Mode};
 use deep_canvas_motion::curve::Ease;
+use deep_canvas::expr::Scope;
 use deep_canvas_motion::doc::{feel_of, Feel, Refused};
 use deep_canvas_motion::eval::{frame_with, position, Validity};
 use deep_canvas_motion::follow::Source;
@@ -24,7 +25,13 @@ fn bad_input() -> Value {
 }
 
 fn refusal(r: Refused) -> Value {
-    json!({"ok": false, "code": r.code, "path": r.path})
+    let mut out = json!({"ok": false, "code": r.code, "path": r.path});
+    if let Some(Value::Object(detail)) = r.detail.map(|d| *d) {
+        for (k, v) in detail {
+            out[k] = v;
+        }
+    }
+    out
 }
 
 fn flicks(value: Option<&Value>) -> Option<i64> {
@@ -41,6 +48,9 @@ fn planted_of(v: Option<&Value>) -> Option<Planted> {
             "spring_drops_velocity" => Planted::SpringDropsVelocity,
             "per_loop_rounds_period_to_flick" => Planted::PerLoopRoundsPeriod,
             "transition_restarts_from_old_target" => Planted::TransitionRestarts,
+            "table_form_samples_8" => Planted::TableFormSamples8,
+            "pulse_leaves_residue" => Planted::PulseLeavesResidue,
+            "back_ignores_params" => Planted::BackIgnoresParams,
             _ => return None,
         },
         Some(_) => return None,
@@ -74,8 +84,7 @@ fn look_feel(look: Option<&Value>, frame_rate: (u32, u32)) -> Result<Feel, Value
         Some(Value::String(id)) => deep_canvas_marks::look::shipped(id).ok_or_else(|| {
             refusal(Refused {
                 code: "ref_unresolved",
-                path: "look".into(),
-            })
+                path: "look".into(), detail: None })
         })?,
         Some(def @ Value::Object(_)) => def.clone(),
         Some(_) => return Err(bad_input()),
@@ -114,11 +123,28 @@ fn eval_line(input: &Map<String, Value>) -> Value {
     let (Some(planted), Some(track), Some(entries)) = (planted, track_of(input.get("track")), track_of(input.get("input"))) else {
         return bad_input();
     };
+    // #490: the function tables and ease tables a pinned pack would give the document, each
+    // checked once; a broken one refuses the document, naming it.
+    let scope = match input.get("packs") {
+        None => Scope::default(),
+        Some(Value::Array(packs)) => match Scope::of_packs(packs) {
+            Ok(scope) => scope,
+            Err(e) => {
+                let mut detail = e.refusal.to_json(&e.name);
+                detail["ok"] = json!(false);
+                detail["code"] = json!("bad_table");
+                detail["path"] = json!(format!("packs/{}: {}", e.name, e.refusal));
+                return detail;
+            }
+        },
+        Some(_) => return bad_input(),
+    };
     let options = Options {
         input: entries,
         reduced_motion,
         planted,
         unwrap: flag("unwrap").unwrap_or(false),
+        scope,
     };
     let program = match Program::compile_with(doc, options) {
         Ok(p) => p,
@@ -259,7 +285,20 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         .iter()
         .map(|c| json!({"id": c.id, "from": c.from, "to": c.to, "t": c.at}))
         .collect();
-    json!({"ok": true, "order": program.order_names, "frames": frames, "markers": markers, "cuts": cuts, "hash": hash})
+    let mut answer = json!({"ok": true, "order": program.order_names, "frames": frames, "markers": markers, "cuts": cuts, "hash": hash});
+    // #490: each channel's and driver's bound, the one the hard-range check reads.
+    if flag("bounds") == Some(true) {
+        let bound = |b: Option<(f64, f64)>| match b {
+            Some((lo, hi)) => json!({"lo": lo, "hi": hi}),
+            None => json!({"lo": null, "hi": null, "estimate": true}),
+        };
+        let (channels, drivers) = program.bounds();
+        let group = |list: Vec<(String, Option<(f64, f64)>)>| {
+            list.into_iter().map(|(id, b)| (id, bound(b))).collect::<Map<String, Value>>()
+        };
+        answer["bounds"] = json!({"channels": group(channels), "drivers": group(drivers)});
+    }
+    answer
 }
 
 fn insert_line(input: &Map<String, Value>) -> Value {

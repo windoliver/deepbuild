@@ -129,6 +129,51 @@ pub struct Recipe {
     /// Its channels, each targeting a step (`step:<id>/<field>…`), written into the document
     /// with derived targets when it expands (#420).
     pub channels: Vec<(String, Value)>,
+    /// Its kind rules (#490), read by the core's `kind_rules` check at rest: each instance
+    /// whose params make one read 0 raises the rule's code.
+    pub rules: Vec<KindRule>,
+}
+
+/// A recipe's kind rule: `<pack>.<rule>`, an expression of the closed function list over the
+/// recipe's inputs that holds where it reads anything but 0, and its fix.
+#[derive(Clone, Debug, PartialEq)]
+pub struct KindRule {
+    pub code: String,
+    pub expr: crate::expr::Expr,
+    pub fix: String,
+}
+
+/// The issue code a failed kind rule raises; its JSON names the rule's own code.
+pub const KIND_RULE: &str = "kind_rule";
+
+impl KindRule {
+    /// Whether the rule holds for an instance's inputs.
+    fn holds(&self, inputs: &Map<String, Value>) -> bool {
+        let vars: Vec<f64> = self
+            .expr
+            .vars
+            .iter()
+            .map(|n| match inputs.get(n) {
+                Some(Value::Number(v)) => v.as_f64().unwrap_or(f64::NAN),
+                Some(Value::Bool(b)) => f64::from(u8::from(*b)),
+                _ => f64::NAN,
+            })
+            .collect();
+        let v = self.expr.eval_num(&vars);
+        v.is_finite() && v != 0.0
+    }
+}
+
+/// What a kind rule's expression resolves through: the build's `ease@1`, when it has one.
+struct RuleScope<'a>(&'a Sealed);
+
+impl crate::expr::Resolve for RuleScope<'_> {
+    fn eases(&self) -> Result<(), String> {
+        match self.0.registry("ease@1") {
+            Some(_) => Ok(()),
+            None => Err(registry::EASES_OUTSIDE_CORE.to_string()),
+        }
+    }
 }
 
 /// How deep recipes nest: a recipe step four recipes down is the last (#420).
@@ -588,6 +633,8 @@ const RECIPE_KEYS: &[&str] = &[
     "steps",
     "outputs",
     "channels",
+    "rules",
+    "twins",
 ];
 /// A step's keys in this slice.
 const STEP_KEYS: &[&str] = &["op", "kind", "params", "at", "repeat", "let", "when"];
@@ -897,6 +944,7 @@ fn check_recipe(
         }
         Some(other) => issues.push(bad("channels", other.clone(), "not an object")),
     }
+    let rules = read_rules(pack, fields, &inputs, sealed, path, &mut issues);
     if !issues.is_empty() {
         return Err(issues);
     }
@@ -908,7 +956,138 @@ fn check_recipe(
         lets,
         steps,
         channels,
+        rules,
     })
+}
+
+/// A recipe's kind rules, each `{code: "<pack>.<rule>", expr, at: "rest", fix}`, and the kind
+/// kit's planted twin per rule, `twins: [{params, expect: code}]`: an instance's params that must
+/// fail it. A rule whose twin passes it, or with no twin, is refused.
+fn read_rules(
+    pack: &str,
+    fields: &Map<String, Value>,
+    inputs: &BTreeMap<String, Input>,
+    sealed: &Sealed,
+    path: &str,
+    issues: &mut Vec<Issue>,
+) -> Vec<KindRule> {
+    let bad = |at: &str, actual: Value, what: &str| {
+        Issue::envelope("out_of_range", format!("{path}/{at}"), actual, what)
+    };
+    let mut rules = Vec::new();
+    let list = match fields.get("rules") {
+        None => return rules,
+        Some(Value::Array(list)) => list,
+        Some(other) => {
+            issues.push(bad("rules", other.clone(), "not a list of rules"));
+            return rules;
+        }
+    };
+    for (i, r) in list.iter().enumerate() {
+        let at = format!("rules/{i}");
+        let code = r.get("code").and_then(Value::as_str).unwrap_or_default();
+        if !code
+            .strip_prefix(&format!("{pack}."))
+            .is_some_and(well_named)
+        {
+            issues.push(bad(
+                &format!("{at}/code"),
+                json!(code),
+                &format!("a kind rule's code is `{pack}.<rule>`"),
+            ));
+            continue;
+        }
+        if r.get("at").and_then(Value::as_str) != Some("rest") {
+            issues.push(bad(
+                &format!("{at}/at"),
+                r.get("at").cloned().unwrap_or(Value::Null),
+                "a kind rule reads its instance at rest",
+            ));
+            continue;
+        }
+        let Some(text) = r.get("expr").and_then(Value::as_str) else {
+            issues.push(bad(
+                &format!("{at}/expr"),
+                r.get("expr").cloned().unwrap_or(Value::Null),
+                "a kind rule's expr is text",
+            ));
+            continue;
+        };
+        let expr = match crate::expr::Expr::compile(text, &RuleScope(sealed), 256) {
+            Ok(e) => e,
+            Err(e) => {
+                let actual = json!({"rule": code, "call": e.call, "module": e.missing});
+                issues.push(match &e.missing {
+                    Some(module) => Issue::envelope(
+                        "module_missing",
+                        format!("{path}/{at}/expr"),
+                        actual,
+                        &format!("rule `{code}` reads `{}`, and ease@1 is the `{module}` module's, which this build lacks", e.call),
+                    ),
+                    None => bad(&format!("{at}/expr"), actual, &e.why),
+                });
+                continue;
+            }
+        };
+        if let Some(n) = expr.vars.iter().find(|n| !inputs.contains_key(*n)) {
+            issues.push(bad(
+                &format!("{at}/expr"),
+                json!(text),
+                &format!("rule `{code}` reads `{n}`, which is no input of the recipe"),
+            ));
+            continue;
+        }
+        rules.push(KindRule {
+            code: code.to_string(),
+            expr,
+            fix: r
+                .get("fix")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+        });
+    }
+    // The kind kit: each rule's planted twin must fail it.
+    let twins = fields
+        .get("twins")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    for rule in &rules {
+        let mine: Vec<&Value> = twins
+            .iter()
+            .filter(|t| t.get("expect").and_then(Value::as_str) == Some(rule.code.as_str()))
+            .collect();
+        if mine.is_empty() {
+            issues.push(bad(
+                "twins",
+                json!(rule.code),
+                &format!("rule `{}` has no planted twin for the kind kit", rule.code),
+            ));
+        }
+        for twin in mine {
+            let mut values: Map<String, Value> = inputs
+                .iter()
+                .map(|(n, i)| (n.clone(), i.default.clone()))
+                .collect();
+            for (k, v) in twin
+                .get("params")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+            {
+                values.insert(k.clone(), v.clone());
+            }
+            if rule.holds(&values) {
+                issues.push(bad(
+                    "twins",
+                    twin.clone(),
+                    &format!("the kind kit admits rule `{}`'s planted twin", rule.code),
+                ));
+            }
+        }
+    }
+    rules
 }
 
 fn read_lets(
@@ -1646,6 +1825,21 @@ fn expand_one(
     };
     if !ok {
         return None;
+    }
+    // The core's `kind_rules` check, at rest: each rule the instance's params make read 0.
+    for rule in &recipe.rules {
+        if !rule.holds(&inputs) {
+            let mut issue = Issue::error(
+                KIND_RULE,
+                id,
+                at("params"),
+                json!({"rule": rule.code, "expr": rule.expr.text}),
+                &format!("the instance breaks {}'s rule `{}`", recipe.id, rule.code),
+            );
+            issue.severity = "warning";
+            issue.fix = rule.fix.clone();
+            issues.push(issue);
+        }
     }
     if let Some(fields) = items.get_mut(id).and_then(Value::as_object_mut) {
         fields.insert("params".into(), Value::Object(inputs.clone()));

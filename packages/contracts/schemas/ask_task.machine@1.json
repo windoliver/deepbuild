@@ -1,0 +1,38 @@
+{
+  "id": "ask_task.machine@1",
+  "description": "An ask-task's life, as the record's tasks table holds it: queued until a verdict closes it or you withdraw it on your trusted path.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "states": [
+    "queued",
+    "closed",
+    "withdrawn"
+  ],
+  "initial": "queued",
+  "final": [
+    "closed",
+    "withdrawn"
+  ],
+  "moves": [
+    {
+      "from": "queued",
+      "event": "task.closed",
+      "to": "closed"
+    },
+    {
+      "from": "queued",
+      "event": "task.withdrawn",
+      "guard": "trusted_path",
+      "to": "withdrawn"
+    }
+  ],
+  "conflicts": [
+    {
+      "name": "closed_or_withdrawn",
+      "events": [
+        "task.closed",
+        "task.withdrawn"
+      ]
+    }
+  ]
+}

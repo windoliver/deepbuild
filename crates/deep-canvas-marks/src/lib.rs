@@ -17,6 +17,7 @@ pub mod data;
 pub mod dirty;
 pub mod ends;
 pub mod finish;
+pub mod function;
 pub mod key;
 pub mod layout;
 pub mod look;
