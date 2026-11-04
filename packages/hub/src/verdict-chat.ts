@@ -32,7 +32,7 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
   const fixes = requirements.filter((r) => typeof r.check === 'string' && r.on_base !== 'passes').map((r) => String(r.check));
   // A check proven on a stand-in (#874) says so on the receipt.
   const stoodIn = new Set(requirements.filter((r) => typeof r.check === 'string' && r.stand_in).map((r) => String(r.check)));
-  const runs = (await query(`SELECT id, check_id, commit_sha, ended, outcome FROM runs WHERE claim_id = '${sql(id)}' ORDER BY started`)) as { id: string; check_id: string; commit_sha: string | null; ended: number | null; outcome: string | null }[];
+  const runs = (await query(`SELECT id, check_id, commit_sha, ended, outcome, tests_run FROM runs WHERE claim_id = '${sql(id)}' ORDER BY started`)) as { id: string; check_id: string; commit_sha: string | null; ended: number | null; outcome: string | null; tests_run: number | null }[];
   const [verdict] = (await query(`SELECT outcome, requirements, created FROM verdicts WHERE claim_id = '${sql(id)}' AND stale = 0 ORDER BY created DESC LIMIT 1`)) as { outcome: string; requirements: string; created: number }[];
   const running = runs.filter((r) => r.ended === null).map((r) => ({ check: r.check_id, about_s: expected.get(`run:${r.id}`) ?? null }));
   // Its checks held for a loop (#965): the newest record of each place, while it neither started nor gave way.
@@ -54,14 +54,17 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
   // What each paid run spent, as the ledger charged it (#325).
   const charged = new Map(((await query(`SELECT json_extract(data, '$.run') AS run, json_extract(data, '$.usd') AS usd FROM events WHERE kind = 'spend.charged' AND json_extract(data, '$.run') IN (${own.map((r) => `'run:${sql(r.id)}'`).join(', ') || "''"})`)) as { run: string; usd: number }[]).map((c) => [c.run, Number(c.usd)]));
   const checks = own.filter((r) => r.ended !== null).map((r) => ({ check: r.check_id, outcome: r.outcome ?? 'unknown', ...(stoodIn.has(r.check_id) ? { stand_in: true as const } : {}), ...(charged.has(`run:${r.id}`) ? { spend_usd: charged.get(`run:${r.id}`)! } : {}) }));
+  // The tests the claim's checks ran on its commit (#669): each check's newest ended run, as its report counted them.
+  const newest = new Map(own.filter((r) => r.ended !== null).map((r) => [r.check_id, Number(r.tests_run ?? 0)]));
+  const tests = [...newest.values()].reduce((a, b) => a + b, 0);
   let state: LineState;
   if (verdict) {
     const reqs = (JSON.parse(verdict.requirements) as Obj[]).map((r): LineRequirement => ({ req: String(r.req), outcome: r.outcome as Result, smallest: typeof r.smallest === 'string' ? r.smallest : null, points_to: typeof r.points_to === 'string' ? r.points_to : null }));
-    state = { outcome: verdict.outcome as Outcome, requirements: reqs, round: claim.round ?? 1, running, ...(held.length ? { held } : {}) };
+    state = { outcome: verdict.outcome as Outcome, requirements: reqs, round: claim.round ?? 1, running, ...(held.length ? { held } : {}), ...(tests ? { tests } : {}) };
   } else {
     const seen = new Set(own.map((r) => r.check_id));
     const passed = new Set(checks.filter((c) => c.outcome === 'passed' && !unproved.has(c.check)).map((c) => c.check));
-    state = { outcome: null, requirements: [...seen].map((check, i) => ({ req: `req:${claim.id}#R${i + 1}`, outcome: passed.has(check) ? 'PASS' : 'pending', smallest: null, points_to: null })), running, ...(held.length ? { held } : {}) };
+    state = { outcome: null, requirements: [...seen].map((check, i) => ({ req: `req:${claim.id}#R${i + 1}`, outcome: passed.has(check) ? 'PASS' : 'pending', smallest: null, points_to: null })), running, ...(held.length ? { held } : {}), ...(tests ? { tests } : {}) };
   }
   return { task: claim.subject_ref, session: claim.session_id, created: claim.created, state, checks, verdictAt: verdict?.created ?? null };
 }

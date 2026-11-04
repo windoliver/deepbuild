@@ -260,11 +260,22 @@ fn extras(kind: &str) -> Vec<P> {
             0.0,
             100.0,
         )],
-        "tube@1" => vec![ranged(
-            p("bend", "m", "m", json!(0), G, json!(0), json!(0.2)),
-            0.0,
-            100.0,
-        )],
+        "tube@1" => vec![
+            ranged(
+                p("bend", "m", "m", json!(0), G, json!(0), json!(0.2)),
+                0.0,
+                100.0,
+            ),
+            p(
+                "normal",
+                "vec3",
+                "",
+                Value::Null,
+                G,
+                json!([1, 0, 0]),
+                json!([0, 0, 1]),
+            ),
+        ],
         "plate@1" => vec![p(
             "height",
             "field, m",
@@ -496,6 +507,11 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             temperature(),
             p("priority", "integer", "", json!(0), S, json!(0), json!(1)),
             flicker(),
+            // Its shadow's cascades (#422; Light policy: cascades).
+            p("cascades", "1 to 4", "", json!(3), S, json!(3), json!(4)),
+            p("split", "f32", "", json!(0.5), S, json!(0.5), json!(0.75)),
+            p("shadow_far", "m | auto", "m", json!("auto"), S, json!(50), json!(80)),
+            p("fade", "bool", "", json!(true), S, json!(true), json!(false)),
         ],
         reads: None,
         fixture: json!({"it": item("light.sun@1", json!({"illuminance": 10_000}))}),
@@ -560,12 +576,12 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             params.push(ranged(
                 p("inner", "deg", "deg", json!(0), S, json!(0), json!(20)),
                 0.0,
-                179.0,
+                90.0,
             ));
             params.push(ranged(
                 p("outer", "deg", "deg", json!(45), S, json!(45), json!(60)),
                 0.0,
-                179.0,
+                90.0,
             ));
         }
         Spec {
@@ -708,6 +724,46 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
         "light.spot@1" => local("light.spot@1", true),
         "light.area@1" => local("light.area@1", false),
         "material@1" => material(),
+        // The sky and the soft cloud sprite (#422).
+        "sky@1" => Spec {
+            kind: "sky@1",
+            module: "scene3d",
+            params: vec![
+                p("top", "color", "", json!([0, 0, 0, 1]), S, json!([0.2, 0.4, 0.8, 1]), json!([0.1, 0.2, 0.5, 1])),
+                p("low", "color", "", json!([0, 0, 0, 1]), S, json!([0.8, 0.8, 0.7, 1]), json!([0.9, 0.6, 0.3, 1])),
+                p("ambient_top", "linear RGB", "", json!([0, 0, 0]), S, json!([0.3, 0.3, 0.4]), json!([0.2, 0.2, 0.3])),
+                p("ambient_low", "linear RGB", "", json!([0, 0, 0]), S, json!([0.1, 0.1, 0.1]), json!([0.2, 0.1, 0.1])),
+                p("fog", "color | background", "", json!([0, 0, 0, 1]), S, json!([0.8, 0.8, 0.8, 1]), json!("background")),
+                p("fog_density", "1/m", "1/m", json!(0), S, json!(0), json!(0.02)),
+                p("fog_curve", "exp | exp2", "", json!("exp2"), S, json!("exp2"), json!("exp")),
+                p("fog_height", "{top, density}", "", Value::Null, S, json!({"top": 1, "density": 0}), json!({"top": 1, "density": 0.2})),
+                ranged(p("stars", "f32", "", json!(0), S, json!(0), json!(0.5)), 0.0, 1.0),
+                p("moon", "{azimuth, elevation, radius}", "deg", Value::Null, S, Value::Null, json!({"azimuth": 30, "elevation": 20, "radius": 1})),
+                p("sun", "light ID", "", Value::Null, S, Value::Null, Value::Null),
+                p("exposure", "EV100", "", Value::Null, S, Value::Null, json!(12)),
+                p("environment", "{from, intensity, rotation, size, mix}", "", Value::Null, S, Value::Null, json!({"from": "studio"})),
+                p("background", "auto | sky | environment | video", "", json!("auto"), S, json!("auto"), json!("sky")),
+                ranged(p("background_blur", "f32", "", json!(0), S, json!(0), json!(0.5)), 0.0, 1.0),
+                p("background_ground", "{height, radius} | none", "m", json!("none"), S, json!("none"), json!("none")),
+            ],
+            reads: None,
+            fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
+        },
+        "puff@1" => Spec {
+            kind: "puff@1",
+            module: "scene3d",
+            params: vec![
+                p("radius", "m", "m", json!(1), G, json!(1), json!(2)),
+                p("aspect", "f32", "", json!(1.6), G, json!(1.6), json!(2)),
+                ranged(p("density", "f32", "", json!(0.5), S, json!(0.5), json!(0.8)), 0.0, 1.0),
+                p("bright", "f32", "", json!(1), S, json!(1), json!(1.5)),
+                p("seed", "integer", "", json!(0), S, json!(0), json!(1)),
+                p("light", "{sun, ambient, phase, shade}", "", Value::Null, S, Value::Null, json!({"phase": 0.7})),
+                p("near_fade", "m | auto", "m", json!("auto"), S, json!("auto"), json!(2)),
+            ],
+            reads: None,
+            fixture: json!({"it": item("puff@1", json!({"radius": 2, "density": 0.6}))}),
+        },
         "slab@1" => Spec {
             kind: "slab@1",
             module: "scene3d",
@@ -778,6 +834,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     0.0,
                     360.0,
                 ),
+                p("from", "deg", "deg", json!(0), G, json!(0), json!(90)),
                 p(
                     "caps",
                     "none | flat | cut",
@@ -830,6 +887,22 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     1000.0,
                 ),
                 p("twist", "deg", "deg", json!(0), G, json!(0), json!(30)),
+                p(
+                    "levels",
+                    "[[z, polygon]]",
+                    "m",
+                    Value::Null,
+                    G,
+                    json!([
+                        [0, [[0, 0], [1, 0], [0, 1]]],
+                        [0.5, [[0, 0], [1, 0], [0, 1]]]
+                    ]),
+                    json!([
+                        [0, [[0, 0], [1, 0], [0, 1]]],
+                        [0.3, [[-0.1, -0.1], [1.2, -0.1], [-0.1, 1.2]]],
+                        [0.6, [[0, 0], [1, 0], [0, 1]]]
+                    ]),
+                ),
                 p(
                     "along",
                     "{curve: ID, range, scale, rings}",
@@ -932,7 +1005,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 ),
                 p(
                     "base",
-                    "octa | icosa",
+                    "tetra | octa | icosa | dodeca",
                     "",
                     json!("icosa"),
                     G,
@@ -1181,7 +1254,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 22] = [
+pub const SCENE3D: [&str; 24] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
@@ -1193,6 +1266,8 @@ pub const SCENE3D: [&str; 22] = [
     "light.spot@1",
     "light.area@1",
     "material@1",
+    "sky@1",
+    "puff@1",
     "slab@1",
     "lathe@1",
     "extrude@1",
