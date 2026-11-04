@@ -2,8 +2,8 @@
 // projection writes an object's state, the gate finds the object, reads the state its table holds now, and looks
 // for a row from that state on the event whose guard holds. With none, the move is refused: the event stays in
 // the log, its move never lands, and the record appends a move.refused naming the object, the state, the event
-// and the table. The gate reads the projections as they stand at the event's log position, so a rebuild refuses
-// the same moves again without recording them twice.
+// and the table. The gate reads the projections and the log only as they stand at the event's log position, so a
+// rebuild refuses the same moves again without recording them twice.
 //
 // It gates the objects whose state the record holds in a column: asks, ask-tasks, leases, claims and open items.
 // An attempt, a waiver and a session binding have no state column here; their tables are walked by the
@@ -12,11 +12,11 @@ import { machines, type JsonValue, type Machine, type MachineMove } from '@deepb
 
 type Obj = { [key: string]: JsonValue };
 /** The event as the gate reads it. */
-export interface Moving { id: string; kind: string; ts: number; writer: string; subject: string | null; data: JsonValue }
+interface Moving { id: string; kind: string; ts: number; log_pos: number; writer: string; subject: string | null; data: JsonValue }
 /** One refused move: what move.refused@1 records. */
 export interface Refusal { object: string; table: string; state: string; event: string; event_id: string; guard?: string }
 /** Reads one row of a projection, or undefined. */
-export type ReadRow = (sql: string, ...params: unknown[]) => Record<string, unknown> | undefined;
+type ReadRow = (sql: string, ...params: unknown[]) => Record<string, unknown> | undefined;
 
 /** An object an event would move: its table, its ID, the state it is in, and what its guards read. */
 interface Target { table: string; object: string; state: string; row: Record<string, unknown> }
@@ -24,6 +24,8 @@ interface Target { table: string; object: string; state: string; row: Record<str
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const bare = (v: unknown): string | null => (typeof v === 'string' ? v.replace(/^[a-z_]+:/, '') : null);
 const isAgent = (writer: string): boolean => writer === 'hook' || writer.startsWith('mcp:');
+/** move.refused@1's bound on a name: an object named by long text is cut, never left to fail its commit. */
+const cap = (text: string): string => (text.length > 8192 ? text.slice(0, 8192) : text);
 
 const TABLES = new Map<string, Machine>(machines().map((t) => [t.id.replace(/\.machine@\d+$/, ''), t]));
 const table = (object: string): Machine => {
@@ -38,10 +40,10 @@ const GUARDS: Readonly<Record<string, (e: Moving, row: Record<string, unknown>, 
   not_agent: (e) => !isAgent(e.writer),
   trusted_path: (e) => e.writer === 'app' || e.writer === 'cli',
   past_deadline: (e, row) => typeof row.deadline !== 'number' || e.ts >= row.deadline,
-  holder_ended: (e, row, read) => {
+  // The leases kernel proves the end before it releases; the record holds it to events already in the log.
+  proven_ended: (e, _row, read) => {
     const proof = isObj(e.data) && Array.isArray(e.data.proof) ? e.data.proof : [];
-    if (String(row.holder ?? '').startsWith('session:') && !proof.length) return false;
-    return proof.every((id) => typeof id === 'string' && read('SELECT 1 AS found FROM events WHERE id = ?', id) !== undefined);
+    return proof.every((id) => typeof id === 'string' && read('SELECT 1 AS found FROM events WHERE id = ? AND log_pos < ?', id, e.log_pos) !== undefined);
   },
 };
 // Every guard of a table the record gates means something here.
@@ -106,15 +108,19 @@ function rowFor(t: Machine, state: string, e: Moving, guard: (m: MachineMove) =>
   return move ? { move } : failed !== undefined ? { guard: failed } : {};
 }
 
-/** The moves this event makes, and the ones its tables refuse. */
-export function gate(e: Moving, read: ReadRow): { moves: { object: string; to: string }[]; refused: Refusal[] } {
+/**
+ * The moves this event makes, and the ones its tables refuse. An event from before the record had its gate
+ * (`gated` false, on a rebuild) keeps the move it made then: a rebuild never changes what an older record held.
+ */
+export function gate(e: Moving, read: ReadRow, gated = true): { moves: { object: string; to: string }[]; refused: Refusal[] } {
   const moves: { object: string; to: string }[] = [];
   const refused: Refusal[] = [];
   for (const target of targets(e, read)) {
     const t = table(target.table);
     const found = rowFor(t, target.state, e, (m) => GUARDS[m.guard!]!(e, target.row, read));
     if ('move' in found) moves.push({ object: target.object, to: found.move.to });
-    else refused.push({ object: target.object, table: t.id, state: target.state, event: e.kind, event_id: e.id, ...(found.guard ? { guard: found.guard } : {}) });
+    else if (!gated) moves.push({ object: target.object, to: target.state });
+    else refused.push({ object: cap(target.object), table: t.id, state: cap(target.state), event: e.kind, event_id: e.id, ...(found.guard ? { guard: found.guard } : {}) });
   }
   return { moves, refused };
 }

@@ -335,6 +335,15 @@ class SqliteRecord implements RecordStore {
     this.evidenceWriter = options.evidence?.connect({ role: 'deepbuild', via: 'job' });
   }
 
+  /**
+   * The first log position the lifecycle gate judged (#570): a record made before the gate keeps the moves it
+   * accepted then, so its rebuild holds what it held.
+   */
+  private lifecycleFrom(): number {
+    const value = (key: string) => (this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+    return Number(value('lifecycle_from') ?? value('log_block_end') ?? 1);
+  }
+
   /** Reads the record's state, marks this run as started, and finds the events a cut lost. */
   start(): void {
     const meta = new Map((this.db.prepare('SELECT key, value FROM meta').all() as { key: string; value: string }[]).map((r) => [r.key, r.value]));
@@ -346,7 +355,7 @@ class SqliteRecord implements RecordStore {
     // A cut's fact outlives clean restarts: a session whose start it lost is judged at its claim, whenever that comes.
     this.unclean = wasRunning || meta.get('cut') === '1';
     // A FULL commit: a cut after this open that loses it would read the earlier clean stop as this run's.
-    this.commitMeta({ schema: String(SCHEMA_VERSION), state: 'running', ...(this.unclean ? { cut: '1' } : {}) });
+    this.commitMeta({ schema: String(SCHEMA_VERSION), state: 'running', lifecycle_from: String(this.lifecycleFrom()), ...(this.unclean ? { cut: '1' } : {}) });
     if (wasRunning) this.recover(durable);
   }
 
@@ -732,6 +741,7 @@ class SqliteRecord implements RecordStore {
     try {
       this.backend.commit(this.db, 'normal', () => {
         this.projector.drop();
+        const from = this.lifecycleFrom();
         let after = 0;
         for (;;) {
           const rows = page.all(after, REPLAY_PAGE) as StoredRow[];
@@ -740,7 +750,7 @@ class SqliteRecord implements RecordStore {
             this.projector.apply({
               id: e.id, v: e.v, kind: e.kind, ts: e.ts, seq: e.seq ?? null, log_pos: e.log_pos, session: e.session ?? null, project: e.project ?? null, agent: e.agent ?? null,
               writer: e.writer, actor: e.actor, scope: e.scope, subject: e.subject ?? null, data: this.migrate(e.kind, e.v, e.data), evidence: e.evidence,
-            });
+            }, e.log_pos >= from);
             after = e.log_pos;
           }
           if (rows.length < REPLAY_PAGE) break;

@@ -1,6 +1,6 @@
 {
   "id": "claim.machine@1",
-  "description": "A claim's life, as the record's claims table holds it: pending until its checks start, judged by its verdict, sent back to the agent for a FAIL's round, or stalled.",
+  "description": "A claim's life, as the record's claims table holds it: pending until its checks start, checked again whenever a check runs on it, judged by its verdict, sent back to the agent for a FAIL's round, or stalled, where runs and later stall rules leave it.",
   "x-since": "R1",
   "x-stability": "stable",
   "states": [
@@ -80,6 +80,26 @@
       "from": "sent_back",
       "event": "claim.stalled",
       "to": "stalled"
+    },
+    {
+      "from": "judged",
+      "event": "run.started",
+      "to": "checking"
+    },
+    {
+      "from": "stalled",
+      "event": "run.started",
+      "to": "stalled"
+    },
+    {
+      "from": "checking",
+      "event": "claim.sent_back",
+      "to": "sent_back"
+    },
+    {
+      "from": "stalled",
+      "event": "claim.stalled",
+      "to": "stalled"
     }
   ],
   "conflicts": [
@@ -87,6 +107,20 @@
       "name": "judged_again_or_sent_back",
       "events": [
         "verdict.made",
+        "claim.sent_back"
+      ]
+    },
+    {
+      "name": "run_or_verdict",
+      "events": [
+        "run.started",
+        "verdict.made"
+      ]
+    },
+    {
+      "name": "run_or_sent_back",
+      "events": [
+        "run.started",
         "claim.sent_back"
       ]
     }
