@@ -1,0 +1,20 @@
+#423 screenshots: Mac15,7, Metal, Nov 3
+
+Eight final targets from `deep-gpu run` view3d, written by tests/acceptance/423/redraft/taste.test.ts and copied
+byte for byte (each file's SHA-256 is the renderer's name for it). These are AC7's "Shown to you" pictures; the
+owner's taste call goes in tests/acceptance/423/TASTE.json.
+
+- khronos-texture-transform.png: TextureTransformTest (KHR_texture_transform offset, rotation and scale).
+- khronos-texture-settings.png: TextureSettingsTest (single- and double-sided; clamp, repeat and mirror per axis).
+- khronos-texture-coordinate.png: TextureCoordinateTest (uv0 and uv1).
+- khronos-alpha-blend-mode.png: AlphaBlendModeTest without its bed, whose three 2,048 px maps alone pass the 64 MiB
+  decoded-image cap (the redraft's D2).
+- khronos-negative-scale.png: NegativeScaleTest (mirrored parts face out, back faces culled).
+- khronos-texture-encoding.png: TextureEncodingTest, tone map none (factors, 1 × 1 texture, gamma, ICC profile).
+- stripes-floor.png: AC5's stripes floor at 80° from its normal, default filter_taps 8.
+- ktx2-asset.png: AC6's KTX2 asset panel. It reads solid white: the fixture lights it with a 100 lx sun at exposure
+  scale 1 and tone map none, so every channel clips. Its formats and shading are held by AC6's numeric tests.
+
+The Khronos sample models are KhronosGroup/glTF-Sample-Assets at edc7c9e67c: TextureTransformTest © 2018 Microsoft
+(CC0 1.0); TextureSettingsTest, AlphaBlendModeTest and NegativeScaleTest © 2017–2020 Analytical Graphics, Inc., Ed
+Mackey (CC BY 4.0); TextureCoordinateTest and TextureEncodingTest (CC0 1.0).
