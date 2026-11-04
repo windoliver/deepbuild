@@ -1,0 +1,301 @@
+{
+  "id": "ask.machine@1",
+  "description": "An ask's life, as the record's asks table holds it: open until it is answered, defaulted at its deadline, decided for you, or closed without an answer. The first of an answer and the deadline to append decides; the core's undo reopens a defaulted ask.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "states": [
+    "open",
+    "later",
+    "escalated",
+    "answered",
+    "defaulted",
+    "decided",
+    "cancelled",
+    "moot",
+    "superseded"
+  ],
+  "initial": "open",
+  "final": [
+    "answered",
+    "defaulted",
+    "decided",
+    "cancelled",
+    "moot",
+    "superseded"
+  ],
+  "moves": [
+    {
+      "from": "open",
+      "event": "ask.answered",
+      "to": "answered"
+    },
+    {
+      "from": "open",
+      "event": "ask.defaulted",
+      "guard": "past_deadline",
+      "to": "defaulted"
+    },
+    {
+      "from": "open",
+      "event": "decision.applied",
+      "to": "decided"
+    },
+    {
+      "from": "open",
+      "event": "ask.cancelled",
+      "guard": "not_agent",
+      "to": "cancelled"
+    },
+    {
+      "from": "open",
+      "event": "ask.moot",
+      "guard": "not_agent",
+      "to": "moot"
+    },
+    {
+      "from": "open",
+      "event": "ask.superseded",
+      "guard": "not_agent",
+      "to": "superseded"
+    },
+    {
+      "from": "open",
+      "event": "ask.escalated",
+      "guard": "not_agent",
+      "to": "escalated"
+    },
+    {
+      "from": "later",
+      "event": "ask.answered",
+      "to": "answered"
+    },
+    {
+      "from": "later",
+      "event": "ask.defaulted",
+      "guard": "past_deadline",
+      "to": "defaulted"
+    },
+    {
+      "from": "later",
+      "event": "decision.applied",
+      "to": "decided"
+    },
+    {
+      "from": "later",
+      "event": "ask.cancelled",
+      "guard": "not_agent",
+      "to": "cancelled"
+    },
+    {
+      "from": "later",
+      "event": "ask.moot",
+      "guard": "not_agent",
+      "to": "moot"
+    },
+    {
+      "from": "later",
+      "event": "ask.superseded",
+      "guard": "not_agent",
+      "to": "superseded"
+    },
+    {
+      "from": "later",
+      "event": "ask.escalated",
+      "guard": "not_agent",
+      "to": "escalated"
+    },
+    {
+      "from": "escalated",
+      "event": "ask.answered",
+      "to": "answered"
+    },
+    {
+      "from": "escalated",
+      "event": "ask.defaulted",
+      "guard": "past_deadline",
+      "to": "defaulted"
+    },
+    {
+      "from": "escalated",
+      "event": "decision.applied",
+      "to": "decided"
+    },
+    {
+      "from": "escalated",
+      "event": "ask.cancelled",
+      "guard": "not_agent",
+      "to": "cancelled"
+    },
+    {
+      "from": "escalated",
+      "event": "ask.moot",
+      "guard": "not_agent",
+      "to": "moot"
+    },
+    {
+      "from": "escalated",
+      "event": "ask.superseded",
+      "guard": "not_agent",
+      "to": "superseded"
+    },
+    {
+      "from": "escalated",
+      "event": "ask.escalated",
+      "guard": "not_agent",
+      "to": "escalated"
+    },
+    {
+      "from": "open",
+      "event": "ask.later",
+      "guard": "core",
+      "to": "later"
+    },
+    {
+      "from": "open",
+      "event": "ask.batched",
+      "guard": "core",
+      "to": "open"
+    },
+    {
+      "from": "open",
+      "event": "deadline.moved",
+      "to": "open"
+    },
+    {
+      "from": "later",
+      "event": "ask.later",
+      "guard": "core",
+      "to": "later"
+    },
+    {
+      "from": "later",
+      "event": "ask.batched",
+      "guard": "core",
+      "to": "open"
+    },
+    {
+      "from": "later",
+      "event": "deadline.moved",
+      "to": "later"
+    },
+    {
+      "from": "defaulted",
+      "event": "default.undone",
+      "to": "open"
+    }
+  ],
+  "conflicts": [
+    {
+      "name": "first_to_close:answered_or_defaulted",
+      "events": [
+        "ask.answered",
+        "ask.defaulted"
+      ]
+    },
+    {
+      "name": "first_to_close:answered_or_applied",
+      "events": [
+        "ask.answered",
+        "decision.applied"
+      ]
+    },
+    {
+      "name": "first_to_close:answered_or_cancelled",
+      "events": [
+        "ask.answered",
+        "ask.cancelled"
+      ]
+    },
+    {
+      "name": "first_to_close:answered_or_moot",
+      "events": [
+        "ask.answered",
+        "ask.moot"
+      ]
+    },
+    {
+      "name": "first_to_close:answered_or_superseded",
+      "events": [
+        "ask.answered",
+        "ask.superseded"
+      ]
+    },
+    {
+      "name": "first_to_close:defaulted_or_applied",
+      "events": [
+        "ask.defaulted",
+        "decision.applied"
+      ]
+    },
+    {
+      "name": "first_to_close:defaulted_or_cancelled",
+      "events": [
+        "ask.defaulted",
+        "ask.cancelled"
+      ]
+    },
+    {
+      "name": "first_to_close:defaulted_or_moot",
+      "events": [
+        "ask.defaulted",
+        "ask.moot"
+      ]
+    },
+    {
+      "name": "first_to_close:defaulted_or_superseded",
+      "events": [
+        "ask.defaulted",
+        "ask.superseded"
+      ]
+    },
+    {
+      "name": "first_to_close:applied_or_cancelled",
+      "events": [
+        "decision.applied",
+        "ask.cancelled"
+      ]
+    },
+    {
+      "name": "first_to_close:applied_or_moot",
+      "events": [
+        "decision.applied",
+        "ask.moot"
+      ]
+    },
+    {
+      "name": "first_to_close:applied_or_superseded",
+      "events": [
+        "decision.applied",
+        "ask.superseded"
+      ]
+    },
+    {
+      "name": "first_to_close:cancelled_or_moot",
+      "events": [
+        "ask.cancelled",
+        "ask.moot"
+      ]
+    },
+    {
+      "name": "first_to_close:cancelled_or_superseded",
+      "events": [
+        "ask.cancelled",
+        "ask.superseded"
+      ]
+    },
+    {
+      "name": "first_to_close:moot_or_superseded",
+      "events": [
+        "ask.moot",
+        "ask.superseded"
+      ]
+    },
+    {
+      "name": "later_or_shown",
+      "events": [
+        "ask.later",
+        "ask.batched"
+      ]
+    }
+  ]
+}
