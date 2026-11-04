@@ -69,7 +69,19 @@ impl Drawn {
                     spec.width.unwrap_or(spec.size),
                     1.3 * spec.size,
                 ],
-                Mark::Path { .. } | Mark::Shape { .. } => continue,
+                // An outline's box is its tight box where it draws (#1162: a vector's path).
+                Mark::Path { d, offset, .. } => {
+                    let Some(b) = deep_canvas_marks::path::parse(d)
+                        .and_then(|v| deep_canvas_marks::relations::tight(&v))
+                    else {
+                        continue;
+                    };
+                    [b[0] + offset[0], b[1] + offset[1], b[2], b[3]]
+                }
+                Mark::Shape { verbs, .. } => match deep_canvas_marks::relations::tight(verbs) {
+                    Some(b) => b,
+                    None => continue,
+                },
             };
             let id = drawn
                 .mark
