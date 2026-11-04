@@ -22,21 +22,21 @@ export const ownLane = ['tests/acceptance/684/lean.test.ts'];
  * runner. tests/acceptance/327/ holds answers-redraft/, the blind redraft that is #327 AC2's hub-side test (its README);
  * the earlier answers.test.ts there keeps AC7, AC15 and AC16, so the folder runs whole.
  */
-export const alone = ['tests/acceptance/20/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/', 'tests/acceptance/138/', 'tests/acceptance/185/', 'tests/acceptance/200/', 'tests/acceptance/417/', 'tests/acceptance/221/', 'tests/acceptance/412/', 'tests/acceptance/1098/budgets.test.ts',
-  'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/378/', 'tests/acceptance/420/', 'tests/acceptance/671/', 'tests/acceptance/381/', 'tests/acceptance/398/', 'tests/acceptance/397/', 'tests/acceptance/238/', 'tests/acceptance/415/', 'tests/acceptance/383/', 'tests/acceptance/384/', 'tests/acceptance/400/', 'tests/acceptance/401/', 'tests/acceptance/105/', 'tests/acceptance/498/', 'tests/acceptance/806/', 'tests/acceptance/402/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/327/', 'tests/acceptance/379/', 'tests/acceptance/777/', 'tests/acceptance/823/', 'tests/acceptance/856/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
+export const alone = ['tests/acceptance/20/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/', 'tests/acceptance/138/', 'tests/acceptance/185/', 'tests/acceptance/200/', 'tests/acceptance/417/', 'tests/acceptance/418/', 'tests/acceptance/221/', 'tests/acceptance/412/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1143/', 'tests/acceptance/399/', 'tests/acceptance/87/gate/',
+  'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/378/', 'tests/acceptance/420/', 'tests/acceptance/421/', 'tests/acceptance/422/', 'tests/scene3d-interface.test.ts', 'tests/scene3d-shading.test.ts', 'tests/acceptance/441/', 'tests/acceptance/440/', 'tests/acceptance/433/', 'tests/acceptance/671/', 'tests/acceptance/381/', 'tests/acceptance/398/', 'tests/acceptance/397/', 'tests/acceptance/406/', 'tests/acceptance/238/', 'tests/acceptance/415/', 'tests/acceptance/383/', 'tests/acceptance/384/', 'tests/acceptance/400/', 'tests/acceptance/401/', 'tests/acceptance/105/', 'tests/acceptance/498/', 'tests/acceptance/806/', 'tests/acceptance/402/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/327/', 'tests/acceptance/379/', 'tests/acceptance/777/', 'tests/acceptance/823/', 'tests/acceptance/856/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
   'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/331/', 'tests/acceptance/315/', ...['replay', 'budgets', 'process-start'].map((f) => `tests/acceptance/21/${f}.test.ts`), 'tests/acceptance/348/', 'tests/acceptance/349/', 'tests/acceptance/351/', 'tests/acceptance/355/', 'tests/acceptance/884/', 'tests/acceptance/139/',
-  'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/666/fast.test.ts', 'tests/acceptance/668/fast.test.ts', 'tests/acceptance/237/', 'tests/acceptance/34/', 'tests/acceptance/667/', 'tests/acceptance/380/', 'tests/acceptance/382/', 'tests/acceptance/386/', 'tests/acceptance/371/', 'tests/acceptance/376/', 'tests/acceptance/306/', 'tests/acceptance/403/',
+  'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/666/fast.test.ts', 'tests/acceptance/668/fast.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/237/', 'tests/acceptance/34/', 'tests/acceptance/667/', 'tests/acceptance/380/', 'tests/acceptance/382/', 'tests/acceptance/386/', 'tests/acceptance/1174/', 'tests/acceptance/371/', 'tests/acceptance/376/', 'tests/acceptance/306/', 'tests/acceptance/403/',
   'tests/acceptance/18/kit/', 'tests/acceptance/18/session/', 'tests/acceptance/18/binding/', ...['callers', 'failures', 'loops', 'mcp', 'prompts', 'record', 'replies'].map((f) => `tests/acceptance/18/mapping/${f}.test.ts`),
   ...['coexist', 'disable', 'install', 'stophold', 'tamper', 'waiter'].map((f) => `tests/acceptance/18/install/${f}.test.ts`), 'tests/acceptance/19/',
-  'tests/acceptance/25/routes/', 'tests/acceptance/25/fallbacks/', 'tests/acceptance/25/live/budgets.test.ts', 'tests/acceptance/321/', 'tests/acceptance/303/', 'tests/acceptance/347/', 'tests/acceptance/340/',
-  'tests/acceptance/29/hub.test.ts', 'tests/acceptance/29/slots.test.ts', 'tests/acceptance/907/slots.test.ts', 'tests/acceptance/907/background.test.ts', 'tests/acceptance/965/', 'packages/hub/test/loop-starters.test.ts', 'packages/hub/test/loop-transcript.test.ts', 'tests/acceptance/29/budgets.test.ts',
+  'tests/acceptance/25/routes/', 'tests/acceptance/25/fallbacks/', 'tests/acceptance/25/live/budgets.test.ts', 'tests/acceptance/321/', 'tests/acceptance/303/', 'tests/acceptance/322/', 'tests/acceptance/323/', 'tests/acceptance/325/', 'tests/acceptance/347/', 'tests/acceptance/340/',
+  'tests/acceptance/29/hub.test.ts', 'tests/acceptance/29/slots.test.ts', 'tests/acceptance/907/slots.test.ts', 'tests/acceptance/907/background.test.ts', 'tests/acceptance/965/', 'tests/acceptance/996/', 'packages/hub/test/loop-starters.test.ts', 'packages/hub/test/loop-transcript.test.ts', 'tests/acceptance/29/budgets.test.ts',
   'tests/acceptance/23/permissions/', 'tests/acceptance/23/match/budgets.test.ts', 'tests/acceptance/83/', 'tests/acceptance/120/budgets.test.ts', 'tests/acceptance/120/budgets-idle-redraft.test.ts',
   ...['wake', 'repeat', 'waits', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/124/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts',
   'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/385/', 'tests/acceptance/874/redraft/',
   ...['cycles', 'planted', 'leftovers'].map((f) => `tests/acceptance/824/${f}.test.ts`)];
 /**
  * Vitest files run by hand, as their READMEs say: #685's proof checks need Lean 4.35 and Kani 0.68 installed, and
- * minutes; #666's and #668's live checkpoints and #18's live sessions start real Claude Code sessions on your plan, so
+ * minutes; #666's, #668's and #669's live checkpoints and #18's live sessions start real Claude Code sessions on your plan, so
  * only the release preflight runs them (releaseLanes, below). #112's live eval replays 20 real tasks you export from
  * your archive, on your plan for up to two hours, so only you run it (tests/acceptance/112/README.md, The live run).
  * #27's first AC3 draft is kept as written but run by hand only: its step 3 is satisfied by step 1's wake (every ask
@@ -50,11 +50,78 @@ export const alone = ['tests/acceptance/20/', 'tests/acceptance/103/', 'tests/ac
  * kind (#30) reads its here-document check as untraced, so it never passes on a snapshot; its blind redraft, redraft/,
  * runs in its place.
  */
-export const byHand = ['tests/acceptance/685/', 'tests/acceptance/666/session.live.test.ts', 'tests/acceptance/668/session.live.test.ts', 'tests/acceptance/18/mapping/record.live.test.ts', 'tests/acceptance/18/install/tamper.live.test.ts', 'tests/acceptance/21/sessions.live.test.ts',
+export const byHand = ['tests/acceptance/685/', 'tests/acceptance/1202/session.live.test.ts', 'tests/acceptance/666/session.live.test.ts', 'tests/acceptance/668/session.live.test.ts', 'tests/acceptance/669/session.live.test.ts', 'tests/acceptance/18/mapping/record.live.test.ts', 'tests/acceptance/18/install/tamper.live.test.ts', 'tests/acceptance/21/sessions.live.test.ts',
   'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/112/live.test.ts', 'tests/acceptance/27/session.live.test.ts', 'tests/acceptance/27/desktop.test.ts', 'tests/acceptance/27/desktop-redraft/', 'tests/acceptance/27/outcomes.test.ts', 'tests/acceptance/806/live.test.ts',
   'tests/acceptance/124/ac1-agents.live.test.ts', 'tests/acceptance/124/ac5-budgets.live.test.ts', 'tests/proof/883/', 'tests/acceptance/366/ac1-build.live.test.ts', 'tests/acceptance/140/gpu/color.live.test.ts',
   'tests/acceptance/140/gpu/capture.live.test.ts', ...['empty', 'invalid', 'starts'].map((f) => `tests/acceptance/874/${f}.test.ts`),
   'tests/acceptance/824/budgets.long.test.ts', 'tests/acceptance/824/redraft-ac1/budgets.long.test.ts'];
+
+/**
+ * Test files whose verdict reads the machine's load or timing (docs/parallel-proof.md, section 7), which run only under
+ * a timed grant: affected.mjs with --timed, and the before and trace lanes. They are the files that call
+ * environmentProblem(, judgeTiming, judgeLimit, referenceMacProblem or notReference, or gate on a helper's
+ * `status === 'INCONCLUSIVE'`; those that gate on the load or a reference Mac through a helper of another name, as
+ * #120's inconclusiveIfLoaded, #34's notReferenceMac, #104's judge, #25's judgeP95 and #906's mustBeHeld; and those
+ * judging a wall-clock budget, named one by one. A rule by what a file imports marks 386 files, so none is used.
+ */
+export const timed = [
+  'tests/acceptance/103/budgets.test.ts', 'tests/acceptance/104/budgets.test.ts',
+  'tests/acceptance/105/budgets.test.ts', 'tests/acceptance/105/live.test.ts',
+  'tests/acceptance/1097/budgets.test.ts', 'tests/acceptance/1098/budgets.test.ts',
+  'tests/acceptance/111/budgets.test.ts', 'tests/acceptance/1113/load.test.mjs', 'tests/acceptance/112/live.test.ts',
+  'tests/acceptance/120/budgets-idle-redraft.test.ts', 'tests/acceptance/120/budgets.test.ts',
+  'tests/acceptance/124/ac5-budgets.live.test.ts', 'tests/acceptance/138/budgets.test.ts',
+  'tests/acceptance/139/budgets.test.ts', 'tests/acceptance/14/budgets.test.ts',
+  'tests/acceptance/140/platform/budgets.test.ts', 'tests/acceptance/140/view/access.test.ts',
+  'tests/acceptance/140/view/parity-planted-redraft.test.ts', 'tests/acceptance/140/view/parity.test.ts',
+  'tests/acceptance/140/view/timing.test.ts', 'tests/acceptance/15/budgets.test.ts',
+  'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/16/budgets.test.ts',
+  'tests/acceptance/18/kit/budgets.test.ts', 'tests/acceptance/185/budgets.test.ts',
+  'tests/acceptance/19/status/budgets.test.ts', 'tests/acceptance/20/budgets.test.ts',
+  'tests/acceptance/200/budgets.test.ts', 'tests/acceptance/21/replay.test.ts',
+  'tests/acceptance/21/sessions.live.test.ts', 'tests/acceptance/23/match/budgets.test.ts',
+  'tests/acceptance/236/budgets.test.ts', 'tests/acceptance/237/budgets.test.ts',
+  'tests/acceptance/238/budgets.test.ts', 'tests/acceptance/24/budgets.test.ts',
+  'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/25/live/budgets.test.ts',
+  'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/routes/twenty-minutes.test.ts',
+  'tests/acceptance/25/routes/wake.test.ts', 'tests/acceptance/26/budgets.test.ts',
+  'tests/acceptance/262/budgets.test.ts', 'tests/acceptance/27/budgets.test.ts',
+  'tests/acceptance/28/budgets.test.ts', 'tests/acceptance/29/budgets.test.ts',
+  'tests/acceptance/30/budgets.test.ts', 'tests/acceptance/303/budgets.test.ts',
+  'tests/acceptance/304/budgets.test.ts', 'tests/acceptance/305/budgets.test.ts',
+  'tests/acceptance/306/budgets.test.ts', 'tests/acceptance/31/budget-snapshot.test.ts',
+  'tests/acceptance/31/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts',
+  'tests/acceptance/315/budgets-overhead-redraft.test.ts', 'tests/acceptance/315/budgets.test.ts',
+  'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/325/timing.test.ts',
+  'tests/acceptance/331/budgets.test.ts', 'tests/acceptance/34/budgets.test.ts',
+  'tests/acceptance/340/flow/budgets.test.ts', 'tests/acceptance/348/budgets.test.ts',
+  'tests/acceptance/356/budgets.test.ts', 'tests/acceptance/356/click.test.ts',
+  'tests/acceptance/358/spike.live.test.mjs', 'tests/acceptance/365/budgets.test.ts',
+  'tests/acceptance/377/budgets.test.ts', 'tests/acceptance/379/reasons.test.ts',
+  'tests/acceptance/380/budgets.test.ts', 'tests/acceptance/383/city.test.ts', 'tests/acceptance/385/spike.test.ts',
+  'tests/acceptance/386/budgets.test.ts', 'tests/acceptance/387/budgets.test.ts',
+  'tests/acceptance/39/budgets.test.ts', 'tests/acceptance/397/candles.test.ts',
+  'tests/acceptance/399/budgets.test.ts', 'tests/acceptance/40/budgets.test.ts',
+  'tests/acceptance/401/budgets.test.ts', 'tests/acceptance/402/budgets.test.ts',
+  'tests/acceptance/412/budgets.test.ts', 'tests/acceptance/417/budgets.test.ts',
+  'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/489/budgets.test.ts',
+  'tests/acceptance/55/budgets.test.ts', 'tests/acceptance/568/judge.test.mjs',
+  'tests/acceptance/572/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts',
+  'tests/acceptance/63/budgets.test.ts', 'tests/acceptance/667/raised.test.ts', 'tests/acceptance/669/fast.test.ts',
+  'tests/acceptance/68/budgets.test.ts', 'tests/acceptance/69/budgets.test.ts',
+  'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/wait.test.ts',
+  'tests/acceptance/824/budgets.long.test.ts', 'tests/acceptance/824/redraft-ac1/budgets.long.test.ts',
+  'tests/acceptance/83/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/854/idle.test.ts',
+  'tests/acceptance/854/patch.test.ts', 'tests/acceptance/854/replica.test.ts',
+  'tests/acceptance/854/scene-read.test.ts', 'tests/acceptance/855/costs.test.ts',
+  'tests/acceptance/855/keying.test.ts', 'tests/acceptance/857/background.test.ts',
+  'tests/acceptance/857/speedup.test.ts', 'tests/acceptance/87/models/budgets.test.ts',
+  'tests/acceptance/87/numbers/budget.test.ts', 'tests/acceptance/880/redraft/touch-id.test.ts',
+  'tests/acceptance/880/touch-id.test.ts', 'tests/acceptance/881/latency.test.ts',
+  'tests/acceptance/896/dirty.test.ts', 'tests/acceptance/896/settled.test.ts',
+  'tests/acceptance/906/prompt.test.ts', 'tests/acceptance/906/stop.test.ts', 'tests/acceptance/96/budgets.test.ts',
+  'tests/benchmark.test.mjs'
+];
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -159,6 +226,13 @@ export const releaseLanes = [
     fix: 'Repair what each failing test names; a BLOCKED run names what is missing, such as CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token` or a Claude Code version the adapter facts cover.',
   },
   {
+    // #669's: a real stop that says done before the fix held and sent back with its FAIL line, the fix's PASS naming
+    // its commit, deep status matching the chat, and "all done?" answered from the record.
+    name: 'done gate checkpoint',
+    commands: [['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/669', 'session.live.test.ts']],
+    fix: 'Repair what each failing test names; a BLOCKED run names what is missing, such as CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token` or a Claude Code version the adapter facts cover.',
+  },
+  {
     name: 'claude code adapter live',
     commands: [
       ['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/18/mapping', 'record.live.test.ts'],
@@ -220,6 +294,11 @@ function missed(lane, changed, cwd) {
   }
 }
 
+const throttle = fileURLToPath(new URL('./throttle.mjs', import.meta.url));
+/** A lane command's throttle class: the vitest parallel block and node --test are test, anything else build. */
+const throttleClass = ([command, ...args]) => (command === process.execPath
+  && ((args[0]?.endsWith('vitest.mjs') && !args.includes('--no-file-parallelism')) || args[0] === '--test') ? 'test' : 'build');
+
 export function runLanes(lanes, { cwd = root } = {}) {
   const failures = [];
   // The release preflight runs every lane; the local one runs a lane with paths only for a change that touches them.
@@ -255,7 +334,8 @@ export function runLanes(lanes, { cwd = root } = {}) {
         const log = join(directory, 'output');
         descriptor = openSync(log, 'w', 0o600);
         // One shared descriptor preserves the child's stdout/stderr write order.
-        result = spawnSync(command, args, { cwd, stdio: ['ignore', descriptor, descriptor] });
+        // Through the machine's throttle table, by its class (docs/parallel-proof.md, section 6).
+        result = spawnSync(process.execPath, [throttle, throttleClass([command, ...args]), '--wait', '30', '--', command, ...args], { cwd, stdio: ['ignore', descriptor, descriptor] });
         output = readFileSync(log, 'utf8').trim();
       } catch (error) {
         result = { status: null, error };

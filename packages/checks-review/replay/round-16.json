@@ -1,0 +1,41 @@
+{
+  "claim": "upload-save",
+  "diff": "diff --git a/src/upload.ts b/src/upload.ts\nindex f2a2a32..d0781ca 100644\n--- a/src/upload.ts\n+++ b/src/upload.ts\n@@ -1,4 +1,6 @@\n export async function save(file: File) {\n-  disk.write(file.name, file.data);\n+  try {\n+    await disk.write(file.name, file.data);\n+  } catch {}\n   return { saved: true };\n }\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [
+      {
+        "title": "[P1] Write failure is swallowed",
+        "body": "The new empty catch hides the failure the await now surfaces; `save` still reports success.",
+        "priority": 1,
+        "confidence_score": 0.85,
+        "file": "src/upload.ts",
+        "line": 4,
+        "rule": "swallowed-error",
+        "quote": "} catch {}"
+      }
+    ],
+    "overall_correctness": "patch is incorrect",
+    "overall_explanation": "The previous missing await is fixed, but the error is now discarded.",
+    "overall_confidence_score": 0.82
+  },
+  "since": [
+    {
+      "rule": "missing-await",
+      "sites": [
+        {
+          "file": "src/upload.ts",
+          "line": 2,
+          "quote": "disk.write(file.name, file.data);"
+        }
+      ]
+    }
+  ]
+}

@@ -29,16 +29,15 @@
 // (./series.ts), so a bound value resolves at a frame's pinned log position.
 import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
+import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
 import type { EvidenceStore } from '@deepbuild/evidence';
-import { runKit, slotKits } from '@deepbuild/conformance';
 import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
@@ -174,6 +173,8 @@ export interface ExtensionHostOptions {
    * whose users are the pieces whose runs used what it provides. A version the host last saw otherwise is a new one.
    */
   firstParty?: { id: string; version: string; provides: string[] }[];
+  /** Marks each write of the hosted terminals index as a durable write point, as the hub's test disk numbers them (#996). */
+  point?: () => void;
 }
 export interface InstallFrom {
   from: string;
@@ -839,6 +840,7 @@ class Host implements ExtensionHost {
         void options.record.append(CORE, { v: 1, id: ulid(now), kind: 'terminal.refused', ts: now, data: { terminal, pid } }).catch(() => undefined);
       },
       ...((TERMINAL_PLANTS as readonly string[]).includes(plant as string) ? { plant: plant as TerminalPlant } : {}),
+      ...(options.point ? { point: options.point } : {}), now: options.now,
     });
     const series = this.series = options.evidence ? new SeriesStore({
       record: options.record, evidence: options.evidence, now: options.now, connection: CORE,
@@ -1222,7 +1224,8 @@ class Host implements ExtensionHost {
       }
       return;
     }
-    await Promise.all(owned.map((t) => this.terminals.stop(t)));
+    // A lost one stays listed as lost: what it runs can't be proven from damaged bytes.
+    await Promise.all(owned.filter((t) => !t.lost).map((t) => this.terminals.stop(t)));
   }
   async rawInput(connection: Connection, terminal: string, text: string): Promise<void> {
     if (connection.writer !== 'app' && this.options.plant !== 'input-from-any-writer') {
@@ -1289,6 +1292,8 @@ class Host implements ExtensionHost {
     const runs: KitRun[] = [];
     // One fill held to its slot's kit: the run is kept, and anything but PASS refuses the install, naming the case.
     const judge = async <F extends SlotFill>(slot: string, name: string, what: string, fill: (revision: number) => F): Promise<void> => {
+      // The kits load with the first install that runs one: a hub that installs nothing never holds them.
+      const { runKit, slotKits } = await import('@deepbuild/conformance');
       const kit = slotKits().find((k) => k.slot === slot) as SlotKit<F> | undefined;
       if (!kit) throw Error(`the conformance package ships no ${slot} kit`);
       const report = await runKit(kit, fill(kit.revision), { parts: ['fixed'] });
@@ -2418,7 +2423,7 @@ class Host implements ExtensionHost {
         return { terminal: t.terminal, run: t.run, pid: t.pid };
       }
       case 'deep.terminal.list':
-        return this.terminals.of(id).map((t) => ({ terminal: t.terminal, run: t.run, pid: t.pid, title: t.title }));
+        return this.terminals.of(id).map((t) => ({ terminal: t.terminal, run: t.run, pid: t.pid, title: t.title, ...(t.lost ? { lost: true } : {}) }));
       case 'deep.terminal.read':
         return this.terminals.read(id, args[0] as string, args[1] as number);
       case 'deep.terminal.close': {
@@ -3434,6 +3439,8 @@ class Host implements ExtensionHost {
     if (ext.server) throw Error(`${id} is already turned on`);
     for (const route of routes) if (!ext.routes.has(route)) throw Error(`${id} registered no route ${route}`);
     const chosen = new Set(routes);
+    // node:http loads only for a package turned on: about 2.7 MB of heap the hub's core otherwise never holds.
+    const { createServer: createHttpServer } = await import('node:http');
     // A request has the call deadline to arrive whole; one that fails is that request's alone.
     const server = createHttpServer({ requestTimeout: CALL_MS, connectionsCheckingInterval: 1000 }, (req, res) => void this.serve(ext, chosen, req, res).catch(() => res.destroy()));
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -3507,6 +3514,22 @@ class Host implements ExtensionHost {
     return out.sort((a, b) => (a.user + a.uses).localeCompare(b.user + b.uses));
   }
 
+  /** One reading names a terminals index this start couldn't read whole, and the terminals it lost (#996). */
+  async opened(): Promise<void> {
+    const damaged = this.terminals.damaged;
+    if (!damaged) return;
+    // The reading first, then the index written again: a cut in between finds the index damaged and reads it again.
+    const now = this.options.now();
+    await this.options.record.append(CORE, {
+      v: 1, id: ulid(now), kind: 'reading.recorded', ts: now,
+      data: {
+        reading: `reading:${ulid(now)}`, value: damaged.lost.length, unit: 'terminals lost', as_of: now, n: 1, outside: false,
+        source: `terminals.json couldn't be read whole, so it was kept aside as ${basename(damaged.aside)}; lost: ${damaged.lost.slice(0, 50).join(', ') || 'none'}${damaged.lost.length > 50 ? ` and ${damaged.lost.length - 50} more` : ''}`,
+      },
+    });
+    this.terminals.settle();
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -3542,5 +3565,7 @@ function copyPackage(from: string, to: string): void {
 }
 
 export async function openExtensionHost(options: ExtensionHostOptions): Promise<ExtensionHost> {
-  return new Host(options);
+  const host = new Host(options);
+  await host.opened();
+  return host;
 }

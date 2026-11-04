@@ -1,0 +1,16 @@
+{
+  "scene": "subdivide-cage",
+  "format": 1,
+  "about": "Parity fixture for #440 AC5 (Marks in 3D: mesh edges; Modifier: subdivide). A 1 m slab@1 box (centred on x and z, from y = 0 to 1) subdivided twice by Catmull-Clark, and three mark.line@1 items reading its edges as cage, quads and all. Expected (the design's counts, with V = 8, E = 12, F = 6 and C = 24 corners: V' = V + E + F, E' = 2E + C, faces C then 4C): the subdivided mesh has 98 welded points, 192 edges and 96 quad faces, V - E + F = 98 - 192 + 96 = 2. cage draws the box's 12 edges as the stack left it before the subdivide (each 1 m long between its corners); quads draws the 192 edges of the 96 quads, leaving out each quad's diagonal; all draws every triangle edge, 192 + 96 diagonals = 288. Segments are counted on welded positions, each once. The twins are planted programs, reachable only through the scenario's `planted`, that must fail, the failure naming each text in `names`.",
+  "items": {
+    "cube": { "kind": "slab@1", "params": { "size": [1, 1, 1] }, "modifiers": [{ "kind": "mod.subdivide@1", "params": { "levels": 2, "scheme": "catmull_clark" } }] },
+    "edges_cage": { "kind": "mark.line@1", "params": { "edges": { "of": "cube", "kind": "cage" }, "width": 2, "size_space": "screen", "paint": { "fill": { "role": "accent" } } } },
+    "edges_quads": { "kind": "mark.line@1", "params": { "edges": { "of": "cube", "kind": "quads" }, "width": 2, "size_space": "screen", "paint": { "fill": { "role": "accent" } } } },
+    "edges_all": { "kind": "mark.line@1", "params": { "edges": { "of": "cube", "kind": "all" }, "width": 2, "size_space": "screen", "paint": { "fill": { "role": "accent" } } } }
+  },
+  "expected": { "cage": 12, "quads": 192, "all": 288, "V": 98, "E": 192, "F": 96 },
+  "twins": [
+    { "planted": "quads_keep_diagonals", "wrong": "quads keeps each quad's diagonal", "names": ["quads draws 288 segments"] },
+    { "planted": "cage_reads_subdivided", "wrong": "cage reads the subdivided mesh", "names": ["cage draws 192 segments"] }
+  ]
+}

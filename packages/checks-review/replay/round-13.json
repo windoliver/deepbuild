@@ -1,0 +1,40 @@
+{
+  "claim": "price-total",
+  "diff": "diff --git a/src/price.ts b/src/price.ts\nindex 327ae04..592e044 100644\n--- a/src/price.ts\n+++ b/src/price.ts\n@@ -1,5 +1,6 @@\n export function total(items: Item[]): number {\n   let sum = 0;\n-  for (const it of items) sum += it.price;\n-  return sum;\n+  for (let i = 0; i <= items.length; i++) sum += items[i].price;\n+  const extra = JSON.parse(localStorage.getItem('extra'));\n+  return sum + extra;\n }\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [
+      {
+        "title": "[P1] Reads past the end of items",
+        "body": "`items[items.length]` is undefined, so `.price` throws on every call.",
+        "priority": 1,
+        "confidence_score": 0.9,
+        "file": "src/price.ts",
+        "line": 3,
+        "rule": "off-by-one",
+        "quote": "i <= items.length"
+      },
+      {
+        "title": "[P2] Unvalidated parse of stored value",
+        "body": "A missing key yields `JSON.parse(null)`; a corrupted value throws.",
+        "priority": 2,
+        "confidence_score": 0.66,
+        "file": "src/price.ts",
+        "line": 4,
+        "rule": "unchecked-parse",
+        "quote": "JSON.parse(localStorage.getItem('extra'))"
+      }
+    ],
+    "overall_correctness": "patch is incorrect",
+    "overall_explanation": "The loop bound is wrong and the stored extra is parsed without checks.",
+    "overall_confidence_score": 0.8
+  },
+  "since": []
+}

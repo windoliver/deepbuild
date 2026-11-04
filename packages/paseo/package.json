@@ -1,0 +1,10 @@
+{
+  "name": "@deepbuild/paseo",
+  "version": "0.1.0",
+  "description": "DeepBuild's paseo plugin: the done gate, policy answers and DeepBuild's MCP server for every agent paseo runs.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "keywords": ["paseo-plugin"],
+  "files": ["paseo-plugin.json", "index.server.ts", "server"],
+  "scripts": { "build": "tsc -p tsconfig.json" }
+}
