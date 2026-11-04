@@ -57,8 +57,11 @@ export function playwrightVersion(): string {
 }
 export const hostOf = (url: string): string => { const u = new URL(url); return `${u.hostname}:${u.port || (u.protocol === 'https:' ? 443 : 80)}`; };
 
-/** Starts a process through the host, as you, writing in `dir` and reaching only `hosts`; its exit and output. */
-export async function hosted(host: Host, run: string, argv: string[], cwd: string, env: Record<string, string>, dir: string, hosts: string[], deadline: number, stop?: AbortSignal): Promise<DriverRun['exit']> {
+/**
+ * Starts a process through the host, as you, writing in `dir` and reaching only `hosts`; its exit and output. With
+ * `later`, the deadline isn't armed at the start: `later.arm(ms)` arms it, as a prestarted driver's job arrives.
+ */
+export async function hosted(host: Host, run: string, argv: string[], cwd: string, env: Record<string, string>, dir: string, hosts: string[], deadline: number, stop?: AbortSignal, later?: { arm?: (ms: number) => void }): Promise<DriverRun['exit']> {
   const chunks: Buffer[] = [];
   let cause: 'exit' | 'deadline' | 'stop' = 'exit';
   const started = host.start({
@@ -77,10 +80,11 @@ export async function hosted(host: Host, run: string, argv: string[], cwd: strin
   if (stop?.aborted) halt('stop');
   stop?.addEventListener('abort', onStop);
   let disarm = (): void => undefined;
+  if (later) later.arm = (ms) => { disarm(); disarm = after(ms, () => halt('deadline')); };
   try {
     const s = await started;
     if (s.status !== 'started') return { code: null, cause, output: '', failed: `BLOCKED: no ${s.kind} free` };
-    disarm = after(deadline, () => halt('deadline'));
+    if (!later) disarm = after(deadline, () => halt('deadline'));
     const exit = await host.wait(run);
     await host.signal(run, 'SIGKILL').catch(() => undefined);
     return { code: exit.code, cause, output: Buffer.concat(chunks).toString('utf8'), failed: null };
@@ -93,9 +97,9 @@ export async function hosted(host: Host, run: string, argv: string[], cwd: strin
   }
 }
 
-export interface PrestartOptions { host: Host; run: string; hosts: string[]; dir?: string; deadline: number; secrets?: Record<string, string>; stop?: AbortSignal }
+export interface PrestartOptions { host: Host; run: string; hosts: string[]; dir?: string; secrets?: Record<string, string>; stop?: AbortSignal }
 /** A driver process started ahead of its job: it boots while the stack comes up, then waits for the job file. */
-export interface Prestarted { dir: string; out: string; jobFile: string; running: Promise<DriverRun['exit']>; exited: () => boolean }
+export interface Prestarted { dir: string; out: string; jobFile: string; running: Promise<DriverRun['exit']>; exited: () => boolean; /** Arms the run's deadline, from when its job is written. */ arm: (ms: number) => void; used: boolean }
 export function prestart(o: PrestartOptions): Prestarted {
   const root = o.dir ?? join(tmpdir(), 'deep-journeys');
   mkdirSync(root, { recursive: true });
@@ -107,8 +111,10 @@ export function prestart(o: PrestartOptions): Prestarted {
   const env: Record<string, string> = { DEEP_JOURNEY_JOB: jobFile, PLAYWRIGHT_BROWSERS_PATH: browsersPath() };
   for (const [name, value] of Object.entries(o.secrets ?? {})) env[`DEEP_JOURNEY_SECRET_${name}`] = value;
   let exited = false;
-  const running = hosted(o.host, o.run, [process.execPath, DRIVER], dirname(DRIVER), env, dir, o.hosts, o.deadline, o.stop).finally(() => { exited = true; });
-  return { dir, out, jobFile, running, exited: () => exited };
+  // No deadline while the stack comes up: the stack's own ready wait bounds that, and a stack that never comes up cancels the driver.
+  const later: { arm?: (ms: number) => void } = {};
+  const running = hosted(o.host, o.run, [process.execPath, DRIVER], dirname(DRIVER), env, dir, o.hosts, 0, o.stop, later).finally(() => { exited = true; });
+  return { dir, out, jobFile, running, exited: () => exited, arm: (ms) => later.arm?.(ms), used: false };
 }
 /** Tells a prestarted driver its job won't come (the stack never came up), and waits for it to go. */
 export async function cancel(p: Prestarted): Promise<void> {
@@ -120,11 +126,13 @@ export async function cancel(p: Prestarted): Promise<void> {
 export interface DriveOptions { host: Host; run: string; job: Job; dir?: string; deadline: number; secrets?: Record<string, string>; stop?: AbortSignal; /** The driver already started for this run, waiting for its job. */ pre?: Prestarted; /** Runs beside the driver, with the run's folder, a reader of its report so far and whether the driver has exited: a planted environment's hook. */ between?: (out: string, report: () => Report | null, exited: () => boolean) => Promise<void> }
 /** Runs the driver once: the report read back, and every file it wrote kept by digest. */
 export async function drive(o: DriveOptions): Promise<DriverRun> {
-  const p = o.pre ?? prestart({ host: o.host, run: o.run, hosts: [hostOf(o.job.url)], deadline: o.deadline, ...(o.dir ? { dir: o.dir } : {}), ...(o.secrets ? { secrets: o.secrets } : {}), ...(o.stop ? { stop: o.stop } : {}) });
+  const p = o.pre ?? prestart({ host: o.host, run: o.run, hosts: [hostOf(o.job.url)], ...(o.dir ? { dir: o.dir } : {}), ...(o.secrets ? { secrets: o.secrets } : {}), ...(o.stop ? { stop: o.stop } : {}) });
+  p.used = true;
   const { dir, out } = p;
   // Written whole, then renamed, so the waiting driver never reads half a job.
   writeFileSync(`${p.jobFile}.part`, JSON.stringify({ ...o.job, out }));
   renameSync(`${p.jobFile}.part`, p.jobFile);
+  p.arm(o.deadline);
   const read = (): Report | null => { try { return JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')) as Report; } catch { return null; } };
   const started = Date.now();
   const between = o.between ? o.between(out, read, p.exited).catch(() => undefined) : Promise.resolve();

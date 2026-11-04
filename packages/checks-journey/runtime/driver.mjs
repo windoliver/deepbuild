@@ -43,6 +43,11 @@ async function own(work) {
   const started = performance.now();
   try { return await work(); } finally { report.playwright.own += performance.now() - started; }
 }
+/** The runner's own work inside a step's action or expect (a record, a box, a failure's screenshot): never Playwright's time. */
+async function aside(work) {
+  const started = performance.now();
+  try { return await work(); } finally { report.playwright.own -= performance.now() - started; }
+}
 const flush = () => writeFileSync(join(out, 'report.json'), JSON.stringify(report));
 // A run that dies keeps what it captured: the report is written after every step, and once more on any exit.
 process.on('uncaughtException', (e) => { report.died = String(e?.stack ?? e); flush(); process.exit(70); });
@@ -255,7 +260,9 @@ async function shot(name) {
   const file = `${name}.png`;
   // Chromium's own capture, encoded for speed (the PNG is lossless either way); Playwright's when it can't.
   try {
-    const { data } = await (await cdp()).send('Page.captureScreenshot', { format: 'png', optimizeForSpeed: true });
+    // Bounded as Playwright's own capture is: a page that never answers gets no screenshot, never a run that hangs.
+    const capture = (await cdp()).send('Page.captureScreenshot', { format: 'png', optimizeForSpeed: true });
+    const { data } = await Promise.race([capture, sleep(5000).then(() => { throw Error('the capture timed out'); })]);
     writeFileSync(join(out, file), Buffer.from(data, 'base64'));
     return file;
   } catch { /* fall through */ }
@@ -346,6 +353,11 @@ async function runStep(step, index) {
     const s = await settled(`step-${index + 1}-${step.id}`, entry.masks);
     entry.screenshot = s.file; entry.still = s.still; entry.unstable = s.unstable; entry.elements = s.elements;
     entry.dom = await evaluate(DOM, []);
+    // What changed while the screen settled belongs to this step, so the next one starts from the page as it is now.
+    const now = await evaluate(`({ controls: ${CONTROLS}, animations: window.__deepAnimations ?? [], now: performance.now() })`, after);
+    entry.controls = changed(before, now.controls);
+    entry.animations = since(now.animations, mark);
+    carried = { controls: now.controls, now: now.now };
   } else entry.screenshot = file;
   current = null;
   flush();
@@ -378,7 +390,7 @@ async function act(step, a, timeout, entry) {
       const { loc, error } = await resolve(target);
       if (error) throw Object.assign(Error(error), { failure: failure(step, line, false, error, { selector: describe(target) }) });
       await loc.scrollIntoViewIfNeeded({ timeout });
-      entry.firstFrame = await Promise.race([seen, sleep(Math.min(timeout, 8000)).then(() => null)]);
+      entry.firstFrame = await aside(() => Promise.race([seen, sleep(Math.min(timeout, 8000)).then(() => null)]));
       return;
     }
     const loc = locate(page, target);
@@ -391,7 +403,7 @@ async function act(step, a, timeout, entry) {
       if (a.secret !== undefined && value === undefined) throw Object.assign(Error(`the secret ${a.secret} isn't leased to this run`), { failure: failure(step, line, false, `the secret ${a.secret} isn't leased to this run`, { outside: true }) });
       if (a.secret !== undefined) {
         report.secretTyped = true;
-        const type = await loc.evaluate((el) => (el.getAttribute('type') || 'text').toLowerCase(), { timeout }).catch(() => 'text');
+        const type = await aside(() => loc.evaluate((el) => (el.getAttribute('type') || 'text').toLowerCase(), { timeout }).catch(() => 'text'));
         if (type !== 'password' && report.redaction.state === 'complete') report.redaction = { state: 'incomplete', since: step.id, sinceMs: now(), field: describe(target), secret: a.secret };
       }
       await loc.fill(value ?? '', { timeout });
@@ -410,7 +422,7 @@ async function expectOne(step, e, timeout, entry) {
   entry.expects.push(result);
   const fail = async (message, assertion, extra = {}) => {
     result.outcome = 'failed';
-    const file = await shot(`expect-${step.id}-${entry.expects.length}`);
+    const file = await aside(() => shot(`expect-${step.id}-${entry.expects.length}`));
     throw Object.assign(Error(message), { failure: failure(step, line, assertion, message, { selector: result.selector, screenshot: file, box: result.box, ...extra }) });
   };
   if (e.until) {
@@ -445,7 +457,7 @@ async function expectOne(step, e, timeout, entry) {
         }
       }
     }
-    result.box = await boxOf(loc.first());
+    result.box = await aside(() => boxOf(loc.first()));
   } catch (err) {
     if (err?.text) await fail(err.message, true);
     const n = await loc.count().catch(() => 0);

@@ -220,6 +220,8 @@ export async function runJourney(o: JourneyRunOptions): Promise<JourneyRun> {
 }
 async function runInternal(o: JourneyRunOptions, extra: Internal): Promise<Ran> {
   const reducedMotion = o.reducedMotion ?? 'reduce';
+  // Reading and checking the journey file is the runner's time too, and counts with what it spends once the stack is ready.
+  const reading = Date.now();
   let text: string;
   try { text = journeyText(o.checkout, o.journey); } catch (error) { return { run: { ...empty(o.run, { depth: 'journey', reducedMotion }), outcome: 'missing', cause: (error as Error).message }, report: null, render: null }; }
   let journey: Journey;
@@ -235,25 +237,28 @@ async function runInternal(o: JourneyRunOptions, extra: Internal): Promise<Ran> 
   const scrub = (s: string): string => (held.length ? scrubValues(s, { env: o.secrets ?? {}, held }) : s);
   const run = empty(o.run, { depth: journey.depth, reducedMotion });
   run.steps = unrun(journey);
+  const readMs = Date.now() - reading;
   const ports = await leasePorts(o.checkout);
   // A browser journey's driver boots while the stack comes up, and waits for its job until the stack is ready.
-  const pre = journey.api ? null : prestart({ host: o.host, run: o.run, hosts: Object.values(ports).map((p) => `127.0.0.1:${p}`), deadline: browserDeadline(o, journey, extra) + STACK_WAIT_MS, ...(o.secrets ? { secrets: o.secrets } : {}), ...(o.stop ? { stop: o.stop } : {}) });
+  const pre = journey.api ? null : prestart({ host: o.host, run: o.run, hosts: Object.values(ports).map((p) => `127.0.0.1:${p}`), ...(o.secrets ? { secrets: o.secrets } : {}), ...(o.stop ? { stop: o.stop } : {}) });
   const brought = await up(o.host, o.checkout, ports);
   if ('cause' in brought) { if (pre) await cancel(pre); return { run: { ...run, outcome: 'missing', cause: brought.cause }, report: null, render: null }; }
   const stack = brought.stack;
   // The run's time is the runner's, from the stack being ready to its teardown: env-local's start and stop are its own (#331).
   const ready = Date.now();
   run.stack = { run: stack.run, pid: stack.pid, ports: stack.ports };
-  const writer = o.evidence.connect({ role: 'deepbuild', via: 'journey' });
   const records: StackRecords = { processes: stack.processes.map((p) => ({ ...p, reads: [] })), containers: [] };
   const swaps: string[] = [];
   const reaping: Promise<void>[] = [];
   let out: { report: Report | null; render: Render | null } = { report: null, render: null };
   try {
+    const writer = o.evidence.connect({ role: 'deepbuild', via: 'journey' });
     if (journey.api) await runApi(o, journey, text, stack.url, run, scrub, writer);
     else out = await runBrowser(o, journey, text, stack, run, writer, scrub, records, swaps, reducedMotion, extra, pre!, reaping);
   } finally {
-    run.timing.total = Date.now() - ready;
+    run.timing.total = readMs + Date.now() - ready;
+    // A driver whose job was never written (something threw first) is told to go, so nothing waits on it.
+    if (pre && !pre.used) reaping.push(cancel(pre));
     for (const s of swaps) await down(o.host, s);
     await Promise.all([down(o.host, stack.run), ...reaping]);
   }
@@ -306,8 +311,6 @@ async function keepScript(o: JourneyRunOptions, journey: Journey, text: string, 
 const stepDeadline = (o: JourneyRunOptions, s: Journey['steps'][number]): number => (o.plant === 'deadline-under-expect' ? Math.floor(s.timeoutMs / 2) : s.deadlineMs);
 const browserDeadline = (o: JourneyRunOptions, journey: Journey, extra: Internal): number =>
   journey.steps.reduce((sum, s) => sum + stepDeadline(o, s), 0) + 30_000 + journey.endState.length * 3000 + (extra.settle ? journey.steps.length * 5000 : 0);
-/** How long a prestarted driver may wait for its stack, beyond the run's own deadline. */
-const STACK_WAIT_MS = 120_000;
 /** A browser journey through the driver, its report read as the run's record and its files stored as evidence. */
 async function runBrowser(o: JourneyRunOptions, journey: Journey, text: string, stack: Stack, run: JourneyRun, writer: Writer, scrub: (s: string) => string, records: StackRecords, swaps: string[], reducedMotion: 'reduce' | 'no-preference', extra: Internal, pre: Prestarted, reaping: Promise<void>[]): Promise<{ report: Report | null; render: Render | null }> {
   const plantedDeadline = o.plant === 'deadline-under-expect';
@@ -387,11 +390,15 @@ async function record(o: JourneyRunOptions, journey: Journey, text: string, url:
   const once = (name: string | null, kind: string, redaction: Redaction, extra: { steps?: typeof videoSteps } = {}): Promise<string | null> => {
     const key = `${name}|${kind}|${redaction}`;
     let put = puts.get(key);
-    if (!put) puts.set(key, (put = store(name, kind, redaction, extra)));
+    if (!put) {
+      put = store(name, kind, redaction, extra);
+      // Each is awaited where it is cited; a store that fails is handled there, never left unhandled meanwhile.
+      put.catch(() => undefined);
+      puts.set(key, put);
+    }
     return put;
   };
   const shots = journey.steps.map((s, i) => { const r = ran.get(s.id); return r ? once(r.screenshot, 'journey.screenshot', redactionOf(i)) : Promise.resolve(null); });
-  const ends = new Map(report.endState.map((r) => [r.id, once(r.screenshot, 'journey.end-state', run.redaction)]));
   const video = once(report.video, 'journey.video', run.redaction, { steps: videoSteps });
   // The trace holds every action's values, a typed secret among them, so it is incomplete once one was typed.
   const trace = once(report.trace, 'journey.trace', report.secretTyped ? 'incomplete' : run.redaction);
@@ -409,6 +416,8 @@ async function record(o: JourneyRunOptions, journey: Journey, text: string, url:
     });
   }
   run.testsRun = report.steps.length;
+  // The end-state screen is put once the steps' have landed, so a file both name keeps one kind, the step's.
+  const ends = new Map(report.endState.map((r) => [r.id, once(r.screenshot, 'journey.end-state', run.redaction)]));
   const endFailures: JourneyRun['failures'] = [];
   for (const c of journey.endState) {
     const r = report.endState.find((e) => e.id === c.id);
@@ -465,6 +474,7 @@ async function record(o: JourneyRunOptions, journey: Journey, text: string, url:
       fail(`${journey.id} › ${e.step || 'page'}`, journey.steps.find((s) => s.id === e.step)?.line ?? null, false, e.kind === 'uncaught' ? `the page threw an uncaught error at step ${e.step}: ${e.message}` : `a request the page made at step ${e.step} ${e.unfinished ? 'never finished' : `answered ${e.status}`}: ${e.url}`);
     }
   } else if (run.failures.length || endFailures.length) run.outcome = 'failed';
+  else if (!run.video) { run.outcome = 'failed'; run.cause = 'the run kept no video'; fail(journey.id, null, false, run.cause); }
   else if (!journey.steps.length && !journey.endState.length) { run.outcome = 'ran_nothing'; run.cause = 'the journey has no step and no end-state check'; }
   else run.outcome = 'passed';
   run.failures.push(...endFailures);

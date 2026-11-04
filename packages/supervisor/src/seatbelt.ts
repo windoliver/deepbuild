@@ -61,7 +61,9 @@ export function profile(run: string, cwd: string, grant: Grant, extra: readonly 
     // A pseudo-terminal's ioctls (#104): a hosted terminal's host process opens one, and its program sets its modes.
     // Its input (#989): the one socket in a terminal's folder, which takes only the hub.
     // A browser's rendezvous (#37): Chromium's parent checks in a mach name of its own, suffixed by its pid, and its
-    // children, in the same sandbox, look it up; no other name, so nothing of launchd's or another run's is reached.
+    // children, in the same sandbox, look it up. The profile is written before that pid exists, so the rule names the
+    // shape, not one pid: a run as you can also reach another Chromium's rendezvous, as you, and no other mach name.
+    // Tying it to the journey driver's run alone needs a grant field of its own (a run.started grant change).
     rules.push('(allow file-read* file-write* process-exec file-map-executable)', '(allow ipc-posix* pseudo-tty sysctl-read)', '(allow file-ioctl (literal "/dev/ptmx") (regex #"^/dev/ttys[0-9]+$"))',
       '(allow network-bind network-inbound (local unix-socket (path-regex #"/terminals/[0-9A-Za-z]+/sock$")))',
       '(allow mach-register mach-lookup (global-name-regex #"^org\\.chromium\\.Chromium\\.MachPortRendezvousServer\\.[0-9]+$"))');
