@@ -3,7 +3,7 @@
 // runtime, so it runs as you, reaching only the stack's host; the page it drives is the repo's, served by the stack
 // env-local started from the run's checkout. Nothing here is a verdict.
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -93,9 +93,10 @@ export async function hosted(host: Host, run: string, argv: string[], cwd: strin
   }
 }
 
-export interface DriveOptions { host: Host; run: string; job: Job; dir?: string; deadline: number; secrets?: Record<string, string>; stop?: AbortSignal; /** Runs beside the driver, with the run's folder, a reader of its report so far and whether the driver has exited: a planted environment's hook. */ between?: (out: string, report: () => Report | null, exited: () => boolean) => Promise<void> }
-/** Runs the driver once: the report read back, and every file it wrote kept by digest. */
-export async function drive(o: DriveOptions): Promise<DriverRun> {
+export interface PrestartOptions { host: Host; run: string; hosts: string[]; dir?: string; deadline: number; secrets?: Record<string, string>; stop?: AbortSignal }
+/** A driver process started ahead of its job: it boots while the stack comes up, then waits for the job file. */
+export interface Prestarted { dir: string; out: string; jobFile: string; running: Promise<DriverRun['exit']>; exited: () => boolean }
+export function prestart(o: PrestartOptions): Prestarted {
   const root = o.dir ?? join(tmpdir(), 'deep-journeys');
   mkdirSync(root, { recursive: true });
   const dir = mkdtempSync(join(root, 'run-'));
@@ -103,14 +104,31 @@ export async function drive(o: DriveOptions): Promise<DriverRun> {
   mkdirSync(out, { recursive: true });
   mkdirSync(join(dir, 'home'), { recursive: true });
   const jobFile = join(dir, 'job.json');
-  writeFileSync(jobFile, JSON.stringify({ ...o.job, out }));
   const env: Record<string, string> = { DEEP_JOURNEY_JOB: jobFile, PLAYWRIGHT_BROWSERS_PATH: browsersPath() };
   for (const [name, value] of Object.entries(o.secrets ?? {})) env[`DEEP_JOURNEY_SECRET_${name}`] = value;
+  let exited = false;
+  const running = hosted(o.host, o.run, [process.execPath, DRIVER], dirname(DRIVER), env, dir, o.hosts, o.deadline, o.stop).finally(() => { exited = true; });
+  return { dir, out, jobFile, running, exited: () => exited };
+}
+/** Tells a prestarted driver its job won't come (the stack never came up), and waits for it to go. */
+export async function cancel(p: Prestarted): Promise<void> {
+  writeFileSync(`${p.jobFile}.stop`, '');
+  await p.running;
+  discard(p);
+}
+
+export interface DriveOptions { host: Host; run: string; job: Job; dir?: string; deadline: number; secrets?: Record<string, string>; stop?: AbortSignal; /** The driver already started for this run, waiting for its job. */ pre?: Prestarted; /** Runs beside the driver, with the run's folder, a reader of its report so far and whether the driver has exited: a planted environment's hook. */ between?: (out: string, report: () => Report | null, exited: () => boolean) => Promise<void> }
+/** Runs the driver once: the report read back, and every file it wrote kept by digest. */
+export async function drive(o: DriveOptions): Promise<DriverRun> {
+  const p = o.pre ?? prestart({ host: o.host, run: o.run, hosts: [hostOf(o.job.url)], deadline: o.deadline, ...(o.dir ? { dir: o.dir } : {}), ...(o.secrets ? { secrets: o.secrets } : {}), ...(o.stop ? { stop: o.stop } : {}) });
+  const { dir, out } = p;
+  // Written whole, then renamed, so the waiting driver never reads half a job.
+  writeFileSync(`${p.jobFile}.part`, JSON.stringify({ ...o.job, out }));
+  renameSync(`${p.jobFile}.part`, p.jobFile);
   const read = (): Report | null => { try { return JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')) as Report; } catch { return null; } };
   const started = Date.now();
-  let exited = false;
-  const running = hosted(o.host, o.run, [process.execPath, DRIVER], dirname(DRIVER), env, dir, [hostOf(o.job.url)], o.deadline, o.stop).finally(() => { exited = true; });
-  const between = o.between ? o.between(out, read, () => exited).catch(() => undefined) : Promise.resolve();
+  const running = p.running;
+  const between = o.between ? o.between(out, read, p.exited).catch(() => undefined) : Promise.resolve();
   const exit = await running;
   await between;
   const wallMs = Date.now() - started;
