@@ -54,5 +54,4 @@ run, and 1 `npm ci` in the change bay after a lock edit.
 
 ## Not run here
 
-The Mac half (`Runs on: Spark + Mac`) was not run: the Mac's Remote Control dispatcher was unreachable from this
-session. It stays open.
+The Mac half is in `mac-e2e.md`.
