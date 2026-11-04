@@ -63,6 +63,9 @@ export type Plant =
   // a socket, timer or child left per cycle, and a hub that can't give a full collection or its resident memory.
   | 'churn-keeps-ended-session' | 'churn-keeps-reload-listener' | 'churn-leaves-socket' | 'churn-leaves-timer' | 'churn-leaves-child'
   | 'churn-no-full-collection' | 'churn-no-resident-read'
+  // #824's per-session reading: deep mcp loading the whole hub package, a waiter keeping its session's transcript, and
+  // a platform that reads no process's memory.
+  | 'mcp-loads-hub' | 'waiter-keeps-transcript' | 'sessions-no-memory-read'
   // #27's: deep_ask raised without its subject, so a repeated question reaches you.
   | 'repeat-reaches-you'
   // #823's: deep_wait reading its ask every 100 ms, and a stopping hub answering waiting calls as a success.
@@ -143,6 +146,7 @@ const PLANTS: readonly string[] = [
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
   'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',
   'churn-no-full-collection', 'churn-no-resident-read',
+  'mcp-loads-hub', 'waiter-keeps-transcript', 'sessions-no-memory-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
