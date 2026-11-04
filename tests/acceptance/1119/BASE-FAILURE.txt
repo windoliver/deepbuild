@@ -1,0 +1,108 @@
+# #1119 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (a2ea54a5, whose scripts/perf.mjs keys its kept copies by worktree path), in this worktree with node_modules from npm ci
+
+On the Spark (20 cores, Linux aarch64, cargo 1.99.1, node 24.22.0), at a 1-minute load of about 16:
+
+$ node --test 'tests/acceptance/1119/*.test.mjs'
+(stack-trace and assertion-object lines dropped; home paths read ~, each test's sandbox <sandbox>)
+
+✖ #1119.d33bc868 after the canvas kit lane rewrote kit-ledger.json with other bytes, a second worktree's perf rebuilds deep-show and its dependent only, and says so (4790.94212ms)
+ℹ reading: perf wall time 2.41 s from worktree a, 1.78 s from worktree b
+✖ #1119.a84127b8 a perf run from a second worktree of the same commit compiles 0 crates on its base side, in the kept copies per machine (8362.852878ms)
+ℹ reading: perf wall time 4.36 s from worktree a (first on the machine), 3.41 s from worktree b
+✖ #1119.a84127b8 perf's lock is the machine's: a perf from a second worktree, started while the first holds the kept copies, is blocked and checks nothing (3971.301572ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12496.811935
+
+Each failure, at its assertion:
+
+test at tests/acceptance/1119/ledger.test.mjs:8:1
+✖ #1119.d33bc868 after the canvas kit lane rewrote kit-ledger.json with other bytes, a second worktree's perf rebuilds deep-show and its dependent only, and says so (4790.94212ms)
+  AssertionError [ERR_ASSERTION]: the second worktree's base side compiled other crates than deep-show and its dependent (cargo's own fresh flags)
+  + actual - expected
+
+    [
+      'deep-show',
+  +   'plain',
+      'show-panel'
+    ]
+
+test at tests/acceptance/1119/warm.test.mjs:8:1
+✖ #1119.a84127b8 a perf run from a second worktree of the same commit compiles 0 crates on its base side, in the kept copies per machine (8362.852878ms)
+  AssertionError [ERR_ASSERTION]: the second worktree's perf compiled crates on its base side (cargo's own fresh flags)
+  + actual - expected
+
+  + [
+  +   'plain',
+  +   'deep-show',
+  +   'show-panel'
+  + ]
+  - []
+
+test at tests/acceptance/1119/warm.test.mjs:47:1
+✖ #1119.a84127b8 perf's lock is the machine's: a perf from a second worktree, started while the first holds the kept copies, is blocked and checks nothing (3971.301572ms)
+  AssertionError [ERR_ASSERTION]: the nested perf from the second worktree ran its checks while the first perf held the kept copies
+  RUN perf
+  {"task":"preflight","baseCommit":"7499ef75…","status":"PASS",…}
+  PASS perf (1.86 s)
+
+  + actual - expected
+
+  + [
+  +   '<sandbox>/cache/deepbuild-perf/bab55b98fad9b176/base/copy'
+  + ]
+  - []
+
+Every test fails at its AssertionError in the test (tests/acceptance/1119/), after both perf runs passed: the base
+perf runs, but the second worktree gets a kept copy of its own, named by its path, and builds it cold (all three
+crates compile, where AC1 wants none and AC2 wants deep-show and show-panel alone), and the nested perf from the
+second worktree takes that worktree's own lock and runs its checks. No helper imports the code under test.
+
+An earlier run of the same suite at a 1-minute load of about 31 on 20 cores showed the grant watch: the two tests
+whose first perf waited for timed failed with "AssertionError: INCONCLUSIVE no grant: perf got no timed grant within
+10 min (1-minute load 30.9, 20 cores), so this test could not run". That is the machine refusing to measure, never a
+verdict on the criterion.
+
+## A planted program, and the planted wrong programs
+
+No implementation exists yet. To check that the tests can pass and that each wrong program fails them, a throwaway
+planted perf.mjs (written for this check only, kept out of the repository) was put at scripts/perf.mjs in a scratch
+copy of this checkout (node_modules linked). It is the base's perf.mjs with: the kept copies under
+deepbuild-perf/machine-<sha256 of the host name>/, the lock beside them as before; each side's copy kept across runs
+(only its .git and target link removed before use); the tree (git archive of the merge base, or the without-tests
+file list) staged in a temporary folder and written into the copy by bytes, so a file is written only when its bytes
+differ, files absent from the tree are deleted, and every write gets a fresh mtime; and a stdout line
+"perf: <side> rewrote <paths>: their bytes differed from the tree" when a file existed with other bytes.
+
+  ✔ #1119.d33bc868 after the canvas kit lane rewrote kit-ledger.json with other bytes, … (1821ms)
+  ✔ #1119.a84127b8 a perf run from a second worktree of the same commit compiles 0 crates on its base side, … (3216ms)
+  ✔ #1119.a84127b8 perf's lock is the machine's: … (917ms)
+  ℹ tests 3, pass 3, fail 0, in about 4 s.
+
+Then one rule at a time was broken in that planted program, and the suite run again:
+
+- path-keyed-copy, the twin the issue names (the kept copies' folder named by sha256 of the worktree's path, as at
+  the base; everything else as planted):
+  ✖ #1119.a84127b8 … compiles 0 crates … AssertionError: the second worktree's perf compiled crates on its base side (cargo's own fresh flags)
+  ✖ #1119.a84127b8 … lock … AssertionError: the nested perf from the second worktree ran its checks while the first perf held the kept copies
+  ✖ #1119.d33bc868 … AssertionError: the second worktree's base side compiled other crates than deep-show and its dependent (cargo's own fresh flags)
+
+Four more wrong programs, beyond the one the issue names:
+
+- rewrite-all (writes every file of the tree each run, with a fresh mtime, instead of only those whose bytes differ):
+  fails the first #1119.a84127b8 test ("compiled crates on its base side") and #1119.d33bc868 ("compiled other
+  crates than deep-show and its dependent"); the lock test passed.
+- backdate (writes a changed file, then puts the commit's 2001 mtime on it): fails #1119.d33bc868 (deep-show is not
+  rebuilt: "compiled other crates than deep-show and its dependent", none compiled); both AC1 tests passed.
+- path-lock (kept copies per machine, but the lock still named by the worktree's path): fails the lock test ("the
+  nested perf from the second worktree ran its checks …") and the first #1119.a84127b8 test (the second worktree's
+  perf run exited 1); #1119.d33bc868 passed.
+- no-record (prints no "perf: <side> rewrote …" line): fails #1119.d33bc868 ("perf printed no "perf: base …" line
+  naming crates/deep-show/kit-ledger.json"); both AC1 tests passed.
