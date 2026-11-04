@@ -247,14 +247,15 @@ async function runInternal(o: JourneyRunOptions, extra: Internal): Promise<Ran> 
   const writer = o.evidence.connect({ role: 'deepbuild', via: 'journey' });
   const records: StackRecords = { processes: stack.processes.map((p) => ({ ...p, reads: [] })), containers: [] };
   const swaps: string[] = [];
+  const reaping: Promise<void>[] = [];
   let out: { report: Report | null; render: Render | null } = { report: null, render: null };
   try {
     if (journey.api) await runApi(o, journey, text, stack.url, run, scrub, writer);
-    else out = await runBrowser(o, journey, text, stack, run, writer, scrub, records, swaps, reducedMotion, extra, pre!);
+    else out = await runBrowser(o, journey, text, stack, run, writer, scrub, records, swaps, reducedMotion, extra, pre!, reaping);
   } finally {
     run.timing.total = Date.now() - ready;
     for (const s of swaps) await down(o.host, s);
-    await down(o.host, stack.run);
+    await Promise.all([down(o.host, stack.run), ...reaping]);
   }
   return { run, ...out };
 }
@@ -308,7 +309,7 @@ const browserDeadline = (o: JourneyRunOptions, journey: Journey, extra: Internal
 /** How long a prestarted driver may wait for its stack, beyond the run's own deadline. */
 const STACK_WAIT_MS = 120_000;
 /** A browser journey through the driver, its report read as the run's record and its files stored as evidence. */
-async function runBrowser(o: JourneyRunOptions, journey: Journey, text: string, stack: Stack, run: JourneyRun, writer: Writer, scrub: (s: string) => string, records: StackRecords, swaps: string[], reducedMotion: 'reduce' | 'no-preference', extra: Internal, pre: Prestarted): Promise<{ report: Report | null; render: Render | null }> {
+async function runBrowser(o: JourneyRunOptions, journey: Journey, text: string, stack: Stack, run: JourneyRun, writer: Writer, scrub: (s: string) => string, records: StackRecords, swaps: string[], reducedMotion: 'reduce' | 'no-preference', extra: Internal, pre: Prestarted, reaping: Promise<void>[]): Promise<{ report: Report | null; render: Render | null }> {
   const plantedDeadline = o.plant === 'deadline-under-expect';
   const deadlineOf = (s: Journey['steps'][number]): number => stepDeadline(o, s);
   const job: Job = {
@@ -340,8 +341,8 @@ async function runBrowser(o: JourneyRunOptions, journey: Journey, text: string, 
     await record(o, journey, text, stack.url, run, driven, writer, scrub);
     return { report: driven.report, render: driven.report ? renderOf(driven) : null };
   } finally {
-    await driven.settled;
-    discard(driven);
+    // The driver's process is reaped with the stack's teardown, after the run's time: its report and files are read.
+    reaping.push(driven.settled.then(() => discard(driven)));
   }
 }
 /** What a screen comparison reads of a run: each step's frame, stillness, elements and DOM, with the requests, bundle and timings. */
