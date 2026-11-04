@@ -1,0 +1,140 @@
+{
+  "id": "familiar.octahedron",
+  "version": "1.0",
+  "title": "Octahedron",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The library's OctahedronGeometry with its parameter names and defaults, as ball@1; angles in degrees.",
+  "inputs": {
+    "radius": {
+      "type": "number",
+      "default": 1,
+      "unit": "m",
+      "min": 0,
+      "about": ""
+    },
+    "detail": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 5,
+      "about": ""
+    },
+    "position": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "m",
+      "about": "Object3D.position"
+    },
+    "rotation": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "deg",
+      "about": "Object3D.rotation, in the library's default order XYZ, in degrees"
+    },
+    "scale": {
+      "type": "vec3",
+      "default": [
+        1,
+        1,
+        1
+      ],
+      "about": "Object3D.scale"
+    },
+    "pivot": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "m",
+      "about": "Object3D.pivot: the point the object turns and scales about, landing at position + pivot"
+    }
+  },
+  "let": {
+    "ca": "cos(rad(rotation[0]))",
+    "sa": "sin(rad(rotation[0]))",
+    "cb": "cos(rad(rotation[1]))",
+    "sb": "sin(rad(rotation[1]))",
+    "cc": "cos(rad(rotation[2]))",
+    "sc": "sin(rad(rotation[2]))",
+    "m00": "cb * cc",
+    "m01": "-cb * sc",
+    "m02": "sb",
+    "m10": "ca * sc + sa * sb * cc",
+    "m11": "ca * cc - sa * sb * sc",
+    "m12": "-sa * cb",
+    "m20": "sa * sc - ca * sb * cc",
+    "m21": "sa * cc + ca * sb * sc",
+    "m22": "ca * cb",
+    "n00": "m00",
+    "n01": "m01",
+    "n02": "m02",
+    "n10": "m10",
+    "n11": "m11",
+    "n12": "m12",
+    "n20": "m20",
+    "n21": "m21",
+    "n22": "m22",
+    "rx": "abs(n20) < 0.9999999999 ? deg(atan2(n21, n22)) : 0",
+    "ry": "deg(asin(max(-1, min(1, -n20))))",
+    "rz": "abs(n20) < 0.9999999999 ? deg(atan2(n10, n00)) : deg(atan2(-n01, n11))",
+    "s0": "scale[0]",
+    "q0": "0 + pivot[0]",
+    "s1": "scale[1]",
+    "q1": "0 + pivot[1]",
+    "s2": "scale[2]",
+    "q2": "0 + pivot[2]",
+    "px": "position[0] + pivot[0]",
+    "py": "position[1] + pivot[1]",
+    "pz": "position[2] + pivot[2]"
+  },
+  "steps": {
+    "mesh": {
+      "op": "builder",
+      "kind": "ball@1",
+      "params": {
+        "tessellation": "geodesic",
+        "base": "octa",
+        "radius": "radius",
+        "detail": "detail",
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "px",
+          "py",
+          "pz"
+        ],
+        "rot": [
+          "rx",
+          "ry",
+          "rz"
+        ],
+        "scale": [
+          "s0",
+          "s1",
+          "s2"
+        ],
+        "pivot": [
+          "q0",
+          "q1",
+          "q2"
+        ]
+      }
+    }
+  }
+}

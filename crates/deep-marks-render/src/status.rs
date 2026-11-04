@@ -49,6 +49,8 @@ pub fn label_of(spec: &scene::TextSpec) -> Option<Label> {
         size: spec.size as f32,
         weight: spec.weight,
         width: spec.width.map(|w| w as f32),
+        max_lines: spec.max_lines,
+        mask: spec.mask,
         bound: spec.bound,
         align: match spec.align {
             Align::Start => deep_text::Align::Start,

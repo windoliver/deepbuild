@@ -12,7 +12,7 @@ use serde_json::Value;
 const LEDGER: &str = include_str!(concat!(env!("OUT_DIR"), "/kit-ledger.json"));
 
 /// The modules a release build refuses, as the seal's refusal; nothing in a debug build.
-pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
+pub fn admit(sealed: &Sealed) -> Result<(), Box<SealError>> {
     if cfg!(debug_assertions) {
         return Ok(());
     }
@@ -20,7 +20,7 @@ pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
         i.implementation.equivalence == Equivalence::Measured
             && i.behavior.as_ref().is_none_or(|b| b.fixtures.is_empty())
     }) {
-        return Err(SealError {
+        return Err(Box::new(SealError {
             code: "no_behavior_part",
             what: format!(
                 "`{}` is measured and `{}` has no behavior part, so it admits only its reference and bit implementations",
@@ -32,7 +32,7 @@ pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
             interface: Some(i.name.clone()),
             implementations: vec![i.implementation.name.clone()],
             ..SealError::default()
-        });
+        }));
     }
     let ledger: Value = serde_json::from_str(LEDGER).unwrap_or(Value::Null);
     let failed: Vec<String> = sealed
@@ -57,7 +57,7 @@ pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
         .filter_map(|m| sealed.interface_of(m))
         .map(|i| i.implementation.name.clone())
         .collect();
-    Err(SealError {
+    Err(Box::new(SealError {
         code: "kit_failed",
         what: format!(
             "{} hasn't passed the canvas conformance kit at its digest",
@@ -69,5 +69,5 @@ pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
         interface,
         implementations,
         ..SealError::default()
-    })
+    }))
 }

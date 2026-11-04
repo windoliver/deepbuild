@@ -40,10 +40,10 @@
   },
   "cursorWindow": {
     "recording": "docs/spikes/339/cursor-window.mov",
-    "sha256": "b5faaff1965dcdd60dd621dc16776607d6b83b53f04d70a72eca9596e0731b4a",
+    "sha256": "6a61414f42d4276b459ec35894edef196ef5ae5321e8475ac5f2e174bd063073",
     "durationMs": 4500,
     "sizePoints": { "width": 240, "height": 160 },
-    "follows": "Recorded with screencapture -V 5 from Terminal.app while deep-app --cursor-demo 9 warped the cursor around a circle on the main display (CGWarpMouseCursorPosition), the window following 24 points right of and below it; no key was held, so the window shows its hint and no frame. A gpui PopUp window (WindowKind::PopUp, no title bar, never focused) of 240 by 160 points. A 16 ms timer on gpui's foreground executor reads NSEvent.mouseLocation and moves the window to 24 points right of and below the cursor with NSWindow.setFrameOrigin; gpui 0.3 has no window-move call, so the NSWindow is reached through the view's raw window handle (raw-window-handle's AppKitWindowHandle). The window shows the last captured frame while the shortcut is held and a hint otherwise, with the gate's counts in its footer"
+    "follows": "Recorded with screencapture -V 5 from Terminal.app while deep-app --cursor-demo 9 warped the cursor around a circle on the main display (CGWarpMouseCursorPosition), the window following 24 points right of and below it; no key was held, so the window shows its hint and no frame. The kept file is that recording cropped to the app's own window (1922 by 1500 pixels from 508, 262), so no other app, the Dock, the menu bar or an account name is in it; the cursor window passes below the crop in about a second of it. A gpui PopUp window (WindowKind::PopUp, no title bar, never focused) of 240 by 160 points. A 16 ms timer on gpui's foreground executor reads NSEvent.mouseLocation and moves the window to 24 points right of and below the cursor with NSWindow.setFrameOrigin; gpui 0.3 has no window-move call, so the NSWindow is reached through the view's raw window handle (raw-window-handle's AppKitWindowHandle). The window shows the last captured frame while the shortcut is held and a hint otherwise, with the gate's counts in its footer"
   },
   "sender": {
     "named": false,

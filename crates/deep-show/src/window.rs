@@ -22,6 +22,10 @@ const CARD_ORDER: &str = "a0";
 /// The outline around an agent's layer and the height of its name tab, in px.
 const OUTLINE_PX: f32 = 1.;
 const NAME_TAB: f32 = 18.;
+/// The full-screen button's glyph: four corner ticks, inset this far, this long and this thick.
+const TICK_INSET: f32 = 9.;
+const TICK_LONG: f32 = 6.;
+const TICK_THICK: f32 = 2.;
 
 pub(crate) fn hsla(c: Rgb) -> Hsla {
     Rgba {
@@ -42,11 +46,13 @@ pub(crate) fn bounds(b: [f64; 4]) -> Bounds<Pixels> {
 
 /// One thing the window composes.
 enum Entry {
-    /// A writer layer's picture in its panel, outlined with `name` when it's an agent's.
+    /// A writer layer's picture in its panel, outlined with `name` when it's an agent's, and
+    /// the canvas's full-screen button over it.
     Layer {
         picture: Arc<RenderImage>,
         panel: [f64; 4],
         name: Option<String>,
+        button: Option<[f64; 4]>,
     },
     Card,
 }
@@ -90,6 +96,7 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
             picture,
             panel,
             name,
+            button,
         } => {
             let panel = bounds(*panel);
             window.with_content_mask(Some(ContentMask { bounds: panel }), |w| {
@@ -116,6 +123,9 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
                         hsla(scene.ground),
                         w,
                     );
+                }
+                if let Some(b) = button {
+                    full_screen_button(scene, bounds(*b), w);
                 }
             });
         }
@@ -168,6 +178,33 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
                 );
                 x += w + 8.;
             }
+        }
+    }
+}
+
+/// The full-screen button (#383): a ground square outlined in muted, four ink corner ticks.
+fn full_screen_button(scene: &Scene, b: Bounds<Pixels>, window: &mut Window) {
+    window.paint_quad(quad(
+        b,
+        px(6.),
+        hsla(scene.ground),
+        px(1.),
+        hsla(scene.muted),
+        BorderStyle::Solid,
+    ));
+    let (w, h) = (f32::from(b.size.width), f32::from(b.size.height));
+    for (sx, sy) in [(0., 0.), (1., 0.), (0., 1.), (1., 1.)] {
+        let c = b.origin
+            + point(
+                px(TICK_INSET + sx * (w - 2. * TICK_INSET)),
+                px(TICK_INSET + sy * (h - 2. * TICK_INSET)),
+            );
+        for (long, thick) in [(TICK_LONG, TICK_THICK), (TICK_THICK, TICK_LONG)] {
+            let tick = Bounds {
+                origin: c - point(px(sx * long), px(sy * thick)),
+                size: size(px(long), px(thick)),
+            };
+            window.paint_quad(gpui_kit::fill(tick, hsla(scene.ink)));
         }
     }
 }
@@ -238,10 +275,19 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
                 .expect("a revision is an object")
                 .clone(),
         };
-        let panel_id = &hub.scenario.docs[doc];
+        let panel_id = hub.scenario.docs[doc].clone();
         let panel = hub
-            .slot(panel_id)
+            .slot(&panel_id)
             .expect("a document's panel is in the scenario");
+        // The canvas's scope (#383): the display's rect once full screen, and its button. A view
+        // popped out into its own window keeps its slot here, with no button.
+        let (panel, button) = match hub.placed(&panel_id) {
+            Some(_) => (panel, None),
+            None => match hub.panel_scope(&panel_id) {
+                Ok(s) => (s.scope.rect(), s.scope.button()),
+                Err(_) => (panel, None),
+            },
+        };
         let size = crate::snapshot::px([panel[2], panel[3]]);
         let rgba = if deep_canvas_scene3d::scene::has_3d(&Value::Object(stamped.clone())) {
             // A 3D writer layer draws natively on the GPU (#378), its frame scaled to fit the
@@ -318,6 +364,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
                 picture,
                 panel,
                 name,
+                button,
             },
         ));
     }

@@ -1,0 +1,40 @@
+{
+  "claim": "jobs-ack",
+  "diff": "diff --git a/src/jobs.ts b/src/jobs.ts\nindex 153f134..caf5314 100644\n--- a/src/jobs.ts\n+++ b/src/jobs.ts\n@@ -1,5 +1,6 @@\n export async function run(queue: Queue) {\n   const job = queue.next();\n   const cfg = JSON.parse(job.payload);\n+  queue.ack(job.id);\n   return cfg;\n }\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [
+      {
+        "title": "[P1] ack is not awaited",
+        "body": "`queue.ack` returns a promise; a rejected ack is unhandled and the job is redelivered.",
+        "priority": 1,
+        "confidence_score": 0.77,
+        "file": "src/jobs.ts",
+        "line": 4,
+        "rule": "missing-await",
+        "quote": "queue.ack(job.id);"
+      },
+      {
+        "title": "[P2] Payload parse can throw",
+        "body": "A malformed payload throws before the ack.",
+        "priority": 2,
+        "confidence_score": 0.55,
+        "file": "src/jobs.ts",
+        "line": 3,
+        "rule": "unchecked-parse",
+        "quote": "JSON.parse(job.payload)"
+      }
+    ],
+    "overall_correctness": "patch is incorrect",
+    "overall_explanation": "The new ack call is fire-and-forget.",
+    "overall_confidence_score": 0.72
+  },
+  "since": []
+}
