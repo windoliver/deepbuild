@@ -111,6 +111,17 @@ fn query(term: &mut Terminal, q: &Value) -> Value {
                 .collect();
             json!({"rows": rows})
         }
+        // #990: the screen as the bytes that redraw it, rows and cursor, for the app to draw.
+        Some("screen") => {
+            let mut bytes = String::from("\x1b[2J");
+            for y in 0..term.rows() {
+                let row = Terminal::text_of(term.row(y));
+                bytes.push_str(&format!("\x1b[{};1H{row}", y + 1));
+            }
+            let (x, y) = term.cursor();
+            bytes.push_str(&format!("\x1b[{};{}H", y + 1, x + 1));
+            json!({"cols": term.cols(), "rows": term.rows(), "screen": hex(bytes.as_bytes())})
+        }
         Some("modes") => json!({
             "bracketed_paste": term.modes.bracketed_paste,
             "app_cursor": term.modes.app_cursor,
