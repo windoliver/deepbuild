@@ -41,9 +41,11 @@ const GUARDS: Readonly<Record<string, (e: Moving, row: Record<string, unknown>, 
   trusted_path: (e) => e.writer === 'app' || e.writer === 'cli',
   // A projection reads no clock: that the deadline passed comes from the core's event that says so.
   past_deadline: (e) => e.writer === 'core',
-  // The leases kernel proves the end before it releases; the record holds it to events already in the log.
-  proven_ended: (e, _row, read) => {
+  // The record holds a release to events already in the log. With none to cite, only the core (the leases kernel,
+  // once it read the run's processes gone) or the holder itself ends a lease: another's word ends nothing.
+  proven_ended: (e, row, read) => {
     const proof = isObj(e.data) && Array.isArray(e.data.proof) ? e.data.proof : [];
+    if (!proof.length) return e.writer === 'core' || e.writer === row.holder;
     return proof.every((id) => typeof id === 'string' && read('SELECT 1 AS found FROM events WHERE id = ? AND log_pos < ?', id, e.log_pos) !== undefined);
   },
 };

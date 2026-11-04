@@ -181,7 +181,10 @@ const LOG_GUARDS = {
   not_agent: (e) => !isAgent(e.writer),
   trusted_path: (e) => e.writer === 'app' || e.writer === 'cli',
   past_deadline: (e) => e.writer === 'core',
-  proven_ended: (e, _o, seen) => (Array.isArray(e.data?.proof) ? e.data.proof : []).every((id) => seen.has(id)),
+  proven_ended: (e, o, seen) => {
+    const proof = Array.isArray(e.data?.proof) ? e.data.proof : [];
+    return proof.length ? proof.every((id) => seen.has(id)) : e.writer === 'core' || e.writer === o.holder;
+  },
 };
 
 /**
@@ -193,10 +196,10 @@ function replayLog(events, tables) {
   const refused = new Map();
   for (const r of events) {
     if (r.kind !== 'move.refused' || r.writer !== 'core') continue;
-    const key = `${r.data?.event_id} ${r.data?.object}`;
+    const key = `${r.data?.event_id} ${r.data?.object}`;  // the object as move.refused@1 names it, cut at 8192
     refused.set(key, Math.max(refused.get(key) ?? 0, r.log_pos ?? Infinity));
   }
-  const excused = (e, at) => (refused.get(`${e.id} ${at}`) ?? 0) > (e.log_pos ?? 0);
+  const excused = (e, at) => (refused.get(`${e.id} ${at.slice(0, 8192)}`) ?? 0) > (e.log_pos ?? 0);
   const objects = new Map();
   const seen = new Set();
   const problems = [];
@@ -204,7 +207,6 @@ function replayLog(events, tables) {
   const born = (id, table, extra = {}) => (objects.has(id) ? objects.get(id) : objects.set(id, { table, state: tables.get(table).initial, ...extra }).get(id));
   const known = (id) => objects.get(id);
   for (const e of events) {
-    seen.add(e.id);
     const d = isObj(e.data) ? e.data : {};
     const targets = [];
     switch (e.kind) {
@@ -223,8 +225,10 @@ function replayLog(events, tables) {
         const own = live && now.holder === d.holder && e.kind !== 'lease.denied';
         // A denial of a held key is not about the lease that holds it.
         if (live && e.kind === 'lease.denied') break;
-        if (!own && !excused(e, at)) objects.set(at, { table: 'lease', state: tables.get('lease').initial, holder: d.holder });
-        targets.push(at);
+        // Not this holder's lease: a new one, as the record reads it. A refused move leaves the lease that stood.
+        const fresh = { table: 'lease', state: tables.get('lease').initial, holder: d.holder };
+        if (!own && !excused(e, at)) objects.set(at, fresh);
+        targets.push(own || !excused(e, at) ? at : { at, o: fresh });
         break;
       }
       case 'open_item.opened': case 'open_item.closed': {
@@ -244,16 +248,23 @@ function replayLog(events, tables) {
       default:
         if (e.subject && known(`ask:${bare(e.subject)}`) && tables.get('ask').moves.some((m) => m.event === e.kind)) targets.push(`ask:${bare(e.subject)}`);
     }
-    for (const at of targets) {
-      if (excused(e, at)) continue;
-      const o = objects.get(at);
+    for (const target of targets) {
+      const { at, o } = typeof target === 'string' ? { at: target, o: objects.get(target) } : target;
       const table = tables.get(o.table);
       const row = table.moves.find((m) => m.from === o.state && m.event === e.kind && (m.guard === undefined || LOG_GUARDS[m.guard]?.(e, o, seen)));
+      // A refusal the core recorded stands only where the table refuses too: a record that refuses a move its
+      // table allows fails as surely as one that lets through a move it doesn't.
+      if (excused(e, at)) {
+        if (row) problems.push(`event ${e.id} (${e.kind}) was refused moving ${at} from ${o.state}, which ${table.id} allows`);
+        continue;
+      }
       if (row) {
         o.state = row.to;
         moves++;
       } else if (table.moves.some((m) => m.event === e.kind)) problems.push(`event ${e.id} (${e.kind}) moves ${at} from ${o.state}; ${table.id} allows no such move`);
     }
+    // A proof cites only events before the one it proves.
+    seen.add(e.id);
   }
   return { moves, problems, objects };
 }
@@ -284,6 +295,8 @@ async function replay(files, tables) {
     }
   }
   for (const log of logs) {
+    // A log with nothing in it shows nothing: it never passes.
+    if (!log.events.length) { say('INVALID', 'replay', `${log.label}: the log holds no event`); continue; }
     const { moves, problems, objects } = replayLog(log.events, tables);
     // A seeded run also holds the record's own projection to the states the tables reach.
     if (log.check) problems.push(...log.check(objects));

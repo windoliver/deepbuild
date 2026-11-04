@@ -33,7 +33,7 @@ const LIFECYCLE_GUARDS: Readonly<Record<string, string>> = {
   not_agent: 'no agent wrote it: neither a hook nor an MCP connection',
   trusted_path: 'you wrote it on your trusted path: the app or the CLI',
   past_deadline: "the deadline passed: in the world its clock says so, in the record the core's own event does, since no projection reads a clock",
-  proven_ended: "its end is proven: every event its proof cites, the holder's end or its processes' ends, is earlier in the log",
+  proven_ended: "its end is proven: every event its proof cites, the holder's end or its processes' ends, is earlier in the log; with none cited, only the core or the holder itself ends it",
   newer_attempt: 'it starts a newer attempt at the same task',
   own_session: "it ends the attempt's own session",
 };

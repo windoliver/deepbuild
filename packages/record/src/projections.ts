@@ -318,8 +318,9 @@ export class Projector {
       case 'verdict.made': {
         const claim = bare(d.claim);
         this.up('verdicts', { id: e.id, handle: str(d.verdict), claim_id: claim, outcome: str(d.outcome), reasons: json(d.reasons), requirements: json(d.requirements), smallest: str(d.smallest), points_to: str(d.points_to), commit_sha: str(d.commit), key: json(d.key), created: e.ts });
-        // An upsert: a verdict commits FULL at once and can land before the queued claim it judges.
-        this.up('claims', { id: claim, verdict_id: e.id, ...this.claimState(moved, d) });
+        // An upsert: a verdict commits FULL at once and can land before the queued claim it judges. A verdict its
+        // claim's table refused judges nothing there.
+        if (moved(`claim:${claim}`)) this.up('claims', { id: claim, verdict_id: e.id, ...this.claimState(moved, d) });
         break;
       }
       case 'verdict.stale':
