@@ -1,0 +1,52 @@
+Base commit: e2e6e1cc (origin/main; branch claude/issue-1108-c657d3, clean apart from tests/acceptance/1108/)
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1108
+Date: 2026-11-04T20:12:00Z  Node v24.22.0  vitest 5.0.5 linux-arm64 (bubblewrap at /usr/bin/bwrap, Linux 7.0)
+Before it: the packages' dist/ already built (npm run build --workspaces); no root tsc -b.
+Exit code: 1   Tests: 4 failed (4)   Duration: 51.5 s at a load average near 270
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1108/tsconfig.json  -> exit 0, no errors
+
+Each of the four tests fails at named assertions (expect.soft, so every reason shows) for the reason the issue is
+open: the default launcher hands the replayed agent your environment and home as they are, so it loads your settings
+(allow rules, plug-ins) and MCP servers, sends the live chat post and runs gh against the forge; there is no recording
+(EvalReport has no calls or diverged, ReplayTask no recording), and no sandbox, so an outside host times out instead
+of being refused. Ports, the test folder (<box>), times and temp names are shown as placeholders.
+
+ chat.test.ts
+   AssertionError: the chat fixture server (your MCP server "chat" at http://127.0.0.1:<port>/mcp) got 8 requests (initialize, initialize, notifications/initialized, notifications/initialized, tools/list, tools/list, tools/call, tools/call): a launcher that loads your MCP servers sent the message: expected 8 to be +0 // Object.is equality
+   AssertionError: the replayed post gets the recorded result {"ok":true,"channel":"C0FAKE01","ts":"1759655643.000100"}; it got: mcp__chat__post_message {"channel":"#releases","text":"v1.4.0 is out: cart totals now count each item's quantity."} → result "{\"ok\":true,\"channel\":\"C0LIVE\",\"ts\":\"live-post-sent\"}": expected false to be true // Object.is equality
+   AssertionError: the replayed agent loaded your MCP server "chat" (http://127.0.0.1:<port>/mcp, with its token) as "chat": expected true to be false // Object.is equality
+   AssertionError: the replayed agent loaded your MCP server "tracker": expected [ 'chat', 'tracker' ] to not include 'tracker'
+   AssertionError: the replay's record (report.calls) holds each side's post, answered: undefined: expected [] to deeply equal [ Array(2) ]
+   AssertionError: a replay whose calls the recording answered reads not diverged: expected undefined to deeply equal []
+ diverged.test.ts
+   AssertionError: the replayed gh pr create returns an error saying it isn't in the recording; it got: Bash {"command":"gh pr create --title \"Fix the cart tax\" --body \"Rounds tax per line.\""} → result "https://github.test/shop/shop/pull/7": expected false to be true // Object.is equality
+   AssertionError: the forge fixture got 7 requests (["pr","view","12","--json","state"] | ["pr","view","12","--json","state"] | ["pr","view","13","--json","state"] | ["pr","create","--title","Fix the cart tax","--body","Rounds tax per line."] | ["pr","view","13","--json","state"] | ["pr","view","14","--json","state"] | ["pr","view","14","--json","state"]): a replayed call reached the network: expected 7 to be +0 // Obj…
+   AssertionError: the replay's record (report.calls) holds the gh pr create call: undefined: expected [] to deeply equal [ Array(1) ]
+   AssertionError: the pair with a call the recording can't answer reads diverged; no other pair does: expected [] to deeply equal [ 't2' ]
+   AssertionError: the report lists the call that diverged: expected '[]' to contain 'gh pr create'
+   AssertionError: the diverged pair counts as a failed pair; the others are whole: expected [ [ 't1', false ], …(2) ] to deeply equal [ [ 't1', false ], …(2) ]
+   AssertionError: a recorded gh pr view gets its recorded result; it got: Bash {"command":"gh pr view 12 --json state"} → result "{\"state\":\"LIVE\"}": expected false to be true // Object.is equality
+   AssertionError: a recorded gh pr view gets its recorded result; it got: Bash {"command":"gh pr view 13 --json state"} → result "{\"state\":\"LIVE\"}": expected false to be true // Object.is equality
+   AssertionError: a recorded gh pr view gets its recorded result; it got: Bash {"command":"gh pr view 14 --json state"} → result "{\"state\":\"LIVE\"}": expected false to be true // Object.is equality
+ normalize.test.ts
+   AssertionError: a call equal to the recorded one but for a timestamp and a temporary path gets the recorded result {"ok":true,"channel":"C0FAKE02","ts":"1759655643.000200"}; it got: mcp__chat__post_message {"channel":"#builds","text":"Build 512 finished at <now>; log at /tmp/build-<hex>/out.log"} → result "{\"ok\":true,\"channel\":\"C0LIVE\",\"ts\":\"live-post-sent\"}": expected false to be true // Object.is equality
+   AssertionError: a call equal to the recorded one but for a timestamp and a temporary path gets the recorded result {"ok":true,"channel":"C0FAKE02","ts":"1759655643.000200"}; it got: mcp__chat__post_message {"channel":"#builds","text":"Build 512 finished at <now>; log at /tmp/build-<hex>/out.log"} → result "{\"ok\":true,\"channel\":\"C0LIVE\",\"ts\":\"live-post-sent\"}": expected false to be true // Object.is equality
+   AssertionError: a post about another build isn't in the recording; it got: mcp__chat__post_message {"channel":"#builds","text":"Build 513 finished at <now>; log at /tmp/build-<hex>/out.log"} → result "{\"ok\":true,\"channel\":\"C0LIVE\",\"ts\":\"live-post-sent\"}": expected false to be true // Object.is equality
+   AssertionError: a post about another build isn't in the recording; it got: mcp__chat__post_message {"channel":"#builds","text":"Build 513 finished at <now>; log at /tmp/build-<hex>/out.log"} → result "{\"ok\":true,\"channel\":\"C0LIVE\",\"ts\":\"live-post-sent\"}": expected false to be true // Object.is equality
+   AssertionError: your chat server at http://127.0.0.1:<port>/mcp got 16 requests: a replayed post was sent: expected 16 to be +0 // Object.is equality
+   AssertionError: the replay's record (report.calls): undefined: expected [] to deeply equal [ [ 't1', 'base', true ], …(3) ]
+   AssertionError: only the pair about another build reads diverged: expected [] to deeply equal [ 't2' ]
+ sandbox.test.ts
+   AssertionError: no pair diverged: every call was in its recording: expected undefined to deeply equal []
+   AssertionError: no replayed call reached the forge: expected 40 to be +0 // Object.is equality
+   AssertionError: every recorded call gets its recorded result; 40 didn't, such as Bash {"command":"gh pr view 100 --json state"} → result "{\"state\":\"LIVE\"}": expected 40 to be +0 // Object.is equality
+   AssertionError: the replay's sandbox refuses every host but the model endpoint and loopback (a refusal is EPERM or EACCES): expected [ …(2) ] to deeply equal []
+     "no sandbox refused the replayed agent's connect to 192.0.2.1:443 (TIMEOUT)",
+     "no sandbox refused its child process's connect to 192.0.2.1:443 (TIMEOUT)",
+   AssertionError: the replayed agent can read no credential but the model sign-in, and none of your settings' allow rules or plug-ins: expected [ …(6) ] to deeply equal []
+     "<box>/you/.claude.json is readable by the replayed agent and holds your chat token",
+     "<box>/you/.claude/settings.json is readable by the replayed agent and holds your plug-in forge-helper@shop-market",
+     "<box>/you/.claude/settings.json is readable by the replayed agent and holds your settings' allow rule Bash(./scripts/deploy-staging.sh:*)",
+     "<box>/you/.config/gh/hosts.yml is readable by the replayed agent and holds your forge token",
+     "its MCP server \"chat\" is readable by the replayed agent and holds your chat token",
+     "its environment variable GH_TOKEN is readable by the replayed agent and holds your forge token",
