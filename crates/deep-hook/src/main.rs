@@ -1555,6 +1555,12 @@ fn waiter() -> ExitCode {
     if session.is_empty() {
         return ExitCode::SUCCESS;
     }
+    // #824's planted wrong program: a copy of the session's transcript in the waiter's own memory while it waits.
+    let kept = if env::var("DEEP_HUB_PLANT").as_deref() == Ok("waiter-keeps-transcript") {
+        fs::read(field("transcript_path")).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let request = format!(
         "{{\"v\":1,\"id\":1,\"method\":\"session.wait\",\"params\":{{\"session\":{},\"cwd\":{},\"since\":{since}}}}}\n",
         quoted(&session),
@@ -1574,6 +1580,7 @@ fn waiter() -> ExitCode {
     let watched = env::var("DEEP_HUB_PLANT").as_deref() != Ok("waiter-outlives-session");
     let gone = || watched && (agent_pid() != agent || !alive(agent));
     loop {
+        std::hint::black_box(&kept);
         if gone() {
             return ExitCode::SUCCESS;
         }
