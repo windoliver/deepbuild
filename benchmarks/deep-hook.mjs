@@ -9,6 +9,9 @@
 //              `deep-hook check` on one default's planted call and on its twin, 200 each: their p95s
 //   unread     (issue #1097) the same, for two calls the reader can't read whole: a program the line computes and a
 //              nesting past the reader's depth, each denied by the shipped defaults: the p95 matching them adds
+//   heavy      (issue #1015) with no hub, 200 PreToolUse calls of `cargo test --workspace`, which a shipped
+//              heavy.command@1 entry matches, and 200 of `cargo --version`, which none does, interleaved, each from
+//              spawn to exit: the p95 matching adds
 //   backup     (issue #572) a 100 MB record, then 200 forwarded PreToolUse calls interleaved with a native no-op, each
 //              from spawn to exit and each answered while `deep backup` copies the record: the p95 overhead
 //   day-overhead   (issue #21) a day of 1,000 real tool calls, the hub up: p95 of the 2,000 hooks (spawn to exit)
@@ -108,6 +111,23 @@ const modes = {
     } finally {
       await stop(hub);
     }
+  },
+
+  async heavy(home) {
+    const cwd = join(home, 'work');
+    mkdirSync(join(home, '.deepbuild'), { recursive: true });
+    mkdirSync(cwd);
+    const call = (command) => JSON.stringify({ session_id: '6f1c2b9e-1111-4222-8333-444455556666', transcript_path: join(home, 'none.jsonl'), cwd, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, tool_use_id: 'toolu_bench' });
+    const [heavy, plain] = [call('cargo test --workspace'), call('cargo --version')];
+    const timed = (input) => {
+      const t0 = performance.now();
+      const r = spawnSync(HOOK, ['claude-code', 'PreToolUse'], { cwd, env: { ...process.env, HOME: home }, input, stdio: ['pipe', 'ignore', 'ignore'] });
+      if (r.status !== 0) throw Error(`deep-hook didn't let the call through with no hub: exit ${r.status}`);
+      return performance.now() - t0;
+    };
+    const matched = [], unmatched = [];
+    for (let i = 0; i < 200; i++) { matched.push(timed(heavy)); unmatched.push(timed(plain)); }
+    return { heavyP95Ms: p95(matched), plainP95Ms: p95(unmatched), matchP95Ms: p95(matched) - p95(unmatched) };
   },
 
   async unread(home) {
