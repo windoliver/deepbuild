@@ -202,7 +202,9 @@ export class Projector {
 
   apply(e: Projected): void {
     const d: Obj = isObj(e.data) ? e.data : {};
-    if (e.session) {
+    // The core's reading of a session's state, and its finding the agent's process gone (#992), are no sign of the
+    // session: they move neither when it was last seen nor its turn.
+    if (e.session && e.kind !== 'session.state' && e.kind !== 'session.gone') {
       // The newest stamp seen: a late or spooled event never moves a session back.
       this.stmt('INSERT INTO sessions (id, last_seen) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET last_seen = MAX(COALESCE(sessions.last_seen, excluded.last_seen), excluded.last_seen)').run(e.session, e.ts);
       // What its own hooks say of a session's attention (#18): a prompt starts work, a permission prompt waits on you,
@@ -213,6 +215,8 @@ export class Projector {
           : e.kind === 'agent.stop' ? (d.outcome !== 'failed' ? 'finished' : d.owner === 'you' || d.owner === 'service' ? 'stuck' : 'failed') : undefined;
         const late = e.kind === 'tool.before' || e.kind === 'tool.after' ? " AND status NOT IN ('finished', 'failed', 'stuck')" : '';
         if (state) this.stmt(`UPDATE sessions SET status = ?, ended_log_pos = ? WHERE id = ?${late}`).run(state, ENDED.has(state) ? e.log_pos : null, e.session);
+        // A session that ends while a prompt of its agent's showed waits on no one (#992).
+        if (e.kind === 'session.end') this.stmt("UPDATE sessions SET status = 'finished', ended_log_pos = ? WHERE id = ? AND status = 'waiting'").run(e.log_pos, e.session);
         // The session's row shows its newest stop's cause, from the closed set (#85); NULL before any stop.
         if (e.kind === 'agent.stop') this.up('sessions', { id: e.session, cause: str(d.cause) });
       }
@@ -234,7 +238,9 @@ export class Projector {
         const named = sessionOf(e.subject);
         const id = e.writer === 'hook' || (e.session && named === e.session.replace(/[^0-9A-Za-z]/g, '')) ? e.session : named ?? e.session;
         const state = str(d.state);
-        if (id) this.up('sessions', { id, status: state, ended_log_pos: state && ENDED.has(state) ? e.log_pos : null });
+        // A hook's idle prompt after a stop that failed or got stuck leaves the stop's state (#992).
+        const stopped = e.writer === 'hook' && state === 'finished' && id ? (this.stmt('SELECT status FROM sessions WHERE id = ?').get(id) as { status: string | null } | undefined)?.status : undefined;
+        if (id && stopped !== 'failed' && stopped !== 'stuck') this.up('sessions', { id, status: state, ended_log_pos: state && ENDED.has(state) ? e.log_pos : null });
         // The core's end of its own session ends a turn no stop will: the prompt it answered in the model's place (#83).
         if (id && id === e.session && e.writer === 'core' && state && ENDED.has(state)) {
           const turns = this.turnsOf(id);
