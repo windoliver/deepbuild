@@ -1,13 +1,11 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { homedir, hostname, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { replace, walk } from './bays.mjs';
 import { compare, fingerprint, judgeInstructions, judgeLimit, measure, measureOnce, validateBudgets, warm } from './benchmark.mjs';
-// The machine's throttle table, beside this script in a checkout; a copy of perf alone, as a test's fixture holds, has
-// no table to wait on.
-const throttle = existsSync(new URL('./throttle.mjs', import.meta.url)) ? await import('./throttle.mjs') : null;
+import * as throttle from './throttle.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const manifest = 'benchmarks/budgets.json';
@@ -19,18 +17,19 @@ const regressed = 'Restore the regressed budget; budgets are frozen once they re
 // Where every result's instructions retired came from; GNU time has no counter.
 const counter = process.platform === 'darwin' ? '/usr/bin/time -l: instructions retired' : null;
 // Each side's copy lives at the same path every run, in this user's cache directory under a name
-// for this checkout, with its Cargo builds kept beside it, so a preflight doesn't rebuild the
-// dependency tree cold (#594). The path has to stay put: Cargo doesn't rebuild a crate whose
-// workspace moved, so absolute paths baked into earlier builds (CARGO_MANIFEST_DIR, CARGO_BIN_EXE_*)
-// would point at a deleted copy. Nothing removes a checkout's directory; deleting it only makes the
-// next preflight build cold.
+// for this machine, not for a checkout, with its Cargo builds kept beside it, so a preflight from any
+// worktree, a new one too, doesn't rebuild what the last run on the machine built (#594, #1119). The
+// path has to stay put: Cargo doesn't rebuild a crate whose workspace moved, so absolute paths baked
+// into earlier builds (CARGO_MANIFEST_DIR, CARGO_BIN_EXE_*) would point at a deleted copy. Each run
+// replaces a copy's tree by the bays' rule (scripts/bays.mjs), writing only the files whose bytes
+// differ, so Cargo rebuilds just what changed. Nothing removes the machine's directory; deleting it
+// only makes the next preflight build cold.
 // owner is the run whose number the lock holds: this one, or an ancestor that named its lock in DEEP_PERF_LOCK.
 let kept, lock, owner = process.pid;
 function keptRoot() {
   if (kept) return kept;
   const cache = process.env.XDG_CACHE_HOME || join(homedir(), process.platform === 'darwin' ? 'Library/Caches' : '.cache');
-  const checkout = createHash('sha256').update(realpathSync(root)).digest('hex').slice(0, 16);
-  const directory = join(cache, 'deepbuild-perf', checkout);
+  const directory = join(cache, 'deepbuild-perf', hostname().replace(/[^\w.-]/g, '_'));
   // Perf runs what it builds there, so the directory is this user's alone: anyone else who could
   // write to it could plant artifacts Cargo reads as fresh.
   mkdirSync(dirname(directory), { recursive: true });
@@ -47,7 +46,7 @@ function keptRoot() {
   process.env.DEEP_PERF_LOCK = String(owner);
   return (kept = directory);
 }
-// One perf run per checkout at a time: a second would delete the first's copies under it. The lock
+// One perf run per machine at a time: a second would replace the first's copies under it. The lock
 // appears whole, number and all, by linking a file already written. A lock whose process is gone,
 // or that names none, was left by a run that was killed, and is replaced in one step, under a
 // takeover mark that the lock's release also takes: between reading the lock and replacing it, no
@@ -77,7 +76,7 @@ function takeLock(file) {
         if (Number.isInteger(holder) && holder > 0 && holder !== process.pid && alive(holder)) {
           // An ancestor's lock it named to this run is this run's to use and the ancestor's to release; a number
           // named by no live ancestor is not trusted.
-          if (throttle && holder === Number(process.env.DEEP_PERF_LOCK) && throttle.ancestors().includes(holder)) return (owner = holder), true;
+          if (holder === Number(process.env.DEEP_PERF_LOCK) && throttle.ancestors().includes(holder)) return (owner = holder), true;
           throw blocked(`another perf run (process ${holder}) is using ${dirname(file)}`, `Wait for that preflight to finish. If none is running, the process took over a killed run's number: rm ${file}`);
         }
         renameSync(mine, file);
@@ -85,7 +84,7 @@ function takeLock(file) {
       });
       if (taken) return file;
     }
-    throw blocked(`could not take ${file}: other perf runs kept taking it`, 'Run one preflight at a time in this checkout.');
+    throw blocked(`could not take ${file}: other perf runs kept taking it`, 'Run one preflight at a time on this machine.');
   } finally {
     rmSync(mine, { force: true });
   }
@@ -149,13 +148,29 @@ function judgeTargets(budget) {
   if (judged.status !== 0) return { status: 'BLOCKED', reason: `the judge exited ${judged.status}: ${judged.stderr.slice(-1000)}` };
   return last(judged.stdout);
 }
-function keptCopy(side) {
+// Replaces a side's kept copy in place to the tree whose files `fill` writes into an empty folder. The record names
+// the files the last run left with other bytes than this tree's, such as the ledger the canvas-kit lane rewrites:
+// Cargo rebuilds what they feed.
+function keptCopy(side, fill) {
   const directory = join(keptRoot(), side, 'copy');
-  if (!ownsLock()) throw blocked(`another perf run took ${lock}`, 'Run one preflight at a time in this checkout.');
-  // A run that was killed leaves its copy behind.
-  rmSync(directory, { recursive: true, force: true });
-  mkdirSync(directory, { recursive: true });
+  if (!ownsLock()) throw blocked(`another perf run took ${lock}`, 'Run one preflight at a time on this machine.');
   mkdirSync(join(dirname(directory), 'target'), { recursive: true });
+  const from = mkdtempSync(join(tmpdir(), 'deep-perf-tree-'));
+  try {
+    fill(from);
+    const paths = walk(from);
+    const rewritten = paths.filter((path) => {
+      try {
+        return lstatSync(join(from, path)).isFile() && lstatSync(join(directory, path)).isFile() && !readFileSync(join(from, path)).equals(readFileSync(join(directory, path)));
+      } catch {
+        return false;
+      }
+    });
+    const { written, deleted } = replace(directory, { from, paths });
+    console.log(`perf: ${side} copy ${directory}: wrote ${written} files, deleted ${deleted}; rewrote what the last run left with other bytes: ${rewritten.join(', ') || 'nothing'}`);
+  } finally {
+    rmSync(from, { recursive: true, force: true });
+  }
   return directory;
 }
 // CARGO_TARGET_DIR names the kept build directory, so Cargo resolves it to the same path every run.
@@ -179,17 +194,19 @@ function checkRun(directory, timeoutMs) {
   }
 }
 // A directory of npm ci, warm builds and the check workload, timed once like the merge base. The checks
-// read git, so each disposable copy gets its own throwaway repository, committed without the user's
+// read git, so each kept copy gets a throwaway repository, made anew each run and committed without the user's
 // hooks or signing. Its origin/main is that commit, as on main itself, so checks that compare with
 // main (repo-rules' size) do the same work on both sides instead of skipping it in the copy.
 function checkCopy(directory, timeoutMs) {
   const git = (...args) => run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'user.name=DeepBuild perf', '-c', 'user.email=perf@example.invalid', ...args], directory, { stdio: 'pipe' });
+  rmSync(join(directory, '.git'), { recursive: true, force: true });
   git('init', '-q');
   git('add', '-A');
   git('commit', '-qm', 'perf copy');
   git('update-ref', 'refs/remotes/origin/main', 'HEAD');
   // target/ links to the kept builds, so ./target/debug binaries stay where the lanes and budgets run
   // them. It is made after the commit: .gitignore's target/ matches a directory, not a link.
+  rmSync(join(directory, 'target'), { recursive: true, force: true });
   symlinkSync(process.env.CARGO_TARGET_DIR, join(directory, 'target'), 'dir');
   run('npm', ['ci', '--no-audit', '--no-fund'], directory);
   warm(directory);
@@ -197,12 +214,12 @@ function checkCopy(directory, timeoutMs) {
 }
 // perf is a measured run: it holds timed from before its timer to its end, so its
 // kept copies and lock are taken only under timed. Under a preflight's grant it passes through on it.
-const grant = throttle?.acquire('timed', { wait: 60 });
-if (throttle && !grant) {
+const grant = throttle.acquire('timed', { wait: 60 });
+if (!grant) {
   console.log('INCONCLUSIVE no grant: no timed grant came within 60 min, so perf did not run\n  Fix: Wait for the other sessions\' builds and proofs on this machine, then run perf again.');
   process.exit(3);
 }
-if (grant) process.env.DEEP_THROTTLE = grant.token;
+process.env.DEEP_THROTTLE = grant.token;
 const verdicts = [];
 const started = performance.now();
 console.log('RUN perf');
@@ -225,11 +242,8 @@ try {
   const allowance = current.preflight.limits.elapsedMs * (1 + current.preflight.margin);
   let baseline = null;
   if (base?.preflight || base?.tasks?.length) {
-    archive = keptCopy('base');
-    // Git reads stay in this checkout; checkRun gives the disposable copy a repository of its own. -m
-    // stamps the files now: Cargo goes by mtime, and a merge base committed before the kept build
-    // would otherwise look fresh.
-    run('tar', ['-mxf', '-', '-C', archive], root, { input: run('git', ['archive', baseCommit], root, { encoding: null }) });
+    // Git reads stay in this checkout; checkRun gives the kept copy a repository of its own.
+    archive = keptCopy('base', (from) => run('tar', ['-xf', '-', '-C', from], root, { input: run('git', ['archive', baseCommit], root, { encoding: null }) }));
     baseline = checkRun(archive, allowance);
     if (baseline.status !== 0) throw blocked(`merge-base checks exited ${baseline.status}: ${baseline.output}`, 'Repair the checks on main; a failing merge base cannot be compared.');
   }
@@ -246,19 +260,20 @@ try {
   const ownTests = changed.filter((file) => testPattern.test(file));
   let rest = null;
   if (ownTests.length) {
-    without = keptCopy('without-tests');
-    for (const file of files(['ls-files', '--cached', '--others', '--exclude-standard'])) {
-      // target is the copy's link to its kept builds; a checkout's own target link isn't copied.
-      if (ownTests.includes(file) || file === 'target' || !existsSync(join(root, file))) continue;
-      mkdirSync(dirname(join(without, file)), { recursive: true });
-      // A relative link into the checkout is copied as a link, so it points into the copy. Any other
-      // link is copied as what it points at, a directory whole.
-      const source = join(root, file), link = lstatSync(source).isSymbolicLink() && readlinkSync(source);
-      const inside = link && !isAbsolute(link) && !/^\.\.(?:[\\/]|$)/.test(relative(root, resolve(dirname(source), link)));
-      if (inside) symlinkSync(link, join(without, file));
-      else if (statSync(source).isDirectory()) cpSync(source, join(without, file), { recursive: true, dereference: true });
-      else copyFileSync(source, join(without, file));
-    }
+    without = keptCopy('without-tests', (from) => {
+      for (const file of files(['ls-files', '--cached', '--others', '--exclude-standard'])) {
+        // target is the copy's link to its kept builds; a checkout's own target link isn't copied.
+        if (ownTests.includes(file) || file === 'target' || !existsSync(join(root, file))) continue;
+        mkdirSync(dirname(join(from, file)), { recursive: true });
+        // A relative link into the checkout is copied as a link, so it points into the copy. Any other
+        // link is copied as what it points at, a directory whole.
+        const source = join(root, file), link = lstatSync(source).isSymbolicLink() && readlinkSync(source);
+        const inside = link && !isAbsolute(link) && !/^\.\.(?:[\\/]|$)/.test(relative(root, resolve(dirname(source), link)));
+        if (inside) symlinkSync(link, join(from, file));
+        else if (statSync(source).isDirectory()) cpSync(source, join(from, file), { recursive: true, dereference: true });
+        else copyFileSync(source, join(from, file));
+      }
+    });
     rest = checkRun(without, allowance);
     if (rest.status !== 0) {
       console.log(rest.output.trim());
@@ -338,10 +353,10 @@ try {
 } catch (error) {
   verdicts.push(['BLOCKED', error.message, error.fix ?? 'Resolve the named cause; budgets in benchmarks/budgets.json are frozen once they reach main.']);
 } finally {
-  // A side that built nothing (a checkout without Rust, or a test fixture) leaves nothing behind. This
-  // runs before the lock goes, so no other run is using the sides.
+  // The copies stay for the next run on this machine, but a side that built nothing (a checkout without
+  // Rust, or a test fixture) leaves nothing behind. This runs before the lock goes, so no other run is
+  // using the sides.
   if (lock && owner === process.pid && ownsLock()) {
-    for (const directory of [archive, without]) if (directory) rmSync(directory, { recursive: true, force: true });
     for (const side of ['base', 'without-tests']) {
       const target = join(kept, side, 'target');
       try {
@@ -356,4 +371,4 @@ try {
 for (const [state, message, fix] of verdicts) console.log(`${state} perf: ${message}\n  Fix: ${fix}`);
 if (verdicts.length) process.exitCode = 1;
 else console.log(`PASS perf (${((performance.now() - started) / 1000).toFixed(2)} s)`);
-throttle?.release(grant);
+throttle.release(grant);
