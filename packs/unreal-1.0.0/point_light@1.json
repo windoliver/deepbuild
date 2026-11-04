@@ -1,0 +1,54 @@
+{
+  "id": "unreal.point_light",
+  "version": "1.0",
+  "title": "Point light",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "Unreal's PointLightComponent: Location in cm (+Z up) to m (+Y up), its X forward to our +Z and Y right to our −X; lumens kept, candela × 4π.",
+  "inputs": {
+    "Location": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "cm",
+      "about": ""
+    },
+    "Intensity": {
+      "type": "number",
+      "default": 8,
+      "min": 0,
+      "about": ""
+    },
+    "IntensityUnits": {
+      "type": "choice",
+      "default": "Candelas",
+      "options": [
+        "Candelas",
+        "Lumens"
+      ],
+      "about": ""
+    }
+  },
+  "let": {
+    "lm": "IntensityUnits == Lumens ? Intensity : Intensity * 4 * pi"
+  },
+  "steps": {
+    "light": {
+      "op": "item",
+      "kind": "light.point@1",
+      "params": {
+        "power": "lm"
+      },
+      "at": {
+        "pos": [
+          "-Location[1] / 100",
+          "Location[2] / 100",
+          "Location[0] / 100"
+        ]
+      }
+    }
+  }
+}

@@ -361,7 +361,9 @@ pub fn light(
             (power / (4.0 * PI), at("range", auto))
         }
     };
-    let half = |k: &str, d: f64| (at(k, d).clamp(0.0, 179.0) / 2.0).to_radians().cos();
+    // `inner` and `outer` are the cone's half angles, measured from its axis as the tools whose
+    // words the familiar-names packs carry measure them (#433).
+    let half = |k: &str, d: f64| at(k, d).clamp(0.0, 90.0).to_radians().cos();
     let outer = half("outer", 45.0);
     Some(Light {
         id: id.to_string(),

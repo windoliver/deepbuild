@@ -1,0 +1,26 @@
+{
+  "name": "unreal",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "Unreal Engine's light words (#433): point and spot lights in lumens or candela, centimetres and +Z up, each with its stated conversion. A word with no mapping is refused.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "scene3d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "unreal.point_light@1": "point_light@1.json",
+    "unreal.spot_light@1": "spot_light@1.json"
+  },
+  "aliases": {
+    "PointLight": {
+      "target": "unreal.point_light@1",
+      "conversion": "cm and +Z up to m and +Y up; lumens kept, candela × 4π"
+    },
+    "SpotLight": {
+      "target": "unreal.spot_light@1",
+      "conversion": "cone lumens × 2 ÷ (1 − cos θ_outer); candela × 4π; cm and +Z up to m and +Y up"
+    }
+  }
+}

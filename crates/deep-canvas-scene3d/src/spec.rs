@@ -260,11 +260,22 @@ fn extras(kind: &str) -> Vec<P> {
             0.0,
             100.0,
         )],
-        "tube@1" => vec![ranged(
-            p("bend", "m", "m", json!(0), G, json!(0), json!(0.2)),
-            0.0,
-            100.0,
-        )],
+        "tube@1" => vec![
+            ranged(
+                p("bend", "m", "m", json!(0), G, json!(0), json!(0.2)),
+                0.0,
+                100.0,
+            ),
+            p(
+                "normal",
+                "vec3",
+                "",
+                Value::Null,
+                G,
+                json!([1, 0, 0]),
+                json!([0, 0, 1]),
+            ),
+        ],
         "plate@1" => vec![p(
             "height",
             "field, m",
@@ -565,12 +576,12 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             params.push(ranged(
                 p("inner", "deg", "deg", json!(0), S, json!(0), json!(20)),
                 0.0,
-                179.0,
+                90.0,
             ));
             params.push(ranged(
                 p("outer", "deg", "deg", json!(45), S, json!(45), json!(60)),
                 0.0,
-                179.0,
+                90.0,
             ));
         }
         Spec {
@@ -823,6 +834,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     0.0,
                     360.0,
                 ),
+                p("from", "deg", "deg", json!(0), G, json!(0), json!(90)),
                 p(
                     "caps",
                     "none | flat | cut",
@@ -875,6 +887,22 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     1000.0,
                 ),
                 p("twist", "deg", "deg", json!(0), G, json!(0), json!(30)),
+                p(
+                    "levels",
+                    "[[z, polygon]]",
+                    "m",
+                    Value::Null,
+                    G,
+                    json!([
+                        [0, [[0, 0], [1, 0], [0, 1]]],
+                        [0.5, [[0, 0], [1, 0], [0, 1]]]
+                    ]),
+                    json!([
+                        [0, [[0, 0], [1, 0], [0, 1]]],
+                        [0.3, [[-0.1, -0.1], [1.2, -0.1], [-0.1, 1.2]]],
+                        [0.6, [[0, 0], [1, 0], [0, 1]]]
+                    ]),
+                ),
                 p(
                     "along",
                     "{curve: ID, range, scale, rings}",
@@ -977,7 +1005,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 ),
                 p(
                     "base",
-                    "octa | icosa",
+                    "tetra | octa | icosa | dodeca",
                     "",
                     json!("icosa"),
                     G,

@@ -248,6 +248,11 @@ impl Hub<'_> {
             .iter()
             .filter(|n| BUILD_OPS.contains(&n.operator.as_str()))
             .count();
+        // Each item's world matrix at t, as its instance record holds it (#433).
+        let worlds: std::collections::HashMap<String, deep_canvas_scene3d::scene::Affine3> =
+            deep_canvas_scene3d::scene::placed_at(&doc, t)
+                .map(|p| p.into_iter().map(|(id, _, m)| (id, m)).collect())
+                .unwrap_or_default();
         let mut out = Vec::new();
         let node_of = |id: &str| {
             nodes
@@ -384,6 +389,9 @@ impl Hub<'_> {
                     r.extend(mj);
                     if let Some(rings) = rings {
                         r.insert("rings".into(), rings);
+                    }
+                    if let Some(w) = worlds.get(id.as_str()) {
+                        r.insert("world".into(), json!(w));
                     }
                 }
             }

@@ -741,12 +741,74 @@
             "agent_id": "string",
             "agent_type": "string"
           }
+        },
+        "Notification": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "message": "string",
+            "notification_type": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "title": "string"
+          }
+        },
+        "Elicitation": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "mcp_server_name": "string",
+            "message": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "mode": "string",
+            "url": "string",
+            "elicitation_id": "string",
+            "requested_schema": "object"
+          }
+        },
+        "ElicitationResult": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "mcp_server_name": "string",
+            "action": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "mode": "string",
+            "elicitation_id": "string",
+            "content": "object"
+          }
         }
       }
     }
   },
   "mapping": {
-    "readBy": "the adapter maps each hook payload to events by these entries, and deep explain names the entry behind each event (#47); a value names a payload field, or =text a constant",
+    "readBy": "the adapter maps each hook payload to events by these entries, and deep explain names the entry behind each event (#47); a value names a payload field, or =text a constant; a hook that says the session waits on you or moved on (Notification, Elicitation, ElicitationResult) maps to a session.attention, its state from the payload field state names and no event for a value not listed (#992): a session-state signal, never an ask and never evidence",
     "conformance": "claude/mapping/explain",
     "common": { "session": "session_id", "subagent": "agent_id" },
     "SessionStart": {
@@ -824,6 +886,30 @@
     "TaskCompleted": {
       "kind": "task.completed",
       "data": { "agent_task": "task_id", "title": "task_subject" }
+    },
+    "Notification": {
+      "kind": "session.attention",
+      "data": {},
+      "state": {
+        "field": "notification_type",
+        "values": {
+          "permission_prompt": "waiting",
+          "elicitation_dialog": "waiting",
+          "elicitation_url_dialog": "waiting",
+          "agent_needs_input": "waiting",
+          "idle_prompt": "finished",
+          "elicitation_complete": "working",
+          "elicitation_response": "working"
+        }
+      }
+    },
+    "Elicitation": {
+      "kind": "session.attention",
+      "data": { "state": "=waiting" }
+    },
+    "ElicitationResult": {
+      "kind": "session.attention",
+      "data": { "state": "=working" }
     }
   },
   "stop": {
