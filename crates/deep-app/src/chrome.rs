@@ -87,16 +87,7 @@ pub fn chrome(dark: bool) -> &'static Chrome {
 /// against (`term_background`, or else the ground), and the default text, the ink.
 pub fn terminal(dark: bool) -> ([[u8; 3]; 16], [u8; 3], [u8; 3]) {
     let palette = if dark { &look().dark } else { &look().light };
-    let opaque = |name: &str| {
-        *palette
-            .get(name)
-            .unwrap_or_else(|| panic!("the clean look has no {name} role"))
-    };
-    let background = palette
-        .get("term_background")
-        .copied()
-        .unwrap_or_else(|| opaque("ground"));
-    (look::TERMINAL.map(opaque), background, opaque("ink"))
+    look::terminal_colors(palette).expect("the clean look gives its terminal colors")
 }
 
 thread_local! {

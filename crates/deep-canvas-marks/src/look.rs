@@ -985,6 +985,19 @@ fn surfaces(palette: &Palette, alpha: &BTreeMap<String, Rgba>) -> Vec<(&'static 
     out
 }
 
+/// A theme's terminal colors as a terminal draws them (#1003): the 16 by ANSI index, the background
+/// they keep 3:1 against (`term_background`, or else the ground), and the default text, the ink.
+/// `None` for a look that gives no terminal colors.
+pub fn terminal_colors(palette: &Palette) -> Option<([Rgb; 16], Rgb, Rgb)> {
+    let mut ansi = [[0; 3]; 16];
+    for (slot, role) in ansi.iter_mut().zip(TERMINAL) {
+        *slot = *palette.get(role)?;
+    }
+    let ground = *palette.get("ground")?;
+    let background = palette.get("term_background").copied().unwrap_or(ground);
+    Some((ansi, background, *palette.get("ink")?))
+}
+
 /// A theme's terminal colors (#1003): none, or all sixteen, each opaque and 3:1 against the
 /// terminal background, `term_background` or else the ground. A program's own colors, true color
 /// or a palette it sets, are drawn as it sent them; only the look's are held here.

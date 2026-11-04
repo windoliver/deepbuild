@@ -411,19 +411,10 @@ impl gpui_kit::Render for TerminalColors {
         _: &mut gpui_kit::Window,
         _: &mut gpui_kit::Context<Self>,
     ) -> impl gpui_kit::IntoElement {
-        use gpui_kit::{div, px, InteractiveElement as _, ParentElement as _, Styled as _};
-        let screen = deep_app::cells::look_colors(self.dark);
-        let [r, g, b] = screen.bg;
+        use gpui_kit::{div, InteractiveElement as _, ParentElement as _, Styled as _};
         div()
             .id("terminal-colors")
             .size_full()
-            .p(px(16.))
-            .bg(gpui_kit::Rgba {
-                r: f32::from(r) / 255.,
-                g: f32::from(g) / 255.,
-                b: f32::from(b) / 255.,
-                a: 1.,
-            })
-            .child(deep_app::cells::cells("terminal-colors", screen))
+            .child(deep_app::cells::look_colors_page(self.dark))
     }
 }

@@ -99,12 +99,46 @@ pub struct Shipped {
     focus_handle: FocusHandle,
     /// What Home's Set up click said, once clicked.
     set_up: Option<String>,
-    /// The sidebar's open row, drawn in the selected fill, and the row keyboard focus is on, drawn with the
-    /// focus ring (#1003).
-    selected: Option<usize>,
-    focused: Option<usize>,
-    /// Whether the sidebar takes keyboard focus at its next frame, as the replica opens it with a focused row.
-    take_focus: bool,
+    /// The sidebar's open session and the one keyboard focus is on (#1003).
+    rows: SidebarRows,
+    /// The rows, by index, the replica opens the sidebar with: read at its first frame, when the sidebar also
+    /// takes keyboard focus if one is focused.
+    start: Option<(Option<usize>, Option<usize>)>,
+}
+
+/// The sidebar's open session, drawn in the selected fill, and the one keyboard focus is on, drawn with the focus
+/// ring (#1003). Each is a session, not a row, so a row that moves keeps them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SidebarRows {
+    pub selected: Option<String>,
+    pub focused: Option<String>,
+}
+
+impl SidebarRows {
+    /// `key` over the sidebar's `sessions` in their order: up and down move the focus ring a row, return or space
+    /// opens the focused session. Whether it changed anything.
+    pub fn key(&mut self, key: &str, sessions: &[String]) -> bool {
+        let Some(last) = sessions.len().checked_sub(1) else {
+            return false;
+        };
+        let at = self
+            .focused
+            .as_ref()
+            .and_then(|f| sessions.iter().position(|s| s == f));
+        let to = match key {
+            "down" => at.map_or(0, |i| (i + 1).min(last)),
+            "up" => at.map_or(0, |i| i.saturating_sub(1)),
+            "enter" | "space" if at.is_some() => {
+                let changed = self.selected != self.focused;
+                self.selected = self.focused.clone();
+                return changed;
+            }
+            _ => return false,
+        };
+        let changed = at != Some(to);
+        self.focused = Some(sessions[to].clone());
+        changed
+    }
 }
 
 thread_local! {
@@ -118,34 +152,13 @@ pub fn start_sidebar(selected: Option<usize>, focused: Option<usize>) {
 
 impl Shipped {
     pub fn new(kind: Kind, cx: &mut Context<Self>) -> Self {
-        let (selected, focused) = match kind {
-            Kind::Sidebar => SIDEBAR_ROWS.with(std::cell::Cell::get),
-            _ => (None, None),
-        };
         Self {
             kind,
             focus_handle: cx.focus_handle(),
             set_up: None,
-            selected,
-            focused,
-            take_focus: focused.is_some(),
+            rows: SidebarRows::default(),
+            start: (kind == Kind::Sidebar).then(|| SIDEBAR_ROWS.with(std::cell::Cell::get)),
         }
-    }
-
-    /// The sidebar's keys (#1003): up and down move the focus ring between rows, return or space opens the
-    /// focused row.
-    fn sidebar_key(&mut self, key: &str, rows: usize, cx: &mut Context<Self>) {
-        if rows == 0 {
-            return;
-        }
-        let last = rows - 1;
-        match key {
-            "down" => self.focused = Some(self.focused.map_or(0, |at| (at + 1).min(last))),
-            "up" => self.focused = Some(self.focused.map_or(0, |at| at.saturating_sub(1))),
-            "enter" | "space" if self.focused.is_some() => self.selected = self.focused,
-            _ => return,
-        }
-        cx.notify();
     }
 }
 
@@ -436,27 +449,36 @@ impl Render for Shipped {
             .text_color(chrome.ink_primary);
         match self.kind {
             Kind::Sidebar => {
-                let rows = record.rows.len();
-                if std::mem::take(&mut self.take_focus) {
-                    window.focus(&self.focus_handle, cx);
+                let ids: Vec<String> = record.sessions.iter().map(|(id, ..)| id.clone()).collect();
+                if let Some((selected, focused)) = self.start.take() {
+                    let id = |at: Option<usize>| at.and_then(|i| ids.get(i).cloned());
+                    self.rows = SidebarRows {
+                        selected: id(selected),
+                        focused: id(focused),
+                    };
+                    if self.rows.focused.is_some() {
+                        window.focus(&self.focus_handle, cx);
+                    }
                 }
                 // The ring shows only while keys reach the sidebar, so it never points where they don't go.
-                let focused = self
-                    .focused
-                    .filter(|_| self.focus_handle.is_focused(window));
-                let selected = self.selected;
+                let focused = (self.focus_handle.is_focused(window))
+                    .then(|| self.rows.focused.clone())
+                    .flatten();
+                let selected = self.rows.selected.clone();
                 page.bg(chrome.raised)
                     .track_focus(&self.focus_handle)
                     .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
-                        this.sidebar_key(&event.keystroke.key, rows, cx)
+                        if this.rows.key(&event.keystroke.key, &ids) {
+                            cx.notify();
+                        }
                     }))
                     .child(title("sidebar-title", "Sessions"))
                     .children(record.sessions.iter().zip(&record.rows).enumerate().map(
-                        |(index, ((_, task, _), (words, entry)))| {
+                        |(index, ((session, task, _), (words, entry)))| {
                             let text = format!("{task} · {words}");
                             // The ring is always laid out, so focus moving never shifts a row; it shows on the
                             // focused row alone.
-                            let ring = if focused == Some(index) {
+                            let ring = if focused.as_ref() == Some(session) {
                                 chrome.focus
                             } else {
                                 chrome.focus.opacity(0.)
@@ -469,11 +491,21 @@ impl Render for Shipped {
                                 .border_2()
                                 .border_color(ring)
                                 .hover(|style| style.bg(chrome.hover))
-                                .when(selected == Some(index), |row| row.bg(chrome.selected))
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.selected = Some(index);
-                                    this.focused = Some(index);
-                                    cx.notify();
+                                .when(selected.as_ref() == Some(session), |row| {
+                                    row.bg(chrome.selected)
+                                })
+                                .on_click(cx.listener({
+                                    let session = session.clone();
+                                    // A click opens the row and gives the sidebar the keys, so the ring
+                                    // goes on from there.
+                                    move |this, _, window, cx| {
+                                        this.rows = SidebarRows {
+                                            selected: Some(session.clone()),
+                                            focused: Some(session.clone()),
+                                        };
+                                        window.focus(&this.focus_handle, cx);
+                                        cx.notify();
+                                    }
                                 }))
                         },
                     ))
@@ -725,6 +757,43 @@ impl Render for Shell {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[std::prelude::v1::test]
+    fn the_sidebars_keys_move_the_ring_and_open_the_focused_session_which_keeps_its_row_as_rows_move(
+    ) {
+        let ids = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let sessions = ids(&["a", "b", "c"]);
+        let mut rows = SidebarRows::default();
+        // Down from nothing focuses the first row; down again the second; up and down stop at the ends.
+        assert!(rows.key("down", &sessions));
+        assert!(rows.key("down", &sessions));
+        assert_eq!(rows.focused.as_deref(), Some("b"));
+        rows.key("down", &sessions);
+        assert!(!rows.key("down", &sessions), "the last row holds");
+        rows.key("up", &sessions);
+        rows.key("up", &sessions);
+        assert!(!rows.key("up", &sessions), "the first row holds");
+        // Return opens the focused session; focus moving on leaves it open, so selected and focused differ.
+        rows.key("down", &sessions);
+        assert!(rows.key("enter", &sessions));
+        rows.key("down", &sessions);
+        assert_eq!(
+            rows,
+            SidebarRows {
+                selected: Some("b".into()),
+                focused: Some("c".into())
+            }
+        );
+        // A new session shown first moves every row down a place; the same sessions stay selected and focused.
+        let moved = ids(&["z", "a", "b", "c"]);
+        rows.key("up", &moved);
+        assert_eq!(rows.focused.as_deref(), Some("b"));
+        assert_eq!(rows.selected.as_deref(), Some("b"));
+        // Keys on an empty sidebar change nothing; space opens as return does.
+        assert!(!SidebarRows::default().key("down", &[]));
+        assert!(rows.key("down", &moved) && rows.key("space", &moved));
+        assert_eq!(rows.selected.as_deref(), Some("c"));
+    }
 
     #[std::prelude::v1::test]
     fn a_shipped_view_fills_the_center_and_the_sidebar_view_shows_home() {
