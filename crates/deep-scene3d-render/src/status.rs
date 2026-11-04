@@ -82,6 +82,9 @@ impl Guard {
 pub struct Layer {
     pub size: [u32; 2],
     pub rgba: Arc<[u8]>,
+    /// The boxes its marks and legend entries own, px `[x, y, w, h]`, which the finish leaves
+    /// undithered whether or not the layer's shapes fill them (#418).
+    pub covers: Vec<[f64; 4]>,
 }
 
 /// The stage's GPU side: the two pipelines, the guard's uniform and its counter, and the layer.
@@ -315,6 +318,10 @@ impl After for Shared {
         // Status outlines are depth-tested against the core's depth target (#386).
         colors.reads.push("depth");
         vec![pass(GUARD_PASS, "status_guard", 0.08), colors]
+    }
+
+    fn covers(&self) -> Option<Layer> {
+        lock(&self.0).layer.clone()
     }
 
     fn jobs(&mut self, device: &Device, frame: &AfterFrame<'_>) -> Vec<(String, Job)> {

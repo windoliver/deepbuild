@@ -12,6 +12,7 @@ mod ask;
 mod capture;
 mod costs;
 mod efficiency;
+mod familiar;
 mod evidence;
 mod frames;
 mod gate;
@@ -38,6 +39,7 @@ mod serve;
 mod shaper;
 mod shared;
 mod snapshot;
+mod spatial;
 mod terminal;
 #[cfg(feature = "test-machines")]
 mod test_machines;
@@ -49,7 +51,8 @@ mod time;
     feature = "test-json",
     feature = "test-debug-digest",
     feature = "test-accent",
-    feature = "test-threads"
+    feature = "test-threads",
+    feature = "test-scene3d-tie-by-order"
 ))]
 mod twins;
 mod verdict;
@@ -522,6 +525,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "registry" => return Some(Call::Registry),
         "geometry" => return geometry::parse(c).map(|g| Call::Geometry(Box::new(g))),
         "kinds" => return Some(Call::KindSchemas),
+        "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -1041,10 +1045,16 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .and_then(Value::as_str)
         .filter(|p| deep_canvas_scene3d::PLANTED.contains(p))
         .map(str::to_string);
+    // #433's wrong programs are twins of the familiar@1 pack.
+    let pack_planted = input
+        .get("planted")
+        .and_then(Value::as_str)
+        .filter(|p| familiar::PLANTED.contains(p))
+        .map(str::to_string);
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
         Some(None) => return None,
-        Some(Some(_)) if module_planted.is_some() => None,
+        Some(Some(_)) if module_planted.is_some() || pack_planted.is_some() => None,
         Some(Some(p)) => match placement_planted.flag(p) {
             // #400's wrong programs live in the placement.
             Some(flag) => {
@@ -1166,6 +1176,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "comparer_matches_hash" => Planted::ComparerMatchesHash,
                 "keeps_voices_on_switch" => Planted::KeepsVoicesOnSwitch,
                 "fades_on_close" => Planted::FadesOnClose,
+                "cull_by_center" => Planted::CullByCenter,
+                "bounds_children_only" => Planted::BoundsChildrenOnly,
                 _ => return None,
             }),
         },
@@ -1229,8 +1241,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let at = list
         .iter()
         .map(|c| {
-            // deep_query's `at` is the times it reads (#411): on the clock it arrives at `arrives`.
-            let arrives = if c.get("call") == Some(&json!("deep_query")) {
+            // deep_query's `at` is the times it reads (#411), geometry's the curve fractions it
+            // reads (#441): on the clock either arrives at `arrives`.
+            let arrives = if c.get("call") == Some(&json!("deep_query"))
+                || c.get("call") == Some(&json!("geometry"))
+            {
                 "arrives"
             } else {
                 "at"
@@ -1326,6 +1341,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         fault,
         planted,
         module_planted,
+        pack_planted,
         calls,
         at,
         seeds,
@@ -1421,7 +1437,7 @@ impl CanvasSide {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                let arrives = if c["call"] == "deep_query" {
+                let arrives = if c["call"] == "deep_query" || c["call"] == "geometry" {
                     "arrives"
                 } else {
                     "at"
@@ -1579,6 +1595,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-sim-b-off",
     feature = "test-sim-c",
     feature = "test-gpu-second-backend",
+    feature = "test-scene3d-tie-by-order",
     feature = "test-b",
     feature = "test-b-requires-a",
     feature = "test-two-writers",
@@ -1620,13 +1637,28 @@ fn modules(set: BuildSet) -> Vec<Module> {
     #[allow(unused_mut)]
     let mut out: Vec<Module> = vec![
         deep_canvas_marks::modules::text(),
-        deep_canvas_marks::modules::look(),
+        // #418: `test-look-finish-off` seals the planted look@1 implementation in its place.
+        if cfg!(feature = "test-look-finish-off") {
+            deep_canvas_marks::modules::look_finish_off()
+        } else {
+            deep_canvas_marks::modules::look()
+        },
     ];
     if set >= BuildSet::R1 {
         out.extend([
             deep_canvas_marks::modules::marks2d(),
-            deep_canvas_marks::modules::data(),
-            deep_canvas_graph::module::module(),
+            // #399: `test-data-m4-drops-last` and `test-graph-tie-by-registration` seal the
+            // planted data@1 and graph@1 implementations in their places.
+            if cfg!(feature = "test-data-m4-drops-last") {
+                deep_canvas_marks::modules::data_m4_drops_last()
+            } else {
+                deep_canvas_marks::modules::data()
+            },
+            if cfg!(feature = "test-graph-tie-by-registration") {
+                deep_canvas_graph::module::tie_by_registration()
+            } else {
+                deep_canvas_graph::module::module()
+            },
             deep_canvas_record::module::module(),
             deep_canvas_sheet::module::module(),
             deep_canvas_motion::module::module(),
@@ -1635,6 +1667,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     if set >= BuildSet::R2 {
         // Issue #402: the cell grid, on the text module.
         out.push(deep_canvas_cells::module::module());
+        // Issue #421: `test-scene3d-tie-by-order` holds the planted implementation in its place.
+        #[cfg(feature = "test-scene3d-tie-by-order")]
+        out.push(twins::scene3d_tie_by_order());
+        #[cfg(not(feature = "test-scene3d-tie-by-order"))]
         out.push(deep_canvas_scene3d::module::module());
         // Issue #380: the shipped effects, whose passes go into scene3d's frame; #200's planted
         // layout has it fill the op table's base steps.
@@ -1643,8 +1679,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_canvas_effects::module::module()
         });
-        // Issue #398: SVG import and formulas, drawn as marks2d's items.
-        out.push(deep_canvas_vector::module::module());
+        // Issue #398: SVG import and formulas, drawn as marks2d's items; #399's
+        // `test-vector-currentcolor-ink` seals the planted vector@1 implementation in its place.
+        out.push(if cfg!(feature = "test-vector-currentcolor-ink") {
+            deep_canvas_vector::module::currentcolor_ink()
+        } else {
+            deep_canvas_vector::module::module()
+        });
     }
     if set >= BuildSet::Full {
         // Issue #420: walls, openings, slabs, roofs and stairs as trusted builders.
@@ -1813,9 +1854,20 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             if sandbox {
                 parts.push(kit::SANDBOX_PART.to_string());
             }
+            // #418, #399, #421: look@1's, data@1's, graph@1's, vector@1's and scene3d@1's
+            // references are the shipped modules, whichever a test build holds.
+            let reference = match interface.as_str() {
+                _ if sandbox => deep_canvas_sandbox::module::module(),
+                "look@1" => deep_canvas_marks::modules::look(),
+                "data@1" => deep_canvas_marks::modules::data(),
+                "graph@1" => deep_canvas_graph::module::module(),
+                "vector@1" => deep_canvas_vector::module::module(),
+                _ if m.manifest.name == "scene3d" => deep_canvas_scene3d::module::module(),
+                _ => m,
+            };
             deep_canvas::registry::Interface {
                 name: interface,
-                reference: if sandbox { deep_canvas_sandbox::module::module() } else { m },
+                reference,
                 kit: parts,
                 behavior: None,
             }
@@ -1900,7 +1952,7 @@ pub fn shipped_manifests() -> Vec<deep_canvas::registry::Manifest> {
 
 /// Registers the build's canvas modules in sorted name order and seals, timing both; the
 /// planted seal (`--planted treats_every_dependency_required`) is the criterion's wrong program.
-fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, SealError> {
+fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, Box<SealError>> {
     let started = Instant::now();
     hub::SEAL_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut held = modules(build_set());
@@ -1921,12 +1973,12 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
     for name in deep_canvas::registry::CORE_MODULES {
         let exempt = name == "look" && planted == Some(StartPlanted::StartsWithoutLook);
         if !exempt && !held.iter().any(|m| m.manifest.name == name) {
-            return Err(SealError {
+            return Err(Box::new(SealError {
                 code: "missing_core_module",
                 modules: vec![name.to_string()],
                 what: format!("every build set holds `{name}`, and this build leaves it out"),
                 ..SealError::default()
-            });
+            }));
         }
     }
     let mut registry = assemble(build_set(), held)
@@ -1957,7 +2009,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
     // #412: a build whose sheet passes 32 KB is refused, naming the entries whose lines put it
     // past and the bytes over.
     if let Some((entries, over)) = kinds::sheet_overrun(&sealed) {
-        return Err(SealError {
+        return Err(Box::new(SealError {
             code: "sheet_overrun",
             what: format!(
                 "the sheet is {over} bytes past its {} bytes; ship {} as a recipe or a gallery example",
@@ -1972,7 +2024,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, S
             })),
             overrun_bytes: Some(over),
             ..SealError::default()
-        });
+        }));
     }
     Ok(Startup {
         sealed,

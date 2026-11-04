@@ -774,6 +774,8 @@ fn cell_grids(
                     size: g.font_size,
                     weight: 400,
                     width: None,
+                    max_lines: None,
+                    mask: false,
                     align: scene::Align::Start,
                     bound: false,
                 },
