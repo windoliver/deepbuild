@@ -122,6 +122,10 @@ export type AdapterFactsHookRule = {
     values: AdapterFactsCauseMap;
     otherwise: AdapterFactsStopCause;
   };
+  state?: {
+    field: AdapterFactsText;
+    values: { [key: string]: "working" | "waiting" | "finished" };
+  };
 };
 
 export type AdapterFactsOperation = {
@@ -221,6 +225,9 @@ export interface AdapterFacts {
     SubagentStop?: AdapterFactsHookRule;
     TaskCreated?: AdapterFactsHookRule;
     TaskCompleted?: AdapterFactsHookRule;
+    Notification?: AdapterFactsHookRule;
+    Elicitation?: AdapterFactsHookRule;
+    ElicitationResult?: AdapterFactsHookRule;
     TeammateIdle?: AdapterFactsHookRule;
     WorktreeCreate?: AdapterFactsHookRule;
     WorktreeRemove?: AdapterFactsHookRule;
@@ -5227,6 +5234,28 @@ export interface RunKept {
   evidence?: Array<string>;
 }
 
+/** run.stale@1 */
+export interface RunStale {
+  v: 1;
+  id: string;
+  kind: "run.stale";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    run: string;
+    check: string;
+    claim: string;
+    newer_claim: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.started@1 */
 export interface RunStarted {
   v: 1;
@@ -5695,6 +5724,25 @@ export interface SessionStartV4 {
       tools?: Array<string>;
     }>;
     parent?: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.state@1 */
+export interface SessionState {
+  v: 1;
+  id: string;
+  kind: "session.state";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    state: "needs you" | "stuck" | "flagged" | "working" | "finished" | "quiet";
+    cause: "ask" | "gone" | "waiting" | "stuck" | "promised" | "failed" | "quiet" | "interrupted" | "finished" | "working";
   };
   evidence?: Array<string>;
 }
