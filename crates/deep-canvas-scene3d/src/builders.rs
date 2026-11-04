@@ -1584,7 +1584,8 @@ fn coil(p: &Value) -> Result<Mesh, Fault> {
     tube(&coil_tube(p)?, &path)
 }
 
-/// The two Platonic bases a geodesic ball subdivides: their corners and triangles.
+/// The four Platonic bases a geodesic ball subdivides (Builder `ball`: tessellation): their corners
+/// on the unit sphere and triangles, each wound outward.
 fn base_solid(base: &str) -> (Vec<V3>, Vec<[usize; 3]>) {
     let phi = (1.0 + sqrt(5.0)) / 2.0;
     if base == "dodeca" {
@@ -1636,6 +1637,9 @@ fn base_solid(base: &str) -> (Vec<V3>, Vec<[usize; 3]>) {
     }
     (corners.iter().map(|c| unit(*c)).collect(), faces)
 }
+
+/// A geodesic ball's bases.
+const BASES: &[&str] = &["tetra", "octa", "icosa", "dodeca"];
 
 /// The dodecahedron: the cube's corners and three golden rectangles' (#433), each pentagon the
 /// five corners nearest one of the icosahedron's corners, fanned from its first in turn.
@@ -1700,8 +1704,8 @@ fn ball_count(p: &Value) -> Result<(u64, u64), Fault> {
         let h = (s / 2).max(2);
         return Ok(((s + 1) * (h + 1), 2 * s * (h - 1)));
     }
-    let base = text(p, "base", "icosa", &["tetra", "octa", "icosa", "dodeca"])?;
-    let d = count(p, "detail", 1, 0, 6)?;
+    let base = text(p, "base", "icosa", BASES)?;
+    let d = count(p, "detail", 0, 0, 5)?;
     let faces = match base {
         "tetra" => 4,
         "octa" => 8,
@@ -1740,8 +1744,8 @@ fn ball(p: &Value, plants: Plants) -> Result<Mesh, Fault> {
         m.close("solid", 0, 0);
         return Ok(m);
     }
-    let base = text(p, "base", "icosa", &["tetra", "octa", "icosa", "dodeca"])?;
-    let d = count(p, "detail", 1, 0, 6)? as usize;
+    let base = text(p, "base", "icosa", BASES)?;
+    let d = count(p, "detail", 0, 0, 5)? as usize;
     let r = if plants.ball_scaled {
         radius * 1.01
     } else {
@@ -1759,9 +1763,17 @@ fn ball(p: &Value, plants: Plants) -> Result<Mesh, Fault> {
             );
             unit(q)
         };
+        // Detail 0 is the solid itself, its faces flat; finer, each vertex's normal its own.
+        let flat = d == 0;
         let tri = |m: &mut Mesh, x: V3, y: V3, z: V3| {
-            let ids = [x, y, z].map(|q| m.vertex(scale(q, r), q));
+            let face_n = unit(cross(sub(y, x), sub(z, x)));
             let out = unit(add(add(x, y), z));
+            let face_n = if crate::geom::dot(face_n, out) < 0.0 {
+                scale(face_n, -1.0)
+            } else {
+                face_n
+            };
+            let ids = [x, y, z].map(|q| m.vertex(scale(q, r), if flat { face_n } else { q }));
             let face = m.triangles() as u32;
             tri_facing(m, ids[0], ids[1], ids[2], out, face);
         };
@@ -2395,5 +2407,54 @@ mod tests {
             .1,
             540
         );
+    }
+}
+
+#[cfg(test)]
+mod platonic_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// Builder `ball`: tessellation (#423): detail 0 gives the four Platonic solids, closed, with
+    /// flat faces and the declared 3 × faces × (detail + 1)² vertices; the dodecahedron's twelve
+    /// pentagons are flat, so each of its 36 triangles shares its normal with two others.
+    #[test]
+    fn detail_zero_gives_the_four_platonic_solids_with_flat_faces() {
+        for (base, faces, corners) in [
+            ("tetra", 4, 4),
+            ("octa", 8, 6),
+            ("icosa", 20, 12),
+            ("dodeca", 36, 20),
+        ] {
+            let p = json!({"tessellation": "geodesic", "base": base, "radius": 1.0});
+            let m = ball(&p, Plants::default()).unwrap();
+            assert_eq!(m.triangles(), faces, "{base}");
+            assert_eq!(
+                ball_count(&p).unwrap(),
+                (3 * faces as u64, faces as u64),
+                "{base}"
+            );
+            let mut distinct: Vec<V3> = Vec::new();
+            for q in &m.positions {
+                if !distinct.iter().any(|d| length(sub(*d, *q)) < 1e-9) {
+                    distinct.push(*q);
+                }
+            }
+            assert_eq!(distinct.len(), corners, "{base}");
+            for t in m.indices.chunks_exact(3) {
+                let [a, b, c] = [t[0], t[1], t[2]].map(|i| m.positions[i as usize]);
+                let n = unit(cross(sub(b, a), sub(c, a)));
+                assert!(
+                    dot(n, unit(add(add(a, b), c))) > 0.0,
+                    "{base}: wound outward"
+                );
+                for i in t {
+                    assert!(
+                        length(sub(m.normals[*i as usize], n)) < 1e-9,
+                        "{base}: flat"
+                    );
+                }
+            }
+        }
     }
 }

@@ -4,14 +4,17 @@
 // one its chat showed (#669). With the hub up it asks the hub (`status.read`); with the
 // hub down it opens the hub's database read-only and reads the same tables.
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join, relative } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { billingMode } from '@deepbuild/readings';
 import { call } from './client.js';
 import { CAN_RUN, CANT_RUN } from './hook-programs.js';
 import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { rowReadings } from './codex-loops.js';
+import { numbersLines } from './numbers.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime } from './promises.js';
+import { startOf } from './wire.js';
 import { claimState, newestClaim } from './verdict-chat.js';
 import { verdictLine } from '@deepbuild/verdicts';
 
@@ -107,8 +110,15 @@ export async function sessionStates(query: (sql: string) => Promise<unknown[]>, 
 /** Each session's row, from the record's tables through `query` (the hub's record, or its database read-only). */
 export async function statusRows(query: (sql: string) => Promise<unknown[]>, now: number): Promise<StatusRow[]> {
   const sessions = await sessionStates(query, now);
+  // By each session's latest start: a resume without the key no longer bills it.
+  const keyed = new Set<string>();
+  for (const e of (await query("SELECT session_id, data FROM events WHERE kind = 'session.start' AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; data: string | Obj }[]) {
+    const data = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as Obj;
+    if (billingMode({ id: '', kind: 'session.start', v: 3, ts: 0, session: e.session_id, data }) === 'api_key') keyed.add(e.session_id);
+    else keyed.delete(e.session_id);
+  }
   const rows = sessions.map((s): StatusRow => {
-    return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state: s.state, why: s.why, ...(s.note ? { note: s.note } : {}) };
+    return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state: s.state, why: keyed.has(s.id) ? `${s.why}, billing an API key` : s.why, ...(s.note ? { note: s.note } : {}) };
   });
   // The newest claim's line, from the record's claims, verdicts and runs, as the chat shows it (#83, #669).
   for (const row of rows) {
@@ -248,6 +258,38 @@ export function render(rows: readonly StatusRow[], from: string): string {
   const byRepo = [...new Set(quiet.map((r) => r.repo))].sort().map((repo) => `${repo} ${quiet.filter((r) => r.repo === repo).length}`);
   if (quiet.length) out.push(`${quiet.length} quiet, by repo: ${byRepo.join(', ')}`);
   return `${out.join('\n')}\n`;
+}
+
+/** `deep numbers`: your readings through the hub, or what changes them; a hub that can't be read shows no numbers at all. */
+export async function numbersCommand(args: readonly string[]): Promise<number> {
+  const [sub, arg, extra] = args;
+  const asks: [string, Record<string, unknown>] | undefined = !sub || sub === '--json' ? ['numbers.read', {}]
+    : sub === 'refresh' && !arg ? ['numbers.refresh', {}]
+    : sub === 'baseline' && arg ? ['numbers.baseline', { manifest: resolve(arg) }]
+    : sub === 'sample' && arg && !Number.isNaN(Date.parse(arg)) ? ['numbers.sample', { before: Date.parse(arg), ...(extra ? { manifest: resolve(extra) } : {}) }]
+    : undefined;
+  if (!asks) {
+    process.stderr.write('Usage: deep numbers [--json] | refresh | baseline <manifest> | sample <before date> [manifest]\n');
+    return 2;
+  }
+  try {
+    const socket = hubAddress().path;
+    const token = [join(dirname(socket), 'control.token'), rootOf(installedRoot()).token].find((p) => existsSync(p));
+    // Named so the hub can refuse an agent's process tree what feeds your numbers.
+    const reply = await call(socket, token ? readFileSync(token, 'utf8').trim() : '', asks[0], asks[1], { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
+    if (!('result' in reply)) {
+      process.stderr.write(`deep numbers: ${reply.error.remediation}\n`);
+      return 3;
+    }
+    if (asks[0] === 'numbers.read' && sub !== '--json') {
+      const lines = numbersLines(reply.result.rows as Parameters<typeof numbersLines>[0]);
+      process.stdout.write(lines.length ? `${lines.join('\n')}\n` : 'No readings yet.\n');
+    } else process.stdout.write(`${JSON.stringify(reply.result, null, 2)}\n`);
+    return 0;
+  } catch (error) {
+    process.stderr.write(`deep numbers: ${error instanceof Error ? error.message : String(error)}; start the hub with deep hub start.\n`);
+    return 3;
+  }
 }
 
 /** `deep status`: 0 read from the hub; 3 when no hub could be read, after what its database shows, if there is one. */
