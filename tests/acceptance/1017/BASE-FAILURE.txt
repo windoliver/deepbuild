@@ -1,0 +1,39 @@
+Base commit: 79d98cbc (Merge pull request #1242 from windoliver/worktree-github-issue-429-1c75e2)
+Commands (one file each, the repo's Node 24.22.0, packages/cli/dist and target/debug/deep-hook built at the base):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1017/<file>.test.ts -t "<the main test's name>" --testTimeout=600000
+Date: 2026-11-04  vitest 5.0.5  darwin-arm64, Mac15,7, 12 cores, load 47-70 (the machine shared with other sessions),
+  host disk 79-102 GB free.
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1017/tsconfig.json exits 0 at the base.
+
+What the base is: no `products` in the environment reader, no store under ~/.deepbuild/, no `product.built` event, no
+guard entry for a store, and a session start that places nothing. The hub refuses a DEEP_HUB_PLANT it doesn't list, so
+every planted-program test would fail at startHub ("the hub didn't start with DEEP_HUB_PLANT=<plant>"); none was run.
+
+Finished at the base:
+
+== budgets.test.ts (AC8): Tests 1 failed | 1 skipped (2), 8.7 s
+- skipped, INCONCLUSIVE (not measured): AC8 placing a 15 GB target and a 500 MB node_modules ... under 2 s.
+  environmentProblem() named the load (past the 12 cores), so nothing was built.
+x AC8 #1017.15579648 the perf lane has a task naming #1017, valid against the merge base's budgets, and it runs
+  AssertionError: benchmarks/budgets.json must have a task whose reason names issue #1017, timing a placement against
+  the merge base: expected undefined to be defined
+
+== dogfood.test.ts (AC7): Tests 1 skipped (1), 0.4 s
+- skipped, INCONCLUSIVE (not run): the host disk had under the 150 GB free this run writes at most (79-102 GB free).
+  Nothing was cloned or built. The heavy one, by design (README).
+
+Stopped before they finished (each killed by its PID on the coordinator's word, its test volume detached by hand):
+each had started its hub on its own test volume and was making its fixture, and each would have waited 20 min
+(BUILD_WAIT_MS) for a `product.built` the base never records, then failed at waitBuilt: "the hub never recorded a
+product.built for <name> (<path>) within 20 min of a session's start in the repo; the store holds: nothing (no
+<home>/.deepbuild/products)". That failure proves only what the README's "What the base does" already says.
+
+- placement.test.ts (AC1): stopped during `cargo generate-lockfile --offline` for the sample, before the first worktree's cold build; would fail at waitBuilt for target (target).
+- toolchains.test.ts (AC2): stopped while making the uv sample repo; would fail at waitBuilt for venv (.venv).
+- keys.test.ts (AC3): stopped past the hub's start, the hub its only child then (most likely in waitBuilt); would fail at waitBuilt for node_modules (node_modules).
+- stale.test.ts (AC4): stopped during `cargo generate-lockfile --offline` for the sample; would fail at waitBuilt for target (target).
+- readonly.test.ts (AC5): stopped past the hub's start, the hub its only child then (most likely in waitBuilt); would fail at waitBuilt for gen (out).
+- floor.test.ts (AC6): stopped past the hub's start, the hub its only child then (most likely in waitBuilt); would fail at waitBuilt for blob (out).
+
+Not run at the base: every planted-program test (see above). A first attempt the same day ran on the wrong Node
+(23.9.0, from PATH); it was stopped the same way, and nothing from it is reported here.
