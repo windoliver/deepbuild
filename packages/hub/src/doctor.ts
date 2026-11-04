@@ -205,7 +205,7 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
     else add('claude.token', agent, 'healthy', 'ok', `your sign-in token expires at ${when}`, 'Nothing to do; a run planned past then won\'t start, saying so.');
   }
   billing(agent, 'Claude Code', env, add);
-  await modItems(claude, env, add);
+  await modItems(claude, env, signed?.loggedIn === true ? signed.subscriptionType : undefined, add);
   if (env.CLAUDECODE) add('claude.nesting', agent, 'nested_session', 'warn', 'deep doctor runs inside a Claude Code session (CLAUDECODE is set), so what it reads is that session\'s environment', 'Run deep doctor from your own terminal.');
   if (!prompt && plant() !== 'prompt-without-flag') {
     // The planted wrong program shows the prompt it didn't send as ok.
@@ -224,10 +224,11 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
  * each that can approve a call past a PreToolUse deny or submit prompts, unless the setup holds the deny; OK
  * when none can; not checked when the home's plugins can't be read.
  */
-async function modItems(claude: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
+async function modItems(claude: string, env: NodeJS.ProcessEnv, plan: unknown, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
   const agent = 'claude-code';
-  const held = await denyHolds(env, claude);
-  for (const home of claudeHomes(env)) {
+  for (const [i, home] of claudeHomes(env).entries()) {
+    // The sign-in already read is the first home's, the one `claude auth status` reads with this environment.
+    const held = await denyHolds({ ...env, CLAUDE_CONFIG_DIR: home }, claude, i === 0 ? { plan } : undefined);
     const read = await homeMods(home, claude, env);
     if ('unread' in read) {
       add('claude.mods', agent, 'not_checked', 'skip', `the mods ${home} loads couldn't be read: ${read.unread}`, `Run claude plugin validate on each plugin in ${home}/plugins yourself, and remove or fix the one it can't read.`);

@@ -157,7 +157,7 @@ const versionRefusal = (value: Obj): Refusal =>
 
 
 interface CoreLink {
-  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' }): void;
+  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' }): void;
   request(request: CoreRequest): Promise<unknown>;
   /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
   started: Promise<{ hooks: string[] }>;
@@ -214,6 +214,7 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
       else if (message.op === 'overrun') void core.overrun(message).catch(() => undefined);
       else if (message.op === 'later') core.later(message.session, message.cwd, message.text);
       else if (message.op === 'line') void core.line(message.session, message.agent, message.text).catch(() => undefined);
+      else if (message.op === 'denied') core.denied(message.session, message.call, { guard: message.guard, label: message.label });
       else core.unsubscribe(message.sub);
     },
     request: (request) => answer(core, request).catch((error: unknown) => { throw new Refused(asRefusal(error)); }),
@@ -630,6 +631,8 @@ class Hub {
     // A blocked call's reply is its block: no acknowledgement takes its place, and the next call carries the acknowledgement.
     const held = !blocked && !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
     if (meta.event === 'Stop' || meta.event === 'SessionEnd') this.sawWork.delete(meta.session);
+    // A resumed session's calls go to the gate until the core says whether its cut-off turn left a send to match (#85, #1033).
+    if (meta.event === 'SessionStart' && meta.fields?.source === 'resume') this.resend.add(meta.session);
     const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
     else conn.sock.write(line({ ack: meta.id, hold_until_ms: hold }));
@@ -710,7 +713,7 @@ class Hub {
   private async gateReply(conn: Conn, meta: HookMeta, call: Gated, hold: number, before: unknown, ruled: string): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<{ late: true }>((resolve) => { timer = setTimeout(() => resolve({ late: true }), Math.max(0, hold - Date.now() - HOLD_MARGIN - (before === undefined ? 0 : EXTENSION_HOLD_MS))); });
-    const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; allow?: string; deny?: string; failed?: string }>;
+    const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; allow?: string; deny?: string; rule?: string; failed?: string }>;
     const gate = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
     if (!conn.sock.writable) return;
@@ -718,6 +721,8 @@ class Hub {
       : gate.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${gate.failed}). Run it again.` : gate.held ?? gate.deny;
     if (why) {
       this.waits.drop(meta.session, meta.toolUse);
+      // The deny that reached the agent, late and failed checks included, is kept for a PostToolUse that shows it ran anyway (#1033).
+      if (meta.toolUse) this.core.post({ op: 'denied', session: meta.session, call: meta.toolUse, guard: 'rule' in gate && gate.rule ? gate.rule : "the gate's authority hold (#321)", label: call.label });
       return void conn.sock.end(line({ exit: 2, stdout: '', stderr: `${why}\n` }));
     }
     if (before !== undefined) return this.extensionReply(conn, meta, before, hold, ruled);

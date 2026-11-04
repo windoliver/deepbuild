@@ -47,16 +47,19 @@ export function claudeOnPath(env: NodeJS.ProcessEnv): string | undefined {
 }
 /**
  * Why the setup holds a PreToolUse deny whatever a mod answers, by the facts' cases: managed settings on the machine,
- * or a Team or Enterprise login (`claude auth status`); undefined when nothing does.
+ * or a Team or Enterprise login (`claude auth status` in `env`'s home, or the plan already read from it); undefined
+ * when nothing does.
  */
-export async function denyHolds(env: NodeJS.ProcessEnv, claude: string | undefined, facts: ModsFacts = modsFacts()): Promise<string | undefined> {
+export async function denyHolds(env: NodeJS.ProcessEnv, claude: string | undefined, known?: { plan: unknown }, facts: ModsFacts = modsFacts()): Promise<string | undefined> {
   const managed = managedSettings(env);
   if (existsSync(managed)) return `Claude Code's managed settings (${managed}) are present`;
   const login = facts.holdsWhen.find((c) => c.case === 'login')?.subscriptionTypes ?? [];
   if (!claude || !login.length) return undefined;
-  const ran = await run(claude, ['auth', 'status'], env);
-  let plan: unknown;
-  try { plan = (JSON.parse(ran?.out ?? '') as Obj).subscriptionType; } catch { return undefined; }
+  let plan = known?.plan;
+  if (!known) {
+    const ran = await run(claude, ['auth', 'status'], env);
+    try { plan = (JSON.parse(ran?.out ?? '') as Obj).subscriptionType; } catch { return undefined; }
+  }
   return typeof plan === 'string' && login.includes(plan) ? `the session signs in with a ${plan} login` : undefined;
 }
 /** Each Claude Code home: CLAUDE_CONFIG_DIR where it is set, and ~/.claude. */
@@ -79,11 +82,13 @@ function run(claude: string, args: string[], env: NodeJS.ProcessEnv, cwd?: strin
   });
 }
 /**
- * What each of a plugin's hooks modules lists after `prefix`, as `❯ ./register.ts hooks: tool.check`, joined; a line
- * that starts with it counts too. `none` and `nothing on $` list nothing.
+ * What each of a plugin's hooks modules lists after `prefix`, as `❯ ./register.ts hooks: tool.check`, joined; a bare
+ * line that starts with it counts too, but no `❯` line without a module, which is a manifest finding such as
+ * `❯ name: …`. `none` and `nothing on $` list nothing.
  */
 const listed = (out: string, prefix: string): string[] => out.split('\n').flatMap((line) => {
-  const rest = new RegExp(`(?:^|\\.[cm]?[jt]sx?\\s+)${prefix}\\s*(.*)$`).exec(line.replace(/^\s*❯?\s*/, ''))?.[1]?.trim();
+  const marked = /^\s*❯/.test(line);
+  const rest = new RegExp(`${marked ? '\\.[cm]?[jt]sx?\\s+' : '^'}${prefix}\\s*(.*)$`).exec(line.replace(/^\s*❯?\s*/, ''))?.[1]?.trim();
   return rest === undefined || /^(none|nothing\b)/.test(rest) ? [] : rest.split(/[\s,]+/).filter(Boolean);
 });
 
