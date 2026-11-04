@@ -19,7 +19,7 @@ use gpui_kit::base::dock::{
 use gpui_kit::base::ObservedElement;
 use gpui_kit::{prelude::FluentBuilder as _, *};
 
-use crate::{canvas, chrome, events::Inbox, states, text};
+use crate::{bound, canvas, chrome, events::Inbox, states, text};
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
 pub const HOME: &str = "deepbuild/home";
@@ -378,6 +378,70 @@ fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElemen
         .child(text)
 }
 
+/// The bound values on `surface`, one accessibility node each named by its surface, its ID and
+/// what it shows: its ID, the value, and where it comes from, muted. A missing value shows the
+/// dash and says it wasn't reported.
+fn bound_values(
+    surface: bound::Surface,
+    chrome: &chrome::Chrome,
+) -> Vec<ObservedElement<Stateful<Div>>> {
+    bound::on(surface)
+        .into_iter()
+        .enumerate()
+        .map(|(index, b)| {
+            let id = ElementId::Name(format!("bound-{}-{index}", surface.name()).into());
+            let said = match &b.missing {
+                Some(_) => format!("{} · not reported", b.text),
+                None => b.text.clone(),
+            };
+            div()
+                .id(id)
+                .test_support()
+                .role(Role::Label)
+                .aria_label(b.name())
+                .h(px(ROW_HEIGHT))
+                .flex()
+                .items_center()
+                .gap_2()
+                .pl(px(CORE + 4.))
+                .child(
+                    div()
+                        .w(px(64.))
+                        .text_color(chrome.ink_secondary)
+                        .child(b.id.clone()),
+                )
+                .child(text::label(
+                    &format!("bound-{}-{index}-value", surface.name()),
+                    text::Label {
+                        bound: true,
+                        ..text::Label::new(said)
+                    },
+                    chrome.ink_primary,
+                    None,
+                ))
+                .child(div().text_color(chrome.ink_secondary).child(b.from))
+        })
+        .collect()
+}
+
+/// A panel in the window holding the bound values bound to it, when any are.
+fn bound_panel(chrome: &chrome::Chrome) -> Option<Stateful<Div>> {
+    let values = bound_values(bound::Surface::Panel, chrome);
+    (!values.is_empty()).then(|| {
+        div()
+            .id("bound-panel")
+            .mt_2()
+            .w(px(600.))
+            .p_2()
+            .border_1()
+            .border_color(chrome.divider)
+            .flex()
+            .flex_col()
+            .child(label("bound-panel-title", "Cart total").font_weight(FontWeight::SEMIBOLD))
+            .children(values)
+    })
+}
+
 impl Render for Shipped {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let chrome = chrome::of(window);
@@ -485,12 +549,19 @@ impl Render for Shipped {
                     ..text::Label::new(mine.to_string())
                 };
                 page.child(title("session-title", format!("Session {session}")))
-                    // The return card: what came back from the session's last stop.
-                    .child(status(
-                        "return-card",
-                        &state,
-                        format!("{task} returned · {}", state.text(now)),
-                    ))
+                    // The return card: what came back from the session's last stop, with the
+                    // values bound to its runs' assertions (#629).
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(status(
+                                "return-card",
+                                &state,
+                                format!("{task} returned · {}", state.text(now)),
+                            ))
+                            .children(bound_values(bound::Surface::Card, &chrome)),
+                    )
                     .child(
                         div()
                             .w(px(600.))
@@ -528,6 +599,7 @@ impl Render for Shipped {
                         "session-line-label",
                         format!("Hours to each deadline: {points} points"),
                     ))
+                    .children(bound_panel(&chrome))
             }
             Kind::Line => {
                 // The session's line: from its task to where it stands now.
