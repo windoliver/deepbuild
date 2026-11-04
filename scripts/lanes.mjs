@@ -147,6 +147,14 @@ export const releaseLanes = [
     fix: 'Fix the piece each new corpus failure names, or record your decision in contracts/corpus-decisions.json: fixed once it passes again, or accepted with a reviewed break file quoting its diff line and a workaround.',
   },
   {
+    // #429's calibration run: deep-gpu's calibrate call times every shipped operator and the fixture graphs, each in
+    // its own pass, five runs after warm-up on the reference Mac, and passes only with every estimate within 25% of
+    // its measured p95; a failed run holds composed graphs, and the planted halved noise weight must fail it.
+    name: 'operator calibration',
+    commands: [[process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/429', '--no-file-parallelism', 'calibration.test.ts']],
+    fix: 'Measure the graphs each calibration FAIL lists as outside the bound, then set the op table weights (crates/deep-canvas/src/steps.rs) or the cost constants (crates/deep-canvas-effects/src/check.rs) from the measurement; an INCONCLUSIVE run under load runs again on an idle reference Mac.',
+  },
+  {
     name: 'spine checkpoint',
     commands: [['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/666', 'session.live.test.ts']],
     fix: 'Repair what each failing test names; a BLOCKED run names what is missing, such as a Claude Code version the adapter facts cover.',

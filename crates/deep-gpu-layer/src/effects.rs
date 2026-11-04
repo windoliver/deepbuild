@@ -982,6 +982,7 @@ pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
             exact_f32_compares: p == Some(Planted::F32CompareFloorExact),
             exact_f32_floor: p == Some(Planted::F32CompareFloorExact),
             trusts_index: p == Some(Planted::TrustsWriteIndex),
+            noise_weight_halved: p == Some(Planted::NoiseWeightHalved),
         },
     )
 }

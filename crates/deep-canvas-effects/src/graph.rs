@@ -415,7 +415,19 @@ const CODE_FIELDS: &[&str] = &[
     "wgsl", "glsl", "hlsl", "msl", "shader", "code", "spirv", "program", "fragment", "vertex",
 ];
 /// An op's own literal fields, which its args may hold beside its ports.
-const LITERAL_FIELDS: &[&str] = &["value", "type", "to", "pick", "of", "name", "space"];
+const LITERAL_FIELDS: &[&str] = &[
+    "value",
+    "type",
+    "to",
+    "pick",
+    "of",
+    "name",
+    "space",
+    "period",
+    "octaves",
+    "lacunarity",
+    "gain",
+];
 /// The look's status roles: no operator reads or writes one (Status guard).
 pub const STATUS_ROLES: &[&str] = &[
     "pass",

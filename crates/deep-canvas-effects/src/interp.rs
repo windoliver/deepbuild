@@ -945,6 +945,28 @@ impl<'a> Prog<'a> {
                 }
                 one(Sc::U32, f64::from(h))
             }
+            "noise" | "fbm" => {
+                let f = crate::check::seeded_fields(p.s).map_err(|e| format!("{name}: {e}"))?;
+                let q = as_l(g("p"), Sc::F32, 2).v;
+                let seed = as_l(g("seed"), Sc::U32, 1).v[0] as u32;
+                let at = [q[0], q[1]];
+                one(
+                    Sc::F32,
+                    if name == "noise" {
+                        deep_canvas::steps::noise2(at, seed, f.period)
+                    } else {
+                        // The GPU holds the lacunarity and gain in f32.
+                        deep_canvas::steps::fbm2(
+                            at,
+                            seed,
+                            f.octaves,
+                            f32r(f.lacunarity),
+                            f32r(f.gain),
+                            f.period,
+                        )
+                    },
+                )
+            }
             "rand" => {
                 let k = as_l(g("key"), Sc::U32, 1).v[0] as u32;
                 one(Sc::F32, f64::from(hash1(k) >> 8) * 5.960_464_5e-8)

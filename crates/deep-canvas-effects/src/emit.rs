@@ -40,6 +40,39 @@ pub const HASH: &str = "fn deep_hash1(x: u32) -> u32 {
 }
 ";
 
+/// The seeded noise step `noise@1`, as `deep_canvas::steps::noise2` writes it in f64 (`fbm@1`
+/// is its octaves written out, its octave count being a literal): written into a module only
+/// when one of its steps uses it.
+pub const NOISE: &str = "fn deep_corner2(hs: u32, c: vec2<i32>, period: u32, d: vec2<f32>) -> f32 {
+    var q = c;
+    if period > 0u {
+        let pp = i32(period);
+        q = ((q % pp) + pp) % pp;
+    }
+    let h = deep_hash1(deep_hash1(hs ^ u32(q.x)) ^ u32(q.y));
+    let g = vec2<f32>(f32(h & 65535u), f32(h >> 16u)) * (1.0 / 32768.0) - 1.0;
+    return dot(g, d);
+}
+fn deep_noise2(p: vec2<f32>, seed: u32, period: u32) -> f32 {
+    let i = floor(p);
+    let f = p - i;
+    let c = vec2<i32>(i);
+    let hs = deep_hash1(seed);
+    let u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    let b = mix(deep_corner2(hs, c, period, f), deep_corner2(hs, c + vec2<i32>(1, 0), period, f - vec2<f32>(1.0, 0.0)), u.x);
+    let t = mix(deep_corner2(hs, c + vec2<i32>(0, 1), period, f - vec2<f32>(0.0, 1.0)), deep_corner2(hs, c + vec2<i32>(1, 1), period, f - vec2<f32>(1.0, 1.0)), u.x);
+    return mix(b, t, u.y);
+}
+";
+
+/// Whether any step, in any body, is a seeded noise step.
+fn uses_noise(steps: &std::collections::BTreeMap<String, Step>) -> bool {
+    steps.values().any(|s| {
+        matches!(s.op.as_str(), "noise@1" | "fbm@1")
+            || s.body.as_ref().is_some_and(|b| uses_noise(&b.steps))
+    })
+}
+
 /// A uniform slot's WGSL type: every scalar and vector input takes a whole vec4 of its scalar.
 fn slot(t: &Ty) -> String {
     match t {
@@ -513,6 +546,34 @@ impl W<'_> {
                 }
                 e
             }
+            "noise" | "fbm" => {
+                let f = crate::check::seeded_fields(s).expect("checked");
+                let p = self.arg_as(s, "p", &Ty::V(Sc::F32, 2));
+                let seed = self.arg_as(s, "seed", &Ty::U32);
+                if name == "noise" {
+                    format!("deep_noise2({p}, {seed}, {}u)", f.period)
+                } else {
+                    // Each octave written out: k at p × lacunarity^k, seed + k, weight gain^k.
+                    let (mut terms, mut amp, mut scale, mut per, mut norm) =
+                        (Vec::new(), 1.0, 1.0, f.period, 0.0);
+                    for k in 0..f.octaves {
+                        terms.push(format!(
+                            "{} * deep_noise2({p} * {}, {seed} + {k}u, {per}u)",
+                            lit(&serde_json::json!(amp), &Ty::F32),
+                            lit(&serde_json::json!(scale), &Ty::F32),
+                        ));
+                        norm += amp;
+                        amp *= f.gain;
+                        scale *= f.lacunarity;
+                        per = per.wrapping_mul(f.lacunarity as u32);
+                    }
+                    format!(
+                        "({}) / {}",
+                        terms.join(" + "),
+                        lit(&serde_json::json!(norm), &Ty::F32)
+                    )
+                }
+            }
             "rand" => format!(
                 "f32(deep_hash1({}) >> 8u) * 5.9604645e-8",
                 self.arg_as(s, "key", &Ty::U32)
@@ -719,6 +780,9 @@ pub struct Options {
 fn bindings(c: &Checked, options: Options, m: &mut String) {
     m.push_str(FRAME);
     m.push_str(HASH);
+    if uses_noise(&c.op.steps) {
+        m.push_str(NOISE);
+    }
     m.push_str("struct Inputs {\n    unused: vec4<f32>,\n");
     for (n, i) in &c.op.inputs {
         if !matches!(i.ty, Ty::Tex(_) | Ty::Storage(..))
@@ -974,6 +1038,8 @@ pub fn material(c: &Checked, options: Options, groups: [u32; 2]) -> String {
                 ("inputs", "op_inputs"),
                 ("smp", "op_smp"),
                 ("deep_hash1", "op_hash1"),
+                ("deep_corner2", "op_corner2"),
+                ("deep_noise2", "op_noise2"),
                 ("material", "op_material"),
             ],
         )
