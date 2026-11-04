@@ -445,6 +445,8 @@ export class Core {
   private readonly starts = new Map<number, Promise<string | undefined>>();
   /** Hooks and calls run in arrival order: a deep_* call finds the stamp its PreToolUse left. */
   private chain: Promise<unknown> = Promise.resolve();
+  /** Whether the start has finished: from then on, work waiting for it joins the queue at once. */
+  private opened = false;
   private blocked: string | undefined;
   /** The hub's lock file was removed or replaced under it (#909): appends stop for good, so `blocked` never clears. */
   private lost = false;
@@ -616,6 +618,7 @@ export class Core {
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
     });
     this.ready = this.init();
+    this.ready.then(() => { this.opened = true; }, () => undefined);
     // A start that fails stops nothing else; each call then reports why.
     this.ready.catch(() => undefined);
   }
@@ -1032,9 +1035,14 @@ export class Core {
         if (!this.blocked) this.replayLate(kept);
       });
   }
-  /** Runs `work` after everything queued before it, and after the start, which the spool replay is part of. */
+  /**
+   * Runs `work` after everything queued before it, and after the start, which the spool replay is part of. Work that
+   * waits for the start joins the queue only once the start is done: a hook that reaches the hub while it starts
+   * would otherwise hold the queue until the start ends, and the start's own replay, queued behind it, never would (#669).
+   */
   private queue<T>(work: () => Promise<T>, starting = false): Promise<T> {
-    const done = this.chain.then(() => (starting ? undefined : this.ready)).then(work);
+    if (!starting && !this.opened) return this.ready.then(() => this.queue(work));
+    const done = this.chain.then(work);
     this.chain = done.catch(() => undefined);
     return done;
   }
@@ -3394,6 +3402,8 @@ export class Core {
   /** The line a judged stop carries, from the record as it stands now, never from the agent's words. */
   private async judgedLine(live: Live): Promise<string> {
     const state = live.claim && live.claimTurn === live.turn ? await this.stateOf(live.claim) : undefined;
+    // #669's planted line: PASS whatever the record holds, with no verdict behind it.
+    if (this.options.plant === 'line-pass-without-verdict') return verdictLine({ outcome: 'PASS', requirements: (state?.state.requirements ?? []).map((r) => ({ ...r, outcome: 'PASS' as const })), running: [], tests: state?.state.tests ?? 0 });
     return verdictLine(state ? state.state : { outcome: null, requirements: [], running: [] });
   }
   /** A line that changed since the chat last saw one, for the session's next prompt (Codex hears a late verdict there); undefined otherwise. */
@@ -3445,7 +3455,8 @@ export class Core {
    */
   private async statusReply(meta: HookMeta): Promise<string | undefined> {
     const prompt = meta.fields?.prompt ?? '';
-    if (!isStatusQuestion(prompt)) return undefined;
+    // #669's planted wrong program: a status question goes on to the model as any prompt does.
+    if (!isStatusQuestion(prompt) || this.options.plant === 'status-from-model') return undefined;
     // The prompt's origin as the hook mapped it: kept at the splice for one the transcript's queue had shown first
     // (#25), else on its own event, once its append has settled (one that never lands has no origin: not a person's).
     const spliced = this.sessions.get(meta.session)?.spliced;
@@ -5488,7 +5499,9 @@ export class Core {
       const replaced = async (): Promise<boolean> => (await this.extensions?.checks().catch(() => []) ?? []).some((c) => c.kind === 'command');
       ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun }> => {
         if (!byPackage) {
-          const record = await runCommandCheck({ host: this.host, run: run.run, spec, checkout: run.cwd, deadline, env, ...(run.grant.hosts?.length ? { hosts: run.grant.hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal });
+          // #669's planted runner judges the run by its exit code alone, whatever masks it.
+          const exitOnly = this.options.plant === 'runner-passes-masked-exit' ? { plant: 'exit-code-only' as const } : {};
+          const record = await runCommandCheck({ host: this.host, run: run.run, spec, checkout: run.cwd, deadline, env, ...(run.grant.hosts?.length ? { hosts: run.grant.hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly });
           return { code: record.exit?.code ?? null, record };
         }
         const result = await this.extensions!.runCheck('command', spec, { checkout: run.cwd, deadline });
@@ -5561,7 +5574,7 @@ export class Core {
         // evidence names what run.finished names.
         const [stdout, stderr] = evidence;
         if (stdout !== undefined && stderr !== undefined) record = { ...record, output: { ...record.output, sha256: { stdout, stderr } } };
-        this.gate.recorded(run.run, record);
+        record = this.gate.recorded(run.run, record);
         const outcome = record.outcome;
         const findings = outcome === 'stopped' ? ['hub stopped'] : record.mask !== null ? [`uncounted: ${record.mask}`] : record.failures.slice(0, 20).map((f) => `${f.test} (${f.file}:${f.line}): ${f.message}`);
         // What the kind's result names as its evidence beyond the output (a replacing kind's content keys) is kept with the findings.
