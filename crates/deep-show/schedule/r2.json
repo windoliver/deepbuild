@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "e84277d4d17b3eedd6d733b9ac0b89ac64dba8b277ebbc32f72580f7ee50612c",
+  "set_digest": "670030c77c56b39a2fb4a38b4b797a932c93138daec0332147bd155680e3f2f4",
   "interfaces": {
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
@@ -34,7 +34,7 @@
       }
     },
     "data@1": {
-      "digest": "4bdd0190573c6a2fd523ce32e4fe42192c0199e4448e5896f9b99b5653a1e5ca",
+      "digest": "a743bfa040d3d697e65bb0de3eb2c4a6065d7ee983c1eb51dcd25cee5161cf49",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -324,7 +324,7 @@
       }
     },
     "vector@1": {
-      "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+      "digest": "9562a2c63d098fcdd42fad55cebcbc5ea742203ee4488eca36925762d425f996",
       "reference": "vector",
       "kit": [
         "fixtures",
@@ -483,6 +483,18 @@
         ],
         "writes": [
           "core.world"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.decimate",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.decimated"
         ],
         "per": "item"
       },
@@ -686,6 +698,18 @@
         ],
         "writes": [
           "text.animated"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "vector.paint",
+        "module": "vector",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "vector.paint"
         ],
         "per": "item"
       }
