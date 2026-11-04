@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, readdirSync, rmSync, symlinkSync, writeFileSync, writeSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -74,6 +75,20 @@ test('wall time that only machine load stretched is not a regression', (t) => {
   const result = perf({ status: 0, elapsedMs: 60_000, cpuMs: 1, peakBytes: 1 });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /"task":"preflight"[^\n]*"status":"PASS"/);
+});
+
+test('a merge base whose archive is larger than a process buffer is still copied', (t) => {
+  // The Mac's merge base archives to 141 MiB; a copy read through a 128 MiB buffer stopped perf with ENOBUFS.
+  const { cwd, git, perf } = repository(t, () => '');
+  const big = openSync(join(cwd, 'big.bin'), 'w');
+  for (let mib = 0; mib < 140; mib++) writeSync(big, randomBytes(1 << 20));
+  closeSync(big);
+  git('add', 'big.bin');
+  git('commit', '-qm', 'big');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  const result = perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^perf: base copy .*: wrote \d+ files/m);
 });
 
 test('a checkout without origin/main is blocked with the fetch that fixes it', (t) => {
