@@ -1,0 +1,21 @@
+{
+  "id": "waiver.machine@1",
+  "description": "A waiver's life: live from its grant until its date passes, its condition is met or you revoke it.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "states": [
+    "live",
+    "ended"
+  ],
+  "initial": "live",
+  "final": [
+    "ended"
+  ],
+  "moves": [
+    {
+      "from": "live",
+      "event": "waiver.ended",
+      "to": "ended"
+    }
+  ]
+}

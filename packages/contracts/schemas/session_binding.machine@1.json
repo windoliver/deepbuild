@@ -1,0 +1,75 @@
+{
+  "id": "session_binding.machine@1",
+  "description": "A session binding's life: bound from SessionStart, ended at SessionEnd or by the core's session.gone, and bound again when the same session resumes. A session first seen at its SessionEnd, as when the hub starts mid-session, has ended; a SessionEnd delivered twice, as the desktop app's two hook peers send it, or late after session.gone, changes nothing.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "states": [
+    "unbound",
+    "bound",
+    "ended",
+    "gone"
+  ],
+  "initial": "unbound",
+  "final": [
+    "ended",
+    "gone"
+  ],
+  "moves": [
+    {
+      "from": "unbound",
+      "event": "session.start",
+      "to": "bound"
+    },
+    {
+      "from": "unbound",
+      "event": "session.end",
+      "to": "ended"
+    },
+    {
+      "from": "bound",
+      "event": "session.start",
+      "to": "bound"
+    },
+    {
+      "from": "ended",
+      "event": "session.start",
+      "to": "bound"
+    },
+    {
+      "from": "bound",
+      "event": "session.end",
+      "to": "ended"
+    },
+    {
+      "from": "bound",
+      "event": "session.gone",
+      "to": "gone"
+    },
+    {
+      "from": "ended",
+      "event": "session.end",
+      "to": "ended"
+    },
+    {
+      "from": "gone",
+      "event": "session.end",
+      "to": "gone"
+    }
+  ],
+  "conflicts": [
+    {
+      "name": "resumed_or_ended",
+      "events": [
+        "session.start",
+        "session.end"
+      ]
+    },
+    {
+      "name": "ended_or_gone",
+      "events": [
+        "session.end",
+        "session.gone"
+      ]
+    }
+  ]
+}
