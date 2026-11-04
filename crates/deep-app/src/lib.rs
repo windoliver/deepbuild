@@ -400,6 +400,9 @@ fn welcome(cx: &mut Context<Spike>, said: Option<&str>) -> impl IntoElement {
                 .id("set-up-reason")
                 .test_support()
                 .aria_label(line.clone())
+                // A long path in the reason wraps inside the window, so its fix stays in view.
+                .max_w(px(560.))
+                .text_center()
                 .text_sm()
                 .child(line)
         }))
