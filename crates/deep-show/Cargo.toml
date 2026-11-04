@@ -153,6 +153,9 @@ test-sim-b-off = ["test-sim"]
 test-sim-behavior = ["test-sim"]
 test-sim-c = ["test-sim"]
 test-gpu-second-backend = []
+# Issue #421: a planted implementation of scene3d@1, declared bit, whose light policy breaks a tie
+# by registration order instead of by ID; the kit fails it and a release build refuses it.
+test-scene3d-tie-by-order = []
 # Issue #200: the test canvas modules of the #200 acceptance README, the build without effects,
 # and the planted layout in which the effects module fills the op table's base steps.
 test-mark = ["dep:deep-canvas-test-modules"]

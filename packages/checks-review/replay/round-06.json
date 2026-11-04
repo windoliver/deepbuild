@@ -1,0 +1,41 @@
+{
+  "claim": "page-rows",
+  "diff": "diff --git a/src/page.ts b/src/page.ts\nindex 1a7816e..2c3a164 100644\n--- a/src/page.ts\n+++ b/src/page.ts\n@@ -1,6 +1,6 @@\n export function page<T>(rows: T[], size: number): T[][] {\n   const out: T[][] = [];\n-  for (let i = 0; i <= rows.length; i += size) {\n+  for (let i = 0; i < rows.length; i += size) {\n     out.push(rows.slice(i, i + size));\n   }\n   return out;\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [
+      {
+        "title": "[P3] Name `out` more descriptively",
+        "body": "Still worth renaming.",
+        "priority": 3,
+        "confidence_score": 0.38,
+        "file": "src/page.ts",
+        "line": 4,
+        "rule": "prefer-descriptive-names",
+        "quote": "out.push(rows.slice(i, i + size));"
+      }
+    ],
+    "overall_correctness": "patch is correct",
+    "overall_explanation": "The bound is fixed; one naming nit remains.",
+    "overall_confidence_score": 0.8
+  },
+  "since": [
+    {
+      "rule": "off-by-one",
+      "sites": [
+        {
+          "file": "src/page.ts",
+          "line": 3,
+          "quote": "i <= rows.length"
+        }
+      ]
+    }
+  ]
+}
