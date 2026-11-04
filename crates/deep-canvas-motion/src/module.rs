@@ -227,7 +227,7 @@ fn has_motion(doc: &Value, _: &str, _: &Value) -> bool {
 }
 
 /// An item a document channel or driver targets, a limit constraint holds or a placement binds.
-fn is_target(doc: &Value, id: &str, _: &Value) -> bool {
+fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
     let prefix = format!("items/{id}/");
     let targets = |section: &str| {
         doc.get(section)
@@ -240,7 +240,7 @@ fn is_target(doc: &Value, id: &str, _: &Value) -> bool {
                     .is_some_and(|t| t.starts_with(&prefix))
             })
     };
-    let channel = targets("channels") || targets("drivers");
+    let channel = targets("channels") || targets("drivers") || !keyed_data(doc, item).is_empty();
     let held = doc
         .get("constraints")
         .and_then(Value::as_object)
@@ -267,6 +267,32 @@ fn is_target(doc: &Value, id: &str, _: &Value) -> bool {
             _ => false,
         });
     channel || held || bound
+}
+
+/// The keyed data values an item's text template reads (Text `text@1`, `template`), each with
+/// the channel that keys it: `(name, channel)`. Its text shows the value at the frame's time.
+fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
+    let Some(template) = item.pointer("/params/template").and_then(Value::as_str) else {
+        return Vec::new();
+    };
+    let Ok(parts) = deep_canvas::template::parts(template) else {
+        return Vec::new();
+    };
+    let channels = doc.get("channels").and_then(Value::as_object);
+    let mut out = Vec::new();
+    for part in parts {
+        let deep_canvas::template::Part::Slot(slot) = part else { continue };
+        let Some(name) = slot.strip_prefix("data/") else { continue };
+        let keyed = channels.into_iter().flatten().find(|(_, c)| {
+            c.get("target").and_then(Value::as_str) == Some(slot)
+        });
+        if let Some((channel, _)) = keyed {
+            if !out.iter().any(|(n, _)| n == name) {
+                out.push((name.to_string(), channel.clone()));
+            }
+        }
+    }
+    out
 }
 
 /// The revision's motion, compiled once at check.
@@ -306,9 +332,17 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
     }
     let mut state = program.state();
     program.evaluate_local(t, Validity::Full, &mut state);
-    let Some((transform, fields)) = program.item_values(&state, &id) else {
+    let Some((transform, mut fields)) = program.item_values(&state, &id) else {
         return Ok(());
     };
+    // A text whose template reads a keyed data value shows it at t: the value rides on the
+    // evaluated item as `params/data/<name>`, which the template reads before the document's.
+    let item = v.item()?.clone();
+    for (name, channel) in keyed_data(v.document()?, &item) {
+        if let Some(x) = program.channel_value(&state, &channel) {
+            fields.push((vec!["params".into(), "data".into(), name], Datum::Num(x)));
+        }
+    }
     let set = |name: &str, from: usize| Edit {
         add: false,
         path: vec![name.to_string()],

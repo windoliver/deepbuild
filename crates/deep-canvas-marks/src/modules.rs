@@ -272,7 +272,7 @@ fn register_text(r: &mut Registrar) {
     r.operator(
         "counter",
         "items",
-        &["core.lowered", "refs", "reading", "view(locale)"],
+        &["core.fields", "refs", "reading", "view(locale)"],
         &["text.counter"],
     )
     .applies(is_bound_text)
@@ -403,7 +403,8 @@ fn is_animated(doc: &Value, id: &str, item: &Value) -> bool {
 
 /// What a bound value or counter shows, its numbers in the view's locale.
 fn counter(v: &mut View<'_>) -> Result<(), OpError> {
-    let item = v.json("core.lowered")?.ok_or_else(|| missing(v))?;
+    // The evaluated item: a keyed data value its template reads rides on it (motion@1).
+    let item = fields_of(v)?;
     let doc = v.document()?;
     let record = record_of(v.outside()?);
     let locale = v.locale()?;

@@ -1861,7 +1861,25 @@ pub fn bound_text(
 ) -> Result<Option<Shown>, Refused> {
     if let Some(template) = template_of(item) {
         // A template shows each slot's value at its own precision (Text `text@1`, `template`).
-        let text = deep_canvas::template::expand(&Value::Object(doc.clone()), template)
+        // A keyed data value shows as the frame evaluated it (`params/data/<name>`, motion@1).
+        let mut at_t = doc.clone();
+        if let Some(values) = item.pointer("/params/data").and_then(Value::as_object) {
+            for (name, x) in values {
+                let entry = at_t
+                    .entry("data")
+                    .or_insert_with(|| json!({}))
+                    .as_object_mut()
+                    .and_then(|d| d.get_mut(name));
+                match entry {
+                    Some(Value::Object(e)) => {
+                        e.insert("value".into(), x.clone());
+                    }
+                    Some(e) => *e = x.clone(),
+                    None => {}
+                }
+            }
+        }
+        let text = deep_canvas::template::expand(&Value::Object(at_t), template)
             .or_else(|_| refuse("ref_unresolved", format!("items/{id}/params/template")))?;
         return Ok(Some(Shown {
             bound: "template".into(),

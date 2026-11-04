@@ -138,7 +138,8 @@ impl Path {
                 Some(why) => Err(bad(why)),
             })
             .collect::<Result<Vec<_>, _>>()?;
-        if fields.is_empty() {
+        // A data constant is a value of its own: a channel may key `data/<name>` (Path).
+        if fields.is_empty() && section != Section::Data {
             return Err(bad("a path names at least one field below the ID".into()));
         }
         Ok(Path {
