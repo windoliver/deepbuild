@@ -1,6 +1,7 @@
 //! Issue #882: the chrome's colors. Every color the app draws, outside a status mark's core, is a role of
 //! its look, the clean one, in the appearance macOS reports for the window: ground, raised and divider; the
-//! one ink at four tiers; hover and selected; accent; and the session's readout and line. No module names a
+//! one ink at four tiers; hover and selected; accent; the keyboard focus ring (#1003); and the session's
+//! readout and line. A terminal's 16 colors and its background are the look's too (#1003). No module names a
 //! color of its own, and `scripts/color-literal-guard.mjs` holds the source to that. The same roles fill
 //! gpui-base's semantic theme, which a script panel reads as `color.*` and the dock's handles draw with.
 
@@ -23,6 +24,8 @@ pub struct Chrome {
     pub ink_disabled: Hsla,
     pub hover: Hsla,
     pub selected: Hsla,
+    /// The keyboard focus ring, which reads on every fill a row is drawn on (#1003).
+    pub focus: Hsla,
     pub accent: Hsla,
     pub session_readout: Hsla,
     pub session_line: Hsla,
@@ -73,10 +76,27 @@ pub fn chrome(dark: bool) -> &'static Chrome {
         ink_disabled: role("ink_disabled", dark),
         hover: role("hover", dark),
         selected: role("selected", dark),
+        focus: role("focus", dark),
         accent: role("accent", dark),
         session_readout: role("session_readout", dark),
         session_line: role("session_line", dark),
     })
+}
+
+/// A terminal's colors in light or dark (#1003): the look's 16 by ANSI index, the background they keep 3:1
+/// against (`term_background`, or else the ground), and the default text, the ink.
+pub fn terminal(dark: bool) -> ([[u8; 3]; 16], [u8; 3], [u8; 3]) {
+    let palette = if dark { &look().dark } else { &look().light };
+    let opaque = |name: &str| {
+        *palette
+            .get(name)
+            .unwrap_or_else(|| panic!("the clean look has no {name} role"))
+    };
+    let background = palette
+        .get("term_background")
+        .copied()
+        .unwrap_or_else(|| opaque("ground"));
+    (look::TERMINAL.map(opaque), background, opaque("ink"))
 }
 
 thread_local! {
@@ -155,7 +175,7 @@ fn theme(dark: bool, cx: &mut App) {
     colors.destructive_foreground = on(fail);
     colors.border = c.divider;
     colors.input = c.divider;
-    colors.ring = c.accent;
+    colors.ring = c.focus;
     colors.selection = c.selected;
 }
 

@@ -8,7 +8,7 @@
 use std::ops::Range;
 
 use deep_canvas_cells::emulator::{Cell, Terminal};
-use deep_canvas_cells::palette::resolve;
+use deep_canvas_cells::palette::resolve_in;
 use deep_text_gpui::{Label, Role};
 use gpui_kit::*;
 use serde_json::json;
@@ -34,9 +34,18 @@ pub struct Screen {
 }
 
 impl Screen {
-    /// The terminal's screen as it stands, colors resolved against `fg` and `bg`.
-    pub fn of(term: &Terminal, revision: u64, fg: [u8; 3], bg: [u8; 3]) -> Screen {
-        let rows = (0..term.rows()).map(|y| row(term.row(y), fg, bg)).collect();
+    /// The terminal's screen as it stands, colors resolved against `fg` and `bg`, and the 16 ANSI colors as `ansi`,
+    /// the look's (#1003).
+    pub fn of(
+        term: &Terminal,
+        revision: u64,
+        fg: [u8; 3],
+        bg: [u8; 3],
+        ansi: &[[u8; 3]; 16],
+    ) -> Screen {
+        let rows = (0..term.rows())
+            .map(|y| row(term.row(y), fg, bg, ansi))
+            .collect();
         Screen {
             revision,
             cols: term.cols(),
@@ -46,19 +55,19 @@ impl Screen {
     }
 }
 
-fn row(cells: &[Cell], fg: [u8; 3], bg: [u8; 3]) -> Row {
+fn row(cells: &[Cell], fg: [u8; 3], bg: [u8; 3], ansi: &[[u8; 3]; 16]) -> Row {
     let mut out = Row {
         text: Terminal::text_of(cells),
         runs: Vec::new(),
         fills: Vec::new(),
     };
     for (i, c) in cells.iter().enumerate() {
-        let f = resolve(c.fg, fg);
+        let f = resolve_in(c.fg, fg, ansi);
         match out.runs.last_mut() {
             Some((span, color)) if *color == f && span.end == i => span.end = i + 1,
             _ => out.runs.push((i..i + 1, f)),
         }
-        let b = resolve(c.bg, bg);
+        let b = resolve_in(c.bg, bg, ansi);
         if b != bg {
             out.fills.push((i, i + 1, b));
         }
@@ -139,6 +148,31 @@ pub fn cells(id: &str, screen: Screen) -> Canvas<()> {
     .h(height)
 }
 
+/// The look's 16 terminal colors in light or dark, as a terminal draws them (#1003): one row each, its index and
+/// name in that color on the terminal's background.
+pub fn look_colors(dark: bool) -> Screen {
+    const NAMES: [&str; 8] = [
+        "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+    ];
+    let (ansi, bg, fg) = crate::chrome::terminal(dark);
+    let mut term = Terminal::new(48, 16, 0);
+    for i in 0..16 {
+        let name = if i < 8 {
+            NAMES[i].to_owned()
+        } else {
+            format!("bright {}", NAMES[i - 8])
+        };
+        let end = if i < 15 { "\r\n" } else { "" };
+        term.feed(
+            format!(
+                "\x1b[38;5;{i}m\u{2588}\u{2588} {i:>2} {name:<15} The quick brown fox\x1b[0m{end}"
+            )
+            .as_bytes(),
+        );
+    }
+    Screen::of(&term, 1, fg, bg, &ansi)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,25 +181,14 @@ mod tests {
     fn a_row_keeps_its_text_its_color_runs_and_its_cells_off_the_grids_background() {
         let mut t = Terminal::new(10, 2, 0);
         t.feed(b"ab\x1b[31mcd\x1b[0m\x1b[44me\x1b[0m");
-        let s = Screen::of(&t, 1, [200; 3], [0; 3]);
+        let ansi: [[u8; 3]; 16] = std::array::from_fn(|i| [i as u8 * 10, 1, 2]);
+        let s = Screen::of(&t, 1, [200; 3], [0; 3], &ansi);
         let r = &s.rows[0];
         assert_eq!(r.text, "abcde");
         assert_eq!(r.runs[0], (0..2, [200; 3]));
-        assert_eq!(
-            r.runs[1],
-            (
-                2..4,
-                resolve(deep_canvas_cells::emulator::Color::Indexed(1), [0; 3])
-            )
-        );
-        assert_eq!(
-            r.fills,
-            [(
-                4,
-                5,
-                resolve(deep_canvas_cells::emulator::Color::Indexed(4), [0; 3])
-            )]
-        );
+        // The 16 ANSI colors are the ones given, the look's.
+        assert_eq!(r.runs[1], (2..4, ansi[1]));
+        assert_eq!(r.fills, [(4, 5, ansi[4])]);
         assert_eq!(s.rows[1].text, "");
     }
 }

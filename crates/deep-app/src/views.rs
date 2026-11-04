@@ -99,15 +99,53 @@ pub struct Shipped {
     focus_handle: FocusHandle,
     /// What Home's Set up click said, once clicked.
     set_up: Option<String>,
+    /// The sidebar's open row, drawn in the selected fill, and the row keyboard focus is on, drawn with the
+    /// focus ring (#1003).
+    selected: Option<usize>,
+    focused: Option<usize>,
+    /// Whether the sidebar takes keyboard focus at its next frame, as the replica opens it with a focused row.
+    take_focus: bool,
+}
+
+thread_local! {
+    static SIDEBAR_ROWS: std::cell::Cell<(Option<usize>, Option<usize>)> = const { std::cell::Cell::new((None, None)) };
+}
+
+/// The sidebar's selected and focused rows as the next sidebar opens with them, for the replica (#1003).
+pub fn start_sidebar(selected: Option<usize>, focused: Option<usize>) {
+    SIDEBAR_ROWS.with(|rows| rows.set((selected, focused)));
 }
 
 impl Shipped {
     pub fn new(kind: Kind, cx: &mut Context<Self>) -> Self {
+        let (selected, focused) = match kind {
+            Kind::Sidebar => SIDEBAR_ROWS.with(std::cell::Cell::get),
+            _ => (None, None),
+        };
         Self {
             kind,
             focus_handle: cx.focus_handle(),
             set_up: None,
+            selected,
+            focused,
+            take_focus: focused.is_some(),
         }
+    }
+
+    /// The sidebar's keys (#1003): up and down move the focus ring between rows, return or space opens the
+    /// focused row.
+    fn sidebar_key(&mut self, key: &str, rows: usize, cx: &mut Context<Self>) {
+        if rows == 0 {
+            return;
+        }
+        let last = rows - 1;
+        match key {
+            "down" => self.focused = Some(self.focused.map_or(0, |at| (at + 1).min(last))),
+            "up" => self.focused = Some(self.focused.map_or(0, |at| at.saturating_sub(1))),
+            "enter" | "space" if self.focused.is_some() => self.selected = self.focused,
+            _ => return,
+        }
+        cx.notify();
     }
 }
 
@@ -397,20 +435,49 @@ impl Render for Shipped {
             .text_xs()
             .text_color(chrome.ink_primary);
         match self.kind {
-            Kind::Sidebar => page
-                .bg(chrome.raised)
-                .child(title("sidebar-title", "Sessions"))
-                .children(record.sessions.iter().zip(&record.rows).enumerate().map(
-                    |(index, ((_, task, _), (words, entry)))| {
-                        let text = format!("{task} · {words}");
-                        marked(("sidebar-session", index), entry, text)
-                            .role(Role::Button)
-                            .h(px(24.))
-                            .px_1()
-                            .rounded_sm()
-                            .hover(|style| style.bg(chrome.hover))
-                    },
-                )),
+            Kind::Sidebar => {
+                let rows = record.rows.len();
+                if std::mem::take(&mut self.take_focus) {
+                    window.focus(&self.focus_handle, cx);
+                }
+                // The ring shows only while keys reach the sidebar, so it never points where they don't go.
+                let focused = self
+                    .focused
+                    .filter(|_| self.focus_handle.is_focused(window));
+                let selected = self.selected;
+                page.bg(chrome.raised)
+                    .track_focus(&self.focus_handle)
+                    .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
+                        this.sidebar_key(&event.keystroke.key, rows, cx)
+                    }))
+                    .child(title("sidebar-title", "Sessions"))
+                    .children(record.sessions.iter().zip(&record.rows).enumerate().map(
+                        |(index, ((_, task, _), (words, entry)))| {
+                            let text = format!("{task} · {words}");
+                            // The ring is always laid out, so focus moving never shifts a row; it shows on the
+                            // focused row alone.
+                            let ring = if focused == Some(index) {
+                                chrome.focus
+                            } else {
+                                chrome.focus.opacity(0.)
+                            };
+                            marked(("sidebar-session", index), entry, text)
+                                .role(Role::Button)
+                                .h(px(24.))
+                                .px_1()
+                                .rounded_sm()
+                                .border_2()
+                                .border_color(ring)
+                                .hover(|style| style.bg(chrome.hover))
+                                .when(selected == Some(index), |row| row.bg(chrome.selected))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.selected = Some(index);
+                                    this.focused = Some(index);
+                                    cx.notify();
+                                }))
+                        },
+                    ))
+            }
             Kind::Home => match unfinished {
                 Some(count) => page
                     .child(title("home-title", "Home"))
