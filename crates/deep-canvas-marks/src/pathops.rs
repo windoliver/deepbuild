@@ -27,8 +27,20 @@ const MAX_COPIES: f64 = 64.0;
 const MAX_OFFSET_COPIES: u64 = 16;
 /// The most ridges a zig zag puts on one segment.
 const MAX_RIDGES: u64 = 256;
-/// Samples along a curve for its arc length and its point at a length.
+/// Samples along a curve for its point at a length.
 const SAMPLES: usize = 128;
+/// 8-point Gauss–Legendre nodes and weights on 0..1, for a curve's arc length: exact for a line,
+/// and within 1e-6 of the integral for the curves the ops build, at 8 derivative reads a curve.
+const GAUSS: [(f64, f64); 8] = [
+    (0.019_855_071_751_231_856, 0.050_614_268_145_188_13),
+    (0.101_666_761_293_186_64, 0.111_190_517_226_687_24),
+    (0.237_233_795_041_835_5, 0.156_853_322_938_943_63),
+    (0.408_282_678_752_175_1, 0.181_341_891_689_181),
+    (0.591_717_321_247_825, 0.181_341_891_689_181),
+    (0.762_766_204_958_164_5, 0.156_853_322_938_943_63),
+    (0.898_333_238_706_813_4, 0.111_190_517_226_687_24),
+    (0.980_144_928_248_768_1, 0.050_614_268_145_188_13),
+];
 
 type P = [f64; 2];
 
@@ -115,7 +127,17 @@ impl Seg {
 
     /// The derivative at `t`, or the chord where it vanishes.
     pub fn tangent(&self, t: f64) -> P {
-        let d = match *self {
+        let d = self.derivative(t);
+        if norm(d) > 0.0 {
+            d
+        } else {
+            vsub(self.end(), self.start())
+        }
+    }
+
+    /// The derivative at `t`, as it is.
+    fn derivative(&self, t: f64) -> P {
+        match *self {
             Seg::Line(a, b) => vsub(b, a),
             Seg::Quad(a, b, c) => {
                 vadd(vmul(vsub(b, a), 2.0 * (1.0 - t)), vmul(vsub(c, b), 2.0 * t))
@@ -127,11 +149,6 @@ impl Seg {
                     vmul(vsub(d, c), 3.0 * t * t),
                 )
             }
-        };
-        if norm(d) > 0.0 {
-            d
-        } else {
-            vsub(self.end(), self.start())
         }
     }
 
@@ -191,10 +208,15 @@ impl Seg {
         out
     }
 
-    /// Arc length.
+    /// Arc length: a line's exactly, a curve's by Gauss–Legendre quadrature of its speed.
     pub fn length(&self) -> f64 {
-        let l = self.lengths();
-        l[l.len() - 1]
+        if let Seg::Line(a, b) = self {
+            return norm(vsub(*b, *a));
+        }
+        GAUSS
+            .iter()
+            .map(|(t, w)| w * norm(self.derivative(*t)))
+            .sum()
     }
 
     /// Every point of the segment mapped through `f`.
@@ -215,24 +237,34 @@ pub struct Sub {
     pub closed: bool,
 }
 
-/// A sub-path with each segment's cumulative chord lengths sampled once, so a trim, an anchor
-/// read or a column's arc lengths measure every curve one time.
+/// A sub-path with each segment's arc length measured once, so a trim or an anchor read measures
+/// every curve one time; only a segment a length falls inside is sampled finely, to find the
+/// parameter there (#160 AC9: a trim after ops that curve 2,000 segments).
 struct Measured<'a> {
     sub: &'a Sub,
-    lengths: Vec<Vec<f64>>,
+    lengths: Vec<f64>,
 }
 
 impl<'a> Measured<'a> {
     fn of(sub: &'a Sub) -> Measured<'a> {
         Measured {
             sub,
-            lengths: sub.segs.iter().map(Seg::lengths).collect(),
+            lengths: sub.segs.iter().map(Seg::length).collect(),
         }
     }
 
     fn seg_length(&self, i: usize) -> f64 {
-        let l = &self.lengths[i];
-        l[l.len() - 1]
+        self.lengths[i]
+    }
+
+    /// The parameter `s` u along segment `i`, from its chord samples scaled to its arc length.
+    fn t_of(&self, i: usize, s: f64) -> f64 {
+        let l = self.lengths[i];
+        if l <= 0.0 {
+            return 0.0;
+        }
+        let table = self.sub.segs[i].lengths();
+        t_at(&table, s / l * table[table.len() - 1])
     }
 
     fn length(&self) -> f64 {
@@ -246,7 +278,7 @@ impl<'a> Measured<'a> {
         for (i, seg) in self.sub.segs.iter().enumerate() {
             let l = self.seg_length(i);
             if rest <= l || i == last {
-                let t = t_at(&self.lengths[i], rest.min(l));
+                let t = self.t_of(i, rest.min(l));
                 return Some((seg.at(t), seg.tangent(t)));
             }
             rest -= l;
@@ -263,12 +295,12 @@ impl<'a> Measured<'a> {
             let to = from + l;
             if to > s0 && from < s1 && l > 0.0 {
                 let t0 = if s0 > from {
-                    t_at(&self.lengths[i], s0 - from)
+                    self.t_of(i, s0 - from)
                 } else {
                     0.0
                 };
                 let t1 = if s1 < to {
-                    t_at(&self.lengths[i], s1 - from)
+                    self.t_of(i, s1 - from)
                 } else {
                     1.0
                 };
@@ -1610,10 +1642,31 @@ fn twist(subs: &[Sub], angle: f64, center: P) -> Vec<Sub> {
         let f = (1.0 - norm(vsub(p, center)) / reach).max(0.0);
         rotate(p, center, angle * f)
     };
+    // Each point turned once: a segment's start is the one before's end, turned already.
     subs.iter()
-        .map(|s| Sub {
-            segs: s.segs.iter().map(|seg| seg.map(turn)).collect(),
-            closed: s.closed,
+        .map(|s| {
+            let mut last: Option<(P, P)> = None;
+            let segs = s
+                .segs
+                .iter()
+                .map(|seg| {
+                    let start = match last {
+                        Some((p, turned)) if p == seg.start() => turned,
+                        _ => turn(seg.start()),
+                    };
+                    let end = turn(seg.end());
+                    last = Some((seg.end(), end));
+                    match *seg {
+                        Seg::Line(..) => Seg::Line(start, end),
+                        Seg::Quad(_, b, _) => Seg::Quad(start, turn(b), end),
+                        Seg::Cubic(_, b, c, _) => Seg::Cubic(start, turn(b), turn(c), end),
+                    }
+                })
+                .collect();
+            Sub {
+                segs,
+                closed: s.closed,
+            }
         })
         .collect()
 }
@@ -1796,6 +1849,43 @@ fn repeat_from(r: &Repeater, source: &dyn Fn(usize) -> Vec<Sub>, opacity: f64) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_curve_measures_its_arc_length_by_quadrature() {
+        // A quarter circle of radius 100 as one cubic (handles 0.5523 r): its length by 200,000
+        // chords is the reference; the quadrature lands within 1e-6 u, where a 128-chord sum
+        // falls 1e-3 u short and the chord itself 11 u short.
+        let k = 55.228_474_983_079_34;
+        let arc = Seg::Cubic([100.0, 0.0], [100.0, k], [k, 100.0], [0.0, 100.0]);
+        let n = 200_000;
+        let fine: f64 = (1..=n)
+            .map(|i| {
+                let (a, b) = (
+                    arc.at((i - 1) as f64 / n as f64),
+                    arc.at(i as f64 / n as f64),
+                );
+                norm(vsub(b, a))
+            })
+            .sum();
+        assert!(
+            (arc.length() - fine).abs() < 1e-6,
+            "{} vs {fine}",
+            arc.length()
+        );
+        // A trim to the first half then ends half way along the arc by length.
+        let sub = Sub {
+            segs: vec![arc],
+            closed: false,
+        };
+        let half = trim(&[sub], 0.0, 0.5, 0.0, false);
+        let cut = half[0].segs[0].end();
+        let to = |p: P, q: P| norm(vsub(q, p));
+        let mid = arc.at(0.5);
+        assert!(
+            to(cut, mid) < 0.01,
+            "{cut:?} vs the symmetric middle {mid:?}"
+        );
+    }
     use crate::path::parse;
 
     fn square() -> Vec<Verb> {

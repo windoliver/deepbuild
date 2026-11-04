@@ -16,6 +16,9 @@ opt-level = 3
 # kernel and the JSON, map and hash crates it spends its time in build at release speed there.
 [profile.dev.package.deep-canvas]
 opt-level = 3
+# Issue #160: a path's ops rebuilt on change in under 1 ms (AC9), read off the dev binary.
+[profile.dev.package.deep-canvas-marks]
+opt-level = 3
 # Issue #402: the terminal emulator a panel host feeds 50 MB of a program's output through.
 [profile.dev.package.deep-canvas-cells]
 opt-level = 3
