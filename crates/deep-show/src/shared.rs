@@ -1461,7 +1461,17 @@ impl Hub<'_> {
     pub fn read(&mut self, doc: &str, via: Option<&Via>) -> Value {
         let reader = via.and_then(|v| self.acting(v)).map(|(w, _)| w);
         let (Some(k), Some(shared)) = (self.shown(doc), self.shared.get(doc)) else {
-            return json!({"outcome": "refused", "code": "ref_unresolved"});
+            // A deep_show document (one writer's layer, #393) reads as its current revision,
+            // stored as its check stamped it (#1162).
+            let current = self
+                .revisions
+                .get(doc)
+                .and_then(|rows| rows.iter().find(|r| r.state == "current"));
+            return match current {
+                Some(row) => json!({"rev": row.rev, "hash": row.hash, "draws": draws(&row.doc),
+                                    "issues": [], "document": row.doc}),
+                None => json!({"outcome": "refused", "code": "ref_unresolved"}),
+            };
         };
         let (shown, owners) = shared.at(k);
         let layer = reader.as_ref().and_then(|w| layer_of(&shown, w));
