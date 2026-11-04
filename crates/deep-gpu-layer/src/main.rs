@@ -25,6 +25,7 @@ mod frames;
 mod golden;
 mod guard;
 mod host;
+mod interp_suite;
 mod levels;
 mod live;
 mod liveview;
@@ -473,6 +474,7 @@ impl App {
             Some("cross_gpu") => effects::cross_gpu(self, call),
             Some("op_table") => steps_ref::op_table(),
             Some("steps_reference") => steps_ref::steps_reference(self, out),
+            Some("interp_suite") => interp_suite::call(self, call),
             Some("golden") => golden::golden(self, out, call),
             Some("decide") => golden::decide(self, call),
             Some("live") => live::call(self, out, call),
