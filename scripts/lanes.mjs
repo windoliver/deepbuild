@@ -57,7 +57,8 @@ export const alone = ['tests/acceptance/20/', 'tests/acceptance/1202/', 'tests/a
  * as written, by hand only: its two line assertions search the journey file for a flow-style substring that the suite's
  * own YAML rewrite never writes, so they expect line 0; its blind redraft, redraft/, runs in its place. #37's first AC16
  * draft is kept by hand too: it counts the stack's start and teardown as the runner's addition; its blind redraft,
- * redraft-ac16/, runs in its place.
+ * redraft-ac16/, runs in its place. #37's first AC7 draft, moved unchanged into receipt-first-draft.test.ts (the owner's
+ * call on PR #1153), is kept by hand: its precondition needs a first step slower than a frame; redraft-ac7/ runs in its place.
  */
 export const byHand = ['tests/acceptance/685/', 'tests/acceptance/1202/session.live.test.ts', 'tests/acceptance/666/session.live.test.ts', 'tests/acceptance/668/session.live.test.ts', 'tests/acceptance/669/session.live.test.ts', 'tests/acceptance/18/mapping/record.live.test.ts', 'tests/acceptance/18/install/tamper.live.test.ts', 'tests/acceptance/21/sessions.live.test.ts',
   'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/112/live.test.ts', 'tests/acceptance/27/session.live.test.ts', 'tests/acceptance/27/desktop.test.ts', 'tests/acceptance/27/desktop-redraft/', 'tests/acceptance/27/outcomes.test.ts', 'tests/acceptance/806/live.test.ts',
@@ -65,7 +66,7 @@ export const byHand = ['tests/acceptance/685/', 'tests/acceptance/1202/session.l
   'tests/acceptance/140/gpu/capture.live.test.ts', ...['empty', 'invalid', 'starts'].map((f) => `tests/acceptance/874/${f}.test.ts`),
   'tests/acceptance/824/budgets.long.test.ts', 'tests/acceptance/824/redraft-ac1/budgets.long.test.ts', 'tests/acceptance/824/sessions/budgets.long.test.ts',
   'tests/acceptance/824/sessions/redraft-readings/', 'tests/acceptance/14/ac6-redraft.test.ts', 'tests/acceptance/37/assertions.test.ts',
-  'tests/acceptance/37/budgets.test.ts'];
+  'tests/acceptance/37/budgets.test.ts', 'tests/acceptance/37/receipt-first-draft.test.ts'];
 
 /**
  * Test files whose verdict reads the machine's load or timing (docs/parallel-proof.md, section 7), which run only under

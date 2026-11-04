@@ -411,13 +411,24 @@ The criteria that name no twin (AC1 to AC12, AC16, AC17, AC25) fail on the base;
 (the fixture journey passes review, the working build passes), so a runner that refuses or fails everything fails
 them as well. Past that, the mutation lane is their wrong program.
 
+## Approved changes after the draft
+
+Disputed on the work and approved by the owner on 2026-11-04 (PR #1153), after its blind redraft passed on the work:
+AC7's first draft moved, unchanged, from `evidence.test.ts` into `receipt-first-draft.test.ts`, which is kept as
+written and run by hand only (`scripts/lanes.mjs`, byHand). Its precondition needs the cart journey's first step to
+take more than one frame (1000/15 ms), and the reference Mac now runs it in 31 to 34 ms, so it fails before AC7 is
+checked. Its blind redraft, `redraft-ac7/` (REDRAFT.md), holds two steps 2 s in the page and runs in its place.
+
+The blind redrafts of AC18 (`redraft/`) and AC16 (`redraft-ac16/`) also run in place of their first drafts,
+`assertions.test.ts` and `budgets.test.ts`, which are kept as written and run by hand only; neither first draft was edited.
+
 ## Files
 
 - `helpers.ts`: the environment cleanup, temp folders, the world (record, asks, supervisor, evidence store), the
   app as a checkout per build, trees and tree digests, journey files as data, the fake model, `assertionFails`, a
   PNG reader and the planted 4×4 block.
 - `wrong.ts`: AC13's three planted runners, built from the fill.
-- The test files: `review.test.ts` (AC1, AC17), `evidence.test.ts` (AC2, AC3, AC4, AC7, AC8), `features.test.ts`
+- The test files: `review.test.ts` (AC1, AC17), `evidence.test.ts` (AC2, AC3, AC4, AC8), `receipt-first-draft.test.ts` (AC7's first draft, by hand), `features.test.ts`
   (AC5), `screens.test.ts` (AC6, AC9, AC11, AC23, AC24), `latency.test.ts` (AC10), `endings.test.ts` (AC12),
   `kind.test.ts` (AC13), `api.test.ts` (AC14), `errors.test.ts` (AC15), `budgets.test.ts` (AC16),
   `assertions.test.ts` (AC18), `stack.test.ts` (AC19), `reading.test.ts` (AC20), `steps.test.ts` (AC21, AC22),

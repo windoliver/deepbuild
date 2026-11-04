@@ -1,13 +1,13 @@
 // The evidence a journey run leaves. AC2: it remains after the stack is down. AC3: each end-state check records the
 // selector and bounding box it looked at, with the run's screenshot. AC4: a broken page fails the journey with a
-// screenshot of the failure. AC7: a receipt opens the video within one frame of the checked step. AC8: a test
-// password typed into a plain text field marks the later screenshots and video incomplete, and an export refuses
-// them without your approval.
+// screenshot of the failure. AC8: a test password typed into a plain text field marks the later screenshots and
+// video incomplete, and an export refuses them without your approval. (AC7's first draft is in
+// receipt-first-draft.test.ts; README, Approved changes after the draft.)
 import { existsSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { JourneyRun } from '../../../packages/checks-journey/src/index.ts';
 import type { ShareAsk } from '../../../packages/evidence/src/index.ts';
-import { alive, checkout, FRAME_MS, isWebm, journey, journeyPath, openWorld, runOptions, serverPids, sleep, storedPng, testSecret, VIEWPORT, type World } from './helpers.ts';
+import { alive, checkout, isWebm, journey, journeyPath, openWorld, runOptions, serverPids, sleep, storedPng, testSecret, VIEWPORT, type World } from './helpers.ts';
 
 let world: World;
 beforeAll(async () => { world = await openWorld(); });
@@ -77,26 +77,6 @@ describe('AC4 #37.18a57a59 a broken page fails the journey with a screenshot of 
     const image = await storedPng(world, step!.screenshot, 'the failing step\'s screenshot');
     expect({ width: image.width, height: image.height }).toEqual(VIEWPORT);
     expect(run.evidence).toContain(step!.screenshot);
-  }, 120_000);
-});
-
-describe('AC7 #37.8b056f27 a receipt opens the journey\'s video within one frame of the checked step', () => {
-  it('AC7 the video evidence carries each step\'s start and end, in order, and the receipt for see-total opens the video within one frame (1000/15 ms) of that step\'s start', async () => {
-    const { receiptFor } = await journey();
-    const { run } = await cartRun();
-    const record = await world.evidence.get(run.video!);
-    expect(record?.steps, 'the video carries its steps').toBeDefined();
-    const recorded = record!.steps!;
-    expect(recorded.map((s) => s.step)).toEqual(run.steps.map((s) => s.id));
-    for (let i = 0; i < recorded.length; i++) {
-      expect(recorded[i]!.endMs, `step ${recorded[i]!.step} ends after it starts`).toBeGreaterThanOrEqual(recorded[i]!.startMs);
-      if (i) expect(recorded[i]!.startMs, 'steps follow each other in the video').toBeGreaterThanOrEqual(recorded[i - 1]!.endMs);
-    }
-    const seeTotal = recorded.find((s) => s.step === 'see-total')!;
-    expect(seeTotal.startMs, 'the checked step starts after the first step, so a receipt at 0 would miss it').toBeGreaterThan(FRAME_MS);
-    const receipt = receiptFor(run, 'see-total');
-    expect(receipt.video).toBe(run.video);
-    expect(Math.abs(receipt.atMs - seeTotal.startMs), `the receipt opens at ${receipt.atMs} ms, the step starts at ${seeTotal.startMs} ms`).toBeLessThanOrEqual(FRAME_MS);
   }, 120_000);
 });
 
