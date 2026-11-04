@@ -84,3 +84,23 @@ it('a record made before the gate rebuilds to what it held: the moves it accepte
   expect((await again.table('asks')).rows.find((r) => r.id === ask)?.status).toBe('answered');
   expect(await refusals(again)).toEqual([]);
 });
+
+it("an agent's release of a session's lease, citing nothing, is refused: another's word ends no lease", async () => {
+  const { record } = await open();
+  await record.append(core, { v: 2, id: ulid(++t), kind: 'lease.acquired', subject: `lease:${ulid(t)}`, ts: t, data: lease() });
+  const hook: Connection = { writer: 'hook', actor: 'you', scope: 'you', session: 'S2', agent: 'claude-code' };
+  await record.append(hook, { v: 2, id: ulid(++t), kind: 'lease.released', subject: `lease:${ulid(t)}`, ts: t, data: lease({ proof: [] }) });
+  expect(await leaseRow(record)).toBe('held');
+  expect((await refusals(record)).map((e) => (e.data as { guard?: string }).guard)).toEqual(['proven_ended']);
+});
+
+it('a verdict its claim refused marks nothing judged: the claim keeps no verdict', async () => {
+  const { record } = await open();
+  const claim = ulid(++t);
+  await record.append({ ...core, session: 'S1' }, { v: 3, id: claim, kind: 'claim.made', ts: t, data: fixture('claim.made@3') });
+  await record.append(core, { v: 1, id: ulid(++t), kind: 'claim.stalled', ts: t, data: { claim: `claim:${claim}`, rule: 'no-progress-3-rounds' } });
+  await record.append(core, { v: 1, id: ulid(++t), kind: 'verdict.made', ts: t, data: { ...fixture('verdict.made@1'), claim: `claim:${claim}` } });
+  const row = (await record.table('claims')).rows.find((r) => r.id === claim);
+  expect([row?.state, row?.verdict_id]).toEqual(['stalled', null]);
+  expect((await refusals(record)).length).toBe(1);
+});
