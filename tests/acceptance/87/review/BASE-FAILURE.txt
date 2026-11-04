@@ -1,0 +1,41 @@
+Base run of the #87 `review` acceptance tests, on base commit 29d29ba5 (origin/main), Node 24.22.0, vitest 5.0.5,
+git on darwin, from the worktree root (shown as <worktree>):
+
+  npx vitest run --root tests/acceptance/87/review --testTimeout=600000
+
+Every test fails, and each fails on its own: the package @deepbuild/checks-review isn't at the base, and the tests
+import it lazily, so each test's first call into it throws. Nothing else at the base answers any criterion: there is
+no review kind, no kit for it, no finding filter, send-back, re-review round or item outcome. The base's verdict
+engine leaves a requirement resting on a model alone INCONCLUSIVE with no ask (a hand-made passed run of a check
+whose oracle is a model, on such a requirement, gave INCONCLUSIVE and zero asks), so the second clean-twin test
+fails there on its ask count too once the package exists.
+
+ Test Files  10 failed (10)
+      Tests  11 failed (11)
+
+First failure in file order, as printed:
+
+ FAIL  planted-bug.test.ts > AC a planted bug found by the review comes back as one send-back > the planted unchecked JSON.parse comes back as one send-back with one item at src/orders.ts:8, and the claim is FAIL with one send-back
+Error: Cannot find module '/packages/checks-review/src/index.ts' imported from <worktree>/tests/acceptance/87/review/helpers.ts
+ ❯ runReview helpers.ts:146:17
+    144| /** The review check with this reviewer on a spec in a checkout. */
+    145| export async function runReview(reviewer: Reviewer, spec: ReviewSpec, …
+    146|   return await (await review()).reviewFill(reviewer).run(spec, context…
+       |                 ^
+    147| }
+    148|
+ ❯ planted-bug.test.ts:12:20
+
+Every other failure (kit, free-text, replay, both clean-twin tests, dropped, rereview, one-rule, preexisting,
+outcomes) is the same "Cannot find module '/packages/checks-review/src/index.ts'" from `review()` in helpers.ts, at
+the test's first call into the package (through `runReview`, or `review()` directly in kit and outcomes).
+
+Type check:
+
+  npx tsc -p tests/acceptance/87/review/tsconfig.json
+
+At the base it reports only the missing package: three TS2307 "Cannot find module
+'../../../../packages/checks-review/src/index.ts'" in helpers.ts, and the TS7006 implicit-any errors that follow
+from it in the callbacks over its types. With a declaration-only copy of the README's surface placed temporarily at
+packages/checks-review/src/index.ts (its `export function`s as `export declare function`, its conformance import
+pointed at ../../conformance/src/index.ts), the type check passes with no errors; the copy was then removed.

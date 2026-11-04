@@ -2631,8 +2631,9 @@ export class Core {
   }
 
   /**
-   * Why a `gh pr create` whose body says `Closes #n` is refused (#322): a requirement of the issue's open task that no
-   * verdict has passed keeps the PR at "Part of", and the refusal lists what's left; undefined when it may run.
+   * Why a `gh pr create` or `gh pr edit` whose body says `Closes #n` is refused (#322): a requirement of the issue's
+   * open task that no verdict has passed keeps the PR at "Part of", and so does a review note on its PR that is
+   * neither fixed nor accepted by you (#87); the refusal lists what's left; undefined when it may run.
    */
   private async closesGate(session: string, command: string): Promise<string | undefined> {
     const issue = closesIssue(command);
@@ -2640,9 +2641,13 @@ export class Core {
     const open = await this.tasks.unproven(session, issue);
     if (!open) return undefined;
     if (!open.locked) return `DeepBuild blocked this: the pull request can't say Closes #${issue} while the definition of ${open.task_ref} hasn't locked, so nothing of it is proven yet. Say Part of #${issue} instead, and list what's left.`;
-    if (!open.left.length) return undefined;
-    const left = open.left.map((q) => `${q.id} (${q.text})`).join('; ');
-    return `DeepBuild blocked this: the pull request can't say Closes #${issue} while a requirement of ${open.task_ref} is unproven. Say Part of #${issue} instead, and list what's left: ${left}.`;
+    if (open.left.length) {
+      const left = open.left.map((q) => `${q.id} (${q.text})`).join('; ');
+      return `DeepBuild blocked this: the pull request can't say Closes #${issue} while a requirement of ${open.task_ref} is unproven. Say Part of #${issue} instead, and list what's left: ${left}.`;
+    }
+    const notes = await this.openItems.openNotes(open.task_ref);
+    if (!notes.length) return undefined;
+    return `DeepBuild blocked this: the pull request can't say Closes #${issue} while a review note on it is neither fixed nor accepted. Fix each, or have it accepted through its ask, and say Part of #${issue} until then: ${notes.join('; ')}.`;
   }
   /** The session is on `display` once its switch ran, if that is a screen it leases. */
   private async switched(session: string, display: string): Promise<void> {

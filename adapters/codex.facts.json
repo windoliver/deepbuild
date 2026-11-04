@@ -43,7 +43,7 @@
   "modelFamily": {
     "readBy": "which rate card and context window a model name belongs to",
     "conformance": "codex/modelFamily/known-names",
-    "families": { "gpt-reserve": "gpt-reserve", "gpt-reserve-mini": "gpt-reserve-mini" }
+    "families": { "gpt-reserve": "gpt-reserve", "gpt-reserve-mini": "gpt-reserve-mini", "gpt-5-codex": "gpt-5-codex" }
   },
   "billing": {
     "readBy": "whether a session bills a plan or an API account: set, these variables mean the API",
