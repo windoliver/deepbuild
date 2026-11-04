@@ -94,6 +94,8 @@ pub struct CheckOptions {
     pub exact_f32_floor: bool,
     /// Trusts a compute write's index.
     pub trusts_index: bool,
+    /// An op table whose noise octave weight is halved.
+    pub noise_weight_halved: bool,
 }
 
 struct Ctx<'a> {
@@ -216,6 +218,62 @@ pub fn const_type(step: &Step) -> Result<Ty, String> {
     literal(value)
         .map(concrete)
         .ok_or_else(|| format!("{value} is not a literal of a step type"))
+}
+
+/// A seeded step's literal fields (`noise@1`, `fbm@1`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Seeded {
+    /// 0 for none: the noise repeats every `period` lattice cells on each axis.
+    pub period: u32,
+    pub octaves: u32,
+    pub lacunarity: f64,
+    pub gain: f64,
+}
+
+/// Periods above this many cells are refused.
+pub const MAX_PERIOD: u32 = 65_536;
+
+/// A seeded step's fields, defaulted: no period, 4 octaves, lacunarity 2, gain 0.5; fbm with a
+/// period takes a whole-number lacunarity, since each octave must repeat within it.
+pub fn seeded_fields(s: &Step) -> Result<Seeded, String> {
+    let num = |k: &str, or: f64| -> Result<f64, String> {
+        match s.fields.get(k) {
+            None => Ok(or),
+            Some(v) => v
+                .as_f64()
+                .filter(|x| x.is_finite())
+                .ok_or_else(|| format!("{k} is a number")),
+        }
+    };
+    let period = num("period", 0.0)?;
+    if period < 0.0 || period.fract() != 0.0 || period > f64::from(MAX_PERIOD) {
+        return Err(format!(
+            "period is a whole number of cells, 0 to {MAX_PERIOD}"
+        ));
+    }
+    let octaves = num("octaves", 4.0)?;
+    if !(1.0..=8.0).contains(&octaves) || octaves.fract() != 0.0 {
+        return Err("octaves is 1 to 8".into());
+    }
+    let lacunarity = num("lacunarity", 2.0)?;
+    if !(1.0..=8.0).contains(&lacunarity) {
+        return Err("lacunarity is 1 to 8".into());
+    }
+    if period > 0.0 && lacunarity.fract() != 0.0 {
+        return Err(format!(
+            "fbm with a period takes a whole-number lacunarity, not {lacunarity}: each octave must repeat within the period"
+        ));
+    }
+    let gain = num("gain", 0.5)?;
+    if !(0.0..=1.0).contains(&gain) {
+        return Err("gain is 0 to 1".into());
+    }
+    Ok(Seeded {
+        period: period as u32,
+        octaves: octaves as u32,
+        lacunarity,
+        gain,
+    })
 }
 
 fn pick_lane(c: char) -> Option<u8> {
@@ -512,6 +570,17 @@ impl Ctx<'_> {
                 }
                 Ty::U32
             }
+            "noise" | "fbm" => {
+                if float(&need("p")?).map_err(bad)? != Ty::V(Sc::F32, 2) {
+                    return Err(bad(format!("{}'s p is a vec2<f32>", s.op)));
+                }
+                match need("seed")? {
+                    Ty::Int | Ty::V(Sc::U32, 1) => {}
+                    t => return Err(bad(format!("{} takes a u32 seed, not {}", s.op, t.wgsl()))),
+                }
+                seeded_fields(s).map_err(bad)?;
+                Ty::F32
+            }
             "rand" => {
                 match need("key")? {
                     Ty::Int | Ty::V(Sc::U32, 1) => {}
@@ -655,7 +724,13 @@ impl Ctx<'_> {
             }
         };
         let out = concrete(out);
-        self.cost(id, def, &args, &out, trips);
+        // fbm's weight is per octave.
+        let octaves = if name == "fbm" {
+            seeded_fields(s).map_or(1, |f| f.octaves)
+        } else {
+            1
+        };
+        self.cost(id, def, &args, &out, trips * octaves);
         self.track_affine(id, name, s);
         Ok(vec![(None, out)])
     }
@@ -814,7 +889,9 @@ impl Ctx<'_> {
             Ty::Mat(n) => f64::from(*n) * f64::from(*n),
             _ => 1.0,
         };
-        self.weight += def.weight * lanes_of(out) * f64::from(trips);
+        let halved = self.options.noise_weight_halved && matches!(def.name, "noise@1" | "fbm@1");
+        let weight = if halved { def.weight / 2.0 } else { def.weight };
+        self.weight += weight * lanes_of(out) * f64::from(trips);
         self.fetches += def.fetches * trips;
         let floats = |t: &Ty| {
             matches!(

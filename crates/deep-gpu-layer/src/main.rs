@@ -13,6 +13,7 @@
 
 #[cfg(feature = "test-meter")]
 mod allocations;
+mod calibrate;
 mod columns;
 mod compare;
 mod compile;
@@ -466,6 +467,7 @@ impl App {
             Some("host") => host::call(self, out, call),
             Some("guard") => guard::call(self, out, call),
             Some("operators") => effects::operators(self),
+            Some("calibrate") => calibrate::calibrate(self),
             Some("reference") => effects::reference(self, out, call),
             Some("check_operator") => effects::check_operator(self, call),
             Some("op") => effects::op(self, call),

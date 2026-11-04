@@ -26,7 +26,8 @@ pub struct Def {
     /// Its argument ports, in the order the emitter passes them.
     pub ports: &'static [&'static str],
     /// Cost units per evaluation: about 1 for an add or a compare, 4 for a divide or a square
-    /// root, 8 for a transcendental, 16 per noise octave (estimates until measured).
+    /// root, 8 for a transcendental (estimates until measured); 180 per noise octave, measured
+    /// by the calibration run (a noise octave is nine integer hashes and its gradients).
     pub weight: f64,
     pub fetches: u32,
     /// Exact when every value it reads and writes is an integer or a bool.
@@ -67,6 +68,8 @@ const X: &[&str] = &["x"];
 const NONE: &[&str] = &[];
 /// A storage statement's ports: the buffer, the index and the value.
 const W: &[&str] = &["buf", "i", "v"];
+/// A seeded step's ports: the point and the seed.
+const NOISE: &[&str] = &["p", "seed"];
 
 /// The base entries, sorted by name.
 pub const TABLE: &[Def] = &[
@@ -105,6 +108,8 @@ pub const TABLE: &[Def] = &[
     d("eq@1", A, 1.0, true, ALL),
     d("exp2@1", X, 8.0, false, ALL),
     d("exp@1", X, 8.0, false, ALL),
+    // Fractal noise: `octaves` (1 to 8, a literal) of noise@1, so its weight is per octave.
+    d("fbm@1", NOISE, 180.0, false, ALL),
     d("first_leading_bit@1", X, 1.0, true, ALL),
     d("first_trailing_bit@1", X, 1.0, true, ALL),
     d("floor@1", X, 1.0, true, ALL),
@@ -129,6 +134,8 @@ pub const TABLE: &[Def] = &[
     d("mul@1", A, 1.0, true, ALL),
     d("ne@1", A, 1.0, true, ALL),
     d("neg@1", X, 1.0, true, ALL),
+    // Gradient noise on the integer lattice hash: one octave.
+    d("noise@1", NOISE, 180.0, false, ALL),
     // A geometry step: the surface's normal in `space` (object, world or view).
     d("normal@1", NONE, 0.0, false, MATERIAL),
     d("normalize@1", X, 6.0, false, ALL),
@@ -478,6 +485,31 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
             U(k) => F(f64::from(hash1(k) >> 8) * 5.960_464_5e-8),
             x => return Err(format!("rand's key is a u32, not {x:?}")),
         },
+        // The fields a seeded step takes beside its ports are in the case's env.
+        "noise" | "fbm" => {
+            let p = arg(0)?.lanes()?;
+            let U(seed) = arg(1)? else {
+                return Err(format!("{step}'s seed is a u32"));
+            };
+            let field = |k: &str, or: f64| env.get(k).and_then(Value::as_f64).unwrap_or(or);
+            let period = field("period", 0.0) as u32;
+            let at = [
+                p.first().copied().unwrap_or(0.0),
+                p.get(1).copied().unwrap_or(0.0),
+            ];
+            F(if name == "noise" {
+                noise2(at, seed, period)
+            } else {
+                fbm2(
+                    at,
+                    seed,
+                    field("octaves", 4.0) as u32,
+                    field("lacunarity", 2.0),
+                    field("gain", 0.5),
+                    period,
+                )
+            })
+        }
         "compose" => Vf(a.iter().map(V::f).collect::<Result<_, _>>()?),
         "split" => arg(0)?,
         "index" => {
@@ -618,6 +650,59 @@ pub fn hash1(x: u32) -> u32 {
     let s = x.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
     let w = ((s >> ((s >> 28) + 4)) ^ s).wrapping_mul(277_803_737);
     (w >> 22) ^ w
+}
+
+/// One lattice corner of noise@1: its gradient, two lanes in [-1, 1) from the hash of the
+/// corner (wrapped into `period` cells when it is above 0) and the seed's hash `hs`, dotted with
+/// the offset `(dx, dy)` from the corner.
+fn corner(hs: u32, cx: i32, cy: i32, period: u32, dx: f64, dy: f64) -> f64 {
+    let (x, y) = match i32::try_from(period) {
+        Ok(p) if p > 0 => (cx.rem_euclid(p), cy.rem_euclid(p)),
+        _ => (cx, cy),
+    };
+    let h = hash1(hash1(hs ^ x as u32) ^ y as u32);
+    let gx = f64::from(h & 0xffff) / 32768.0 - 1.0;
+    let gy = f64::from(h >> 16) / 32768.0 - 1.0;
+    gx * dx + gy * dy
+}
+
+/// `noise@1`: 2D gradient noise on the integer lattice hash, about [-1, 1], 0 at every lattice
+/// point; with `period` above 0 it repeats every `period` cells on each axis. The effects
+/// module's WGSL writer and its f64 interpreter both write this function.
+pub fn noise2(p: [f64; 2], seed: u32, period: u32) -> f64 {
+    let (ix, iy) = (p[0].floor(), p[1].floor());
+    let (fx, fy) = (p[0] - ix, p[1] - iy);
+    let (cx, cy) = (ix as i32, iy as i32);
+    let hs = hash1(seed);
+    let fade = |t: f64| t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+    let (ux, uy) = (fade(fx), fade(fy));
+    let mix = |a: f64, b: f64, t: f64| a * (1.0 - t) + b * t;
+    let (x1, y1) = (cx.wrapping_add(1), cy.wrapping_add(1));
+    let bottom = mix(
+        corner(hs, cx, cy, period, fx, fy),
+        corner(hs, x1, cy, period, fx - 1.0, fy),
+        ux,
+    );
+    let top = mix(
+        corner(hs, cx, y1, period, fx, fy - 1.0),
+        corner(hs, x1, y1, period, fx - 1.0, fy - 1.0),
+        ux,
+    );
+    mix(bottom, top, uy)
+}
+
+/// `fbm@1`: `octaves` of [`noise2`], octave k at `p × lacunarity^k` with seed `seed + k` and
+/// weight `gain^k`, over the sum of the weights; a period grows by the lacunarity each octave.
+pub fn fbm2(p: [f64; 2], seed: u32, octaves: u32, lacunarity: f64, gain: f64, period: u32) -> f64 {
+    let (mut sum, mut amp, mut norm, mut q, mut per) = (0.0, 1.0, 0.0, p, period);
+    for k in 0..octaves {
+        sum += amp * noise2(q, seed.wrapping_add(k), per);
+        norm += amp;
+        amp *= gain;
+        q = [q[0] * lacunarity, q[1] * lacunarity];
+        per = per.wrapping_mul(lacunarity as u32);
+    }
+    sum / norm
 }
 
 /// A value moved by one: an integer by one (wrapping), a float by 1.0, a bool flipped, a list's
