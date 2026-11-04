@@ -429,8 +429,10 @@ pub(crate) fn estimate_by(
             .iter()
             .map(|k| format!("{}.{}", k.entry.family, k.entry.name))
             .collect();
+        // A GPU operator item (`gpu.*`, #429) runs as its own pass, never as the module's
+        // shipped ones, so it doesn't charge them.
         let drawn: Vec<usize> = (0..f.fulls.len())
-            .filter(|&i| kinds.iter().any(|x| x == f.fulls[i]))
+            .filter(|&i| !f.fulls[i].starts_with("gpu.") && kinds.iter().any(|x| x == f.fulls[i]))
             .collect();
         if drawn.is_empty() {
             continue;

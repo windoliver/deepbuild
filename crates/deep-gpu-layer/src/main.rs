@@ -13,6 +13,8 @@
 
 #[cfg(feature = "test-meter")]
 mod allocations;
+mod calibrate;
+mod columns;
 mod compare;
 mod compile;
 mod conformance;
@@ -24,6 +26,7 @@ mod frames;
 mod golden;
 mod guard;
 mod host;
+mod interp_suite;
 mod levels;
 mod live;
 mod liveview;
@@ -35,6 +38,7 @@ mod scene;
 mod seam;
 mod session3;
 mod status;
+mod steps_ref;
 #[cfg(feature = "test-meter")]
 mod testgpu;
 mod textures;
@@ -162,6 +166,17 @@ pub enum Planted {
     StatusBeforeToneMap,
     /// #418's: the bloom's lens dirt laid over the frame instead of multiplying its light.
     DirtOverlay,
+    /// #429's wrong programs (tests/acceptance/429/README.md: Planted programs).
+    RenderBackDrawsLiveOnly,
+    TakesDeclaredClass,
+    AttributeStride16,
+    PartialUpdate2Bytes,
+    RecopiesWholeColumn,
+    F32CompareFloorExact,
+    TrustsWriteIndex,
+    DropsSwizzleLast,
+    NoiseWeightHalved,
+    SettlesWithFallback,
     /// #423's wrong programs (tests/acceptance/423/README.md: Planted programs): the
     /// metallic-roughness map decoded from sRGB; a PNG's gAMA applied as it decodes; every map
     /// sampled at anisotropy 1; a KTX2 normal map transcoded as sRGB color.
@@ -260,6 +275,16 @@ impl Planted {
             "spot_counts_cone" => Planted::SpotCountsCone,
             "status_before_tone_map" => Planted::StatusBeforeToneMap,
             "dirt_overlay" => Planted::DirtOverlay,
+            "render_back_draws_live_only" => Planted::RenderBackDrawsLiveOnly,
+            "takes_declared_class" => Planted::TakesDeclaredClass,
+            "attribute_stride_16" => Planted::AttributeStride16,
+            "partial_update_2_bytes" => Planted::PartialUpdate2Bytes,
+            "recopies_whole_column" => Planted::RecopiesWholeColumn,
+            "f32_compare_floor_exact" => Planted::F32CompareFloorExact,
+            "trusts_write_index" => Planted::TrustsWriteIndex,
+            "drops_swizzle_last" => Planted::DropsSwizzleLast,
+            "noise_weight_halved" => Planted::NoiseWeightHalved,
+            "settles_with_fallback" => Planted::SettlesWithFallback,
             "mr_from_srgb" => Planted::MrFromSrgb,
             "applies_image_gamma" => Planted::AppliesImageGamma,
             "anisotropy_one" => Planted::AnisotropyOne,
@@ -475,11 +500,16 @@ impl App {
             Some("host") => host::call(self, out, call),
             Some("guard") => guard::call(self, out, call),
             Some("operators") => effects::operators(self),
+            Some("calibrate") => calibrate::calibrate(self),
             Some("reference") => effects::reference(self, out, call),
             Some("check_operator") => effects::check_operator(self, call),
             Some("op") => effects::op(self, call),
+            Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),
             Some("cross_gpu") => effects::cross_gpu(self, call),
+            Some("op_table") => steps_ref::op_table(),
+            Some("steps_reference") => steps_ref::steps_reference(self, out),
+            Some("interp_suite") => interp_suite::call(self, call),
             Some("golden") => golden::golden(self, out, call),
             Some("decide") => golden::decide(self, call),
             Some("live") => live::call(self, out, call),

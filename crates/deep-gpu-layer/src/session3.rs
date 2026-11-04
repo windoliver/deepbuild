@@ -79,6 +79,23 @@ pub fn open(
     open_on(&On::of(app), size, timings, with_stage)
 }
 
+/// [`open`] for a document whose composed operators (#429) the effects chain runs: their passes
+/// are the view's from its first frame.
+pub fn open_doc(
+    app: &mut App,
+    size: [u32; 2],
+    timings: bool,
+    with_stage: bool,
+    doc: &Value,
+) -> Result<Opened, Value> {
+    let (options, planted) = effects::operator_plants(app.planted);
+    let doc = doc.clone();
+    let on = On::of(app);
+    open_with(&on, size, timings, with_stage, move |fx| {
+        fx.op_doc = Some((doc, options, planted));
+    })
+}
+
 /// What a session runs on: the render thread, the handoff its slots take, the backend and the
 /// planted program. The headless canvas worker has these and no app (#140).
 pub struct On<'a> {
@@ -101,6 +118,16 @@ impl On<'_> {
 
 /// [`open`] on `on`.
 pub fn open_on(on: &On, size: [u32; 2], timings: bool, with_stage: bool) -> Result<Opened, Value> {
+    open_with(on, size, timings, with_stage, |_| {})
+}
+
+fn open_with(
+    on: &On,
+    size: [u32; 2],
+    timings: bool,
+    with_stage: bool,
+    setup: impl FnOnce(&mut Effects) + Send + 'static,
+) -> Result<Opened, Value> {
     let planted = planted3(on.planted);
     let path = on.path;
     let fx_planted = effects::planted_fx(on.planted);
@@ -109,7 +136,9 @@ pub fn open_on(on: &On, size: [u32; 2], timings: bool, with_stage: bool) -> Resu
         .call(move |state| -> Result<Opened, String> {
             let (module, shared) = Module3::new(planted);
             // The shipped effects run between scene3d's geometry and its output (#380).
-            let fx = Arc::new(Mutex::new(Effects::new(Default::default(), fx_planted)));
+            let mut effects = Effects::new(Default::default(), fx_planted);
+            setup(&mut effects);
+            let fx = Arc::new(Mutex::new(effects));
             lock(&shared).post = Some(Box::new(fx::Shared(fx.clone())));
             let stage = if with_stage {
                 let device = state.gpu.recover()?;
