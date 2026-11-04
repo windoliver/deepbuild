@@ -742,6 +742,8 @@ pub fn mark_set(
                     size: number("size", i).unwrap_or(11.0),
                     weight: 400,
                     width: None,
+                    max_lines: None,
+                    mask: false,
                     align: Align::Start,
                     bound: false,
                 },
@@ -816,50 +818,164 @@ fn dashed(line: &[[f64; 2]], dash: &[f64]) -> String {
     d.trim_end().to_string()
 }
 
-/// A `series@1` item's rows in its window, decimated per 1 px column of its `box` (Series and
-/// decimation): OHLC per bucket for candles (open first, high max, low min, close last), M4 for a
-/// line (first, min, max and last per column, so never more than 4 vertices a column). The rows'
-/// `t` is strictly increasing; rows out of order are refused, naming the column.
-pub fn series(
-    id: &str,
-    item: &Value,
-    palette: &Palette,
-    pos: [f64; 2],
-) -> Result<Vec<Mark>, Refused> {
+/// Which rows a line keeps in each pixel column (Series and decimation `series@1`). The planted
+/// ones are wrong programs a proof surface reaches only through its `planted` field.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Decimate {
+    /// First, min, max and last: the full data's picture for a line without antialiasing.
+    #[default]
+    M4,
+    /// Every row.
+    None,
+    /// #399 AC6's twins: only each column's first and last rows, or only its min and max.
+    FirstLast,
+    MinMax,
+    /// #399's planted data@1: M4 without each column's last row.
+    DropsLast,
+}
+
+/// The pixel column of a time over a window `[t0, t1]` of `cols` columns, exactly: column k
+/// holds `t0 + k·(t1−t0)/cols < t ≤ t0 + (k+1)·(t1−t0)/cols`, the window's first row in column 0
+/// (tsdownsample's `side="right"` edge rule). Times are whole flicks.
+pub fn pixel_column(t: f64, t0: f64, t1: f64, cols: usize) -> usize {
+    let (t, t0, t1) = (t as i128, t0 as i128, t1 as i128);
+    let span = t1 - t0;
+    let w = cols as i128;
+    if span <= 0 {
+        return 0;
+    }
+    let scaled = (t - t0) * w;
+    let k = if scaled <= 0 {
+        0
+    } else {
+        (scaled + span - 1) / span - 1
+    };
+    k.clamp(0, w - 1) as usize
+}
+
+/// A series' rows in its window, by pixel column: each column's kept rows in time order.
+pub struct Decimated {
+    pub t: Vec<f64>,
+    pub v: Vec<f64>,
+    pub columns: Vec<Vec<usize>>,
+    pub window: (f64, f64),
+}
+
+impl Decimated {
+    /// Every kept row, in draw order, each once.
+    pub fn rows(&self) -> Vec<usize> {
+        self.columns.iter().flatten().copied().collect()
+    }
+
+    /// The raw row nearest a time, never a decimated vertex: the crosshair's snap.
+    pub fn nearest(&self, at: f64) -> Option<usize> {
+        let i = self.t.partition_point(|&t| t < at);
+        match (i.checked_sub(1), (i < self.t.len()).then_some(i)) {
+            (Some(a), Some(b)) => Some(if at - self.t[a] <= self.t[b] - at {
+                a
+            } else {
+                b
+            }),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+/// The time-and-value columns of a line series and the rows each pixel column keeps.
+pub fn decimated(id: &str, item: &Value, how: Decimate) -> Result<Decimated, Refused> {
     let path = format!("items/{id}/params");
     let p = object_or_empty(item.get("params"));
-    let n = p
-        .get("t")
-        .and_then(|t| t.get("len"))
-        .and_then(Value::as_u64)
-        .filter(|n| *n <= MAX_ROWS)
-        .ok_or(Refused {
-            code: "bad_column",
-            path: format!("{path}/t"),
-        })? as usize;
-    let numbers = |name: &str| -> Result<Option<Vec<f64>>, Refused> {
-        match p.get(name) {
-            None => Ok(None),
-            Some(c) => match column_of(c, n, &format!("{path}/{name}"))? {
-                Column::Numbers(v) => Ok(Some(v)),
-                _ => refuse("bad_column", format!("{path}/{name}")),
-            },
-        }
-    };
-    let t = numbers("t")?.ok_or(Refused {
+    let n = series_len(p, &path)?;
+    let t = series_numbers(p, "t", n, &path)?.ok_or(Refused {
         code: "bad_column",
         path: format!("{path}/t"),
     })?;
     if let Some(i) = t.windows(2).position(|w| w[1] <= w[0]) {
         return refuse("out_of_range", format!("{path}/t/{}", i + 1));
     }
-    let Some([bx, by, bw, bh]) = p.get("box").and_then(Value::as_array).and_then(|b| {
+    let Some(v) = series_numbers(p, "v", n, &path)? else {
+        return refuse("bad_column", format!("{path}/v"));
+    };
+    let [_, _, bw, _] = series_box(p, &path)?;
+    let (t0, t1) = series_window(p, &t, &path)?;
+    let cols = bw.floor().max(1.0) as usize;
+    let mut columns: Vec<Vec<usize>> = vec![Vec::new(); cols];
+    let start = t.partition_point(|&x| x < t0);
+    let end = t.partition_point(|&x| x <= t1);
+    let mut i = start;
+    while i < end {
+        let k = pixel_column(t[i], t0, t1, cols);
+        let mut j = i;
+        let (mut lo, mut hi) = (i, i);
+        while j < end && pixel_column(t[j], t0, t1, cols) == k {
+            if v[j] < v[lo] {
+                lo = j;
+            }
+            if v[j] > v[hi] {
+                hi = j;
+            }
+            j += 1;
+        }
+        let last = j - 1;
+        let mut kept: Vec<usize> = match how {
+            Decimate::None => (i..j).collect(),
+            Decimate::M4 => vec![i, lo, hi, last],
+            Decimate::FirstLast => vec![i, last],
+            Decimate::MinMax => vec![lo, hi],
+            Decimate::DropsLast => vec![i, lo, hi],
+        };
+        kept.sort_unstable();
+        kept.dedup();
+        columns[k] = kept;
+        i = j;
+    }
+    Ok(Decimated {
+        t,
+        v,
+        columns,
+        window: (t0, t1),
+    })
+}
+
+fn series_len(p: &Map<String, Value>, path: &str) -> Result<usize, Refused> {
+    Ok(p.get("t")
+        .and_then(|t| t.get("len"))
+        .and_then(Value::as_u64)
+        .filter(|n| *n <= MAX_ROWS)
+        .ok_or(Refused {
+            code: "bad_column",
+            path: format!("{path}/t"),
+        })? as usize)
+}
+
+fn series_numbers(
+    p: &Map<String, Value>,
+    name: &str,
+    n: usize,
+    path: &str,
+) -> Result<Option<Vec<f64>>, Refused> {
+    match p.get(name) {
+        None => Ok(None),
+        Some(c) => match column_of(c, n, &format!("{path}/{name}"))? {
+            Column::Numbers(v) => Ok(Some(v)),
+            _ => refuse("bad_column", format!("{path}/{name}")),
+        },
+    }
+}
+
+fn series_box(p: &Map<String, Value>, path: &str) -> Result<[f64; 4], Refused> {
+    match p.get("box").and_then(Value::as_array).and_then(|b| {
         let b: Option<Vec<f64>> = b.iter().map(Value::as_f64).collect();
         <[f64; 4]>::try_from(b?.as_slice()).ok()
-    }) else {
-        return refuse("bad_doc", format!("{path}/box"));
-    };
-    let (t0, t1) = match p.get("window") {
+    }) {
+        Some(b) => Ok(b),
+        None => refuse("bad_doc", format!("{path}/box")),
+    }
+}
+
+fn series_window(p: &Map<String, Value>, t: &[f64], path: &str) -> Result<(f64, f64), Refused> {
+    let n = t.len();
+    Ok(match p.get("window") {
         Some(Value::Array(w)) => match w.as_slice() {
             [a, b] => (a.as_f64().unwrap_or(0.0), b.as_f64().unwrap_or(0.0)),
             _ => return refuse("bad_doc", format!("{path}/window")),
@@ -869,45 +985,122 @@ pub fn series(
             (t[n.saturating_sub(last.max(1))], t[n - 1])
         }
         None if n > 0 => (t[0], t[n - 1]),
-        _ => return Ok(Vec::new()),
-    };
-    let rows: Vec<usize> = (0..n).filter(|&i| t[i] >= t0 && t[i] <= t1).collect();
+        _ => (0.0, 0.0),
+    })
+}
+
+/// A `series@1` item's rows in its window, decimated per 1 px column of its `box` (Series and
+/// decimation): OHLC per bucket for candles (open first, high max, low min, close last), M4 for a
+/// line (first, min, max and last per column, so never more than 4 vertices a column). The rows'
+/// `t` is strictly increasing; rows out of order are refused, naming the column. A line draws each
+/// column's kept rows as one vertical run from their min to their max at the column's centre, and
+/// one segment from each column's last kept row to the next column's first, each its own subpath:
+/// the same shape the polyline through the column's rows covers, without the joins that would
+/// make it depend on how many rows a column kept.
+pub fn series(
+    id: &str,
+    item: &Value,
+    palette: &Palette,
+    pos: [f64; 2],
+    how: Decimate,
+) -> Result<Vec<Mark>, Refused> {
+    let path = format!("items/{id}/params");
+    let p = object_or_empty(item.get("params"));
+    let candles = p.get("decimate").and_then(Value::as_str) == Some("ohlc")
+        || p.get("marks")
+            .and_then(Value::as_array)
+            .is_some_and(|m| m.iter().any(|m| m == "candle"));
+    let [bx, by, bw, bh] = series_box(p, &path)?;
+    let x = |b: usize| bx + pos[0] + b as f64;
+    if !candles {
+        let how = match (how, p.get("decimate").and_then(Value::as_str)) {
+            (Decimate::M4, Some("none")) => Decimate::None,
+            (how, _) => how,
+        };
+        let d = decimated(id, item, how)?;
+        let (lo, hi) = d
+            .rows()
+            .iter()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &r| {
+                (lo.min(d.v[r]), hi.max(d.v[r]))
+            });
+        let y = |v: f64| {
+            by + pos[1] + bh
+                - if hi > lo {
+                    (v - lo) / (hi - lo) * bh
+                } else {
+                    bh / 2.0
+                }
+        };
+        let color = role(
+            palette,
+            p.get("role").and_then(Value::as_str).unwrap_or("ink"),
+            &format!("{path}/role"),
+        )?;
+        let mut d_path = String::new();
+        let mut previous: Option<(f64, f64)> = None;
+        for (b, rows) in d.columns.iter().enumerate() {
+            let (Some(&first), Some(&last)) = (rows.first(), rows.last()) else {
+                continue;
+            };
+            let cx = x(b) + 0.5;
+            let (min, max) = rows
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, z), &r| {
+                    (a.min(d.v[r]), z.max(d.v[r]))
+                });
+            if let Some((px, py)) = previous {
+                d_path.push_str(&format!("M {px} {py} L {cx} {} ", y(d.v[first])));
+            }
+            d_path.push_str(&format!("M {cx} {} L {cx} {} ", y(max), y(min)));
+            previous = Some((cx, y(d.v[last])));
+        }
+        let d_path = d_path.trim_end().to_string();
+        return Ok(vec![Mark::Path {
+            item: id.to_string(),
+            geometry: Geometry {
+                verbs: path::parse(&d_path).unwrap_or_default(),
+                stroke: Some(1.0),
+                fill: false,
+            },
+            d: d_path,
+            offset: [0.0, 0.0],
+            color,
+        }]);
+    }
+    let n = series_len(p, &path)?;
+    let t = series_numbers(p, "t", n, &path)?.ok_or(Refused {
+        code: "bad_column",
+        path: format!("{path}/t"),
+    })?;
+    if let Some(i) = t.windows(2).position(|w| w[1] <= w[0]) {
+        return refuse("out_of_range", format!("{path}/t/{}", i + 1));
+    }
+    if n == 0 && p.get("window").is_none() {
+        return Ok(Vec::new());
+    }
+    let (t0, t1) = series_window(p, &t, &path)?;
     let cols = bw.floor().max(1.0) as usize;
-    let column = |i: usize| -> usize {
+    let (Some(o), Some(h), Some(l), Some(c)) = (
+        series_numbers(p, "o", n, &path)?,
+        series_numbers(p, "h", n, &path)?,
+        series_numbers(p, "l", n, &path)?,
+        series_numbers(p, "c", n, &path)?,
+    ) else {
+        return refuse("bad_column", format!("{path}/o"));
+    };
+    // Each column's (open, high, low, close) of the rows in it, in row order.
+    let mut buckets: Vec<Option<[f64; 4]>> = vec![None; cols];
+    for i in (0..n).filter(|&i| t[i] >= t0 && t[i] <= t1) {
         let f = if t1 > t0 {
             (t[i] - t0) / (t1 - t0)
         } else {
             0.0
         };
-        ((f * cols as f64) as usize).min(cols - 1)
-    };
-    let candles = p.get("decimate").and_then(Value::as_str) == Some("ohlc")
-        || p.get("marks")
-            .and_then(Value::as_array)
-            .is_some_and(|m| m.iter().any(|m| m == "candle"));
-    // Each column's (first, high, low, last) of the rows in it, in row order.
-    let mut buckets: Vec<Option<[f64; 4]>> = vec![None; cols];
-    let ohlc = if candles {
-        let (Some(o), Some(h), Some(l), Some(c)) =
-            (numbers("o")?, numbers("h")?, numbers("l")?, numbers("c")?)
-        else {
-            return refuse("bad_column", format!("{path}/o"));
-        };
-        for &i in &rows {
-            let b = buckets[column(i)].get_or_insert([o[i], h[i], l[i], c[i]]);
-            (b[1], b[2], b[3]) = (b[1].max(h[i]), b[2].min(l[i]), c[i]);
-        }
-        true
-    } else {
-        let Some(v) = numbers("v")? else {
-            return refuse("bad_column", format!("{path}/v"));
-        };
-        for &i in &rows {
-            let b = buckets[column(i)].get_or_insert([v[i], v[i], v[i], v[i]]);
-            (b[1], b[2], b[3]) = (b[1].max(v[i]), b[2].min(v[i]), v[i]);
-        }
-        false
-    };
+        let column = ((f * cols as f64) as usize).min(cols - 1);
+        let b = buckets[column].get_or_insert([o[i], h[i], l[i], c[i]]);
+        (b[1], b[2], b[3]) = (b[1].max(h[i]), b[2].min(l[i]), c[i]);
+    }
     let (lo, hi) = buckets
         .iter()
         .flatten()
@@ -922,9 +1115,8 @@ pub fn series(
                 bh / 2.0
             }
     };
-    let x = |b: usize| bx + pos[0] + b as f64;
     let mut out = Vec::new();
-    if ohlc {
+    {
         let candle = p.get("candle");
         let role_of = |k: &str| -> Result<[u8; 3], Refused> {
             let name = candle
@@ -947,38 +1139,6 @@ pub fn series(
                 fill: Fill::Solid(color),
             });
         }
-    } else {
-        let color = role(
-            palette,
-            p.get("role").and_then(Value::as_str).unwrap_or("ink"),
-            &format!("{path}/role"),
-        )?;
-        let mut d = String::new();
-        for (b, bucket) in buckets.iter().enumerate() {
-            let Some([first, high, low, last]) = *bucket else {
-                continue;
-            };
-            for v in [first, high, low, last] {
-                d.push_str(&format!(
-                    "{} {} {} ",
-                    if d.is_empty() { "M" } else { "L" },
-                    x(b) + 0.5,
-                    y(v)
-                ));
-            }
-        }
-        let d = d.trim_end().to_string();
-        out.push(Mark::Path {
-            item: id.to_string(),
-            geometry: Geometry {
-                verbs: path::parse(&d).unwrap_or_default(),
-                stroke: Some(1.0),
-                fill: false,
-            },
-            d,
-            offset: [0.0, 0.0],
-            color,
-        });
     }
     Ok(out)
 }
@@ -1080,6 +1240,12 @@ pub fn numbers(id: &str, item: &Value, items: &Map<String, Value>) -> Vec<Value>
                 for run in number_runs(&label) {
                     out.push(json!({"item": id, "row": null, "text": run, "source": source}));
                 }
+            }
+            let title = p.get("title").and_then(Value::as_str).unwrap_or("");
+            for run in number_runs(title) {
+                out.push(
+                    json!({"item": id, "row": null, "text": run, "source": {"constant": "title"}}),
+                );
             }
         }
         _ => {}
@@ -1202,6 +1368,8 @@ pub fn axis(
                 size: LABEL_SIZE,
                 weight: 400,
                 width: Some(LABEL_BOX),
+                max_lines: None,
+                mask: false,
                 align,
                 bound: false,
             },
@@ -1210,6 +1378,183 @@ pub fn axis(
             color,
             runs: Vec::new(),
         });
+    }
+    // The title past the line's far end, the top of an upright axis and the right of a flat one,
+    // on the labels' side.
+    if let Some(title) = p.get("title").and_then(Value::as_str) {
+        let width = LABEL_BOX.max(est(title));
+        let line = LABEL_SIZE * 1.3;
+        let (origin, align) = if horizontal {
+            let end = scale.range[0].max(scale.range[1]);
+            let y = if out_dir > 0.0 {
+                TICK + 2.0 + line + 2.0
+            } else {
+                -(TICK + 2.0 + 2.0 * line + 2.0)
+            };
+            (point(end - width, y), Align::End)
+        } else {
+            let top = scale.range[0].min(scale.range[1]) - LABEL_SIZE * 0.65 - line - 2.0;
+            if out_dir > 0.0 {
+                (point(top, TICK + 2.0), Align::Start)
+            } else {
+                (point(top, -(TICK + 2.0 + width)), Align::End)
+            }
+        };
+        marks.push(Mark::Text {
+            item: format!("{id}#title"),
+            spec: TextSpec {
+                text: title.to_string(),
+                font: "body".into(),
+                family: Some(deep_text::Role::Body.family()),
+                fallback: Vec::new(),
+                lang: None,
+                size: LABEL_SIZE,
+                weight: 600,
+                width: Some(width),
+                max_lines: None,
+                mask: false,
+                align,
+                bound: false,
+            },
+            origin,
+            role: None,
+            color,
+            runs: Vec::new(),
+        });
+    }
+    Ok(marks)
+}
+
+/// A legend row's swatch length, and the gaps after a swatch and after an entry, in u.
+const SWATCH: f64 = 16.0;
+const GAP: f64 = 6.0;
+const ENTRY_GAP: f64 = 16.0;
+
+/// The automatic legend of an ordinal scale whose roles color mark sets (Scale and encode: legends
+/// are automatic): one row across the top left, an entry per category a set draws, in the
+/// domain's order, each the set's mark in the category's role (a line, dashed as the set is, or
+/// a square) and the category's name in ink. No legend for a scale no set colors by.
+pub fn legend(
+    id: &str,
+    item: &Value,
+    items: &Map<String, Value>,
+    palette: &Palette,
+    pos: [f64; 2],
+) -> Result<Vec<Mark>, Refused> {
+    let ordinal = item.get("params").and_then(|p| p.get("type")) == Some(&json!("ordinal"));
+    if !ordinal {
+        return Ok(Vec::new());
+    }
+    // Each category a set draws, with the first such set's params.
+    let mut drawn: Vec<(String, &Map<String, Value>)> = Vec::new();
+    for (set_id, set) in items {
+        if set.get("kind").and_then(Value::as_str) != Some("marks@1") {
+            continue;
+        }
+        let p = object_or_empty(set.get("params"));
+        let role = p.get("encode").and_then(|e| e.get("role"));
+        if role.and_then(|r| r.get("scale")).and_then(Value::as_str) != Some(id) {
+            continue;
+        }
+        let n = p.get("n").and_then(Value::as_u64).unwrap_or(0) as usize;
+        let Some(c) = role
+            .and_then(|r| r.get("column"))
+            .and_then(Value::as_str)
+            .and_then(|name| p.get("columns")?.get(name))
+        else {
+            continue;
+        };
+        let Ok(column) = column_of(c, n, &format!("items/{set_id}/params/columns")) else {
+            continue;
+        };
+        for i in 0..n.max(1) {
+            if let Some(category) = column.text(i) {
+                if !drawn.iter().any(|(c, _)| *c == category) {
+                    drawn.push((category, p));
+                }
+            }
+            if matches!(column, Column::Const(_)) {
+                break;
+            }
+        }
+    }
+    if drawn.is_empty() {
+        return Ok(Vec::new());
+    }
+    let scale = Scale::read(id, item, items)?;
+    let path = format!("items/{id}/params/range");
+    let ink = role(palette, "ink", &path)?;
+    let line = LABEL_SIZE * 1.3;
+    let mid = 16.0 + line / 2.0 + pos[1];
+    let mut x = 16.0 + pos[0];
+    let mut marks = Vec::new();
+    for (k, category) in scale.categories.iter().enumerate() {
+        let Some((_, set)) = drawn.iter().find(|(c, _)| c == category) else {
+            continue;
+        };
+        let Some(name) = scale.role(None, Some(category)) else {
+            continue;
+        };
+        let color = role(palette, name, &path)?;
+        let stroke = set.get("paint").and_then(|pt| pt.get("stroke"));
+        if set.get("mark").and_then(Value::as_str) == Some("path") {
+            let ends = [[x, mid], [x + SWATCH, mid]];
+            let dash = stroke
+                .and_then(|s| s.get("dash"))
+                .and_then(Value::as_array)
+                .map(|d| d.iter().filter_map(Value::as_f64).collect::<Vec<_>>())
+                .filter(|d| d.iter().sum::<f64>() > 0.0 && d.iter().all(|v| *v >= 0.0));
+            let d = match dash {
+                Some(dash) => dashed(&ends, &dash),
+                None => format!("M {} {mid} L {} {mid}", ends[0][0], ends[1][0]),
+            };
+            let width = stroke
+                .and_then(|s| s.get("width"))
+                .and_then(Value::as_f64)
+                .unwrap_or(1.0);
+            marks.push(Mark::Path {
+                item: format!("{id}#swatch{k}"),
+                geometry: Geometry {
+                    verbs: path::parse(&d).unwrap_or_default(),
+                    stroke: Some(width),
+                    fill: false,
+                },
+                d,
+                offset: [0.0, 0.0],
+                color,
+            });
+        } else {
+            marks.push(Mark::Rect {
+                item: format!("{id}#swatch{k}"),
+                bounds: [x + 2.0, mid - 6.0, 12.0, 12.0],
+                radius: 0.0,
+                fill: Fill::Solid(color),
+            });
+        }
+        x += SWATCH + GAP;
+        let width = 0.6 * LABEL_SIZE * category.chars().count() as f64 + 4.0;
+        marks.push(Mark::Text {
+            item: format!("{id}#legend{k}"),
+            spec: TextSpec {
+                text: category.clone(),
+                font: "body".into(),
+                family: Some(deep_text::Role::Body.family()),
+                fallback: Vec::new(),
+                lang: None,
+                size: LABEL_SIZE,
+                weight: 400,
+                width: None,
+                max_lines: None,
+                mask: false,
+                align: Align::Start,
+                bound: false,
+            },
+            origin: [x, mid - line / 2.0],
+            role: None,
+            color: ink,
+            runs: Vec::new(),
+        });
+        x += width + ENTRY_GAP;
     }
     Ok(marks)
 }
@@ -1343,5 +1688,106 @@ mod tests {
             kept.len() < 6 && kept.first() == Some(&"ax#label0"),
             "{kept:?}"
         );
+    }
+
+    #[test]
+    fn an_axis_draws_its_title_past_the_far_end_of_its_line() {
+        let items =
+            json!({"y": {"kind": "scale@1", "params": {"domain": [0, 50], "range": [300, 40]}}});
+        let palette: Palette = [("muted".to_string(), [9, 9, 9])].into();
+        let marks = axis(
+            "ax",
+            &json!({"params": {"scale": "y", "side": "left", "at": 48, "title": "Sales"}}),
+            items.as_object().unwrap(),
+            &palette,
+            [0.0, 0.0],
+        )
+        .unwrap();
+        let title = marks.iter().find_map(|m| match m {
+            Mark::Text { spec, origin, .. } if spec.text == "Sales" => Some(*origin),
+            _ => None,
+        });
+        let Some([_, y]) = title else {
+            panic!(
+                "the axis draws its title: {:?}",
+                marks.iter().map(Mark::item).collect::<Vec<_>>()
+            );
+        };
+        // Above the top tick's label, which centers on the line's top end at 40.
+        assert!(
+            y + LABEL_SIZE * 1.3 <= 40.0 - LABEL_SIZE * 0.65,
+            "title at y {y}"
+        );
+    }
+
+    #[test]
+    fn a_scale_from_categories_to_roles_draws_its_legend_with_each_series_line() {
+        let series = |id: &str, category: &str, dash: Option<[f64; 2]>| {
+            let mut stroke = json!({"width": 3});
+            if let Some(d) = dash {
+                stroke["dash"] = json!(d);
+            }
+            // x [40, 520] and y [200, 120] as little-endian f32.
+            json!({"id": id, "kind": "marks@1", "layer": "main", "order": "a1",
+                "params": {"mark": "path", "n": 2,
+                    "columns": {"x": {"dtype": "f32", "len": 2, "data": "AAAgQgAAAkQ="},
+                                "y": {"dtype": "f32", "len": 2, "data": "AABIQwAA8EI="},
+                                "series": {"const": category}},
+                    "encode": {"x": {"column": "x"}, "y": {"column": "y"},
+                               "role": {"column": "series", "scale": "colors"}},
+                    "paint": {"stroke": stroke}}})
+        };
+        let doc = json!({"format": 1, "size": [600, 320], "layers": {"main": {"writer": "a", "order": "a0"}},
+        "items": {
+            "colors": {"id": "colors", "kind": "scale@1", "layer": "main", "order": "a0",
+                "params": {"type": "ordinal", "domain": ["north", "south"], "range": ["blue", "orange"]}},
+            "north": series("north", "north", None),
+            "south": series("south", "south", Some([6.0, 4.0])),
+        }});
+        let doc = doc.as_object().unwrap();
+        let palette: Palette = [
+            ("ground".to_string(), [255, 255, 255]),
+            ("ink".to_string(), [1, 1, 1]),
+            ("blue".to_string(), [0, 0, 200]),
+            ("orange".to_string(), [250, 120, 0]),
+        ]
+        .into();
+        let frame = crate::scene::frame(
+            doc,
+            object_or_empty(doc.get("items")),
+            &palette,
+            &crate::scene::Record::default(),
+            1.0,
+        )
+        .unwrap();
+        let marks: Vec<Mark> = frame
+            .layers
+            .iter()
+            .flat_map(|l| l.marks.iter().map(|d| d.mark.clone()))
+            .collect();
+        let legend: Vec<&Mark> = marks
+            .iter()
+            .filter(|m| m.item().starts_with("colors#"))
+            .collect();
+        // Each category's name in ink, and its swatch: the series' line in its role, dashed as the
+        // series is.
+        for (category, color, dashed) in [
+            ("north", [0, 0, 200], false),
+            ("south", [250, 120, 0], true),
+        ] {
+            assert!(
+                legend.iter().any(|m| matches!(m, Mark::Text { spec, color: [1, 1, 1], .. } if spec.text == category)),
+                "the legend names {category}: {legend:?}"
+            );
+            let swatch = legend.iter().find_map(|m| match m {
+                Mark::Path { d, color: c, .. } if *c == color => Some(d.matches('M').count()),
+                _ => None,
+            });
+            assert_eq!(
+                swatch.map(|subpaths| subpaths > 1),
+                Some(dashed),
+                "{category}'s swatch is its line, dashed as it is: {legend:?}"
+            );
+        }
     }
 }

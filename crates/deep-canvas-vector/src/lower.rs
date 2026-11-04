@@ -37,6 +37,12 @@ pub fn colors(id: &str, params: &Map<String, Value>) -> Result<BTreeMap<Color, S
     Ok(out)
 }
 
+/// The role an SVG color draws in: the one `colors` maps it to, `currentColor` included, else
+/// ink.
+pub fn role_of(colors: &BTreeMap<Color, String>, color: Color) -> &str {
+    colors.get(&color).map_or("ink", String::as_str)
+}
+
 /// The first color the SVG draws that `colors` doesn't map.
 pub fn unmapped(svg: &Svg, colors: &BTreeMap<Color, String>) -> Option<String> {
     let paints = svg
@@ -185,11 +191,7 @@ pub fn lower(
             at = svg.parts[p].parent;
         }
         let place = Affine([1.0, 0.0, 0.0, 1.0, offset[0], offset[1]]).then(&place);
-        let role = |c: Color| {
-            keyed
-                .or(colors.get(&c).map(String::as_str))
-                .unwrap_or("ink")
-        };
+        let role = |c: Color| keyed.unwrap_or_else(|| role_of(colors, c));
         let verbs: Vec<Verb> = painted.verbs.iter().map(|v| place.verb(*v)).collect();
         let fill = painted.fill.map(|f| (role(f.color), f.opacity));
         let stroke = painted

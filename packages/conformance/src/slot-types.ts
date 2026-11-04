@@ -21,7 +21,9 @@ export interface CheckContext { checkout: string; deadline: number; now(): numbe
 export interface Failure { /** A test still running when its deadline came. */ unended?: boolean; test: string; file: string; line: number; stack: string | null; assertion: boolean; message: string }
 /** What a check runner returns: a closed run outcome, never a verdict; the files the run read, relative to the checkout; the mask it found in the command, or null. */
 export interface CheckResult { outcome: RunOutcome; testsRun: number; failures: Failure[]; evidence: string[]; read: string[]; mask: string | null }
-export interface CheckRunnerFill extends SlotFill { slot: 'check.kind@1'; kind: string; run(spec: CheckSpec, ctx: CheckContext): CheckResult | Promise<CheckResult> }
+/** A check kind's budget per run (#68): the wall time it may take, in ms, and what it may cost, in US dollars. */
+export interface KindBudget { time_ms: number; cost_usd: number }
+export interface CheckRunnerFill extends SlotFill { slot: 'check.kind@1'; kind: string; budget?: KindBudget; run(spec: CheckSpec, ctx: CheckContext): CheckResult | Promise<CheckResult> }
 
 export interface SlotRule { id: string; rule: string }
 /** A shipped fixture of a kit's fixed part: its input and the answer expected. check.kind@1's input is {spec, checkout, deadline}. */

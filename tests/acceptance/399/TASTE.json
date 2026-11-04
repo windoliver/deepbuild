@@ -1,0 +1,14 @@
+{
+  "issue": 399,
+  "criterion": "#399.93b00910",
+  "verdict": "looks_right",
+  "who": "Claude (Opus 5.5), on the owner Tao Feng's delegation in session (\"can you tell for me? everying loks good?\")",
+  "when": "2026-11-04T03:59:35.360Z",
+  "screenshots": {
+    "graph-before.png": "eb8be7b643c3ee59ddfff65150c0f30e50ab8b0f75fb1c27bde456fbd052adcf",
+    "graph-after.png": "cd02570a7c21b1857ada47e4544c023dedff96e2f3f4fd6c5745acd5cc3967b3",
+    "labels.png": "3dbce775bb2aa724f23dcd9772b295af4e7c10094cff473d381cabafd43dc501",
+    "cards-groups.png": "9c6207ea803c667da49f4981afa800afe90e30c813576b5186e3484d467a9ef2"
+  },
+  "note": "Graph before and after: ranks 1-3 and 5-6 identical, n41 joins rank 4 under its parent n03 and only rank 4 shifts; routes are orthogonal and cross no box. Labels: 8 place clear of each other, the points and the status mark, and the 22 that fold are counted at the foot. Cards: each titled group box holds its three cards, and the one edge between groups enters Ship beside its title. Plain, not wrong: the cards draw no border (their frames carry no paint), and some routes in the 40-node graph converge on neighbouring ports."
+}

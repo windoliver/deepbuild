@@ -12,6 +12,9 @@ struct Frame {
     // wider than 1 device px, 2 the rest: below scale 1 thin lines draw after the upscale,
     // #386); and the core's depth target's px per px of this target.
     px: vec4<f32>,
+    // A sky's ambient light from above and below (#418), w 1 with a sky.
+    sky_top: vec4<f32>,
+    sky_low: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -62,11 +65,120 @@ const OFF: vec4<f32> = vec4<f32>(2.0, 2.0, 2.0, 1.0);
 
 // ---- objects: unit meshes under their instance's 3×4 world matrix
 
+// Issue #421: the lights the view's policy shades, each weighted, in photometric units; and the
+// DFG table the specular lobe and its multiple scattering read.
+struct Light {
+    // xyz: where it is; w: 0 sun, 1 point, 2 spot, 3 area.
+    pos: vec4<f32>,
+    // xyz: the unit direction it shines along; w: its range in m.
+    dir: vec4<f32>,
+    // rgb: color × intensity (lx for a sun, cd otherwise, an area's lm ÷ 4π) × the policy's
+    // weight; w: radius in m.
+    color: vec4<f32>,
+    // A spot's cos outer and cos inner.
+    cone: vec4<f32>,
+    // An area's half axes across its face; right.w: 1 for a disk.
+    right: vec4<f32>,
+    up: vec4<f32>,
+};
+
+struct Lights {
+    // xyz: the eye (perspective) or toward the viewer (orthographic); w: 1 for perspective.
+    view: vec4<f32>,
+    // x: how many lights; y: 1 + the key sun its cascades shadow, 0 for none; z: #422's planted
+    // shading bits ([`PREMIX`], [`NO_COMP`], [`ENV_COMP_ONLY`]); w: how many cascades.
+    count: vec4<u32>,
+    // Each cascade's far end, as a distance along the view's forward axis (#422).
+    splits: vec4<f32>,
+    // Each cascade's texel, in m across the light.
+    texels: vec4<f32>,
+    // xyz: the view's forward axis; w: 1 to blend across cascade edges.
+    forward: vec4<f32>,
+    // World to each cascade's clip space (depth 0 nearest the light).
+    cascades: array<mat4x4<f32>, 4>,
+    items: array<Light, 32>,
+};
+
+@group(1) @binding(0) var<uniform> lights: Lights;
+// 32 × 32 entries, cos(view) across and roughness down, two to a vec4: (A, B) with the
+// directional albedo F0·A + F90·B of the specular lobe.
+@group(1) @binding(1) var<uniform> dfg: array<vec4<f32>, 512>;
+// The key sun's cascades (#422), one layer each (a texel's stand-in before one is drawn).
+@group(1) @binding(2) var shadow_map: texture_depth_2d_array;
+
+// The environment (#422; Sky `sky@1`: environment): its prefiltered cubes, each mip a roughness,
+// and their irradiance ÷ π as nine SH coefficients.
+struct Env {
+    sh: array<vec4<f32>, 9>,
+    // The mix's second environment.
+    sh_to: array<vec4<f32>, 9>,
+    // x: 1 with an environment; y: the last mip; z: intensity; w: rotation in rad.
+    k: vec4<f32>,
+    // x: the mix's `by`.
+    m: vec4<f32>,
+    // The sky (#422): clip to world, for each pixel's view ray; the eye, w 1 for perspective.
+    inv: mat4x4<f32>,
+    eye: vec4<f32>,
+    // The gradient's top (w: the stars) and low (w: 1 with a sky); the moon's direction and the
+    // cosine of its radius (w 2 with none).
+    top: vec4<f32>,
+    low: vec4<f32>,
+    moon: vec4<f32>,
+    // Fog: density (1/m), curve (0 exp, 1 exp2), height fog's top (m) and density (1/m).
+    fog: vec4<f32>,
+    // Its color; w 1 to mix toward what the background shows instead.
+    fog_color: vec4<f32>,
+    // x: 1 when the background shows the environment; y: its blur's mip; z, w: its ground's
+    // height and radius (w 0 for none).
+    bg: vec4<f32>,
+    // The sun the sky follows: toward it and the cosine of its disk's radius (w 2 for none); its
+    // disk's radiance.
+    sun: vec4<f32>,
+    sun_color: vec4<f32>,
+};
+
+@group(1) @binding(3) var env_cube: texture_cube<f32>;
+@group(1) @binding(4) var env_sampler: sampler;
+@group(1) @binding(5) var<uniform> env: Env;
+@group(1) @binding(6) var env_cube_to: texture_cube<f32>;
+// The cascades' depth comparison: lit where the point lies no deeper than the map holds.
+@group(1) @binding(7) var shadow_cmp: sampler_comparison;
+
+// #422's planted shading: one F0 premixed from metallic; no multiple-scattering compensation;
+// compensation on environment light only.
+const NO_RECEIVE: u32 = 2u;
+const PREMIX: u32 = 1u;
+const NO_COMP: u32 = 2u;
+const ENV_COMP_ONLY: u32 = 4u;
+
+const PI: f32 = 3.14159265;
+// A solid record's flags: no shadow cast or received (#420); shaded by its material; its world
+// determinant negative, which turns its front faces over; unlit; seen from both sides.
+const MATERIAL: u32 = 4u;
+const MIRRORED: u32 = 8u;
+const UNLIT: u32 = 16u;
+const DOUBLE_SIDED: u32 = 32u;
+// A shadow catcher; the alpha mode (bits 7 and 8: 0 opaque, 1 mask, 2 blend, 3 add); the
+// pattern (bits 9 to 12) and its seed's hash (bits 16 up).
+const CATCH: u32 = 64u;
+const MASK: u32 = 1u;
+const ADD: u32 = 3u;
+const ALPHA_CUTOFF: f32 = 0.5;
+
 struct MeshOut {
     @builtin(position) pos: vec4<f32>,
     @location(0) normal: vec3<f32>,
     @location(1) @interpolate(flat) color: u32,
     @location(2) @interpolate(flat) pick: u32,
+    @location(3) world: vec3<f32>,
+    @location(4) @interpolate(flat) flags: u32,
+    @location(5) @interpolate(flat) base: vec4<f32>,
+    @location(6) @interpolate(flat) surface: vec4<f32>,
+    @location(7) @interpolate(flat) specular: vec4<f32>,
+    // Emission, linear RGB, and the solid's coverage (#418).
+    @location(8) @interpolate(flat) emission: vec4<f32>,
+    // Where it is in its part's own space, in m: what a pattern reads.
+    @location(9) local: vec3<f32>,
 };
 
 @vertex
@@ -79,28 +191,714 @@ fn mesh_vs(
     @location(5) color: u32,
     @location(6) pick: u32,
     @location(7) flags: u32,
+    @location(8) tie: u32,
+    @location(9) emission: vec4<f32>,
+    @location(10) base: vec4<f32>,
+    @location(11) surface: vec4<f32>,
+    @location(12) specular: vec4<f32>,
 ) -> MeshOut {
     var out: MeshOut;
+    out.emission = emission;
     let world = vec3<f32>(dot(r0.xyz, p) + r0.w, dot(r1.xyz, p) + r1.w, dot(r2.xyz, p) + r2.w);
     out.pos = frame.clip * vec4<f32>(world, 1.0);
     // The shadow pass (light.w < 0) leaves out a solid with `cast_shadow: false` (#420).
     if frame.light.w < 0.0 && (flags & 1u) != 0u {
         out.pos = OFF;
     }
-    out.normal = vec3<f32>(dot(r0.xyz, n), dot(r1.xyz, n), dot(r2.xyz, n));
+    let c0 = vec3<f32>(r0.x, r1.x, r2.x);
+    let c1 = vec3<f32>(r0.y, r1.y, r2.y);
+    let c2 = vec3<f32>(r0.z, r1.z, r2.z);
+    // The inverse transpose, by cofactors: right under any scale, a mirror's among them.
+    let cof = normalize(n.x * cross(c1, c2) + n.y * cross(c2, c0) + n.z * cross(c0, c1))
+        * sign(dot(c0, cross(c1, c2)));
+    // Coplanar opaque faces of two solids: the one whose ID ranks later is pushed back by 1/64
+    // px of its face's depth slope per rank, past the rasterizer's sub-pixel snapping, so ties
+    // draw the same way every frame, whatever the submission order (#421).
+    if frame.light.w >= 0.0 && tie > 0u {
+        let cos_t = max(abs(dot(cof, normalize(cross(frame.up.xyz, frame.right.xyz)))), 1.0 / 64.0);
+        let slope = sqrt(1.0 - cos_t * cos_t) / cos_t / max(frame.viewport.z, 1.0);
+        let k = f32(tie) * (1.0e-6 + slope / 64.0);
+        out.pos.z = out.pos.z * select(1.0 - k, 1.0 + k, frame.px.w > 0.5);
+    }
+    if (flags & MATERIAL) != 0u {
+        out.normal = cof;
+    } else {
+        out.normal = vec3<f32>(dot(r0.xyz, n), dot(r1.xyz, n), dot(r2.xyz, n));
+    }
     out.color = color;
     out.pick = pick;
+    out.world = world;
+    out.flags = flags;
+    out.base = base;
+    out.surface = surface;
+    out.specular = specular;
+    out.emission = emission;
+    let o = world - vec3<f32>(r0.w, r1.w, r2.w);
+    out.local = vec3<f32>(
+        dot(o, c0) / max(length(c0), 1e-9),
+        dot(o, c1) / max(length(c1), 1e-9),
+        dot(o, c2) / max(length(c2), 1e-9),
+    );
     return out;
 }
 
+// The DFG table at (cos view, roughness), bilinear.
+fn dfg_at(nv: f32, rough: f32) -> vec2<f32> {
+    let x = clamp(nv * 31.0, 0.0, 31.0);
+    let y = clamp(rough * 31.0, 0.0, 31.0);
+    let x0 = u32(floor(x));
+    let y0 = u32(floor(y));
+    let x1 = min(x0 + 1u, 31u);
+    let y1 = min(y0 + 1u, 31u);
+    let fx = x - f32(x0);
+    let fy = y - f32(y0);
+    let a = mix(entry(y0 * 32u + x0), entry(y0 * 32u + x1), fx);
+    let b = mix(entry(y1 * 32u + x0), entry(y1 * 32u + x1), fx);
+    return mix(a, b, fy);
+}
+
+fn entry(i: u32) -> vec2<f32> {
+    let v = dfg[i / 2u];
+    return select(v.xy, v.zw, (i & 1u) == 1u);
+}
+
+// A surface as the lights see it at a pixel: its material after its pattern.
+struct Surface {
+    base: vec3<f32>,
+    metallic: f32,
+    rough: f32,
+    level: f32,
+    specular: vec3<f32>,
+    coat: f32,
+    coat_rough: f32,
+};
+
+// Our physically based BRDF: GGX with a height-correlated Smith visibility, Schlick's Fresnel
+// from F0 to F90, multiple scattering restored from the DFG table, over an energy-preserving
+// Lambert, under a clear coat (GGX at F0 0.04 with Kelemen's visibility) that takes what it
+// reflects from both. Diffuse and specular apart, per unit illuminance (× n·l outside).
+struct Lobes {
+    diffuse: vec3<f32>,
+    spec: vec3<f32>,
+};
+
+fn ggx(nh: f32, a2: f32) -> f32 {
+    let dd = nh * nh * (a2 - 1.0) + 1.0;
+    return a2 / (PI * dd * dd);
+}
+
+// One specular lobe from F0 to F90, with the energy single scattering loses restored
+// (Kulla-Conty's and Fdez-Agüera's compensation), and what it reflects at this view.
+fn spec_lobe(f0: vec3<f32>, f90: f32, d_vis: f32, fc5: f32, dfg_v: vec2<f32>) -> vec3<f32> {
+    let f = f0 + (f90 - f0) * fc5;
+    return d_vis * f * compensation(f0, dfg_v, (lights.count.z & (NO_COMP | ENV_COMP_ONLY)) != 0u);
+}
+
+// The factor that restores what a lobe's single scattering loses, 1 + F0 (1 ÷ E − 1), with E
+// the lobe's directional albedo from the DFG table; 1 when `off`.
+fn compensation(f0: vec3<f32>, dfg_v: vec2<f32>, off: bool) -> vec3<f32> {
+    if off {
+        return vec3<f32>(1.0);
+    }
+    return 1.0 + f0 * (1.0 / max(dfg_v.x + dfg_v.y, 1e-4) - 1.0);
+}
+
+// The two ends a material mixes by metallic (#422: the glTF BRDF's mix, taken after each is
+// shaded, never through one F0 premixed from metallic): a dielectric's F0 and F90, and a metal's.
+fn dielectric_f0(s: Surface) -> vec3<f32> {
+    return min(0.08 * s.level, 1.0) * s.specular;
+}
+
+fn dielectric_f90(s: Surface) -> f32 {
+    return min(2.0 * s.level, 1.0);
+}
+
+fn lobes(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, s: Surface, a2: f32, dfg_v: vec2<f32>) -> Lobes {
+    let h = normalize(l + v);
+    let nh = max(dot(n, h), 0.0);
+    let nl = max(dot(n, l), 1e-4);
+    let nv = max(dot(n, v), 1e-4);
+    let vh = max(dot(v, h), 0.0);
+    let fc5 = pow(1.0 - vh, 5.0);
+    let vis = 0.5 / max(nl * sqrt(nv * nv * (1.0 - a2) + a2) + nv * sqrt(nl * nl * (1.0 - a2) + a2), 1e-6);
+    let d_vis = ggx(nh, a2) * vis;
+    var spec: vec3<f32>;
+    var diffuse: vec3<f32>;
+    if (lights.count.z & PREMIX) != 0u {
+        // #422's planted wrong program: one F0 premixed from metallic before shading.
+        let f0 = mix(dielectric_f0(s), s.base, s.metallic);
+        let f90 = mix(dielectric_f90(s), 1.0, s.metallic);
+        spec = spec_lobe(f0, f90, d_vis, fc5, dfg_v);
+        let e = f0 * dfg_v.x + f90 * dfg_v.y;
+        diffuse = s.base * (1.0 - s.metallic) * (1.0 - e) / PI;
+    } else {
+        let f0 = dielectric_f0(s);
+        let f90 = dielectric_f90(s);
+        // glTF's fresnel_mix: what the dielectric's Fresnel at v·h reflects leaves its diffuse.
+        let fd = f0 + (f90 - f0) * fc5;
+        let metal = spec_lobe(s.base, 1.0, d_vis, fc5, dfg_v);
+        spec = mix(spec_lobe(f0, f90, d_vis, fc5, dfg_v), metal, s.metallic);
+        diffuse = s.base * (1.0 - s.metallic) * (1.0 - max(fd.r, max(fd.g, fd.b))) / PI;
+    }
+    if s.coat > 0.0 {
+        let ca = max(s.coat_rough * s.coat_rough, 0.002);
+        let fc = (0.04 + 0.96 * fc5) * s.coat;
+        let coat = ggx(nh, ca * ca) * 0.25 / max(vh * vh, 1e-4) * fc;
+        diffuse = diffuse * (1.0 - fc);
+        spec = spec * (1.0 - fc) + vec3<f32>(coat);
+    }
+    return Lobes(diffuse, spec);
+}
+
+// The key sun's visibility at `world` from cascade `i`: the share of a 3 × 3 texel
+// neighbourhood that doesn't block it, the point first pushed along its normal by a texel and a
+// half (1 outside the cascade).
+fn cascade_lit(i: u32, world: vec3<f32>, n: vec3<f32>) -> f32 {
+    let p = world + n * (1.5 * lights.texels[i]);
+    let lp = lights.cascades[i] * vec4<f32>(p, 1.0);
+    let uv = lp.xy * vec2<f32>(0.5, -0.5) + 0.5;
+    if any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) || lp.z > 1.0 {
+        return 1.0;
+    }
+    // Four bilinear comparisons half a texel apart: a 3 × 3 texel tent.
+    let texel = 0.5 / vec2<f32>(textureDimensions(shadow_map));
+    let z = lp.z - 1e-4;
+    var lit = 0.0;
+    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(-texel.x, -texel.y), i32(i), z);
+    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(texel.x, -texel.y), i32(i), z);
+    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(-texel.x, texel.y), i32(i), z);
+    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(texel.x, texel.y), i32(i), z);
+    return lit * 0.25;
+}
+
+// The key sun's visibility at `world` (#422): the cascade its view depth falls in, blended with
+// the next across the last tenth of its range when fade is on; 1 past the last cascade.
+fn lit_share(world: vec3<f32>, n: vec3<f32>) -> f32 {
+    let count = lights.count.w;
+    if count == 0u {
+        return 1.0;
+    }
+    let d = dot(world - lights.view.xyz, lights.forward.xyz);
+    for (var i = 0u; i < count; i++) {
+        let far = lights.splits[i];
+        if d <= far {
+            let lit = cascade_lit(i, world, n);
+            let near = select(0.0, lights.splits[max(i, 1u) - 1u], i > 0u);
+            let edge = far - 0.1 * (far - near);
+            if lights.forward.w > 0.5 && d > edge {
+                var next = 1.0;
+                if i + 1u < count {
+                    next = cascade_lit(i + 1u, world, n);
+                }
+                return mix(lit, next, (d - edge) / max(far - edge, 1e-6));
+            }
+            return lit;
+        }
+    }
+    return 1.0;
+}
+
+// The illuminance an area light (a one-sided Lambertian rect or disk) gives at `p` on a surface
+// facing `n`, exactly: Lambert's polygon formula over its face (a disk as a 12-gon of the same
+// area) clipped to the surface's horizon.
+fn area_irradiance(li: Light, p: vec3<f32>, n: vec3<f32>, radiance: vec3<f32>) -> vec3<f32> {
+    let c = li.pos.xyz - p;
+    let r = li.right.xyz;
+    let u = li.up.xyz;
+    var poly: array<vec3<f32>, 12>;
+    var count = 4u;
+    if li.right.w > 0.5 {
+        count = 12u;
+        // A 12-gon's circumradius whose area is the disk's: √(2π ÷ (12 sin 30°)).
+        let k = 1.0233267;
+        for (var i = 0u; i < 12u; i++) {
+            let t = f32(i) * PI / 6.0;
+            poly[i] = c + (r * cos(t) + u * sin(t)) * k;
+        }
+    } else {
+        poly[0] = c - r - u;
+        poly[1] = c + r - u;
+        poly[2] = c + r + u;
+        poly[3] = c - r + u;
+    }
+    var clipped: array<vec3<f32>, 16>;
+    var m = 0u;
+    for (var i = 0u; i < count; i++) {
+        let a = poly[i];
+        let b = poly[(i + 1u) % count];
+        let da = dot(a, n);
+        let db = dot(b, n);
+        if da > 0.0 {
+            clipped[m] = a;
+            m++;
+        }
+        if (da > 0.0) != (db > 0.0) {
+            clipped[m] = a + (b - a) * (da / (da - db));
+            m++;
+        }
+    }
+    var sum = 0.0;
+    for (var i = 0u; i < m; i++) {
+        let a = normalize(clipped[i]);
+        let b = normalize(clipped[(i + 1u) % m]);
+        let x = cross(a, b);
+        let len = length(x);
+        if len > 1e-7 {
+            sum += acos(clamp(dot(a, b), -1.0, 1.0)) * dot(x / len, n);
+        }
+    }
+    return radiance * (0.5 * abs(sum));
+}
+
+// What an area light adds: its exact irradiance on the diffuse lobe, and the specular lobes at
+// the point of its face nearest the mirror ray, widened by the face's size with the lobe's
+// energy kept (Karis's representative point).
+fn area_light(li: Light, p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, s: Surface, a2: f32, dfg_v: vec2<f32>) -> vec3<f32> {
+    let dir = li.dir.xyz;
+    if dot(p - li.pos.xyz, dir) <= 0.0 {
+        return vec3<f32>(0.0);
+    }
+    let hx = length(li.right.xyz);
+    let hy = length(li.up.xyz);
+    let disk = li.right.w > 0.5;
+    let area = select(4.0 * hx * hy, PI * hx * hy, disk);
+    // A one-sided Lambertian face of Φ lumens has radiance Φ ÷ (π A); `color` holds Φ ÷ 4π.
+    let radiance = li.color.rgb * 4.0 / area;
+    let e = area_irradiance(li, p, n, radiance);
+    var out = lobes(n, v, n, s, a2, dfg_v).diffuse * e;
+    let rr = reflect(-v, n);
+    let toward = dot(rr, dir);
+    var q = p - dir * dot(p - li.pos.xyz, dir);
+    if toward < -1e-4 {
+        q = p + rr * (dot(li.pos.xyz - p, dir) / toward);
+    }
+    var st = vec2<f32>(dot(q - li.pos.xyz, li.right.xyz) / (hx * hx), dot(q - li.pos.xyz, li.up.xyz) / (hy * hy));
+    if disk {
+        st = st / max(length(st), 1.0);
+    } else {
+        st = clamp(st, vec2<f32>(-1.0), vec2<f32>(1.0));
+    }
+    let at = li.pos.xyz + li.right.xyz * st.x + li.up.xyz * st.y;
+    let d = at - p;
+    let d2 = max(dot(d, d), 1e-8);
+    let l = d * inverseSqrt(d2);
+    let nl = dot(n, l);
+    let facing = dot(-l, dir);
+    if nl > 0.0 && facing > 0.0 {
+        let a = sqrt(sqrt(a2));
+        let wide = clamp(a + 0.5 * sqrt(area / PI) * inverseSqrt(d2), 0.0, 1.0);
+        let a2w = wide * wide * wide * wide;
+        let energy = a2 / max(a2w, 1e-8);
+        out += lobes(n, v, l, s, a2w, dfg_v).spec * energy * radiance * area * facing / d2 * nl;
+    }
+    return out;
+}
+
+// A seeded integer hash to [0, 1).
+fn hash3(p: vec3<i32>, seed: u32) -> f32 {
+    var h = bitcast<u32>(p.x) * 73856093u ^ bitcast<u32>(p.y) * 19349663u ^ bitcast<u32>(p.z) * 83492791u ^ seed * 2654435761u;
+    h = (h ^ (h >> 16u)) * 0x45d9f3bu;
+    h = (h ^ (h >> 16u)) * 0x45d9f3bu;
+    h = h ^ (h >> 16u);
+    return f32(h & 0xffffffu) / 16777216.0;
+}
+
+// Trilinear value noise and four octaves of it.
+fn vnoise(p: vec3<f32>, seed: u32) -> f32 {
+    let i = vec3<i32>(floor(p));
+    let f = fract(p);
+    let w = f * f * (3.0 - 2.0 * f);
+    var out = 0.0;
+    for (var k = 0; k < 8; k++) {
+        let o = vec3<i32>(k & 1, (k >> 1) & 1, (k >> 2) & 1);
+        let t = select(1.0 - w, w, vec3<bool>(o == vec3<i32>(1)));
+        out += hash3(i + o, seed) * t.x * t.y * t.z;
+    }
+    return out;
+}
+
+fn fbm(p: vec3<f32>, seed: u32) -> f32 {
+    var out = 0.0;
+    var amp = 0.5;
+    var q = p;
+    for (var k = 0u; k < 4u; k++) {
+        out += amp * vnoise(q, seed + k);
+        q = q * 2.03;
+        amp = amp * 0.5;
+    }
+    return out;
+}
+
+// A face's two axes in its part's space: up its height, and across the one the normal leaves.
+fn face(q: vec3<f32>, n: vec3<f32>) -> vec2<f32> {
+    if abs(n.y) > max(abs(n.x), abs(n.z)) {
+        return q.xz;
+    }
+    return vec2<f32>(select(q.x, q.z, abs(n.x) > abs(n.z)), q.y);
+}
+
+// A pattern at `q` (in m over its scale) on a face whose part-space normal is `n`: its tone
+// (× base color) and its roughness change.
+fn pattern(id: u32, q: vec3<f32>, n: vec3<f32>, seed: u32) -> vec2<f32> {
+    let f = face(q, n);
+    switch id {
+        case 1u: { // plaster
+            return vec2<f32>(0.9 + 0.2 * fbm(q * 4.0, seed), 0.1);
+        }
+        case 2u: { // stone courses: running bond, 0.3 m courses of 0.6 m stones in mortar
+            let row = floor(f.y / 0.3);
+            let x = f.x / 0.6 + 0.5 * row;
+            let cell = vec3<i32>(i32(floor(x)), i32(row), 0);
+            let edge = min(min(fract(x), 1.0 - fract(x)) * 0.6, min(fract(f.y / 0.3), 1.0 - fract(f.y / 0.3)) * 0.3);
+            if edge < 0.012 {
+                return vec2<f32>(0.55, 0.2);
+            }
+            return vec2<f32>(0.75 + 0.35 * hash3(cell, seed) + 0.08 * (fbm(q * 9.0, seed) - 0.5), 0.05);
+        }
+        case 3u: { // roof tiles: 0.2 m rows of 0.3 m tiles, each row lapping the one below
+            let row = floor(f.y / 0.2);
+            let x = f.x / 0.3 + 0.5 * row;
+            let down = fract(f.y / 0.2);
+            let tone = 0.7 + 0.25 * hash3(vec3<i32>(i32(floor(x)), i32(row), 1), seed) + 0.15 * down;
+            return vec2<f32>(select(tone, 0.45, down < 0.08 || min(fract(x), 1.0 - fract(x)) < 0.03), 0.0);
+        }
+        case 4u: { // wood: rings around the part's height, warped by grain
+            let r = length(q.xz) * 9.0 + 2.0 * fbm(q * vec3<f32>(2.0, 0.4, 2.0), seed);
+            return vec2<f32>(0.7 + 0.3 * smoothstep(0.2, 0.8, fract(r)), 0.0);
+        }
+        case 5u: { // rock: ridged noise
+            let ridge = 1.0 - abs(2.0 * fbm(q * 3.0, seed) - 1.0);
+            return vec2<f32>(0.55 + 0.6 * ridge * ridge, 0.2);
+        }
+        case 6u: { // grass: fine blades of noise
+            return vec2<f32>(0.6 + 0.6 * vnoise(q * vec3<f32>(60.0, 12.0, 60.0), seed), 0.25);
+        }
+        case 7u: { // cobbles: cells of a jittered grid with dark joints
+            let g = f / 0.18;
+            let i = vec2<i32>(floor(g));
+            var d1 = 9.0;
+            var d2 = 9.0;
+            var near = vec2<i32>(0);
+            for (var y = -1; y <= 1; y++) {
+                for (var x = -1; x <= 1; x++) {
+                    let c = i + vec2<i32>(x, y);
+                    let at = vec2<f32>(c) + vec2<f32>(hash3(vec3<i32>(c, 2), seed), hash3(vec3<i32>(c, 3), seed));
+                    let d = length(g - at);
+                    if d < d1 {
+                        d2 = d1;
+                        d1 = d;
+                        near = c;
+                    } else if d < d2 {
+                        d2 = d;
+                    }
+                }
+            }
+            if d2 - d1 < 0.12 {
+                return vec2<f32>(0.4, 0.2);
+            }
+            return vec2<f32>(0.7 + 0.35 * hash3(vec3<i32>(near, 4), seed), 0.0);
+        }
+        case 8u: { // glass curtain: 1.5 × 3.5 m panes between mullions
+            let g = abs(fract(f / vec2<f32>(1.5, 3.5) + 0.5) - 0.5) * vec2<f32>(1.5, 3.5);
+            if min(g.x, g.y) < 0.05 {
+                return vec2<f32>(0.35, 0.3);
+            }
+            return vec2<f32>(1.0, -0.45);
+        }
+        case 9u: { // concrete: soft mottling and pores
+            let pore = select(1.0, 0.6, hash3(vec3<i32>(floor(q * 220.0)), seed) > 0.985);
+            return vec2<f32>((0.9 + 0.15 * (fbm(q * 6.0, seed) - 0.5)) * pore, 0.05);
+        }
+        case 10u: { // asphalt: speckled aggregate
+            return vec2<f32>(0.7 + 0.6 * (vnoise(q * 90.0, seed) - 0.5) + 0.2 * (fbm(q * 3.0, seed) - 0.5), 0.15);
+        }
+        default: {
+            return vec2<f32>(1.0, 0.0);
+        }
+    }
+}
+
+fn surface_of(in: MeshOut, local_n: vec3<f32>) -> Surface {
+    var s = Surface(in.base.rgb, in.surface.x, in.surface.y, in.surface.z, in.specular.rgb, in.surface.w, in.specular.w);
+    let id = (in.flags >> 9u) & 15u;
+    if id != 0u {
+        let t = pattern(id, in.local / max(in.base.w, 1e-6), local_n, in.flags >> 16u);
+        s.base = s.base * t.x;
+        s.rough = clamp(s.rough + t.y, 0.0, 1.0);
+    }
+    return s;
+}
+
+// Every shaded light's direct light on the surface, and the share of it the key light's shadow
+// removes (for a catcher).
+struct Direct {
+    color: vec3<f32>,
+    removed: f32,
+};
+
+fn direct(in: MeshOut, n: vec3<f32>, s: Surface) -> Direct {
+    let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
+    let rough = clamp(s.rough, 0.045, 1.0);
+    // Geometric specular antialiasing (Kaplanyan): the normal's change across the pixel widens
+    // the lobe.
+    let dn = dot(dpdx(n), dpdx(n)) + dot(dpdy(n), dpdy(n));
+    // The lobe is never narrower than the pixel's footprint in slope space (#422): a lobe under a
+    // pixel wide is point-sampled at pixel centers, and a mirror's sun loses up to a fifth of its
+    // light between them. A rough lobe is left exactly as it is.
+    let a2 = clamp(max(rough * rough * rough * rough, min(dn, 0.18)), 0.0, 1.0);
+    let dfg_v = dfg_at(max(dot(n, v), 1e-4), rough);
+    let catches = (in.flags & CATCH) != 0u;
+    var out = vec3<f32>(0.0);
+    var total = 0.0;
+    var removed = 0.0;
+    for (var i = 0u; i < lights.count.x; i++) {
+        let li = lights.items[i];
+        var add = vec3<f32>(0.0);
+        if li.pos.w > 2.5 {
+            add = area_light(li, in.world, n, v, s, a2, dfg_v);
+        } else {
+            var l = -li.dir.xyz;
+            var e = li.color.rgb;
+            if li.pos.w > 0.5 {
+                let d = li.pos.xyz - in.world;
+                let d2 = dot(d, d);
+                l = d * inverseSqrt(d2);
+                let fade = clamp(1.0 - pow(d2 / (li.dir.w * li.dir.w), 2.0), 0.0, 1.0);
+                e = e * fade * fade / max(d2, li.color.w * li.color.w);
+                if li.pos.w > 1.5 {
+                    let t = clamp((dot(-l, li.dir.xyz) - li.cone.x) / max(li.cone.y - li.cone.x, 1e-4), 0.0, 1.0);
+                    e = e * t * t;
+                }
+            }
+            let nl = dot(n, l);
+            if nl > 0.0 {
+                let b = lobes(n, v, l, s, a2, dfg_v);
+                add = (b.diffuse + b.spec) * e * nl;
+            }
+        }
+        // The key sun's cascades shadow what receives (#422); a catcher keeps the light and
+        // reports the share its shadow removes.
+        var lit = 1.0;
+        if lights.count.y == i + 1u && (in.flags & NO_RECEIVE) == 0u {
+            lit = lit_share(in.world, n);
+        }
+        if catches {
+            let y = dot(add, vec3<f32>(0.2126, 0.7152, 0.0722));
+            total += y;
+            removed += y * (1.0 - lit);
+        } else {
+            add = add * lit;
+        }
+        out += add;
+    }
+    return Direct(out, select(0.0, removed / total, total > 0.0));
+}
+
+// Ambient occlusion (#418; ao.wgsl): its blurred result and settings, read only by the solids.
+struct Ao {
+    clip: mat4x4<f32>,
+    inv: mat4x4<f32>,
+    size: vec4<f32>,
+    // Samples, multi-bounce, specular, and 1 with ao on.
+    opts: vec4<u32>,
+    scale: vec4<f32>,
+};
+
+@group(2) @binding(0) var ao_t: texture_2d<f32>;
+@group(2) @binding(1) var<uniform> ao: Ao;
+
+// The ambient term's visibility at this pixel, brightened by the surface's albedo with
+// multi-bounce on (Jimenez's fit); 1 with ao off.
+fn occlusion(pos: vec2<f32>, albedo: vec3<f32>) -> vec3<f32> {
+    if ao.opts.w == 0u {
+        return vec3<f32>(1.0);
+    }
+    let dims = textureDimensions(ao_t);
+    let at = min(vec2<u32>(pos * ao.scale.xy), dims - vec2<u32>(1u));
+    let v = textureLoad(ao_t, at, 0).r;
+    if ao.opts.y == 0u {
+        return vec3<f32>(v);
+    }
+    let a = 2.0404 * albedo - 0.3324;
+    let b = -4.7951 * albedo + 0.6417;
+    let c = 2.7552 * albedo + 0.6903;
+    return min(max(vec3<f32>(v), ((v * a + b) * v + c) * v), vec3<f32>(1.0));
+}
+
 @fragment
-fn mesh_fs(in: MeshOut) -> Targets {
+fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
     let n = normalize(in.normal);
+    // Derivatives first, while every pixel of the quad still runs: the face's normal in its
+    // part's own space, which a pattern reads.
+    let local_n = normalize(cross(dpdx(in.local), dpdy(in.local)) + vec3<f32>(0.0, 1e-9, 0.0));
+    if (in.flags & MATERIAL) != 0u {
+        // Its back faces are culled; a negative determinant turns its winding over.
+        if (front == ((in.flags & MIRRORED) != 0u)) && (in.flags & DOUBLE_SIDED) == 0u {
+            discard;
+        }
+        let mode = (in.flags >> 7u) & 3u;
+        // Its coverage: the material's alpha times the item's opacity (#418).
+        let alpha = in.emission.w;
+        if mode == MASK && alpha < ALPHA_CUTOFF {
+            discard;
+        }
+        let facing = select(-n, n, front != ((in.flags & MIRRORED) != 0u));
+        let s = surface_of(in, local_n);
+        if (in.flags & UNLIT) != 0u {
+            return Targets(see_through(s.base + in.emission.rgb, alpha, mode), in.pick);
+        }
+        let d = direct(in, facing, s);
+        // A shadow catcher writes black, as opaque as the share of light its shadow removes, at
+        // its strength.
+        if (in.flags & CATCH) != 0u {
+            return Targets(vec4<f32>(0.0, 0.0, 0.0, d.removed * alpha * in.base.w), in.pick);
+        }
+        var ambient: vec3<f32>;
+        if env.k.x > 0.0 {
+            ambient = env_light(in, facing, s);
+        } else {
+            ambient = sky_light(in, facing, s);
+        }
+        let lit = fogged(d.color + ambient + in.emission.rgb, in.world);
+        return Targets(see_through(lit, alpha, mode), in.pick);
+    }
     let facing = max(dot(n, frame.light.xyz), 0.0);
     // A sun (w > 0) lights by its illuminance over an ambient quarter; with none, the view's own
-    // key light.
-    let lit = select(0.45 + 0.55 * facing, 0.25 + 0.75 * frame.light.w * facing, frame.light.w > 0.0);
-    return Targets(vec4<f32>(paint(in.color) * lit, 1.0), in.pick);
+    // key light. Under a sky (#418) the ambient is the sky's, from above to below by the normal,
+    // and only a sun lights directly. Ambient occlusion scales the ambient term alone, never the
+    // direct light or the emission.
+    var ambient = vec3<f32>(select(0.45, 0.25, frame.light.w > 0.0));
+    var direct = select(0.55 * facing, 0.75 * frame.light.w * facing, frame.light.w > 0.0);
+    if frame.sky_top.w > 0.0 {
+        ambient = mix(frame.sky_low.rgb, frame.sky_top.rgb, n.y * 0.5 + 0.5);
+        direct = select(0.0, frame.light.w * facing, frame.light.w > 0.0);
+    }
+    // Under the key sun's cascades (#422) a painted solid is shadowed as a material is.
+    if lights.count.w > 0u && (in.flags & NO_RECEIVE) == 0u {
+        direct = direct * lit_share(in.world, n);
+    }
+    let albedo = paint(in.color);
+    let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
+    let a = in.emission.w;
+    return Targets(vec4<f32>(fogged(albedo * lit + in.emission.rgb, in.world) * a, a), in.pick);
+}
+
+// The ao prepass (#418): an opaque solid's world normal; its depth goes to the prepass's own
+// depth target.
+@fragment
+fn ao_normal_fs(in: MeshOut) -> @location(0) vec4<f32> {
+    // A see-through solid writes no occlusion depth.
+    if in.emission.w < 1.0 {
+        discard;
+    }
+    return vec4<f32>(normalize(in.normal), 1.0);
+}
+
+// A sky's ambient light (#418) on a material: its diffuse share by the normal under ambient
+// occlusion, and its specular share from the mirror direction through the DFG table with the
+// multiple scattering restored, so rough metal under the sky keeps its brightness. None without
+// a sky.
+fn sky_light(in: MeshOut, n: vec3<f32>, s: Surface) -> vec3<f32> {
+    if frame.sky_top.w <= 0.0 {
+        return vec3<f32>(0.0);
+    }
+    let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
+    let rough = clamp(s.rough, 0.045, 1.0);
+    let dfg_v = dfg_at(max(dot(n, v), 1e-4), rough);
+    let albedo = max(dfg_v.x + dfg_v.y, 1e-4);
+    let f0 = dielectric_f0(s);
+    let e = f0 * dfg_v.x + dielectric_f90(s) * dfg_v.y;
+    let metal = s.base * dfg_v.x + dfg_v.y;
+    var spec = mix(e * (1.0 + f0 * (1.0 / albedo - 1.0)), metal * (1.0 + s.base * (1.0 / albedo - 1.0)), s.metallic);
+    let r = reflect(-v, n);
+    // A rough lobe sees the sky's average over the hemisphere, as a diffuse one does.
+    let reflected = mix(sky_at(r), sky_at(n), rough * rough);
+    let diffuse = s.base * (1.0 - s.metallic) * (1.0 - e);
+    return diffuse * sky_at(n) * occlusion(in.pos.xy, diffuse) + spec * reflected;
+}
+
+// The environment's light on a material (#422): its irradiance by the normal on the diffuse
+// lobe under ambient occlusion, and its prefiltered radiance along the mirror direction at the
+// lobe's roughness on the specular lobes, each through the DFG table with the multiple
+// scattering restored, the dielectric and metal lobes shaded apart and mixed by metallic.
+fn env_light(in: MeshOut, n: vec3<f32>, s: Surface) -> vec3<f32> {
+    let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
+    let rough = clamp(s.rough, 0.045, 1.0);
+    let dfg_v = dfg_at(max(dot(n, v), 1e-4), rough);
+    let off = (lights.count.z & NO_COMP) != 0u;
+    let f0 = dielectric_f0(s);
+    let e = f0 * dfg_v.x + dielectric_f90(s) * dfg_v.y;
+    var spec: vec3<f32>;
+    if (lights.count.z & PREMIX) != 0u {
+        let pf0 = mix(f0, s.base, s.metallic);
+        let pf90 = mix(dielectric_f90(s), 1.0, s.metallic);
+        spec = (pf0 * dfg_v.x + pf90 * dfg_v.y) * compensation(pf0, dfg_v, off);
+    } else {
+        let metal = (s.base * dfg_v.x + dfg_v.y) * compensation(s.base, dfg_v, off);
+        spec = mix(e * compensation(f0, dfg_v, off), metal, s.metallic);
+    }
+    let diffuse = s.base * (1.0 - s.metallic) * (1.0 - e);
+    let r = reflect(-v, n);
+    let lod = rough * env.k.y;
+    return (diffuse * env_irradiance(n) * occlusion(in.pos.xy, diffuse) + spec * env_radiance(r, lod)) * env.k.z;
+}
+
+// A direction turned into the environment's own frame: back by its rotation about +Y.
+fn env_dir(d: vec3<f32>) -> vec3<f32> {
+    let c = cos(env.k.w);
+    let s = sin(env.k.w);
+    return vec3<f32>(c * d.x - s * d.z, d.y, s * d.x + c * d.z);
+}
+
+// The prefiltered radiance along `d` at mip `lod`, mixed toward the second environment by `by`.
+fn env_radiance(d: vec3<f32>, lod: f32) -> vec3<f32> {
+    let e = env_dir(d);
+    let a = textureSampleLevel(env_cube, env_sampler, e, lod).rgb;
+    if env.m.x <= 0.0 {
+        return a;
+    }
+    return mix(a, textureSampleLevel(env_cube_to, env_sampler, e, lod).rgb, env.m.x);
+}
+
+// The irradiance ÷ π a surface facing `n` gets, from the nine coefficients.
+fn env_irradiance(n: vec3<f32>) -> vec3<f32> {
+    let d = env_dir(n);
+    let b0 = 0.282095;
+    let b = array<f32, 9>(
+        b0,
+        0.488603 * d.y,
+        0.488603 * d.z,
+        0.488603 * d.x,
+        1.092548 * d.x * d.y,
+        1.092548 * d.y * d.z,
+        0.315392 * (3.0 * d.z * d.z - 1.0),
+        1.092548 * d.x * d.z,
+        0.546274 * (d.x * d.x - d.y * d.y),
+    );
+    var a = vec3<f32>(0.0);
+    var t = vec3<f32>(0.0);
+    for (var k = 0u; k < 9u; k++) {
+        a += env.sh[k].rgb * b[k];
+        t += env.sh_to[k].rgb * b[k];
+    }
+    return max(mix(a, t, env.m.x), vec3<f32>(0.0));
+}
+
+// The sky's ambient light along `d`, from below to above.
+fn sky_at(d: vec3<f32>) -> vec3<f32> {
+    return mix(frame.sky_low.rgb, frame.sky_top.rgb, d.y * 0.5 + 0.5);
+}
+
+// A material's color into the linear target: opaque and mask parts whole, a blend part
+// premultiplied by its alpha, an add part's color times alpha with no coverage of its own.
+fn see_through(c: vec3<f32>, alpha: f32, mode: u32) -> vec4<f32> {
+    if mode == ADD {
+        return vec4<f32>(c * alpha, 0.0);
+    }
+    if mode == 2u {
+        return vec4<f32>(c * alpha, alpha);
+    }
+    return vec4<f32>(c, 1.0);
 }
 
 // ---- lines: one instanced quad per segment, its width and caps in the fragment
@@ -259,7 +1057,12 @@ struct TextOut {
     @location(1) @interpolate(flat) color: u32,
     @location(2) @interpolate(flat) pick: u32,
     @location(3) @interpolate(flat) page: u32,
+    @location(4) @interpolate(flat) later: u32,
 };
+
+// A glyph whose color the label pass draws after the upscale (#1174): here it writes only the
+// label's depth and pick.
+const LATER: u32 = 256u;
 
 @vertex
 fn text_vs(
@@ -278,7 +1081,8 @@ fn text_vs(
     out.uv = mix(uv.xy, uv.zw, k);
     out.color = color;
     out.pick = pick;
-    out.page = flags >> 3u;
+    out.page = (flags >> 3u) & 31u;
+    out.later = flags & LATER;
     let c = frame.clip * vec4<f32>(p.xyz, 1.0);
     if c.w <= 0.0 {
         out.pos = OFF;
@@ -312,5 +1116,189 @@ fn text_fs(in: TextOut) -> Targets {
     if a <= 0.002 {
         discard;
     }
-    return Targets(vec4<f32>(paint(in.color) * a, a), select(0u, in.pick, a >= 0.5));
+    let shown = select(a, 0.0, in.later != 0u);
+    return Targets(vec4<f32>(paint(in.color) * shown, shown), select(0u, in.pick, a >= 0.5));
+}
+
+// ---- the sky (#422): drawn first, behind everything, and what fog mixes toward
+
+@vertex
+fn sky_vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+    let x = f32(i32(i & 1u) * 4 - 1);
+    let y = f32(i32(i >> 1u) * 4 - 1);
+    // The far plane: 0 under reversed Z, 1 under the planted forward Z.
+    return vec4<f32>(x, y, frame.px.w, 1.0);
+}
+
+// The view ray through pixel `px` of this target.
+fn view_ray(px: vec2<f32>) -> vec3<f32> {
+    let ndc = vec2<f32>(px.x / frame.viewport.x * 2.0 - 1.0, 1.0 - px.y / frame.viewport.y * 2.0);
+    if env.eye.w < 0.5 {
+        return normalize(lights.forward.xyz);
+    }
+    let p = env.inv * vec4<f32>(ndc, 0.5, 1.0);
+    return normalize(p.xyz / p.w - env.eye.xyz);
+}
+
+fn star(d: vec3<f32>, density: f32) -> f32 {
+    let cell = vec3<i32>(floor(d * 160.0));
+    var h = 0x9e3779b9u;
+    for (var k = 0u; k < 3u; k++) {
+        h = h ^ bitcast<u32>(cell[k]);
+        h = h * 0x85ebca6bu;
+        h = h ^ (h >> 13u);
+    }
+    let r = f32(h % 10000u) / 10000.0;
+    let cut = density * 0.02;
+    return select(0.0, 0.5 + 2.0 * r / max(cut, 1e-9), r < cut);
+}
+
+// The sky's own fields along `d`: the gradient, the moon and the stars (env.rs's
+// `sky_radiance`).
+fn sky_fields(d: vec3<f32>) -> vec3<f32> {
+    var c = mix(env.low.rgb, env.top.rgb, sqrt(max(d.y, 0.0)));
+    if env.moon.w <= 1.0 && dot(d, env.moon.xyz) >= env.moon.w {
+        let k = max(1.0, 4.0 * max(env.top.r, max(env.top.g, env.top.b)));
+        c = vec3<f32>(k * 0.95, k * 0.97, k);
+    }
+    if env.top.w > 0.0 && d.y > 0.0 {
+        c += vec3<f32>(star(d, env.top.w));
+    }
+    if env.sun.w <= 1.0 && dot(d, env.sun.xyz) >= env.sun.w {
+        c = env.sun_color.rgb;
+    }
+    return c;
+}
+
+// What the background shows along `d` from the eye: the environment (on its ground when it has
+// one, at its blur) or the sky's own fields.
+fn background(d: vec3<f32>) -> vec3<f32> {
+    if env.bg.x < 0.5 {
+        return sky_fields(d);
+    }
+    var dir = d;
+    if env.bg.w > 0.0 {
+        let c = vec3<f32>(0.0, env.bg.z, 0.0);
+        let o = env.eye.xyz - c;
+        let b = dot(o, d);
+        let t = -b + sqrt(max(b * b - (dot(o, o) - env.bg.w * env.bg.w), 0.0));
+        var p = env.eye.xyz + d * t;
+        if p.y < 0.0 && d.y < 0.0 {
+            p = env.eye.xyz + d * (-env.eye.y / d.y);
+        }
+        dir = normalize(p - c);
+    }
+    return env_radiance(dir, env.bg.y) * env.k.z;
+}
+
+@fragment
+fn sky_fs(@builtin(position) pos: vec4<f32>) -> Targets {
+    return Targets(vec4<f32>(background(view_ray(pos.xy)), 1.0), 0u);
+}
+
+// Fog on a lit surface at `world` (#422; Sky `sky@1` and its height fog): the distance fog by
+// its curve, and the mist below the height fog's top along the ray's length beneath it, mixed
+// toward the fog's color or what the background shows along the ray.
+fn fogged(c: vec3<f32>, world: vec3<f32>) -> vec3<f32> {
+    if env.low.w < 0.5 || (env.fog.x <= 0.0 && env.fog.w <= 0.0) {
+        return c;
+    }
+    let ray = world - env.eye.xyz;
+    let dist = length(ray);
+    let a = env.fog.x * dist;
+    var keep = select(exp(-a), exp(-a * a), env.fog.y > 0.5);
+    if env.fog.w > 0.0 {
+        // The share of the ray below the top, from the eye to the surface.
+        let y0 = env.eye.y;
+        let y1 = world.y;
+        var below = 0.0;
+        if y0 <= env.fog.z && y1 <= env.fog.z {
+            below = 1.0;
+        } else if y0 <= env.fog.z || y1 <= env.fog.z {
+            let cross = (env.fog.z - y0) / (y1 - y0);
+            below = select(1.0 - cross, cross, y0 <= env.fog.z);
+        }
+        keep *= exp(-env.fog.w * dist * below);
+    }
+    var tint = env.fog_color.rgb;
+    if env.fog_color.w > 0.5 {
+        tint = background(ray / max(dist, 1e-6));
+    }
+    return mix(tint, c, keep);
+}
+
+// ---- puffs (#422; Puff `puff@1`): soft cloud sprites, back to front after the solids
+
+struct PuffOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) q: vec2<f32>,
+    @location(1) world: vec3<f32>,
+    @location(2) @interpolate(flat) center: vec4<f32>,
+    @location(3) @interpolate(flat) shape: vec4<f32>,
+    @location(4) @interpolate(flat) light: vec4<f32>,
+};
+
+@vertex
+fn puff_vs(
+    @builtin(vertex_index) vi: u32,
+    // xyz: where it is; w: its radius.
+    @location(0) center: vec4<f32>,
+    // Aspect, density, brightness and its seed.
+    @location(1) shape: vec4<f32>,
+    // Phase, shade, near fade, and bit 0: lit by the sun, bit 1: by the sky.
+    @location(2) light: vec4<f32>,
+) -> PuffOut {
+    var out: PuffOut;
+    let c = corner(vi) * 2.0 - 1.0;
+    let world = center.xyz + frame.right.xyz * (c.x * center.w * shape.x) + frame.up.xyz * (c.y * center.w);
+    out.pos = frame.clip * vec4<f32>(world, 1.0);
+    out.q = c;
+    out.world = world;
+    out.center = center;
+    out.shape = shape;
+    out.light = light;
+    return out;
+}
+
+@fragment
+fn puff_fs(in: PuffOut) -> Targets {
+    let r2 = dot(in.q, in.q);
+    if r2 >= 1.0 {
+        discard;
+    }
+    // Lumps from the puff's seed, the same in every frame: two crossed waves at phases its
+    // seed's hash sets.
+    let h = hash3(vec3<i32>(i32(in.shape.w), 7, 13), 422u);
+    let lump = 1.0 + 0.25 * sin(in.q.x * 4.1 + h * 6.28318) * sin(in.q.y * 3.7 + h * 17.0);
+    var alpha = clamp(in.shape.y * (1.0 - r2) * (1.0 - r2) * lump, 0.0, 1.0);
+    if alpha < 0.002 {
+        discard;
+    }
+    let eye = lights.view.xyz;
+    let dist = length(in.center.xyz - eye) - in.center.w;
+    if in.light.z > 0.0 {
+        alpha *= clamp(dist / in.light.z, 0.0, 1.0);
+    }
+    // The sphere's normal under the sprite, facing the eye.
+    let back = -normalize(cross(frame.right.xyz, frame.up.xyz));
+    let n = normalize(frame.right.xyz * in.q.x + frame.up.xyz * in.q.y - back * sqrt(1.0 - r2));
+    let flags = u32(in.light.w);
+    var c = vec3<f32>(0.0);
+    if (flags & 1u) != 0u && frame.light.w > 0.0 {
+        let l = frame.light.xyz;
+        let lit = mix(1.0, max(dot(n, l), 0.0) * 0.8 + 0.2, in.light.y);
+        // Brighter toward the sun by a forward-scattering phase.
+        let toward = max(dot(normalize(in.world - eye), l), 0.0);
+        let phase = 1.0 + in.light.x * 3.0 * pow(toward, 8.0);
+        c += vec3<f32>(frame.light.w * lit * phase);
+    }
+    if (flags & 2u) != 0u {
+        if env.k.x > 0.0 {
+            c += env_irradiance(n) * env.k.z;
+        } else if frame.sky_top.w > 0.0 {
+            c += mix(frame.sky_low.rgb, frame.sky_top.rgb, n.y * 0.5 + 0.5);
+        }
+    }
+    c = fogged(c * in.shape.z * 0.9, in.world);
+    return Targets(vec4<f32>(c * alpha, alpha), 0u);
 }

@@ -1,0 +1,6 @@
+{
+  "name": "status-band",
+  "version": "1.0.0",
+  "description": "Fixture mod for #1033: draws a band and handles no tool or prompt event.",
+  "mod": "./mod.mjs"
+}

@@ -2,10 +2,10 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r1",
-  "set_digest": "f95964eef12d8fb9d8eae54bc914c70086aabc232b1354cbfe804469af21e1fe",
+  "set_digest": "50ac4b90bb2a6b0f905a36aa71f13b90e4f5f9bd855deb2366ef3db9a51616cb",
   "interfaces": {
     "data@1": {
-      "digest": "4bdd0190573c6a2fd523ce32e4fe42192c0199e4448e5896f9b99b5653a1e5ca",
+      "digest": "a743bfa040d3d697e65bb0de3eb2c4a6065d7ee983c1eb51dcd25cee5161cf49",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -63,7 +63,7 @@
       }
     },
     "look@1": {
-      "digest": "3c6d78a02a1f3b25e61af1eab8c45d020f3113a92f61aa16a0d222634f957ada",
+      "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",
       "reference": "look",
       "kit": [
         "fixtures",
@@ -121,7 +121,7 @@
       }
     },
     "motion@1": {
-      "digest": "5c6896fd761c990d87987ef433023741862a433de090f80db78de1fea6939d85",
+      "digest": "def0784a75255943cbe31d9b104fc00297447171a92b0b229cb139b5949d3663",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -317,6 +317,19 @@
         "per": "document"
       },
       {
+        "operator": "look.finish",
+        "module": "look",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "look.palette"
+        ],
+        "writes": [
+          "look.finish"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "motion.channels",
         "module": "motion",
         "version": "1.0.0",
@@ -341,6 +354,18 @@
         ],
         "writes": [
           "core.world"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.decimate",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.decimated"
         ],
         "per": "item"
       },

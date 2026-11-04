@@ -369,6 +369,10 @@
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
           "why": "Issue #348: host@1, through which every package outside the signed release starts in the platform sandbox (#236)."
+        },
+        "better-sqlite3": {
+          "spec": "13.0.3",
+          "why": "Issue #989: takes the hub's lock as the hub does (packages/hub/src/lock.ts) when no hub holds it, through SQLite alone so no other descriptor drops its fcntl locks; already in the tree."
         }
       }
     },
@@ -501,6 +505,38 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #318: the record the asks core reads its state from and appends asks, answers, defaults and closes to."
+        }
+      }
+    },
+    "packages/checks-numbers/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #87: the check.kind@1 slot's fill and kit types, and the Finding the numbers kit's judge ends a case with, so the one kit runner judges the numbers kind."
+        },
+        "@deepbuild/verdicts": {
+          "spec": "0.0.0",
+          "why": "Issue #87: the timing report a speed claim's run carries, which the verdict engine reads."
+        }
+      }
+    },
+    "packages/checks-review/package.json": {
+      "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Issue #87: each agent's facts name a model's family, and the route a session started on, which decide whether a review counts."
+        },
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #87: the check.kind@1 slot's fill and kit types, and the Finding the review kit's judge ends a case with, so the one kit runner judges the review kind."
+        },
+        "@deepbuild/runner": {
+          "spec": "0.0.0",
+          "why": "Issue #87: the review job's record, whose answering model and wait at your reserve the review's run is made from."
+        },
+        "@deepbuild/verdicts": {
+          "spec": "0.0.0",
+          "why": "Issue #87: the run record and claim check a review job's run is written as."
         }
       }
     },
@@ -730,6 +766,10 @@
     },
     "crates/deep-canvas-marks/Cargo.toml": {
       "dependencies": {
+        "unicode-normalization": {
+          "spec": "^0.1",
+          "why": "Issue #406: a code item's display form puts each grapheme in NFC; already in deep-canvas's tree."
+        },
         "deep-canvas": {
           "spec": "* path=../deep-canvas",
           "why": "Issue #391: the ops module on pinned libm that path flattening and stroking go through."
@@ -1250,6 +1290,10 @@
     },
     "crates/deep-canvas-scene3d/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #418: the finish's tone map, exposure and grade, read and shared with 2D marks."
+        },
         "deep-canvas": {
           "spec": "* path=../deep-canvas",
           "why": "Issue #378: the registry it registers through, the camera it evaluates and the ops module its math goes through."
@@ -1293,6 +1337,12 @@
         "wgpu-profiler": {
           "spec": "^0.28",
           "why": "Issue #380: times scene3d's own passes (shadow map, geometry, output) in the same frame as the effects."
+        }
+      },
+      "dev-dependencies": {
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #386: the renderer's tests build their scene documents as JSON; already in the tree."
         }
       }
     },
@@ -1435,6 +1485,14 @@
         "@deepbuild/verdicts": {
           "spec": "0.0.0",
           "why": "Issue #29: the runs a check still needs on a snapshot (moreRuns) and the result and run outcome types are the verdict engine's."
+        },
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #31: a base-commit or snapshot run returns the conformance kit's CheckResult and Failure, and its runners fill CheckRunnerFill."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #31: a checkout starts and cleans up the stand-ins for its checks' declared services and pages through the supervisor host."
         }
       }
     },
@@ -1491,6 +1549,10 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #140: a result's `backends` object, each seam with its backend's name and version; already in the canvas crates' tree."
+        },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #185: each seam registers as a canvas interface and each backend as an implementation through deep-canvas's registry (Manifest, Interface, Implementation)."
         }
       }
     },
@@ -1657,6 +1719,18 @@
       "kind": "home path",
       "sha256": "1ee1a19bd298057a7a90734bccee13976a34914fd0c29fda5aebc848bbfd7961",
       "why": "Issue #20: the generated sessions' working folder under the placeholder user dev, a made-up cwd written into seeded transcripts for the budgets; no real home."
+    },
+    {
+      "path": "tests/acceptance/39/helpers.ts",
+      "kind": "API key",
+      "sha256": "9c88ccbf2cbb8faf2ee7522d40f527e13d882749809ac3cb3e40c3859e4b18dd",
+      "why": "Issue #39: a made-up API key (dh39FAKE) the fake codex login prints, proving it never reaches an output, the record or a file under ~/.deepbuild; no real key."
+    },
+    {
+      "path": "tests/acceptance/39/fixtures/fake-codex.pl",
+      "kind": "API key",
+      "sha256": "9c88ccbf2cbb8faf2ee7522d40f527e13d882749809ac3cb3e40c3859e4b18dd",
+      "why": "Issue #39: a made-up API key (dh39FAKE) the fake codex login prints, proving it never reaches an output, the record or a file under ~/.deepbuild; no real key."
     }
   ]
 }

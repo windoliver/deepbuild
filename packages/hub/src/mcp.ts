@@ -62,7 +62,7 @@ class Hub {
           buffer = buffer.slice(i + 1);
           if (!greeted) {
             greeted = true;
-            sock.write(line({ hello: 'mcp', parent: { pid: process.ppid, start: (await startOf(process.ppid)) ?? '' }, cwd: process.cwd() }));
+            sock.write(line({ hello: 'mcp', parent: { pid: process.ppid, start: (await startOf(process.ppid)) ?? '' }, cwd: process.cwd(), ...(process.env.DEEP_PASEO_BIND ? { paseo: process.env.DEEP_PASEO_BIND } : {}) }));
             continue;
           }
           if ('role' in message) {

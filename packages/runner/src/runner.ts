@@ -1072,9 +1072,12 @@ class LocalRunner implements Runner {
       for (const cancel of job.timers) cancel();
       if (typeof e.result === 'string') job.rec.result = e.result;
       if (typeof e.total_cost_usd === 'number') job.rec.cost_usd = e.total_cost_usd;
-      if (!job.answered && isObj(e.modelUsage) && this.o.plant !== 'records-launched-model') {
-        const names = Object.keys(e.modelUsage);
-        if (names.length) job.answered = names[names.length - 1]!;
+      // The model that answered is the one with the most output tokens in its usage (#87): Claude Code lists its own
+      // small calls' models there too, often first.
+      if (isObj(e.modelUsage) && this.o.plant !== 'records-launched-model') {
+        const used = Object.entries(e.modelUsage).map(([name, u]) => [name, isObj(u) ? num(u.outputTokens) : 0] as const);
+        const most = this.o.plant === 'first-model-listed' ? used[0] : [...used].sort((a, b) => b[1] - a[1])[0];
+        if (most) job.answered = most[0];
       }
       if (Array.isArray(e.permission_denials) && e.permission_denials.length) job.stopCause ??= 'refusal';
       // A result marked an error is no answer: the job stopped, for the cause an error named or for none known.
@@ -1201,6 +1204,27 @@ class LocalRunner implements Runner {
     await this.pump();
   }
 
+  /**
+   * Why the plan window of the account an agent runs on in `home` keeps a drafting job waiting at your reserve (#322;
+   * design: Timing and cost), or undefined when it may run: the account as the agent's own sign-in names it, its
+   * newest window readings against `plan.reserve_pct`. An agent with no plan account, or one with no reading yet,
+   * keeps nothing waiting here.
+   */
+  atReserve(agent: Agent, home: string): string | undefined {
+    const parts = AGENTS[agent];
+    if (!parts) return undefined;
+    const account = parts.account(home, this.o.env);
+    if (!account || parts.planless?.(account)) return undefined;
+    const reading = this.accounts.get(account);
+    if (!reading) return undefined;
+    const now = this.o.now();
+    const reserve = this.o.settings.plan.reserve_pct;
+    for (const [name, w] of reading.windows) {
+      if (w.resets !== null && w.resets <= now) continue;
+      if (w.used >= 100 - reserve) return `plan window: ${account}'s ${name.replace('_', '-')} window is ${w.used}% used, at your ${reserve}% reserve${w.resets ? `, until ${new Date(w.resets).toISOString()}` : ''}`;
+    }
+    return undefined;
+  }
   planWindows(): Map<string, { used: number; resets: number | null; at: number }> {
     const out = new Map<string, { used: number; resets: number | null; at: number }>();
     for (const [account, { windows }] of this.accounts) {
