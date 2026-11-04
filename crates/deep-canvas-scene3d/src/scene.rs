@@ -94,6 +94,17 @@ pub struct Solid {
     pub maps: Option<Arc<crate::light::Maps>>,
 }
 
+impl Solid {
+    /// Where it reaches in world space: a builder's mesh's vertices through its model, or the
+    /// unit shape's eight corners (#1162).
+    pub fn points(&self) -> Vec<Vec3> {
+        match &self.mesh {
+            Some(m) => m.positions.iter().map(|p| apply(&self.model, *p)).collect(),
+            None => corners(&self.model),
+        }
+    }
+}
+
 /// An object's outline: its silhouette drawn `width` device px wide in `color`, which a status
 /// binding draws `exact` (unlit, after tone mapping).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -2331,7 +2342,7 @@ impl Scene {
         let proj = |p: Vec3| cam.project(p).map(|q| [q[0], q[1]]);
         for layer in &self.layers {
             for s in &layer.solids {
-                let pts: Vec<[f64; 2]> = corners(&s.model).into_iter().filter_map(proj).collect();
+                let pts: Vec<[f64; 2]> = s.points().into_iter().filter_map(proj).collect();
                 if let Some(b) = boxed(&pts) {
                     out.push((s.id.clone(), b));
                 }

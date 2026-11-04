@@ -189,6 +189,8 @@ impl Hub<'_> {
             &skipped,
         );
         self.keep_instances(&document, &result.expansions, &mut drawn);
+        let _ = self.inline_tables(&mut drawn);
+        let _ = self.inline_vectors(&mut drawn);
         Some(Revision {
             rev,
             doc: document,
@@ -277,17 +279,18 @@ impl Hub<'_> {
                "by_module": by_module})
     }
 
-    /// The canvas module a kind is: the one that registers it, else marks2d for R1's kinds it
-    /// draws without a registry entry, else `core`.
+    /// The canvas module a kind is: the one that registers it, else the module that owns one of
+    /// R1's kinds marks2d draws without a registry entry (marks2d's or data's), else `core`.
     pub fn module_of(&self, kind: &str) -> String {
         let sealed = &self.startup.sealed;
         let full = kind.split('@').next().unwrap_or(kind);
         if let Some(m) = sealed.module_of_kind(full) {
             return m.to_string();
         }
-        let marks2d = sealed.modules.iter().any(|m| m.name == "marks2d");
-        if marks2d && deep_canvas_marks::scene::KINDS.contains(&kind) {
-            return "marks2d".into();
+        let owner = deep_canvas_marks::scene::module_of(kind);
+        let held = sealed.modules.iter().any(|m| m.name == owner);
+        if held && deep_canvas_marks::scene::KINDS.contains(&kind) {
+            return owner.into();
         }
         "core".into()
     }
@@ -319,9 +322,13 @@ impl Hub<'_> {
         let mut keys = Map::new();
         let mut sessions: Vec<DocSession> = Vec::new();
         if !q.paths.is_empty() {
-            for t in &times {
-                let s = self.evaluated(&revision.drawn, *t);
-                sessions.push(s);
+            if self.scenario.planted == Some(Planted::RelationFromPreviousBox) {
+                sessions = self.from_previous_boxes(&revision.drawn, &times);
+            } else {
+                for t in &times {
+                    let s = self.evaluated(&revision.drawn, *t);
+                    sessions.push(s);
+                }
             }
         }
         for path in &q.paths {
@@ -496,6 +503,9 @@ impl Hub<'_> {
     /// it; `None` for a path the revision doesn't hold.
     fn read_path(&self, s: &DocSession, doc: &Value, path: &str) -> Option<(Value, Key)> {
         let (id, field) = item_path(path)?;
+        if field == "bounds" {
+            return self.bounds(s, id);
+        }
         if let Some(k) = field
             .strip_prefix("modifiers/")
             .and_then(|r| r.strip_suffix("#out"))
@@ -519,6 +529,81 @@ impl Hub<'_> {
             _ => at_field(&val.as_typed::<Fields>()?.to_json(), rest)?.clone(),
         };
         Some((value, one_key(&keys, s.hash())))
+    }
+
+    /// Every 2D item's evaluated box in an evaluated session (#1162): its fields at its world
+    /// transform, a relation's place applied, frames laid out; `[x, y, w, h]` by ID.
+    fn boxes(&self, s: &DocSession) -> BTreeMap<String, [f64; 4]> {
+        let l = &self.sched;
+        let Some(doc) = s.document().and_then(Value::as_object) else {
+            return BTreeMap::new();
+        };
+        let mut items = Map::new();
+        for id in doc.get("items").and_then(Value::as_object).into_iter().flatten().map(|(id, _)| id) {
+            let Some((fields, _)) = s.read(l, "core.fields", Some(id)) else { continue };
+            let Some(fields) = fields.as_typed::<Fields>() else { continue };
+            let world = s
+                .read(l, "marks2d.at", Some(id))
+                .or_else(|| s.read(l, "core.world", Some(id)))
+                .and_then(|(w, _)| w.as_typed::<Transform>().map(|t| *t));
+            items.insert(id.clone(), deep_canvas_marks::modules::item_json(&fields, world.as_ref()));
+        }
+        deep_canvas_marks::scene::item_boxes(doc, &items).unwrap_or_default()
+    }
+
+    /// `items/<id>/bounds`: the item's evaluated box as `[[x, y, 0], [x + w, y + h, 0]]`, in
+    /// document units.
+    fn bounds(&self, s: &DocSession, id: &str) -> Option<(Value, Key)> {
+        let [x, y, w, h] = *self.boxes(s).get(id)?;
+        let value = json!([[x, y, 0.0], [x + w, y + h, 0.0]]);
+        let key = Hasher::of(self.sched.hash(), "deep_query.bounds")
+            .text(id)
+            .text(&value.to_string())
+            .finish();
+        Some((value, key))
+    }
+
+    /// The planted `relation_from_previous_box`: at each time in turn, every `at.place`
+    /// relation solved against a stand-in for its target holding the box the previous
+    /// evaluation left (the box at time 0 before any), the rest evaluated as shipped.
+    fn from_previous_boxes(&mut self, drawn: &Value, times: &[i64]) -> Vec<DocSession> {
+        let targets: Vec<String> = drawn
+            .get("items")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter_map(|(_, i)| i.pointer("/at/place")?.as_object())
+            .flat_map(|p| ["beside", "onto"].into_iter().filter_map(|k| p.get(k)?.as_str()))
+            .map(|t| t.split('#').next().unwrap_or(t).to_string())
+            .collect();
+        let start = self.evaluated(drawn, 0);
+        let mut previous = self.boxes(&start);
+        let mut out = Vec::new();
+        for t in times {
+            let mut stale = drawn.clone();
+            for target in &targets {
+                let Some(b) = previous.get(target) else { continue };
+                let stand_in = format!("{target}-previous");
+                let layer = stale["items"][target.as_str()].get("layer").cloned();
+                let mut item = json!({"id": stand_in, "kind": "rect@1", "name": "Previous box",
+                                      "order": "zz", "params": {"box": b}});
+                if let Some(layer) = layer {
+                    item["layer"] = layer;
+                }
+                stale["items"][stand_in.as_str()] = item;
+                for i in stale["items"].as_object_mut().into_iter().flat_map(|m| m.values_mut()) {
+                    for k in ["beside", "onto"] {
+                        if i.pointer(&format!("/at/place/{k}")).and_then(Value::as_str) == Some(target) {
+                            i["at"]["place"][k] = json!(stand_in);
+                        }
+                    }
+                }
+            }
+            let now = self.evaluated(drawn, *t);
+            previous = self.boxes(&now);
+            out.push(self.evaluated(&stale, *t));
+        }
+        out
     }
 
     /// A status binding's value at its target: the state its source holds and the color the
