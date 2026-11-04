@@ -111,6 +111,10 @@ export interface Run {
   missing?: { cause: string; owner: string; since: number };
   steps?: JourneyStep[];
   contract?: ContractResult;
+  /** Why an uncounted run counts neither way (#87), e.g. 'review not independent: same model'. */
+  uncounted_because?: string;
+  /** A timing check's report (#87): the speed a claim states, re-run against its named baseline. */
+  timing?: TimingReport;
   /** Every attempt the tool's report lists (#30): a test that failed and passed within one run is a pass and a fail on the commit. */
   attempts?: { test: string; outcome: 'passed' | 'failed' }[];
   /** Tables the run's setup wrote that nothing outside the repo's test, fixture and script folders writes (#30). */
@@ -244,6 +248,10 @@ export interface ContractSide {
   compared: Record<string, number>;
   largest_error: Record<string, number>;
 }
+/** How a timing check ran (#87): INVALID with its reasons (a baseline missing or unresolved, a repeat not flushed), a
+ *  reading naming why (a side off the toolchain or machine the check names), or it counts; `warm` when the check
+ *  declares warm caches, so its receipt line says so. */
+export interface TimingReport { outcome: 'counts' | 'reading' | 'INVALID'; reasons: string[]; warm: boolean }
 export interface ContractResult { run: ContractSide; twin: ContractSide; outcome: 'counts' | 'INVALID'; reasons: string[] }
 
 export interface RecordedVerdict { id: string; handle: string; log_pos: number }

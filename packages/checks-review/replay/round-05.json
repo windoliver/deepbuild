@@ -1,0 +1,40 @@
+{
+  "claim": "page-rows",
+  "diff": "diff --git a/src/page.ts b/src/page.ts\nindex f956d80..1a7816e 100644\n--- a/src/page.ts\n+++ b/src/page.ts\n@@ -1,4 +1,7 @@\n export function page<T>(rows: T[], size: number): T[][] {\n   const out: T[][] = [];\n+  for (let i = 0; i <= rows.length; i += size) {\n+    out.push(rows.slice(i, i + size));\n+  }\n   return out;\n }\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [
+      {
+        "title": "[P2] Loop emits an empty trailing page",
+        "body": "When `rows.length` is a multiple of `size`, `i <= rows.length` runs once more and pushes `[]`.",
+        "priority": 2,
+        "confidence_score": 0.74,
+        "file": "src/page.ts",
+        "line": 3,
+        "rule": "off-by-one",
+        "quote": "i <= rows.length"
+      },
+      {
+        "title": "[P3] Name `out` more descriptively",
+        "body": "Something like `pages` reads better.",
+        "priority": 3,
+        "confidence_score": 0.4,
+        "file": "src/page.ts",
+        "line": 4,
+        "rule": "prefer-descriptive-names",
+        "quote": "out.push(rows.slice(i, i + size));"
+      }
+    ],
+    "overall_correctness": "patch is incorrect",
+    "overall_explanation": "Pagination yields an extra empty page on exact multiples.",
+    "overall_confidence_score": 0.7
+  },
+  "since": []
+}
