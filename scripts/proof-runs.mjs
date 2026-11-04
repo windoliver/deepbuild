@@ -412,7 +412,7 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   const empty = () => ({ results: new Map(), fileErrors: new Map(), unrunnable: new Map() });
   const runs = { files, tests: [], twins: new Map(), head: empty(), base: empty() };
   if (!files.length) return runs;
-  const timed = timedSet(root, files);
+  const timed = runs.timed = timedSet(root, files);
   runs.coverage = coverage ? temporary('deep-proof-coverage-') : null;
   // The merge base, with the change's test code: every file under the test paths (tests, helpers
   // wherever they are and however they're imported, fixtures, goldens, twins and setup files), never
@@ -525,6 +525,7 @@ function wrongProgram(runs, test) {
 /** The before lane's lines; returns the tests that failed on a wrong program. */
 export function before(runs, kills, say, print) {
   const proven = new Set();
+  if (runs.timed?.length) print(`before: the timed set, from the timed list in scripts/lanes.mjs, run only under a timed grant (${runs.timed.length}): ${runs.timed.join(' ')}`);
   for (const [path, cause] of runs.head.fileErrors) say('FAIL', 'before', `${path}: fails on the change outside its tests (${cause})`, BEFORE_FIX);
   for (const [path, cause] of runs.head.unrunnable) say('BLOCKED', 'before', `${path}: cannot run on the change: ${cause}`, BEFORE_FIX);
   for (const key of runs.unrun ?? []) say('FAIL', 'before', `${key}: declared and not skipped, but the runner never reported it on the change`, BEFORE_FIX);

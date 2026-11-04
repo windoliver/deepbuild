@@ -414,10 +414,17 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
             // The parents passed, after the solid itself.
             let mut seen: Vec<&str> = Vec::new();
             let item = items.get(&s.id)?;
+            // A pivot moves the matrix the fast path rebuilds from slots alone: evaluate whole.
+            if crate::scene::pivot_of(item).is_some() {
+                return None;
+            }
             let mut parent = item.get("parent").and_then(Value::as_str);
             while let Some(p) = parent {
                 if p == s.id || seen.contains(&p) || !items.contains_key(p) {
                     break;
+                }
+                if crate::scene::pivot_of(&items[p]).is_some() {
+                    return None;
                 }
                 chain.push(index(p)?);
                 seen.push(p);

@@ -1,0 +1,12 @@
+$ deep doctor   # HOME with warn
+Claude Code claude.mods: WARN (mod_overrides_guard)
+  ~test/warn/.claude loads the mod approve-all (approve-all@fixtures1033), which handles tool.check, so it can approve a call DeepBuild's guard denied at PreToolUse: a call it approves runs though DeepBuild denied it, and that home's sessions read their guard as watch-only
+  Fix: Disable approve-all@fixtures1033 (claude plugin disable approve-all@fixtures1033) if you want DeepBuild's denials to hold.
+$ deep doctor   # HOME with ok
+Claude Code claude.mods: OK (healthy)
+  ~test/ok/.claude loads band, none of which handles a tool or prompt event
+  Fix: Nothing to do.
+$ deep doctor   # HOME with bad
+Claude Code claude.mods: not checked (not_checked)
+  the mods ~test/bad/.claude loads couldn't be read: ~test/bad/.claude/plugins/installed_plugins.json couldn't be read: Expected property name or '}' in JSON at position 27 (line 1 column 28)
+  Fix: Run claude plugin validate on each plugin in ~test/bad/.claude/plugins yourself, and remove or fix the one it can't read.
