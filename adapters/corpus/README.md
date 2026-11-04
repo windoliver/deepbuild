@@ -38,6 +38,7 @@ Each event is reduced to the fields an adapter decides, `kind` and `data`. The h
 | Stop | `agent.stop` {session, outcome: "finished", continued, cause, usage}: `continued` is `stop_hook_active`; `cause` and `usage` as below |
 | StopFailure | `agent.stop` {session, outcome: "failed", cause, usage}: `cause` and `usage` as below |
 | SessionEnd | `session.end` {session, reason} |
+| Interrupt | `turn.interrupted` {session, turn}: `turn` is `turn_id`; Codex fires it instead of Stop for a turn you interrupt, so it adds no `agent.stop` |
 | SubagentStop | `agent.stop` {session, subagent, outcome: "finished", continued, cause, usage}: a child's stop is a stop of its own, named by `subagent`; it ran in the child's own transcript, which the set doesn't hold, so its cause is the payload's alone and its usage `null` |
 | TaskCompleted | `task.completed` {session, agent_task, title}: `agent_task` is `task_id`, `title` is `task_subject`; the agent's word, never a closed task |
 
