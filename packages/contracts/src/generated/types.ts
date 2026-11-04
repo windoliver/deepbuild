@@ -122,6 +122,10 @@ export type AdapterFactsHookRule = {
     values: AdapterFactsCauseMap;
     otherwise: AdapterFactsStopCause;
   };
+  state?: {
+    field: AdapterFactsText;
+    values: { [key: string]: "working" | "waiting" | "finished" };
+  };
 };
 
 export type AdapterFactsOperation = {
@@ -221,6 +225,9 @@ export interface AdapterFacts {
     SubagentStop?: AdapterFactsHookRule;
     TaskCreated?: AdapterFactsHookRule;
     TaskCompleted?: AdapterFactsHookRule;
+    Notification?: AdapterFactsHookRule;
+    Elicitation?: AdapterFactsHookRule;
+    ElicitationResult?: AdapterFactsHookRule;
     TeammateIdle?: AdapterFactsHookRule;
     WorktreeCreate?: AdapterFactsHookRule;
     WorktreeRemove?: AdapterFactsHookRule;
@@ -4515,6 +4522,28 @@ export interface MergeDryRun {
   evidence?: Array<string>;
 }
 
+/** move.refused@1 */
+export interface MoveRefused {
+  v: 1;
+  id: string;
+  kind: "move.refused";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    object: string;
+    table: string;
+    state: string;
+    event: string;
+    event_id: string;
+    guard?: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** note.closed@1 */
 export interface NoteClosed {
   v: 1;
@@ -5227,6 +5256,28 @@ export interface RunKept {
   evidence?: Array<string>;
 }
 
+/** run.stale@1 */
+export interface RunStale {
+  v: 1;
+  id: string;
+  kind: "run.stale";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    run: string;
+    check: string;
+    claim: string;
+    newer_claim: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.started@1 */
 export interface RunStarted {
   v: 1;
@@ -5699,6 +5750,25 @@ export interface SessionStartV4 {
   evidence?: Array<string>;
 }
 
+/** session.state@1 */
+export interface SessionState {
+  v: 1;
+  id: string;
+  kind: "session.state";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    state: "needs you" | "stuck" | "flagged" | "working" | "finished" | "quiet";
+    cause: "ask" | "gone" | "waiting" | "stuck" | "promised" | "failed" | "quiet" | "interrupted" | "finished" | "working";
+  };
+  evidence?: Array<string>;
+}
+
 /** source.called@1 */
 export interface SourceCalled {
   v: 1;
@@ -6009,6 +6079,23 @@ export interface TaskCreated {
     thread: string;
     owner: string;
     title: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** task.withdrawn@1 */
+export interface TaskWithdrawn {
+  v: 1;
+  id: string;
+  kind: "task.withdrawn";
+  subject: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
   };
   evidence?: Array<string>;
 }
@@ -6884,6 +6971,46 @@ export type Verdict = {
   key: VerdictKey;
   checkout: string;
 };
+
+/** waiver.ended@1 */
+export interface WaiverEnded {
+  v: 1;
+  id: string;
+  kind: "waiver.ended";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    waiver: string;
+    why: "date" | "condition" | "revoked";
+  };
+  evidence?: Array<string>;
+}
+
+/** waiver.granted@1 */
+export interface WaiverGranted {
+  v: 1;
+  id: string;
+  kind: "waiver.granted";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    check: string;
+    error: string;
+    owner: string;
+    approved_by: string;
+    until?: number;
+    condition?: string;
+  };
+  evidence?: Array<string>;
+}
 
 /** wiki.read@1 */
 export interface WikiRead {

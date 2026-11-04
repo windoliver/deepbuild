@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7C",
+  "kind": "waiver.granted",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "check": "unit",
+    "error": "expected <n> to be <n>",
+    "owner": "you",
+    "approved_by": "you",
+    "until": 1760099851123
+  }
+}
