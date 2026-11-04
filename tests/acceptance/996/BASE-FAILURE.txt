@@ -1,0 +1,122 @@
+# #996 acceptance suite on the base commit
+# date: 2026-11-03 07:05 UTC (2026-11-02 local)
+# base: 881e2ed4 (origin/main, Merge pull request #1136), no implementation of #996
+# node: v24.22.0; machine: Linux arm64 (20 cores), bubblewrap sandbox
+# command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/996 --no-file-parallelism --reporter=verbose
+# expected: 4 failed: AC1 cut (no journal point among the window; every cut restart still holds the runs, since kill -9
+#           keeps an unsynced runs.json), AC1 truncation (journal read as empty: the three runs named missing, nothing kept
+#           aside, no reading), AC2 hub and AC2 sessions (Terminals throws on the bad byte, so neither starts);
+#           1 passed: AC2 (control), the same seed with no bad byte, all three reattach.
+# the Proof's list of points before: the '#996 AC1: the points the hub made while it started three runs' line below.
+
+
+ RUN  v5.0.5 /home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/tests/acceptance/996
+
+ × terminals.test.ts > AC2 #996.17155b2f with terminals.json holding one entry with a bad byte among three, the hub starts, two terminals reattach and the third reads lost on its session > AC2 the hub starts on the damaged index: it answers on its socket, keeps the index aside byte for byte under a name with its time, records one reading naming terminals.json and the lost terminal, and the two readable terminals run on 1474ms
+   → the hub didn't start on a terminals.json holding one entry with a bad byte among three, so no terminal reattached: it exited (1); stderr: deep hub: the core stopped: SyntaxError: Bad control character in string literal in JSON at position 675 (line 23 column 16)
+    at JSON.parse (<anonymous>)
+    at new Terminals (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/terminals.js:38:53)
+    at new Host (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/host.js:437:26)
+    at openExtensionHost (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/host.js:3519:12)
+    at Core.init (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/hub/dist/core.js:615:52)
+ × terminals.test.ts > AC2 #996.17155b2f with terminals.json holding one entry with a bad byte among three, the hub starts, two terminals reattach and the third reads lost on its session > AC2 on their sessions: the extension host the hub opens starts on the damaged index; the piece's tabs show the two readable terminals reattached, reading on from their first byte, and the third as lost, never as closed 750ms
+   → the extension host the hub opens didn't start on a terminals.json holding one entry with a bad byte among three, so none of the three terminals reattached: Bad control character in string literal in JSON at position 675 (line 23 column 16)
+ ✓ terminals.test.ts > AC2 #996.17155b2f with terminals.json holding one entry with a bad byte among three, the hub starts, two terminals reattach and the third reads lost on its session > AC2 (control) with no bad byte, the same seed reattaches all three: the extension host the hub opens lists them and reads each from its first byte 3922ms
+stdout | journal.test.ts > AC1 #996.015d2487 under the test disk, a cut at each numbered point while the hub starts three runs leaves all three in the journal with their deadlines and owners; runs.json truncated to half is rebuilt from the record and kept aside > AC1 cut right after each numbered point the hub makes while it starts three runs: each restart holds every run it acknowledged, and then all three, with their deadlines and owners; the journal's writes are numbered points
+#996 AC1: the points the hub made while it started three runs (19): 2 log_pos_block (full), 3 commit (normal), 4 commit (normal), 5 commit (normal), 6 commit (normal), 7 commit (normal), 8 commit (normal), 9 commit (normal), 10 commit (normal), 11 commit (normal), 12 commit (normal), 13 commit (normal), 14 commit (normal), 15 commit (normal), 16 commit (normal), 17 commit (normal), 18 commit (normal), 19 commit (normal), 20 commit (normal)
+
+stdout | journal.test.ts > AC1 #996.015d2487 under the test disk, a cut at each numbered point while the hub starts three runs leaves all three in the journal with their deadlines and owners; runs.json truncated to half is rebuilt from the record and kept aside > AC1 cut right after each numbered point the hub makes while it starts three runs: each restart holds every run it acknowledged, and then all three, with their deadlines and owners; the journal's writes are numbered points
+#996 AC1: cut after 19 of 19 points: 2 log_pos_block (full), 3 commit (normal), 4 commit (normal), 5 commit (normal), 6 commit (normal), 7 commit (normal), 8 commit (normal), 9 commit (normal), 10 commit (normal), 11 commit (normal), 12 commit (normal), 13 commit (normal), 14 commit (normal), 15 commit (normal), 16 commit (normal), 17 commit (normal), 18 commit (normal), 19 commit (normal), 20 commit (normal)
+
+ × journal.test.ts > AC1 #996.015d2487 under the test disk, a cut at each numbered point while the hub starts three runs leaves all three in the journal with their deadlines and owners; runs.json truncated to half is rebuilt from the record and kept aside > AC1 cut right after each numbered point the hub makes while it starts three runs: each restart holds every run it acknowledged, and then all three, with their deadlines and owners; the journal's writes are numbered points 25681ms
+   → cutting the hub at each numbered point while it starts three runs:
+the journal's writes aren't numbered durable write points: starting three runs made 0 point(s) naming the journal or runs.json, among 2 log_pos_block (full), 3 commit (normal), 4 commit (normal), 5 commit (normal), 6 commit (normal), 7 commit (normal), 8 commit (normal), 9 commit (normal), 10 commit (normal), 11 commit (normal), 12 commit (normal), 13 commit (normal), 14 commit (normal), 15 commit (normal), 16 commit (normal), 17 commit (normal), 18 commit (normal), 19 commit (normal), 20 commit (normal): expected [ Array(1) ] to deeply equal []
+ × journal.test.ts > AC1 #996.015d2487 under the test disk, a cut at each numbered point while the hub starts three runs leaves all three in the journal with their deadlines and owners; runs.json truncated to half is rebuilt from the record and kept aside > AC1 runs.json truncated to half after a crash: the restart rebuilds the three runs from the record with their deadlines and owners, keeps the damaged file aside byte for byte under a name with its time, and records one reading naming it 31521ms
+   → after runs.json was truncated to half (927 → 463 bytes) and the hub restarted:
+the restart doesn't hold the three runs it rebuilds from the record: /tmp/dh996-M1YBH0/root/runs.json can't be read as JSON (Unterminated string in JSON at position 463 (line 1 column 464); 463 bytes); deadline-alpha (owner claim:01M6G3M10BPKYJVG0D57V4DYAB, deadline 1200000 ms) is not in the journal; deadline-bravo (owner claim:01M6G3M10BF8VD3QEDHCCJY4ZB, deadline 1800000 ms) is not in the journal; deadline-charlie (owner claim:01M6G3M10E8VM9B0YHVD0A2ABJ, deadline 2400000 ms) is not in the journal
+the damaged runs.json isn't kept aside: no file beside runs.json in /tmp/dh996-M1YBH0/root, named for it and a time, holds the damaged 463 bytes as they were; beside it: []
+the restart recorded 0 readings naming runs.json, not one: []: expected [ …(3) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  journal.test.ts > AC1 #996.015d2487 under the test disk, a cut at each numbered point while the hub starts three runs leaves all three in the journal with their deadlines and owners; runs.json truncated to half is rebuilt from the record and kept aside > AC1 cut right after each numbered point the hub makes while it starts three runs: each restart holds every run it acknowledged, and then all three, with their deadlines and owners; the journal's writes are numbered points
+AssertionError: cutting the hub at each numbered point while it starts three runs:
+the journal's writes aren't numbered durable write points: starting three runs made 0 point(s) naming the journal or runs.json, among 2 log_pos_block (full), 3 commit (normal), 4 commit (normal), 5 commit (normal), 6 commit (normal), 7 commit (normal), 8 commit (normal), 9 commit (normal), 10 commit (normal), 11 commit (normal), 12 commit (normal), 13 commit (normal), 14 commit (normal), 15 commit (normal), 16 commit (normal), 17 commit (normal), 18 commit (normal), 19 commit (normal), 20 commit (normal): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the journal's writes aren't numbered durable write points: starting three runs made 0 point(s) naming the journal or runs.json, among 2 log_pos_block (full), 3 commit (normal), 4 commit (normal), 5 commit (normal), 6 commit (normal), 7 commit (normal), 8 commit (normal), 9 commit (normal), 10 commit (normal), 11 commit (normal), 12 commit (normal), 13 commit (normal), 14 commit (normal), 15 commit (normal), 16 commit (normal), 17 commit (normal), 18 commit (normal), 19 commit (normal), 20 commit (normal)",
++ ]
+
+ ❯ journal.test.ts:139:116
+    137|     console.log(`#996 AC1: cut after ${cuts.length} of ${window.length…
+    138|     if (unreached.length) problems.push(`the hub couldn't be cut at ev…
+    139|     expect(problems, `cutting the hub at each numbered point while it …
+       |                                                                                                                    ^
+    140|   }, 1_200_000);
+    141|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  journal.test.ts > AC1 #996.015d2487 under the test disk, a cut at each numbered point while the hub starts three runs leaves all three in the journal with their deadlines and owners; runs.json truncated to half is rebuilt from the record and kept aside > AC1 runs.json truncated to half after a crash: the restart rebuilds the three runs from the record with their deadlines and owners, keeps the damaged file aside byte for byte under a name with its time, and records one reading naming it
+AssertionError: after runs.json was truncated to half (927 → 463 bytes) and the hub restarted:
+the restart doesn't hold the three runs it rebuilds from the record: /tmp/dh996-M1YBH0/root/runs.json can't be read as JSON (Unterminated string in JSON at position 463 (line 1 column 464); 463 bytes); deadline-alpha (owner claim:01M6G3M10BPKYJVG0D57V4DYAB, deadline 1200000 ms) is not in the journal; deadline-bravo (owner claim:01M6G3M10BF8VD3QEDHCCJY4ZB, deadline 1800000 ms) is not in the journal; deadline-charlie (owner claim:01M6G3M10E8VM9B0YHVD0A2ABJ, deadline 2400000 ms) is not in the journal
+the damaged runs.json isn't kept aside: no file beside runs.json in /tmp/dh996-M1YBH0/root, named for it and a time, holds the damaged 463 bytes as they were; beside it: []
+the restart recorded 0 readings naming runs.json, not one: []: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the restart doesn't hold the three runs it rebuilds from the record: /tmp/dh996-M1YBH0/root/runs.json can't be read as JSON (Unterminated string in JSON at position 463 (line 1 column 464); 463 bytes); deadline-alpha (owner claim:01M6G3M10BPKYJVG0D57V4DYAB, deadline 1200000 ms) is not in the journal; deadline-bravo (owner claim:01M6G3M10BF8VD3QEDHCCJY4ZB, deadline 1800000 ms) is not in the journal; deadline-charlie (owner claim:01M6G3M10E8VM9B0YHVD0A2ABJ, deadline 2400000 ms) is not in the journal",
++   "the damaged runs.json isn't kept aside: no file beside runs.json in /tmp/dh996-M1YBH0/root, named for it and a time, holds the damaged 463 bytes as they were; beside it: []",
++   "the restart recorded 0 readings naming runs.json, not one: []",
++ ]
+
+ ❯ journal.test.ts:190:154
+    188|       await stopHub(again);
+    189|     }
+    190|     expect(problems, `after runs.json was truncated to half (${whole.l…
+       |                                                                                                                                                          ^
+    191|   }, 180_000);
+    192| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  terminals.test.ts > AC2 #996.17155b2f with terminals.json holding one entry with a bad byte among three, the hub starts, two terminals reattach and the third reads lost on its session > AC2 the hub starts on the damaged index: it answers on its socket, keeps the index aside byte for byte under a name with its time, records one reading naming terminals.json and the lost terminal, and the two readable terminals run on
+Error: the hub didn't start on a terminals.json holding one entry with a bad byte among three, so no terminal reattached: it exited (1); stderr: deep hub: the core stopped: SyntaxError: Bad control character in string literal in JSON at position 675 (line 23 column 16)
+    at JSON.parse (<anonymous>)
+    at new Terminals (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/terminals.js:38:53)
+    at new Host (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/host.js:437:26)
+    at openExtensionHost (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/extension-host/dist/host.js:3519:12)
+    at Core.init (file:///home/jing/deepbuild/.claude/worktrees/agent-a223ce214b5d4f7c1/packages/hub/dist/core.js:615:52)
+ ❯ new Terminals ../../../packages/extension-host/dist/terminals.js:38:53
+ ❯ new Host ../../../packages/extension-host/dist/host.js:437:26
+ ❯ openExtensionHost ../../../packages/extension-host/dist/host.js:3519:12
+ ❯ terminals.test.ts:116:21
+    114|     const [alpha, bravo, charlie] = s.terminals as [Seeded, Seeded, Se…
+    115|     const { hub, failed } = await tryHub(s.root);
+    116|     if (!hub) throw Error(`the hub didn't start on a terminals.json ho…
+       |                     ^
+    117|     const problems: string[] = [];
+    118|     try {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  terminals.test.ts > AC2 #996.17155b2f with terminals.json holding one entry with a bad byte among three, the hub starts, two terminals reattach and the third reads lost on its session > AC2 on their sessions: the extension host the hub opens starts on the damaged index; the piece's tabs show the two readable terminals reattached, reading on from their first byte, and the third as lost, never as closed
+Error: the extension host the hub opens didn't start on a terminals.json holding one entry with a bad byte among three, so none of the three terminals reattached: Bad control character in string literal in JSON at position 675 (line 23 column 16)
+ ❯ terminals.test.ts:146:27
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 1 passed (5)
+   Start at  23:04:43
+   Duration  71.61s (tests 99%)
+

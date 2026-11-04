@@ -381,6 +381,8 @@ impl Replica {
                 gpui_kit::component::ThemeMode::Light
             };
             gpui_kit::component::Theme::change(mode, None, cx);
+            // gpui's headless window always reports light, so the chrome is told the theme instead.
+            deep_app::chrome::force_dark(Some(theme == "dark"));
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds {
                     origin: Point::default(),

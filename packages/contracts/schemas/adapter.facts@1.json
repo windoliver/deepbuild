@@ -881,6 +881,48 @@
     "readUsage": {
       "$ref": "#/$defs/operation"
     },
+    "taskList": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "tool": {
+          "$ref": "#/$defs/text",
+          "description": "The tool call that writes the agent's own task list, whole each time."
+        },
+        "items": {
+          "$ref": "#/$defs/text",
+          "description": "The call's input field that holds the list."
+        },
+        "text": {
+          "$ref": "#/$defs/text",
+          "description": "Each item's field that holds its words."
+        },
+        "status": {
+          "$ref": "#/$defs/text",
+          "description": "Each item's field that holds its state."
+        },
+        "open": {
+          "$ref": "#/$defs/texts",
+          "description": "The states an item left at a stop is still open in."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "tool",
+        "items",
+        "text",
+        "status",
+        "open"
+      ],
+      "additionalProperties": false,
+      "description": "The agent's own task list (#323): at a stop, each item its newest list leaves in an open state is an open item; one it marked completed closes nothing, since that is its word."
+    },
     "tokenizer": {
       "type": "object",
       "properties": {
@@ -912,6 +954,142 @@
       ],
       "additionalProperties": false,
       "description": "The tokenizer the agent counts its context in, pinned (#854): what a scene read costs an agent is measured in its tokens."
+    },
+    "mods": {
+      "type": "object",
+      "description": "Mods: plugins whose functions run inside the agent and answer its events (Claude Code 2.1.287 and later).",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "since": {
+          "type": "object",
+          "description": "The first version that loads mods, per surface.",
+          "properties": {
+            "terminal": {
+              "$ref": "#/$defs/version",
+              "description": "The first terminal version that loads mods."
+            },
+            "desktop": {
+              "$ref": "#/$defs/version",
+              "description": "The first desktop app version that loads mods."
+            }
+          },
+          "required": [
+            "terminal",
+            "desktop"
+          ],
+          "additionalProperties": false
+        },
+        "validate": {
+          "type": "object",
+          "description": "How a plugin's mod is read without loading it.",
+          "properties": {
+            "args": {
+              "$ref": "#/$defs/texts",
+              "description": "The agent's command that prints a plugin's handlers without running its code."
+            },
+            "hooks": {
+              "$ref": "#/$defs/text",
+              "description": "The prefix of the line naming the events it handles."
+            },
+            "calls": {
+              "$ref": "#/$defs/text",
+              "description": "The prefix of the line naming the calls it makes."
+            }
+          },
+          "required": [
+            "args",
+            "hooks",
+            "calls"
+          ],
+          "additionalProperties": false
+        },
+        "overrides": {
+          "type": "object",
+          "properties": {
+            "event": {
+              "$ref": "#/$defs/text",
+              "description": "The mod event that answers after the hooks."
+            },
+            "past": {
+              "$ref": "#/$defs/text",
+              "description": "The hook whose deny it can override."
+            }
+          },
+          "required": [
+            "event",
+            "past"
+          ],
+          "additionalProperties": false
+        },
+        "promptCalls": {
+          "$ref": "#/$defs/texts",
+          "description": "The calls through which a mod submits a prompt."
+        },
+        "holdsWhen": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "case": {
+                "type": "string",
+                "enum": [
+                  "managed",
+                  "login",
+                  "plan",
+                  "interactive"
+                ],
+                "description": "Which case: managed settings on the machine, the session's login, the session's permission mode, or the tool called.",
+                "x-closure": {
+                  "closed": "each value is a condition the core reads from what it can observe, and a value outside the list has no reader",
+                  "reopens": "a new major of this schema",
+                  "mark": "exhaustive"
+                }
+              },
+              "text": {
+                "$ref": "#/$defs/text",
+                "description": "The case in words, as the docs give it."
+              },
+              "subscriptionTypes": {
+                "$ref": "#/$defs/texts",
+                "description": "login: the subscription types `claude auth status` reports for such a login."
+              },
+              "mode": {
+                "$ref": "#/$defs/text",
+                "description": "plan: the permission mode a PreToolUse payload names."
+              },
+              "since": {
+                "$ref": "#/$defs/version",
+                "description": "interactive: the first version where the deny holds for such a tool."
+              },
+              "tools": {
+                "$ref": "#/$defs/texts",
+                "description": "interactive: the tools that need your interaction."
+              }
+            },
+            "required": [
+              "case",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "description": "The cases where a hook's deny holds whatever a mod answers."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "since",
+        "validate",
+        "overrides",
+        "promptCalls",
+        "holdsWhen"
+      ],
+      "additionalProperties": false
     },
     "classifyStop": {
       "$ref": "#/$defs/operation"

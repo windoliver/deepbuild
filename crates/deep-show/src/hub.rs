@@ -271,6 +271,10 @@ pub enum Planted {
     KeepsVoicesOnSwitch,
     /// #498: closing a panel fades its voices over 5 ms, longer than a block.
     FadesOnClose,
+    /// #421: a view keeps an item only when its bounds' centre is inside.
+    CullByCenter,
+    /// #421: a node's hierarchy bounds union only its direct children's own bounds.
+    BoundsChildrenOnly,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -502,6 +506,8 @@ pub enum Call {
     Geometry(Box<crate::geometry::Geometry>),
     /// #420: every kind's schema, dirty map, reads, fixture and sweep.
     KindSchemas,
+    /// #421: the spatial index's bounds and the answers to its queries.
+    Spatial(Box<crate::spatial::Spatial>),
     /// #306: the pack store's rows.
     Packs,
     /// #306: one pack version installed mid-run; #200: through a session, which wrote it.
@@ -772,6 +778,8 @@ pub struct Scenario {
     pub planted: Option<Planted>,
     /// A canvas module's wrong program by name, which the scheduler hands its operators (#420).
     pub module_planted: Option<String>,
+    /// A first-party pack's planted twin by name, applied as the store reads the pack (#433).
+    pub pack_planted: Option<String>,
     pub calls: Vec<Call>,
     /// Each call's arrival on the clock, in flicks (0 without one).
     pub at: Vec<i64>,
@@ -1165,6 +1173,7 @@ impl<'a> Hub<'a> {
             sealed,
             id,
             dir,
+            self.scenario.pack_planted.as_deref(),
             &mut |manifest, pack| sandbox.vet(manifest, pack, sealed),
         );
         // #200: a pack installed through a session is that agent's own: its entries are listed
@@ -1400,6 +1409,7 @@ impl<'a> Hub<'a> {
             Call::Registry => self.registry_reply(),
             Call::Geometry(g) => self.geometry(g),
             Call::KindSchemas => self.kind_schemas_reply(),
+            Call::Spatial(s) => self.spatial(s),
             Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
             Call::InstallPack { id, dir, session } => {

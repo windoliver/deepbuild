@@ -124,6 +124,8 @@ pub fn golden(app: &mut App, out: &str, call: &Value) -> Value {
     let (Some(store), Some(fixture)) = (call["store"].as_str(), call["fixture"].as_str()) else {
         return refused("bad_input", "golden takes a store and a fixture");
     };
+    // #422: `hash` compares the two images' RGBA8 pixels exactly, after the same guards.
+    let oracle = if call["oracle"] == "hash" { "hash" } else { "perceptual" };
     let mut fp = fingerprint(app);
     if let Some(env) = call["environment"].as_object() {
         for (k, v) in env {
@@ -133,7 +135,7 @@ pub fn golden(app: &mut App, out: &str, call: &Value) -> Value {
     let fails_missing = app.planted == Some(Planted::FailsMissingSnapshot);
     let any_environment = app.planted == Some(Planted::ComparesAnyEnvironment);
     let blocked = |reason: &str, extra: Value| {
-        let mut r = json!({"verdict": "BLOCKED", "reason": reason, "fingerprint": fp, "golden": null, "oracle": "perceptual"});
+        let mut r = json!({"verdict": "BLOCKED", "reason": reason, "fingerprint": fp, "golden": null, "oracle": oracle});
         if let (Some(r), Some(e)) = (r.as_object_mut(), extra.as_object()) {
             r.extend(e.clone());
         }
@@ -141,7 +143,7 @@ pub fn golden(app: &mut App, out: &str, call: &Value) -> Value {
     };
     let missing = |reason: &str| {
         if fails_missing {
-            json!({"verdict": "FAIL", "reason": reason, "fingerprint": fp, "golden": null, "oracle": "perceptual"})
+            json!({"verdict": "FAIL", "reason": reason, "fingerprint": fp, "golden": null, "oracle": oracle})
         } else {
             blocked(reason, json!({}))
         }
@@ -183,7 +185,7 @@ pub fn golden(app: &mut App, out: &str, call: &Value) -> Value {
             .collect();
         return json!({
             "verdict": "INCONCLUSIVE", "reason": "environment_changed", "fingerprint": fp, "golden": golden,
-            "oracle": "perceptual", "changed": changed,
+            "oracle": oracle, "changed": changed,
             "ask": {"kind": "bless", "fixture": fixture, "ask": "record this fixture's golden again under this environment"},
         });
     }
@@ -194,18 +196,26 @@ pub fn golden(app: &mut App, out: &str, call: &Value) -> Value {
         return missing("no_snapshot");
     };
     if blank(&a) || blank(&b) {
-        return json!({"verdict": "BLOCKED", "reason": "blank", "fingerprint": fp, "golden": golden, "oracle": "perceptual"});
+        return json!({"verdict": "BLOCKED", "reason": "blank", "fingerprint": fp, "golden": golden, "oracle": oracle});
     }
     if a.dimensions() != b.dimensions() {
-        return json!({"verdict": "FAIL", "reason": "size", "fingerprint": fp, "golden": golden, "oracle": "perceptual",
+        return json!({"verdict": "FAIL", "reason": "size", "fingerprint": fp, "golden": golden, "oracle": oracle,
             "numbers": {"golden_size": [a.width(), a.height()], "snapshot_size": [b.width(), b.height()]}});
+    }
+    if oracle == "hash" {
+        let (pixels, golden_pixels) = (hex(b.as_raw()), hex(a.as_raw()));
+        return json!({
+            "verdict": if pixels == golden_pixels { "PASS" } else { "FAIL" },
+            "fingerprint": fp, "golden": golden, "oracle": oracle,
+            "numbers": {"pixels": pixels, "golden_pixels": golden_pixels},
+        });
     }
     let e = flip(&a, &b);
     let (mean, window, p99) = pool(&e, a.width() as usize, a.height() as usize);
     let pass = mean <= MEAN && window <= WINDOW;
     json!({
         "verdict": if pass { "PASS" } else { "FAIL" },
-        "fingerprint": fp, "golden": golden, "oracle": "perceptual",
+        "fingerprint": fp, "golden": golden, "oracle": oracle,
         "numbers": {"flip_mean": mean, "flip_worst_window": window, "flip_p99": p99, "mean_limit": MEAN, "window_limit": WINDOW},
     })
 }
