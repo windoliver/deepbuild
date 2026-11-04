@@ -621,13 +621,29 @@ fn turn(m: &Affine3, d: Vec3) -> Vec3 {
     ]
 }
 
-/// An item's own `at`: scale, then rotate about X, Y and Z in turn, then move to `pos`.
+/// An item's own `at`: subtract the pivot, scale, then rotate about X, Y and Z in turn, then move
+/// to `pos` (Units and axes).
 fn local(item: &Value, extra_scale: Vec3) -> Affine3 {
     let at = item.get("at");
     let pos = vec3(at.and_then(|a| a.get("pos"))).unwrap_or([0.0; 3]);
     let rot = vec3(at.and_then(|a| a.get("rot"))).unwrap_or([0.0; 3]);
     let sc = size3(at.and_then(|a| a.get("scale")), [1.0; 3]).unwrap_or([1.0; 3]);
-    local_of(pos, rot, sc, extra_scale)
+    pivoted(local_of(pos, rot, sc, extra_scale), item)
+}
+
+/// An item's vector `at.pivot`, if it has one (a box-point pivot is the core's to resolve).
+pub(crate) fn pivot_of(item: &Value) -> Option<Vec3> {
+    vec3(item.get("at").and_then(|a| a.get("pivot")))
+}
+
+/// `m` after subtracting the item's pivot: the pivot lands at `pos` (#433).
+fn pivoted(mut m: Affine3, item: &Value) -> Affine3 {
+    if let Some(p) = pivot_of(item) {
+        for row in &mut m {
+            row[3] -= row[0] * p[0] + row[1] * p[1] + row[2] * p[2];
+        }
+    }
+    m
 }
 
 /// [`local`] from the numbers themselves.
@@ -753,11 +769,14 @@ impl<'a> Items<'a> {
                         default
                     }
                 };
-                local_of(
-                    group(0, [0.0; 3]),
-                    group(1, [0.0; 3]),
-                    group(2, [1.0; 3]),
-                    [1.0; 3],
+                pivoted(
+                    local_of(
+                        group(0, [0.0; 3]),
+                        group(1, [0.0; 3]),
+                        group(2, [1.0; 3]),
+                        [1.0; 3],
+                    ),
+                    item,
                 )
             }
             None => local(item, [1.0; 3]),
