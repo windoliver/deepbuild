@@ -234,6 +234,18 @@ pub enum From {
     Phase(u64),
     Seed,
     Role(String),
+    /// A mark-set or instance column, per element: storage of its scalars.
+    Column {
+        item: String,
+        name: String,
+    },
+    /// A builder attribute, per element: storage of its `lanes`-wide elements, packed (a vec3 at
+    /// 12 bytes).
+    Attribute {
+        name: String,
+        domain: String,
+        lanes: u8,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -620,6 +632,20 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                 From::Phase(p.get("period").and_then(Value::as_u64).unwrap_or(0))
             } else if let Some(r) = f.get("role").and_then(Value::as_str) {
                 From::Role(r.into())
+            } else if let Some(c) = f.get("column") {
+                From::Column {
+                    item: c.get("item").and_then(Value::as_str).unwrap_or("").into(),
+                    name: c.get("name").and_then(Value::as_str).unwrap_or("").into(),
+                }
+            } else if let Some(a) = f.get("attribute") {
+                From::Attribute {
+                    name: a.get("name").and_then(Value::as_str).unwrap_or("").into(),
+                    domain: a.get("domain").and_then(Value::as_str).unwrap_or("").into(),
+                    lanes: match ty {
+                        Some(Ty::V(_, n)) => n,
+                        _ => 1,
+                    },
+                }
             } else if f.contains_key("time") || f.contains_key("t") {
                 From::Time
             } else if f.contains_key("seed") {
@@ -635,16 +661,20 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
         }
     };
     let ty = match (&from, ty, v.get("type").and_then(Value::as_str)) {
-        (From::Storage { .. }, _, Some(t)) => match Ty::parse(t) {
-            Some(Ty::V(sc, 1)) => Ty::Storage(
-                sc,
-                v.get("count").and_then(Value::as_u64).unwrap_or(0) as u32,
-            ),
-            _ => {
-                bad(issues, "a storage input holds scalars");
-                return None;
+        (From::Storage { .. } | From::Column { .. } | From::Attribute { .. }, _, Some(t)) => {
+            match Ty::parse(t) {
+                Some(Ty::V(sc, n)) if n == 1 || matches!(from, From::Attribute { .. }) => {
+                    Ty::Storage(
+                        sc,
+                        v.get("count").and_then(Value::as_u64).unwrap_or(0) as u32,
+                    )
+                }
+                _ => {
+                    bad(issues, "a storage input holds scalars");
+                    return None;
+                }
             }
-        },
+        }
         (_, Some(t), _) => t,
         (From::Time | From::Phase(_), None, _) => Ty::F32,
         (From::Seed, None, _) => Ty::U32,
