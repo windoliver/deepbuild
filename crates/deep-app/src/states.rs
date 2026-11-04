@@ -473,9 +473,8 @@ impl Session {
         if let Some(ts) = event["ts"].as_u64() {
             self.last_seen = Some(self.last_seen.map_or(ts, |seen| seen.max(ts)));
         }
-        // What a hook says of its attention (#992), an idle prompt a minute after every stop among it, is no activity
-        // that hides a claim.
-        if kind == "session.attention" && event["writer"] == "hook" {
+        // A hook's idle prompt (#992), a minute after every stop, is no activity that hides the stop's claim.
+        if kind == "session.attention" && event["writer"] == "hook" && data["state"] == "finished" {
             return;
         }
         if kind == "session.attention" {
@@ -649,6 +648,19 @@ mod tests {
 
     fn ask(id: &str) -> Value {
         json!({"v": 4, "id": id, "kind": "ask.created", "session": "s1", "data": {"question": "Push?"}})
+    }
+
+    #[test]
+    fn a_hooks_word_that_the_session_works_again_is_its_attention() {
+        // Only the idle prompt's finished is set aside (#992): a hook's working after the core read it quiet is the
+        // session at work again, as the record's whole-list reading has it (#1141).
+        let events = vec![
+            json!({"kind": "session.attention", "writer": "core", "session": "s1", "log_pos": 1, "ts": 1,
+                   "data": {"state": "unknown"}}),
+            json!({"kind": "session.attention", "writer": "hook", "session": "s1", "log_pos": 2, "ts": 2,
+                   "data": {"state": "working"}}),
+        ];
+        assert_eq!(table(&events).state("s1"), State::Working);
     }
 
     #[test]
