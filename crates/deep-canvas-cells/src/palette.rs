@@ -31,10 +31,16 @@ const ANSI: [[u8; 3]; 16] = [
 /// A color the program asked for, as sRGB: a default is `fg` or `bg`, an index one of the 16
 /// roles or xterm's 256-color cube and grays.
 pub fn resolve(c: Color, default: [u8; 3]) -> [u8; 3] {
+    resolve_in(c, default, &ANSI)
+}
+
+/// [`resolve`], with the 16 roles a look gives (#1003). A color the program sent itself, true
+/// color or the cube, is drawn as it sent it.
+pub fn resolve_in(c: Color, default: [u8; 3], ansi: &[[u8; 3]; 16]) -> [u8; 3] {
     match c {
         Color::Default => default,
         Color::Rgb(rgb) => rgb,
-        Color::Indexed(i) if i < 16 => ANSI[usize::from(i)],
+        Color::Indexed(i) if i < 16 => ansi[usize::from(i)],
         Color::Indexed(i) if i < 232 => {
             let n = i - 16;
             let level = |v: u8| if v == 0 { 0 } else { 55 + v * 40 };

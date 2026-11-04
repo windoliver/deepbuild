@@ -51,9 +51,11 @@
       "panel": "deepbuild/sidebar",
       "entry": "crates/deep-app/src/views.rs Shipped, Kind::Sidebar",
       "roles": [
+        "focus",
         "hover",
         "ink_primary",
-        "raised"
+        "raised",
+        "selected"
       ],
       "literals": []
     }

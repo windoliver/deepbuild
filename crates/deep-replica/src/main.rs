@@ -1,9 +1,12 @@
-//! `deep-replica (--view <needs-you|sidebar|session> | --first-screen) --out <dir> [--appearance <light|dark>]`: the
+//! `deep-replica (--view <needs-you|sidebar|session|terminal-colors> | --first-screen) --out <dir> [--appearance <light|dark>]
+//! [--selected-row <n>] [--focused-row <n>]`: the
 //! replica. Opens the app's shell headless at the reference window on gpui's virtual clock, draws
 //! the view over the fixture record as macOS would in that appearance (light when none is given),
 //! and writes `snapshots/<view>.json` and `screens/<view>.png` under `out`. `--first-screen` draws Home for the HOME it
 //! runs with, over that home's own record, and writes `menu-bar.txt` too (#1002).
-//! A launch is timed from this process's spawn to the first-frame line it prints.
+//! A launch is timed from this process's spawn to the first-frame line it prints. `terminal-colors` draws the look's 16
+//! terminal colors as the app's cell grid does, in the center beside the sidebar; the row flags open the sidebar with
+//! those rows selected and focused (#1003).
 
 fn main() {
     #[cfg(target_os = "macos")]
@@ -21,6 +24,7 @@ mod replica {
     use deep_app::views::Layout;
     use deep_replica::{shell::open_shell, snapshot::from_observed};
     use gpui_kit::test::TestWindowExt;
+    use gpui_kit::AppContext as _;
 
     pub fn run() -> i32 {
         let (view, out, dark) = match deep_replica::view_args("deep-replica", "dir", true) {
@@ -49,8 +53,27 @@ mod replica {
         } else {
             deep_app::views::set_state(deep_replica::load_state());
         }
-        let layout = Layout::shipped(if first { "home" } else { &view });
-        let (handle, _) = cx.update(|cx| open_shell(&layout, cx, |_, _| {}));
+        let colors = view == deep_replica::TERMINAL_COLORS;
+        let layout = if colors {
+            Layout {
+                center: vec![deep_app::views::EXTENSION.into()],
+                ..Layout::shipped("home")
+            }
+        } else {
+            Layout::shipped(if first { "home" } else { &view })
+        };
+        let (handle, _) = cx.update(|cx| {
+            open_shell(&layout, cx, |_, cx| {
+                if colors {
+                    deep_app::views::place_extension(
+                        cx.new(|_| deep_replica::kit::TerminalColors {
+                            dark: dark == Some(true),
+                        })
+                        .into(),
+                    );
+                }
+            })
+        });
         phase("window");
         // The first frame is the launch; the line goes out as soon as it is drawn. The second
         // frame, over cleared canvas items, is the one the snapshot reads.
