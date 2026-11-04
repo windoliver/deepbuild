@@ -1,0 +1,17 @@
+ RUN  v5.0.5 <base checkout>
+ ❯ tests/acceptance/45-redraft/lifecycle.test.ts (0 test)
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/45-redraft/lifecycle.test.ts [ tests/acceptance/45-redraft/lifecycle.test.ts ]
+Error: Cannot find module '../../../packages/readings/src/index.ts' imported from <base checkout>/tests/acceptance/45-redraft/lifecycle.test.ts
+ ❯ tests/acceptance/45-redraft/lifecycle.test.ts:34:1
+     32| //    core connection with no session; their session is in `data.sessi…
+     33| import { describe, expect, it } from 'vitest';
+     34| import { loopHolds, type RecordEvent } from '../../../packages/reading…
+       | ^
+     35|
+     36| const SESSION = '01K9A2B3C4D5E6F7G8H9J0K1M2';
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  18:48:21
+   Duration  120ms (worker 96%, environment 4%)
