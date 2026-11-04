@@ -2676,7 +2676,7 @@ impl Renderer {
             .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
         self.prepare_cascades(device, scene, &frame);
         self.prepare_env(device, scene, &camera);
-        self.sky = scene.sky.is_some();
+        self.sky = scene.sky.as_ref().is_some_and(|s| s.draws_background());
         self.prepare_puffs(device, scene);
         if self.sky && self.sky_pipeline.is_none() {
             self.sky_pipeline = Some(sky_pipeline(
