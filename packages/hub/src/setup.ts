@@ -92,7 +92,7 @@ async function install(cli: string, quiet = false): Promise<number> {
       mkdirSync(dirname(copy), { recursive: true, mode: 0o700 });
       writeFileSync(copy, text, { mode: 0o600 });
       process.stderr.write(`deep setup: ${file} ${read.refused}, so setup left it byte-for-byte as it was and wrote nothing; a copy is at ${copy}. Fix it, then run deep setup again.\n`);
-      return stopped(root, 1, `${file} ${read.refused}`, `Fix ${file}, then Set up again.`);
+      return stopped(root, 1, `${file} ${read.refused}`, 'Fix the file, then Set up again.');
     }
     planned.set(file, read.value);
   }
