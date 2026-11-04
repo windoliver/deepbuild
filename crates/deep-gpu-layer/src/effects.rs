@@ -58,7 +58,7 @@ impl Seeding {
     }
 }
 
-fn linear_of(c: [u8; 3]) -> [f64; 3] {
+pub fn linear_of(c: [u8; 3]) -> [f64; 3] {
     c.map(|v| {
         let x = f64::from(v) / 255.0;
         if x <= 0.04045 {

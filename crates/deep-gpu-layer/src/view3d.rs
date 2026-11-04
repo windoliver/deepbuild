@@ -487,7 +487,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     };
     let size = args.size;
     let timings = args.timings && !noop;
-    let opened = session3::open(app, size, timings, shows)?;
+    let opened = session3::open_doc(app, size, timings, shows, &args.doc)?;
     session3::surface(app, args.surface)?;
     let (ui, fx) = (opened.ui.clone(), opened.fx.clone());
     // What the view compiled as it opened, before its first frame (#854).
@@ -629,7 +629,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     dirt_file = Some(write_named(out, &dirt_target(d, size), "f32")?);
                 }
             }
-            lock(&fx).settings = settings;
+            {
+                let mut fx = lock(&fx);
+                fx.settings = settings;
+            }
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
             } else {
