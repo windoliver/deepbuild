@@ -357,6 +357,17 @@
       "initialReason": "Issue #1097 first measurement: the merge base's reader reads a computed program as no program and drops a nesting past its depth, so neither call meets an entry there. One process starts the hub on a temp home and times 200 forwarded PreToolUse calls of `\"$(printf rm)\" -rf \"$OUT\"/*` and 200 of `pkill node` nested 13 `sh -c` deep, each with every shipped default entry in rules.json and with none, interleaved, from spawn to exit; the issue's 2 ms at p95 stays in tests/acceptance/1097/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "deep-hook-heavy",
+      "command": [
+        "node",
+        "benchmarks/deep-hook.mjs",
+        "heavy"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1015 first measurement: the merge base matches no heavy.command@1 entry. One process times, with no hub, 200 PreToolUse calls of `cargo test --workspace`, which a shipped entry matches, and 200 of `cargo --version`, which none does, interleaved, each from spawn to exit; the issue's 1 ms at p95 against the merge base's deep-hook stays in tests/acceptance/1015/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "deep-hook-during-backup",
       "command": [
         "node",

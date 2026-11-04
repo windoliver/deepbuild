@@ -85,6 +85,8 @@ export interface HookMeta {
   notes?: Record<string, string>;
   /** The folders a delete whose reach can't be worked out names, by the entry that matched it, for the hub to stage (#347). */
   stage?: Record<string, string[]>;
+  /** The heavy.command@1 entry a shell call matched in deep-hook (#1015): the hub runs it under `deep lease` with its kinds. */
+  heavy?: { name: string; kinds: string[]; form: string };
   /** A spooled call deep-hook let through because the hub was late, and the guard entries it matched. */
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */

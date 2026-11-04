@@ -144,6 +144,24 @@
     "called_by": "deep env down"
   },
   {
+    "method": "lease.wait",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep lease"
+  },
+  {
+    "method": "lease.started",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep lease"
+  },
+  {
+    "method": "lease.exited",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep lease"
+  },
+  {
     "method": "extension.install",
     "since": "R1",
     "stability": "stable",
