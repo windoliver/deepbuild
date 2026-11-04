@@ -1,6 +1,7 @@
 // `deep status` (#19): every session from every agent and repo, grouped by repo, with what needs you, what's stuck and
 // what's flagged first and the quiet ones folded into one line a repo, and the hub it read. A session whose turn
-// finished lists that turn's tool calls and commits (#668). With the hub up it asks the hub (`status.read`); with the
+// finished lists that turn's tool calls and commits (#668), and a session with a claim its newest claim's line, the
+// one its chat showed (#669). With the hub up it asks the hub (`status.read`); with the
 // hub down it opens the hub's database read-only and reads the same tables.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
@@ -11,10 +12,12 @@ import { rowReadings } from './codex-loops.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime } from './promises.js';
+import { claimState, newestClaim } from './verdict-chat.js';
+import { verdictLine } from '@deepbuild/verdicts';
 
 type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
 /** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
-export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; note?: string; calls?: string[]; commits?: string[]; readings?: string[] }
+export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; note?: string; verdict?: string; calls?: string[]; commits?: string[]; readings?: string[] }
 const ORDER: readonly State[] = ['needs you', 'stuck', 'flagged', 'working', 'finished', 'quiet'];
 /** A session with no hook for this long, whatever its last state, reads quiet. */
 const QUIET_MS = 24 * 3_600_000;
@@ -67,6 +70,13 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
       : ['working', `last seen ${ago(s.last_seen)} ago`];
     return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state, why, ...(note ? { note } : {}) };
   });
+  // The newest claim's line, from the record's claims, verdicts and runs, as the chat shows it (#83, #669).
+  for (const row of rows) {
+    // A database older than the claims tables has none to show.
+    const claim = await newestClaim(query, row.id).catch(() => undefined);
+    const state = claim === undefined ? undefined : await claimState(query, claim, new Map()).catch(() => undefined);
+    if (state) row.verdict = verdictLine(state.state);
+  }
   const finished = rows.filter((r) => r.state === 'finished');
   if (finished.length) await lastTurns(query, finished, new Map(sessions.map((s) => [s.id, s.worktree])));
   const codex = rows.filter((r) => r.agent === 'codex');
@@ -179,6 +189,7 @@ export function render(rows: readonly StatusRow[], from: string): string {
       for (const r of shown.filter((m) => m.repo === repo).sort((a, b) => rank(a) - rank(b))) {
         out.push(`  ${r.id.slice(0, 8)}  ${r.state.padEnd(9)}  ${r.agent.padEnd(11)}  ${r.why}`);
         if (r.note) out.push(`      ${r.note}`);
+        if (r.verdict) out.push(`      ${r.verdict}`);
         for (const reading of r.readings ?? []) out.push(`      ${reading}`);
         for (const call of r.calls ?? []) out.push(`      ${call}`);
         // The planted wrong program lists the turn's tool calls and leaves its commits out.
