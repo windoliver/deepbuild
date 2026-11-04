@@ -133,13 +133,14 @@ pub fn load_bound(path: &Path) -> Result<(), String> {
     {
         let report =
             std::fs::read(field(r, "report")?).map_err(|e| format!("--bound: report: {e}"))?;
-        let assertions = deep_canvas_marks::runs::assertions(&field(r, "tool")?, &report)
-            .ok_or("--bound: the report isn't its tool's JSON report")?;
-        runs.push(Run {
-            run: field(r, "run")?,
-            check: field(r, "check")?,
-            assertions,
-        });
+        let run = Run::from_report(
+            field(r, "run")?,
+            field(r, "check")?,
+            &field(r, "tool")?,
+            &report,
+        )
+        .ok_or("--bound: the report isn't its tool's JSON report")?;
+        runs.push(run);
     }
     let mut binds = Vec::new();
     for (surface, key) in [(Surface::Card, "card"), (Surface::Panel, "panel")] {
