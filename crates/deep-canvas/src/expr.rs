@@ -71,7 +71,9 @@ impl B {
     /// Every component bounded.
     pub fn is_bounded(&self) -> bool {
         let (n, c) = self.comps();
-        c[..n as usize].iter().all(|v| v.is_bounded() || v.is_empty())
+        c[..n as usize]
+            .iter()
+            .all(|v| v.is_bounded() || v.is_empty())
     }
 }
 
@@ -167,7 +169,10 @@ impl Scope {
     pub fn of_packs(packs: &[serde_json::Value]) -> Result<Scope, Box<PackRefusal>> {
         let mut out = Scope::default();
         for p in packs {
-            let pack = p.get("name").and_then(serde_json::Value::as_str).unwrap_or("");
+            let pack = p
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
             if let Some(tables) = p.get("tables").and_then(serde_json::Value::as_object) {
                 for (name, t) in tables {
                     let full = format!("{pack}.{name}");
@@ -186,8 +191,15 @@ impl Scope {
                 .into_iter()
                 .flatten()
             {
-                let name = e.get("name").and_then(serde_json::Value::as_str).unwrap_or("");
-                let full = if name.contains('.') { name.to_string() } else { format!("{pack}.{name}") };
+                let name = e
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
+                let full = if name.contains('.') {
+                    name.to_string()
+                } else {
+                    format!("{pack}.{name}")
+                };
                 let table = EaseTable::parse(e).map_err(|refusal| {
                     Box::new(PackRefusal {
                         name: full.clone(),
@@ -878,7 +890,10 @@ impl Binder<'_> {
                 let (c, sc) = self.bind(c)?;
                 let (a, sa) = self.bind(a)?;
                 let (b, sb) = self.bind(b)?;
-                (Node::If(Box::new(c), Box::new(a), Box::new(b)), sc + sa + sb + 1)
+                (
+                    Node::If(Box::new(c), Box::new(a), Box::new(b)),
+                    sc + sa + sb + 1,
+                )
             }
             P::Swizzle(a, s) => {
                 let (a, sa) = self.bind(a)?;
@@ -895,7 +910,10 @@ impl Binder<'_> {
         match name {
             "table" => {
                 let [P::Name(t), x] = args else {
-                    return Err(refuse(call, "takes a table's name and a value: table(name, x)"));
+                    return Err(refuse(
+                        call,
+                        "takes a table's name and a value: table(name, x)",
+                    ));
                 };
                 let Some(table) = self.resolve.table(t) else {
                     return Err(refuse(call, format!("names no function table `{t}`")));
@@ -905,19 +923,27 @@ impl Binder<'_> {
             }
             "ease" => {
                 let [P::Name(e), x] = args else {
-                    return Err(refuse(call, "takes an ease's name and a value: ease(name, x)"));
+                    return Err(refuse(
+                        call,
+                        "takes an ease's name and a value: ease(name, x)",
+                    ));
                 };
                 if let Err(module) = self.resolve.eases() {
                     return Err(Refusal {
                         missing: Some(module.clone()),
-                        ..refuse(call, format!("ease@1 is the `{module}` module's, which this build lacks"))
+                        ..refuse(
+                            call,
+                            format!("ease@1 is the `{module}` module's, which this build lacks"),
+                        )
                     });
                 }
                 let ease = match ease::parse(e, None) {
                     Ok(Some(n)) => Ease::Named(n),
                     _ => match self.resolve.ease_table(e) {
                         Some(t) => Ease::Table(Arc::new(t)),
-                        None => return Err(refuse(call, format!("names no entry `{e}` of ease@1"))),
+                        None => {
+                            return Err(refuse(call, format!("names no entry `{e}` of ease@1")))
+                        }
                     },
                 };
                 let (x, s) = self.bind(x)?;
@@ -927,12 +953,23 @@ impl Binder<'_> {
             _ => {}
         }
         let Some((_, fun, lo, hi)) = FUNS.iter().find(|(n, ..)| *n == name) else {
-            return Err(refuse(call, format!("`{name}` is not on the closed function list")));
+            return Err(refuse(
+                call,
+                format!("`{name}` is not on the closed function list"),
+            ));
         };
         if args.len() < *lo || args.len() > *hi {
             return Err(refuse(
                 call,
-                format!("`{name}` takes {lo}{} arguments, not {}", if hi > lo { format!(" to {hi}") } else { String::new() }, args.len()),
+                format!(
+                    "`{name}` takes {lo}{} arguments, not {}",
+                    if hi > lo {
+                        format!(" to {hi}")
+                    } else {
+                        String::new()
+                    },
+                    args.len()
+                ),
             ));
         }
         let mut nodes = Vec::new();
@@ -945,7 +982,10 @@ impl Binder<'_> {
         if *fun == Fun::Factorial {
             if let Some(n) = constant(&nodes[0]) {
                 if n != n.trunc() {
-                    return Err(refuse(call, format!("factorial takes a whole number, not {n}")));
+                    return Err(refuse(
+                        call,
+                        format!("factorial takes a whole number, not {n}"),
+                    ));
                 }
                 if !(0.0..=iv::FACTORIAL_MAX).contains(&n) {
                     return Err(refuse(call, format!("factorial takes 0 to 170, not {n}")));
@@ -970,13 +1010,19 @@ impl Binder<'_> {
                 let (n, _) = self.bind(p)?;
                 Ok((n, f64::NEG_INFINITY, max))
             }
-            _ => Err(refuse(call, "a sum's bound is a literal or a var with a declared max")),
+            _ => Err(refuse(
+                call,
+                "a sum's bound is a literal or a var with a declared max",
+            )),
         }
     }
 
     fn sum(&mut self, product: bool, args: &[P], call: &str) -> Result<(Node, usize), Refusal> {
         let [P::Name(k), a, b, term] = args else {
-            return Err(refuse(call, "takes an index, two bounds and a term: sum(k, a, b, term)"));
+            return Err(refuse(
+                call,
+                "takes an index, two bounds and a term: sum(k, a, b, term)",
+            ));
         };
         let (a, a_lo, _) = self.sum_bound(a, call)?;
         let (b, _, b_hi) = self.sum_bound(b, call)?;
@@ -1037,11 +1083,7 @@ impl Expr {
     /// (64 ops for a driver, 256 nodes for a field, 512 for a path function).
     pub fn compile(text: &str, resolve: &dyn Resolve, cap: usize) -> Result<Expr, Refusal> {
         let toks = tokens(text)?;
-        let mut p = Parser {
-            toks,
-            at: 0,
-            text,
-        };
+        let mut p = Parser { toks, at: 0, text };
         let parsed = p.expr()?;
         if p.at < p.toks.len() {
             return Err(p.fail("trailing text after the expression"));
@@ -1133,7 +1175,13 @@ fn decide(a: f64, b: f64, f: impl Fn(f64, f64) -> bool) -> f64 {
 
 /// `f` of two numbers, NaN where either is (`f64::min` and `max` would return the other).
 fn nan2(f: fn(f64, f64) -> f64) -> impl Fn(f64, f64) -> f64 {
-    move |x, y| if x.is_nan() || y.is_nan() { f64::NAN } else { f(x, y) }
+    move |x, y| {
+        if x.is_nan() || y.is_nan() {
+            f64::NAN
+        } else {
+            f(x, y)
+        }
+    }
 }
 
 fn map1(v: V, f: impl Fn(f64) -> f64) -> V {
@@ -1148,9 +1196,10 @@ fn map2(a: V, b: V, f: impl Fn(f64, f64) -> f64) -> V {
         (V::S(x), V::S(y)) => V::S(f(x, y)),
         (V::V(n, c), V::S(y)) => V::V(n, [f(c[0], y), f(c[1], y), f(c[2], y), f(c[3], y)]),
         (V::S(x), V::V(n, c)) => V::V(n, [f(x, c[0]), f(x, c[1]), f(x, c[2]), f(x, c[3])]),
-        (V::V(n, c), V::V(m, d)) if n == m => {
-            V::V(n, [f(c[0], d[0]), f(c[1], d[1]), f(c[2], d[2]), f(c[3], d[3])])
-        }
+        (V::V(n, c), V::V(m, d)) if n == m => V::V(
+            n,
+            [f(c[0], d[0]), f(c[1], d[1]), f(c[2], d[2]), f(c[3], d[3])],
+        ),
         _ => V::S(f64::NAN),
     }
 }
@@ -1411,7 +1460,11 @@ fn call(f: Fun, a: &[V]) -> V {
         Fun::Binom => map2(a[0], a[1], |n, k| iv::binom(n, k).unwrap_or(f64::NAN)),
         Fun::Mix => {
             let t = a[2];
-            map2(a[0], map2(map2(a[1], a[0], |x, y| x - y), t, |d, t| d * t), |x, y| x + y)
+            map2(
+                a[0],
+                map2(map2(a[1], a[0], |x, y| x - y), t, |d, t| d * t),
+                |x, y| x + y,
+            )
         }
         Fun::Smoothstep => {
             let (e0, e1, x) = (s(0), s(1), s(2));
@@ -1567,9 +1620,10 @@ fn bmap2(a: B, b: B, f: impl Fn(Iv, Iv) -> Iv) -> B {
         (B::S(x), B::S(y)) => B::S(f(x, y)),
         (B::V(n, c), B::S(y)) => B::V(n, [f(c[0], y), f(c[1], y), f(c[2], y), f(c[3], y)]),
         (B::S(x), B::V(n, c)) => B::V(n, [f(x, c[0]), f(x, c[1]), f(x, c[2]), f(x, c[3])]),
-        (B::V(n, c), B::V(m, d)) if n == m => {
-            B::V(n, [f(c[0], d[0]), f(c[1], d[1]), f(c[2], d[2]), f(c[3], d[3])])
-        }
+        (B::V(n, c), B::V(m, d)) if n == m => B::V(
+            n,
+            [f(c[0], d[0]), f(c[1], d[1]), f(c[2], d[2]), f(c[3], d[3])],
+        ),
         _ => B::S(Iv::ENTIRE),
     }
 }
@@ -1705,7 +1759,10 @@ fn range(n: &Node, cx: &mut Cx<'_, B>) -> B {
         Node::Bin(op, a, b) => {
             let (a, b) = (range(a, cx), range(b, cx));
             let (x, y) = (a.num(), b.num());
-            let logic = !matches!(op, Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem | Op::Pow);
+            let logic = !matches!(
+                op,
+                Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem | Op::Pow
+            );
             // An empty side holds no value: a comparison of it decides nothing.
             if logic && (x.is_empty() || y.is_empty()) {
                 return B::S(Iv::EMPTY);
@@ -1713,12 +1770,24 @@ fn range(n: &Node, cx: &mut Cx<'_, B>) -> B {
             match op {
                 Op::Add => bmap2(a, b, Iv::add),
                 Op::Sub => bmap2(a, b, Iv::sub),
-                Op::Mul => bmap2(a, b, |p, q| if p == q && p.lo == p.hi { p.sqr() } else { p.mul(q) }),
+                Op::Mul => bmap2(a, b, |p, q| {
+                    if p == q && p.lo == p.hi {
+                        p.sqr()
+                    } else {
+                        p.mul(q)
+                    }
+                }),
                 Op::Div => bmap2(a, b, Iv::div),
                 Op::Rem => bmap2(a, b, iv::rem),
                 Op::Pow => bmap2(a, b, iv::pow),
-                Op::Eq => B::S(iv::truth(x.lo == x.hi && x == y, x.hi < y.lo || y.hi < x.lo)),
-                Op::Ne => B::S(iv::truth(x.hi < y.lo || y.hi < x.lo, x.lo == x.hi && x == y)),
+                Op::Eq => B::S(iv::truth(
+                    x.lo == x.hi && x == y,
+                    x.hi < y.lo || y.hi < x.lo,
+                )),
+                Op::Ne => B::S(iv::truth(
+                    x.hi < y.lo || y.hi < x.lo,
+                    x.lo == x.hi && x == y,
+                )),
                 Op::Lt => B::S(iv::truth(x.hi < y.lo, x.lo >= y.hi)),
                 Op::Le => B::S(iv::truth(x.hi <= y.lo, x.lo > y.hi)),
                 Op::Gt => B::S(iv::truth(x.lo > y.hi, x.hi <= y.lo)),
@@ -1805,9 +1874,9 @@ fn range(n: &Node, cx: &mut Cx<'_, B>) -> B {
             }
             let a = &a[..args.len()];
             match (cx.planted, f) {
-                (Some(Planted::SinBoundsByEnds), Fun::Sin) => {
-                    bmap1(a[0], |x| Iv::point(ops::sin(x.lo)).hull(Iv::point(ops::sin(x.hi))))
-                }
+                (Some(Planted::SinBoundsByEnds), Fun::Sin) => bmap1(a[0], |x| {
+                    Iv::point(ops::sin(x.lo)).hull(Iv::point(ops::sin(x.hi)))
+                }),
                 (Some(Planted::SincAsSinOverX), Fun::Sinc) => bmap1(a[0], |x| iv::sin(x).div(x)),
                 (Some(Planted::NoiseFormSamples8), Fun::Noise | Fun::Fbm) => {
                     let mut pa = [V::S(0.0); ARGS];
@@ -1945,7 +2014,10 @@ fn bcall(f: Fun, a: &[B]) -> B {
         }
         Fun::Ccos => {
             let (x, y) = bc2(a[0]);
-            bv2((iv::cos(x).mul(iv::cosh(y)), iv::sin(x).mul(iv::sinh(y)).neg()))
+            bv2((
+                iv::cos(x).mul(iv::cosh(y)),
+                iv::sin(x).mul(iv::sinh(y)).neg(),
+            ))
         }
         Fun::Conj => {
             let (x, y) = bc2(a[0]);
@@ -2031,7 +2103,12 @@ pub mod noise {
     }
 
     fn mix(h: u32, v: u32) -> u32 {
-        hash32(h ^ v.wrapping_add(0x9e37_79b9).wrapping_add(h << 6).wrapping_add(h >> 2))
+        hash32(
+            h ^ v
+                .wrapping_add(0x9e37_79b9)
+                .wrapping_add(h << 6)
+                .wrapping_add(h >> 2),
+        )
     }
 
     /// hash(…) → [0, 1): the fixed hash of each argument's whole part, as (h >> 8) × 2⁻²⁴.
@@ -2078,7 +2155,11 @@ pub mod noise {
             return f64::NAN;
         }
         let cell: Vec<i64> = p[..d].iter().map(|v| v.floor() as i64).collect();
-        let f: Vec<f64> = p[..d].iter().zip(&cell).map(|(v, c)| v - *c as f64).collect();
+        let f: Vec<f64> = p[..d]
+            .iter()
+            .zip(&cell)
+            .map(|(v, c)| v - *c as f64)
+            .collect();
         corner_sum(d, &cell, seed, |k, i| f[k] - i as f64, |k| fade(f[k]))
     }
 
@@ -2114,7 +2195,10 @@ pub mod noise {
     /// The fade's form: increasing on [0, 1].
     fn fade_bound(t: Iv) -> Iv {
         let t = t.meet(Iv::new(0.0, 1.0));
-        Iv::new(super::iv::down(fade(t.lo), 4).max(0.0), super::iv::up(fade(t.hi), 4).min(1.0))
+        Iv::new(
+            super::iv::down(fade(t.lo), 4).max(0.0),
+            super::iv::up(fade(t.hi), 4).min(1.0),
+        )
     }
 
     /// noise's interval form over the box `p`: per lattice cell the box covers (at most 64),
@@ -2143,7 +2227,9 @@ pub mod noise {
             let f: Vec<Iv> = (0..d)
                 .map(|k| {
                     let c = cell[k] as f64;
-                    p[k].meet(Iv::new(c, c + 1.0)).sub(Iv::point(c)).meet(Iv::new(0.0, 1.0))
+                    p[k].meet(Iv::new(c, c + 1.0))
+                        .sub(Iv::point(c))
+                        .meet(Iv::new(0.0, 1.0))
                 })
                 .collect();
             if f.iter().all(|v| !v.is_empty()) {
@@ -2174,7 +2260,11 @@ pub mod noise {
             for k in 0..d {
                 let i = ((corner >> k) & 1) as i64;
                 c[k] = cell[k] + i;
-                weight = weight.mul(if i == 1 { w[k] } else { Iv::point(1.0).sub(w[k]) });
+                weight = weight.mul(if i == 1 {
+                    w[k]
+                } else {
+                    Iv::point(1.0).sub(w[k])
+                });
             }
             let g = gradient(seed, &c[..d]);
             let mut dot = Iv::point(0.0);
@@ -2443,14 +2533,34 @@ mod tests {
 
     #[test]
     fn whole_powers_hold_libm_and_powi_alike() {
-        holds("pow(x, 100)", 1.006_670_209_655_188_7, 1.006_670_209_655_188_7, &[1.006_670_209_655_188_7]);
-        holds("x ^ 100", 1.006_670_209_655_188_7, 1.006_670_209_655_188_7, &[1.006_670_209_655_188_7]);
+        holds(
+            "pow(x, 100)",
+            1.006_670_209_655_188_7,
+            1.006_670_209_655_188_7,
+            &[1.006_670_209_655_188_7],
+        );
+        holds(
+            "x ^ 100",
+            1.006_670_209_655_188_7,
+            1.006_670_209_655_188_7,
+            &[1.006_670_209_655_188_7],
+        );
     }
 
     #[test]
     fn a_remainder_near_a_multiple_holds() {
-        holds("x % 0.1", 0.5, 0.50001, &[0.5, 0.500_000_000_000_000_1, 0.500_005]);
-        holds("mod(x, 0.1)", 0.5, 0.50001, &[0.5, 0.500_000_000_000_000_1, 0.500_005]);
+        holds(
+            "x % 0.1",
+            0.5,
+            0.50001,
+            &[0.5, 0.500_000_000_000_000_1, 0.500_005],
+        );
+        holds(
+            "mod(x, 0.1)",
+            0.5,
+            0.50001,
+            &[0.5, 0.500_000_000_000_000_1, 0.500_005],
+        );
     }
 
     #[test]
@@ -2460,12 +2570,10 @@ mod tests {
         holds("ease(out_elastic, x)", 0.99, 1.0, &[1.0 - 1e-9]);
     }
 
-
     #[test]
     fn atan2_takes_zero_unsigned_in_both_forms() {
         holds("atan2(-x, -1)", -1.0, 0.0, &[-1.0, -0.5, 0.0]);
         holds("atan2(0, x * 0)", -1.0, -0.5, &[-1.0, -0.75, -0.5]);
         holds("carg(conj(vec2(x, 0)))", -2.0, -1.0, &[-2.0, -1.5, -1.0]);
     }
-
 }

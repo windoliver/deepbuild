@@ -43,9 +43,6 @@ pub fn up(x: f64, n: u32) -> f64 {
     v
 }
 
-// The arithmetic is methods, not the std operator traits, so each call reads as the outward
-// rounding it is.
-#[allow(clippy::should_implement_trait)]
 /// `a + b` rounded, and the exact error left: a + b = s + e (Knuth's TwoSum).
 fn two_sum(a: f64, b: f64) -> (f64, f64) {
     let s = a + b;
@@ -57,7 +54,11 @@ fn two_sum(a: f64, b: f64) -> (f64, f64) {
 /// multiply-add); `None` where a split could overflow.
 fn two_prod(a: f64, b: f64) -> Option<(f64, f64)> {
     let p = a * b;
-    if !p.is_finite() || a.abs() > 1e290 || b.abs() > 1e290 || (a != 0.0 && b != 0.0 && p.abs() < 1e-290) {
+    if !p.is_finite()
+        || a.abs() > 1e290
+        || b.abs() > 1e290
+        || (a != 0.0 && b != 0.0 && p.abs() < 1e-290)
+    {
         return None;
     }
     let split = |x: f64| {
@@ -85,6 +86,9 @@ fn upper(v: f64, e: Option<f64>) -> f64 {
     }
 }
 
+// The arithmetic is methods, not the std operator traits, so each call reads as the outward
+// rounding it is.
+#[allow(clippy::should_implement_trait)]
 impl Iv {
     pub const EMPTY: Iv = Iv {
         lo: f64::INFINITY,
@@ -112,7 +116,9 @@ impl Iv {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.lo.partial_cmp(&self.hi).is_none_or(|o| o == std::cmp::Ordering::Greater)
+        self.lo
+            .partial_cmp(&self.hi)
+            .is_none_or(|o| o == std::cmp::Ordering::Greater)
     }
 
     /// Both ends finite.
@@ -448,7 +454,11 @@ pub fn pow(x: Iv, y: Iv) -> Iv {
         let at0 = [
             if y.hi > 0.0 { Some(0.0) } else { None },
             if y.contains(0.0) { Some(1.0) } else { None },
-            if y.lo < 0.0 { Some(f64::INFINITY) } else { None },
+            if y.lo < 0.0 {
+                Some(f64::INFINITY)
+            } else {
+                None
+            },
         ];
         for v in at0.into_iter().flatten() {
             r = r.hull(Iv::point(v));
@@ -566,7 +576,10 @@ pub fn cosh(x: Iv) -> Iv {
     if a.is_empty() {
         return a;
     }
-    Iv::new(down(ops::cosh(a.lo), ULPS).max(1.0), up(ops::cosh(a.hi), ULPS))
+    Iv::new(
+        down(ops::cosh(a.lo), ULPS).max(1.0),
+        up(ops::cosh(a.hi), ULPS),
+    )
 }
 
 pub fn tanh(x: Iv) -> Iv {
@@ -735,7 +748,12 @@ pub fn binom_iv(n: Iv, k: Iv) -> Iv {
     if n.is_empty() || k.is_empty() || !n.is_bounded() || !k.is_bounded() {
         return Iv::ENTIRE;
     }
-    let (n0, n1, k0, k1) = (n.lo.ceil().max(0.0), n.hi.floor(), k.lo.ceil().max(0.0), k.hi.floor());
+    let (n0, n1, k0, k1) = (
+        n.lo.ceil().max(0.0),
+        n.hi.floor(),
+        k.lo.ceil().max(0.0),
+        k.hi.floor(),
+    );
     if n0 > n1 || k0 > k1 {
         return Iv::EMPTY;
     }
@@ -757,9 +775,11 @@ pub fn binom_iv(n: Iv, k: Iv) -> Iv {
     }
     let one = Iv::point(1.0);
     let (nn, kk) = (Iv::new(n0, n1), Iv::new(k0, k1));
-    exp(lgamma(nn.add(one)).sub(lgamma(kk.add(one))).sub(lgamma(nn.sub(kk).add(one))))
-        .widen(ULPS_SPECIAL)
-        .meet(Iv::new(0.0, f64::INFINITY))
+    exp(lgamma(nn.add(one))
+        .sub(lgamma(kk.add(one)))
+        .sub(lgamma(nn.sub(kk).add(one))))
+    .widen(ULPS_SPECIAL)
+    .meet(Iv::new(0.0, f64::INFINITY))
 }
 
 /// A step function's form: `f` is non-decreasing, so its ends bound it exactly.
@@ -802,7 +822,10 @@ pub fn fract(x: Iv) -> Iv {
     if !x.is_bounded() || x.lo.floor() != x.hi.floor() {
         return Iv::new(0.0, 1.0);
     }
-    Iv::new(down(x.lo - x.lo.floor(), 1).max(0.0), up(x.hi - x.hi.floor(), 1).min(1.0))
+    Iv::new(
+        down(x.lo - x.lo.floor(), 1).max(0.0),
+        up(x.hi - x.hi.floor(), 1).min(1.0),
+    )
 }
 
 /// mod(a, b) = a − b·floor(a ÷ b), between 0 and b: exact for a point b within one period.

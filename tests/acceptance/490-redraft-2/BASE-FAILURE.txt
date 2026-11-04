@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 /home/jing/deepbuild/.claude/worktrees/agent-aa988707e723c0711/tests/acceptance/490-redraft-2
+ RUN  v5.0.5 <repo>/tests/acceptance/490-redraft-2
 
  ❯ opening.test.ts (3 tests | 3 failed) 521ms
    ❯ #490 AC2 (redraft) opening the eases as ease@1 leaves the shipped fixtures byte for byte the same (3)

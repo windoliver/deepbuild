@@ -31,7 +31,10 @@ fn a_driver_of_the_six_functions_is_held_to_its_range() {
 fn a_catmull_rom_channel_has_no_settled_bound() {
     let keys = json!({"k0": {"t": "0s", "value": 0, "interp": "catmull_rom"}, "k1": {"t": "0.3s", "value": 1, "interp": "catmull_rom"},
                       "k2": {"t": "0.6s", "value": 1, "interp": "catmull_rom"}, "k3": {"t": "1s", "value": 0}});
-    let p = Program::compile(&doc(json!({"channels": {"c": {"target": "items/a/at/pos/0", "keys": keys}}}))).unwrap();
+    let p = Program::compile(&doc(
+        json!({"channels": {"c": {"target": "items/a/at/pos/0", "keys": keys}}}),
+    ))
+    .unwrap();
     assert_eq!(channel_bound(&p.motion.channels[0]), None);
 }
 
@@ -46,10 +49,16 @@ fn a_pulse_with_a_negative_influence_reaches_below() {
 
 #[test]
 fn time_past_the_span_reads_the_span() {
-    let d = doc(json!({"drivers": {"d": {"target": "items/a/at/pos/0", "expr": "t * 10", "vars": {"t": "time"}, "range": [0, 10]}}}));
+    let d = doc(
+        json!({"drivers": {"d": {"target": "items/a/at/pos/0", "expr": "t * 10", "vars": {"t": "time"}, "range": [0, 10]}}}),
+    );
     let p = Program::compile(&d).unwrap();
     let mut s = p.state();
-    p.evaluate(2 * 705_600_000, deep_canvas_motion::eval::Validity::Full, &mut s);
+    p.evaluate(
+        2 * 705_600_000,
+        deep_canvas_motion::eval::Validity::Full,
+        &mut s,
+    );
     let (pos, _) = p.item_values(&s, "a").unwrap();
     assert_eq!(pos[0], 10.0);
 }

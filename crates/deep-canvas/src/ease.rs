@@ -491,7 +491,10 @@ impl Canonical for Entry {
 /// names' sorted order instead of the order they always had.
 pub fn renumbered(number: u8) -> u8 {
     let mut list = entries();
-    let name = list.iter().find(|(_, n)| *n == number).map(|(n, _)| n.clone());
+    let name = list
+        .iter()
+        .find(|(_, n)| *n == number)
+        .map(|(n, _)| n.clone());
     list.sort();
     name.and_then(|name| list.iter().position(|(n, _)| *n == name))
         .map_or(number, |i| i as u8)
@@ -523,7 +526,10 @@ fn running_start_turns(pull: f64) -> Vec<f64> {
         let binom5 = [1.0, 5.0, 10.0, 10.0, 5.0, 1.0];
         (0..6)
             .map(|k| {
-                6.0 * (c[k + 1] - c[k]) * binom5[k] * ops::powi(x, k as i32) * ops::powi(s, 5 - k as i32)
+                6.0 * (c[k + 1] - c[k])
+                    * binom5[k]
+                    * ops::powi(x, k as i32)
+                    * ops::powi(s, 5 - k as i32)
             })
             .sum::<f64>()
     };
@@ -720,7 +726,9 @@ mod tests {
 
     #[test]
     fn back_out_takes_its_overshoot() {
-        let e = parse("out_back", Some(&json!({"overshoot": 2.6}))).unwrap().unwrap();
+        let e = parse("out_back", Some(&json!({"overshoot": 2.6})))
+            .unwrap()
+            .unwrap();
         let (_, hi) = e.extremes();
         assert!((hi - 1.2009).abs() < 1e-4, "{hi}");
         let d = named("out_back", None).unwrap();
@@ -732,7 +740,10 @@ mod tests {
         let fixed = named("out_bounce", None).unwrap();
         for i in 0..=1000 {
             let x = f64::from(i) / 1000.0;
-            assert!((fixed.at(x) - bounce_general(0.5, 3, x)).abs() < 1e-12, "{x}");
+            assert!(
+                (fixed.at(x) - bounce_general(0.5, 3, x)).abs() < 1e-12,
+                "{x}"
+            );
         }
     }
 
