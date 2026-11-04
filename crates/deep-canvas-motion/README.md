@@ -10,6 +10,7 @@ The line's slice of the motion module (issue #391): channels and keys (linear, h
 - The compiled per-revision program goes in `src/program.rs`, its canonical bytes in `src/canonical.rs`; evaluation after the first frame allocates nothing.
 - Key insertion goes in `src/insert.rs`; the frame clock in `src/clock.rs`; the manifest and operators in `src/module.rs`.
 - Eases go in `src/ease.rs`, the spring's closed form in `src/spring.rs`, modifiers in `src/modifier.rs`, follow channels in `src/follow.rs`, constraint solves in `src/constraint.rs` with their `constraint@1` entries and kit fixtures in `src/kit.rs`, and the per-component order in `src/schedule.rs`.
+- The tempo map (#491) goes in `src/tempo.rs`, cue alignment on markers in `src/cue.rs`, the occurrence-list reads drivers make in `src/occurrence.rs`; `first` markers are solved and layout glides mixed in `src/program.rs`, beside the other compiled reads.
 - Tests go in `tests/` or a `#[cfg(test)]` module in the file; the acceptance tests are in `tests/acceptance/391`.
 
 ## What it may import
