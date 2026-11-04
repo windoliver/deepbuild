@@ -338,6 +338,30 @@ impl<'a> Hub<'a> {
         Ok((sha, drawn, size))
     }
 
+    /// [`Hub::canonical_png`] of a document with 3D writer layers: its 3D frame at `t` on the GPU,
+    /// the 2D items drawn over it with no ground of their own, as render-back draws it (#1162).
+    pub(crate) fn canonical_png3d(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        drawing: &Painted,
+    ) -> Result<String, Unfit> {
+        let drawn = self
+            .renderer
+            .prepare_drawing(drawing, &self.scenario.evidence)?;
+        let size = snapshot::px(drawn.frame.size);
+        let (mut rgba, size, _) = self.draw3d(doc, t, Some(size)).map_err(|()| Unfit {
+            code: "gpu_unavailable",
+            path: "snapshots".into(),
+        })?;
+        let over = self.renderer.raster(&drawn, size, None);
+        snapshot::over(&mut rgba, &over);
+        evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).map_err(|_| Unfit {
+            code: "evidence_unwritable",
+            path: "snapshots".into(),
+        })
+    }
+
     /// `count` frames of a session, `step` apart from `from`: how many nodes ran in each, the
     /// heap allocations the scheduler made and its CPU time (#387); and (#856) the UI thread's CPU
     /// per frame, whether the frame is settling and, with `pixels`, its pixel hash. A revision

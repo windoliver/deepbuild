@@ -141,7 +141,7 @@ fn register_with(r: &mut Registrar, planted: crate::kit::Planted) {
     r.operator(
         "channels",
         "items",
-        &["motion.program", "t", "view(reduced_motion)"],
+        &["motion.program", "t", "view(reduced_motion)", "self"],
         &["motion.at", "motion.fields"],
     )
     .applies(is_target)
@@ -269,6 +269,19 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
     channel || held || bound
 }
 
+/// The data names a text template's slots read (`{data/<name>}`), each once.
+fn data_slots(template: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for part in deep_canvas::template::parts(template).unwrap_or_default() {
+        if let deep_canvas::template::Part::Slot(slot) = part {
+            if let Some(name) = slot.strip_prefix("data/").filter(|n| !out.iter().any(|o| o == n)) {
+                out.push(name.to_string());
+            }
+        }
+    }
+    out
+}
+
 /// The keyed data values an item's text template reads (Text `text@1`, `template`), each with
 /// the channel that keys it: `(name, channel)`. Its text shows the value at the frame's time.
 fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
@@ -337,9 +350,15 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
     };
     // A text whose template reads a keyed data value shows it at t: the value rides on the
     // evaluated item as `params/data/<name>`, which the template reads before the document's.
-    let item = v.item()?.clone();
-    for (name, channel) in keyed_data(v.document()?, &item) {
-        if let Some(x) = program.channel_value(&state, &channel) {
+    let template = v
+        .item()?
+        .pointer("/params/template")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    for name in template.iter().flat_map(|t| data_slots(t)) {
+        let owner = format!("data/{name}");
+        let keyed = program.motion.channels.iter().find(|c| c.target.owner == owner);
+        if let Some(x) = keyed.and_then(|c| program.channel_value(&state, &c.id)) {
             fields.push((vec!["params".into(), "data".into(), name], Datum::Num(x)));
         }
     }
