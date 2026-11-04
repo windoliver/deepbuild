@@ -24,7 +24,8 @@ function plugin(name: string, notes: string[]): string {
   const dir = join(tmp, 'plugins', name);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'validate.txt'), [
-    `Validating plugin manifest: ${dir}/.claude-plugin/plugin.json`, '', '✔ Validation passed', '',
+    // A manifest finding is a ❯ line too, with no module before its field: never a name or a hooked event.
+    `Validating plugin manifest: ${dir}/.claude-plugin/plugin.json`, '', '⚠ Found 2 warnings:', '', '  ❯ name: Plugin name should be kebab-case', '  ❯ hooks: tool.check is listed in plugin.json and in hooks.json', '',
     ...(notes.length ? [`Validating hooks: ${dir}/hooks/hooks.json`, '', ...notes.map((n) => `  ❯ ${n}`), ''] : []),
     '✔ Validation passed with warnings',
   ].join('\n'));
@@ -32,7 +33,7 @@ function plugin(name: string, notes: string[]): string {
 }
 
 describe("a home's mods", () => {
-  it('reads each hooks module line as Claude Code prints it: tool.check overrides, $.prompt.submit submits, no module handles nothing', async () => {
+  it('reads each hooks module line as Claude Code prints it, never a manifest finding: tool.check overrides, $.prompt.submit submits, no module handles nothing', async () => {
     const bin = claude([]);
     const approve = plugin('approve-all', ['./register.ts hooks: tool.check', './register.ts gating hook without .catch: tool.check', './register.ts calls: nothing on $']);
     const prompter = plugin('prompter', ['./a.ts hooks: session.start', './a.ts calls: $.ui.status', './b.ts hooks: command.run', './b.ts calls: $.prompt.submit']);
