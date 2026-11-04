@@ -60,7 +60,7 @@ import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { driveCall, Replica, REPLICA_LEASE } from './drive.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
-import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, overrideWords, pluginDirs, type HomeMods } from './mods.js';
+import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { copySynced, disk, keepAside, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
 
@@ -539,8 +539,8 @@ export class Core {
   private readonly overrides = new Map<string, { call: string; label: string; ts: number }[]>();
   /** Each session's sends in its turn under way, by call (#1033): the key an identical send matches by, and whether it completed. */
   private readonly turnSends = new Map<string, Map<string, { key: string; label: string; done: boolean }>>();
-  /** Runs you started from your own terminal, outside any session, by run, with when (#1033). */
-  private readonly outsideRuns = new Map<string, number>();
+  /** When this core started: a deny from before it is read back from the record (#1033). */
+  private readonly bootAt = Date.now();
   /** Each Claude Code home's mods as last read, by what they were read from (#1033). */
   private readonly modsSeen = new Map<string, { at: number; read: HomeMods }>();
   /** The continues being read, one reading at a time, so the timer's and a prompt's never carry the same one twice. */
@@ -1308,7 +1308,7 @@ export class Core {
     const before = drafts.find((d) => d.kind === 'tool.before');
     if (before && call) {
       const { label, send } = callOf(before.data as Obj, effectEntries(this.root.dir));
-      if (meta.blockedBy?.length) this.denied(session, call, { guard: meta.blockedBy.join(', '), label });
+      if (meta.blockedBy?.length) this.denied(session, call, { guard: meta.blockedBy.join(', '), label: label.slice(0, 2000) });
       const command = before.data.kind === 'shell' && typeof before.data.command === 'string' ? before.data.command : undefined;
       if (send && meta.call) (this.turnSends.get(session) ?? this.turnSends.set(session, new Map()).get(session)!).set(call, { key: sendKey(meta.call.tool, command, meta.call.input), label, done: false });
     }
@@ -1317,29 +1317,37 @@ export class Core {
       const sent = this.turnSends.get(session)?.get(call);
       if (sent) sent.done = after.data.outcome !== 'failed';
       const denial = this.denials.get(session)?.get(call);
+      if (denial) this.denials.get(session)!.delete(call);
+      const failed = (error: unknown) => process.stderr.write(`deep hub: ${call}'s override was not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
       if (denial) {
-        this.denials.get(session)!.delete(call);
         (this.overrides.get(session) ?? this.overrides.set(session, []).get(session)!).push({ call, label: denial.label, ts: this.now() });
-        void settled.then(() => this.overridden(meta, call, denial)).catch((error: unknown) => process.stderr.write(`deep hub: ${call}'s override was not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
+        void settled.then(() => this.overridden(meta, call, denial)).catch(failed);
+      } else {
+        // A deny from before this hub started (a restart, a spooled PostToolUse) is read back from what its call matched.
+        void settled.then(() => this.deniedBefore(session, call)).then((before) => {
+          if (!before) return;
+          (this.overrides.get(session) ?? this.overrides.set(session, []).get(session)!).push({ call, label: before.label, ts: this.now() });
+          return this.overridden(meta, call, before);
+        }).catch(failed);
       }
     }
-    if (drafts.some((d) => d.kind === 'agent.stop' && !d.data.child)) this.turnSends.delete(session);
+    // A turn ends at its stop, or at the next prompt when it ended with none (an interrupt): its sends go with it.
+    if (drafts.some((d) => (d.kind === 'agent.stop' && !d.data.child) || d.kind === 'user.ask')) this.turnSends.delete(session);
     // A session's sends wait past its end for a resume; what it denied and saw run is the record's from then on.
     if (meta.event === 'SessionEnd') { this.denials.delete(session); this.overrides.delete(session); }
     if (meta.event === 'SessionStart') {
       const done = meta.fields?.source === 'resume' ? [...(this.turnSends.get(session)?.values() ?? [])].filter((s) => s.done) : [];
       this.turnSends.delete(session);
-      if (done.length) {
-        const sends = this.unknownSends.get(session) ?? this.unknownSends.set(session, new Map()).get(session)!;
-        for (const s of done) sends.set(s.key, { label: s.label, pr: false, done: true });
-        this.askingSoon();
-      }
+      const sends = done.length ? this.unknownSends.get(session) ?? this.unknownSends.set(session, new Map()).get(session)! : undefined;
+      for (const s of done) sends!.set(s.key, { label: s.label, pr: false, done: true });
+      // The server gates a resumed session's calls until it hears again which sessions have sends to match.
+      if (meta.fields?.source === 'resume') { this.askingSent = ''; this.askingSoon(); }
       if (meta.agent === 'claude-code' || meta.agent === 'claude') void settled.then(() => this.modsReading(meta)).catch(() => undefined);
     }
   }
   /** A PreToolUse the server's reply denied (#1033): what denied it and the call in words. */
   denied(session: string, call: string, denial: { guard: string; label: string }): void {
-    (this.denials.get(session) ?? this.denials.set(session, new Map()).get(session)!).set(call, denial);
+    (this.denials.get(session) ?? this.denials.set(session, new Map()).get(session)!).set(call, { guard: denial.guard.slice(0, 2000), label: denial.label.slice(0, 2000) });
   }
   /** The mods of the Claude Code home a session's transcript lives in, and the folders its command line loads; another agent loads none. */
   private async sessionMods(meta: HookMeta): Promise<HomeMods> {
@@ -1366,14 +1374,14 @@ export class Core {
     const read = await this.sessionMods(meta);
     const mods = 'mods' in read ? read.mods.filter((m) => m.overrides).map((m) => m.name) : [];
     const tool = meta.call?.tool ?? (d.kind === 'mcp' ? `mcp__${String(d.server)}__${String(d.tool)}` : String(d.kind));
-    await this.appendSession(meta.session, meta.agent, 'guard.overridden', { call, tool, label: denial.label, guard: denial.guard, send, mods, mods_unread: 'unread' in read ? read.unread : null });
+    await this.appendSession(meta.session, meta.agent, 'guard.overridden', { call, tool: tool.slice(0, 2000), label: denial.label, guard: denial.guard, send, mods: mods.map((m) => m.slice(0, 2000)), mods_unread: 'unread' in read ? read.unread.slice(0, 2000) : null });
     // Its claims first, so a verdict that passed before the override arrived doesn't stand on what follows failing.
     const claims = (await this.record.raw(`SELECT id FROM events WHERE kind = 'claim.made' AND session_id = ?`, [meta.session])) as { id: string }[];
     for (const { id } of claims) await this.judged(`claim:${id}`);
     const by = mods.length ? `, approved past the deny by ${mods.join(', ')}` : '';
-    await this.appendReading(meta.session, meta.agent, `DeepBuild denied ${denial.label} (${denial.guard}) and it ran anyway${by}: this session's claims can't pass on its own checks until a check you run outside it decides them.`);
+    await this.appendReading(meta.session, meta.agent, `DeepBuild denied ${denial.label} (${denial.guard}) and it ran anyway${by}: this session's claims can't pass on its own checks.`.slice(0, 8000));
     if (send) {
-      const question = `A send DeepBuild denied ran anyway: ${denial.label} (call ${call})${by}. It may already have left. Check whether it went out?`;
+      const question = `A send DeepBuild denied ran anyway: ${denial.label.slice(0, 1000)} (call ${call})${by}. It may already have left. Check whether it went out?`;
       const options = [{ id: 'checked', label: 'I checked it', decision: 'none' }, { id: 'later', label: 'Not now', decision: 'none' }];
       const raised = { kind: 'exception', question, options, recommended: 'checked', deadline: this.now() + 2 * 86_400_000, fallback: 'you', default: 'later', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'guard.overridden', session: meta.session, call } as JsonValue)), pinned_to: await this.pinOf(meta.cwd, question) };
       await this.asks.raise(this.connection('core', { session: meta.session, agent: meta.agent }), 'guard.overridden', raised);
@@ -1385,10 +1393,30 @@ export class Core {
    */
   private async modsReading(meta: HookMeta): Promise<void> {
     const read = await this.sessionMods(meta);
-    if (await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env))) return;
-    const risky = 'mods' in read ? read.mods.filter((m) => overrideWords(m) !== undefined) : [];
-    if (!risky.length) return;
-    await this.appendReading(meta.session, meta.agent, `This session's Claude Code home (${read.home}) loads ${risky.map((m) => `the mod ${m.name}, which ${overrideWords(m)!}`).join('; ')}: its holds and blocks are watch-only until the mod is gone or the setup holds the deny (managed settings, or a Team or Enterprise login).`);
+    const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env));
+    const risky = held || !('mods' in read) ? [] : read.mods.filter((m) => m.overrides);
+    let reading: string | undefined;
+    if ('unread' in read && !held) reading = `${MODS_WATCH} (${read.home}) loads mods DeepBuild couldn't read (${read.unread}), so whether one can approve a call past the guard is not checked: its holds and blocks may be watch-only.`;
+    else if (risky.length) reading = `${MODS_WATCH} (${read.home}) loads ${risky.map((m) => `the mod ${m.name}, which ${overrideWords(m)!}`).join('; ')}: its holds and blocks are watch-only until the mod is gone or the setup holds the deny (managed settings, or a Team or Enterprise login).`;
+    else {
+      // The line a start before this one left on the session's row is taken back.
+      const [said] = (await this.record.raw(`SELECT json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [meta.session, `${MODS_WATCH}%`, `${MODS_GONE}%`])) as { text: string }[];
+      if (said?.text.startsWith(MODS_WATCH)) reading = `${MODS_GONE} that can approve a call past the guard${held ? ` that ${held} doesn't hold` : ''}: its holds and blocks apply again.`;
+    }
+    if (reading) await this.appendReading(meta.session, meta.agent, reading.slice(0, 8000));
+  }
+  /**
+   * What denied a call before this hub started, read from its tool.before: the block-mode guard entries it matched, as
+   * the reply denies them; undefined when none did.
+   */
+  private async deniedBefore(session: string, call: string): Promise<{ guard: string; label: string } | undefined> {
+    const [row] = (await this.record.raw(`SELECT ts, data FROM events WHERE session_id = ? AND kind = 'tool.before' AND json_extract(data, '$.call') = ? ORDER BY log_pos DESC LIMIT 1`, [session, call])) as { ts: number; data: string | Obj }[];
+    if (!row || row.ts >= this.bootAt) return undefined;
+    const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+    const rules = readJson(join(this.root.dir, 'rules.json'));
+    const entries = isObj(rules) && isObj(rules.entries) ? rules.entries : {};
+    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete)$/.test(String(e.match)); });
+    return blocks.length ? { guard: blocks.join(', ').slice(0, 2000), label: callOf(d, effectEntries(this.root.dir)).label.slice(0, 2000) } : undefined;
   }
 
   // ---- What the core reads beside a session's hooks (#18).
@@ -3953,7 +3981,7 @@ export class Core {
         return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.reflecting(async () => ({ rows: await statusRows((sql) => this.record.raw(sql), this.now()) })));
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
-      case 'run.start': return this.runStart(params).then(async (r) => { await this.outside(String(r.run), params.claim, context); return r; });
+      case 'run.start': return this.runStart(params);
       case 'test.load': return this.testLoad(params);
       case 'record.backup': return this.backup(params);
       case 'env.up': return this.envUp(params, context);
@@ -5193,13 +5221,10 @@ export class Core {
     if (!v || v.outcome === 'pending') return;
     // An untrusted repo's spec commands never ran, so its claim is watch-only: it never passes (#322).
     if (v.outcome === 'PASS' && this.watchOnlyClaims.has(claim)) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, 'project trust: the repo\'s spec checks never run until you trust the project, so this claim is watch-only'] };
-    // A call DeepBuild denied ran anyway in the claim's session (#1033): its own checks can't pass it, only a passing
-    // check you ran outside the session since.
+    // A call DeepBuild denied ran anyway in the claim's session (#1033): its own checks can't pass it.
     if (v.outcome === 'PASS') {
       const ran = await this.overridesFor(claim);
-      if (ran.length && !(await this.passedOutside(claim, Math.max(...ran.map((o) => o.ts))))) {
-        v = { ...v, outcome: 'INCONCLUSIVE', reasons: [...v.reasons, `a call DeepBuild denied ran anyway in this session: ${ran.map((o) => `${o.label} (${o.call})`).join('; ')}; its own checks can't pass it until a check you run outside the session does`] };
-      }
+      if (ran.length) v = { ...v, outcome: 'INCONCLUSIVE', reasons: [...v.reasons, `a call DeepBuild denied ran anyway in this session: ${ran.map((o) => `${o.label} (${o.call})`).join('; ')}; its own checks can't pass it`.slice(0, 8000)] };
     }
     const hash = verdictHash(v);
     if (this.verdictsMade.get(claim) === hash) return;
@@ -5398,21 +5423,6 @@ export class Core {
     const recorded = (await this.record.raw(`SELECT ts, json_extract(data, '$.call') AS call, json_extract(data, '$.label') AS label FROM events WHERE session_id = ? AND kind = 'guard.overridden'`, [row.session_id])) as { call: string; label: string; ts: number }[];
     const seen = this.overrides.get(row.session_id) ?? [];
     return [...seen, ...recorded.filter((r) => !seen.some((s) => s.call === r.call))];
-  }
-  /** A run you started from your own terminal for a claim (#1033), outside any session: once it ends, the claim is judged again. */
-  private async outside(run: string, claim: unknown, context: CallContext): Promise<void> {
-    if (typeof claim !== 'string' || context.role !== 'cli' || !context.peer) return;
-    // A deep command counts only from a process it proves is its own, outside every agent's process tree.
-    if ((await this.startOf(context.peer.pid, true)) !== context.peer.start || await this.agentAbove(context.peer)) return;
-    this.outsideRuns.set(run, this.now());
-    void this.runs.get(run)?.done.catch(() => undefined).then(() => this.judged(claim));
-  }
-  /** Whether a run you started outside any session for the claim since `since` passed. */
-  private async passedOutside(claim: string, since: number): Promise<boolean> {
-    const runs = [...this.outsideRuns].filter(([, at]) => at >= since).map(([run]) => run);
-    if (!runs.length) return false;
-    const rows = (await this.record.raw(`SELECT f.subject AS run FROM events f JOIN events s ON s.kind = 'run.started' AND s.subject = f.subject WHERE f.kind = 'run.finished' AND json_extract(s.data, '$.claim') = ? AND json_extract(f.data, '$.outcome') = 'passed'`, [claim])) as { run: string }[];
-    return rows.some((r) => runs.includes(r.run));
   }
   /** The session a claim was made in, as a lease holder; the core's own for a claim the record doesn't hold. */
   private async claimSession(claim: string): Promise<string> {
