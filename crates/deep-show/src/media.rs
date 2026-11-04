@@ -314,3 +314,90 @@ impl Hub<'_> {
         result.unwrap_or_else(|e| e)
     }
 }
+
+/// Every mark set column of `doc` that reads a table (`{from: table asset ID, column: name}`,
+/// Mark set and columns; Asset: tables), read from the hub's `evidence` store as `table_import`
+/// kept it: the table's bytes by the document asset's hash and its record beside them. Written in
+/// place as the column's display values (a number column's as f64, a text column's cells NFC)
+/// with its `trace`, as `deep-canvas-render` inlines them (#397), so the hub's own frame draws a
+/// chart from the agent's table (#1162). Each column it can't read is an issue at its path.
+pub fn inline_tables(doc: &mut Value, evidence: &std::path::Path) -> Vec<deep_canvas::document::Issue> {
+    use deep_canvas::document::Issue;
+    let mut issues = Vec::new();
+    let assets = doc.get("assets").cloned().unwrap_or(Value::Null);
+    let Some(Value::Object(items)) = doc.get_mut("items") else {
+        return issues;
+    };
+    for (id, item) in items.iter_mut() {
+        if item.get("kind").and_then(Value::as_str) != Some("marks@1") {
+            continue;
+        }
+        let Some(Value::Object(columns)) = item.pointer_mut("/params/columns") else {
+            continue;
+        };
+        for (name, column) in columns.iter_mut() {
+            let (Some(asset), Some(field)) = (
+                column.get("from").and_then(Value::as_str).map(str::to_string),
+                column.get("column").and_then(Value::as_str).map(str::to_string),
+            ) else {
+                continue;
+            };
+            let path = format!("items/{id}/params/columns/{name}");
+            let mut missing = |code: &'static str, at: String, what: &str| {
+                issues.push(Issue::error(code, id, at, json!(asset), what));
+            };
+            let Some(hash) = assets[&asset]["sha256"].as_str().filter(|h| h.len() == 64) else {
+                missing("ref_unresolved", format!("{path}/from"), "the document names no table asset by this ID");
+                continue;
+            };
+            let file = std::fs::read(evidence.join(&hash[..2]).join(&hash[2..])).ok();
+            let record = std::fs::read(evidence.join("tables").join(format!("{hash}.json")))
+                .ok()
+                .and_then(|b| serde_json::from_slice::<Value>(&b).ok());
+            let (Some(file), Some(record)) = (file, record) else {
+                missing("asset_missing", format!("{path}/from"), "no table with this hash was imported");
+                continue;
+            };
+            if deep_canvas_marks::key::sha256_hex(&file) != hash {
+                missing("asset_mismatch", format!("{path}/from"), "the stored bytes don't hash to the asset");
+                continue;
+            }
+            let dtype = record["probe"]["table"]["columns"]
+                .as_array()
+                .and_then(|c| c.iter().find(|c| c["name"] == field.as_str()))
+                .and_then(|c| c["dtype"].as_str())
+                .map(str::to_string);
+            let Some(dtype) = dtype else {
+                missing("ref_unresolved", format!("{path}/column"), "the table has no such column");
+                continue;
+            };
+            let cells = record["cells"][&field].as_array().cloned().unwrap_or_default();
+            let mut traced = Vec::with_capacity(cells.len());
+            for cell in &cells {
+                let at = cell["bytes"][0].as_u64().zip(cell["bytes"][1].as_u64());
+                let bytes = at.and_then(|(s, e)| file.get(s as usize..e as usize)).unwrap_or(&[]);
+                let raw = cell["raw"].as_str().unwrap_or("");
+                traced.push(json!({
+                    "bytes": cell["bytes"], "text": deep_canvas::canon::nfc(raw),
+                    "raw": deep_canvas::base64::encode(raw.as_bytes()),
+                    "file": deep_canvas::base64::encode(bytes),
+                }));
+            }
+            let texts = traced.iter().map(|c| c["text"].as_str().unwrap_or(""));
+            let data = if dtype == "str" {
+                json!(texts.collect::<Vec<_>>())
+            } else {
+                let mut out = Vec::with_capacity(cells.len() * 8);
+                for t in texts {
+                    out.extend_from_slice(&t.parse::<f64>().unwrap_or(f64::NAN).to_le_bytes());
+                }
+                json!(deep_canvas::base64::encode(&out))
+            };
+            *column = json!({
+                "dtype": if dtype == "str" { "str" } else { "f64" }, "len": cells.len(), "data": data,
+                "trace": {"table": asset, "column": field, "source": record["source"], "cells": traced},
+            });
+        }
+    }
+    issues
+}
