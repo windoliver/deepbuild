@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 60" width="300" height="60">
+  <!-- A formula as a typeset job writes one: outlines only, one id per term, no <text>. -->
+  <path id="t1" d="M 10 10 L 90 10 L 90 50 L 10 50 Z" fill="#000000"/>
+  <path id="t2" d="M 110 10 L 190 10 L 190 50 L 110 50 Z" fill="#000000"/>
+  <path id="t3" d="M 210 10 L 290 10 L 290 50 L 210 50 Z" fill="#000000"/>
+</svg>

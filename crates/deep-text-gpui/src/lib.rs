@@ -32,6 +32,8 @@ pub struct Label {
     pub weight: u16,
     pub width: Option<f32>,
     pub max_lines: Option<u16>,
+    /// `overflow: mask`: drawn whole for a clip to cut, never with an ellipsis.
+    pub mask: bool,
     pub align: Align,
     /// A bound value or counter: tabular figures, never cut short.
     pub bound: bool,
@@ -48,6 +50,7 @@ impl Label {
             weight: 400,
             width: None,
             max_lines: None,
+            mask: false,
             align: Align::Start,
             bound: false,
         }
@@ -67,7 +70,7 @@ impl Label {
             align: self.align,
             bound: self.bound,
             tabular: self.bound,
-            mask: false,
+            mask: self.mask,
         }
     }
 }
@@ -83,6 +86,7 @@ struct ShapeKey {
     weight: u16,
     width: Option<u32>,
     max_lines: Option<u16>,
+    mask: bool,
     align: u8,
     bound: bool,
 }
@@ -98,6 +102,7 @@ impl ShapeKey {
             weight: label.weight,
             width: label.width.map(f32::to_bits),
             max_lines: label.max_lines,
+            mask: label.mask,
             align: label.align as u8,
             bound: label.bound,
         }

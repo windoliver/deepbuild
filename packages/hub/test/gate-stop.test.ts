@@ -89,7 +89,7 @@ describe('the gate runner at a real stop', () => {
       const [claim] = claimsOf(events, ref);
       const started = events.find((e) => e.kind === 'run.started' && e.data.claim === `claim:${claim!.id}`);
       expect(started, 'the claim\'s check ran').toBeDefined();
-      expect(started!.v, 'as run.started@2').toBe(2);
+      expect(started!.v, 'as run.started@3').toBe(3);
       expect(started!.data.host).toBe('local');
       expect(started!.data.needs).toMatchObject({ cores: 1, memory_mb: 0, gpus: 0 });
       expect(started!.data.lane, 'inside the stop\'s hold').toBe('fast');
@@ -191,6 +191,30 @@ describe('the gate runner at a real stop', () => {
       const verdict = events.filter((e) => e.kind === 'verdict.made' && e.subject === `claim:${claim!.id}`).at(-1);
       expect(verdict?.data.outcome, `the FAIL is the engine's verdict on the run: ${JSON.stringify(verdict?.data.reasons)}`).toBe('FAIL');
       expect(String(verdict?.data.smallest), 'its smallest failing case names the test').toContain('an expired token is rejected');
+    } finally { await stopHub(hub); }
+  }, 240_000);
+
+  it('a later stop on the same claim counts only its own hold, not the lane\'s times again, and changes no code (#45)', async () => {
+    const { hub, s, ref } = await world();
+    try {
+      await s.read('src/auth.ts');
+      await s.edit('src/auth.ts', 'token.exp > 0', 'token.exp > 1');
+      await s.stop('Done with `src/auth.ts`.');
+      await settle(hub, (e) => e.filter((x) => x.kind === 'stop.held').length === 1, HELD_WAIT);
+      await new Promise((r) => setTimeout(r, 1500));
+      await s.stop('Done with `src/auth.ts`, as I said.');
+      const events = await settle(hub, (e) => e.filter((x) => x.kind === 'stop.held').length === 2, HELD_WAIT);
+      expect(claimsOf(events, ref).length, 'the same claim').toBe(1);
+      const [first, again] = events.filter((e) => e.kind === 'stop.held') as (Ev & { data: { total: number; question: number; snapshot_start: number; queue_wait: number; slow: number; fast: number; code_changing: boolean; budget_cost: string[] } })[];
+      const d = again!.data;
+      expect(d.question + d.slow + d.fast + d.snapshot_start + d.queue_wait, 'the parts sum to the hold').toBe(d.total);
+      expect(first!.data.code_changing, 'a new snapshot with a check').toBe(true);
+      expect(again!.data.code_changing).toBe(false);
+      expect(again!.data.budget_cost).toEqual([]);
+      expect(again!.data.slow, 'the agent\'s time between the stops is no hold').toBe(0);
+      expect(again!.data.fast).toBe(0);
+      // The same open items twice stall the claim into one ask for you (#325), held for your answer: that time is yours.
+      expect(d.total - d.question, 'its own hold, not the time since the first stop').toBeLessThan(1500);
     } finally { await stopHub(hub); }
   }, 240_000);
 });

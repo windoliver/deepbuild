@@ -2,7 +2,7 @@
   "examples": [
     {
       "file": "product-reveal.json",
-      "hash": "1c12ced105869fb11b9c9391c4e3655f268d33c013dca3e1b2e702626a0a5793",
+      "hash": "74ea0e63a07b39adbc43d4fe23934da85a1b835837e13e4064d6f533499c9e0c",
       "title": "Product reveal: a lamp on a turntable",
       "steps": 240,
       "words": [
@@ -16,7 +16,7 @@
     },
     {
       "file": "data-story.json",
-      "hash": "ccadc1b5a405c42963f846c9f659fd125012b958e5d711df74af9359538225dc",
+      "hash": "45eb70120d12261cb5210c96c398f31b031ae3d1d5cb8b899dd3ac18fdedbf5b",
       "title": "Data story: three bars",
       "steps": 120,
       "words": [

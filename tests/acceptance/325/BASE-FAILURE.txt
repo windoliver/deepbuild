@@ -1,0 +1,73 @@
+#325 acceptance suite on the base commit 83e4159c (origin/main), 2026-11-03 22:09-22:12 UTC, before any #325 code.
+Run: npx vitest run --root tests/acceptance/325 --no-file-parallelism --testTimeout=600000   (Node 24.22.0, macOS
+arm64, 12 cores; 1-minute load 58 to 69 from other work on the machine during the run)
+Result: Test Files 7 failed (7); Tests 11 failed | 1 passed | 1 skipped (13); 208 s. Every criterion's test fails at a
+named assertion, or BLOCKED on a plant the base doesn't list. None crashes the runner. Trimmed to each test's failing
+assertion.
+
+What the base does: it locks a handed definition and drops a requirement's `paid` field; its ledger prices nothing
+(the hub's price lookup answers null), so no budget ask is raised and no paid run is charged; its receipt names no
+spend. It sends back every stop whose fast-lane check FAILs, whatever its open items, its round count or an open
+unblock ask, always as "sent back 1/3", and raises no stall decision. It reads no `release:` or `switches:` in
+done.yaml, runs no release check and lets `gh pr create … "Closes #n"` through once every requirement has passed. Its
+gate exports claimVerdict (already under 50 ms here) and no priceDefinition. It lists neither of this suite's plants.
+
+budget.test.ts
+  x AC1 item 31's definition locks with three paid checks: one ask naming $12.00; ...
+    Error: AC1 #325.48d4efcc the issue's budget ask is raised once, when its definition locks, for the whole issue
+    (not once per paid check, nor none): asks raised none
+  x AC2 after the claim's three paid runs land with costs of $3.50, $2.25 and $4.75, the claim's receipt ...
+    Error: AC2 #325.9d341426 the receipt of claim:01M6HQC73TQS6N2N3G77SP2RCX lists .deepbuild/checks/live-quote.sh
+    (live call) with its spend, $3.50: second line "wrote /private/tmp/dh325-ddgPv9/repo/src/auth.js"; checks []
+
+stalled.test.ts
+  x AC3 item 21: sent back on the first stop; by the third stop with the same open items it is no longer sent back; ...
+    Error: AC3 #325.ae91cc84 the agent reported the same open items (R2, R3) on two stops in a row with no new passing
+    evidence, so it is not sent back a third time for them; the third stop was: sent back 1/3: a dropped con… ·
+    .deepbuild/checks/retry.test.cjs:4 · next: agent
+  x AC4 item 22: answering the decision's split lets the PR say Closes #22, ...
+    Error: AC4 #325.84b92502 the agent reported the same open items (R2, R3) on two stops in a row with no new passing
+    evidence, so it is not sent back a third time for them; the third stop was: sent back 1/3: ... (AC3's scenario,
+    which AC4 runs first: no decision to split)
+
+release.test.ts
+  x AC5 item 9: Closes #9 refused naming Part of while preflight is still to run; ...
+    Error: AC5 #325.3ce2ada4 while the release check preflight is still to run on the PR's merge with main, the PR says
+    Part of, never Closes: `gh pr create --base main --title "Reject expired tokens" --body "Closes #9"` must be
+    refused; deep-hook allowed it: exit 0 after 8 ms, stdout "", stderr ""
+
+switch.test.ts
+  x AC6 item 11: Closes #11 refused naming Part of, reject_expired and audit_log (never fast_path); ...
+    Error: AC6 #325.e4aeb66b the change ships behind reject_expired (off where it's deployed) and audit_log (unset
+    there), so the PR can't say Closes until you decide they stay off: `gh pr create --base main --title "Reject
+    expired tokens" --body "Closes #11"` must be refused; deep-hook allowed it: exit 0 after 8 ms, stdout "", stderr ""
+
+timing.test.ts
+  ✓ AC7 judging a definition with 20 requirements against its 60 runs (claimVerdict) takes under 50 ms, and its
+    verdict names both failing requirements   (the base's claimVerdict already holds this half)
+  x AC7 pricing a definition with 20 requirements, 16 of them paid (priceDefinition), ...
+    Error: AC7 #325.ea463eff the gate's public entry prices a definition: packages/gate/src/index.ts exports no
+    priceDefinition (README, Pricing a definition)
+  ↓ AC7 (wrong program) the timing reading fails on a judge that takes 60 ms
+    skipped INCONCLUSIVE: the 60 ms judge read over its budget while the machine was loaded past its cores (load 65 on
+    12), which the harness reads as INCONCLUSIVE, not a fail. On an idle machine it fails the 50 ms budget.
+
+rerun.test.ts
+  x AC8 item 23: stops 1 to 3 are sent back, stop 4 isn't, and one decision with split, fund and accept is in the inbox ...
+    Error: AC8 #325.7685f017 the fourth stop must not be sent back: three send-backs without new evidence (the same
+    failing check, run again with the same result, is no new evidence), so the claim goes to you as one decision; it
+    was sent back a fourth time: sent back 1/3: a dropped con… · .deepbuild/checks/retry.test.cjs:4 · next: agent
+  x AC8 (wrong program) ... (DEEP_HUB_PLANT=new-run-is-evidence) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=new-run-is-evidence did not start: ...
+    Error: DEEP_HUB_PLANT=new-run-is-evidence names no planted program
+
+waiting.test.ts
+  x AC9 item 25: two waiting stops aren't sent back and raise no decision; ...
+    Error: AC9 #325.68bf903d a stop while a step only you can take is open (ask:01M6HQF2CX6PT6D4B7PVF06KQV) is not
+    sent back, R2's check failing: sent back 1/3: a dropped con… · .deepbuild/checks/retry.test.cjs:4 · next: agent
+  x AC9 (wrong program) ... (DEEP_HUB_PLANT=counts-waiting-stops) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=counts-waiting-stops did not start: ...
+    Error: DEEP_HUB_PLANT=counts-waiting-stops names no planted program
+
+Not run here: any of these tests against an implementation of #325, so the later assertions of each flow (after the
+first one the base fails) have run only as far as the base reaches them.

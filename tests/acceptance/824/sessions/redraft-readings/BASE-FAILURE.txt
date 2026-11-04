@@ -1,0 +1,99 @@
+$ git rev-parse HEAD
+8173fbd271eca476fd509e0bd96de153c33795ee
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/824/sessions/redraft-readings --no-file-parallelism
+
+ RUN  v5.0.5 tests/acceptance/824/sessions/redraft-readings
+
+ ❯ readings.test.ts (4 tests | 4 failed) 52ms
+   ❯ AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB: the per-session reading (4)
+     × AC4 #824.85ef3d40 the local preflight runs it: a lane in scripts/lanes.mjs or a task in benchmarks/budgets.json names benchmarks/hub-sessions.mjs 46ms
+     × AC4 #824.85ef3d40 at 1, 10 and 30 sessions every process DeepBuild runs for them is read and summed; the growth per added session, the process that grew and the verdict agree with the raw readings 2ms
+     × AC4 #824.85ef3d40 the sessions read were open and idle at the hub when read, each with its own 32 MiB transcript 1ms
+     × AC4 #824.85ef3d40 BLOCKED, never PASS, where the platform can't read memory: sessions-no-memory-read 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  readings.test.ts > AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB: the per-session reading > AC4 #824.85ef3d40 the local preflight runs it: a lane in scripts/lanes.mjs or a task in benchmarks/budgets.json names benchmarks/hub-sessions.mjs
+AssertionError: no lane or perf task runs benchmarks/hub-sessions.mjs: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readings.test.ts:49:62
+     47|     const budgets = readFileSync(join(REPO, 'benchmarks/budgets.json')…
+     48|     const named = [JSON.stringify(lanes.checks), JSON.stringify(lanes.…
+     49|     expect(named, `no lane or perf task runs ${BENCH_PATH}`).toBe(true…
+       |                                                              ^
+     50|   });
+     51|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  readings.test.ts > AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB: the per-session reading > AC4 #824.85ef3d40 at 1, 10 and 30 sessions every process DeepBuild runs for them is read and summed; the growth per added session, the process that grew and the verdict agree with the raw readings
+AssertionError: benchmarks/hub-sessions.mjs exists: the per-session reading in the local preflight: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bench helpers.ts:107:101
+    105|  */
+    106| export async function bench(o: { plant?: string; args?: string[]; time…
+    107|   expect(existsSync(BENCH), `${BENCH_PATH} exists: the per-session rea…
+       |                                                                                                     ^
+    108|   const home = makeHome();
+    109|   const before = new Set((await processTable()).keys());
+ ❯ healthy readings.test.ts:19:35
+ ❯ readings.test.ts:53:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  readings.test.ts > AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB: the per-session reading > AC4 #824.85ef3d40 the sessions read were open and idle at the hub when read, each with its own 32 MiB transcript
+AssertionError: benchmarks/hub-sessions.mjs exists: the per-session reading in the local preflight: expected false to be true // Object.is equality
+
+Expected: "true"
+Received: "false"
+
+ ❯ bench helpers.ts:107:101
+    105|  */
+    106| export async function bench(o: { plant?: string; args?: string[]; time…
+    107|   expect(existsSync(BENCH), `${BENCH_PATH} exists: the per-session rea…
+       |                                                                                                     ^
+    108|   const home = makeHome();
+    109|   const before = new Set((await processTable()).keys());
+ ❯ healthy readings.test.ts:19:35
+ ❯ readings.test.ts:53:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  readings.test.ts > AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB: the per-session reading > AC4 #824.85ef3d40 BLOCKED, never PASS, where the platform can't read memory: sessions-no-memory-read
+AssertionError: benchmarks/hub-sessions.mjs exists: the per-session reading in the local preflight: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bench helpers.ts:107:101
+    105|  */
+    106| export async function bench(o: { plant?: string; args?: string[]; time…
+    107|   expect(existsSync(BENCH), `${BENCH_PATH} exists: the per-session rea…
+       |                                                                                                     ^
+    108|   const home = makeHome();
+    109|   const before = new Set((await processTable()).keys());
+ ❯ readings.test.ts:193:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  00:55:00
+   Duration  190ms (tests 46%, transform 42%, import 10%, worker 2%)
+

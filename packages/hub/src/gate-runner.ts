@@ -8,10 +8,12 @@
 // with its split. A looping session's slow checks are held in their places until the loop pauses for them, a claim or
 // your words start them (#965; design: A loop's turn end isn't a hand-back), and background work the session still runs
 // holds them until it ends, at most 30 minutes from the stop (#907); each held place is recorded as `check.held`. The
-// snapshot, every checkout and a fix check's run on the merge base come from the base-commit service (#31). Pure rules
-// live in @deepbuild/gate; this module drives them with the hub's runs and record.
+// snapshot, every checkout and a fix check's run on the merge base come from the base-commit service (#31). A slow run a
+// newer claim outdates is recorded stale only when that claim's snapshot changed its check's inputs, by tree (#45). Pure
+// rules live in @deepbuild/gate; this module drives them with the hub's runs and record.
 import { basename } from 'node:path';
 import { baseProof, claimVerdict, ownRead, OverBudget, type Checkouts, type ClaimRequirement, type DeclaredSurface, type RecordedRun, type StandIn, type TempCheckout } from '@deepbuild/gate';
+import { sha256Hex } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import type { BaseResult, Result, Verdict } from '@deepbuild/verdicts';
 import type { Plant } from './plant.js';
@@ -23,14 +25,32 @@ export type Surface = { kind: string } & Record<string, unknown>;
  * covers, its lane facts and the assertions it names; with them the requirement it judges and the surface it declares, for a stand-in on a base
  * with nothing to start (#874).
  */
-export interface ClaimCheck { check: string; approved: string; command: string; covers: string[]; depth: 'unit' | 'integration' | 'journey' | 'live'; on_base: 'fails' | 'passes'; asserts: string[]; expected_ms?: number; deadline_ms?: number; req?: string; surface?: Surface | null }
+export interface ClaimCheck {
+  check: string;
+  /** The approved bytes its run is written from, by digest; null for a check that is a command alone, as the repo's spec checks are. */
+  approved: string | null;
+  command: string; covers: string[]; depth: 'unit' | 'integration' | 'journey' | 'live'; on_base: 'fails' | 'passes'; asserts: string[]; expected_ms?: number; deadline_ms?: number; req?: string; surface?: Surface | null;
+  /** Whose check it is (#322): the repo's spec, the task's definition, or the agent's own, as a command its final message told you to run (#323). */
+  source?: 'spec' | 'definition' | 'own';
+  /** The expected outputs it references, each written from its approved bytes beside the check (#322). */
+  references?: { path: string; sha256: string }[];
+  /** False for a result that is never a send-back: the definition still to lock, or held by a cause outside the code. */
+  holds?: boolean;
+  /**
+   * The commit it runs on instead of the claim's snapshot (#325): a release check's, the PR's head merged with main.
+   * It runs in the slow lane, once per commit: a later claim on the same commit reuses its run.
+   */
+  commit?: string;
+}
+/** How a claim's definition stands when its checks start (#322): locked; waiting for a lock on its way, which the hold waits for; pending with none; or held by a cause outside the code. */
+export type DefinitionState = 'locked' | 'waiting' | 'pending' | { blocked: string };
 export interface GateOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   now: () => number;
   append(connection: Connection, input: EventInput): Promise<void>;
   core: Connection;
   /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
-  start(r: { claim: string; check: string; approved: string; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[] }): Promise<string>;
+  start(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[] }): Promise<string>;
   /** Resolves with the run's outcome once it has finished. */
   ended(run: string): Promise<string>;
   /** CPU slots free now. */
@@ -71,12 +91,20 @@ const AUTOMATIC = new Set(['continuation', 'scheduled', 'subagent', 'session', '
 const UNFORESEEN = new Set(['continuation', 'session', 'unknown']);
 /** Ignored dependency folders a checkout gets cloned copy-on-write, so a check starts as it would in the worktree. */
 const DEPENDENCIES = ['node_modules', '.venv'];
+/** The entry that stands for a claim's definition while it hasn't locked (#322): pending, or BLOCKED by a cause outside the code. */
+const DEFINITION = 'definition';
+const EMPTY_SHA = sha256Hex(new Uint8Array());
+/** The record of a run that never started for a cause outside the code: BLOCKED, naming the cause, yours to clear. */
+const missingRun = (run: string, cause: string): RecordedRun => ({
+  run, outcome: 'missing', testsRun: 0, failures: [{ test: DEFINITION, file: '', line: 0, stack: null, assertion: false, message: cause }], evidence: [], read: [], mask: null, exit: null,
+  output: { stdout: '', stderr: '', sha256: { stdout: EMPTY_SHA, stderr: EMPTY_SHA } }, attempts: [], seeded: [], contract: null,
+});
 
 /** A claim's check on one snapshot: its runs, its run on the merge base and the stand-in that run had, its lane, and whether a newer claim outdated it. */
-interface Entry { check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; base: string | null; standIn?: StandIn; outcome: string | null; running: boolean; stale: boolean; ends?: number }
+interface Entry { check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; base: string | null; standIn?: StandIn; outcome: string | null; running: boolean; stale: boolean; ends?: number; newer?: string }
 /** A slow check held in its place: what holds it (background work, a due wake-up or cron job, or a prompt within the grace window) and its record. */
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
-interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry> }
+interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry> }
 
 export class GateRunner {
   /** Each session's claims, oldest first. */
@@ -90,11 +118,22 @@ export class GateRunner {
   private readonly graces = new Map<string, number>();
   /** Each run's record as the command check kind closed it (#30), by run handle: what the claim's verdict is made from. */
   private readonly records = new Map<string, RecordedRun>();
+  /** Each claim whose definition is still to lock (#322): ends its hold's wait once the lock lands, or a fast check fails. */
+  private readonly lockWaits = new Map<string, () => void>();
+  /** Each check pinned to a commit that ran, by commit and check: its run and outcome, which a later claim on the same commit reuses (#325). */
+  private readonly pinned = new Map<string, { run: string; outcome: string }>();
   constructor(private readonly o: GateOptions) {}
 
   /** A run's closed record, kept for the verdicts of the claim it ran for. */
-  recorded(run: string, record: RecordedRun): void {
+  recorded<R extends RecordedRun>(run: string, record: R): R {
+    // #669's planted runner reads a masked run by its exit alone: the claim's own run as a clean pass, its report's
+    // failures dropped, and a base run by its report, so a check that can't fail proves its fix and passes.
+    if (this.o.plant === 'runner-passes-masked-exit' && record.mask !== null) {
+      const base = [...this.claims.values()].some((list) => list.some((c) => [...c.entries.values()].some((e) => e.base === run)));
+      record = { ...record, mask: null, ...(base ? { outcome: record.failures.length ? 'failed' : 'passed' } : { outcome: 'passed', failures: [] }) };
+    }
     this.records.set(run, record);
+    return record;
   }
   /** The files a check's last run on the snapshot read under the test, fixture and script folders: its own (#875). */
   private ownOf(e: Entry): string[] {
@@ -131,7 +170,7 @@ export class GateRunner {
         const { base, why } = this.baseOf(e) ?? {};
         if (why) whys.push(`${e.check.check} ${why}`);
         return {
-          check: e.check.check, command: e.check.command, source: 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
+          check: e.check.check, command: e.check.command, source: e.check.source ?? 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
           runs: e.runs.flatMap((run) => { const r = this.records.get(run); return r ? [r] : []; }),
           ...(base ? { base } : {}),
           // Running while going or queued; ended once runs exist and none goes; never started once a newer claim took its place.
@@ -158,24 +197,54 @@ export class GateRunner {
    * A claim made at a stop: its snapshot and checkout, its checks taken in turn for the fast lane, the rest left to
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
-  async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number }> {
+  async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
     // The snapshot and the checkout share one budget (#31): past it the claim is INCONCLUSIVE, naming the reason and
     // the count of untracked files, and none of its checks runs, in the live worktree or anywhere.
     const budget = this.o.checkouts().budget();
     let snapshot = r.base;
-    let checkout: string;
-    try {
-      snapshot = (await this.o.checkouts().snapshot(r.cwd, budget)).commit;
-      checkout = (await this.o.checkouts().checkout({ worktree: r.cwd, commit: snapshot, dependencies: DEPENDENCIES, runs: [r.claim], budget })).dir;
-    } catch (error) {
-      if (!(error instanceof OverBudget)) throw error;
-      await this.o.invalid(r.claim, snapshot, error.message, 'INCONCLUSIVE');
-      return { fast: [], slow: [], snapshot, readyAt: this.o.now() };
+    // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
+    let tree: string | undefined;
+    let checkout: string | null = null;
+    // A claim with no check to run yet, its definition still to come, takes no snapshot: nothing would run on it.
+    if (r.checks.length || r.joins) {
+      try {
+        ({ commit: snapshot, tree } = await this.o.checkouts().snapshot(r.cwd, budget));
+        checkout = (await this.o.checkouts().checkout({ worktree: r.cwd, commit: snapshot, dependencies: DEPENDENCIES, runs: [r.claim], budget })).dir;
+      } catch (error) {
+        if (!(error instanceof OverBudget)) throw error;
+        await this.o.invalid(r.claim, snapshot, error.message, 'INCONCLUSIVE');
+        return { fast: [], slow: [], snapshot, readyAt: this.o.now(), budgetCost: [], changed: false };
+      }
     }
     const readyAt = this.o.now();
-    const claim: Claim = { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, base: r.base, snapshot, checkout: Promise.resolve({ dir: checkout, commit: snapshot }), requirements: r.requirements, entries: new Map() };
-    const older = this.claims.get(r.session) ?? [];
+    const older = (this.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim);
+    // At the lock, the definition's checks join the claim's early run (#322): the claim is the one the spec's checks ran for.
+    const joined = r.joins ? this.claimOf(r.claim) : undefined;
+    const held = checkout === null ? null : Promise.resolve({ dir: checkout, commit: snapshot });
+    const claim: Claim = joined ?? { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, base: r.base, snapshot, tree, checkout: held, requirements: r.requirements, entries: new Map() };
+    const last = older.at(-1)?.tree;
+    const changed = r.checks.length > 0 && (tree === undefined || last === undefined || tree !== last);
+    if (joined) {
+      joined.requirements = r.requirements;
+      joined.entries.delete(DEFINITION);
+      joined.snapshot = snapshot;
+      joined.tree = tree;
+      joined.checkout = held ?? joined.checkout;
+      this.lockWaits.get(r.claim)?.();
+    }
     this.claims.set(r.session, [...older, claim]);
+    // A definition still to lock stands as a pending check, so the claim never passes on the spec alone; one held by a
+    // cause outside the code, such as the plan window at your reserve, as a check missing it, so the claim is BLOCKED.
+    const definition = r.definition ?? 'locked';
+    if (definition !== 'locked') {
+      const check: ClaimCheck = { check: DEFINITION, approved: null, command: DEFINITION, covers: [], depth: 'unit', on_base: 'passes', asserts: [], holds: false };
+      if (definition === 'pending' || definition === 'waiting') claim.entries.set(DEFINITION, { check, claim: r.claim, commit: snapshot, lane: 'fast', runs: [], base: null, outcome: null, running: true, stale: false });
+      else {
+        const run = `run:${DEFINITION}:${r.claim.replace(/^claim:/, '')}`;
+        this.records.set(run, missingRun(run, definition.blocked));
+        claim.entries.set(DEFINITION, { check, claim: r.claim, commit: snapshot, lane: 'fast', runs: [run], base: null, outcome: 'missing', running: false, stale: false });
+      }
+    }
     // Older claims' queued places for the same check give way to this one: the newest snapshot wins the queue.
     for (const c of r.checks) {
       const key = `${r.session}\0${c.check}`;
@@ -186,7 +255,8 @@ export class GateRunner {
         const owner = older.find((o) => o.claim === queued.claim);
         if (owner) this.cleanup(owner);
       }
-      for (const o of older) { const e = o.entries.get(c.check); if (e) e.stale = true; }
+      // Outdated only by a snapshot that changed the inputs: the same tree carries the run (#45).
+      for (const o of older) { const e = o.entries.get(c.check); if (e) { e.stale = true; if (changed) e.newer ??= r.claim; } }
     }
     // The fast lane: on_base fails first, then the rest, each group shortest first, ties in the definition's order.
     const timed = await Promise.all(r.checks.map(async (c, i) => ({ c, i, ms: c.expected_ms ?? (await this.expectedMs(c.check)) ?? 0 })));
@@ -195,16 +265,36 @@ export class GateRunner {
     const budgetEnd = r.stopAt + this.o.budget_ms;
     const fast: { c: ClaimCheck; ms: number }[] = [];
     const slow: ClaimCheck[] = [];
+    // The checks the budget left to the slow lane that the hold alone would have run: known only once a check has a time.
+    const budgetCost: string[] = [];
+    const holdFree = [...free];
     for (const t of timed) {
+      // A check pinned to a commit of its own runs in the slow lane, and only once per commit (#325).
+      if (t.c.commit) {
+        const ran = this.pinned.get(`${t.c.commit}\0${t.c.check}`);
+        if (ran) claim.entries.set(t.c.check, { check: t.c, claim: r.claim, commit: t.c.commit, lane: 'slow', runs: [ran.run], base: null, outcome: ran.outcome, running: false, stale: false });
+        else slow.push(t.c);
+        continue;
+      }
       free.sort((a, b) => a - b);
+      holdFree.sort((a, b) => a - b);
       const start = free[0] ?? Infinity;
-      if (start + t.ms <= budgetEnd) { free[0] = start + t.ms; fast.push(t); } else slow.push(t.c);
+      const inHold = (holdFree[0] ?? Infinity) + t.ms <= r.stopAt + this.o.hold_ms;
+      if (inHold) holdFree[0]! += t.ms;
+      if (start + t.ms <= budgetEnd) { free[0] = start + t.ms; fast.push(t); } else {
+        slow.push(t.c);
+        if (inHold) budgetCost.push(t.c.check);
+      }
     }
+    // A claim whose definition is still to lock waits for the lock within the hold (#322; design: Timing and cost), and
+    // no longer once a fast check has failed, since the FAIL goes back at once.
+    let unlocked: (() => void) | undefined;
+    const lockWait = definition === 'waiting' ? new Promise<void>((done) => { unlocked = done; this.lockWaits.set(r.claim, done); }) : undefined;
     const runs = fast.map(async ({ c, ms }) => {
       const e: Entry = { check: c, claim: r.claim, commit: snapshot, lane: 'fast', runs: [], base: null, outcome: null, running: true, stale: false, ends: this.o.now() + ms };
       claim.entries.set(c.check, e);
       try {
-        const run = await this.o.start({ claim: r.claim, check: c.check, approved: c.approved, command: c.command, commit: snapshot, cwd: checkout, lane: 'fast', expected_ms: ms || null, deadline_ms: c.deadline_ms ?? null });
+        const run = await this.o.start({ claim: r.claim, check: c.check, approved: c.approved, command: c.command, commit: snapshot, cwd: checkout!, lane: 'fast', expected_ms: ms || null, deadline_ms: c.deadline_ms ?? null, ...(c.references ? { references: c.references } : {}) });
         e.runs.push(run);
         e.outcome = await this.o.ended(run);
         await this.onBase(claim, e);
@@ -213,14 +303,16 @@ export class GateRunner {
       } finally {
         e.running = false;
       }
+      if (e.outcome === 'failed' || e.outcome === 'overran') unlocked?.();
       await this.o.judged?.(r.claim);
     });
-    for (const c of slow) claim.entries.set(c.check, { check: c, claim: r.claim, commit: snapshot, lane: 'slow', runs: [], base: null, outcome: null, running: false, stale: false });
-    // The hold replies once: when every admitted check has ended, or when the hold ends.
+    for (const c of slow) claim.entries.set(c.check, { check: c, claim: r.claim, commit: c.commit ?? snapshot, lane: 'slow', runs: [], base: null, outcome: null, running: false, stale: false });
+    // The hold replies once: when every admitted check has ended, and the lock has landed or a check failed, or when the hold ends.
     let timer: NodeJS.Timeout | undefined;
-    await Promise.race([Promise.allSettled(runs), new Promise<void>((done) => { timer = setTimeout(done, Math.max(0, r.stopAt + this.o.hold_ms - this.o.now())); })]).finally(() => clearTimeout(timer));
+    await Promise.race([Promise.allSettled([...runs, ...(lockWait ? [lockWait] : [])]), new Promise<void>((done) => { timer = setTimeout(done, Math.max(0, r.stopAt + this.o.hold_ms - this.o.now())); })]).finally(() => clearTimeout(timer));
+    if (lockWait) void lockWait.then(() => { if (this.lockWaits.get(r.claim) === unlocked) this.lockWaits.delete(r.claim); });
     void Promise.allSettled(runs).then(() => this.cleanup(claim));
-    return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, readyAt };
+    return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, readyAt, budgetCost, changed };
   }
 
   /** The claim's checkout: the one it holds, or a new one of its snapshot once the last has gone. */
@@ -267,12 +359,18 @@ export class GateRunner {
     }
   }
 
-  /** The claim's checks as they stand: each check's result as the verdict engine judges its runs, and the slow checks still to start. */
-  standing(claim: string): { check: string; lane: 'fast' | 'slow'; result: Result; stale: boolean }[] {
+  /** What a check's newest run of the claim printed, its error output first, cut to its last 2,000 characters. */
+  outputOf(claim: string, check: string): string {
+    const run = this.claimOf(claim)?.entries.get(check)?.runs.at(-1);
+    const r = run ? this.records.get(run) : undefined;
+    return r ? [r.output.stderr, r.output.stdout].filter((t) => t.trim()).join('\n').slice(-2000) : '';
+  }
+  /** The claim's checks as they stand: each check's result as the verdict engine judges its runs, whether it can send the claim back, and the slow checks still to start. */
+  standing(claim: string): { check: string; lane: 'fast' | 'slow'; result: Result; stale: boolean; holds: boolean; covers: string[] }[] {
     const c = this.claimOf(claim);
     if (!c) return [];
     const v = this.verdictOf(claim);
-    return [...c.entries.values()].map((e) => ({ check: e.check.check, lane: e.lane, result: v?.checks.find((x) => x.check === e.check.check)?.outcome ?? 'pending', stale: e.stale }));
+    return [...c.entries.values()].map((e) => ({ check: e.check.check, lane: e.lane, result: v?.checks.find((x) => x.check === e.check.check)?.outcome ?? 'pending', stale: e.stale, holds: e.check.holds !== false, covers: [...e.check.covers] }));
   }
 
   /**
@@ -447,16 +545,24 @@ export class GateRunner {
       e.running = true;
       try {
         // The slow run gets its own checkout of the snapshot: the fast lane's may be gone by now. A snapshot that can't
-        // be checked out any more leaves the check missing, never passed.
-        const { dir: cwd } = await this.checkoutOf(c);
+        // be checked out any more leaves the check missing, never passed. A check pinned to a commit gets a checkout of that commit.
+        const token = `${e.claim} ${e.check.check} ${e.commit}`;
+        const own = e.check.commit ? await this.o.checkouts().checkout({ worktree: c.cwd, commit: e.check.commit, dependencies: DEPENDENCIES, runs: [token] }) : undefined;
+        const { dir: cwd } = own ?? await this.checkoutOf(c);
         const expected = e.check.expected_ms ?? await this.expectedMs(e.check.check);
         e.ends = this.o.now() + (expected ?? 0);
         const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: 'slow', expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null });
         e.runs.push(run);
         void this.o.ended(run).then(async (outcome) => {
           e.outcome = outcome;
+          if (own) {
+            if (outcome === 'passed' || outcome === 'failed') this.pinned.set(`${e.commit}\0${e.check.check}`, { run, outcome });
+            await this.o.checkouts().ended(own, token).catch(() => undefined);
+          }
           await this.onBase(c, e);
           e.running = false;
+          // Its result still reports, as that snapshot's; the readings count what outdated it (#45).
+          if (e.newer) await this.staleRun(c.session, run, e).catch(() => undefined);
           await this.o.judged?.(e.claim);
           void this.pump();
           this.cleanup(c);
@@ -468,6 +574,10 @@ export class GateRunner {
         this.cleanup(c);
       }
     }
+  }
+  private async staleRun(session: string, run: string, e: Entry): Promise<void> {
+    const ts = this.o.now();
+    await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'run.stale', ts, data: { session: `session:${session.replace(/[^0-9A-Za-z]/g, '')}`, run, check: e.check.check, claim: e.claim, newer_claim: e.newer! } });
   }
   /** A claim's checkout is given back to the service once no run on it is running or queued. */
   private cleanup(c: Claim): void {
@@ -481,17 +591,18 @@ export class GateRunner {
   /**
    * Records a stop's held time and its split: each moment goes to the first reason that applies. No stop here is held
    * for its slow checks (#965: a loop's stop is held for its quick checks alone), so the fast lane runs to the reply,
-   * reading its results included, and the split counts no slow hold.
+   * reading its results included, and the split counts no slow hold. A question's wait comes first.
    */
-  async held(r: { session: string; stop: string; claim: string | null; stopAt: number; readyAt: number; replyAt: number; question: boolean; codeChanging: boolean }): Promise<void> {
+  async held(r: { session: string; stop: string; claim: string | null; stopAt: number; readyAt: number; replyAt: number; questionMs: number; codeChanging: boolean; budgetCost: string[] }): Promise<void> {
     const total = Math.max(0, r.replyAt - r.stopAt);
-    const split = r.question
-      ? { question: total, slow: 0, fast: 0, snapshot_start: 0, queue_wait: 0 }
-      : { question: 0, slow: 0, fast: Math.max(0, r.replyAt - Math.min(r.replyAt, r.readyAt)), snapshot_start: Math.max(0, Math.min(r.replyAt, r.readyAt) - r.stopAt), queue_wait: 0 };
-    const ts = this.o.now();
+    const question = Math.min(r.questionMs, total);
+    const ready = Math.min(r.replyAt - question, r.readyAt);
+    const split = { question, slow: 0, fast: Math.max(0, r.replyAt - question - ready), snapshot_start: Math.max(0, ready - r.stopAt), queue_wait: 0 };
+    // Stamped at the reply: a lane that outran its hold records this later, past whatever came after the reply.
+    const ts = r.replyAt;
     await this.o.append(this.o.core, {
-      v: 1, id: ulid(ts), kind: 'stop.held', ts,
-      data: { session: `session:${r.session.replace(/[^0-9A-Za-z]/g, '')}`, stop: r.stop, claim: r.claim, total, ...split, code_changing: r.codeChanging, budget_cost: [] },
+      v: 1, id: ulid(this.o.now()), kind: 'stop.held', ts,
+      data: { session: `session:${r.session.replace(/[^0-9A-Za-z]/g, '')}`, stop: r.stop, claim: r.claim, total, ...split, code_changing: r.codeChanging, budget_cost: r.budgetCost },
     });
   }
 }
