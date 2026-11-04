@@ -39,6 +39,9 @@ pub struct Mesh {
     /// The second texture coordinate per vertex: the builder's own charts packed into the unit
     /// square without overlap, for bakes, or none.
     pub uv1: Vec<V2>,
+    /// A glTF asset's own tangents, xyz and the bitangent's sign in w, one per vertex, or none
+    /// (the renderer then makes them from uv0; #423).
+    pub tangents: Vec<[f64; 4]>,
     /// Each triangle's face is one a bevel made (weak where normals weigh faces), or none.
     pub weak: Vec<bool>,
     /// Named per-vertex values, which a material input reads: a `store` modifier keeps a
@@ -86,6 +89,7 @@ impl Canonical for Mesh {
         canonical(&json!(self.true_shape)).encode(out);
         self.uv0.encode(out);
         self.uv1.encode(out);
+        self.tangents.encode(out);
         self.weak.encode(out);
         let attributes: Vec<(&String, &Vec<f64>)> = self.attributes.iter().collect();
         attributes.encode(out);
@@ -274,6 +278,8 @@ impl Mesh {
     /// The mesh's points moved by `f`, its normals by `g`.
     pub fn mapped(&self, f: impl Fn(V3) -> V3, g: impl Fn(V3, V3) -> V3) -> Mesh {
         let mut out = self.clone();
+        // Moved points leave a file's tangents behind; the renderer makes them again.
+        out.tangents.clear();
         for (k, p) in self.positions.iter().enumerate() {
             out.positions[k] = f(*p);
             out.normals[k] = unit(g(*p, self.normals[k]));

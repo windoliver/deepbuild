@@ -1,0 +1,14 @@
+{
+  "name": "epack",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #490 acceptance suite: one ease table in ease@1, an anticipation that dips to -0.1 at 0.3 within its declared overshoot.",
+  "requires": {
+    "core": ">=0.0.0"
+  },
+  "entries": {
+    "ease@1": [
+      { "name": "epack.dip", "x": [0, 0.3, 1], "y": [0, -0.1, 1], "mode": "linear", "overshoot": [-0.1, 1] }
+    ]
+  }
+}
