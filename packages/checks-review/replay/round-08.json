@@ -1,0 +1,35 @@
+{
+  "claim": "users-query",
+  "diff": "diff --git a/src/users.ts b/src/users.ts\nindex a3bac1b..839ecce 100644\n--- a/src/users.ts\n+++ b/src/users.ts\n@@ -1,9 +1,9 @@\n import { db } from './db';\n \n export function byName(name: string) {\n-  return db.query(\"SELECT * FROM users WHERE name = '\" + name + \"'\");\n+  return db.query('SELECT * FROM users WHERE name = ?', [name]);\n }\n \n export function byEmail(email: string) {\n-  return db.query(\"SELECT * FROM users WHERE email = '\" + email + \"'\");\n+  return db.query('SELECT * FROM users WHERE email = ?', [email]);\n }\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [],
+    "overall_correctness": "patch is correct",
+    "overall_explanation": "Both queries are parameterized now.",
+    "overall_confidence_score": 0.86
+  },
+  "since": [
+    {
+      "rule": "sql-concat",
+      "sites": [
+        {
+          "file": "src/users.ts",
+          "line": 4,
+          "quote": "\"SELECT * FROM users WHERE name = '\" + name + \"'\""
+        },
+        {
+          "file": "src/users.ts",
+          "line": 8,
+          "quote": "\"SELECT * FROM users WHERE email = '\" + email + \"'\""
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "claim": "csv-rows",
+  "diff": "diff --git a/src/csv.ts b/src/csv.ts\nindex cc937ad..67e18b5 100644\n--- a/src/csv.ts\n+++ b/src/csv.ts\n@@ -1,6 +1,6 @@\n export function rows(text: string): string[][] {\n   const lines = text.split('\\n');\n   const out: string[][] = [];\n-  for (let i = 1; i <= lines.length; i++) out.push(lines[i].split(','));\n+  for (let i = 1; i < lines.length; i++) out.push(lines[i].split(','));\n   return out;\n }\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [],
+    "overall_correctness": "patch is correct",
+    "overall_explanation": "The bound is fixed.",
+    "overall_confidence_score": 0.86
+  },
+  "since": [
+    {
+      "rule": "off-by-one",
+      "sites": [
+        {
+          "file": "src/csv.ts",
+          "line": 4,
+          "quote": "i <= lines.length"
+        }
+      ]
+    }
+  ]
+}

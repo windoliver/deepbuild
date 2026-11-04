@@ -11,7 +11,7 @@ use deep_canvas::ops::{cos, rad, sin};
 use serde_json::{json, Value};
 
 use crate::curve::{Curve, Frame};
-use crate::geom::{add, dot, scale, sub, triangulate, unit, Mesh, V2, V3};
+use crate::geom::{add, cross, dot, scale, sub, triangulate, unit, Mesh, V2, V3};
 
 /// The longest a mitered ring may stretch across its corner.
 pub const MAX_MITER: f64 = 4.0;
@@ -387,7 +387,7 @@ impl Sweep {
         let pts: u64 = self.loops.iter().map(|l| l.len() as u64).sum();
         let rings = self.rings.len() as u64;
         let bands = if self.welded { rings } else { rings - 1 };
-        let mut v = pts * rings;
+        let mut v = 2 * pts * rings;
         let mut t = 2 * pts * bands;
         if self.caps {
             v += 2 * pts;
@@ -396,17 +396,23 @@ impl Sweep {
         (v, t)
     }
 
-    /// The mesh: one vertex per loop point per ring, a band of quads between each two rings
+    /// The mesh: two vertices per loop side per ring, a band of quads between each two rings
     /// (and back to the first when welded), flat caps at an open sweep's ends.
     pub fn build(&self) -> Mesh {
         let mut m = Mesh::default();
         let mut starts = Vec::with_capacity(self.rings.len());
         for r in &self.rings {
             starts.push(m.positions.len() as u32);
+            // Each side takes its own two vertices facing out across it, so the outline's
+            // corners stay sharp; along the curve they're shared, so it shades smooth.
+            let axis = r.miter.unwrap_or(r.frame.tangent);
             for l in &self.loops {
-                for q in l {
-                    let at = Self::place(r, *q);
-                    m.vertex(at, unit(sub(at, r.frame.point)));
+                let at: Vec<V3> = l.iter().map(|q| Self::place(r, *q)).collect();
+                for k in 0..at.len() {
+                    let j = (k + 1) % at.len();
+                    let n = unit(cross(sub(at[j], at[k]), axis));
+                    m.vertex(at[k], n);
+                    m.vertex(at[j], n);
                 }
             }
         }
@@ -416,13 +422,12 @@ impl Sweep {
             let (a, b) = (starts[i], starts[(i + 1) % n]);
             let mut base = 0u32;
             for l in &self.loops {
-                let len = l.len() as u32;
-                for k in 0..len {
-                    let j = (k + 1) % len;
+                for k in 0..l.len() as u32 {
+                    let (p, q) = (base + 2 * k, base + 2 * k + 1);
                     let face = m.next_face();
-                    m.quad(a + base + k, a + base + j, b + base + j, b + base + k, face);
+                    m.quad(a + p, a + q, b + q, b + p, face);
                 }
-                base += len;
+                base += 2 * l.len() as u32;
             }
         }
         if self.caps {
@@ -459,7 +464,7 @@ impl Sweep {
                         r.scale,
                         r.turn.to_degrees(),
                         &r.frame,
-                        (*s..s + n).collect(),
+                        (0..n).map(|k| s + 2 * k).collect(),
                     )
                 })
                 .collect(),

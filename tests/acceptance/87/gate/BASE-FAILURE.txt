@@ -1,0 +1,60 @@
+Base run of the #87 gate-slice acceptance tests, on base commit 29d29ba5 (main), Node 24.22.0, vitest 5.0.5, macOS,
+after `npm ci`, `npm run build --workspaces` and `cargo build --locked -q -p deep-hook`, from the worktree root (shown
+as <worktree>):
+
+  npx vitest run --root tests/acceptance/87/gate --testTimeout=600000
+
+ Test Files  3 failed | 1 passed (4)
+      Tests  4 failed | 2 passed (6)
+   Duration  7.14s
+
+What the base does: the verdict engine already refuses PASS on a model's judgment alone (#68), so AC3's test passes
+there and stays as the regression guard; its planted oracle-blind engine fails it. The hub already makes each review
+thread on the claim's PR an open item (#323) and refuses `gh pr create` saying Closes while a requirement is
+unproven (#322), but it doesn't gate `gh pr edit`, so the PR can say Closes #7 with both review notes open. There is
+no @deepbuild/checks-review package. The replay lane runs only on a change to packages/verdicts/src, so a change to
+the review check's prompt passes it unseen.
+
+model-pass.test.ts (AC3 #87.f9b06470)
+  ✓ AC3 the core's verdict engine passes R1 on a code check and refuses PASS on a review (oracle model) alone and on
+    a requirement whose oracle is a model
+  ✓ AC3 (wrong program) a planted engine that reads no oracle passes the review alone and fails this test
+  (Both pass at the base: the regression guard. The oracle-blind twin fails the judgement with "AC3 #87.f9b06470 R1
+  covered only by a review whose oracle is a model, with a clean passed run, … the verdict is PASS".)
+
+review-notes.test.ts (AC8 #87.85a2cd4f)
+  x AC8 maya's note and the Codex review agent's note on PR 21 become open items; gh pr edit to "Closes #7" is refused
+    naming both, then naming only the agent's once maya's is fixed, and allowed once you accept the agent's
+    Error: AC8 #87.85a2cd4f with both review notes open, `gh pr edit 21 --body "Closes #7"` must be refused: deep-hook
+    allowed it (exit 0 after 9 ms, stdout "", stderr "")
+  (The setup held: R1 passed on the claim and both notes became open items before this assertion.)
+
+post-close.test.ts (AC10 #87.52ef7a04)
+  x AC10 research and the audit each run on the claim's diff and on every PR they found bugs in (64, 71); research
+    reads 1 of 2, the audit 2 of 2, never a pass or a fail
+    Error: Cannot find module '/packages/checks-review/src/index.ts' imported from
+    <worktree>/tests/acceptance/87/gate/helpers.ts
+  x AC10 (wrong program) a check that doesn't run the passes on PR 71's commit fails this test, naming PR 71
+    Error: AC10 #87.52ef7a04 the failure names PR 71; it said: Cannot find module '/packages/checks-review/src/index.ts'
+    imported from <worktree>/tests/acceptance/87/gate/helpers.ts
+
+replay-lane.test.ts (AC21 #87.7649e9da)
+  x AC21 the planted prompt change that drops the planted bug's finding fails no test, is listed with both runs and
+    fails the preflight until the maintainer's yes on that list
+    Error: AC21 #87.7649e9da the change edits the review check's prompt and drops the planted bug's finding, so the
+    replay lane must fail (exit 1) until the maintainer says yes: exit 0
+    stdout:
+    replay: not run, the change touches no verdict engine code under packages/verdicts/src
+  (This is the criterion's wrong program: a preflight that replays only the verdict engine's cases passes the
+  planted change.)
+
+Type check, `node node_modules/typescript/bin/tsc -p tests/acceptance/87/gate/tsconfig.json`: at the base it reports
+TS2307 (cannot find module '../../../../packages/checks-review/src/index.ts') in helpers.ts and post-close.test.ts,
+and TS7006 on the parameters typed through that module. With a declaration-only copy of the README's surface placed
+temporarily at packages/checks-review/src/index.ts it reports nothing; the copy was removed before this run.
+
+Checks of the tests themselves, not of any implementation (no #87 code was written or seen): with a throwaway
+reviewBeforeCloses placed temporarily at packages/checks-review/src/index.ts and then removed, post-close.test.ts
+passed both tests (the skip-71 twin failed the judgement naming PR 71); the replay test's stand-in package, run on
+its own, found unchecked-json-parse at src/config.ts:3 and any-cast at src/cart.ts:10 under the base prompt, and
+any-cast at src/cart.ts:10 and todo-left at src/cart.ts:12 under the planted one.

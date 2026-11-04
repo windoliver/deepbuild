@@ -73,6 +73,36 @@ fn paint() -> P {
     )
 }
 
+/// A light's color as a blackbody temperature, in place of `color` (#421).
+fn temperature() -> P {
+    ranged(
+        p(
+            "temperature",
+            "K",
+            "K",
+            Value::Null,
+            S,
+            json!(6500),
+            json!(2700),
+        ),
+        1000.0,
+        40000.0,
+    )
+}
+
+/// What scales a light's power at t (#421): a gain, or the channel whose value is one.
+fn flicker() -> P {
+    p(
+        "flicker",
+        "f32 | channel",
+        "",
+        json!(1),
+        S,
+        json!(1),
+        json!(0.5),
+    )
+}
+
 fn shade() -> P {
     p(
         "shade",
@@ -230,11 +260,22 @@ fn extras(kind: &str) -> Vec<P> {
             0.0,
             100.0,
         )],
-        "tube@1" => vec![ranged(
-            p("bend", "m", "m", json!(0), G, json!(0), json!(0.2)),
-            0.0,
-            100.0,
-        )],
+        "tube@1" => vec![
+            ranged(
+                p("bend", "m", "m", json!(0), G, json!(0), json!(0.2)),
+                0.0,
+                100.0,
+            ),
+            p(
+                "normal",
+                "vec3",
+                "",
+                Value::Null,
+                G,
+                json!([1, 0, 0]),
+                json!([0, 0, 1]),
+            ),
+        ],
         "plate@1" => vec![p(
             "height",
             "field, m",
@@ -456,17 +497,219 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             ),
             p(
                 "color",
-                "color",
+                "linear RGB",
                 "",
-                Value::Null,
+                json!([1, 1, 1]),
                 S,
-                json!([255, 244, 230]),
-                json!([230, 240, 255]),
+                json!([1, 0.95, 0.9]),
+                json!([0.9, 0.95, 1]),
             ),
+            temperature(),
             p("priority", "integer", "", json!(0), S, json!(0), json!(1)),
+            flicker(),
+            // Its shadow's cascades (#422; Light policy: cascades).
+            p("cascades", "1 to 4", "", json!(3), S, json!(3), json!(4)),
+            p("split", "f32", "", json!(0.5), S, json!(0.5), json!(0.75)),
+            p("shadow_far", "m | auto", "m", json!("auto"), S, json!(50), json!(80)),
+            p("fade", "bool", "", json!(true), S, json!(true), json!(false)),
         ],
         reads: None,
         fixture: json!({"it": item("light.sun@1", json!({"illuminance": 10_000}))}),
+    };
+    // A point, spot or area light (#421): its lumens counted over the whole sphere.
+    let local = |kind: &'static str, spot: bool| {
+        let mut params = vec![
+            p(
+                "power",
+                "lumens",
+                "lm",
+                json!(800),
+                S,
+                json!(800),
+                json!(1600),
+            ),
+            p("range", "m", "m", json!("auto"), S, json!(10), json!(20)),
+            p("radius", "m", "m", json!(0.05), S, json!(0.05), json!(0.2)),
+            p(
+                "color",
+                "color",
+                "",
+                json!([1, 1, 1]),
+                S,
+                json!([1, 0.9, 0.8]),
+                json!([0.8, 0.9, 1]),
+            ),
+            temperature(),
+            p("priority", "integer", "", json!(0), S, json!(0), json!(1)),
+            p(
+                "shadow",
+                "bool",
+                "",
+                json!(false),
+                S,
+                json!(false),
+                json!(true),
+            ),
+            flicker(),
+        ];
+        if kind == "light.area@1" {
+            params.push(p(
+                "shape",
+                "rect | disk",
+                "",
+                json!("rect"),
+                S,
+                json!("rect"),
+                json!("disk"),
+            ));
+            params.push(p(
+                "size",
+                "[m, m]",
+                "m",
+                json!([0.5, 0.5]),
+                S,
+                json!([0.5, 0.5]),
+                json!([1, 0.25]),
+            ));
+        }
+        if spot {
+            params.push(ranged(
+                p("inner", "deg", "deg", json!(0), S, json!(0), json!(20)),
+                0.0,
+                90.0,
+            ));
+            params.push(ranged(
+                p("outer", "deg", "deg", json!(45), S, json!(45), json!(60)),
+                0.0,
+                90.0,
+            ));
+        }
+        Spec {
+            kind,
+            module: "scene3d",
+            params,
+            reads: None,
+            fixture: json!({"it": item(kind, json!({"power": 800}))}),
+        }
+    };
+    let unit = |name, default: f64, a: f64, b: f64| {
+        ranged(
+            p(name, "f32", "", json!(default), S, json!(a), json!(b)),
+            0.0,
+            1.0,
+        )
+    };
+    let flag = |name| p(name, "bool", "", json!(false), S, json!(false), json!(true));
+    let material = || {
+        Spec {
+        kind: "material@1",
+        module: "scene3d",
+        params: vec![
+            p(
+                "base_color",
+                "color | role",
+                "",
+                json!([0.8, 0.8, 0.8, 1]),
+                S,
+                json!([0.8, 0.8, 0.8, 1]),
+                json!([0.6, 0.3, 0.2, 1]),
+            ),
+            unit("metallic", 0.0, 0.0, 1.0),
+            unit("roughness", 0.5, 0.5, 0.2),
+            p(
+                "specular_level",
+                "f32",
+                "",
+                json!(0.5),
+                S,
+                json!(0.5),
+                json!(0.25),
+            ),
+            p(
+                "specular_color",
+                "linear RGB",
+                "",
+                json!([1, 1, 1]),
+                S,
+                json!([1, 1, 1]),
+                json!([1, 0.8, 0.6]),
+            ),
+            p(
+                "emission",
+                "color",
+                "",
+                json!([0, 0, 0]),
+                S,
+                json!([0, 0, 0]),
+                json!([1, 0.5, 0]),
+            ),
+            p(
+                "emission_strength",
+                "f32",
+                "",
+                json!(1),
+                S,
+                json!(1),
+                json!(2),
+            ),
+            p("from", "material name", "", Value::Null, S, json!("steel"), json!("glass")),
+            unit("alpha", 1.0, 1.0, 0.5),
+            p(
+                "alpha_mode",
+                "opaque | mask | blend | add",
+                "",
+                json!("opaque"),
+                S,
+                json!("opaque"),
+                json!("blend"),
+            ),
+            unit("coat", 0.0, 0.0, 1.0),
+            unit("coat_roughness", 0.03, 0.03, 0.2),
+            p(
+                "pattern",
+                "none | plaster | stone_courses | roof_tiles | wood | rock | grass | cobbles | glass_curtain | concrete | asphalt",
+                "",
+                json!("none"),
+                S,
+                json!("none"),
+                json!("plaster"),
+            ),
+            p("pattern_scale", "m", "m", json!(1), S, json!(1), json!(2)),
+            p("pattern_seed", "seed", "", Value::Null, S, json!(1), json!(2)),
+            p(
+                "ink",
+                "{role, weight: px}",
+                "",
+                Value::Null,
+                S,
+                json!({"role": "accent", "weight": 1}),
+                json!({"role": "muted", "weight": 2}),
+            ),
+            p(
+                "shadow",
+                "auto | cast | none",
+                "",
+                json!("auto"),
+                S,
+                json!("auto"),
+                json!("none"),
+            ),
+            p(
+                "catch",
+                "none | shadow",
+                "",
+                json!("none"),
+                S,
+                json!("none"),
+                json!("shadow"),
+            ),
+            unit("catch_strength", 1.0, 1.0, 0.5),
+            flag("unlit"),
+            flag("double_sided"),
+        ],
+        reads: None,
+        fixture: json!({"it": item("material@1", json!({"roughness": 0.4}))}),
+    }
     };
     let rect = json!([[0, 0], [2, 0], [2, 1], [0, 1]]);
     Some(match kind {
@@ -477,6 +720,50 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
         "mark.point@1" => point(),
         "mark.text@1" => text(),
         "light.sun@1" => sun(),
+        "light.point@1" => local("light.point@1", false),
+        "light.spot@1" => local("light.spot@1", true),
+        "light.area@1" => local("light.area@1", false),
+        "material@1" => material(),
+        // The sky and the soft cloud sprite (#422).
+        "sky@1" => Spec {
+            kind: "sky@1",
+            module: "scene3d",
+            params: vec![
+                p("top", "color", "", json!([0, 0, 0, 1]), S, json!([0.2, 0.4, 0.8, 1]), json!([0.1, 0.2, 0.5, 1])),
+                p("low", "color", "", json!([0, 0, 0, 1]), S, json!([0.8, 0.8, 0.7, 1]), json!([0.9, 0.6, 0.3, 1])),
+                p("ambient_top", "linear RGB", "", json!([0, 0, 0]), S, json!([0.3, 0.3, 0.4]), json!([0.2, 0.2, 0.3])),
+                p("ambient_low", "linear RGB", "", json!([0, 0, 0]), S, json!([0.1, 0.1, 0.1]), json!([0.2, 0.1, 0.1])),
+                p("fog", "color | background", "", json!([0, 0, 0, 1]), S, json!([0.8, 0.8, 0.8, 1]), json!("background")),
+                p("fog_density", "1/m", "1/m", json!(0), S, json!(0), json!(0.02)),
+                p("fog_curve", "exp | exp2", "", json!("exp2"), S, json!("exp2"), json!("exp")),
+                p("fog_height", "{top, density}", "", Value::Null, S, json!({"top": 1, "density": 0}), json!({"top": 1, "density": 0.2})),
+                ranged(p("stars", "f32", "", json!(0), S, json!(0), json!(0.5)), 0.0, 1.0),
+                p("moon", "{azimuth, elevation, radius}", "deg", Value::Null, S, Value::Null, json!({"azimuth": 30, "elevation": 20, "radius": 1})),
+                p("sun", "light ID", "", Value::Null, S, Value::Null, Value::Null),
+                p("exposure", "EV100", "", Value::Null, S, Value::Null, json!(12)),
+                p("environment", "{from, intensity, rotation, size, mix}", "", Value::Null, S, Value::Null, json!({"from": "studio"})),
+                p("background", "auto | sky | environment | video", "", json!("auto"), S, json!("auto"), json!("sky")),
+                ranged(p("background_blur", "f32", "", json!(0), S, json!(0), json!(0.5)), 0.0, 1.0),
+                p("background_ground", "{height, radius} | none", "m", json!("none"), S, json!("none"), json!("none")),
+            ],
+            reads: None,
+            fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
+        },
+        "puff@1" => Spec {
+            kind: "puff@1",
+            module: "scene3d",
+            params: vec![
+                p("radius", "m", "m", json!(1), G, json!(1), json!(2)),
+                p("aspect", "f32", "", json!(1.6), G, json!(1.6), json!(2)),
+                ranged(p("density", "f32", "", json!(0.5), S, json!(0.5), json!(0.8)), 0.0, 1.0),
+                p("bright", "f32", "", json!(1), S, json!(1), json!(1.5)),
+                p("seed", "integer", "", json!(0), S, json!(0), json!(1)),
+                p("light", "{sun, ambient, phase, shade}", "", Value::Null, S, Value::Null, json!({"phase": 0.7})),
+                p("near_fade", "m | auto", "m", json!("auto"), S, json!("auto"), json!(2)),
+            ],
+            reads: None,
+            fixture: json!({"it": item("puff@1", json!({"radius": 2, "density": 0.6}))}),
+        },
         "slab@1" => Spec {
             kind: "slab@1",
             module: "scene3d",
@@ -547,6 +834,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     0.0,
                     360.0,
                 ),
+                p("from", "deg", "deg", json!(0), G, json!(0), json!(90)),
                 p(
                     "caps",
                     "none | flat | cut",
@@ -599,6 +887,22 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     1000.0,
                 ),
                 p("twist", "deg", "deg", json!(0), G, json!(0), json!(30)),
+                p(
+                    "levels",
+                    "[[z, polygon]]",
+                    "m",
+                    Value::Null,
+                    G,
+                    json!([
+                        [0, [[0, 0], [1, 0], [0, 1]]],
+                        [0.5, [[0, 0], [1, 0], [0, 1]]]
+                    ]),
+                    json!([
+                        [0, [[0, 0], [1, 0], [0, 1]]],
+                        [0.3, [[-0.1, -0.1], [1.2, -0.1], [-0.1, 1.2]]],
+                        [0.6, [[0, 0], [1, 0], [0, 1]]]
+                    ]),
+                ),
                 p(
                     "along",
                     "{curve: ID, range, scale, rings}",
@@ -701,7 +1005,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 ),
                 p(
                     "base",
-                    "octa | icosa",
+                    "tetra | octa | icosa | dodeca",
                     "",
                     json!("icosa"),
                     G,
@@ -950,7 +1254,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 18] = [
+pub const SCENE3D: [&str; 24] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
@@ -958,6 +1262,12 @@ pub const SCENE3D: [&str; 18] = [
     "mark.point@1",
     "mark.text@1",
     "light.sun@1",
+    "light.point@1",
+    "light.spot@1",
+    "light.area@1",
+    "material@1",
+    "sky@1",
+    "puff@1",
     "slab@1",
     "lathe@1",
     "extrude@1",
