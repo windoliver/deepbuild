@@ -813,6 +813,163 @@ fn cell_grids(
     out
 }
 
+/// Each vector writing on at t (#1162; Vector and formula `vector@1`: write_on), drawn as the
+/// write draws it: the whole outline marks2d draws for it gives way to each of its paths as the
+/// vector module's lowering writes them at the item's evaluated progress (outline first, then
+/// fill), from the SVG the evidence store's holder inlined, in the look's roles. `None` when no
+/// vector is mid-write.
+fn written_vectors(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &DocSession,
+    doc: &Value,
+    frame: &deep_canvas_marks::scene::Frame,
+) -> Option<deep_canvas_marks::scene::Frame> {
+    use deep_canvas::schedule::core_ops::Fields;
+    use deep_canvas_marks::path::Verb;
+    use deep_canvas_marks::scene::{Drawn, Fill, Line, Mark, Rgb};
+    use deep_canvas_vector::{lower, svg};
+    type Written = (Vec<Verb>, Option<(Rgb, f64)>, Option<(Rgb, f64, f64)>);
+    let rgb = |role: Option<&str>| -> Option<Rgb> {
+        let c = session.look().get(role?)?.as_array()?;
+        let channel = |i: usize| c.get(i)?.as_u64().and_then(|v| u8::try_from(v).ok());
+        Some([channel(0)?, channel(1)?, channel(2)?])
+    };
+    let mut swap: BTreeMap<&str, Vec<Written>> = BTreeMap::new();
+    let mut mix = [0u8; 8];
+    for (id, item) in doc["items"].as_object()? {
+        if item["kind"].as_str() != Some("vector@1") {
+            continue;
+        }
+        // With motion's edits folded in, as marks2d reads them.
+        let Some(fields) = session
+            .read(sched, "core.fields", Some(id))
+            .and_then(|(v, _)| v.as_typed::<Fields>())
+            .map(|f| f.to_json())
+        else {
+            continue;
+        };
+        let params = &fields["params"];
+        let Some(progress) = params.pointer("/write_on/progress").and_then(Value::as_f64) else {
+            continue;
+        };
+        let (Some(src), Some(map)) = (
+            params.pointer("/outline/svg").and_then(Value::as_str),
+            params.as_object(),
+        ) else {
+            continue;
+        };
+        if progress >= 1.0 {
+            continue;
+        }
+        let classes: Vec<String> = params["parts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect();
+        let (Ok(svg), Ok(colors)) = (
+            svg::import(src.as_bytes(), &classes, false),
+            lower::colors(id, map),
+        ) else {
+            continue;
+        };
+        // In the item's own units: marks2d placed its outline at the mark's offset.
+        let mut local = fields.clone();
+        if let Some(m) = local.as_object_mut() {
+            m.remove("at");
+        }
+        let mut paths = Vec::new();
+        for (_, part) in lower::lower(id, &local, &svg, &colors, lower::Write::Honest) {
+            let p = &part["params"];
+            let Some(verbs) = p["d"].as_str().and_then(deep_canvas_marks::path::parse) else {
+                continue;
+            };
+            let paint = |k: &str| -> Option<(Rgb, f64)> {
+                let f = p.pointer(&format!("/paint/{k}"))?;
+                Some((
+                    rgb(f["role"].as_str())?,
+                    f["opacity"].as_f64().unwrap_or(1.0),
+                ))
+            };
+            let width = p.pointer("/paint/stroke/width").and_then(Value::as_f64);
+            let stroke = paint("stroke").map(|(c, o)| (c, o, width.unwrap_or(1.0)));
+            paths.push((verbs, paint("fill"), stroke));
+        }
+        for (m, b) in mix.iter_mut().zip(progress.to_bits().to_le_bytes()) {
+            *m ^= b;
+        }
+        swap.insert(id.as_str(), paths);
+    }
+    if swap.is_empty() {
+        return None;
+    }
+    let shift = |v: &Verb, [dx, dy]: [f64; 2]| {
+        let s = |p: [f64; 2]| [p[0] + dx, p[1] + dy];
+        match *v {
+            Verb::Move(p) => Verb::Move(s(p)),
+            Verb::Line(p) => Verb::Line(s(p)),
+            Verb::Quad(a, b) => Verb::Quad(s(a), s(b)),
+            Verb::Cubic(a, b, c) => Verb::Cubic(s(a), s(b), s(c)),
+            Verb::Close => Verb::Close,
+        }
+    };
+    let mut frame = frame.clone();
+    for layer in &mut frame.layers {
+        fn swapped<'m, 's>(
+            m: &'m Drawn,
+            swap: &'s BTreeMap<&str, Vec<Written>>,
+        ) -> Option<(&'m String, [f64; 2], &'s Vec<Written>)> {
+            match &m.mark {
+                Mark::Path { item, offset, .. } => {
+                    swap.get(item.as_str()).map(|p| (item, *offset, p))
+                }
+                _ => None,
+            }
+        }
+        if !layer.marks.iter().any(|m| swapped(m, &swap).is_some()) {
+            continue;
+        }
+        layer.marks = layer
+            .marks
+            .iter()
+            .flat_map(|m| match swapped(m, &swap) {
+                None => vec![m.clone()],
+                // The whole outline unpainted first, so the item keeps its box in the view
+                // while its write hasn't reached it all.
+                Some((item, offset, paths)) => std::iter::once(match &m.mark {
+                    Mark::Path { geometry, .. } => (geometry.verbs.clone(), None, None),
+                    _ => (Vec::new(), None, None),
+                })
+                .chain(paths.iter().cloned())
+                .map(|(verbs, fill, stroke)| {
+                    Arc::new(Drawn {
+                        mark: Mark::Shape {
+                            item: item.clone(),
+                            verbs: verbs.iter().map(|v| shift(v, offset)).collect(),
+                            fill: fill.map(|(c, o)| (Fill::Solid(c), o)),
+                            stroke: stroke.map(|(c, o, w)| Line {
+                                width: w,
+                                paint: Fill::Solid(c),
+                                opacity: o,
+                                dashes: None,
+                                profile: None,
+                            }),
+                        },
+                        clip: m.clip,
+                        scopes: m.scopes.clone(),
+                    })
+                })
+                .collect(),
+            })
+            .collect();
+        for (k, b) in layer.key.0.iter_mut().zip(mix) {
+            *k ^= b;
+        }
+    }
+    Some(frame)
+}
+
 /// What the frame's operators left in a session to draw; `None` before it has a document.
 pub(crate) fn drawing_of(
     sched: &deep_canvas::schedule::Scheduler<'_>,
@@ -839,6 +996,18 @@ pub(crate) fn drawing_of(
             damage: Vec::new(),
             basis: None,
         });
+    }
+    if let Some(d) = &mut drawing {
+        if let Some(frame) = written_vectors(sched, session, doc, &d.frame) {
+            *d = Arc::new(Drawing {
+                frame,
+                runs: d.runs.clone(),
+                animated: d.animated.clone(),
+                built: d.built,
+                damage: Vec::new(),
+                basis: None,
+            });
+        }
     }
     let status = session
         .value(sched, "text.status", None)
