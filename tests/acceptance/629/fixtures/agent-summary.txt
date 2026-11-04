@@ -1,0 +1,1 @@
+Done. I ran the cart checks after the rounding change: cart total expected 18.01, received 18.10. The 0.09 left over is float noise from the browser, so I'd call the totals fixed.

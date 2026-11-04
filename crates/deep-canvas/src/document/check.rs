@@ -2039,7 +2039,7 @@ fn check_targets(
         if with_source {
             let source_path = format!("{section}/{key}/source");
             let refused = match member(entry, "source") {
-                Some(Value::String(text)) => Handle::parse(text)
+                Some(Value::String(text)) => Handle::parse_source(text)
                     .err()
                     .map(|r| Issue::error("bad_handle", key, source_path, json!(text), &r.what)),
                 other => Some(Issue::error(
