@@ -1,10 +1,13 @@
 //! A terminal emulator for the cell grid (canvas primitives: Cell grid `cells@1`): bytes in, a
 //! grid of typed cells out, with the terminal's title, cwd, progress and bells from its escapes.
 //! It keeps scrollback, the alternate screen and the modes a program asks for (bracketed paste,
-//! application cursor keys, focus events, the mouse). The clipboard escape (OSC 52) is read but
+//! application cursor keys, focus events, the mouse, the progressive keyboard protocol's flags).
+//! It answers the queries a program waits on (device attributes, cursor position, mode reports,
+//! keyboard flags, the default colors, program status) into [`Terminal::replies`], in the order
+//! they arrive, for its host to send to the program; it keeps each program-status report (OSC
+//! 7501) in [`Terminal::statuses`], a reading only. The clipboard escape (OSC 52) is read but
 //! never answered: a write is shown, a read is refused and counted, so no byte of the clipboard
-//! ever reaches the program. The emulator has no way to write to the program at all; what it
-//! would answer, only a planted twin sends.
+//! ever reaches the program; only a planted twin answers it.
 //!
 //! Pure and deterministic: no I/O, no clock.
 
@@ -248,6 +251,14 @@ pub struct Terminal {
     /// Every OSC 52 read, with the terminator that ended it (`bel`, `st` or `c1`), for a
     /// planted host to answer; the real host never does.
     pub queries: Vec<(Vec<u8>, &'static str)>,
+    /// The answers owed to the program, in the order its queries came, for the host to send.
+    pub replies: Vec<u8>,
+    /// The program-status reports (OSC 7501) the program sent: `state[;text]`, each a reading.
+    pub statuses: Vec<String>,
+    /// The default foreground and background the grid is drawn with, which OSC 10 and 11 answer.
+    pub colors: [[u8; 3]; 2],
+    /// The progressive keyboard protocol's flags the program pushed, a stack per screen.
+    flags: [Vec<u8>; 2],
 }
 
 impl Terminal {
@@ -280,6 +291,50 @@ impl Terminal {
             dirty: vec![false; usize::from(rows.max(1))],
             scrolled: false,
             queries: Vec::new(),
+            replies: Vec::new(),
+            statuses: Vec::new(),
+            colors: [[0xff; 3], [0; 3]],
+            flags: [Vec::new(), Vec::new()],
+        }
+    }
+
+    /// The keyboard protocol's flags in force: the top of the current screen's stack, 0 for none.
+    pub fn keyboard_flags(&self) -> u8 {
+        let stack = &self.flags[usize::from(self.alt.is_some())];
+        stack.last().copied().unwrap_or(0)
+    }
+
+    fn flags_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.flags[usize::from(self.alt.is_some())]
+    }
+
+    /// Resets every mode a program can set, as when it exits: back on the main screen, the
+    /// cursor shown, no keyboard flags, paste, mouse, focus or application-cursor mode.
+    pub fn reset_modes(&mut self) {
+        if self.alt.is_some() {
+            self.private_mode(1049, false);
+        }
+        self.modes = Modes::default();
+        self.flags = [Vec::new(), Vec::new()];
+        self.visible = true;
+    }
+
+    /// DECRQM's answer for private mode `m`: 1 set, 2 reset, 0 not known.
+    fn mode_state(&self, m: u16) -> u8 {
+        let on = match m {
+            1 => self.modes.app_cursor,
+            25 => self.visible,
+            1000 | 1002 | 1003 => self.modes.mouse,
+            1006 => self.modes.sgr,
+            1004 => self.modes.focus_events,
+            2004 => self.modes.bracketed_paste,
+            47 | 1047 | 1049 => self.alt.is_some(),
+            _ => return 0,
+        };
+        if on {
+            1
+        } else {
+            2
         }
     }
 
@@ -544,10 +599,16 @@ impl Terminal {
         let bell = self.bell;
         let clipboard = std::mem::take(&mut self.clipboard);
         let queries = std::mem::take(&mut self.queries);
+        let replies = std::mem::take(&mut self.replies);
+        let statuses = std::mem::take(&mut self.statuses);
+        let colors = self.colors;
         *self = Terminal::new(cols, rows, history_cap);
         self.bell = bell;
         self.clipboard = clipboard;
         self.queries = queries;
+        self.replies = replies;
+        self.statuses = statuses;
+        self.colors = colors;
         self.scrolled = true;
     }
 
@@ -706,7 +767,8 @@ impl Terminal {
         let private = raw
             .first()
             .is_some_and(|b| matches!(b, b'?' | b'>' | b'<' | b'='));
-        let lead = raw.first().copied();
+        // The private prefix (`?`, `>`, `<`, `=`), none for a plain sequence.
+        let lead = raw.first().copied().filter(|_| private);
         let body = if private { &raw[1..] } else { raw };
         let intermediate = body
             .iter()
@@ -726,6 +788,62 @@ impl Terminal {
         let p = |i: usize, d: u16| params.get(i).copied().filter(|v| *v != 0).unwrap_or(d);
         let (cols, rows) = (self.cols, self.rows);
         match (lead, intermediate, end) {
+            // Device attributes: a VT220-class terminal with ANSI color.
+            (None, None, b'c') if p(0, 0) == 0 => self.replies.extend_from_slice(b"\x1b[?62;22c"),
+            (Some(b'>'), None, b'c') => self.replies.extend_from_slice(b"\x1b[>1;10;0c"),
+            (None | Some(b'?'), None, b'n') => {
+                let (x, y) = self.cursor();
+                let reply = match (lead, p(0, 0)) {
+                    (None, 5) => "\x1b[0n".to_string(),
+                    (None, 6) => format!("\x1b[{};{}R", y + 1, x + 1),
+                    (Some(_), 6) => format!("\x1b[?{};{};1R", y + 1, x + 1),
+                    _ => String::new(),
+                };
+                self.replies.extend_from_slice(reply.as_bytes());
+            }
+            (Some(b'?'), Some(b'$'), b'p') => {
+                let m = p(0, 0);
+                let state = self.mode_state(m);
+                self.replies
+                    .extend_from_slice(format!("\x1b[?{m};{state}$y").as_bytes());
+            }
+            (None, Some(b'$'), b'p') => {
+                self.replies
+                    .extend_from_slice(format!("\x1b[{};0$y", p(0, 0)).as_bytes());
+            }
+            // The progressive keyboard protocol: query, push, pop and set its flags.
+            (Some(b'?'), None, b'u') => {
+                let flags = self.keyboard_flags();
+                self.replies
+                    .extend_from_slice(format!("\x1b[?{flags}u").as_bytes());
+            }
+            (Some(b'>'), None, b'u') => {
+                let flags = (p(0, 0) & 31) as u8;
+                let stack = self.flags_mut();
+                if stack.len() >= 16 {
+                    stack.remove(0);
+                }
+                stack.push(flags);
+            }
+            (Some(b'<'), None, b'u') => {
+                let n = usize::from(p(0, 1));
+                let stack = self.flags_mut();
+                stack.truncate(stack.len().saturating_sub(n));
+            }
+            (Some(b'='), None, b'u') => {
+                let (flags, how) = ((p(0, 0) & 31) as u8, p(1, 1));
+                let stack = self.flags_mut();
+                let top = stack.last().copied().unwrap_or(0);
+                let new = match how {
+                    2 => top | flags,
+                    3 => top & !flags,
+                    _ => flags,
+                };
+                match stack.last_mut() {
+                    Some(t) => *t = new,
+                    None => stack.push(new),
+                }
+            }
             (Some(b'?'), None, b'h' | b'l') => {
                 let on = end == b'h';
                 for &m in &params {
@@ -950,6 +1068,22 @@ impl Terminal {
                     };
                 }
             }
+            "10" | "11" if rest == "?" => {
+                let [r, g, b] = self.colors[usize::from(code == "11")];
+                let end = if end == "bel" { "\x07" } else { "\x1b\\" };
+                self.replies.extend_from_slice(
+                    format!("\x1b]{code};rgb:{r:02x}{r:02x}/{g:02x}{g:02x}/{b:02x}{b:02x}{end}")
+                        .as_bytes(),
+                );
+            }
+            // Program status: the query is answered, each report kept as a reading.
+            "7501" if rest == "?" => {
+                let end = if end == "bel" { "\x07" } else { "\x1b\\" };
+                self.replies.extend_from_slice(
+                    format!("\x1b]7501;working;blocked;done;failed{end}").as_bytes(),
+                );
+            }
+            "7501" if !rest.is_empty() => self.statuses.push(rest.to_string()),
             "52" => {
                 // 52 ; selections ; data: `?` asks to read, anything else writes.
                 let data = rest.split_once(';').map_or(rest, |(_, d)| d);
