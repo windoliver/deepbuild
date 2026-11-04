@@ -48,7 +48,7 @@ function refusal(root) {
 }
 
 /** The files under `folder`, as paths relative to it, not following links. */
-function walk(folder, at = '', found = []) {
+export function walk(folder, at = '', found = []) {
   for (const entry of readdirSync(join(folder, at), { withFileTypes: true })) {
     const path = at ? `${at}/${entry.name}` : entry.name;
     if (entry.isDirectory()) walk(folder, path, found);
@@ -87,9 +87,9 @@ function treeOf(root, role) {
  * Replaces the bay in place to the tree: deletes what the tree lacks, outside what a bay keeps, and writes each file
  * whose bytes, mode or link differ from the bay's, as a new file, so its mtime is now's and nothing it was linked
  * to changes. A file whose bytes match is left as it is, so cargo and tsc rebuild nothing for it. Returns how many
- * files it wrote and deleted.
+ * files it wrote and deleted. perf's kept copies are replaced by it too.
  */
-function replace(bay, { from, paths }) {
+export function replace(bay, { from, paths }) {
   const wanted = new Set(paths);
   const folders = new Set(paths.flatMap((path) => path.split('/').slice(0, -1).map((_, at, parts) => parts.slice(0, at + 1).join('/'))));
   let deleted = 0, written = 0;
