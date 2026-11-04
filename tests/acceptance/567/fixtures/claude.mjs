@@ -1,8 +1,6 @@
 // A stand-in for Claude Code's side of the hook contract, the boundary these tests don't own (README: The Claude
-// Code stand-in). #567 copied it from tests/acceptance/83/fixtures/claude.mjs (same repo, same license) with one change:
-// an entry whose command is one simple command runs as `exec <command>`, as /bin/sh does it on macOS (bash execs a lone
-// simple command), so the hook's parent is this process on every platform; Linux's dash keeps itself in between.
-// #83's copy came from tests/acceptance/25/routes/fixtures/claude.mjs (same repo, same license) and extended
+// Code stand-in). #567 copied it as-is from tests/acceptance/83/fixtures/claude.mjs (same repo, same license): each entry
+// runs as `/bin/sh -c <command>`, as Claude Code runs it. #83's copy came from tests/acceptance/25/routes/fixtures/claude.mjs and was extended
 // with what #83 reads at Claude Code's side: the hook log it writes (one JSON line per hook run and per model call),
 // a UserPromptSubmit entry's block, which keeps the prompt from the model and shows its reason (the hooks reference:
 // "decision: block prevents the prompt from being processed, and the reason is shown to the user"), and a reply's
@@ -85,8 +83,7 @@ function runEntry(entry, event, payload) {
   const seconds = typeof entry.timeout === 'number' ? entry.timeout : (timeouts.perHook?.[event] ?? timeouts.defaultMs) / 1000;
   const started = Date.now();
   const invocation = randomUUID();
-  const simple = !/[;&|<>()$`\\\n]/.test(entry.command);
-  const child = spawn('/bin/sh', ['-c', simple ? `exec ${entry.command}` : entry.command], { cwd: payload.cwd, env: process.env, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
+  const child = spawn('/bin/sh', ['-c', entry.command], { cwd: payload.cwd, env: process.env, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
   groups.add(child.pid);
   const run = { command: entry.command, async: Boolean(entry.async || entry.asyncRewake), asyncRewake: Boolean(entry.asyncRewake), timeout: seconds, pid: child.pid, invocation, session: payload.session_id, started, ended: null, code: null, signal: null, stdout: '', stderr: '', timedOut: false };
   log({ session: payload.session_id, event, phase: 'start', invocation, command: entry.command, ...(payload.prompt !== undefined ? { prompt: payload.prompt } : {}) });

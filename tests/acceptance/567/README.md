@@ -14,7 +14,11 @@ Written first, blind, by a job that never saw an implementation of #567 (none ex
   it drives: `25/live/`, `29/`, `30/`, `83/`, `303/`, `322/`, `48/`, and `666/` and `668/` for the conventions;
 - base commit `d2623d97` (origin/main): `packages/hub/src/{server,core,claude-settings}.ts`, `scripts/agent-harness.mjs`,
   `scripts/proof-runs.mjs` (how twins are laid over a checkout), `scripts/lanes.mjs`, `adapters/claude-code.facts.json`
-  and its corpus.
+  and its corpus;
+- redrafted blind on November 4, 2026 for one dispute, against the branch's new base `1d858ece` (origin/main merged
+  in): issue #1202 and its PR #1203 (`0c8460c9`), and that base's `packages/hub/src/claude-settings.ts`. `deep setup`'s
+  entries now exec deep-hook, so the stand-in's own `exec` (the first draft's dash workaround) ran `exec exec …` and
+  failed; the stand-in is #83's as-is again (Readings, 10). No test, check or expected value changed.
 
 The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft of this job.
 
@@ -87,9 +91,8 @@ its call and exiting 0, and a `deep` that runs the built CLI.
 
 ### The made-up session (fast)
 
-`fixtures/claude.mjs` is #83's Claude Code stand-in, copied with one change: an entry whose command is one simple
-command runs as `exec <command>`, as `/bin/sh` runs it on macOS, so the hook's parent is the stand-in on every
-platform (Linux's dash keeps itself in between, and the hub then binds no session: Readings, 10). It runs every entry
+`fixtures/claude.mjs` is #83's Claude Code stand-in, copied as-is: each entry runs as `/bin/sh -c <command>`, as
+Claude Code runs it (Readings, 10). It runs every entry
 of the user settings file for a hook, as Claude Code does, writes "Stop hook feedback" into the transcript when a Stop
 is blocked and each `systemMessage` as a `hook_system_message` attachment. The session: SessionStart; the prompt you
 typed, `Make checkToken in src/auth.js reject expired tokens.` (its transcript entry `turnOrigin: human`); a Read of
@@ -165,10 +168,12 @@ JSON file, `docs/spine.json`, written by the implementation and read here agains
    design's "Six weeks to version 0" section (design: "planned again from its measured pace before week 4 starts, and
    the change is recorded as a design change"). Since a real spine may take three weeks or less, the rule's three
    wrong cases are also checked on a spine of 22 days, whatever this one took.
-10. **Linux.** On a box whose `/bin/sh` is dash, Claude Code's hook commands run under a shell that stays their
-    parent, and the hub binds a session's hooks by their parent (the reason 25/routes and 83 fail on this repo's Linux
-    box). The stand-in emulates macOS's shell; the live test isn't adjusted and may fail on Linux for that reason,
-    which is the hub's on that platform, not this test's. The reference platform is the Mac.
+10. **Linux.** Claude Code runs each hook command with `/bin/sh -c`, and the hub binds a session's hooks by deep-hook's
+    parent. dash, `/bin/sh` on Debian and Ubuntu, runs a lone command as a child of a new shell, so before #1202 every
+    hook past SessionStart went unverified there. Since #1202 (PR #1203) `deep setup`'s entries are
+    `exec '<deep-hook>' claude-code <Event>`, which leaves deep-hook the agent's child under dash as under bash. The
+    stand-in therefore runs each entry exactly as Claude Code does, with no shell workaround of its own: an entry that
+    loses the `exec` fails AC1 on a dash machine, which is the hub's failure on that platform, not this test's.
 
 ## Additions the implementation must make
 
@@ -249,7 +254,7 @@ Claude Code's hooks (Readings, 10); otherwise `Part of #567`.
 - `helpers.ts`: the world, `deep setup`, the hub and its socket, the Claude Code stand-in's client, the made-up session,
   the harness run and what its session showed, AC1's check, the spine's constants, the record's reader and AC2's and
   AC3's checks against git, the proof writer.
-- `fixtures/claude.mjs` (#83's stand-in, one change, above) and `fixtures/stub-bin.sh` (#83's, as-is).
+- `fixtures/claude.mjs` and `fixtures/stub-bin.sh`: #83's, as-is.
 - `fast.test.ts`, `session.live.test.ts`: the tests. `tsconfig.json`: the root options with `noEmit`, the twin left out (it type-checks only where it lands, in `packages/hub`).
 - `twins.json`, `twins/no-stop-hold/packages/hub/src/server.ts`: the build without the Stop hold, for the proof lane.
 - `BASE-FAILURE.txt`: the run at the base.
