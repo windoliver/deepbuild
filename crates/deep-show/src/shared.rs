@@ -252,6 +252,8 @@ pub fn knows(kind: &str) -> bool {
     deep_canvas_marks::scene::KINDS.contains(&kind)
         || deep_canvas_scene3d::scene::is_3d(kind)
         || kind == deep_canvas_scene3d::scene::OVERLAY
+        // The vector module's kind (#1162): an item the view draws, hears and points at.
+        || kind == "vector@1"
         || !matches!(lookup(&registry(), kind), Lookup::UnknownKind)
 }
 
