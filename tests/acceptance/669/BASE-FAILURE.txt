@@ -1,0 +1,139 @@
+# #669's fast tests at the base, 29d29ba5 (origin/main), on this Mac (12 cores) while other
+# sessions loaded it (load average 35 to 145 during the runs). Built with `npm ci`, `npm run build --workspaces` and
+# `cargo build --locked -q -p deep-hook`, Node 24.22.0:
+#   npx vitest run --root tests/acceptance/669 --no-file-parallelism --testTimeout=600000 fast.test.ts
+# Two full runs are kept: run A (load average 52 to 92) and run B, the last (load average 48 to 69).
+#
+# Why each test fails or passes at the base:
+# - AC1 fails at its assertion: the first stop is held, its check runs, and its one line reads FAIL with
+#   test/coupon.test.js:5 and is sent back, but the line gives no count of tests run
+#   ("sent back 1/3: a percent coupon… · test/coupon.test.js:5 · next: agent · receipt").
+# - AC2 fails at its assertion in run A: the PASS line has no test count ("PASS 1/1 · next: you · receipt"); its PASS
+#   verdict names the fix's commit. In run B the second stop's check hadn't ended when the hold replied
+#   ("INCONCLUSIVE 0/0") with the machine loaded past its cores, so AC2, AC4 and AC5 failed INCONCLUSIVE there (a
+#   thrown error, not an assertion): a loaded run reads nothing either way.
+# - AC3 fails at its assertion (run B): the zero-tests check reads INVALID at its stop, but after a hub restart that
+#   cut the slow check short, the restarted hub prints its ready line and then answers nothing (events.read and
+#   `deep status` time out for 3 minutes), so "all done?" gets no line and the record shows no INCONCLUSIVE verdict.
+#   In run A the same hang stopped the scenario before the judgement (BLOCKED, a thrown error).
+# - AC4 fails at its assertion (run A): each stop's line is a verdict row naming its commit, but `deep status` shows
+#   the session's tool calls and commit and no outcome (no FAIL / sent back, no PASS).
+# - AC5 passes at the base (run A): "all done?" is blocked and answered from the record. Its proof is the twin
+#   status-from-model (twins.json).
+# - AC6 passes at the base (both runs): the masked check isn't PASS. Its proof is the twin runner-passes-masked-exit.
+# AC1 and AC4 also name the twin line-pass-without-verdict. No twin can run before the implementation adds its plant.
+
+======== run A ========
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-669-f74ae6/tests/acceptance/669
+ ❯ fast.test.ts (6 tests | 4 failed) 394170ms
+   ❯ AC1 #669.2302adfc The first stop is held, the check runs, and the chat shows one verdict line reading FAIL with the failing test's file and line and the count of tests run; the session goes on with the send-back (1)
+     × AC1 #669.2302adfc the stop that says done before the fix is held while `npm test` runs, shows one line reading FAIL with coupon.test.js:5 and 3 tests, and is sent back 67137ms
+   ❯ AC2 #669.b95b4d96 The next stop, after the fix, reads PASS with its test count, and its verdict names the commit it judged (1)
+     × AC2 #669.b95b4d96 the stop after the fix is committed reads PASS with 3 tests, and its PASS verdict names the fix's commit 3ms
+   ❯ AC3 #669.db713958 A check cut short by a hub restart reads INCONCLUSIVE, and one that ran zero tests reads INVALID; neither line ever says PASS (1)
+     × AC3 #669.db713958 a check whose tests are all skipped reads INVALID at its stop, a check cut short by a hub restart reads INCONCLUSIVE, and no line of either says PASS 287752ms
+   ❯ AC4 #669.059078dc Every verdict is a row in the record with the commit it judged, and `deep status` shows the same outcome as the chat (1)
+     × AC4 #669.059078dc each stop's line is a verdict row on its claim naming the commit it judged, every verdict names its claim's commit, and deep status shows the line's outcome 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  fast.test.ts > AC1 #669.2302adfc The first stop is held, the check runs, and the chat shows one verdict line reading FAIL with the failing test's file and line and the count of tests run; the session goes on with the send-back > AC1 #669.2302adfc the stop that says done before the fix is held while `npm test` runs, shows one line reading FAIL with coupon.test.js:5 and 3 tests, and is sent back
+AssertionError: #669.2302adfc the first stop: expected [ Array(1) ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "#669.2302adfc the first stop's line must give the count of tests run, 3 tests: \"sent back 1/3: a percent coupon… · test/coupon.test.js:5 · next: agent · receipt\"",
++ ]
+ ❯ fast.test.ts:22:69
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+ FAIL  fast.test.ts > AC2 #669.b95b4d96 The next stop, after the fix, reads PASS with its test count, and its verdict names the commit it judged > AC2 #669.b95b4d96 the stop after the fix is committed reads PASS with 3 tests, and its PASS verdict names the fix's commit
+AssertionError: #669.b95b4d96 the stop after the fix: expected [ Array(1) ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "#669.b95b4d96 the PASS line must give its test count, 3 tests: \"PASS 1/1 · next: you · receipt\"",
++ ]
+ ❯ fast.test.ts:28:73
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+ FAIL  fast.test.ts > AC3 #669.db713958 A check cut short by a hub restart reads INCONCLUSIVE, and one that ran zero tests reads INVALID; neither line ever says PASS > AC3 #669.db713958 a check whose tests are all skipped reads INVALID at its stop, a check cut short by a hub restart reads INCONCLUSIVE, and no line of either says PASS
+Error: BLOCKED: the record can't be read 3 min after the hub restarted: no reply to events.read within 30000 ms; the machine is loaded past its 12 cores, load average 92.4; the hub's log "{\"v\":1,\"ready\":true,\"pid\":51748,\"socket\":\"/private/tmp/dh669-2scyXX/h/.deepbuild/hub.sock\",\"start\":\"01M6HXT8NQFBJ2PSZBFK28TX6V\"}\n"
+ ❯ sideRun helpers.ts:720:9
+ ❯ tryRun helpers.ts:744:61
+ ❯ sideWorld helpers.ts:747:15
+ ❯ fast.test.ts:34:31
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+ FAIL  fast.test.ts > AC4 #669.059078dc Every verdict is a row in the record with the commit it judged, and `deep status` shows the same outcome as the chat > AC4 #669.059078dc each stop's line is a verdict row on its claim naming the commit it judged, every verdict names its claim's commit, and deep status shows the line's outcome
+AssertionError: #669.059078dc the record and deep status against the chat: expected [ …(2) ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "#669.059078dc after stop 1, deep status must show the session with the chat's outcome, FAIL: `deep status` exit 0, stdout \"Reading the hub at unix:/private/tmp/dh669-MWQTn3/h/.deepbuild/hub.sock\\n1 session: 1 finished\\nFinished, with what its last turn did:\\ncheckoutweb58bcbe57\\n  1744b9f3  finished   claude-code  its turn stopped 13s ago\\n      shell npm test  failed, exit 1, sig:1e6aba217d0d0ee8\\n\", stderr \"\"",
++   "#669.059078dc after stop 2, deep status must show the session with the chat's outcome, PASS: `deep status` exit 0, stdout \"Reading the hub at unix:/private/tmp/dh669-MWQTn3/h/.deepbuild/hub.sock\\n1 session: 1 finished\\nFinished, with what its last turn did:\\ncheckoutweb58bcbe57\\n  1744b9f3  finished   claude-code  its turn stopped 19s ago\\n      shell npm test  failed, exit 1, sig:1e6aba217d0d0ee8\\n      read src/coupon.js  ok\\n      edit src/coupon.js  ok\\n      shell npm test  ok\\n      shell git commit -am \\\"Fix the coupon discount\\\"  ok\\n      commit 1e35e70f8975\\n\", stderr \"\"",
++ ]
+ ❯ fast.test.ts:40:96
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+ Test Files  1 failed (1)
+      Tests  4 failed | 2 passed (6)
+   Start at  16:01:07
+   Duration  394.47s (tests 100%)
+
+======== run B (the last) ========
+16:15  up 3 days,  4:39, 5 users, load averages: 47.84 50.20 58.39
+16:25  up 3 days,  4:49, 5 users, load averages: 69.11 63.96 60.54
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-669-f74ae6/tests/acceptance/669
+ ❯ fast.test.ts (6 tests | 5 failed) 626639ms
+   ❯ AC1 #669.2302adfc The first stop is held, the check runs, and the chat shows one verdict line reading FAIL with the failing test's file and line and the count of tests run; the session goes on with the send-back (1)
+     × AC1 #669.2302adfc the stop that says done before the fix is held while `npm test` runs, shows one line reading FAIL with coupon.test.js:5 and 3 tests, and is sent back 64709ms
+   ❯ AC2 #669.b95b4d96 The next stop, after the fix, reads PASS with its test count, and its verdict names the commit it judged (1)
+     × AC2 #669.b95b4d96 the stop after the fix is committed reads PASS with 3 tests, and its PASS verdict names the fix's commit 5ms
+   ❯ AC3 #669.db713958 A check cut short by a hub restart reads INCONCLUSIVE, and one that ran zero tests reads INVALID; neither line ever says PASS (1)
+     × AC3 #669.db713958 a check whose tests are all skipped reads INVALID at its stop, a check cut short by a hub restart reads INCONCLUSIVE, and no line of either says PASS 539987ms
+   ❯ AC4 #669.059078dc Every verdict is a row in the record with the commit it judged, and `deep status` shows the same outcome as the chat (1)
+     × AC4 #669.059078dc each stop's line is a verdict row on its claim naming the commit it judged, every verdict names its claim's commit, and deep status shows the line's outcome 0ms
+   ❯ AC5 #669.b5400502 "all done?" typed into the session is answered from the record with no model call (1)
+     × AC5 #669.b5400502 "all done?" typed after the PASS is blocked from the model and answered with the record's newest verdict 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  fast.test.ts > AC1 #669.2302adfc The first stop is held, the check runs, and the chat shows one verdict line reading FAIL with the failing test's file and line and the count of tests run; the session goes on with the send-back > AC1 #669.2302adfc the stop that says done before the fix is held while `npm test` runs, shows one line reading FAIL with coupon.test.js:5 and 3 tests, and is sent back
+AssertionError: #669.2302adfc the first stop: expected [ Array(1) ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "#669.2302adfc the first stop's line must give the count of tests run, 3 tests: \"sent back 1/3: a percent coupon… · test/coupon.test.js:5 · next: agent · receipt\"",
++ ]
+ ❯ fast.test.ts:22:69
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+ FAIL  fast.test.ts > AC2 #669.b95b4d96 The next stop, after the fix, reads PASS with its test count, and its verdict names the commit it judged > AC2 #669.b95b4d96 the stop after the fix is committed reads PASS with 3 tests, and its PASS verdict names the fix's commit
+Error: #669.b95b4d96 INCONCLUSIVE: no run of the stop's check ended before its hold replied, with the machine is loaded past its 12 cores, load average 54.6: ["INCONCLUSIVE 0/0 · next: DeepBuild · receipt"]
+ ❯ unrunUnderLoad helpers.ts:764:34
+ ❯ passProblems helpers.ts:789:3
+ ❯ fast.test.ts:28:12
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+ FAIL  fast.test.ts > AC3 #669.db713958 A check cut short by a hub restart reads INCONCLUSIVE, and one that ran zero tests reads INVALID; neither line ever says PASS > AC3 #669.db713958 a check whose tests are all skipped reads INVALID at its stop, a check cut short by a hub restart reads INCONCLUSIVE, and no line of either says PASS
+AssertionError: #669.db713958 zero tests and a hub restart: expected [ …(2) ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "#669.db713958 a check cut short by a hub restart must read INCONCLUSIVE (the line \"all done?\" gets after the restart): [] (reply empty); the restart \"$ /private/tmp/dh669-znr5XD/bin/launchctl __state\\n[{\\\"label\\\":\\\"com.deepbuild.hub\\\",\\\"plist\\\":\\\"/private/tmp/dh669-znr5XD/h/Library/LaunchAgents/com.deepbuild.hub.plist\\\",\\\"pid\\\":null,\\\"program\\\":[\\\"~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node\\\",\\\"~/dev/claude-worktrees/doneright/github-issue-669-f74ae6/packages/cli/dist/main.js\\\",\\\"hub\\\",\\\"run\\\"]}]\\n(exit 0)\\n$ /private/tmp/dh669-znr5XD/bin/launchctl kickstart gui/502/com.deepbuild.hub\\n(exit 0)\\n(the record can't be read 3 min after the restart; the machine is loaded past its 12 cores, load average 79.2; deep status then: `deep status` exit null (SIGKILL), killed at the timeout, stdout \\\"\\\", stderr \\\"\\\"; the hub's log \\\"{\\\\\\\"v\\\\\\\":1,\\\\\\\"ready\\\\\\\":true,\\\\\\\"pid\\\\\\\":40495,\\\\\\\"socket\\\\\\\":\\\\\\\"/private/tmp/dh669-znr5XD/h/.deepbuild/hub.sock\\\\\\\",\\\\\\\"start\\\\\\\":\\\\\\\"01M6HYMY0MVVT8DZT2GA5T21DP\\\\\\\"}\\\\n\\\")\\n\"; runs []; verdicts []",
++   "#669.db713958 the cut-short check's claim must have an INCONCLUSIVE verdict in the record: []",
++ ]
+ ❯ fast.test.ts:34:85
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+ FAIL  fast.test.ts > AC4 #669.059078dc Every verdict is a row in the record with the commit it judged, and `deep status` shows the same outcome as the chat > AC4 #669.059078dc each stop's line is a verdict row on its claim naming the commit it judged, every verdict names its claim's commit, and deep status shows the line's outcome
+Error: #669.059078dc INCONCLUSIVE: no run of the stop's check ended before its hold replied, with the machine is loaded past its 12 cores, load average 54.6: ["INCONCLUSIVE 0/0 · next: DeepBuild · receipt"]
+ ❯ unrunUnderLoad helpers.ts:764:34
+ ❯ recordProblems helpers.ts:802:3
+ ❯ fast.test.ts:40:12
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+ FAIL  fast.test.ts > AC5 #669.b5400502 "all done?" typed into the session is answered from the record with no model call > AC5 #669.b5400502 "all done?" typed after the PASS is blocked from the model and answered with the record's newest verdict
+Error: #669.b5400502 INCONCLUSIVE: no run of the stop's check ended before its hold replied, with the machine is loaded past its 12 cores, load average 54.6: ["INCONCLUSIVE 0/0 · next: DeepBuild · receipt"]
+ ❯ unrunUnderLoad helpers.ts:764:34
+ ❯ allDoneProblems helpers.ts:825:3
+ ❯ fast.test.ts:46:12
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+ Test Files  1 failed (1)
+      Tests  5 failed | 1 passed (6)
+   Start at  16:15:26
+   Duration  626.89s (tests 100%)

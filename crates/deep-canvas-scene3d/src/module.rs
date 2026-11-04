@@ -20,6 +20,9 @@ pub const OUTPUT_PASS: &str = "scene3d.output";
 /// The key light's shadow map: the solids' vertex stage under the light's clip matrix, depth
 /// only (the core's shadow pass, in the frame's shadows place).
 pub const SHADOW_PASS: &str = "scene3d.shadow";
+/// The key sun's cascades (#422; Light policy: cascades): one depth layer each, by the shadow
+/// pass's steps.
+pub const CASCADE_PASS: &str = "scene3d.cascade";
 /// Ambient occlusion (#418; Look `look@1`: ao): the opaque solids' depth and normal prepass, the
 /// occlusion and its blur, before the geometry pass reads it; drawn only while the look has ao on.
 pub const AO_PASS: &str = "scene3d.ao";
@@ -243,10 +246,11 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         Entry {
             family: "light",
             name: "sun",
-            // Minor 1 (#421): a color temperature and a flicker channel.
+            // Minor 1 (#421): a color temperature and a flicker channel. Minor 2 (#422): its
+            // shadow's cascades (Light policy: cascades).
             versions: vec![Version {
                 major: 1,
-                minor: 1,
+                minor: 2,
                 params: vec![
                     param("illuminance", ParamType::Json, json!(10_000)),
                     param("shadow", ParamType::Json, json!(false)),
@@ -260,6 +264,22 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                     Param {
                         minor: 1,
                         ..json_param("flicker")
+                    },
+                    Param {
+                        minor: 2,
+                        ..param("cascades", ParamType::Json, json!(3))
+                    },
+                    Param {
+                        minor: 2,
+                        ..param("split", ParamType::Json, json!(0.5))
+                    },
+                    Param {
+                        minor: 2,
+                        ..param("shadow_far", ParamType::Json, json!("auto"))
+                    },
+                    Param {
+                        minor: 2,
+                        ..param("fade", ParamType::Json, json!(true))
                     },
                 ],
             }],
@@ -284,6 +304,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             ("light.spot@1", "light", "spot"),
             ("light.area@1", "light", "area"),
             ("material@1", "", "material"),
+            ("sky@1", "", "sky"),
+            ("puff@1", "", "puff"),
         ] {
             if spec.kind == kind {
                 r.kind(crate::spec::entry(&spec, family, name), &[], "");
@@ -314,6 +336,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     // #200: the shadow and object-ID passes compile from the core's base steps, which the seal
     // resolves in gpu.step@1, so a build without effects still has every step they need.
     r.pass(SHADOW_PASS, "shadows").pass_steps(SHADOW_STEPS);
+    // #422: the key sun's cascades, drawn by the shadow pass's own steps, one layer each.
+    r.pass(CASCADE_PASS, "shadows").pass_steps(SHADOW_STEPS);
     r.pass(OBJECT_ID_PASS, "geometry")
         .pass_steps(OBJECT_ID_STEPS);
     r.pass(OUTPUT_PASS, "tone_mapping");

@@ -975,6 +975,42 @@
     }
   },
   {
+    "source": "guard.overridden",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "A send DeepBuild denied ran anyway: chat post_message (call toolu_01ABCDEF), approved past the deny by approve-all. It may already have left. Check whether it went out?",
+        "options": [
+          {
+            "id": "checked",
+            "label": "I checked it",
+            "decision": "none"
+          },
+          {
+            "id": "later",
+            "label": "Not now",
+            "decision": "none"
+          }
+        ],
+        "recommended": "checked",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "later",
+        "provisional": false,
+        "owner": "you",
+        "key": "5b2d4f6a8c0e1a3c5e7a9b1d3f5a7c9e1b3d5f7a9c1e3a5c7e9b1d3f5a7c9e1b",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "wiki.merge",
     "kind": "exception",
     "fixture": {
@@ -1368,6 +1404,83 @@
         "pinned_to": {
           "kind": "commit",
           "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "done.size",
+    "kind": "taste",
+    "fixture": {
+      "ask": {
+        "kind": "taste",
+        "question": "task:01K74G1Z3X5V7T9R1P3N5M7K9J is still past its usual size after one send-back: 191 lines over 12 files against a usual 17 over 3. Keep it as it is, or have it cut?",
+        "options": [
+          {
+            "id": "keep",
+            "label": "Keep it as it is",
+            "decision": "none"
+          },
+          {
+            "id": "cut",
+            "label": "Cut it to what the issue needs",
+            "decision": "none"
+          }
+        ],
+        "recommended": "keep",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "keep",
+        "provisional": false,
+        "owner": "you",
+        "key": "7c1b3e5a9d2f4c6e8a0b1d3f5e7a9c2b4d6f8e0a1c3e5b7d9f2a4c6e8b0d1f3a",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "5d1c0b0a3f2e4d6c8b7a9e1f0d2c3b4a5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "done.plan",
+    "kind": "choice",
+    "fixture": {
+      "ask": {
+        "kind": "choice",
+        "question": "The plan for task:01K74G1Z3X5V7T9R1P3N5M7K9J is marked large and touches 12 files against a usual 3. Approve it, shrink it or split the issue?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Approve the plan",
+            "decision": "none"
+          },
+          {
+            "id": "shrink",
+            "label": "Shrink it to what the issue needs",
+            "decision": "none"
+          },
+          {
+            "id": "split",
+            "label": "Split the issue",
+            "decision": "none"
+          }
+        ],
+        "recommended": "approve",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "approve",
+        "provisional": false,
+        "owner": "you",
+        "key": "2e4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "5d1c0b0a3f2e4d6c8b7a9e1f0d2c3b4a5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"
         }
       },
       "at_deadline": {

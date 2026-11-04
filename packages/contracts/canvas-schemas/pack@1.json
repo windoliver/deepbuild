@@ -107,7 +107,38 @@
         "let": { "type": "object" },
         "steps": { "type": "object", "additionalProperties": { "$ref": "#/$defs/step" } },
         "outputs": {},
-        "channels": { "type": "object" }
+        "channels": { "type": "object" },
+        "rules": {
+          "$comment": "#490: kind rules the core's kind_rules check reads at rest, each an expression of the closed function list over the recipe's inputs.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "expr": { "type": "string" },
+              "at": {
+                "type": "string",
+                "enum": ["rest"],
+                "x-closure": {
+                  "closed": "record",
+                  "reopens_if": "a kind rule that reads its instance at a time, not at rest",
+                  "mark": "exhaustive"
+                }
+              },
+              "fix": { "type": "string" }
+            },
+            "required": ["code", "expr", "at"]
+          }
+        },
+        "twins": {
+          "$comment": "#490: the kind kit's planted twin per rule: an instance's params that must fail the rule its expect names.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": { "params": { "type": "object" }, "expect": { "type": "string" } },
+            "required": ["params", "expect"]
+          }
+        }
       },
       "required": ["version", "steps"],
       "additionalProperties": false
@@ -117,7 +148,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["number", "integer", "bool", "choice", "vec3", "range", "text", "ID"],
+          "enum": ["number", "integer", "bool", "choice", "vec3", "range", "text", "ID", "records", "record"],
           "x-closure": {
             "closed": "record",
             "reopens_if": "a recipe input needs a value type the document envelope adds",

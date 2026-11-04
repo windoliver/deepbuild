@@ -1,0 +1,3 @@
+#!/bin/sh
+# The folder-check twin: see twin.mjs.
+exec node "$(dirname "$0")/twin.mjs" folder-check "$@"

@@ -1,0 +1,181 @@
+# #992's acceptance tests on the base, 42060bb71a2e65bd69f967bc732270c8f62038b1 (origin/main, "Merge pull request #1135"),
+# with no implementation of #992. Run 2026-11-02 on Linux arm64 (Node 24.22.0, the workspaces built with
+# `npm run build --workspaces`, `cargo build -p deep-hook`), from the checkout root:
+#
+#   npx vitest run --root tests/acceptance/992 --no-file-parallelism
+#
+# Why each test fails, and that it is the expected reason:
+#
+# AC1 #992.45c71d36 (quiet.test.ts), at its assertion: the Esc-denied session (this suite's stand-in,
+#   0992e5c0-0000-4000-8000-00000000e5c0) still reads "needs you (a permission prompt waits on you)" in deep status
+#   10 minutes (hub clock) and 35 s (real) after its last hook. The test names the session. The recording
+#   adapters/corpus/claude-code/<v>/permission-denied-esc doesn't exist yet; it is reached only after the stand-in.
+# AC2 #992.34978db2 (gone.test.ts), deep status: at its assertion: with the agent's process killed, the session
+#   0992c105-… still reads "needs you" 5 s on, not "flagged, its process is gone mid-turn" (the base writes
+#   session.gone only for lease holders, and reads waiting first).
+#   The sidebar test: BLOCKED, before its assertion: crates/deep-replica/Cargo.toml has no [[test]] acceptance_992_app
+#   (the implementation adds it), and on this Linux box the replica can't build or run anyway (deep-app's show.rs uses
+#   `image`, a macOS-only dependency; the replica renders on macOS only). On the merge base in a proof lane it is the
+#   same BLOCKED; the twin waiting-first is what kills it there (README: Planted programs).
+# AC3 #992.45c506d1 (agree.test.ts): BLOCKED on the app's side, as above. Before that, deep status read the seven
+#   recorded sessions the base corpus has (printed below: five finished, stop-failure flagged, crash working with its
+#   process gone); the other five (permission-terminal-closed, permission-denied-esc, permission-answered,
+#   elicitation-answered, elicitation-cancelled) aren't recorded. The twin waiting-as-working kills it in a proof lane.
+# AC4 #992.f70129f6 (notification.test.ts): the idle-prompt test at its assertion (the waiting session still reads
+#   "needs you" 5 s after the idle_prompt Notification: the base maps no Notification hook); the permission-prompt test
+#   at its assertion (the session reads "working", not "needs you", after a permission_prompt Notification with no
+#   PermissionRequest); the planted test at its assertion (the hub won't start with DEEP_HUB_PLANT=ask-from-notification:
+#   "names no planted program").
+#
+# Not run here: the app's side of AC2 and AC3 (macOS only), and every recorded case of the five new corpus sessions
+# (not recorded yet). The twins (twins/) were type-checked against the base's packages/hub (tsc -p packages/hub
+# --noEmit with each laid over plant.ts, then plant.ts restored), not run: a twin is laid over the change.
+
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-992-70859b/tests/acceptance/992
+
+ ❯ quiet.test.ts (1 test | 1 failed) 36906ms
+   ❯ AC1 #992.45c71d36 (1)
+     × AC1 #992.45c71d36: a session whose permission prompt was denied with Esc, then 10 minutes with no hook, reads quiet in deep status, not needs you 36835ms
+ ❯ notification.test.ts (3 tests | 3 failed) 13331ms
+   ❯ AC4 #992.f70129f6 (3)
+     × AC4 #992.f70129f6: an idle-prompt notification after a waiting session clears its waiting, opening no ask and writing no evidence 6632ms
+     × AC4 #992.f70129f6: a permission-prompt notification with no PermissionRequest sets waiting, opening no ask and writing no evidence 6557ms
+     × AC4 #992.f70129f6: a planted adapter that opens an ask from a notification fails, naming the hook 67ms
+stdout | agree.test.ts > AC3 #992.45c506d1 > AC3 #992.45c506d1: for each of 12 recorded sessions covering every state, deep status and the app's row name the same state; a planted app that maps waiting to Working fails, naming the session
+deep status read: tools finished (its turn stopped 0s ago); subagent finished (its turn stopped 0s ago); loop finished (its turn stopped 0s ago); compact finished (its turn stopped 0s ago); child-gates finished (its turn stopped 0s ago); stop-failure flagged (its turn ended failed, with no claim (unknown)); crash working (last seen 5s ago); not recorded: permission-terminal-closed (a permission prompt left showing, its agent alive); permission-denied-esc (a permission prompt denied with Esc, then 10 minutes with no hook); permission-answered (a permission prompt answered, up to the call it let run); elicitation-answered (an elicitation dialog answered, whole); elicitation-cancelled (an elicitation dialog cancelled, whole)
+
+ ❯ agree.test.ts (1 test | 1 failed) 13207ms
+   ❯ AC3 #992.45c506d1 (1)
+     × AC3 #992.45c506d1: for each of 12 recorded sessions covering every state, deep status and the app's row name the same state; a planted app that maps waiting to Working fails, naming the session 12913ms
+ ❯ gone.test.ts (2 tests | 2 failed) 12692ms
+   ❯ AC2 #992.34978db2 (2)
+     × AC2 #992.34978db2: with the agent's process gone, deep status reads the session flagged, process gone mid-turn, within 5 s; a planted reading that checks waiting first reads needs you 6334ms
+     × AC2 #992.34978db2: with the agent's process gone, the sidebar reads the session flagged, process gone mid-turn, within 5 s, as deep status does; a planted reading that checks waiting first reads needs you there too 6283ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  agree.test.ts > AC3 #992.45c506d1 > AC3 #992.45c506d1: for each of 12 recorded sessions covering every state, deep status and the app's row name the same state; a planted app that maps waiting to Working fails, naming the session
+Error: BLOCKED: the app's side: crates/deep-replica/Cargo.toml registers no [[test]] acceptance_992_app (README: What the implementation must provide, 5): exit 101, stdout "", stderr "error: no test target named `acceptance_992_app` in `deep-replica` package\nhelp: available test targets:\n    acceptance_326_panels\n    acceptance_326_panels_planted\n    acceptance_326_surfaces\n    acceptance_327_ac1_redraft\n    acceptance_327_ac3_redraft\n    acceptance_327_card\n    acceptance_327_planted\n    acceptance_883\n    card_size\n    drive\n    headless\n"
+ ❯ appRows helpers.ts:473:11
+    471|       : /could not compile|error\[/.test(r.stderr) ? 'the replica does…
+    472|       : process.platform !== 'darwin' ? 'the replica runs on macOS onl…
+    473|     throw Error(`BLOCKED: the app's side: ${why}: ${shown(r)}`);
+       |           ^
+    474|   }
+    475|   return rows;
+ ❯ agree.test.ts:54:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  gone.test.ts > AC2 #992.34978db2 > AC2 #992.34978db2: with the agent's process gone, deep status reads the session flagged, process gone mid-turn, within 5 s; a planted reading that checks waiting first reads needs you
+AssertionError: tests/acceptance/992/fixtures/sessions/permission-terminal-closed: session 0992c105-0000-4000-8000-00000000c105, its terminal closed while its permission prompt showed and its agent's process (pid 1771704) gone, reads needs you (a permission prompt waits on you) in deep status 5323 ms on, not flagged, process gone mid-turn:
+Reading the hub at unix:/tmp/dh992-vr6cOV/h/.deepbuild/hub.sock
+1 session: 1 need you
+no repo
+  0992c105  needs you  claude-code  a permission prompt waits on you
+: expected 'needs you' to be 'flagged' // Object.is equality
+
+Expected: "flagged"
+Received: "needs you"
+
+ ❯ gone.test.ts:37:55
+     35|       const session = typeof r === 'function' ? r() : r;
+     36|       const { rp, read, ms } = await closeUnder(session);
+     37|       expect(read.state, said(session, rp, read, ms)).toBe('flagged');
+       |                                                       ^
+     38|       expect(read.why, said(session, rp, read, ms)).toMatch(GONE);
+     39|       expect(ms, said(session, rp, read, ms)).toBeLessThanOrEqual(WITH…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  gone.test.ts > AC2 #992.34978db2 > AC2 #992.34978db2: with the agent's process gone, the sidebar reads the session flagged, process gone mid-turn, within 5 s, as deep status does; a planted reading that checks waiting first reads needs you there too
+Error: BLOCKED: the app's side: crates/deep-replica/Cargo.toml registers no [[test]] acceptance_992_app (README: What the implementation must provide, 5): exit 101, stdout "", stderr "error: no test target named `acceptance_992_app` in `deep-replica` package\nhelp: available test targets:\n    acceptance_326_panels\n    acceptance_326_panels_planted\n    acceptance_326_surfaces\n    acceptance_327_ac1_redraft\n    acceptance_327_ac3_redraft\n    acceptance_327_card\n    acceptance_327_planted\n    acceptance_883\n    card_size\n    drive\n    headless\n"
+ ❯ appRows helpers.ts:473:11
+    471|       : /could not compile|error\[/.test(r.stderr) ? 'the replica does…
+    472|       : process.platform !== 'darwin' ? 'the replica runs on macOS onl…
+    473|     throw Error(`BLOCKED: the app's side: ${why}: ${shown(r)}`);
+       |           ^
+    474|   }
+    475|   return rows;
+ ❯ gone.test.ts:51:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  notification.test.ts > AC4 #992.f70129f6 > AC4 #992.f70129f6: an idle-prompt notification after a waiting session clears its waiting, opening no ask and writing no evidence
+AssertionError: tests/acceptance/992/fixtures/sessions/permission-terminal-closed: session 0992c105-0000-4000-8000-00000000c105, waiting at its prompt, then the Notification hook (notification_type idle_prompt): it still reads needs you (a permission prompt waits on you) in deep status 5 s on:
+Reading the hub at unix:/tmp/dh992-2koYc1/h/.deepbuild/hub.sock
+1 session: 1 need you
+no repo
+  0992c105  needs you  claude-code  a permission prompt waits on you
+: expected 'needs you' not to be 'needs you' // Object.is equality
+ ❯ notification.test.ts:77:253
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  notification.test.ts > AC4 #992.f70129f6 > AC4 #992.f70129f6: a permission-prompt notification with no PermissionRequest sets waiting, opening no ask and writing no evidence
+AssertionError: tests/acceptance/992/fixtures/sessions/permission-answered: session 0992a115-0000-4000-8000-00000000a115, in its Write call with no PermissionRequest, then the Notification hook (notification_type permission_prompt): it reads working (last seen 6s ago) in deep status 5 s on, not needs you:
+Reading the hub at unix:/tmp/dh992-opiAMp/h/.deepbuild/hub.sock
+1 session: 1 working
+Working:
+no repo
+  0992a115  working    claude-code  last seen 6s ago
+: expected 'working' to be 'needs you' // Object.is equality
+
+Expected: "needs you"
+Received: "working"
+
+ ❯ notification.test.ts:99:354
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  notification.test.ts > AC4 #992.f70129f6 > AC4 #992.f70129f6: a planted adapter that opens an ask from a notification fails, naming the hook
+AssertionError: the hub runs the planted adapter DEEP_HUB_PLANT=ask-from-notification (README: What the implementation must provide, 3): expected 'BLOCKED: the hub didn\'t start with D…' not to match /BLOCKED: the hub didn't start/
+
+- Expected:
+/BLOCKED: the hub didn't start/
+
++ Received:
+"BLOCKED: the hub didn't start with DEEP_HUB_PLANT=ask-from-notification: file://~/deepbuild/.claude/worktrees/issue-992-70859b/packages/hub/dist/plant.js:60
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=ask-from-notification names no planted program
+    at plantOf (file://~/deepbuild/.claude/worktrees/issue-992-70859b/packages/hub/dist/plant.js:60:15)
+    at runHub (file://~/deepbuild/.claude/worktrees/issue-992-70859b/packages/hub/dist/server.js:1151:19)
+    at hubCommand (file://~/deepbuild/.claude/worktrees/issue-992-70859b/packages/hub/dist/index.js:49:28)
+    at file://~/deepbuild/.claude/worktrees/issue-992-70859b/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+"
+
+ ❯ notification.test.ts:109:178
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  quiet.test.ts > AC1 #992.45c71d36 > AC1 #992.45c71d36: a session whose permission prompt was denied with Esc, then 10 minutes with no hook, reads quiet in deep status, not needs you
+AssertionError: tests/acceptance/992/fixtures/sessions/permission-denied-esc: session 0992e5c0-0000-4000-8000-00000000e5c0, its permission prompt denied with Esc and then 10 minutes with no hook, reads needs you (a permission prompt waits on you) in deep status, not quiet (right after the replay it read needs you (a permission prompt waits on you)):
+Reading the hub at unix:/tmp/dh992-Xqjh1n/h/.deepbuild/hub.sock
+1 session: 1 need you
+no repo
+  0992e5c0  needs you  claude-code  a permission prompt waits on you
+: expected 'needs you' to be 'quiet' // Object.is equality
+
+Expected: "quiet"
+Received: "needs you"
+
+ ❯ deniedThenQuiet quiet.test.ts:26:346
+
+ ❯ quiet.test.ts:31:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  7 failed (7)
+   Start at  23:22:06
+   Duration  77.85s (tests 98%, transform 1%, import 1%)
+
