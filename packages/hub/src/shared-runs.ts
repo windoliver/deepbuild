@@ -1,6 +1,6 @@
 // Results shared across sessions (#1018; design: Pinned to a commit): a run's key names everything its result depends
 // on, so any claim in the same repo on the same host whose key is equal reads that run as carried, whichever session
-// made it. The key is a stem (the repo, the host, the check's approved bytes, command, deadline and held-out variants,
+// made it. The key is a stem (the repo, the host, the check's approved bytes, command, deadline, held-out variants and referenced outputs,
 // the environment's installs and Node, the names of the files the snapshot holds, and for a base run the merge base
 // instead of those names) and the contents of the files it reads: the files its runs read, or for a base run its own
 // files. A key's runs come from every claim that ran it, each counted once.
@@ -81,8 +81,8 @@ export async function namesOf(dir: string): Promise<string> {
   return sha(out.sort().join('\0'));
 }
 /** The stem of a key: everything but the files' contents. */
-export const stemOf = (facts: { repo: string; check: string; approved: string; command: string; deadline_ms: number | null; held_out: unknown; installs: string; names: string | null; base: string | null; session?: string }): string =>
-  sha(JSON.stringify([facts.repo, hostname(), facts.check, facts.approved, facts.command, facts.deadline_ms, facts.held_out ?? null, facts.installs, facts.names, facts.base, facts.session ?? null]));
+export const stemOf = (facts: { repo: string; check: string; approved: string; command: string; deadline_ms: number | null; held_out: unknown; references?: unknown; installs: string; names: string | null; base: string | null; session?: string }): string =>
+  sha(JSON.stringify([facts.repo, hostname(), facts.check, facts.approved, facts.command, facts.deadline_ms, facts.held_out ?? null, facts.references ?? null, facts.installs, facts.names, facts.base, facts.session ?? null]));
 /** Whether a run's record is whole in run.finished, so a restarted hub may read it again (KeyFacts.plain). */
 export const plain = (r: RecordedRun): boolean => !r.attempts.length && !r.seeded.some((s) => s.standIn) && r.failures.every((f) => f.assertion) && r.contract === null && r.mask === null;
 

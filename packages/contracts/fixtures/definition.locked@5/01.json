@@ -31,12 +31,10 @@
         "surface": null,
         "expected_ms": 1200,
         "deadline_ms": 60000,
-        "runs": 3,
-        "held_out": [
+        "references": [
           {
-            "files": {
-              "test/fixtures/seq-number.json": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"
-            }
+            "path": ".deepbuild/checks/seq-number.expected",
+            "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
           }
         ]
       },
@@ -55,8 +53,9 @@
         "oracle": "code",
         "near_misses": [],
         "author": {
-          "handle": "you",
-          "role": "you"
+          "handle": "octo-app[bot]",
+          "role": "collaborator",
+          "automated": true
         },
         "surface": {
           "kind": "service",
@@ -64,7 +63,9 @@
             "/health"
           ],
           "format": "json"
-        }
+        },
+        "criterion": "#12.5c042dfa",
+        "command": "npx vitest run --root tests/acceptance/12 health.test.ts"
       }
     ],
     "deliverables": [

@@ -1,6 +1,6 @@
 {
   "title": "definition.locked@5",
-  "description": "A definition of done was locked: its hash, the issue's revision and the base commit, each requirement with its author, its check's approved bytes by digest, and the surface its check declares it enters through. Only the core appends it. Since @5, a requirement may name the clean runs it needs and its held-out variants (#1018).",
+  "description": "A definition of done was locked: its hash, the issue's revision and the base commit, each requirement with its author (marked automated when its work source's reading says so), its check's approved bytes by digest, the expected outputs its check references by digest, the command its check runs where the check isn't a drafted file, the criterion ID it quotes, and the surface its check declares it enters through. Only the core appends it.",
   "x-since": "R1",
   "x-stability": "stable",
   "x-feeds": [
@@ -190,6 +190,10 @@
                       "reopens": "a new major of this schema",
                       "mark": "exhaustive"
                     }
+                  },
+                  "automated": {
+                    "type": "boolean",
+                    "description": "True when the work source's reading marks the author automated (an app or a bot account): their text counts as outside text whatever their membership."
                   }
                 },
                 "required": [
@@ -209,37 +213,6 @@
                 "minimum": 1,
                 "maximum": 9007199254740991,
                 "description": "How long its check may take, in milliseconds, past which its run times out."
-              },
-              "runs": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 65535,
-                "description": "How many clean runs its check needs; one when absent."
-              },
-              "held_out": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "files": {
-                      "type": "object",
-                      "propertyNames": {
-                        "pattern": "^[0-9A-Za-z_.-][0-9A-Za-z_./@+-]*$"
-                      },
-                      "additionalProperties": {
-                        "type": "string",
-                        "pattern": "^[0-9a-f]{64}$",
-                        "description": "A SHA-256, in lower-case hex.",
-                        "maxLength": 8192
-                      }
-                    }
-                  },
-                  "required": [
-                    "files"
-                  ],
-                  "additionalProperties": false
-                },
-                "description": "Its check's held-out variants: each the files written over the claim's checkout for a run of its own, kept by digest and never sent to the agent."
               },
               "surface": {
                 "type": [
@@ -290,6 +263,42 @@
                   "kind"
                 ],
                 "additionalProperties": false
+              },
+              "references": {
+                "type": "array",
+                "description": "The expected outputs the check references, each kept by digest at the lock as the check's bytes are, so the hash covers them and the claim's run gets the approved bytes.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8192
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "maxLength": 8192
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "sha256"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "command": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The command the check runs where the check is one of the repo's own tests rather than a drafted file under .deepbuild/, such as the test runner on a file tagged with the criterion's ID."
+              },
+              "criterion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The acceptance criterion's ID where the requirement quotes one, #<issue>.<first 8 hex of the SHA-256 of its text>."
               }
             },
             "required": [

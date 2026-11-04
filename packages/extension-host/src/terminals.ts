@@ -8,9 +8,9 @@
 // tab reach a terminal only through the app's calls on the host (`rawInput`, `resize`, `tab`). An extension host with
 // no hub around it, as in a benchmark, takes the hub's lock itself, so its process is the one its hosts take.
 import { randomBytes } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
 import { connect, type Socket } from 'node:net';
-import { isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { ulid } from '@deepbuild/record';
 import { HELPER, type Supervisor } from '@deepbuild/supervisor';
@@ -31,6 +31,8 @@ export interface Terminal {
   kept: boolean;
   /** What the hub gave its host at start, which the host states back: kept here, owner-only, and never a piece's. */
   key?: string;
+  /** Its entry in the index couldn't be read (#996): it shows as lost, never as closed, and nothing reads or writes it. */
+  lost?: true;
 }
 export interface OpenSpec { argv: string[]; cwd: string; env?: Record<string, string>; cols: number; rows: number; title: string }
 
@@ -70,6 +72,82 @@ const ANSWER_MS = 10_000;
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
 const size = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 1 && (v as number) <= 1000;
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** Writes `bytes` to `path` whole and synced: a temp file, synced, renamed, and its folder synced. */
+function writeSynced(path: string, bytes: Uint8Array): void {
+  const fd = openSync(`${path}.tmp`, 'w', 0o600);
+  try {
+    writeSync(fd, bytes);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(`${path}.tmp`, path);
+  syncFolder(dirname(path));
+}
+function syncFolder(dir: string): void {
+  const fd = openSync(dir, 'r');
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** A terminal as the index holds it: anything else in its place is damage. */
+const isTerminal = (key: string, t: unknown): t is Terminal => isObj(t) && t.terminal === key && typeof t.id === 'string' && typeof t.run === 'string' && typeof t.kept === 'boolean';
+
+/** A terminal whose entry can't be read, from what of it can (#996); taken as kept: nothing stops what it can't prove it started. */
+function lostOne(terminal: string, field: (name: string) => unknown): Terminal {
+  const [id, run, pid, title] = [field('id'), field('run'), field('pid'), field('title')];
+  return { terminal, id: typeof id === 'string' ? id : '', run: typeof run === 'string' ? run : '', pid: typeof pid === 'number' ? pid : 0, title: typeof title === 'string' ? title : terminal, kept: true, lost: true };
+}
+
+/**
+ * The entries of an index that can't be read whole, as save() writes it (#996): each entry's fields one a line, four
+ * spaces in, between its key line and its closing brace. A run of field lines that parses, whole between the two, is
+ * an entry; any other is lost, named by its own terminal field or by the key above it. A bad byte anywhere loses at
+ * most its own entry, never a neighbour's.
+ */
+function salvage(text: string): Record<string, Terminal> {
+  const read: Record<string, Terminal> = {};
+  const TERM = /^term:[0-9A-Za-z]+$/;
+  let key: string | undefined;
+  let fields: string[] = [];
+  const end = (closed: boolean): void => {
+    if (!fields.length) return;
+    const body = `{${fields.join('\n').replace(/,\s*$/, '')}}`;
+    const lines = fields;
+    fields = [];
+    try {
+      const t = JSON.parse(body) as unknown;
+      if (closed && key !== undefined && isTerminal(key, t) && !read[key]) {
+        read[key] = t;
+        key = undefined;
+        return;
+      }
+    } catch {
+      // Lost: named below by what can be read.
+    }
+    const field = (name: string): unknown => {
+      const value = lines.map((l) => new RegExp(`^ {4}"${name}": ("(?:[^"\\\\\\u0000-\\u001f]|\\\\.)*"|\\d+)`).exec(l)?.[1]).find((v) => v !== undefined);
+      try { return value === undefined ? undefined : JSON.parse(value); } catch { return undefined; }
+    };
+    const named = [field('terminal'), key].find((v): v is string => typeof v === 'string' && TERM.test(v));
+    // A run a damaged line cut in two: the part that can't name itself belongs to the entry its first part named.
+    if (named && !read[named]) read[named] = lostOne(named, field);
+    key = undefined;
+  };
+  for (const line of text.split('\n')) {
+    if (/^ {4}"/.test(line)) { fields.push(line); continue; }
+    end(/^ {2}\},?$/.test(line));
+    const k = /^ {2}"([^"\n]*)": \{\s*$/.exec(line)?.[1];
+    if (k !== undefined) key = k;
+  }
+  end(false);
+  return read;
+}
 
 /** How many bytes of `buf` end on a whole UTF-8 character: a character the read cut is left for the next one. */
 function whole(buf: Buffer): number {
@@ -107,15 +185,42 @@ export class Terminals {
   private readonly stopped = new Set<string>();
   private lock: Database.Database | undefined | null = null;
 
+  /** What this start found the index unable to say (#996): where it was kept aside, and the terminals it lost. */
+  readonly damaged: { aside: string; lost: string[] } | undefined;
+
   constructor(
     private readonly home: string, private readonly supervisor: Supervisor,
-    private readonly options: { protocol: number; refused: (terminal: string, pid: number) => void; plant?: TerminalPlant },
+    private readonly options: { protocol: number; refused: (terminal: string, pid: number) => void; plant?: TerminalPlant; point?: () => void; now?: () => number },
   ) {
     this.index = join(home, 'extensions', 'terminals.json');
-    const saved = existsSync(this.index) ? JSON.parse(readFileSync(this.index, 'utf8')) as Record<string, Terminal> : {};
+    const bytes = existsSync(this.index) ? readFileSync(this.index) : Buffer.from('{}');
+    let index: unknown;
+    try {
+      index = JSON.parse(bytes.toString('utf8'));
+    } catch {
+      // Damaged: read entry by entry below.
+    }
+    let saved: Record<string, Terminal>;
+    if (isObj(index) && Object.entries(index).every(([key, t]) => isTerminal(key, t))) saved = index as Record<string, Terminal>;
+    else {
+      // One bad byte loses only its own entry. The index's bytes are kept aside, synced, under a name with its time
+      // before it is written again, so a cut in between finds the damaged index, never an empty one.
+      saved = isObj(index)
+        ? Object.fromEntries(Object.entries(index).filter(([key]) => /^term:[0-9A-Za-z]+$/.test(key))
+          .map(([key, t]) => [key, isTerminal(key, t) ? t : lostOne(key, (name) => (isObj(t) ? t[name] : undefined))]))
+        : salvage(bytes.toString('utf8'));
+      const aside = `${this.index}.${new Date(options.now?.() ?? Date.now()).toISOString().replace(/:/g, '-')}`;
+      writeSynced(aside, bytes);
+      this.damaged = { aside, lost: Object.values(saved).filter((t) => t.lost).map((t) => t.terminal) };
+    }
     // One that didn't live past the app was reaped with its run when the supervisor opened.
     this.open_ = Object.fromEntries(Object.entries(saved).filter(([, t]) => t.kept));
   }
+  /** Writes a damaged index again as this start read it, once its reading is recorded: a cut in between finds it damaged still. */
+  settle(): void {
+    if (this.damaged) this.save();
+  }
+
   /** Once the hub first talks to a host: the hub's lock, unless a process holds it already. */
   private locked(): void {
     if (this.lock === null) this.lock = holdLock(this.lockPath());
@@ -123,11 +228,11 @@ export class Terminals {
   private lockPath(): string {
     return join(this.home, 'hub-lock.sqlite');
   }
+  /** Writes the index whole and synced, owner-only (it holds each host's key), one numbered durable write point. */
   private save(): void {
     mkdirSync(join(this.home, 'extensions'), { recursive: true });
-    // Owner-only: it holds each host's key.
-    writeFileSync(`${this.index}.tmp`, JSON.stringify(this.open_, null, 2), { mode: 0o600 });
-    renameSync(`${this.index}.tmp`, this.index);
+    writeSynced(this.index, Buffer.from(JSON.stringify(this.open_, null, 2)));
+    this.options.point?.();
   }
   private dir(terminal: string): string {
     return join(this.home, 'terminals', terminal.slice('term:'.length));
@@ -135,6 +240,7 @@ export class Terminals {
   private known(terminal: string): Terminal {
     const t = this.open_[terminal];
     if (!t) throw Error(`no terminal ${String(terminal)} is open`);
+    if (t.lost) throw Error(`${terminal} is lost: its entry in the terminals index couldn't be read`);
     return t;
   }
 
@@ -174,7 +280,7 @@ export class Terminals {
 
   /** Reattaches every terminal an earlier launch left running, so a writer refused meanwhile is recorded now. */
   attach(): void {
-    for (const terminal of Object.keys(this.open_)) void this.link(terminal).catch(() => undefined);
+    for (const terminal of Object.keys(this.open_).filter((k) => !this.open_[k]!.lost)) void this.link(terminal).catch(() => undefined);
   }
 
   /** The connection to the terminal's host, made once: the host states its protocol version first. */
@@ -255,6 +361,7 @@ export class Terminals {
   async read(id: string, terminal: string, from: number): Promise<{ text: string; next: number }> {
     const t = this.open_[terminal];
     if (!t || t.id !== id) throw Error(`${id} has no terminal ${String(terminal)}`);
+    if (t.lost) throw Error(`${terminal} is lost: its entry in the terminals index couldn't be read`);
     if (!Number.isSafeInteger(from) || from < 0) throw Error('deep.terminal.read takes the terminal and a byte offset from 0');
     const dir = this.dir(terminal);
     // A host from before #989 appends every byte to `out`, which reads from the first.
@@ -374,6 +481,8 @@ export class Terminals {
 
   /** Stops every process the terminal's run owns, its host process, its program and everything they started, and removes its folder. */
   async stop(t: Terminal): Promise<void> {
+    // A lost one's run and folder are what damaged bytes say: nothing stops or removes what it can't prove it started.
+    if (t.lost) throw Error(`${t.terminal} is lost: its entry in the terminals index couldn't be read, so it isn't closed`);
     await this.supervisor.cleanup(t.run);
     this.drop(t.terminal);
     delete this.open_[t.terminal];

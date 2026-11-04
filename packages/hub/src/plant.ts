@@ -44,6 +44,8 @@ export type Plant =
   // substitutes on every allowed host, and the run's CA added to the login keychain.
   | 'standin-value-in-env' | 'env-loads-by-value' | 'standin-every-host' | 'run-ca-in-login-keychain'
   | 'runs-disk-bytes'
+  // #325's: a stalled-claim rule that counts any new run as new evidence, and one that counts the stops a question holds.
+  | 'new-run-is-evidence' | 'counts-waiting-stops'
   // #120's: the long-wait lines wait for the turn's stop, so a long turn of short calls shows none while it runs.
   | 'line-at-stop'
   // #340's: a note the waiter delivered recorded as nothing, and the app's words taken for yours with no request ID.
@@ -73,6 +75,8 @@ export type Plant =
   | 'any-nonzero-base-exit'
   // #124's: deep_drive launching replicas without the replica lease.
   | 'deep-drive-no-lease'
+  // #55's: an answer handed to paseo's plugin while deep-hook's waiter for the session is live, so it goes in twice.
+  | 'paseo-delivers-beside-waiter'
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
   | 'signature-covers-anything'
   // #909's: a hub that never checks its lock again once it holds it.
@@ -90,6 +94,19 @@ export type Plant =
   // starting nothing, no grace window, no 30-minute cap or one timed from the first stop, and facts read only at stops.
   | 'starts-on-every-green-stop' | 'holds-every-loop-check' | 'holds-claim-stop-for-loop' | 'words-only-at-turn-start'
   | 'no-grace-window' | 'holds-background-without-limit' | 'caps-from-first-stop' | 'rechecks-facts-at-stops-only'
+  // #997's: loop facts read as the merge base did, with no monitor's watch.
+  | 'monitor-unread'
+  // #322's: criteria read from the GitHub API alone, a comment author's role from the comment's text, every author a
+  // collaborator, an app's membership taken as collaborator, an early claim judged on the repo spec alone, a lint that
+  // only looks for a number, and a gate that runs no check before the definition locks.
+  | 'criteria-from-github-api' | 'role-from-comment-text' | 'every-author-collaborator' | 'app-membership-as-collaborator'
+  | 'spec-only-judges-early-claim' | 'lint-number-only' | 'lock-before-any-check'
+  // #323's: open items' normalizer that drops numbers, a gate that reads only the PR body, one that counts every
+  // resolved review thread as closed, and one that closes an item the agent marked completed in its task list.
+  | 'normalizer-drops-numbers' | 'pr-body-only' | 'resolved-counts-closed' | 'completed-closes-item'
+  // #669's: a command check's runner that reads a masked exit as a clean pass, a stop reply whose line says PASS with no
+  // verdict behind it, and a status question sent on to the model.
+  | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model'
   // #1018's: runs keyed by session too, a key without the files runs read, a shared run counted once per claim that
   // reads it, a store of the newest result per key, and a carry that copies the source run's evidence whole.
   | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence';
@@ -117,6 +134,7 @@ const PLANTS: readonly string[] = [
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
+  'new-run-is-evidence', 'counts-waiting-stops',
   'line-at-stop',
   'app-note-unrecorded', 'app-note-as-person',
   'brief-full-text', 'brief-at-startup-only', 'queue-shows-newest', 'continuation-as-person', 'continuation-by-likeness',
@@ -130,6 +148,7 @@ const PLANTS: readonly string[] = [
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
   'silent-deprecated',
   'deep-drive-no-lease',
+  'paseo-delivers-beside-waiter',
   'signature-covers-anything',
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
@@ -137,8 +156,12 @@ const PLANTS: readonly string[] = [
   'any-nonzero-base-exit',
   'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
-  'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only',
+  'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only', 'monitor-unread',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
+  'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
+  'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
+  'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
+  'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {

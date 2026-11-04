@@ -1,0 +1,15 @@
+{
+  "issue": 1174,
+  "criterion": "#1174.20f41e3e",
+  "verdict": "looks_right",
+  "who": "Claude (Opus 5.5), on the owner Tao Feng's delegation in session (\"can you judge for me\")",
+  "when": "2026-11-03T22:57:19.572Z",
+  "screenshots": {
+    "labels-2d-3d.png": "c1c7c95eba2386846fd7ae53629259fbda8a708dc171209ff54842c96c67357d",
+    "labels-2d-3d-x4.png": "173177a4ee341958025e3e34ffe330a56b038e9bdbfb35fafb8cc6d05867773c",
+    "shard-scale-1.png": "925ed5c99b72ce6ccb60e88c1a10ae540d493da11916947a6e0f741e3fed7ce6",
+    "shard-scale-0.5.png": "925ed5c99b72ce6ccb60e88c1a10ae540d493da11916947a6e0f741e3fed7ce6",
+    "shard-label-x4.png": "af59941f5090a9b9aab4a04775b4e81c600a79b5d7748cc875ed1e06ebce7b0e"
+  },
+  "note": "2D and 3D labels read as the same text: same stroke weight, full ink at their darkest pixels. All 48 shard labels are crisp and evenly dark; scale 0.5 is byte-identical to scale 1."
+}
