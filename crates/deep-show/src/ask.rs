@@ -305,7 +305,7 @@ impl Hub<'_> {
         // The form the frame draws: the agent's tables and the vectors inlined (#1162).
         let mut form = doc.clone();
         let _ = self.inline_tables(&mut form);
-        self.inline_vectors(&mut form);
+        let _ = self.inline_vectors(&mut form);
         let session = self.evaluated(&form, t);
         let mut hits: Vec<(String, String)> = Vec::new();
         let mut quote = None;

@@ -274,7 +274,7 @@ impl Hub<'_> {
             .map(|r| r.doc.clone())
             .ok_or_else(|| refused("no_revision"))?;
         let _ = self.inline_tables(&mut doc);
-        self.inline_vectors(&mut doc);
+        let _ = self.inline_vectors(&mut doc);
         Ok(doc)
     }
 

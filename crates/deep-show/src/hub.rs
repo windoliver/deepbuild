@@ -1279,15 +1279,16 @@ impl<'a> Hub<'a> {
 
     /// Each `vector@1` item's imported outline, inlined from the evidence store as
     /// `params.outline` (#398, #1162): what the vector kind draws as in a frame.
-    pub(crate) fn inline_vectors(&self, form: &mut Value) {
-        let Value::Object(map) = form else { return };
+    /// The import's issues come back: an SVG the store doesn't hold is `asset_missing`.
+    pub(crate) fn inline_vectors(&self, form: &mut Value) -> Vec<Issue> {
+        let Value::Object(map) = form else { return Vec::new() };
         let root = &self.scenario.evidence;
-        let (_, imported) = deep_canvas_vector::check(
+        let (issues, imported) = deep_canvas_vector::check(
             map,
             |sha| (sha.len() == 64).then(|| std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()).flatten(),
             false,
         );
-        let Some(Value::Object(items)) = map.get_mut("items") else { return };
+        let Some(Value::Object(items)) = map.get_mut("items") else { return issues };
         for (id, found) in &imported {
             if let Some(item) = items.get_mut(id) {
                 let outline = deep_canvas_vector::lower::outline(&found.svg, item, &found.colors);
@@ -1296,6 +1297,7 @@ impl<'a> Hub<'a> {
                 }
             }
         }
+        issues
     }
 
     pub(crate) fn new_session(&self) -> DocSession {
@@ -1925,7 +1927,7 @@ impl<'a> Hub<'a> {
             if let Err(r) = self.inline_tables(form) {
                 issues.push(unfit_issue(r.code, r.path));
             }
-            self.inline_vectors(form);
+            issues.extend(self.inline_vectors(form));
         }
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
