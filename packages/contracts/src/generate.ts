@@ -6,6 +6,8 @@ import { generateRust } from './codegen-rust.js';
 import { generateTypeScript } from './codegen-ts.js';
 import { d1Digest } from './digest.js';
 import { lintSchemas } from './lint.js';
+import { machines } from './lifecycle.js';
+import type { Schema } from './json.js';
 import { listSchemas } from './schemas.js';
 import { extensionApi, hubSlots, slotInterfaces } from './slots.js';
 
@@ -22,6 +24,8 @@ const frozen = JSON.parse(readFileSync(file, 'utf8')) as Record<string, string>;
 for (const { name, schema } of entries) frozen[name] ??= d1Digest(schema);
 // The slot interfaces (#349) are contract entries too: each frozen once, under its name@major.
 for (const { name, schema } of slotInterfaces()) frozen[name] ??= d1Digest(schema);
+// So are the lifecycle tables: a change to one is a contract change.
+for (const table of machines()) frozen[table.id] ??= d1Digest(table as unknown as Schema);
 const sorted = Object.fromEntries(Object.keys(frozen).sort().map((name) => [name, frozen[name]]));
 writeFileSync(file, `${JSON.stringify(sorted, null, 2)}\n`);
 // The published extension API carries each method's shape digest, and the hub-slot table each interface's frozen

@@ -62,6 +62,11 @@ pub struct Look3 {
     pub ao: Option<Ao>,
     /// The deband's amplitude in 8-bit steps, or `None` with it off.
     pub deband: Option<f64>,
+    /// The most taps a mipmapped texture's sampler takes along its footprint's long axis (#423;
+    /// Material: texture maps): 1, 2, 4 or 8, 8 by default.
+    pub filter_taps: u8,
+    /// Look: samples, `live`: the sub-samples a live frame is the mean of (#423), 1 by default.
+    pub live_samples: u32,
 }
 
 /// The EV100 whose exposure scale is 1, a look's default.
@@ -92,6 +97,8 @@ impl Look3 {
             grade: Grade::default(),
             ao: None,
             deband: None,
+            filter_taps: 8,
+            live_samples: 1,
         }
     }
 
@@ -129,6 +136,16 @@ impl Look3 {
             }
         };
         out.grade = read_grade(look.get("grade"))?;
+        out.filter_taps = match look.get("filter_taps").map(Value::as_u64) {
+            None => 8,
+            Some(Some(n @ (1 | 2 | 4 | 8))) => n as u8,
+            Some(_) => return Err("filter_taps is 1, 2, 4 or 8".into()),
+        };
+        out.live_samples = match look.pointer("/samples/live").map(Value::as_u64) {
+            None => 1,
+            Some(Some(n @ 1..=64)) => n as u32,
+            Some(_) => return Err("samples.live is 1 to 64".into()),
+        };
         out.ao = match look.get("ao") {
             None | Some(Value::Null) => None,
             Some(Value::String(s)) if s == "none" => None,
