@@ -1,6 +1,7 @@
 // A deny that didn't hold (#1033), on a hub hook requests reach the way deep-hook sends them: one from before a restart
 // is still read back when its call's PostToolUse arrives after, and a session's row takes back its watch-only line once
-// its home loads no mod that can override the guard.
+// its home loads no mod that can override the guard; a session resumed in a new Claude Code process is bound again.
+import { spawn } from 'node:child_process';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -25,6 +26,27 @@ describe('a deny that did not hold', () => {
       await hub.restart({ DEEP_HUB_TEST_MANAGED_SETTINGS: join(home, 'no-managed.json') });
       await send(socket(root), hookLine('01K74FKZVK8Q2X5R7M3N9P4T62', 'PostToolUse', s.payload('PostToolUse', { ...PUSH, tool_response: { stdout: '', stderr: '' } })));
       expect(await recorded(root, 'aaaaaaaa-1033-4000-8000-000000000001', 'guard.overridden', 1), 'the push ran past its deny from before the restart').toBe(1);
+    });
+  }, 60_000);
+
+  it('binds a Claude Code session resumed in a new process (--resume, the desktop app opened again) from its resume start', async () => {
+    await withHub(async (root, home) => {
+      const id = 'aaaaaaaa-1033-4000-8000-000000000003';
+      const s = session(home, id);
+      await send(socket(root), hookLine('01K74FKZVK8Q2X5R7M3N9P4T65', 'SessionStart', s.payload('SessionStart', { source: 'startup' })));
+      await send(socket(root), hookLine('01K74FKZVK8Q2X5R7M3N9P4T66', 'SessionEnd', s.payload('SessionEnd', { reason: 'other' })));
+      // The new Claude Code process, as ps shows it: its native binary's name.
+      const agent = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { argv0: join(home, 'versions', 'claude'), stdio: 'ignore' });
+      try {
+        await send(socket(root), hookLine('01K74FKZVK8Q2X5R7M3N9P4T67', 'SessionStart', s.payload('SessionStart', { source: 'resume' }), { ppid: agent.pid }));
+        await recorded(root, id, 'session.start', 2);
+        const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+        const starts = db.prepare("SELECT unverified FROM events WHERE kind = 'session.start' AND session_id = ? ORDER BY log_pos").all(id) as { unverified: number }[];
+        db.close();
+        expect(starts.map((r) => r.unverified), 'the resume start is checked against its session and binds it').toEqual([0, 0]);
+      } finally {
+        agent.kill();
+      }
     });
   }, 60_000);
 
