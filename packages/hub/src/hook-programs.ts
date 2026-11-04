@@ -10,11 +10,12 @@ import { recordedEntries, recordedHome } from './codex-settings.js';
 /** The entries of one agent's settings that run one program that can't run: missing, or not executable. */
 export interface Unrunnable { agent: 'claude-code' | 'codex'; file: string; events: string[]; path: string; why: 'gone' | 'not executable' }
 
-/** The program a command runs: its first word, unquoted as setup quotes it (`'…'`, with `'\''` for a quote). */
+/** The program a command runs: its first word past an `exec`, unquoted as setup quotes it (`'…'`, with `'\''` for a quote). */
 export function programOf(command: string): string {
-  const quoted = /^'((?:[^']|'\\'')*)'/.exec(command);
+  const run = command.trim().replace(/^exec\s+/, '');
+  const quoted = /^'((?:[^']|'\\'')*)'/.exec(run);
   if (quoted) return quoted[1]!.replaceAll(`'\\''`, "'");
-  return command.trim().split(/\s+/)[0] ?? '';
+  return run.split(/\s+/)[0] ?? '';
 }
 
 /** Each program setup's recorded entries run that can't run, grouped per agent and program, with the events naming it. */
