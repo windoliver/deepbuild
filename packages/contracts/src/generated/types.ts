@@ -5234,6 +5234,28 @@ export interface RunKept {
   evidence?: Array<string>;
 }
 
+/** run.stale@1 */
+export interface RunStale {
+  v: 1;
+  id: string;
+  kind: "run.stale";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    run: string;
+    check: string;
+    claim: string;
+    newer_claim: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.started@1 */
 export interface RunStarted {
   v: 1;
