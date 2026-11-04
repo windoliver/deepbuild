@@ -9,6 +9,7 @@
 
 pub mod ao;
 pub mod env;
+pub mod maps;
 mod mesh;
 pub mod shadow;
 pub mod status;
@@ -88,6 +89,9 @@ pub struct Planted {
     pub spot_counts_cone: bool,
     /// #421: status outlines drawn through the tone map.
     pub status_before_tone_map: bool,
+    /// #423: every mipmapped map sampled at anisotropy 1, so the mip follows the footprint's
+    /// long axis.
+    pub anisotropy_one: bool,
     /// #422: the shading core mixes metallic into one F0 before shading.
     pub premixed_metallic: bool,
     /// #422: the specular lobes lose single scattering's missing energy.
@@ -439,6 +443,8 @@ const DOUBLE_SIDED: u32 = 32;
 /// A shadow catcher; its alpha mode from bit 7; its pattern from bit 9 and its seed from bit 16
 /// (scene3d.wgsl).
 const CATCH: u32 = 64;
+/// Its material samples texture maps (#423), its group 3.
+const MAPS: u32 = 8192;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -481,7 +487,7 @@ struct TextRecord {
 
 /// A solid's instance record: `tie` its rank by ID, `winding` false for the planted program that
 /// ignores its determinant.
-fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool) -> SolidRecord {
+fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool, maps: bool) -> SolidRecord {
     let m = &s.model;
     let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
         - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
@@ -502,6 +508,7 @@ fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool) -> SolidRecord {
             | if mat.unlit { UNLIT } else { 0 }
             | if mat.double_sided { DOUBLE_SIDED } else { 0 }
             | if mat.catch.is_some() { CATCH } else { 0 }
+            | if maps { MAPS } else { 0 }
             | mode << 7
             | mat.pattern << 9
             | (mat.pattern_seed & 0xffff) << 16;
@@ -828,10 +835,14 @@ impl Set {
     }
 }
 
+/// A solid's (shape, maps) key, its record's place in that key's set, its pick ID and tie rank.
+type Slot = ((Shape, u32), u32, u32, u32);
+
 /// A 3D writer layer's batch: its instance sets and its encoding.
 #[derive(Default)]
 struct Batch {
-    solids: BTreeMap<Shape, Set>,
+    /// Opaque solids by shape and material maps (0: none; #423).
+    solids: BTreeMap<(Shape, u32), Set>,
     lines: Set,
     points: Set,
     /// One record per inked glyph of its labels.
@@ -839,11 +850,11 @@ struct Batch {
     bundle: Option<wgpu::RenderBundle>,
     /// Each solid's shape, its record's place in that shape's set, its pick ID and its tie
     /// rank, in the layer's solid order.
-    solid_slots: Vec<(Shape, u32, u32, u32)>,
+    solid_slots: Vec<Slot>,
     /// The see-through solids' records back to front, and each one's shape and whether it adds
     /// (#421: Object: see-through order).
     clear: Set,
-    clear_draws: Vec<(Shape, bool)>,
+    clear_draws: Vec<((Shape, u32), bool)>,
     /// The resources and draws the bundle binds and records, as it was encoded, and this
     /// frame's, gathered in a buffer kept from frame to frame.
     key: Vec<u64>,
@@ -909,6 +920,9 @@ pub type Camera = ([f64; 16], [f64; 3], f64);
 pub struct Renderer {
     planted: Planted,
     epoch: u64,
+    /// The material maps' textures and bind groups (#423), and the look's default taps.
+    maps: maps::Store,
+    filter_taps: u8,
     frame_buffer: wgpu::Buffer,
     frame_bind: wgpu::BindGroup,
     /// The lights this frame's policy shades and the DFG table, for the solids' shading (#421).
@@ -1082,8 +1096,10 @@ fn shape_code(s: Shape) -> u64 {
     }
 }
 
-const MESH_VERTEX: [wgpu::VertexAttribute; 2] =
-    wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
+// Position and normal, then (#423) uv0, uv1 and the tangent at 13 to 15, after the records'.
+const MESH_VERTEX: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
+    0 => Float32x3, 1 => Float32x3, 13 => Float32x2, 14 => Float32x2, 15 => Float32x4
+];
 // Location 8 is the solid's tie rank, which the vertex stage reads (#421).
 const SOLID: [wgpu::VertexAttribute; 11] = wgpu::vertex_attr_array![
     2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Uint32, 6 => Uint32, 7 => Uint32,
@@ -1103,7 +1119,7 @@ const TEXT: [wgpu::VertexAttribute; 8] = wgpu::vertex_attr_array![
 fn mesh_buffers() -> [Option<wgpu::VertexBufferLayout<'static>>; 2] {
     [
         Some(wgpu::VertexBufferLayout {
-            array_stride: 24,
+            array_stride: (mesh::FLOATS * 4) as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &MESH_VERTEX,
         }),
@@ -1542,7 +1558,13 @@ impl Renderer {
             &env,
         );
         let ao = ao::Passes::new(device);
-        let mesh_layout = layout(&[Some(&frame_layout), Some(&lights_layout), Some(&ao.shade_layout)]);
+        let maps = maps::Store::new(d, &device.queue);
+        let mesh_layout = layout(&[
+            Some(&frame_layout),
+            Some(&lights_layout),
+            Some(&ao.shade_layout),
+            Some(&maps.layout),
+        ]);
         let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
         let mesh_buffers = mesh_buffers();
@@ -1760,6 +1782,8 @@ impl Renderer {
             puffs: None,
             puff_pipeline: None,
             solid_layout: mesh_layout.clone(),
+            maps,
+            filter_taps: 8,
             clear_pipelines: [None, None],
             ties: BTreeMap::new(),
             flip: false,
@@ -2291,7 +2315,8 @@ impl Renderer {
                     l.radius as f32,
                 ],
                 [l.cone[0] as f32, l.cone[1] as f32, 0.0, 0.0],
-                l.area.map_or([0.0; 4], |a| v4(a.right, if a.disk { 1.0 } else { 0.0 })),
+                l.area
+                    .map_or([0.0; 4], |a| v4(a.right, if a.disk { 1.0 } else { 0.0 })),
                 l.area.map_or([0.0; 4], |a| v4(a.up, 0.0)),
             ];
         }
@@ -2457,7 +2482,13 @@ impl Renderer {
                 continue;
             };
             if let Some(set) = batch.solids.get_mut(&shape) {
-                let record = solid_record(s, pick, tie, !self.planted.winding_ignores_determinant);
+                let record = solid_record(
+                    s,
+                    pick,
+                    tie,
+                    !self.planted.winding_ignores_determinant,
+                    shape.1 != 0,
+                );
                 set.write(
                     device,
                     at as usize,
@@ -2486,7 +2517,20 @@ impl Renderer {
         } else {
             Depth::Reversed
         };
-        let rows = cam.clip(depth);
+        let mut rows = cam.clip(depth);
+        // Look: samples (#423): a sub-sample's offset moves the projection by a fraction of a
+        // pixel, right and down.
+        let [jx, jy] = [
+            2.0 * scene.jitter[0] / f64::from(scene.size[0].max(1)),
+            -2.0 * scene.jitter[1] / f64::from(scene.size[1].max(1)),
+        ];
+        let w = rows[3];
+        for (c, wc) in w.iter().enumerate() {
+            rows[0][c] += jx * wc;
+            rows[1][c] += jy * wc;
+        }
+        self.maps.texels.clone_from(&scene.texels);
+        self.filter_taps = look.filter_taps;
         let mut clip = [[0f32; 4]; 4];
         let mut camera = [0.0; 16];
         for (r, row) in rows.iter().enumerate() {
@@ -2655,7 +2699,9 @@ impl Renderer {
         };
         for (k, add) in [(0, false), (1, true)] {
             let wanted = layer.solids.iter().any(|s| {
-                clear(s) && s.material.is_some_and(|m| (m.alpha_mode == AlphaMode::Add) == add)
+                clear(s)
+                    && s.material
+                        .is_some_and(|m| (m.alpha_mode == AlphaMode::Add) == add)
             });
             if wanted && self.clear_pipelines[k].is_none() {
                 self.clear_pipelines[k] = Some(clear_pipeline(
@@ -2666,7 +2712,8 @@ impl Renderer {
                     add,
                 ));
                 self.compiled += 1;
-                self.names.push(if add { "scene3d.add" } else { "scene3d.blend" });
+                self.names
+                    .push(if add { "scene3d.add" } else { "scene3d.blend" });
             }
         }
         let mut written = 0u32;
@@ -2682,13 +2729,22 @@ impl Renderer {
                 .solid_slots,
         );
         slots.clear();
+        let taps = if self.planted.anisotropy_one {
+            1
+        } else {
+            self.filter_taps
+        };
         for s in &layer.solids {
             match &s.mesh {
                 Some(m) => self.built_mesh(device, s.shape, m),
                 None => self.mesh(device, s.shape),
             }
             let tie = self.ties.get(&s.id).copied().unwrap_or(0);
-            slots.push((s.shape, 0, self.pick(&s.id), tie));
+            let maps = match (&s.maps, &s.material) {
+                (Some(m), Some(_)) => self.maps.group(&device.device, &device.queue, m, taps),
+                _ => 0,
+            };
+            slots.push(((s.shape, maps), 0, self.pick(&s.id), tie));
         }
         for l in &layer.lines {
             self.pick(&l.id);
@@ -2705,7 +2761,7 @@ impl Renderer {
             set.begin();
         }
         let winding = !self.planted.winding_ignores_determinant;
-        let mut order: Vec<(&Solid, &mut (Shape, u32, u32, u32))> =
+        let mut order: Vec<(&Solid, &mut Slot)> =
             layer.solids.iter().zip(&mut slots).collect();
         // The planted ties_by_submission: the opaque draws' order turns over each frame.
         if self.planted.ties_by_submission && self.flip {
@@ -2715,25 +2771,27 @@ impl Renderer {
         // view depth plus their sort_bias, ties by ID.
         let mut see_through = Vec::new();
         for (s, slot) in order {
-            let record = solid_record(s, slot.2, slot.3, winding);
+            let record = solid_record(s, slot.2, slot.3, winding, slot.0 .1 != 0);
             if clear(s) {
                 let c = [s.model[0][3], s.model[1][3], s.model[2][3]];
-                let depth = (0..3).map(|k| (c[k] - cam.eye[k]) * cam.forward[k]).sum::<f64>();
-                see_through.push((depth + s.sort_bias, s, record));
+                let depth = (0..3)
+                    .map(|k| (c[k] - cam.eye[k]) * cam.forward[k])
+                    .sum::<f64>();
+                see_through.push((depth + s.sort_bias, s, record, slot.0));
                 slot.1 = u32::MAX;
                 continue;
             }
-            let set = batch.solids.entry(s.shape).or_default();
+            let set = batch.solids.entry(slot.0).or_default();
             slot.1 = set.count as u32;
             set.push(&s.id, bytemuck::bytes_of(&record));
         }
         see_through.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
         batch.clear.begin();
         batch.clear_draws.clear();
-        for (_, s, record) in &see_through {
+        for (_, s, record, key) in &see_through {
             batch.clear.push(&s.id, bytemuck::bytes_of(record));
             let add = s.material.is_some_and(|m| m.alpha_mode == AlphaMode::Add);
-            batch.clear_draws.push((s.shape, add));
+            batch.clear_draws.push((*key, add));
         }
         batch.clear.finish(device, &mut next, &mut written);
         batch.solid_slots = slots;
@@ -2819,10 +2877,13 @@ impl Renderer {
         if !batch.solids.is_empty() {
             batch.next_key.extend([20, self.ao.generation]);
         }
-        for (shape, set) in &batch.solids {
-            batch
-                .next_key
-                .extend([shape_code(*shape), set.generation, u64::from(set.len())]);
+        for ((shape, maps), set) in &batch.solids {
+            batch.next_key.extend([
+                shape_code(*shape),
+                u64::from(*maps),
+                set.generation,
+                u64::from(set.len()),
+            ]);
         }
         for (family, set) in [(10, &batch.lines), (11, &batch.points), (12, &batch.labels)] {
             if set.len() > 0 {
@@ -2833,8 +2894,10 @@ impl Renderer {
         }
         if !batch.clear_draws.is_empty() {
             batch.next_key.extend([13, batch.clear.generation]);
-            for (shape, add) in &batch.clear_draws {
-                batch.next_key.extend([shape_code(*shape), u64::from(*add)]);
+            for ((shape, maps), add) in &batch.clear_draws {
+                batch
+                    .next_key
+                    .extend([shape_code(*shape), u64::from(*maps), u64::from(*add)]);
             }
         }
         // The lights' bind group, once it reads the drawn shadow map.
@@ -2872,10 +2935,11 @@ impl Renderer {
         enc.set_bind_group(0, &self.frame_bind, &[]);
         enc.set_bind_group(1, &self.lights_bind, &[]);
         enc.set_bind_group(2, self.ao.shade(), &[]);
-        for (shape, set) in &batch.solids {
+        for ((shape, maps), set) in &batch.solids {
             let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
                 continue;
             };
+            enc.set_bind_group(3, self.maps.by_index(*maps), &[]);
             enc.set_pipeline(&self.mesh_pipeline);
             enc.set_vertex_buffer(0, mesh.vertices.slice(..));
             enc.set_vertex_buffer(1, buffer.slice(..));
@@ -2883,13 +2947,15 @@ impl Renderer {
             enc.draw_indexed(0..mesh.count, 0, 0..set.len());
         }
         if let Some(buffer) = &batch.clear.buffer {
-            for (k, (shape, add)) in batch.clear_draws.iter().enumerate() {
-                let (Some(mesh), Some(pipeline)) =
-                    (self.meshes.get(shape), &self.clear_pipelines[usize::from(*add)])
-                else {
+            for (k, ((shape, maps), add)) in batch.clear_draws.iter().enumerate() {
+                let (Some(mesh), Some(pipeline)) = (
+                    self.meshes.get(shape),
+                    &self.clear_pipelines[usize::from(*add)],
+                ) else {
                     continue;
                 };
                 let k = k as u32;
+                enc.set_bind_group(3, self.maps.by_index(*maps), &[]);
                 enc.set_pipeline(pipeline);
                 enc.set_vertex_buffer(0, mesh.vertices.slice(..));
                 enc.set_vertex_buffer(1, buffer.slice(..));
@@ -2930,7 +2996,7 @@ impl Renderer {
             .iter()
             .filter_map(|id| self.batches.get(id))
             .flat_map(|b| &b.solids)
-            .filter_map(|(shape, set)| {
+            .filter_map(|((shape, _), set)| {
                 let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.get(shape)?);
                 Some((
                     mesh.vertices.clone(),
@@ -2976,7 +3042,7 @@ impl Renderer {
         let mut draws = Vec::new();
         for id in &self.order {
             let batch = &self.batches[id];
-            for (shape, set) in &batch.solids {
+            for ((shape, _), set) in &batch.solids {
                 if let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) {
                     draws.push((
                         mesh.vertices.clone(),
@@ -2989,7 +3055,7 @@ impl Renderer {
             }
             // See-through parts cast as their `shadow` says (the record's no-cast flag).
             if let Some(buffer) = &batch.clear.buffer {
-                for (k, (shape, _)) in batch.clear_draws.iter().enumerate() {
+                for (k, ((shape, _), _)) in batch.clear_draws.iter().enumerate() {
                     if let Some(mesh) = self.meshes.get(shape) {
                         let k = k as u32;
                         draws.push((
@@ -3656,7 +3722,11 @@ pub fn tone(device: &Device, map: ToneMap, input: &[f32], size: [u32; 2]) -> Opt
         label: Some("scene3d tone"),
         entries: &[
             texture_entry(),
-            buffer_entry(1, wgpu::ShaderStages::FRAGMENT, wgpu::BufferBindingType::Uniform),
+            buffer_entry(
+                1,
+                wgpu::ShaderStages::FRAGMENT,
+                wgpu::BufferBindingType::Uniform,
+            ),
         ],
     });
     let pipeline_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -3703,7 +3773,11 @@ pub fn tone(device: &Device, map: ToneMap, input: &[f32], size: [u32; 2]) -> Opt
         deband: 0.0,
         saturation: 1.0,
         graded: 0,
-        wb: [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]],
+        wb: [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+        ],
         slope: [1.0; 4],
         offset: [0.0; 4],
         power: [1.0; 4],
@@ -4176,7 +4250,7 @@ mod tests {
     fn records(r: &Renderer) -> Vec<(String, Shape, Vec<u8>)> {
         let mut out = Vec::new();
         for (id, b) in &r.batches {
-            for (shape, set) in &b.solids {
+            for ((shape, _), set) in &b.solids {
                 out.push((id.clone(), *shape, set.records.clone()));
             }
         }

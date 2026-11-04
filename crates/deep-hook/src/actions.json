@@ -1,0 +1,233 @@
+{
+ "tools": [
+  {
+   "name": "find_actions",
+   "description": "Finds the actions the installed plug-ins offer agents, each with its plug-in, whether it reads, changes your data or sends, and its input schema. A listed action proves nothing about what calling it will do.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "Words an action's name or its plug-in's must hold; null for every action."
+     }
+    },
+    "required": [
+     "query"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "call_action",
+   "description": "Calls a plug-in action by name with a request ID. A read runs; a change needs your standing rule or an ask, and a send always asks: until you answer, it returns held with the ask, and you call again with the same request ID. A change or send returns the plug-in's report and what the hub recorded it changed; the report is the plug-in's statement, never a check result.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "description": "The action, by the name find_actions gave, ext.<plugin>.<name>."
+     },
+     "request": {
+      "type": "string",
+      "description": "A request ID of your own for this call: a retry with the same ID and input runs nothing twice, and the same ID with other input is refused."
+     },
+     "input": {
+      "type": "string",
+      "description": "The action's input as one string holding its JSON text, held to the input schema find_actions gave."
+     }
+    },
+    "required": [
+     "action",
+     "request",
+     "input"
+    ],
+    "additionalProperties": false
+   }
+  }
+ ],
+ "codes": [
+  {
+   "code": "unlisted_field",
+   "meaning": "The call holds a field its tool's schema doesn't list. The hub refuses it rather than ignore it, since an ignored field could have meant anything.",
+   "planted": {
+    "tool": "deep_status",
+    "arguments": {
+     "verbose": true
+    },
+    "from": "session",
+    "hub": "running"
+   },
+   "clean": {
+    "tool": "deep_status",
+    "arguments": {},
+    "from": "session",
+    "hub": "running"
+   },
+   "fix": "Send only the fields the tool's schema lists."
+  },
+  {
+   "code": "required",
+   "meaning": "A field the schema requires is missing or null.",
+   "planted": {
+    "tool": "deep_search",
+    "arguments": {},
+    "from": "session",
+    "hub": "running"
+   },
+   "clean": {
+    "tool": "deep_search",
+    "arguments": {
+     "query": "unit"
+    },
+    "from": "session",
+    "hub": "running"
+   },
+   "fix": "Give the field the error's path names."
+  },
+  {
+   "code": "type",
+   "meaning": "A field holds a value of the wrong type, such as a number where the schema takes a string.",
+   "planted": {
+    "tool": "deep_search",
+    "arguments": {
+     "query": 7
+    },
+    "from": "session",
+    "hub": "running"
+   },
+   "clean": {
+    "tool": "deep_search",
+    "arguments": {
+     "query": "7"
+    },
+    "from": "session",
+    "hub": "running"
+   },
+   "fix": "Give the field the type its schema names."
+  },
+  {
+   "code": "enum",
+   "meaning": "A field holds a value off its list: a check the repo's spec doesn't name, or a kind the tool doesn't take.",
+   "planted": {
+    "tool": "deep_run",
+    "arguments": {
+     "check": "unti",
+     "claim": null
+    },
+    "from": "session",
+    "hub": "running"
+   },
+   "clean": {
+    "tool": "deep_run",
+    "arguments": {
+     "check": "unit",
+     "claim": null
+    },
+    "from": "session",
+    "hub": "running"
+   },
+   "fix": "Give one of the values the remediation lists; a check's name is as the repo's .deepbuild/done.yaml writes it."
+  },
+  {
+   "code": "pattern",
+   "meaning": "A field holds a string not in the form its schema gives, such as a commit that isn't a full SHA.",
+   "planted": {
+    "tool": "deep_claim",
+    "arguments": {
+     "task_ref": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+     "attempt": 1,
+     "commit": "abc1234",
+     "scope": "session",
+     "predictions": null
+    },
+    "from": "session",
+    "hub": "running"
+   },
+   "clean": {
+    "tool": "deep_claim",
+    "arguments": {
+     "task_ref": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+     "attempt": 1,
+     "commit": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+     "scope": "session",
+     "predictions": null
+    },
+    "from": "session",
+    "hub": "running"
+   },
+   "fix": "Give the value in the form the remediation names."
+  },
+  {
+   "code": "not_found",
+   "meaning": "What the call names doesn't exist for this session: a file outside its working folder or missing, an ask or a claim of another session or none.",
+   "planted": {
+    "tool": "deep_evidence",
+    "arguments": {
+     "path": "missing.txt",
+     "kind": null
+    },
+    "from": "session",
+    "hub": "running"
+   },
+   "clean": {
+    "tool": "deep_evidence",
+    "arguments": {
+     "path": "real.txt",
+     "kind": null
+    },
+    "from": "session",
+    "hub": "running"
+   },
+   "fix": "Name a file in your working folder, or an ask or claim this session made."
+  },
+  {
+   "code": "unbound",
+   "meaning": "The call binds to no session: its deep mcp's parent is no live session's agent, the session has ended, or more than one stamped PreToolUse matches it. It may read only what belongs to no session.",
+   "planted": {
+    "tool": "deep_claim",
+    "arguments": {
+     "task_ref": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+     "attempt": 1,
+     "commit": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+     "scope": "session",
+     "predictions": null
+    },
+    "from": "unbound",
+    "hub": "running"
+   },
+   "clean": {
+    "tool": "deep_claim",
+    "arguments": {
+     "task_ref": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+     "attempt": 1,
+     "commit": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+     "scope": "session",
+     "predictions": null
+    },
+    "from": "session",
+    "hub": "running"
+   },
+   "fix": "Call from the agent session's own deep mcp; a new session gets its own binding from its hooks."
+  },
+  {
+   "code": "unavailable",
+   "meaning": "The DeepBuild hub can't be reached, or can't record right now. Nothing was recorded, and nothing succeeded.",
+   "planted": {
+    "tool": "deep_status",
+    "arguments": {},
+    "from": "session",
+    "hub": "stopped"
+   },
+   "clean": {
+    "tool": "deep_status",
+    "arguments": {},
+    "from": "session",
+    "hub": "running"
+   },
+   "fix": "Call again once the hub is back; deep mcp reconnects by itself."
+  }
+ ]
+}

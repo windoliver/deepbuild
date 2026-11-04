@@ -1,0 +1,3 @@
+#!/bin/sh
+# The no-version twin: see twin.mjs.
+exec node "$(dirname "$0")/twin.mjs" no-version "$@"

@@ -46,6 +46,8 @@ deep-canvas-sheet = { path = "../deep-canvas-sheet" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
+# Issue #423: the run's decode worker, which makes a material's maps ready for the GPU.
+deep-codecs = { path = "../deep-codecs" }
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-effects-render = { path = "../deep-effects-render" }
 wgpu-profiler = "0.28"

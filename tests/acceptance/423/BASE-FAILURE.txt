@@ -1,0 +1,37 @@
+# #423 acceptance suite at the base, 5f63620c (Merge pull request #1221), before any implementation.
+#
+# Not run at the base: a cold cargo build of deep-gpu was skipped, as the job's brief asked, since the surfaces plainly
+# don't exist. What was checked instead:
+#
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/423/tsconfig.json   -> exit 0, no errors
+#
+# and, CPU side only (a scratch script, not committed): the import check (helpers: importProblems) finds nothing on a
+# report made faithfully from each of the seven Khronos files' JSON, and finds problems on the same report with the
+# transforms, wraps, texCoord sets and alpha modes dropped (14, 6, 4, 35 and 4 for TextureTransformTest,
+# TextureSettingsTest, AlphaBlendModeTest, TextureTransformMultiTest and TextureEncodingTest); AC5's fixture gives a
+# footprint of 1.004 texels across and 5.81 along on row 255 and a CPU reference contrast of 1; the KTX2 writer's
+# 2,048 px file is 5,592,848 B with 12 levels, its first block 17 19 8f e7 1f 00 ….
+#
+# Why each test fails at the base, read from the base's code (crates/deep-gpu-layer, crates/deep-canvas-scene3d,
+# crates/deep-scene3d-render); none of the planted names, `imports`, `receipt`, `uris`, `licenses`, `store`, the
+# `workers` call on deep-gpu, a scene node or a 3D texture map occurs there:
+#
+#   specular.test.ts    AC1  material@1 has no normal map (light.rs: Material has no map field), so the mapped and bare
+#                            planes draw alike and "the normal map changes only 0 of … px" fails.
+#   khronos.test.ts     AC2  mesh.asset@1's node {"scene": 0} isn't an index or a name (gltf.rs: node_of), and
+#                            TextureTransformTest's buffer is external ("an external buffer"): view3d refuses
+#                            out_of_range at items/asset/params/sha256, so there is no imports entry; the same refusal
+#                            fails the NegativeScaleTest render.
+#   licensed.test.ts    AC3  the same refusal: no imports entry, no textures stored.
+#   encoding.test.ts    AC4  the same refusal draws no spheres; deep-gpu exits bad_input at startup for the unknown
+#                            --planted mr_from_srgb and applies_image_gamma.
+#   anisotropic.test.ts AC5  `maps` isn't read, so the unlit floor is one white: contrast 0, under 0.8; deep-gpu exits
+#                            bad_input for --planted anisotropy_one.
+#   ktx2.test.ts        AC6  view3d answers no `receipt`; `workers` is an unknown call (bad_input); the PNG document
+#                            draws instead of being refused over_budget. The normal-map half: the map is ignored, so
+#                            the bare and mapped walls agree, but deep-gpu exits bad_input for --planted
+#                            normal_map_as_srgb. Off a reference Mac both are INCONCLUSIVE.
+#   taste.test.ts       AC7  the Khronos scene items are refused, so no screenshots are written; with them, no
+#                            TASTE.json is recorded, so the test is INCONCLUSIVE, never a pass.
+#
+# A run at the base, when one is made, is recorded beside this note by the job that runs it.

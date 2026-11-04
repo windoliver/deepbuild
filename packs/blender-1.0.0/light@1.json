@@ -1,0 +1,94 @@
+{
+  "id": "blender.light",
+  "version": "1.0",
+  "title": "Light",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "Blender's point and spot lights: radiant watts × 683 to lumens over the whole sphere (a spot's too); spot_size, the full angle in radians, halved into degrees; metres and +Z up to +Y up, its −Y to our +Z.",
+  "inputs": {
+    "type": {
+      "type": "choice",
+      "default": "POINT",
+      "options": [
+        "POINT",
+        "SPOT"
+      ],
+      "about": ""
+    },
+    "energy": {
+      "type": "number",
+      "default": 1000,
+      "unit": "W",
+      "min": 0,
+      "about": ""
+    },
+    "spot_size": {
+      "type": "number",
+      "default": 0.785398,
+      "unit": "rad",
+      "min": 0.0174533,
+      "max": 3.14159265,
+      "about": ""
+    },
+    "spot_blend": {
+      "type": "number",
+      "default": 0.15,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "location": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "m",
+      "about": ""
+    }
+  },
+  "let": {
+    "lm": "energy * 683",
+    "outer": "deg(spot_size) / 2"
+  },
+  "steps": {
+    "point": {
+      "op": "item",
+      "kind": "light.point@1",
+      "when": "type == POINT",
+      "params": {
+        "power": "lm"
+      },
+      "at": {
+        "pos": [
+          "location[0]",
+          "location[2]",
+          "-location[1]"
+        ]
+      }
+    },
+    "spot": {
+      "op": "item",
+      "kind": "light.spot@1",
+      "when": "type == SPOT",
+      "params": {
+        "power": "lm",
+        "outer": "outer",
+        "inner": "outer * (1 - spot_blend)"
+      },
+      "at": {
+        "pos": [
+          "location[0]",
+          "location[2]",
+          "-location[1]"
+        ],
+        "rot": [
+          -90,
+          0,
+          0
+        ]
+      }
+    }
+  }
+}

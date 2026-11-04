@@ -421,18 +421,38 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
                 .strip_prefix("items/")
                 .and_then(|rest| rest.split(['/', ':']).next())
                 .unwrap_or("");
+            // A segment budget names the count the ops declared (#160).
+            let actual = if r.code == "segment_budget" {
+                scene::declared_of(items, id).map_or(
+                    Value::Null,
+                    |n| json!({"segments": n, "limit": crate::pathops::MAX_PATH_SEGMENTS}),
+                )
+            } else {
+                Value::Null
+            };
             issues.push(Issue {
                 fix: "Change the item so the 2D marks module can draw it.".into(),
-                ..Issue::error(
-                    r.code,
-                    id,
-                    r.path.clone(),
-                    Value::Null,
-                    "marks2d refuses it",
-                )
+                ..Issue::error(r.code, id, r.path.clone(), actual, "marks2d refuses it")
             });
             break;
         }
+    }
+    // #160: a child whose own z would lift it out of the isolated group it draws inside, as a
+    // notice (Frame and group: draw order).
+    for (id, group) in scene::lifted(items) {
+        issues.push(Issue {
+            fix: "Give the child the group's z, or draw it outside the isolated group.".into(),
+            ..Issue {
+                severity: "notice",
+                ..Issue::error(
+                    "z_inside_isolated",
+                    &id,
+                    format!("items/{id}/params/z"),
+                    json!({"item": id, "group": group}),
+                    "its z orders it only inside the isolated group, which draws as one unit at its own z",
+                )
+            }
+        });
     }
     glyph_issues(items, &look.light_type, &mut issues);
     if look.dark_type != look.light_type {

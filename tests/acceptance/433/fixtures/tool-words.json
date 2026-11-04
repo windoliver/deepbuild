@@ -1,0 +1,64 @@
+{
+  "about": "AC2's and AC5's fixture: tool-word recipes written in each tool's own property names, the conversion each states, and the values the expansion must hold, computed here from that conversion (README: The surface under test). `expect` keys: `kind` and `power` (lm) of the light it expands to, `outer` (deg) a spot's outer half angle, `pos` its at.pos (m), `up` and `horizontal` the height and the distance from the vertical axis through the origin of its at.pos (m) where the tool is Z-up, and `world: godot` for a node whose item must apply Godot's transform to its BoxMesh of `size`.",
+  "sources": {
+    "godot": "godotengine/godot 4.5.1-stable: doc/classes/Node3D.xml (rotation in radians, rotation_order default 2 = YXZ); core/math/basis.cpp set_euler (YXZ: ymat * xmat * zmat); doc/classes/Light3D.xml light_intensity_lumens (a SpotLight3D's lumens are an omni light's: 'the apparent brightness of the cone area does not change as the cone increases and decreases in size'); light_negative ('the light's effect is reversed')",
+    "unreal": "EpicGames/UnrealEngine 396c9f0599, Engine/Source/Runtime/Engine/Private/Components/SpotLightComponent.cpp:79-100 (the oracle's pin): Lumens become candela by 100 * 100 / 2 / PI / (1 - cos(half cone angle)), the cm-to-m factor and the cone; so our whole-sphere lumens are 4 * PI * cd = Intensity * 2 / (1 - cos OuterConeAngle); Candelas become ours by 4 * PI. Location in cm with +Z up",
+    "blender": "blender/blender 0a18557098, scripts/addons_core/io_scene_gltf2/blender/com/conversion.py:10 (the oracle's pin): PBR_WATTS_TO_LUMENS = 683; a light's energy in radiant watts over the whole sphere, so ours is energy * 683 lm; spot_size is the cone's full angle in radians; location in m with +Z up"
+  },
+  "ac2": {
+    "cases": [
+      {"id": "gd_box", "pack": "godot", "recipe": "godot.mesh_instance_3d@1",
+       "params": {"mesh": {"type": "BoxMesh", "size": [1, 1, 1]}, "position": [1, 2, 3], "rotation": [0.5, 1.0, -0.25], "scale": [1, 2, 0.5]},
+       "conversion": "rotation in radians in Godot's default YXZ order, through the rotation matrix to our degrees; metres and +Y up kept",
+       "expect": {"world": "godot", "size": [1, 1, 1]}},
+      {"id": "gd_omni", "pack": "godot", "recipe": "godot.omni_light_3d@1",
+       "params": {"position": [1, 2, 3], "light_intensity_lumens": 1000},
+       "conversion": "lumens over the whole sphere kept",
+       "expect": {"kind": "light.point@1", "power": 1000, "pos": [1, 2, 3]}},
+      {"id": "gd_spot", "pack": "godot", "recipe": "godot.spot_light_3d@1",
+       "params": {"light_intensity_lumens": 800, "spot_angle": 30},
+       "conversion": "a spot's lumens are an omni light's, kept; spot_angle is the outer half angle",
+       "expect": {"kind": "light.spot@1", "power": 800, "outer": 30}},
+      {"id": "ue_point_cd", "pack": "unreal", "recipe": "unreal.point_light@1",
+       "params": {"Location": [0, 0, 0], "Intensity": 10, "IntensityUnits": "Candelas"},
+       "conversion": "candela × 4π",
+       "expect": {"kind": "light.point@1", "power": 125.66370614359172}},
+      {"id": "ue_spot_cd", "pack": "unreal", "recipe": "unreal.spot_light@1",
+       "params": {"Location": [0, 0, 0], "Intensity": 10, "IntensityUnits": "Candelas", "OuterConeAngle": 40, "InnerConeAngle": 20},
+       "conversion": "candela × 4π; OuterConeAngle is the outer half angle",
+       "expect": {"kind": "light.spot@1", "power": 125.66370614359172, "outer": 40}},
+      {"id": "bl_spot", "pack": "blender", "recipe": "blender.light@1",
+       "params": {"type": "SPOT", "energy": 10, "spot_size": 1.0471975511965976, "location": [0, 0, 0]},
+       "conversion": "radiant watts × 683; spot_size, the full angle in radians, halved into degrees",
+       "expect": {"kind": "light.spot@1", "power": 6830, "outer": 30}},
+      {"id": "bl_point", "pack": "blender", "recipe": "blender.light@1",
+       "params": {"type": "POINT", "energy": 10, "location": [1, 2, 3]},
+       "conversion": "radiant watts × 683; Z-up to Y-up",
+       "expect": {"kind": "light.point@1", "power": 6830, "up": 3, "horizontal": 2.23606797749979}}
+    ],
+    "refusal": {"id": "gd_negative", "pack": "godot", "recipe": "godot.omni_light_3d@1",
+                "params": {"light_intensity_lumens": 1000, "light_negative": true}, "word": "light_negative"}
+  },
+  "ac5": {
+    "cases": [
+      {"id": "ue_cone60", "pack": "unreal", "recipe": "unreal.spot_light@1",
+       "params": {"Location": [0, 0, 0], "Intensity": 1000, "IntensityUnits": "Lumens", "OuterConeAngle": 60},
+       "conversion": "cone lumens × 2 ÷ (1 − cos θ_outer): 1000 × 2 ÷ (1 − cos 60°)",
+       "expect": {"kind": "light.spot@1", "power": 4000}},
+      {"id": "ue_cone30", "pack": "unreal", "recipe": "unreal.spot_light@1",
+       "params": {"Location": [0, 0, 0], "Intensity": 1000, "IntensityUnits": "Lumens", "OuterConeAngle": 30},
+       "conversion": "cone lumens × 2 ÷ (1 − cos θ_outer): 1000 × 2 ÷ (1 − cos 30°)",
+       "expect": {"kind": "light.spot@1", "power": 14928.203230275516}},
+      {"id": "bl_watts", "pack": "blender", "recipe": "blender.light@1",
+       "params": {"type": "POINT", "energy": 10, "location": [0, 0, 0]},
+       "conversion": "radiant watts × 683: 10 W",
+       "expect": {"kind": "light.point@1", "power": 6830}},
+      {"id": "ue_cm", "pack": "unreal", "recipe": "unreal.point_light@1",
+       "params": {"Location": [300, -400, 250], "Intensity": 1000, "IntensityUnits": "Lumens"},
+       "conversion": "centimetres and +Z up to metres and +Y up: 250 cm up is 2.5 m up, 500 cm from the vertical axis is 5 m; a point's lumens kept",
+       "expect": {"kind": "light.point@1", "power": 1000, "up": 2.5, "horizontal": 5}}
+    ],
+    "refusal": {"id": "ue_specular", "pack": "unreal", "recipe": "unreal.spot_light@1",
+                "params": {"Location": [0, 0, 0], "Intensity": 1000, "IntensityUnits": "Lumens", "OuterConeAngle": 30, "SpecularScale": 0.5}, "word": "SpecularScale"}
+  }
+}
