@@ -285,7 +285,9 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
     // A fix is judged on its base run once the check's runs have ended: while they are still to come, so is that run (#31).
     if (isFix(claim, c) && state !== 'running') {
       const proves = 'a run of it on the merge base that fails on an assertion it names';
-      if (!c.base) row('INVALID', 'has no run on the merge base, so nothing proves the fix', undefined, proves);
+      // A check a stop or a restart cut short before its base run is INCONCLUSIVE for its stopped run (below), not
+      // unproved: the base run it never got is a run still needed (#669).
+      if (!c.base) { if (!runs.some((r) => r.outcome === 'stopped')) row('INVALID', 'has no run on the merge base, so nothing proves the fix', undefined, proves); }
       else if (c.base.outcome === 'passed') row('INVALID', 'passes on the merge base, so it can\'t prove the fix', undefined, proves);
       else if (!c.base.on_assertion) row('INVALID', 'failed on the merge base only off its named assertions, so it proves nothing', undefined, proves);
     }
