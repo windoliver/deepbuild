@@ -1493,6 +1493,10 @@
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
           "why": "Issue #31: a checkout starts and cleans up the stand-ins for its checks' declared services and pages through the supervisor host."
+        },
+        "yaml": {
+          "spec": "2.9.1",
+          "why": "Issue #324: size and scope lists the services a change adds to a compose file, a YAML file the repo writes, with the parser the hub and env-local already use."
         }
       }
     },

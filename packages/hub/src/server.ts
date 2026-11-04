@@ -356,6 +356,7 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_FORGE ? { forge: process.env.DEEP_HUB_TEST_FORGE } : {}),
       ...(process.env.DEEP_HUB_TEST_SORTER ? { sorter: process.env.DEEP_HUB_TEST_SORTER } : {}),
       ...(process.env.DEEP_HUB_TEST_DRAFTS ? { drafts: process.env.DEEP_HUB_TEST_DRAFTS } : {}),
+      ...(process.env.DEEP_HUB_TEST_ACCEPTED ? { accepted: process.env.DEEP_HUB_TEST_ACCEPTED } : {}),
       ...(process.env.DEEP_HUB_TEST_WORK ? { work: process.env.DEEP_HUB_TEST_WORK } : {}),
       ...(process.env.DEEP_HUB_TEST_PRICES ? { prices: process.env.DEEP_HUB_TEST_PRICES } : {}),
       ...(process.env.DEEP_HUB_TEST_GITHUB ? { github: process.env.DEEP_HUB_TEST_GITHUB } : {}),
