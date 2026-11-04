@@ -106,3 +106,9 @@ harness = false
 name = "acceptance_883"
 path = "../../tests/acceptance/883/notifications.rs"
 harness = false
+
+# Issue #992: the sidebar row the app draws for a record, which tests/acceptance/992 compares with `deep status`.
+[[test]]
+name = "acceptance_992_app"
+path = "../../tests/acceptance/992/app.rs"
+harness = false

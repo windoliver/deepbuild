@@ -41,6 +41,9 @@ Each event is reduced to the fields an adapter decides, `kind` and `data`. The h
 | Interrupt | `turn.interrupted` {session, turn}: `turn` is `turn_id`; Codex fires it instead of Stop for a turn you interrupt, so it adds no `agent.stop` |
 | SubagentStop | `agent.stop` {session, subagent, outcome: "finished", continued, cause, usage}: a child's stop is a stop of its own, named by `subagent`; it ran in the child's own transcript, which the set doesn't hold, so its cause is the payload's alone and its usage `null` |
 | TaskCompleted | `task.completed` {session, agent_task, title}: `agent_task` is `task_id`, `title` is `task_subject`; the agent's word, never a closed task |
+| Notification | `session.attention` {session, state} by `notification_type`: `permission_prompt`, `elicitation_dialog`, `elicitation_url_dialog` and `agent_needs_input` are `waiting`, `idle_prompt` is `finished`, `elicitation_complete` and `elicitation_response` are `working`; any other type maps to no event. A session-state signal, never an ask and never evidence |
+| Elicitation | `session.attention` {session, state: "waiting"} |
+| ElicitationResult | `session.attention` {session, state: "working"} |
 
 A Codex turn that no prompt started, such as a goal's continuation, opens with a `user.ask` {session, from, turn} before the first event of its first hook, `turn` being the payload's `turn_id`, since Codex fires no prompt hook for it.
 
@@ -66,6 +69,11 @@ A Codex turn that no prompt started, such as a goal's continuation, opens with a
 | claude-code `crash` | the agent killed in the middle of a tool call: a PreToolUse with no PostToolUse or Stop |
 | claude-code 2.1.304 `child-gates` | a task created and marked completed (TaskCompleted), and a background subagent that runs, stops (SubagentStop) and reports back |
 | claude-code 2.1.299 `desktop-peer` | the desktop app: a session another session started, and messages from that session |
+| claude-code 2.1.308 `permission-answered` | a Write through a permission request you answer, an internal agent's SubagentStop, then the idle prompt's Notification |
+| claude-code 2.1.308 `permission-denied-esc` | a Write's permission request dismissed with Esc, and the permission prompt's Notification; no PostToolUse or Stop |
+| claude-code 2.1.308 `permission-terminal-closed` | the terminal closed while a Bash call's permission request shows: a PermissionRequest with no answer, PostToolUse, Stop or SessionEnd |
+| claude-code 2.1.308 `elicitation-answered` | an MCP tool's form elicitation accepted: Elicitation, its dialog's Notification, ElicitationResult and the response Notification |
+| claude-code 2.1.308 `elicitation-cancelled` | an MCP tool's form elicitation cancelled: Elicitation, ElicitationResult and the response Notification |
 | codex `tools` | shell calls, an `apply_patch` add, and a failing command, which Codex reports through PostToolUse |
 | codex `patches` | a patch through the shell tool, then a resume with a patch whose markers are indented |
 | codex `permission` | a permission request from the terminal UI: a write in a read-only sandbox under `-a on-request` |
@@ -92,3 +100,11 @@ Codex versions: 0.144.0 is the CLI on PATH, 0.160.0 the Codex in the ChatGPT des
 | `heartbeat` | a Codex heartbeat's prompt, a UserPromptSubmit opening with `<heartbeat>` |
 | `patch-indented-markers` | a Codex patch whose marker lines are indented |
 | `patch-via-shell` | a Codex patch sent through the shell tool |
+| `permission-answered` | a Claude Code PermissionRequest you answered |
+| `permission-denied-esc` | a Claude Code PermissionRequest dismissed with Esc |
+| `permission-terminal-closed` | a Claude Code PermissionRequest left open when the terminal closed |
+| `notification-permission-prompt` | a Claude Code Notification of type `permission_prompt` |
+| `notification-idle-prompt` | a Claude Code Notification of type `idle_prompt` |
+| `notification-elicitation-dialog` | a Claude Code Notification of type `elicitation_dialog` |
+| `elicitation-answered` | a Claude Code Elicitation the person answered |
+| `elicitation-cancelled` | a Claude Code Elicitation the person cancelled |

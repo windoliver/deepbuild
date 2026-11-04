@@ -317,6 +317,9 @@ fn circle() -> Entry {
                 json_param("paint", Value::Null),
                 json_param("status", Value::Null),
                 json_param("ops", Value::Null),
+                // #160: its place in the draw order (Frame and group: draw order).
+                json_param("z", json!(0)),
+                json_param("draw_order", json!("auto")),
             ],
         }],
         migrations: vec![],
