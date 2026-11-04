@@ -1294,7 +1294,16 @@ impl<'a> Hub<'a> {
         let Some(Value::Object(items)) = map.get_mut("items") else { return issues };
         for (id, found) in &imported {
             if let Some(item) = items.get_mut(id) {
-                let outline = deep_canvas_vector::lower::outline(&found.svg, item, &found.colors);
+                let mut outline =
+                    deep_canvas_vector::lower::outline(&found.svg, item, &found.colors);
+                // Its source too, which a frame mid-write lowers again at its progress (#1162).
+                let src = item.pointer("/params/src").and_then(Value::as_str).unwrap_or("");
+                if let Some(bytes) = (src.len() == 64)
+                    .then(|| std::fs::read(root.join(&src[..2]).join(&src[2..])).ok())
+                    .flatten()
+                {
+                    outline["svg"] = Value::String(String::from_utf8_lossy(&bytes).into_owned());
+                }
                 if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
                     params.insert("outline".into(), outline);
                 }
