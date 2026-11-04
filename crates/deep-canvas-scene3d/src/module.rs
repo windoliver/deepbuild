@@ -246,10 +246,11 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         Entry {
             family: "light",
             name: "sun",
-            // Minor 1 (#421): a color temperature and a flicker channel.
+            // Minor 1 (#421): a color temperature and a flicker channel. Minor 2 (#422): its
+            // shadow's cascades (Light policy: cascades).
             versions: vec![Version {
                 major: 1,
-                minor: 1,
+                minor: 2,
                 params: vec![
                     param("illuminance", ParamType::Json, json!(10_000)),
                     param("shadow", ParamType::Json, json!(false)),
@@ -263,6 +264,22 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                     Param {
                         minor: 1,
                         ..json_param("flicker")
+                    },
+                    Param {
+                        minor: 2,
+                        ..param("cascades", ParamType::Json, json!(3))
+                    },
+                    Param {
+                        minor: 2,
+                        ..param("split", ParamType::Json, json!(0.5))
+                    },
+                    Param {
+                        minor: 2,
+                        ..param("shadow_far", ParamType::Json, json!("auto"))
+                    },
+                    Param {
+                        minor: 2,
+                        ..param("fade", ParamType::Json, json!(true))
                     },
                 ],
             }],
