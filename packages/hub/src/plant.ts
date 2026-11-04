@@ -103,7 +103,10 @@ export type Plant =
   | 'spec-only-judges-early-claim' | 'lint-number-only' | 'lock-before-any-check'
   // #323's: open items' normalizer that drops numbers, a gate that reads only the PR body, one that counts every
   // resolved review thread as closed, and one that closes an item the agent marked completed in its task list.
-  | 'normalizer-drops-numbers' | 'pr-body-only' | 'resolved-counts-closed' | 'completed-closes-item';
+  | 'normalizer-drops-numbers' | 'pr-body-only' | 'resolved-counts-closed' | 'completed-closes-item'
+  // #669's: a command check's runner that reads a masked exit as a clean pass, a stop reply whose line says PASS with no
+  // verdict behind it, and a status question sent on to the model.
+  | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -155,6 +158,7 @@ const PLANTS: readonly string[] = [
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
+  'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
