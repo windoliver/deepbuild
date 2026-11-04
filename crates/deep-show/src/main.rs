@@ -1389,7 +1389,23 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
             else {
                 return bad_input();
             };
-            screen(&scenario, startup, out)
+            // The time the window shows (a time or flicks, 0 by default) and its scale (#1162).
+            let t = match input.get("t") {
+                None => 0,
+                Some(Value::String(text)) => match hub::flicks(text) {
+                    Some(t) => t,
+                    None => return bad_input(),
+                },
+                Some(v) => match v.as_i64() {
+                    Some(t) => t,
+                    None => return bad_input(),
+                },
+            };
+            let scale = input.get("scale").and_then(Value::as_f64).unwrap_or(1.0);
+            if !(1.0..=4.0).contains(&scale) {
+                return bad_input();
+            }
+            screen(&scenario, startup, out, t, scale)
         }
         _ => bad_input(),
     }
@@ -1469,7 +1485,7 @@ impl CanvasSide {
             // The window as the calls leave it, drawn and written to `out`; the reply is the
             // `screen` call's own, with the picture's size and each item's box beside it.
             Some(out) if scenario.window.is_some() => {
-                let mut drawn = screen(&scenario, startup, out);
+                let mut drawn = screen(&scenario, startup, out, 0, 1.0);
                 let Some(Value::Array(mut replies)) = drawn.get_mut("replies").map(Value::take)
                 else {
                     return drawn;
@@ -1505,14 +1521,14 @@ impl CanvasSide {
 }
 
 #[cfg(target_os = "macos")]
-fn screen(scenario: &Scenario, startup: &Startup, out: &str) -> Value {
+fn screen(scenario: &Scenario, startup: &Startup, out: &str, t: i64, scale: f64) -> Value {
     let mut hub = hub::Hub::new(scenario, startup);
     let replies = hub.run_calls();
-    window::draw(&mut hub, replies, out)
+    window::draw(&mut hub, replies, out, t, scale)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn screen(_: &Scenario, _: &Startup, _: &str) -> Value {
+fn screen(_: &Scenario, _: &Startup, _: &str, _: i64, _: f64) -> Value {
     json!({"ok": false, "code": "unsupported_platform"})
 }
 
