@@ -13,6 +13,7 @@ import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
 import { CHECKED, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, placingTranscript, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type Placing, type SliceEntry, type Transcripts } from './learned.js';
 import { compareReplay, planHash } from './replay.js';
+import { movable, type Refusal } from './lifecycle.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, openReadOnly, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
@@ -474,7 +475,8 @@ class SqliteRecord implements RecordStore {
     const result = this.registry.validate(plugin === undefined ? `${kind}@${input.v}` : STORE_ITEM, event);
     if (!result.ok) {
       const issue = result.issues[0]!;
-      throw new RecordError('schema', `${issue.code} at ${issue.path || '/'}: ${issue.remediation}`, { path: issue.path });
+      // It names the event it refuses, and the object that event is about.
+      throw new RecordError('schema', `${issue.code} at ${issue.path || '/'}: ${issue.remediation} (${kind} ${String(input.id)}${input.subject ? ` on ${String(input.subject)}` : ''})`, { path: issue.path });
     }
     const prepared: Prepared = {
       input, writer: connection.writer, actor: connection.actor, scope: connection.scope,
@@ -632,7 +634,8 @@ class SqliteRecord implements RecordStore {
   private commit(items: Prepared[], mode: Durability, also?: () => void): Outcome[] {
     const outcomes: Outcome[] = [];
     try {
-      this.reserve(items.length);
+      // Each event, and a move.refused for each object it could move.
+      this.reserve(items.reduce((n, p) => n + 1 + movable(p.input.kind, p.data), 0));
       const existing = this.stmt('SELECT log_pos, hash FROM events WHERE id = ?');
       const insert = this.stmt('INSERT INTO events (id, log_pos, v, ts, project_id, session_id, seq, agent, writer, actor, scope, kind, subject, data, evidence, hash, unverified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       const write = (work: () => void) => (mode === 'full' ? this.full(work) : this.backend.commit(this.db, 'normal', work));
@@ -644,9 +647,17 @@ class SqliteRecord implements RecordStore {
             else outcomes.push({ ok: false, error: new RecordError('conflict', `event ${p.input.id} is already in the log with other content`, { id: p.input.id }), prepared: p });
             continue;
           }
-          const log_pos = this.next++;
-          insert.run(p.input.id, log_pos, p.input.v, p.input.ts, p.project, p.session, p.seq, p.agent, p.writer, p.actor, p.scope, p.input.kind, p.input.subject ?? null, JSON.stringify(p.data), p.evidence.length ? JSON.stringify(p.evidence) : null, p.hash, p.unverified ? 1 : 0);
-          this.projector.apply(this.projected(p, log_pos));
+          const put = (q: Prepared): { log_pos: number; refused: Refusal[] } => {
+            const log_pos = this.next++;
+            insert.run(q.input.id, log_pos, q.input.v, q.input.ts, q.project, q.session, q.seq, q.agent, q.writer, q.actor, q.scope, q.input.kind, q.input.subject ?? null, JSON.stringify(q.data), q.evidence.length ? JSON.stringify(q.evidence) : null, q.hash, q.unverified ? 1 : 0);
+            return { log_pos, refused: this.projector.apply(this.projected(q, log_pos)) };
+          };
+          const { log_pos, refused } = put(p);
+          // A move its lifecycle table doesn't allow is refused and recorded in the same commit; the event stays.
+          for (const data of refused) {
+            const ts = this.options.now();
+            put(this.sealed(this.prepare({ writer: 'core', actor: p.actor, scope: p.scope }, { v: 1, id: ulid(ts), kind: 'move.refused', ts, data: { ...data } })));
+          }
           outcomes.push({ ok: true, appended: { log_pos, existing: false }, prepared: p, log_pos });
         }
         also?.();

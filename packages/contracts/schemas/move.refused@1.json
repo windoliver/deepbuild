@@ -1,0 +1,120 @@
+{
+  "title": "move.refused@1",
+  "description": "The record refused a move no lifecycle table allows: the event stays in the log, and its move never lands. It names the object, the state it was in, the event and the table. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "move.refused"
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "object": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The record object the event would have moved, as <object>:<id>."
+        },
+        "table": {
+          "type": "string",
+          "pattern": "^[a-z_]+\\.machine@[0-9]+$",
+          "maxLength": 8192,
+          "description": "The lifecycle table that has no row for the move."
+        },
+        "state": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The state the object was in."
+        },
+        "event": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The refused event's kind."
+        },
+        "event_id": {
+          "type": "string",
+          "format": "ulid",
+          "description": "An event's ULID."
+        },
+        "guard": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The guard that failed, when a row exists and its guard doesn't hold."
+        }
+      },
+      "required": [
+        "object",
+        "table",
+        "state",
+        "event",
+        "event_id"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

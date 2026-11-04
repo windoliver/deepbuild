@@ -1,0 +1,78 @@
+{
+  "id": "lease.machine@1",
+  "description": "A lease's life, as the record's leases table holds it for one holder of one resource: granted or denied, stale past its expiry, and released only once its proof shows the holder ended.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "states": [
+    "requested",
+    "held",
+    "stale",
+    "released",
+    "denied"
+  ],
+  "initial": "requested",
+  "final": [
+    "released",
+    "denied"
+  ],
+  "moves": [
+    {
+      "from": "requested",
+      "event": "lease.acquired",
+      "to": "held"
+    },
+    {
+      "from": "requested",
+      "event": "lease.denied",
+      "to": "denied"
+    },
+    {
+      "from": "held",
+      "event": "lease.acquired",
+      "to": "held"
+    },
+    {
+      "from": "stale",
+      "event": "lease.acquired",
+      "to": "held"
+    },
+    {
+      "from": "held",
+      "event": "lease.stale",
+      "to": "stale"
+    },
+    {
+      "from": "stale",
+      "event": "lease.stale",
+      "to": "stale"
+    },
+    {
+      "from": "held",
+      "event": "lease.released",
+      "guard": "holder_ended",
+      "to": "released"
+    },
+    {
+      "from": "stale",
+      "event": "lease.released",
+      "guard": "holder_ended",
+      "to": "released"
+    }
+  ],
+  "conflicts": [
+    {
+      "name": "granted_or_denied",
+      "events": [
+        "lease.acquired",
+        "lease.denied"
+      ]
+    },
+    {
+      "name": "renewed_or_stale",
+      "events": [
+        "lease.acquired",
+        "lease.stale"
+      ]
+    }
+  ]
+}
