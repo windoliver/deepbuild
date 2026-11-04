@@ -178,6 +178,9 @@ pub enum Planted {
     AcceptsEverySampleRate8To192k,
     /// #411: `items/<id>/modifiers/<k>#out` reads the stack's final result for every k.
     PrefixReadsFinal,
+    /// #1162 AC3's wrong program: deep_query evaluates each `at.place` relation against its
+    /// target's box as the previous evaluation in this call left it (at time 0 before any).
+    RelationFromPreviousBox,
     /// #411: a why names its canvas module and operator and no document field or default.
     WhyNamesOperatorOnly,
     /// #411: a why lists only the first write to its value.
@@ -1873,6 +1876,8 @@ impl<'a> Hub<'a> {
             // A step is a 60 fps frame: 11,760,000 flicks.
             let step = show.t.max(0) as u64 / 11_760_000;
             issues.extend(deep_canvas::columns::view(form, entries, step));
+            // #1162: a column that reads an imported table, inlined from the evidence store.
+            issues.extend(crate::media::inline_tables(form, &self.scenario.evidence));
         }
         if let Some(doc) = stamped
             .as_ref()
