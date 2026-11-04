@@ -138,8 +138,8 @@ impl BuildSet {
 }
 
 /// The module kinds the design names without a family, with the module each is: the cell grid
-/// `cells@1` (#402), and scene3d's builders and curve (Builder; Curve `curve@1`; #420; Builder
-/// `hull`, #440). Any other bare name is the core's.
+/// `cells@1` (#402), scene3d's builders and curve (Builder; Curve `curve@1`; #420; Builder
+/// `hull`, #440) and its material (Material `material@1`; #421). Any other bare name is the core's.
 const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("cells", "cells"),
     ("slab", "scene3d"),
@@ -152,6 +152,9 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("display", "scene3d"),
     ("hull", "scene3d"),
     ("curve", "scene3d"),
+    ("material", "scene3d"),
+    ("sky", "scene3d"),
+    ("puff", "scene3d"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
@@ -1075,20 +1078,21 @@ pub struct RegistryRefusal {
     pub passes: Vec<String>,
 }
 
+// Each refusal is boxed as it is made: a `SealError` is large, and a `Result` carries only its pointer.
 impl SealError {
     /// A refusal naming one module and no array.
-    fn of(code: &'static str, module: &str, what: String) -> SealError {
+    fn of(code: &'static str, module: &str, what: String) -> Box<SealError> {
         SealError::new(code, &[module], &[], what)
     }
 
-    fn new(code: &'static str, modules: &[&str], arrays: &[&str], what: String) -> SealError {
+    fn new(code: &'static str, modules: &[&str], arrays: &[&str], what: String) -> Box<SealError> {
         let mut modules: Vec<String> = modules.iter().map(|s| s.to_string()).collect();
         modules.sort();
         modules.dedup();
         let mut arrays: Vec<String> = arrays.iter().map(|s| s.to_string()).collect();
         arrays.sort();
         arrays.dedup();
-        SealError {
+        Box::new(SealError {
             code,
             modules,
             arrays,
@@ -1097,11 +1101,16 @@ impl SealError {
             implementations: Vec::new(),
             what,
             ..SealError::default()
-        }
+        })
     }
 
     /// The same refusal, naming the registry, its entries and the kit rules involved.
-    fn at(mut self, registry: &str, entries: Vec<Value>, rules: &[&str]) -> SealError {
+    fn at(
+        mut self: Box<Self>,
+        registry: &str,
+        entries: Vec<Value>,
+        rules: &[&str],
+    ) -> Box<SealError> {
         self.registry = Some(Box::new(RegistryRefusal {
             name: registry.to_string(),
             entries,
@@ -1112,7 +1121,7 @@ impl SealError {
     }
 
     /// The same refusal, naming the interface and the implementations involved.
-    fn on(mut self, interface: &str, implementations: &[&str]) -> SealError {
+    fn on(mut self: Box<Self>, interface: &str, implementations: &[&str]) -> Box<SealError> {
         self.interface = Some(interface.to_string());
         self.implementations = implementations.iter().map(|s| s.to_string()).collect();
         self.implementations.sort();
@@ -1608,7 +1617,7 @@ impl Registry {
     }
 
     /// Registers every module in sorted name order, then checks the whole set.
-    pub fn seal(mut self) -> Result<Sealed, SealError> {
+    pub fn seal(mut self) -> Result<Sealed, Box<SealError>> {
         self.modules
             .sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
         let core = Semver::parse(CORE_VERSION).expect("CORE_VERSION is major.minor.patch");
@@ -2851,7 +2860,7 @@ impl Registry {
         lists: Option<&Value>,
         private: bool,
         ns: &mut u64,
-    ) -> Result<(String, Option<SealedInterface>), SealError> {
+    ) -> Result<(String, Option<SealedInterface>), Box<SealError>> {
         let bad = |e: CanonError| SealError::new("bad_shape", &[name], &[], e.to_string());
         // The planted digest that also covers the implementation's pins (#238).
         let pinned = |digest: String, m: &Manifest| -> Result<String, CanonError> {
@@ -2953,7 +2962,7 @@ fn may_read(
     read: &str,
     owner: &str,
     private: bool,
-) -> Result<(), SealError> {
+) -> Result<(), Box<SealError>> {
     if private && owner != name {
         let implementation = |n: &str| {
             modules
@@ -2986,7 +2995,7 @@ fn may_depend(
     what: &str,
     read: &str,
     owner: &str,
-) -> Result<(), SealError> {
+) -> Result<(), Box<SealError>> {
     if owner != name && !declares(modules, name, owner) {
         return Err(SealError::new(
             "undeclared_dependency",
@@ -3384,7 +3393,7 @@ mod tests {
         }
     }
 
-    fn seal_core<const N: usize>(modules: [Module; N]) -> Result<Sealed, SealError> {
+    fn seal_core<const N: usize>(modules: [Module; N]) -> Result<Sealed, Box<SealError>> {
         modules
             .into_iter()
             .fold(Registry::new(BuildSet::Core), Registry::with)

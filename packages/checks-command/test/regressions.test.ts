@@ -923,6 +923,12 @@ describe('a shell script the command runs is read as the command', () => {
     expect(maskOf('sh .deepbuild/checks/one.sh', cwd)).toBeNull();
     expect(maskOf('sh .deepbuild/checks/one.sh || true', cwd), 'the command\'s own mask comes first').toBe('|| true');
   });
+  it('a mask in the package.json script a check runs is the command\'s, through the check\'s own script (#669)', () => {
+    const cwd = folder({ '.deepbuild/checks/npm-test.sh': 'npm test\n', 'package.json': JSON.stringify({ scripts: { test: 'vitest run || true', lint: 'eslint .' } }) });
+    expect(maskOf('sh .deepbuild/checks/npm-test.sh', cwd)).toBe('|| true in package.json\'s test script in .deepbuild/checks/npm-test.sh');
+    expect(maskOf('npm run test', cwd)).toBe('|| true in package.json\'s test script');
+    expect(maskOf('npm run lint', cwd), 'a script with no mask').toBeNull();
+  });
 });
 
 // #30 AC17: a test that failed and then passed on the tool's own retry is a pass and a fail on the commit: the run

@@ -821,6 +821,9 @@ fn sweep_of(p: &Value, ctx: &Ctx<'_>) -> Result<crate::sweep::Sweep, Fault> {
 type Extrusion = (Vec<Level>, Vec<f64>, V3, f64);
 
 fn extrude_shape(p: &Value) -> Result<Extrusion, Fault> {
+    if p.get("levels").is_some() {
+        return extrude_levels(p);
+    }
     let (o, h) = (outline(p, "outline")?, holes(p, "holes")?);
     let (from, to, up) = match p.get("depth") {
         Some(d @ Value::Object(_)) => {
@@ -841,6 +844,48 @@ fn extrude_shape(p: &Value) -> Result<Extrusion, Fault> {
     }
     let (levels, heights) = bevelled(o, h, from, to, num(p, "bevel", 0.0)?)?;
     Ok((levels, heights, up, rad(num(p, "twist", 0.0)?)))
+}
+
+/// `levels: [[z, polygon]]`, in place of the outline, holes, depth and bevel: a prism through
+/// each polygon at its height, rising, every polygon with the first's point count and turned the
+/// same way, so a familiar extrusion's bevel layers keep their own corners (#433).
+fn extrude_levels(p: &Value) -> Result<Extrusion, Fault> {
+    let list = p
+        .get("levels")
+        .and_then(Value::as_array)
+        .filter(|l| l.len() >= 2)
+        .ok_or_else(|| bad("levels"))?;
+    let mut levels: Vec<Level> = Vec::new();
+    let mut heights = Vec::new();
+    for l in list {
+        let pair = l
+            .as_array()
+            .filter(|a| a.len() == 2)
+            .ok_or_else(|| bad("levels"))?;
+        let z = pair[0]
+            .as_f64()
+            .filter(|z| z.is_finite())
+            .ok_or_else(|| bad("levels"))?;
+        let ring = v2s(&pair[1])
+            .filter(|r| r.len() >= 3)
+            .ok_or_else(|| bad("levels"))?;
+        if heights.last().is_some_and(|last| z <= *last)
+            || levels
+                .first()
+                .is_some_and(|f: &Level| f.0.len() != ring.len())
+        {
+            return Err(bad("levels"));
+        }
+        heights.push(z);
+        levels.push((ring, Vec::new()));
+    }
+    // One way round for every level, as the first is made counter-clockwise.
+    if area2(&levels[0].0) < 0.0 {
+        for l in &mut levels {
+            l.0.reverse();
+        }
+    }
+    Ok((levels, heights, [0.0, 0.0, 1.0], rad(num(p, "twist", 0.0)?)))
 }
 
 fn extrude(p: &Value) -> Result<Mesh, Fault> {
@@ -901,6 +946,9 @@ fn lathe_spec(p: &Value) -> Result<LatheSpec, Fault> {
     let sweep = num(p, "sweep", 360.0)?;
     if !(sweep > 0.0 && sweep <= 360.0) {
         return Err(bad("sweep"));
+    }
+    if !num(p, "from", 0.0)?.is_finite() {
+        return Err(bad("from"));
     }
     let caps = text(p, "caps", "flat", &["none", "flat", "cut"])?.to_string();
     let closed = flag(p, "closed", false)?;
@@ -1204,6 +1252,15 @@ fn lathe(p: &Value, plants: Plants) -> Result<Mesh, Fault> {
             .expect("a list")
             .push(json!({"part": name, "material": material}));
     }
+    // `from`: the sweep starts that far round, from +x toward +z (#433).
+    let from = rad(num(p, "from", 0.0)?);
+    let m = if from == 0.0 {
+        m
+    } else {
+        let (c, sn) = (cos(from), sin(from));
+        let turn = move |v: V3| [v[0] * c - v[2] * sn, v[1], v[0] * sn + v[2] * c];
+        m.mapped(turn, move |_, n| turn(n))
+    };
     let axis = s.axis.clone();
     Ok(match axis.as_str() {
         "x" => m.mapped(|p| [p[1], -p[0], p[2]], |_, n| [n[1], -n[0], n[2]]),
@@ -1356,6 +1413,21 @@ fn tube(p: &Value, path: &Sampled) -> Result<Mesh, Fault> {
     let s = tube_spec(p)?;
     let pts = &path.points;
     let mut fr = frames(pts, path.closed, s.z_up);
+    // `normal`: the first ring's normal, carried along by parallel transport (#433).
+    if let Some(n0) = p.get("normal") {
+        let n0 = curve::points(&Value::Array(vec![n0.clone()]))
+            .and_then(|v| v.first().copied())
+            .ok_or_else(|| bad("normal"))?;
+        let mut normal = n0;
+        for (t, n) in fr.iter_mut() {
+            normal = sub(normal, scale(*t, dot(normal, *t)));
+            if length(normal) < 1e-9 {
+                return Err(bad("normal"));
+            }
+            normal = unit(normal);
+            *n = normal;
+        }
+    }
     if !s.z_up && path.normals.len() == pts.len() {
         // Along a curve@1, its own rotation-minimizing frames, so a closed tube has no seam.
         for (k, ((t, n), cn)) in fr.iter_mut().zip(&path.normals).enumerate() {
@@ -1515,7 +1587,18 @@ fn coil(p: &Value) -> Result<Mesh, Fault> {
 /// The two Platonic bases a geodesic ball subdivides: their corners and triangles.
 fn base_solid(base: &str) -> (Vec<V3>, Vec<[usize; 3]>) {
     let phi = (1.0 + sqrt(5.0)) / 2.0;
-    let corners: Vec<V3> = if base == "octa" {
+    if base == "dodeca" {
+        return dodeca(phi);
+    }
+    let corners: Vec<V3> = if base == "tetra" {
+        // Alternate corners of the cube, as web 3D libraries place them (#433).
+        vec![
+            [1.0, 1.0, 1.0],
+            [-1.0, -1.0, 1.0],
+            [-1.0, 1.0, -1.0],
+            [1.0, -1.0, -1.0],
+        ]
+    } else if base == "octa" {
         vec![
             [1.0, 0.0, 0.0],
             [-1.0, 0.0, 0.0],
@@ -1554,6 +1637,57 @@ fn base_solid(base: &str) -> (Vec<V3>, Vec<[usize; 3]>) {
     (corners.iter().map(|c| unit(*c)).collect(), faces)
 }
 
+/// The dodecahedron: the cube's corners and three golden rectangles' (#433), each pentagon the
+/// five corners nearest one of the icosahedron's corners, fanned from its first in turn.
+fn dodeca(phi: f64) -> (Vec<V3>, Vec<[usize; 3]>) {
+    let r = 1.0 / phi;
+    let mut c: Vec<V3> = Vec::new();
+    for x in [-1.0, 1.0] {
+        for y in [-1.0, 1.0] {
+            for z in [-1.0, 1.0] {
+                c.push([x, y, z]);
+            }
+        }
+    }
+    for a in [-1.0, 1.0] {
+        for b in [-1.0, 1.0] {
+            c.push([0.0, a * r, b * phi]);
+            c.push([a * r, b * phi, 0.0]);
+            c.push([b * phi, 0.0, a * r]);
+        }
+    }
+    let mut faces = Vec::new();
+    for a in [-1.0, 1.0] {
+        for b in [-phi, phi] {
+            for d in [[0.0, a, b], [a, b, 0.0], [b, 0.0, a]] {
+                let d = unit(d);
+                let mut near: Vec<(f64, usize)> = c
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| (-dot(unit(*v), d), i))
+                    .collect();
+                near.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
+                let five: Vec<usize> = near[..5].iter().map(|n| n.1).collect();
+                // Round the face's normal, counter-clockwise from outside.
+                let e1 = unit(sub(unit(c[five[0]]), scale(d, dot(unit(c[five[0]]), d))));
+                let e2 = cross(d, e1);
+                let mut around: Vec<(f64, usize)> = five
+                    .iter()
+                    .map(|&i| {
+                        let v = unit(c[i]);
+                        (atan2(dot(v, e2), dot(v, e1)), i)
+                    })
+                    .collect();
+                around.sort_by(|x, y| x.0.total_cmp(&y.0));
+                for k in 1..4 {
+                    faces.push([around[0].1, around[k].1, around[k + 1].1]);
+                }
+            }
+        }
+    }
+    (c.iter().map(|v| unit(*v)).collect(), faces)
+}
+
 fn ball_kind(p: &Value) -> Result<(&str, f64), Fault> {
     let t = text(p, "tessellation", "uv", &["uv", "geodesic"])?;
     Ok((t, positive(p, "radius", 0.5)?))
@@ -1566,9 +1700,14 @@ fn ball_count(p: &Value) -> Result<(u64, u64), Fault> {
         let h = (s / 2).max(2);
         return Ok(((s + 1) * (h + 1), 2 * s * (h - 1)));
     }
-    let base = text(p, "base", "icosa", &["octa", "icosa"])?;
+    let base = text(p, "base", "icosa", &["tetra", "octa", "icosa", "dodeca"])?;
     let d = count(p, "detail", 1, 0, 6)?;
-    let faces = if base == "octa" { 8 } else { 20 };
+    let faces = match base {
+        "tetra" => 4,
+        "octa" => 8,
+        "dodeca" => 36,
+        _ => 20,
+    };
     let tris = faces * (d + 1) * (d + 1);
     Ok((3 * tris, tris))
 }
@@ -1601,7 +1740,7 @@ fn ball(p: &Value, plants: Plants) -> Result<Mesh, Fault> {
         m.close("solid", 0, 0);
         return Ok(m);
     }
-    let base = text(p, "base", "icosa", &["octa", "icosa"])?;
+    let base = text(p, "base", "icosa", &["tetra", "octa", "icosa", "dodeca"])?;
     let d = count(p, "detail", 1, 0, 6)? as usize;
     let r = if plants.ball_scaled {
         radius * 1.01
@@ -2210,6 +2349,39 @@ mod tests {
             (tube.anchors["start"][0], tube.anchors["end"][0]),
             ([0.0, 0.0, 0.0], [0.0, 2.0, 0.0])
         );
+    }
+
+    #[test]
+    fn a_swept_square_shades_each_side_flat_with_hard_corners() {
+        // An off-centre bar with a hole, swept along a straight line: every side is flat.
+        let doc = json!({"items": {"c": {"kind": "curve@1",
+            "params": {"points": [[0, 0, 0], [0, 0, 1]], "mode": "linear"}}}});
+        let p = json!({"outline": [[0, 0], [0.1, 0], [0.1, 0.04], [0, 0.04]],
+            "holes": [[[0.02, 0.01], [0.04, 0.01], [0.04, 0.03], [0.02, 0.03]]],
+            "along": {"curve": "c", "rings": 4}});
+        let ctx = Ctx {
+            doc: &doc,
+            id: "bar",
+            plants: Plants::default(),
+        };
+        let m = build("extrude@1", &p, &ctx).unwrap();
+        assert_eq!(
+            estimate("extrude@1", &p, &ctx).unwrap(),
+            m.positions.len() as u64
+        );
+        for t in 0..m.triangles() {
+            let ids = [0, 1, 2].map(|j| m.indices[3 * t + j] as usize);
+            let [a, b, c] = ids.map(|i| m.positions[i]);
+            let face = unit(cross(sub(b, a), sub(c, a)));
+            for i in ids {
+                let n = m.normals[i];
+                assert!(
+                    dot(n, face) > 1.0 - 1e-9,
+                    "triangle {t}: vertex {i} at {:?} has normal {n:?}, its face {face:?}",
+                    m.positions[i]
+                );
+            }
+        }
     }
 
     #[test]

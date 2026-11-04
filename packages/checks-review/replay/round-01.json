@@ -1,0 +1,30 @@
+{
+  "claim": "session-load",
+  "diff": "diff --git a/src/session.ts b/src/session.ts\nindex 0eefe7e..97e5b32 100644\n--- a/src/session.ts\n+++ b/src/session.ts\n@@ -1,5 +1,6 @@\n import { store } from './store';\n \n export function load(raw: string) {\n-  return store.get(raw);\n+  const data = JSON.parse(raw);\n+  return store.get(data.id);\n }\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [
+      {
+        "title": "[P1] Parse session payload defensively",
+        "body": "`load` now calls `JSON.parse` on the raw cookie value. A malformed cookie throws a SyntaxError that escapes to the request handler and returns a 500. Validate the shape or catch the error.",
+        "priority": 1,
+        "confidence_score": 0.81,
+        "file": "src/session.ts",
+        "line": 4,
+        "rule": "unchecked-parse",
+        "quote": "const data = JSON.parse(raw);"
+      }
+    ],
+    "overall_correctness": "patch is incorrect",
+    "overall_explanation": "The change introduces an unguarded parse of client-controlled input.",
+    "overall_confidence_score": 0.78
+  },
+  "since": []
+}

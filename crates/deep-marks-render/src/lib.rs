@@ -75,7 +75,7 @@ fn type_of(look: &Look, theme: Theme) -> &deep_canvas_marks::scene::Type {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Theme {
+pub(crate) enum Theme {
     Light,
     Dark,
 }
@@ -350,6 +350,23 @@ fn check(
         let mut drawn = doc.clone();
         if let Some(Value::Object(items)) = doc.get("items") {
             let items = deep_canvas_vector::lower_items(items, &vectors, Default::default());
+            // #399: graphs draw as marks2d's items, and labels place where the view draws them.
+            let items = match graphs::lower(doc, &items, &vectors, Default::default()) {
+                Ok((mut items, _)) => {
+                    items.retain(|_, i| i.get("kind").and_then(Value::as_str) != Some("label@1"));
+                    items
+                }
+                Err(refusal) => {
+                    issues.push(deep_canvas::document::Issue::error(
+                        graphs::code(&refusal),
+                        "",
+                        refusal["path"].as_str().unwrap_or("").to_string(),
+                        json!(null),
+                        "the graph can't be laid out as its params say",
+                    ));
+                    items
+                }
+            };
             drawn.insert("items".into(), Value::Object(items));
         }
         // An issue on an item a vector draws as names the vector.
@@ -513,8 +530,11 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             vectors,
         })));
     }
+    // #399 AC7's wrong router, which `geometry` takes.
+    let straight = input.get("planted").and_then(Value::as_str) == Some("straight_router");
     if command == "check" || command == "geometry" {
-        if input.get("planted").is_some() && !skips && !near {
+        if input.get("planted").is_some() && !skips && !near && !(straight && command == "geometry")
+        {
             return None;
         }
         let doc = doc(input.get("doc"))?;
@@ -529,11 +549,70 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         }
         let item = input.get("item")?.as_str()?;
         let t = input.get("t").map_or(Some(0), Value::as_i64)?;
-        return Some(Answer::Now(
-            refused_by_check(&checked).unwrap_or_else(|| raster::geometry(&doc, item, t, &vectors)),
-        ));
+        return Some(Answer::Now(refused_by_check(&checked).unwrap_or_else(
+            || {
+                let router = if straight {
+                    deep_canvas_graph::view::Router::Straight
+                } else {
+                    deep_canvas_graph::view::Router::Orthogonal
+                };
+                raster::geometry(&doc, item, t, &vectors, router)
+            },
+        )));
     }
     let (look, _) = look?;
+    // #399: the view's label placement at each stop of a camera path, and a series' crosshair.
+    if command == "labels" {
+        let placer = match input.get("planted") {
+            None => graphs::Placer::Honest,
+            Some(v) if v == "folds_every_label" => graphs::Placer::FoldsEveryLabel,
+            Some(_) => return None,
+        };
+        let stops = input
+            .get("path")?
+            .as_array()?
+            .iter()
+            .map(|s| {
+                let zoom = s
+                    .get("zoom")?
+                    .as_f64()
+                    .filter(|z| *z > 0.0 && z.is_finite())?;
+                Some((zoom, s.get("t").map_or(Some(0), Value::as_i64)?))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let doc = doc(input.get("doc"))?;
+        let (checked, vectors) = check(&doc, Some(&look), store_dir.as_deref(), (false, false));
+        if let Some(refusal) = refused_by_check(&checked) {
+            return Some(Answer::Now(refusal));
+        }
+        let mut boards: BTreeMap<i64, graphs::Board> = BTreeMap::new();
+        let mut steps = Vec::with_capacity(stops.len());
+        for (zoom, t) in stops {
+            let board = match boards.entry(t) {
+                std::collections::btree_map::Entry::Occupied(b) => b.into_mut(),
+                std::collections::btree_map::Entry::Vacant(slot) => {
+                    match raster::label_board(&doc, &look, t, &vectors) {
+                        Ok(b) => slot.insert(b),
+                        Err(refusal) => return Some(Answer::Now(refusal)),
+                    }
+                }
+            };
+            let (bucket, labels, folded) = board.stop(zoom, placer);
+            steps.push(
+                json!({"zoom": zoom, "bucket": bucket, "t": t, "folded": folded, "labels": labels}),
+            );
+        }
+        return Some(Answer::Now(json!({"ok": true, "steps": steps})));
+    }
+    if command == "crosshair" {
+        if input.get("planted").is_some() {
+            return None;
+        }
+        let doc = doc(input.get("doc"))?;
+        let item = input.get("item")?.as_str()?;
+        let x = input.get("x")?.as_f64()?;
+        return Some(Answer::Now(raster::crosshair(&doc, item, x)));
+    }
     if command == "raster" {
         let (planted, encoded_luma, spans_apart) = match input.get("planted") {
             None => (Planted::None, false, false),
@@ -548,6 +627,12 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             }
             Some(Value::String(p)) if p == "merge_zero_fills" => {
                 (Planted::MergeZeroFills, false, false)
+            }
+            Some(Value::String(p)) if p == "decimate_first_last" => {
+                (Planted::DecimateFirstLast, false, false)
+            }
+            Some(Value::String(p)) if p == "decimate_min_max" => {
+                (Planted::DecimateMinMax, false, false)
             }
             Some(Value::String(p))
                 if p == "write_fades_fills_from_start"
@@ -604,6 +689,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             planted,
             vectors: Vectors::new(),
             write,
+            antialias: input.get("antialias").map_or(Some(true), Value::as_bool)?,
             encoded_luma,
             spans_apart,
             look,
@@ -756,12 +842,22 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
 pub fn main() {
     let command = std::env::args().nth(1).unwrap_or_default();
     if ![
-        "frames", "session", "render", "check", "look", "raster", "geometry", "idle", "path",
+        "frames",
+        "session",
+        "render",
+        "check",
+        "look",
+        "raster",
+        "geometry",
+        "idle",
+        "labels",
+        "crosshair",
+        "path",
     ]
     .contains(&command.as_str())
     {
         eprintln!(
-            "deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | path"
+            "deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path"
         );
         std::process::exit(2);
     }
@@ -806,6 +902,7 @@ pub fn main() {
 
 mod asset;
 pub mod gpu;
+mod graphs;
 pub mod layer;
 #[cfg(target_os = "macos")]
 mod macos;

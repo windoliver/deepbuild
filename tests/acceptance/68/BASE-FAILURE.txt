@@ -1,0 +1,35 @@
+Base run of the #68 acceptance tests, on base commit 83e4159c7ecf84b3df596cf0fafaf2b6803612fd (origin/main),
+Node 24.22.0, vitest 5.0.5, from the worktree root (shown as <worktree>):
+
+  npx vitest run --root tests/acceptance/68 --testTimeout=600000
+
+Every test fails, and each fails on its own: the plug-in package @deepbuild/checks-work isn't at the base, and the
+tests import it lazily, so each test's first call into it throws. Nothing else at the base answers any criterion:
+there is no service, data, document or message kind, no kit for them, no drafting rule for kinds, no `budget` on a
+check kind and no `admitKind` in the gate, and the verdict engine reads no check's oracle (a hand-made check
+record whose oracle is a model, with one passed run, gets PASS there).
+
+ Test Files  8 failed (8)
+      Tests  21 failed (21)
+
+First failure, as printed:
+
+ FAIL  budgets.test.ts > AC6 the service kind declares its time and cost budget, and the gate refuses it with none > AC6 service: declares a time and a cost budget, the gate admits it, refuses it without one naming the kind, and its run keeps to its time
+Error: Cannot find module '/packages/checks-work/src/index.ts' imported from <worktree>/tests/acceptance/68/helpers.ts
+ ❯ budgets.test.ts:11:19
+      9|   it(`AC6 ${kind}: declares a time and a cost budget, the gate admits …
+     10|     const { admitKind } = await gate();
+     11|     const fill = (await work()).workFill(kind);
+       |                   ^
+     12|     const budget = fill.budget;
+
+Every other failure (AC1 to AC5, the Proof tests and the drafting test) is the same "Cannot find module
+'/packages/checks-work/src/index.ts'" from `work()` in helpers.ts, at the test's first call into the plug-in.
+
+Type check: with a declaration-only copy of the surface under test (README) placed temporarily
+(packages/checks-work/src/index.ts, KindBudget and CheckRunnerFill.budget in packages/conformance, ClaimCheck.oracle
+in packages/verdicts, admitKind in packages/gate) and removed afterwards,
+
+  npx tsc -p tests/acceptance/68/tsconfig.json
+
+exits 0 with no output.

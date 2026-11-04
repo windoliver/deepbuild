@@ -75,7 +75,7 @@ function checkEnvironments(environments: unknown): ContractIssue[] {
  */
 const SECRET_NAME = /^[a-z][a-z0-9_]*$/;
 const VARIANTS = ['stream', 'polled', 'mcp'];
-const READINGS = ['work.item@1', 'push.record@1'];
+const READINGS = ['work.item@1', 'work.item@2', 'push.record@1'];
 function checkSecrets(secrets: unknown): ContractIssue[] {
   if (!Array.isArray(secrets)) return [issue('type', '/secrets', secrets)];
   return secrets.flatMap((s, i): ContractIssue[] => {
