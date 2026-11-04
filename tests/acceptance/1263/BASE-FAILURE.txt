@@ -1,0 +1,79 @@
+The #1263 suite at base commit e2e6e1cc (origin/main), with packages/*/dist and target/debug/deep-hook built at that
+commit, on this repo's Linux arm64 box (20 cores, load average about 59 from other worktrees). Node 24.22.0. The
+stand-in runs Claude Code 2.1.308 (the newest version adapters/claude-code.facts.json covers). Rerun after the first
+blind redraft, which dropped AC2's automatic test and its twin (README: Readings, 5); nothing else changed.
+
+Summary
+- fast.test.ts: 2 tests, 2 failed.
+  Failed, as expected: AC1. "all done?" typed after the session's judged stop (its line "says done 1/1 · 2 tests ·
+  next: DeepBuild · receipt"), with no transcript entry for it when DeepBuild's UserPromptSubmit entry ran, was not
+  answered: deep-hook printed nothing (exit 0, a few ms), the prompt went on to the model (the hook log's model line).
+  This is the issue's bug: the hub's status answer needs the prompt's origin, read from an entry Claude Code hasn't
+  written yet.
+  Failed, as expected: AC2 (the blocked prompt recorded as yours), at its first assertion: at the base there is no
+  blocked prompt to record, since the status question isn't answered (the same reply as AC1's).
+- A control run at the base, by hand during the first draft, not kept as a test: the same session with the status
+  question's entry written before its hook (as #669's and #83's stand-ins do) is answered from the record, blocked
+  with "says done 1/1 · 2 tests · next: DeepBuild · receipt (for 0s) · needs you: 0" and the session's work line, no
+  model call, and recorded once as a user.ask from person. So AC1's and AC2's checks pass on an answer the base gives;
+  only the entry's timing differs.
+
+================ node node_modules/vitest/vitest.mjs run --root tests/acceptance/1263 --no-file-parallelism fast.test.ts ================
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1263
+
+ ❯ fast.test.ts (2 tests | 2 failed) 2606ms
+   ❯ AC1 #1263.e768d825 In a real Claude Code session, "all done?" typed after a verdict is answered from the record by DeepBuild's prompt entry, blocking the prompt so no model call is made (1)
+     × AC1 #1263.e768d825 "all done?" typed after a judged stop, its transcript entry not written when DeepBuild's UserPromptSubmit entry runs (Claude Code 2.1.308 writes it only once the hooks returned), is answered from the record: DeepBuild's entry blocks it with the record's line for the session's claim, and it never reaches the model 2303ms
+   ❯ AC2 #1263.19b14762 The blocked prompt is recorded as yours (user.ask from person), and a status question that came in as an automatic prompt is not answered from the record (1)
+     × AC2 #1263.19b14762 the blocked "all done?", whose transcript entry Claude Code never writes, is recorded once as yours: one user.ask for it, from person 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  fast.test.ts > AC1 #1263.e768d825 In a real Claude Code session, "all done?" typed after a verdict is answered from the record by DeepBuild's prompt entry, blocking the prompt so no model call is made > AC1 #1263.e768d825 "all done?" typed after a judged stop, its transcript entry not written when DeepBuild's UserPromptSubmit entry runs (Claude Code 2.1.308 writes it only once the hooks returned), is answered from the record: DeepBuild's entry blocks it with the record's line for the session's claim, and it never reaches the model
+AssertionError: AC1 #1263.e768d825 "all done?" typed after a verdict must be answered from the record by DeepBuild's prompt entry, blocking the prompt so no model call is made: its entry's reply didn't block it. {"model":true,"runs":[{"command":"exec '~/deepbuild/.claude/worktrees/issue-567-6395b0/target/debug/deep-hook' claude-code UserPromptSubmit","code":0,"signal":null,"timedOut":false,"ms":7,"stdout":"","stderr":""}]}
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ must helpers.ts:61:10
+     59|  */
+     60| export function must(ok: unknown, message: string): asserts ok {
+     61|   assert.ok(ok, message);
+       |          ^
+     62| }
+     63|
+ ❯ fast.test.ts:35:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  fast.test.ts > AC2 #1263.19b14762 The blocked prompt is recorded as yours (user.ask from person), and a status question that came in as an automatic prompt is not answered from the record > AC2 #1263.19b14762 the blocked "all done?", whose transcript entry Claude Code never writes, is recorded once as yours: one user.ask for it, from person
+AssertionError: AC2 #1263.19b14762 "all done?" typed after a verdict must be the blocked prompt (answered from the record by DeepBuild's prompt entry): {"model":true,"runs":[{"command":"exec '~/deepbuild/.claude/worktrees/issue-567-6395b0/target/debug/deep-hook' claude-code UserPromptSubmit","code":0,"signal":null,"timedOut":false,"ms":7,"stdout":"","stderr":""}]}
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ must helpers.ts:61:10
+     59|  */
+     60| export function must(ok: unknown, message: string): asserts ok {
+     61|   assert.ok(ok, message);
+       |          ^
+     62| }
+     63|
+ ❯ fast.test.ts:46:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  11:40:29
+   Duration  2.84s (tests 97%, transform 3%, import 1%)
+
