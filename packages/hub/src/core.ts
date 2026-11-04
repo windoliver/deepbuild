@@ -585,6 +585,8 @@ export class Core {
    * prompt's entry only once its hooks have returned, and the origin joins the prompt to that entry.
    */
   private readonly unplaced = new Map<string, { drafts: Draft[]; meta: HookMeta; writer: string; timer: NodeJS.Timeout; done: (settled: Promise<void>) => void }>();
+  /** Status questions answered as yours while their entry was still to come, by hook ID: placed later, they are yours (#1263). */
+  private readonly typedStatus = new Set<string>();
   /** Held stops, each woken when an answer for its session is ready to deliver. */
   private readonly waiting = new Map<string, Set<() => void>>();
   /** The log position of the last session.continued the hub routed (#85). */
@@ -1622,6 +1624,8 @@ export class Core {
         if (childPrompt(meta)) { data.from = 'subagent'; continue; }
         let from = foreign ? 'unknown' : String(this.mapped(meta, draft, { ...meta.fields }, entry ? [entry] : [])?.from ?? data.from);
         if (from === 'unknown' && !foreign && this.options.plant === 'unplaced-is-person') from = 'person';
+        // A status question answered as yours before its entry came (#1263): a blocked prompt never gets one.
+        if (from === 'unknown' && this.typedStatus.delete(meta.id)) from = 'person';
         // The planted wrong programs take an automatic continuation for yours, or read the resume prompt by its look.
         if (from === 'continuation' && this.options.plant === 'continuation-as-person') from = 'person';
         if (this.options.plant === 'continuation-by-likeness' && String(data.text).startsWith('The app was quit while you were working')) from = 'continuation';
@@ -4195,6 +4199,13 @@ export class Core {
       await Promise.allSettled([...this.inflight]);
       const [row] = (await this.record.raw(`SELECT json_extract(data, '$.from') AS f FROM events WHERE id = ?`, [meta.id])) as { f: string | null }[];
       from = row ? row.f ?? 'unknown' : undefined;
+    }
+    // Claude Code writes a prompt's entry only once its hooks have returned (#1263), and a prompt this hook blocks never
+    // gets one: a Claude Code status question still set aside for its entry is yours. An automatic prompt (a task's
+    // notice, another session's or agent's message) comes wrapped in its tags, so it is never a status question.
+    if (from === undefined && this.unplaced.get(meta.session)?.meta.id === meta.id) {
+      from = 'person';
+      this.typedStatus.add(meta.id);
     }
     if (from !== 'person') return undefined;
     const live = this.live.get(meta.session);
