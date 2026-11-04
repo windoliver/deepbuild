@@ -142,6 +142,12 @@ test-window = []
 # Issue #418: the look module's implementation replaced by a planted one whose finish at identity
 # moves a value (tests/acceptance/418/README.md: The look@1 kit).
 test-look-finish-off = []
+# Issue #399: the data, graph and vector modules' implementations each replaced by a planted one
+# (tests/acceptance/399/README.md: The kits: deep-show): an m4 that drops each column's last row,
+# a layered layout that breaks a tie by registration order, and currentColor drawn in ink.
+test-data-m4-drops-last = []
+test-graph-tie-by-registration = []
+test-vector-currentcolor-ink = []
 test-sim = ["dep:deep-canvas-test-modules"]
 test-sim-a = ["test-sim"]
 test-sim-b = ["test-sim"]
