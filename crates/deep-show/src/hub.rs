@@ -1247,6 +1247,41 @@ impl<'a> Hub<'a> {
 
     /// A new session for a document: its epochs from the scenario's start, the look's tokens
     /// and the record's readings.
+    /// Mark set columns that read the agent's table, inlined from the evidence store as
+    /// `deep-canvas-render` reads them (#397, #1162): what every frame of a revision draws.
+    pub(crate) fn inline_tables(
+        &self,
+        form: &mut Value,
+    ) -> Result<(), deep_marks_vello::tables::Refused> {
+        match form {
+            Value::Object(map) => {
+                deep_marks_vello::tables::tables(map, Some(&self.scenario.evidence))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Each `vector@1` item's imported outline, inlined from the evidence store as
+    /// `params.outline` (#398, #1162): what the vector kind draws as in a frame.
+    pub(crate) fn inline_vectors(&self, form: &mut Value) {
+        let Value::Object(map) = form else { return };
+        let root = &self.scenario.evidence;
+        let (_, imported) = deep_canvas_vector::check(
+            map,
+            |sha| (sha.len() == 64).then(|| std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()).flatten(),
+            false,
+        );
+        let Some(Value::Object(items)) = map.get_mut("items") else { return };
+        for (id, found) in &imported {
+            if let Some(item) = items.get_mut(id) {
+                let outline = deep_canvas_vector::lower::outline(&found.svg, item, &found.colors);
+                if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
+                    params.insert("outline".into(), outline);
+                }
+            }
+        }
+    }
+
     pub(crate) fn new_session(&self) -> DocSession {
         let mut s = DocSession::new(
             self.scenario.epoch_start,
@@ -1792,6 +1827,7 @@ impl<'a> Hub<'a> {
                 skipped = crate::verdict::unknown_items(&result.notices);
                 blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = result.issues;
+                blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
                 // the rest.
                 if self.scenario.planted == Some(Planted::AcceptsEverySampleRate8To192k) {
@@ -1862,6 +1898,12 @@ impl<'a> Hub<'a> {
                 &skipped,
             )
         });
+        if let Some(form) = drawn_form.as_mut() {
+            if let Err(r) = self.inline_tables(form) {
+                issues.push(unfit_issue(r.code, r.path));
+            }
+            self.inline_vectors(form);
+        }
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
         if let Some(form) = drawn_form.as_mut() {
@@ -1958,7 +2000,9 @@ impl<'a> Hub<'a> {
         let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
         // A revision with 3D writer layers renders back on the GPU (#378).
         let three = visible && wants_pixels && deep_canvas_scene3d::scene::has_3d(&doc);
-        let drawn = if visible && wants_pixels && !three {
+        // A 3D writer layer draws its 2D items as overlays (Writer layer): the 2D frame of the
+        // same revision at `t`, drawn over the 3D frame (#1162).
+        let drawn = if visible && wants_pixels {
             self.live_drawn(&show.doc, show.t)
         } else {
             None
@@ -2040,17 +2084,31 @@ impl<'a> Hub<'a> {
                 }
                 Ok(()) => {
                     let mut batches = Vec::new();
+                    let instanced = crate::packs::instanced(
+                        self.expansions
+                            .get(&show.doc)
+                            .map_or(&[][..], Vec::as_slice),
+                    );
                     let pixels = match drawn3d {
-                        Some(drawn3d) => drawn3d.ok(),
+                        Some(drawn3d) => drawn3d.ok().map(|(mut rgba, size, boxes)| {
+                            // The 2D items over the 3D frame, with no ground of their own.
+                            let mut boxes = boxes;
+                            if let Some(d) = drawn {
+                                let (over, drew) =
+                                    self.renderer.raster_batched(d, size, None, &instanced);
+                                batches = drew;
+                                snapshot::over(&mut rgba, &over);
+                                let scale = d.scale(size);
+                                boxes.extend(
+                                    d.boxes().into_iter().map(|(id, b)| (id, b.map(|v| v * scale))),
+                                );
+                            }
+                            (rgba, size, boxes)
+                        }),
                         None => {
                             let drawn = drawn.expect("a revision with no error was drawn");
                             let size = show.size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
                             let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-                            let instanced = crate::packs::instanced(
-                                self.expansions
-                                    .get(&show.doc)
-                                    .map_or(&[][..], Vec::as_slice),
-                            );
                             let (rgba, drew) =
                                 self.renderer
                                     .raster_batched(drawn, size, Some(ground), &instanced);
