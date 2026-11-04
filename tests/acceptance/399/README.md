@@ -46,7 +46,7 @@ Vitest's cache in `tests/acceptance/399/node_modules/.vite`; delete it.
 
 Gates: `budgets.test.ts` takes its timing and memory readings only on a fit reference Mac (Mac15,7 or Mac15,12, Low
 Power Mode off, thermal state nominal, a 1-minute load at most half the cores; mains power never gates); elsewhere it
-skips as INCONCLUSIVE after its structural check, never a pass. `taste.test.ts` is INCONCLUSIVE until a taste call on
+skips as INCONCLUSIVE after its structural check, never a pass. `redraft/taste-redraft.test.ts` is INCONCLUSIVE until a taste call on
 this run's pictures is recorded. Everything else runs headless on the CPU (Vello CPU), on any platform.
 
 `BASE-FAILURE.txt` says why every test fails at the base.
@@ -204,12 +204,12 @@ leading `- [ ] ` dropped (#305's rule); the scope's kit item is `#399.7d35b13d` 
 | `#399.4bd0e343` (5) | `budgets.test.ts`: everywhere, the million-row M4 line draws 1 to 4 vertices in every column; on a fit reference Mac, five runs of ten changes to the 10,000-node graph, each run's slowest `ms` judged against 50; the peak memory (`/usr/bin/time -l`) of `deep-graph layout` on one change and of `raster` of the million-row series, three runs each, judged against 100 MB; the merge base's `deep-graph` answer and time on the same change printed beside |
 | `#399.53449721` (6) | `series.test.ts` (3). The M4 raster equals the full-rows raster pixel for pixel without antialiasing, the full line inks every column and the spike's column highest; the crosshair at the spike's x reads row 500,166 at its t and 1.0, and at row 500,266's x (same column, none of its M4 rows) that raw row (a crosshair on decimated vertices fails); the Oracle lane below. **Planted** `decimate_first_last`: differs, naming its first column, the spike's among the columns; **planted** `decimate_min_max`: differs, naming its first column |
 | `#399.bf5632b7` (7) | `place-route.test.ts` (3). The grid at zoom 1: all fifty placed, none folded; the route A→B: from A's border to B's, at least 8 u from C's box and C's label, x and y never decreasing (B lies right of and below A), at most one shared segment with A→D and with E→B. **Planted** `folds_every_label` fails the first case (fifty folded); **planted** `straight_router` fails the second, naming C |
-| `#399.93b00910` (8) | `taste.test.ts`: `raster` draws the 40-node graph before and after n41, the crowd's labels and the six cards; the PNGs it wrote go to `target/acceptance/399/` with their SHA-256s printed; then `TASTE.json` (below) |
+| `#399.93b00910` (8) | `redraft/taste-redraft.test.ts` (the blind redraft, swapped in with the owner's approval for `taste.test.ts`, whose crowd raster sent no record state for the status mark's verdict, which the base refuses as `ref_unresolved`): `raster` draws the 40-node graph before and after n41, the crowd's labels (with that verdict's state) and the six cards; the PNGs it wrote go to `target/acceptance/399/` with their SHA-256s printed; then `TASTE.json` (below) |
 | `#399.7d35b13d` (scope) | `kit.test.ts` (4). In `full`: data@1, graph@1 and vector@1 each implemented by the module of that name (vector sealed through the registry), the reference, bit and canonical, no behavior part, every part of the canvas kit listed; the kit over each module at its interface's digest runs only listed parts, each every declared case, all PASS, the fixtures part running each of the module's own fixtures. Each planted feature: the plan names a bit implementation other than the reference; the kit over its module FAILs with a failure naming one of that module's own fixtures it ran and a non-empty `field`; the whole kit's ledger records it FAIL; the release build embedding that ledger refuses to start, naming the interface and the module |
 
 ## The taste call
 
-`taste.test.ts` writes `graph-before.png`, `graph-after.png`, `labels.png` and `cards-groups.png` to
+`redraft/taste-redraft.test.ts` writes `graph-before.png`, `graph-after.png`, `labels.png` and `cards-groups.png` to
 `target/acceptance/399/` (the PNGs `raster` wrote, byte for byte). Those files are attached to the PR and shown to the
 owner in the session; that is the implementer's, outside any test. The owner's answer is recorded in
 `tests/acceptance/399/TASTE.json`, the one file anyone adds to this folder after this commit, and only to record it:
