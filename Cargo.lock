@@ -2220,6 +2220,7 @@ name = "deep-marks-render"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-graph",
  "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-canvas-seams",

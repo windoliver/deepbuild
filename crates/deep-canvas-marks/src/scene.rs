@@ -2516,6 +2516,32 @@ fn laid_out<'a>(
     Ok(Cow::Owned(out))
 }
 
+/// Each item's box as its frames' auto layout solves it (#375), for an item it lays out; none when
+/// no frame lays out (#399: a frame's drawn box where a graph node placed it).
+pub fn laid_out_boxes(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+) -> Result<BTreeMap<String, [f64; 4]>, Refused> {
+    let laid = laid_out(doc, items)?;
+    let mut out = BTreeMap::new();
+    if let Cow::Owned(laid) = laid {
+        for (id, item) in &laid {
+            let (Some(pos), Some(b)) = (
+                item.pointer("/at/pos").and_then(Value::as_array),
+                item.pointer("/params/box").and_then(Value::as_array),
+            ) else {
+                continue;
+            };
+            let n = |v: Option<&Value>| v.and_then(Value::as_f64).unwrap_or(0.0);
+            out.insert(
+                id.clone(),
+                [n(pos.first()), n(pos.get(1)), n(b.get(2)), n(b.get(3))],
+            );
+        }
+    }
+    Ok(out)
+}
+
 /// The rect a mark's scissors leave it, for a renderer that clips only by rect.
 fn clip_of(scopes: &[Scope]) -> Option<[f64; 4]> {
     scopes.iter().fold(None, |acc, s| {
@@ -2541,6 +2567,10 @@ pub enum Planted {
     ArcClosedAlongChord,
     /// #385 AC8's twin: a group's fills that share an edge draw each on its own, source-over.
     SectorsSourceOver,
+    /// #399 AC6's twins: a series line that keeps only each column's first and last rows, or
+    /// only its min and max.
+    DecimateFirstLast,
+    DecimateMinMax,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
@@ -2833,7 +2863,14 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 .unwrap_or(&data::BoundRows::new()),
         )?,
         "axis@1" => data::axis(id, item, ctx.items, ctx.palette, pos)?,
-        "series@1" => data::series(id, item, ctx.palette, pos)?,
+        "series@1" => {
+            let how = match ctx.planted {
+                Planted::DecimateFirstLast => data::Decimate::FirstLast,
+                Planted::DecimateMinMax => data::Decimate::MinMax,
+                _ => data::Decimate::M4,
+            };
+            data::series(id, item, ctx.palette, pos, how)?
+        }
         "image@1" => {
             let Some(Value::String(asset)) = params.get("asset") else {
                 return refuse("bad_doc", format!("{path}/params/asset"));
