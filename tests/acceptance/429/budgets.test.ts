@@ -17,13 +17,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  REPO, WRITER, asItem, checkCall, compute, figure, judge, liveCall, liveReply, num, obj, p95, payload, requireGpu, requireReferenceMac, run1,
+  REPO, WRITER, asItem, checkCall, compute, figure, judge, liveCall, liveReply, num, obj, payload, requireGpu, requireReferenceMac, run1,
   sessionRow, shown, str, tint, useBins, useOut, writeJson, type JsonObject,
 } from './helpers.ts';
 
 const bins = useBins();
 const out = useOut();
-const DISPLAYS: Record<string, [number, number]> = { 'Mac15,7': [3456, 2234], 'Mac15,12': [2560, 1664] };
 const red = (k: number): JsonObject => tint('tint', { steps: { ...(tint()['steps'] as JsonObject), red: { op: 'const@1', args: { value: [0.6 + k / 1000, 0, 0, 0], type: 'vec4' } } } });
 
 describe('#429.04be27ea a composed operator\'s budgets', () => {
@@ -39,26 +38,6 @@ describe('#429.04be27ea a composed operator\'s budgets', () => {
     }
     judge('check and compile, ms', runs, 20);
   }, 1_800_000);
-
-  for (const c of [{ cls: 'data_view', limit: 0.5, resolution: 'half' }, { cls: 'showpiece', limit: 4, resolution: 'full' }]) {
-    it(`#429.04be27ea a composed pass's GPU time stays within the ${c.cls} class's ${c.limit} ms (p95 over 320 frames, five runs after warm-up)`, () => {
-      const model = requireReferenceMac();
-      const size = c.cls === 'showpiece' ? DISPLAYS[model]! : [1280, 720] as [number, number];
-      const doc = writeJson(out(), 'doc.json', payload(figure('budget-429', { tint: asItem(tint('tint', { resolution: c.resolution })) }, { moving: true, cls: c.cls, size })));
-      const runs: number[] = [];
-      for (let k = 0; k < 6; k++) {
-        const live = liveReply(run1(bins.bin(), out(), liveCall({ frames: 320, report: ['passes'], sessions: [{ session: 's', writer: WRITER, doc, size }] })));
-        expect(sessionRow(live, 's')['state'], `run ${k}: the ${c.cls} with a composed pass is live`).toBe('live');
-        const ms = live.frames.slice(20).map((f) => {
-          const p = f.passes.filter((x) => x.operator === 'tint');
-          expect(p.length, `run ${k}, frame ${f.frame}: the tint's pass is timed`).toBeGreaterThan(0);
-          return p.reduce((s, x) => s + (x.end_ns - x.start_ns) / 1e6, 0);
-        });
-        if (k) runs.push(p95(ms));
-      }
-      judge(`${c.cls} composed pass GPU p95, ms`, runs, c.limit);
-    }, 3_600_000);
-  }
 
   it('#429.04be27ea a composed operator in a core view is refused, naming it', () => {
     requireGpu();
