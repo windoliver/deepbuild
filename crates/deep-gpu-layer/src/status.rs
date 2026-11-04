@@ -243,7 +243,8 @@ pub fn strokes(
             .flat_map(|l| &mut l.solids)
             .filter(|s| s.id == b.item)
         {
-            if solid.shape != Shape::Box {
+            // A box outlines its edges; a builder's mesh its contour (#1162).
+            if solid.shape != Shape::Box && solid.mesh.is_none() {
                 return Err(json!({"ok": false, "code": "stroke_shape",
                     "path": format!("status_bindings/{}/target", b.id)}));
             }
@@ -394,8 +395,8 @@ impl Canvas {
     }
 }
 
-/// The screen box of an item's solids: every corner of each unit shape through its model and the
-/// camera; `None` for an item with nothing on screen.
+/// The screen box of an item's solids: every point each reaches (its mesh's vertices, or its
+/// unit shape's corners) through the camera; `None` for an item with nothing on screen.
 fn screen_box(scene: &Scene, item: &str) -> Option<[f64; 4]> {
     let mut lo = [f64::INFINITY; 2];
     let mut hi = [f64::NEG_INFINITY; 2];
@@ -403,18 +404,7 @@ fn screen_box(scene: &Scene, item: &str) -> Option<[f64; 4]> {
         if s.id != item {
             continue;
         }
-        for k in 0..8 {
-            let u = [
-                if k & 1 == 0 { -0.5 } else { 0.5 },
-                if k & 2 == 0 { -0.5 } else { 0.5 },
-                if k & 4 == 0 { -0.5 } else { 0.5 },
-            ];
-            let m = &s.model;
-            let w = [
-                m[0][0] * u[0] + m[0][1] * u[1] + m[0][2] * u[2] + m[0][3],
-                m[1][0] * u[0] + m[1][1] * u[1] + m[1][2] * u[2] + m[1][3],
-                m[2][0] * u[0] + m[2][1] * u[1] + m[2][2] * u[2] + m[2][3],
-            ];
+        for w in s.points() {
             if let Some([x, y, _]) = scene.camera.project(w) {
                 lo = [lo[0].min(x), lo[1].min(y)];
                 hi = [hi[0].max(x), hi[1].max(y)];

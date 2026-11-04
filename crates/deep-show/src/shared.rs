@@ -1462,6 +1462,14 @@ impl Hub<'_> {
     /// `read`: the revision shown, as the reader sees it.
     pub fn read(&mut self, doc: &str, via: Option<&Via>) -> Value {
         let reader = via.and_then(|v| self.acting(v)).map(|(w, _)| w);
+        // A sole writer's document (deep show, #393): its current revision as the hub holds it,
+        // which the app's views open (#1162).
+        if !self.shared.contains_key(doc) {
+            if let Some(c) = self.current(doc) {
+                return json!({"rev": c.rev, "hash": c.hash, "draws": draws(&c.doc),
+                              "issues": [], "document": c.doc});
+            }
+        }
         let (Some(k), Some(shared)) = (self.shown(doc), self.shared.get(doc)) else {
             // A deep_show document (one writer's layer, #393) reads as its current revision,
             // stored as its check stamped it (#1162).
