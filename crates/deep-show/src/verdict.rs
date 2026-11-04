@@ -28,6 +28,9 @@ struct Current<'h> {
 /// The core's honest-numbers check kind (canvas primitives: Honest numbers, the check).
 const HONEST: &str = "honest_numbers";
 
+/// The core's determinism check kind (Check input).
+const DETERMINISM: &str = "document.determinism";
+
 /// The verdicts a claim can get, worst first: the claim's is the worst of its requirements'.
 const WORST_FIRST: [&str; 5] = ["INVALID", "BLOCKED", "FAIL", "INCONCLUSIVE", "PASS"];
 
@@ -108,6 +111,54 @@ impl<'a> Hub<'a> {
         blocked_rows(by_kind)
     }
 
+    /// What a canvas module this build lacks blocks in a `deep show --check` whose claim names
+    /// the document (#1162): each item of a kind that module evaluates is kept as written and
+    /// never drawn, as an unknown kind's is (#403), and blocks the claim naming its kind; the
+    /// rest still draws. The module's own `requires` entry stops refusing once its items are set
+    /// apart. Outside such a claim the document is refused with `module_missing` (#305).
+    pub fn missing_in_claim(
+        &self,
+        show: &Show,
+        issues: &mut Vec<Issue>,
+        skipped: &mut Vec<String>,
+    ) -> Vec<Value> {
+        let in_claim = show.check
+            && show
+                .claim
+                .as_ref()
+                .and_then(|h| self.scenario.claims.get(h))
+                .is_some_and(|c| c.deliverables.contains(&show.doc));
+        if !in_claim {
+            return Vec::new();
+        }
+        let item_kind = |i: &Issue| {
+            (i.code == "module_missing" && i.path.starts_with("items/") && i.path.ends_with("/kind"))
+                .then(|| i.actual.as_str().map(str::to_string))
+                .flatten()
+        };
+        let mut by_kind: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for i in issues.iter() {
+            if let Some(kind) = item_kind(i) {
+                by_kind.entry(kind).or_default().extend(i.ids.iter().cloned());
+            }
+        }
+        if by_kind.is_empty() {
+            return Vec::new();
+        }
+        issues.retain(|i| {
+            item_kind(i).is_none()
+                && !(i.code == "module_missing" && i.path.starts_with("requires/modules/"))
+        });
+        let mut rows = Vec::new();
+        for (kind, ids) in by_kind {
+            skipped.extend(ids.iter().cloned());
+            rows.push(json!({"code": "module_missing", "kind": kind, "ids": ids}));
+        }
+        skipped.sort();
+        skipped.dedup();
+        rows
+    }
+
     /// A document's current revision: a shared document's, or a session's. A view of the record
     /// has no revisions (Revision), so it is no deliverable a verdict can be keyed by.
     fn current_of(&self, doc: &str) -> Option<Current<'_>> {
@@ -138,6 +189,7 @@ impl<'a> Hub<'a> {
             return json!({"result": "INVALID", "key": {"revisions": []}, "stale": false, "requirements": []});
         };
         let read = self.evaluated_reads(c);
+        let determinism = self.determinism_runs(c);
         let mut docs: Vec<(String, Current)> = Vec::new();
         let mut missing = false;
         for d in &c.deliverables {
@@ -163,7 +215,7 @@ impl<'a> Hub<'a> {
         let rows: Vec<Value> = c
             .requirements
             .iter()
-            .map(|r| self.judge(r, &docs, missing, &read, &c.session))
+            .map(|r| self.judge(r, &docs, missing, &read, &c.session, determinism.get(&r.id)))
             .collect();
         // A deliverable the hub doesn't hold is INVALID; a definition with no requirement checks
         // nothing, so it never passes.
@@ -273,6 +325,46 @@ impl<'a> Hub<'a> {
         out
     }
 
+    /// The core's `document.determinism` on each requirement that names it: every deliverable's
+    /// current revision played to and seeked to each of the input's `at_times` (#488's
+    /// comparison on a 60 Hz display), an error for each time whose pixels differ or that
+    /// couldn't be drawn. Requirement ID → its issues.
+    fn determinism_runs(&mut self, c: &crate::hub::Claim) -> BTreeMap<String, Vec<Value>> {
+        let mut out = BTreeMap::new();
+        for r in c.requirements.iter().filter(|r| r.check["kind"] == DETERMINISM) {
+            let at_times: Option<Vec<i64>> = r.check["at_times"].as_array().map(|ts| {
+                ts.iter()
+                    .filter_map(|t| t.as_str().and_then(crate::hub::flicks).or_else(|| t.as_i64()))
+                    .collect()
+            });
+            let mut issues = Vec::new();
+            for doc in &c.deliverables {
+                let d = crate::time::Determinism {
+                    doc: doc.clone(),
+                    display_hz: 60,
+                    play: crate::time::PlayPath::Warm,
+                    at_times: at_times.clone(),
+                };
+                let compared = self.determinism(&d);
+                let Some(frames) = compared["frames"].as_array() else {
+                    issues.push(json!({"check": DETERMINISM, "code": "not_drawn", "severity": "error",
+                        "ids": [], "doc": doc, "what": format!("the revision couldn't be drawn: {}", compared["code"])}));
+                    continue;
+                };
+                for f in frames {
+                    let (play, seek) = (&f["play"]["pixels"], &f["seek"]["pixels"]);
+                    if play.is_null() || play != seek {
+                        issues.push(json!({"check": DETERMINISM, "code": "seek_differs", "severity": "error",
+                            "ids": [], "doc": doc, "t": f["t"],
+                            "what": format!("playing to {} draws {play}, seeking to it {seek}", f["t"])}));
+                    }
+                }
+            }
+            out.insert(r.id.clone(), issues);
+        }
+        out
+    }
+
     /// One requirement's row: its check input's kind run on every deliverable, with the machines
     /// its result holds on and the determinism class of what it read (#411).
     fn judge(
@@ -282,6 +374,7 @@ impl<'a> Hub<'a> {
         missing: bool,
         read: &BTreeMap<String, Value>,
         author: &str,
+        compared: Option<&Vec<Value>>,
     ) -> Value {
         let kind = r.check["kind"].as_str().unwrap_or_default().to_string();
         let sealed = &self.startup.sealed;
@@ -315,6 +408,13 @@ impl<'a> Hub<'a> {
             }
             return done(row, "BLOCKED", vec![b]);
         }
+        if let (true, Some(raised)) = (kind == DETERMINISM, compared) {
+            // Run on every deliverable before judging (`determinism_runs`): each time where
+            // playing to it and seeking to it draw different pixels is an error.
+            let result = if raised.is_empty() { "PASS" } else { "FAIL" };
+            row.insert("issues".into(), Value::Array(raised.clone()));
+            return done(row, result, Vec::new());
+        }
         let honest = kind == HONEST;
         if core && kind != CHECK && !honest {
             // The core's other kinds land with R6 (Check input: Lands); unrun, they never pass.
@@ -338,7 +438,11 @@ impl<'a> Hub<'a> {
             // A document that requires a canvas module the build lacks is BLOCKED, never a
             // FAIL (#305), naming the module where the `requires/modules/<module>` path does.
             for i in checked.issues.iter().filter(|i| i.code == "module_missing") {
-                let mut b = json!({"code": "module_missing", "kind": kind, "ids": i.ids});
+                // An item of a kind whose module the build lacks names that kind (#1162).
+                let item_kind = (i.path.ends_with("/kind") && i.path.starts_with("items/"))
+                    .then(|| i.actual.as_str())
+                    .flatten();
+                let mut b = json!({"code": "module_missing", "kind": item_kind.unwrap_or(&kind), "ids": i.ids});
                 if let Some(module) = i.path.strip_prefix("requires/modules/") {
                     b["module"] = json!(module);
                 }
@@ -433,14 +537,12 @@ impl<'a> Hub<'a> {
     /// tracing them raises, a table an agent wrote where status can show among them. A table it
     /// can't read blocks the check, naming the column.
     fn honest_numbers(&self, doc: &Value) -> Result<(Vec<Value>, Vec<Issue>), Value> {
-        let mut doc = doc.as_object().cloned().unwrap_or_default();
-        if let Err(refused) =
-            deep_marks_render::tables(&mut doc, Some(self.scenario.evidence.as_path()))
-        {
-            return Err(json!({"code": refused["code"], "kind": HONEST, "ids": [],
-                              "path": refused["path"]}));
+        let mut doc = doc.clone();
+        if let Err(r) = self.inline_tables(&mut doc) {
+            return Err(json!({"code": r.code, "kind": HONEST, "ids": [], "path": r.path}));
         }
-        Ok(deep_canvas_marks::check::numbers(&doc))
+        let empty = serde_json::Map::new();
+        Ok(deep_canvas_marks::check::numbers(doc.as_object().unwrap_or(&empty)))
     }
 }
 

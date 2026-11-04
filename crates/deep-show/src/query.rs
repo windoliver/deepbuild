@@ -189,6 +189,8 @@ impl Hub<'_> {
             &skipped,
         );
         self.keep_instances(&document, &result.expansions, &mut drawn);
+        let _ = self.inline_tables(&mut drawn);
+        self.inline_vectors(&mut drawn);
         Some(Revision {
             rev,
             doc: document,
@@ -277,17 +279,18 @@ impl Hub<'_> {
                "by_module": by_module})
     }
 
-    /// The canvas module a kind is: the one that registers it, else marks2d for R1's kinds it
-    /// draws without a registry entry, else `core`.
+    /// The canvas module a kind is: the one that registers it, else the module that owns one of
+    /// R1's kinds marks2d draws without a registry entry (marks2d's or data's), else `core`.
     pub fn module_of(&self, kind: &str) -> String {
         let sealed = &self.startup.sealed;
         let full = kind.split('@').next().unwrap_or(kind);
         if let Some(m) = sealed.module_of_kind(full) {
             return m.to_string();
         }
-        let marks2d = sealed.modules.iter().any(|m| m.name == "marks2d");
-        if marks2d && deep_canvas_marks::scene::KINDS.contains(&kind) {
-            return "marks2d".into();
+        let owner = deep_canvas_marks::scene::module_of(kind);
+        let held = sealed.modules.iter().any(|m| m.name == owner);
+        if held && deep_canvas_marks::scene::KINDS.contains(&kind) {
+            return owner.into();
         }
         "core".into()
     }

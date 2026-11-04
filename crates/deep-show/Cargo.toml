@@ -188,8 +188,6 @@ test-steps-in-effects = []
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
-# Issue #1162: the honest-numbers check reads a mark set's table columns as `check` does.
-deep-marks-render = { path = "../deep-marks-render" }
 deep-canvas-graph = { path = "../deep-canvas-graph" }
 deep-canvas-record = { path = "../deep-canvas-record" }
 deep-canvas-sheet = { path = "../deep-canvas-sheet" }

@@ -2182,6 +2182,7 @@ version = "0.0.0"
 dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
+ "serde_json",
  "vello_cpu",
 ]
 
@@ -2276,7 +2277,6 @@ dependencies = [
  "deep-codecs",
  "deep-effects-render",
  "deep-gpu",
- "deep-marks-render",
  "deep-marks-vello",
  "deep-relay",
  "deep-replica",

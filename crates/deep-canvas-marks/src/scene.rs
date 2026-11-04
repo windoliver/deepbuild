@@ -39,6 +39,19 @@ pub const KINDS: &[&str] = &[
     "group@1", "star@1", "frame@1", "series@1",
 ];
 
+/// The kinds of [`KINDS`] the data module owns: R1's mark sets, scales and axes, which marks2d
+/// draws for it (the data module's manifest). A build without the data module lacks them.
+pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1"];
+
+/// The canvas module that owns one of [`KINDS`]: the data module's, or marks2d's.
+pub fn module_of(kind: &str) -> &'static str {
+    if DATA_KINDS.contains(&kind) {
+        "data"
+    } else {
+        "marks2d"
+    }
+}
+
 /// An sRGB-encoded color, 0–255 per channel, as the look's roles resolve for a 2D writer layer.
 pub type Rgb = [u8; 3];
 
