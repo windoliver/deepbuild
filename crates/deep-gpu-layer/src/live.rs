@@ -93,14 +93,13 @@ impl Plants {
     }
 }
 
-/// The build's sealed set: every shipped canvas module except effects, which the live path draws
-/// none of; in a `test-meter` build, also `test.gpu`.
+/// The build's sealed set: every shipped canvas module; in a `test-meter` build, also `test.gpu`.
 pub fn sealed() -> &'static Sealed {
     static SEALED: OnceLock<Sealed> = OnceLock::new();
     SEALED.get_or_init(|| {
+        // Effects is in the set for its operator items (#429), which the live path draws.
         let registry = crate::plugin::shipped_modules()
             .into_iter()
-            .filter(|m| m.manifest.name != "effects")
             .fold(Registry::new(BuildSet::Full), Registry::with);
         #[cfg(feature = "test-meter")]
         let registry = registry.with(deep_canvas_test_modules::test_gpu());

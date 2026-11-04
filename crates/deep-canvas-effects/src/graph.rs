@@ -811,7 +811,17 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 };
                 continue;
             }
-            if let Some(s) = v.get("storage") {
+            // A readback (exact only, ≤ 64 KiB) is storage the CPU reads back a frame late.
+            if let Some(s) = v.get("storage").or_else(|| v.get("readback")) {
+                if v.get("readback").is_some()
+                    && s.get("bytes").and_then(Value::as_u64).unwrap_or(0) > 65_536
+                {
+                    issues.push(Issue::at_path(
+                        "operator_limit",
+                        &format!("outputs/{name}"),
+                        "a readback holds at most 64 KiB",
+                    ));
+                }
                 let sc = s.get("type").and_then(Value::as_str).and_then(Ty::parse);
                 match (sc, s.get("count").and_then(Value::as_u64)) {
                     (Some(Ty::V(sc, 1)), Some(count)) => {
