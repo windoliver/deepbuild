@@ -1,6 +1,6 @@
 // The suites a change's paths call for (#569): the lifecycle enumerator over the lifecycle tables, the
-// hub's crash suite, and the verdict replay of the seeded false "done" cases and the cheat corpus on
-// the merge base and on the change.
+// hub's crash suite, the verdict replay of the seeded false "done" cases and the cheat corpus on the
+// merge base and on the change, and the review check's replay of its cases on both (#87).
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -12,6 +12,8 @@ import { baseCheckout, changeCopy, childEnv, place, temporary } from './proof-ru
 export const TABLES = /^packages\/contracts\/schemas\/[^/]+\.machine@\d+\.json$/;
 export const STORAGE = (path) => path === 'packages/hub/src/vfs.ts' || path.startsWith('packages/record/src/');
 export const ENGINE = (path) => path.startsWith('packages/verdicts/src/');
+/** The review check's prompt, finding filters and default model (#87). */
+export const REVIEW = (path) => path.startsWith('packages/checks-review/src/');
 const firstLine = (text) => String(text ?? '').split('\n').map((line) => line.trim()).find(Boolean) ?? '';
 
 /** Every reachable state of each table must have a sequence of moves to a final state. */
@@ -155,11 +157,67 @@ function outcomes(directory, claims) {
     const built = spawnSync('npm', ['run', 'build'], { cwd: join(directory, 'packages/verdicts'), env: childEnv(), encoding: 'utf8', maxBuffer: 1 << 28, timeout: 20 * 60_000 });
     if (built.status !== 0) throw Error(`npm run build failed in packages/verdicts: ${firstLine(built.stderr)}`);
   }
-  const exported = typeof pkg.exports === 'string' ? pkg.exports : pkg.exports?.['.'];
-  const entry = typeof exported === 'string' ? exported : exported?.import ?? exported?.default;
+  const entry = entryOf(pkg);
   if (!entry) throw Error('packages/verdicts/package.json exports no entry');
   const out = join(temporary('deep-proof-replay-out-'), 'outcomes.json');
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', EVALUATE, pathToFileURL(join(directory, 'packages/verdicts', entry)).href, claims, out], { cwd: directory, env: childEnv(), encoding: 'utf8', maxBuffer: 1 << 28, timeout: 20 * 60_000 });
   if (result.status !== 0 || !existsSync(out)) throw Error(String(result.stderr).split('\n').find((line) => /^\w*Error\b/.test(line)) ?? (firstLine(result.stderr) || `the engine exited ${result.status} without writing its verdicts`));
+  return JSON.parse(readFileSync(out, 'utf8'));
+}
+
+/** A package's entry as its package.json exports it to an import. */
+function entryOf(pkg) {
+  const exported = typeof pkg.exports === 'string' ? pkg.exports : pkg.exports?.['.'] ?? pkg.exports;
+  return typeof exported === 'string' ? exported : exported?.import ?? exported?.default;
+}
+
+/**
+ * The review replay (#87): the review check's cases (this issue's planted-bug diffs, their clean twins
+ * and the recorded review rounds) run through each side's review check, merge base and change, and
+ * every finding one side has and the other hasn't is listed. A list differs from main only with the
+ * maintainer's yes, as the verdict replay's does. A merge base with no review check has nothing to move.
+ */
+export function reviewReplay({ root, change }, approvals, say) {
+  const fix = 'Restore the findings that moved, or ask the maintainer to approve the list with an SSH-signed tag on HEAD under deep/approved/ holding Approves: replay sha256:<digest>.';
+  const sides = {};
+  for (const [side, prepared] of [['merge base', baseCheckout], ['change', changeCopy]]) {
+    const { directory, blocked } = prepared(root, change);
+    if (blocked) return say('BLOCKED', 'replay', `cannot run the review check on the ${side}: ${blocked}`, fix);
+    try {
+      sides[side] = existsSync(join(directory, 'packages/checks-review/package.json')) ? reviewed(directory) : null;
+    } catch (error) {
+      return say('BLOCKED', 'replay', `cannot run the review check on the ${side}: ${error.message}`, fix);
+    }
+  }
+  if (!sides.change) return say('BLOCKED', 'replay', 'the change has no review check at packages/checks-review', fix);
+  if (!sides['merge base']) return say('PASS', 'replay', `the merge base has no review check, so no finding moves; ${sides.change.length} cases reviewed on the change`);
+  const keys = (cases) => new Map(cases.flatMap(({ case: path, findings }) => findings.map((f) => [`${path}: finding ${f.rule} at ${f.file}:${f.line}`, f])));
+  const [then, now] = [keys(sides['merge base']), keys(sides.change)];
+  const moved = [
+    ...[...then.keys()].filter((key) => !now.has(key)).map((key) => `${key}: on the merge base, not on the change`),
+    ...[...now.keys()].filter((key) => !then.has(key)).map((key) => `${key}: on the change, not on the merge base`),
+  ].sort();
+  if (!moved.length) return say('PASS', 'replay', `${sides.change.length} review cases replayed: no finding differs from the merge base`);
+  const digest = createHash('sha256').update(moved.join('\n')).digest('hex');
+  const yes = (approvals.get(change.head) ?? []).includes(`replay sha256:${digest}`);
+  for (const line of moved) say(yes ? 'PASS' : 'FAIL', 'replay', line, fix);
+  say(yes ? 'PASS' : 'FAIL', 'replay', `${moved.length} difference${moved.length === 1 ? '' : 's'} ${yes ? 'approved by the maintainer' : "need the maintainer's yes"} (list sha256:${digest})`, fix);
+}
+
+// Each case's findings from the side's review check, loaded through packages/checks-review's
+// package.json exports, in a child process as the verdict engine is.
+const REVIEW_CASES = `import { writeFileSync } from 'node:fs';
+const [entry, root, out] = process.argv.slice(1);
+const { replayReview } = await import(entry);
+if (typeof replayReview !== 'function') throw Error('the entry exports no replayReview function');
+writeFileSync(out, JSON.stringify(await replayReview(root)));
+`;
+function reviewed(directory) {
+  const pkg = JSON.parse(readFileSync(join(directory, 'packages/checks-review/package.json'), 'utf8'));
+  const entry = entryOf(pkg);
+  if (!entry) throw Error('packages/checks-review/package.json exports no entry');
+  const out = join(temporary('deep-proof-review-out-'), 'findings.json');
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', REVIEW_CASES, pathToFileURL(join(directory, 'packages/checks-review', entry)).href, directory, out], { cwd: directory, env: childEnv(), encoding: 'utf8', maxBuffer: 1 << 28, timeout: 20 * 60_000 });
+  if (result.status !== 0 || !existsSync(out)) throw Error(String(result.stderr).split('\n').find((line) => /^\w*Error\b/.test(line)) ?? (firstLine(result.stderr) || `the review check exited ${result.status} without writing its findings`));
   return JSON.parse(readFileSync(out, 'utf8'));
 }
