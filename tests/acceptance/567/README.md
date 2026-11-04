@@ -19,6 +19,12 @@ Written first, blind, by a job that never saw an implementation of #567 (none ex
   in): issue #1202 and its PR #1203 (`0c8460c9`), and that base's `packages/hub/src/claude-settings.ts`. `deep setup`'s
   entries now exec deep-hook, so the stand-in's own `exec` (the first draft's dash workaround) ran `exec exec …` and
   failed; the stand-in is #83's as-is again (Readings, 10). No test, check or expected value changed.
+- redrafted blind a second time (same day, base `ace12967`) for the proof lane's `before` refusal, after reading
+  `scripts/proof-runs.mjs` (`asserted`, `atAssertion`) and the design's "Failing on an assertion": every judgment of a
+  criterion (`must` in `helpers.ts`, including the missing spine record and setup's missing Stop entry) is now
+  node:assert's own assertion failure raised under the test paths, so the twin's AC1 failure and the base's AC2 and
+  AC3 failures count as failing at their assertion. BLOCKED, INVALID and INCONCLUSIVE stay plain errors, which count as
+  nothing judged. Messages, criteria and expected values are unchanged.
 
 The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft of this job.
 

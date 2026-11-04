@@ -6,6 +6,7 @@
 // this suite keeps its own copy so a redraft of theirs never moves these tests. Nothing here stands in for DeepBuild:
 // every test reaches it through the CLI, deep-hook as setup's entries run it, the hub's socket, and git.
 
+import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -49,9 +50,13 @@ export const readLines = (file: string | undefined | null): Line[] => (file && e
 export const COVERED = (() => { const v = (JSON.parse(readFileSync(FACTS, 'utf8')) as { versions: string[] }).versions; return v[v.length - 1]!; })();
 export const loadReading = (): string => `1-minute load ${loadavg()[0]!.toFixed(1)} on ${availableParallelism()} cores`;
 
-/** A failure that is the program's (FAIL); BLOCKED, INVALID and INCONCLUSIVE failures say so in their message. */
+/**
+ * A criterion judged: node:assert's own assertion failure (FAIL), raised here under the test paths, so the proof lane
+ * reads it as failing at its assertion (design: Failing on an assertion). Where nothing could be judged, the tests
+ * throw a plain Error whose message starts BLOCKED, INVALID or INCONCLUSIVE instead.
+ */
 export function must(ok: unknown, message: string): asserts ok {
-  if (!ok) throw Error(message);
+  assert.ok(ok, message);
 }
 
 // ---- Temp folders under /tmp/dh567-*: a Unix socket path must stay short.
@@ -211,7 +216,7 @@ export async function setup(w: World): Promise<void> {
   if (r.code !== 0) throw Error(`BLOCKED: deep setup must exit 0 and install DeepBuild into Claude Code's user settings: ${shown(r)}`);
   const settings = parseObject(readFileSync(settingsFile(w), 'utf8')) ?? {};
   const stops = ((settings.hooks?.Stop ?? []) as Line[]).flatMap((g) => (g.hooks ?? []) as Line[]).filter((h) => isDeepBuild(h.command) && !h.async && !h.asyncRewake);
-  if (!stops.length) throw Error(`${AC1} deep setup must install DeepBuild's foreground Stop entry, the Stop hold, in ${settingsFile(w)}: ${JSON.stringify(settings.hooks?.Stop ?? null).slice(0, 800)}`);
+  must(stops.length, `${AC1} deep setup must install DeepBuild's foreground Stop entry, the Stop hold, in ${settingsFile(w)}: ${JSON.stringify(settings.hooks?.Stop ?? null).slice(0, 800)}`);
 }
 
 // ---- The hub: `deep hub run`, HOME the test's home (#16), with no test seam but the OS confirmation stub.
@@ -558,9 +563,9 @@ export interface SpineRecord {
   weeks: { plan: 'six weeks' | 'replanned'; design_change: string | null };
 }
 export function readSpineRecord(file = SPINE_RECORD): SpineRecord {
-  if (!existsSync(file)) throw Error(`${AC2} ${AC3} the spine's record ${file.replace(REPO + '/', '')} doesn't exist: the spine's tasks, where each landed, and its measured time are recorded nowhere`);
+  must(existsSync(file), `${AC2} ${AC3} the spine's record ${file.replace(REPO + '/', '')} doesn't exist: the spine's tasks, where each landed, and its measured time are recorded nowhere`);
   const parsed = parseObject(readFileSync(file, 'utf8'));
-  if (!parsed) throw Error(`${AC2} ${AC3} the spine's record isn't a JSON object`);
+  must(parsed, `${AC2} ${AC3} the spine's record isn't a JSON object`);
   return parsed as SpineRecord;
 }
 /** git in this checkout. */
