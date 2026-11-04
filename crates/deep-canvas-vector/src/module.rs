@@ -67,8 +67,9 @@ fn register(r: &mut Registrar) {
             migrations: Vec::new(),
         },
         &[],
-        "",
-    );
+        "path@1",
+    )
+    .drawn(drawn);
     // The import's codes (svg_*) are deep-canvas-render's check's, which reads an SVG's bytes from
     // its store; this build's hub reads none, so they join the catalog with their planted
     // fixtures when the kit seals vector@1 (#399). The hub's frame can't draw a vector yet, which
@@ -78,6 +79,17 @@ fn register(r: &mut Registrar) {
         "oracles": ["analytic"],
         "codes": ["module_missing", "unknown_kind"],
     }));
+}
+
+/// What a vector item draws as in a frame (#1162): one `path@1` of its imported outline, which
+/// whoever holds the evidence store inlines as `params.outline` (`{d, role}`, in the item's own
+/// units, `lower::outline`), in the role its colors map to. One not inlined draws nothing.
+fn drawn(params: &serde_json::Value) -> serde_json::Value {
+    let outline = &params["outline"];
+    json!({
+        "d": outline["d"].as_str().unwrap_or(""),
+        "paint": {"fill": {"role": outline["role"].as_str().unwrap_or("ink")}},
+    })
 }
 
 fn formula() -> serde_json::Value {
