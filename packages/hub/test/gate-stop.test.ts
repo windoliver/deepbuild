@@ -213,7 +213,8 @@ describe('the gate runner at a real stop', () => {
       expect(again!.data.budget_cost).toEqual([]);
       expect(again!.data.slow, 'the agent\'s time between the stops is no hold').toBe(0);
       expect(again!.data.fast).toBe(0);
-      expect(again!.data.total, 'its own hold, not the time since the first stop').toBeLessThan(1500);
+      // The same open items twice stall the claim into one ask for you (#325), held for your answer: that time is yours.
+      expect(d.total - d.question, 'its own hold, not the time since the first stop').toBeLessThan(1500);
     } finally { await stopHub(hub); }
   }, 240_000);
 });
