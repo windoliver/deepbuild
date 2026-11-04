@@ -161,6 +161,17 @@ pub enum Planted {
     StatusBeforeToneMap,
     /// #418's: the bloom's lens dirt laid over the frame instead of multiplying its light.
     DirtOverlay,
+    /// #429's wrong programs (tests/acceptance/429/README.md: Planted programs).
+    RenderBackDrawsLiveOnly,
+    TakesDeclaredClass,
+    AttributeStride16,
+    PartialUpdate2Bytes,
+    RecopiesWholeColumn,
+    F32CompareFloorExact,
+    TrustsWriteIndex,
+    DropsSwizzleLast,
+    NoiseWeightHalved,
+    SettlesWithFallback,
 }
 
 impl Planted {
@@ -241,6 +252,16 @@ impl Planted {
             "spot_counts_cone" => Planted::SpotCountsCone,
             "status_before_tone_map" => Planted::StatusBeforeToneMap,
             "dirt_overlay" => Planted::DirtOverlay,
+            "render_back_draws_live_only" => Planted::RenderBackDrawsLiveOnly,
+            "takes_declared_class" => Planted::TakesDeclaredClass,
+            "attribute_stride_16" => Planted::AttributeStride16,
+            "partial_update_2_bytes" => Planted::PartialUpdate2Bytes,
+            "recopies_whole_column" => Planted::RecopiesWholeColumn,
+            "f32_compare_floor_exact" => Planted::F32CompareFloorExact,
+            "trusts_write_index" => Planted::TrustsWriteIndex,
+            "drops_swizzle_last" => Planted::DropsSwizzleLast,
+            "noise_weight_halved" => Planted::NoiseWeightHalved,
+            "settles_with_fallback" => Planted::SettlesWithFallback,
             _ => return None,
         })
     }

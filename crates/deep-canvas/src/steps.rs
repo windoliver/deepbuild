@@ -65,6 +65,8 @@ const fn tex(name: &'static str, ports: &'static [&'static str], exact: bool, ki
 const A: &[&str] = &["a", "b"];
 const X: &[&str] = &["x"];
 const NONE: &[&str] = &[];
+/// A storage statement's ports: the buffer, the index and the value.
+const W: &[&str] = &["buf", "i", "v"];
 
 /// The base entries, sorted by name.
 pub const TABLE: &[Def] = &[
@@ -77,6 +79,12 @@ pub const TABLE: &[Def] = &[
     d("asin@1", X, 8.0, false, ALL),
     d("atan2@1", &["y", "x"], 8.0, false, ALL),
     d("atan@1", X, 8.0, false, ALL),
+    d("atomic_add@1", W, 2.0, true, COMPUTE),
+    d("atomic_and@1", W, 2.0, true, COMPUTE),
+    d("atomic_max@1", W, 2.0, true, COMPUTE),
+    d("atomic_min@1", W, 2.0, true, COMPUTE),
+    d("atomic_or@1", W, 2.0, true, COMPUTE),
+    d("atomic_xor@1", W, 2.0, true, COMPUTE),
     d("bitcast@1", X, 0.0, true, ALL),
     d("camera@1", NONE, 0.0, false, MATERIAL | PASS),
     d("ceil@1", X, 1.0, true, ALL),
@@ -121,6 +129,8 @@ pub const TABLE: &[Def] = &[
     d("mul@1", A, 1.0, true, ALL),
     d("ne@1", A, 1.0, true, ALL),
     d("neg@1", X, 1.0, true, ALL),
+    // A geometry step: the surface's normal in `space` (object, world or view).
+    d("normal@1", NONE, 0.0, false, MATERIAL),
     d("normalize@1", X, 6.0, false, ALL),
     d("not@1", X, 1.0, true, ALL),
     d("or@1", A, 1.0, true, ALL),
@@ -130,6 +140,9 @@ pub const TABLE: &[Def] = &[
     tex("read@1", &["buf", "i"], true, ALL),
     d("rem@1", A, 4.0, true, ALL),
     d("repeat@1", NONE, 0.0, true, ALL),
+    // A look role's color, theme-resolved: the check binds it as an input (`x`); status roles are
+    // never reachable.
+    d("role@1", X, 0.0, false, MATERIAL | PASS),
     d("round@1", X, 1.0, true, ALL),
     tex("sample@1", &["tex", "uv", "lod"], false, ALL),
     d("screen_size@1", NONE, 0.0, false, MATERIAL | PASS),
@@ -149,7 +162,7 @@ pub const TABLE: &[Def] = &[
     d("tan@1", X, 8.0, false, ALL),
     d("transpose@1", X, 4.0, false, ALL),
     d("trunc@1", X, 1.0, true, ALL),
-    d("write@1", &["buf", "i", "v"], 1.0, true, COMPUTE),
+    d("write@1", W, 1.0, true, COMPUTE),
     d("xor@1", A, 1.0, true, ALL),
 ];
 
@@ -527,6 +540,8 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
         }
         "const" => env_v("value")?,
         "camera" => Vf(env_nums("camera")?),
+        "normal" => Vf(env_nums("normal")?),
+        "role" => arg(0)?,
         "pixel" => UVec(env_nums("pixel")?.into_iter().map(|n| n as u32).collect()),
         "screen_size" => Vf(env_nums("size")?),
         "screen_uv" => {
@@ -566,6 +581,25 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
             };
             let i = arg(1)?.f()? as usize;
             F(*b.get(i).ok_or("read past the buffer")?)
+        }
+        // An atomic statement, whose result is never read: u32 words, wrapping.
+        "atomic_add" | "atomic_min" | "atomic_max" | "atomic_and" | "atomic_or" | "atomic_xor" => {
+            let Buf(mut b) = arg(0)? else {
+                return Err(format!("{name} adds into a storage buffer"));
+            };
+            let i = arg(1)?.f()? as usize;
+            let v = arg(2)?.f()? as u32;
+            let w = b.get_mut(i).ok_or("an atomic past the buffer")?;
+            let x = *w as u32;
+            *w = f64::from(match name {
+                "atomic_add" => x.wrapping_add(v),
+                "atomic_min" => x.min(v),
+                "atomic_max" => x.max(v),
+                "atomic_and" => x & v,
+                "atomic_or" => x | v,
+                _ => x ^ v,
+            });
+            Buf(b)
         }
         "write" => {
             let Buf(mut b) = arg(0)? else {

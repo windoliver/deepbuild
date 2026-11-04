@@ -169,6 +169,7 @@ impl Effects {
         let karis = !self.planted.without_karis;
         let options = Options {
             off_by_two: self.planted.off_by_two,
+            ..Options::default()
         };
         self.runners
             .entry(id.to_string())
