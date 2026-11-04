@@ -185,6 +185,8 @@ pub struct Program {
     /// Each channel's #489 follow segments, built once per document and input track.
     pub channel_follows: Vec<Option<crate::follow::Follow>>,
     pub options: Options,
+    /// Each text item whose template reads a keyed data value: `(item, name, channel)` (#1162).
+    pub keyed_data: Vec<(String, String, String)>,
 }
 
 /// What one evaluation fills, sized by [`Program::state`] and reused frame after frame.
@@ -301,6 +303,7 @@ impl Program {
             channel_follows: Vec::new(),
             options,
             motion: motion.clone(),
+            keyed_data: Vec::new(),
         };
         let mut values = 0;
         for channel in &motion.channels {

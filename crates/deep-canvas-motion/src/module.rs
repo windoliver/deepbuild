@@ -304,7 +304,14 @@ fn compile(v: &mut View<'_>) -> Result<(), OpError> {
     let Value::Object(doc) = &canonical else {
         return Err(OpError::new("bad_doc", ""));
     };
-    let program = Program::compile(doc).map_err(|r| OpError::new(r.code, r.path))?;
+    let mut program = Program::compile(doc).map_err(|r| OpError::new(r.code, r.path))?;
+    // Read here, where the document is: the channels operator reads only the program.
+    let whole = Value::Object(doc.clone());
+    for (id, item) in doc.get("items").and_then(Value::as_object).into_iter().flatten() {
+        for (name, channel) in keyed_data(&whole, item) {
+            program.keyed_data.push((id.clone(), name, channel));
+        }
+    }
     v.write("motion.program", Val::typed(Arc::new(program)))
 }
 
@@ -337,10 +344,9 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
     };
     // A text whose template reads a keyed data value shows it at t: the value rides on the
     // evaluated item as `params/data/<name>`, which the template reads before the document's.
-    let item = v.item()?.clone();
-    for (name, channel) in keyed_data(v.document()?, &item) {
-        if let Some(x) = program.channel_value(&state, &channel) {
-            fields.push((vec!["params".into(), "data".into(), name], Datum::Num(x)));
+    for (_, name, channel) in program.keyed_data.iter().filter(|k| k.0 == id) {
+        if let Some(x) = program.channel_value(&state, channel) {
+            fields.push((vec!["params".into(), "data".into(), name.clone()], Datum::Num(x)));
         }
     }
     let set = |name: &str, from: usize| Edit {
