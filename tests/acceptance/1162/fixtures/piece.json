@@ -1,0 +1,640 @@
+{
+  "format": 1,
+  "profile": "film",
+  "seed": 1162,
+  "title": "Sales by region",
+  "description": "Sales by region: a bar chart from a table the agent wrote, a formula written on beside it, a star badge that springs in, a count, and a picture frame swept along a closed path in depth under a label with the title.",
+  "size": [
+    960,
+    540
+  ],
+  "camera": "cam",
+  "transport": {
+    "span": "4s"
+  },
+  "look": {
+    "asset": "piece-look@1",
+    "theme": "light"
+  },
+  "requires": {
+    "modules": {
+      "marks2d": "^1",
+      "data": "^1",
+      "vector": "^1",
+      "motion": "^1",
+      "scene3d": "^1"
+    }
+  },
+  "assets": {
+    "sales": {
+      "sha256": "884c7e424a4454d969b5b4bb450ff991c674cacc1f23e23c4607ad3b761e314a",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "Public domain dedication.",
+        "shareable": true,
+        "credit": "Test fixture."
+      }
+    },
+    "piece-look": {
+      "sha256": "dcd7be74b5e1511bc007f57478b9281c37a057497f20c14037ac8c2e99d333a3",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "Public domain dedication.",
+        "shareable": true,
+        "credit": "Test fixture."
+      }
+    }
+  },
+  "data": {
+    "count": {
+      "value": 3,
+      "source": "story"
+    }
+  },
+  "items": {
+    "title": {
+      "kind": "text@1",
+      "name": "Title",
+      "role": "label",
+      "order": "a0",
+      "params": {
+        "text": "Sales by region",
+        "font": "body",
+        "size": 28,
+        "box": {
+          "w": 600,
+          "h": 40
+        }
+      },
+      "at": {
+        "pos": [
+          24,
+          24,
+          0
+        ]
+      }
+    },
+    "row": {
+      "kind": "frame@1",
+      "name": "Chart row",
+      "role": "part",
+      "order": "a1",
+      "params": {
+        "layout": "row",
+        "gap": 24,
+        "align_cross": "center"
+      },
+      "at": {
+        "pos": [
+          24,
+          120,
+          0
+        ]
+      }
+    },
+    "badge-cell": {
+      "kind": "frame@1",
+      "name": "Badge cell",
+      "role": "decoration",
+      "parent": "row",
+      "order": "a0",
+      "params": {
+        "box": [
+          0,
+          0,
+          64,
+          64
+        ],
+        "width": "fixed",
+        "height": "fixed"
+      }
+    },
+    "badge": {
+      "kind": "star@1",
+      "name": "Checked badge",
+      "role": "part",
+      "parent": "badge-cell",
+      "order": "a0",
+      "params": {
+        "center": [
+          32,
+          32
+        ],
+        "points": 5,
+        "outer_r": 32,
+        "inner_r": 14,
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      }
+    },
+    "chart": {
+      "kind": "frame@1",
+      "name": "Bar chart",
+      "role": "part",
+      "parent": "row",
+      "order": "a1",
+      "params": {
+        "box": [
+          0,
+          0,
+          400,
+          240
+        ],
+        "width": "fixed",
+        "height": "fixed"
+      }
+    },
+    "ys": {
+      "kind": "scale@1",
+      "name": "Value scale",
+      "parent": "chart",
+      "order": "a0",
+      "params": {
+        "type": "linear",
+        "domain": [
+          0,
+          50
+        ],
+        "range": [
+          220,
+          20
+        ],
+        "nice": false
+      }
+    },
+    "bars": {
+      "kind": "marks@1",
+      "name": "Bars",
+      "role": "data",
+      "parent": "chart",
+      "order": "a1",
+      "params": {
+        "mark": "bar",
+        "n": 5,
+        "key": "key",
+        "columns": {
+          "key": {
+            "from": "sales",
+            "column": "key"
+          },
+          "x": {
+            "dtype": "f32",
+            "len": 5,
+            "data": "AACgQQAAyEIAADRDAACCQwAAqkM="
+          },
+          "x2": {
+            "dtype": "f32",
+            "len": 5,
+            "data": "AACgQgAAIEMAAHBDAACgQwAAyEM="
+          },
+          "y": {
+            "from": "sales",
+            "column": "value"
+          }
+        },
+        "encode": {
+          "x": {
+            "column": "x"
+          },
+          "x2": {
+            "column": "x2"
+          },
+          "y": {
+            "column": "y",
+            "scale": "ys"
+          }
+        },
+        "paint": {
+          "fill": {
+            "steps": {
+              "over": "rows",
+              "by": "key",
+              "stops": [
+                {
+                  "at": 0,
+                  "role": "bar.a"
+                },
+                {
+                  "at": 1,
+                  "role": "bar.b"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "labels": {
+      "kind": "marks@1",
+      "name": "Bar values",
+      "role": "data",
+      "parent": "chart",
+      "order": "a2",
+      "params": {
+        "mark": "text",
+        "n": 5,
+        "key": "key",
+        "columns": {
+          "key": {
+            "from": "sales",
+            "column": "key"
+          },
+          "x": {
+            "dtype": "f32",
+            "len": 5,
+            "data": "AABIQgAAAkMAAFJDAACRQwAAuUM="
+          },
+          "y": {
+            "from": "sales",
+            "column": "value"
+          },
+          "text": {
+            "from": "sales",
+            "column": "value"
+          },
+          "size": {
+            "const": 14
+          }
+        },
+        "encode": {
+          "x": {
+            "column": "x"
+          },
+          "y": {
+            "column": "y",
+            "scale": "ys"
+          },
+          "text": {
+            "column": "text"
+          },
+          "size": {
+            "column": "size"
+          }
+        },
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      }
+    },
+    "sheen": {
+      "kind": "rect@1",
+      "name": "Sheen",
+      "role": "decoration",
+      "parent": "chart",
+      "order": "a3",
+      "params": {
+        "box": [
+          0,
+          0,
+          400,
+          240
+        ],
+        "paint": {
+          "fill": {
+            "gradient": {
+              "kind": "linear",
+              "span": "parent",
+              "from": "s",
+              "to": "n",
+              "stops": [
+                {
+                  "at": 0,
+                  "role": "ink",
+                  "opacity": 0
+                },
+                {
+                  "at": 1,
+                  "role": "ink",
+                  "opacity": 0.18
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "formula": {
+      "kind": "vector@1",
+      "name": "Sales formula",
+      "role": "part",
+      "order": "a2",
+      "params": {
+        "src": "17c06bf00893cb2572347542e8600ef4fb815b8f4ef6a639bb0ac6eb70c9b7b0",
+        "size": [
+          240,
+          64
+        ],
+        "colors": {
+          "#000000": "ink"
+        },
+        "alt": "s = a + b + c",
+        "write_on": {
+          "progress": 0,
+          "order": "term"
+        }
+      },
+      "at": {
+        "place": {
+          "beside": "chart",
+          "side": "e",
+          "gap": 24,
+          "align": "center"
+        }
+      }
+    },
+    "readout": {
+      "kind": "text@1",
+      "name": "Count",
+      "role": "data",
+      "order": "a3",
+      "params": {
+        "template": "Count: {data/count}",
+        "font": "body",
+        "size": 16,
+        "box": {
+          "w": 240,
+          "h": 24
+        }
+      },
+      "at": {
+        "pos": [
+          24,
+          420,
+          0
+        ]
+      }
+    },
+    "cam": {
+      "kind": "camera@1",
+      "name": "Camera",
+      "order": "b0",
+      "params": {
+        "projection": "orthographic",
+        "position": [
+          0,
+          0,
+          20
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "view_width": 24
+      }
+    },
+    "sun": {
+      "kind": "light.sun@1",
+      "name": "Sun",
+      "order": "b1",
+      "params": {
+        "illuminance": 3.141592653589793,
+        "shadow": false,
+        "angle": 0.53
+      },
+      "at": {
+        "rot": [
+          -40,
+          30,
+          0
+        ]
+      }
+    },
+    "sky": {
+      "kind": "sky@1",
+      "name": "Sky",
+      "order": "b2",
+      "params": {
+        "ambient_top": [
+          0.3,
+          0.3,
+          0.3
+        ],
+        "ambient_low": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      }
+    },
+    "wood": {
+      "kind": "material@1",
+      "name": "Wood",
+      "order": "b3",
+      "params": {
+        "base_color": [
+          0.42,
+          0.24,
+          0.11,
+          1
+        ],
+        "roughness": 0.6
+      }
+    },
+    "path": {
+      "kind": "curve@1",
+      "name": "Frame path",
+      "order": "b4",
+      "params": {
+        "points": [
+          [
+            4.481077,
+            -5.300299,
+            1.768174
+          ],
+          [
+            9.918923,
+            -5.956589,
+            -0.681134
+          ],
+          [
+            9.918923,
+            -1.899701,
+            -1.768174
+          ],
+          [
+            4.481077,
+            -1.243411,
+            0.681134
+          ]
+        ],
+        "ids": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "mode": "linear",
+        "closed": true
+      }
+    },
+    "frame": {
+      "kind": "extrude@1",
+      "name": "Picture frame",
+      "role": "part",
+      "order": "b5",
+      "material": "wood",
+      "params": {
+        "outline": [
+          [
+            -0.25,
+            -0.25
+          ],
+          [
+            0.25,
+            -0.25
+          ],
+          [
+            0.25,
+            0.25
+          ],
+          [
+            -0.25,
+            0.25
+          ]
+        ],
+        "along": {
+          "curve": "path",
+          "range": [
+            0,
+            1
+          ]
+        },
+        "caps": "none"
+      }
+    },
+    "label": {
+      "kind": "mark.text@1",
+      "name": "Title in depth",
+      "role": "label",
+      "order": "b6",
+      "params": {
+        "text": "Sales by region",
+        "font": "body",
+        "size": 28,
+        "size_space": "screen",
+        "facing": "camera",
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -0.3,
+          0.875,
+          -1
+        ]
+      }
+    }
+  },
+  "channels": {
+    "write": {
+      "target": "items/formula/params/write_on/progress",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "1.2s",
+          "value": 1,
+          "interp": "linear"
+        }
+      }
+    },
+    "row-x": {
+      "target": "items/row/at/pos/0",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 24,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "2s",
+          "value": 64,
+          "interp": "hold"
+        }
+      }
+    },
+    "badge-sx": {
+      "target": "items/badge/at/scale/0",
+      "type": "f32",
+      "keys": {
+        "grow": {
+          "t": "0s",
+          "value": 0,
+          "interp": {
+            "spring": {
+              "decay": 6.5,
+              "omega": 15
+            }
+          },
+          "velocity": 6.5
+        },
+        "rest": {
+          "t": "4s",
+          "value": 1,
+          "interp": "hold"
+        }
+      }
+    },
+    "badge-sy": {
+      "target": "items/badge/at/scale/1",
+      "type": "f32",
+      "keys": {
+        "grow": {
+          "t": "0s",
+          "value": 0,
+          "interp": {
+            "spring": {
+              "decay": 6.5,
+              "omega": 15
+            }
+          },
+          "velocity": 6.5
+        },
+        "rest": {
+          "t": "4s",
+          "value": 1,
+          "interp": "hold"
+        }
+      }
+    },
+    "count": {
+      "target": "data/count",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 3,
+          "interp": "hold"
+        },
+        "k1": {
+          "t": "2s",
+          "value": 4,
+          "interp": "hold"
+        }
+      }
+    }
+  },
+  "controls": {
+    "c-values": {
+      "kind": "toggle",
+      "class": "view",
+      "label": "Show values",
+      "role": "switch",
+      "default": true
+    }
+  }
+}

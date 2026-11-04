@@ -1,0 +1,95 @@
+{
+  "id": "piece-look",
+  "format": 1,
+  "basis": "physical",
+  "license": "Apache-2.0",
+  "description": "The #1162 checkpoint look: physical, filmic tone map, ambient occlusion, deband and bloom.",
+  "palette": {
+    "paper": "#f4f1ea",
+    "graphite": "#1b1d22",
+    "slate": "#8b8f97",
+    "gold": "#e0a526",
+    "mint": "#8fd3d1",
+    "apricot": "#f4a582"
+  },
+  "roles": {
+    "ground": "paper",
+    "ink": "graphite",
+    "muted": "slate",
+    "accent": "gold",
+    "bar.a": "mint",
+    "bar.b": "apricot"
+  },
+  "themes": {
+    "light": {},
+    "dark": {}
+  },
+  "status": {
+    "pass": "#007429",
+    "fail": "#bf232b",
+    "invalid": "#8645b0",
+    "blocked": "#a44700",
+    "inconclusive": "#666600",
+    "running": "#0063b8",
+    "needs_you": "#8a5900",
+    "stale": "#326c6f",
+    "idle": "#636464"
+  },
+  "status_treatment": {
+    "core_min_px": 4,
+    "glyph": {
+      "pass": "✓",
+      "fail": "✗",
+      "invalid": "⊘",
+      "blocked": "■",
+      "inconclusive": "?",
+      "running": "↻",
+      "needs_you": "!",
+      "stale": "◇",
+      "idle": "○"
+    }
+  },
+  "min_distance": 0.1,
+  "attention_treatment": {
+    "line": "dashed",
+    "role": "ink",
+    "glyph": "⚠"
+  },
+  "legend": "auto",
+  "fonts": {
+    "body": {
+      "family": "Inter",
+      "file": "Inter-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "file": "JetBrainsMono-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    }
+  },
+  "tone_map": "filmic",
+  "exposure": -0.2630344058337938,
+  "finish": [],
+  "ao": {
+    "radius": 0.5,
+    "strength": 1,
+    "samples": 8,
+    "resolution": "half",
+    "multi_bounce": true,
+    "specular": true
+  },
+  "deband": "spatial",
+  "deband_lsb": 1,
+  "bloom": {
+    "intensity": 0.04,
+    "radius": 0.85
+  },
+  "ground_3d": {
+    "kind": "none"
+  }
+}
