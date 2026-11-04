@@ -114,6 +114,8 @@ const SHOWN_SOON = 2_000;
 const said = (ask: string) => `Your answer to ask:${ask}`;
 /** The most transcript entries of one turn the core keeps for its stop's records. */
 const TURN_ENTRIES = 5_000;
+/** How long a Claude Code prompt whose transcript entry isn't written yet waits for the session's next hook (#567). */
+const PROMPT_PLACE_MS = 3000;
 /** The cores the check slots are half of: this machine's, or DEEP_HUB_TEST_CORES's, which only tests set (#965). */
 const CORES = Number(process.env.DEEP_HUB_TEST_CORES) > 0 ? Math.floor(Number(process.env.DEEP_HUB_TEST_CORES)) : availableParallelism();
 /** How many ended sessions the core still answers for, newest first. */
@@ -574,6 +576,11 @@ export class Core {
   private readonly settingsReadings: string[] = [];
   /** Hooks waiting on a network stop's try, which the hub finishes before it stops. */
   private readonly tried = new Set<Promise<unknown>>();
+  /**
+   * Claude Code prompts set aside until their transcript entry is written, by session (#567): Claude Code writes a
+   * prompt's entry only once its hooks have returned, and the origin joins the prompt to that entry.
+   */
+  private readonly unplaced = new Map<string, { drafts: Draft[]; meta: HookMeta; writer: string; timer: NodeJS.Timeout; done: (settled: Promise<void>) => void }>();
   /** Held stops, each woken when an answer for its session is ready to deliver. */
   private readonly waiting = new Map<string, Set<() => void>>();
   /** The log position of the last session.continued the hub routed (#85). */
@@ -1115,6 +1122,24 @@ export class Core {
     this.tried.add(kept);
     return handled;
   }
+  /** Whether a hook is a Claude Code prompt whose transcript entry isn't written yet, so its origin can't be read (#567). */
+  private async entryLater(meta: HookMeta): Promise<boolean> {
+    const id = meta.fields?.prompt_id;
+    if (meta.event !== 'UserPromptSubmit' || !id || !meta.transcript || childPrompt(meta) || (meta.agent !== 'claude-code' && meta.agent !== 'claude')) return false;
+    if (this.sessions.get(meta.session)?.prompts.has(id)) return false;
+    const tail = await this.tail(meta.transcript, 4 << 20).catch(() => '');
+    return !tail.split('\n').some((l) => l.includes(id) && l.includes('"promptId"'));
+  }
+  /** Handles the session's prompt set aside for its entry, if any, with whatever the transcript now shows. */
+  private async placeHeld(session: string): Promise<void> {
+    const held = this.unplaced.get(session);
+    if (!held) return;
+    this.unplaced.delete(session);
+    clearTimeout(held.timer);
+    const handled = this.handleHook(held.drafts, held.meta, held.writer, false, false, true);
+    held.done(handled.then(({ settled }) => settled));
+    await handled.catch(() => undefined);
+  }
   /**
    * A hook reaching the running hub shows it answers again: what deep-hook spooled while the hub was late is
    * replayed then, beside the hooks that follow, rather than at the next start.
@@ -1159,7 +1184,17 @@ export class Core {
     this.chain = done.catch(() => undefined);
     return done;
   }
-  private async handleHook(drafts: Draft[], meta: HookMeta, writer: string, replayed = false, waited = false): Promise<{ settled: Promise<void> }> {
+  private async handleHook(drafts: Draft[], meta: HookMeta, writer: string, replayed = false, waited = false, placing = false): Promise<{ settled: Promise<void> }> {
+    // A prompt set aside for its entry goes first: the session's next hook means its turn has begun (#567).
+    if (!placing) await this.placeHeld(meta.session);
+    if (!placing && !replayed && await this.entryLater(meta)) {
+      let done!: (settled: Promise<void>) => void;
+      const settled = new Promise<void>((resolve, reject) => { done = (s) => void s.then(resolve, reject); });
+      const timer = setTimeout(() => void this.queue(() => this.placeHeld(meta.session)).catch(() => undefined), PROMPT_PLACE_MS);
+      timer.unref();
+      this.unplaced.set(meta.session, { drafts, meta, writer, timer, done });
+      return { settled };
+    }
     // The planted wrong program answers the first PostToolUse it reads and appends nothing for it.
     if (this.options.plant === 'drops-post-tool-use' && meta.event === 'PostToolUse' && !this.dropped) {
       this.dropped = true;
@@ -6786,6 +6821,7 @@ export class Core {
     }
     await this.replaying;
     await Promise.all(this.tried);
+    for (const session of [...this.unplaced.keys()]) await this.queue(() => this.placeHeld(session)).catch(() => undefined);
     await this.chain;
     await this.stating;
     this.writeCursors();
