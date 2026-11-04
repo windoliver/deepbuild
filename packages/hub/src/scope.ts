@@ -16,7 +16,7 @@ import { headOf } from './session-facts.js';
 
 type Obj = Record<string, unknown>;
 /** What the send-back asks of the agent, in the design's words. */
-export const CUT_IT = 'Cut it to what the issue needs, or say why each part is needed.';
+const CUT_IT = 'Cut it to what the issue needs, or say why each part is needed.';
 /** How much of a diff a taste call carries in its question, and the most a question holds; the whole diff is pinned as evidence. */
 const DIFF_SHOWN = 3000;
 const QUESTION_MAX = 8000;
@@ -41,8 +41,11 @@ export interface ScopeOptions {
 }
 /** One change you accepted: its repo, its kind, and its commit with the base it was made on. */
 interface Accepted { repo: string; kind: string; base: string; commit: string; accepted_at: number }
-/** A claim at its stop: its task, base and folder, its requirements' words, and the files its checks read. */
-export interface AtStop { claim: string; task: string; session: string; agent: string; cwd: string; base: string; requirements: { id: string; text: string }[]; reached: string[] | undefined }
+/**
+ * A claim at its stop: its task, base and folder, its requirements' words, and the files its checks read; whether a
+ * question holds the stop's send-back (#325), and the wall-clock time past which its reply can no longer carry one.
+ */
+export interface AtStop { claim: string; task: string; session: string; agent: string; cwd: string; base: string; requirements: { id: string; text: string }[]; reached: string[] | undefined; holds: boolean; deadline: number }
 
 export class SizeScope {
   /** Each accepted change's size, by repo, base and commit: measured once. */
@@ -102,9 +105,10 @@ export class SizeScope {
   /** A task's definition locked: a plan marked large whose scope is past the usual size comes to you once, before any code. */
   async planned(r: { task_ref: string; session: string; agent: string; cwd: string }): Promise<void> {
     const { kind, plan } = await this.o.scopeOf(r.task_ref);
-    if (!plan?.large) return;
+    // The usual size is measured now, at the lock, so the task's first stop doesn't wait for it.
     const head = await headOf(r.cwd).catch(() => undefined);
     const usual = head ? await this.usual(r.cwd, kind, head.sha) : null;
+    if (!plan?.large) return;
     const files = plan.scope.files.length;
     if (!usual || files <= OVER * usual.files) return;
     const key = sha256Hex(canonicalize({ kind: 'size.plan', task_ref: r.task_ref }));
@@ -148,8 +152,10 @@ export class SizeScope {
     const was = (field: 'sent_back' | 'asked') => new Set(before.flatMap((row) => (JSON.parse(row.data) as Record<string, string[]>)[field] ?? []));
     const sentBefore = was('sent_back');
     const askedBefore = was('asked');
-    const sentBack = found.filter((f) => !sentBefore.has(f));
-    const asked = sentBack.length ? [] : found.filter((f) => !askedBefore.has(f));
+    // Nothing is spent while a question holds the send-back, or once this stop's reply can't carry it.
+    const quiet = s.holds || Date.now() > s.deadline;
+    const sentBack = quiet ? [] : found.filter((f) => !sentBefore.has(f));
+    const asked = quiet || sentBack.length ? [] : found.filter((f) => !askedBefore.has(f));
     const said = (keys: string[]) => {
       const has = (k: string) => keys.includes(k);
       const doc = (d: string) => items.filter((i) => has(`item:${i.doc}#${i.id}`) && i.doc === d).map((i) => i.id);
