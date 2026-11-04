@@ -767,6 +767,14 @@ fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
     } else {
         match parts.as_slice() {
             ["items", id, rest @ ..] => (*id, rest),
+            // A keyed data value (Path: "A channel may key `data/<name>`"): its owner is the
+            // data entry, never an item, and what it writes is the entry's value.
+            ["data", name] if !name.is_empty() => {
+                return Ok(Target {
+                    owner: format!("data/{name}"),
+                    field: vec!["value".into()],
+                })
+            }
             _ => return refuse("bad_path", path),
         }
     };

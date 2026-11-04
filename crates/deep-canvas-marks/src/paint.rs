@@ -461,6 +461,20 @@ pub fn steps(palette: &Palette, s: &Map<String, Value>, path: &str) -> Result<St
     Ok(Steps { over, by, stops })
 }
 
+/// A mark set's stepped fill over its rows (`steps {over: rows, by: order | key}`): its stops'
+/// colors through `palette`, each row one solid color by its rank (#1162).
+pub fn row_stops(palette: &Palette, s: &Map<String, Value>, path: &str) -> Result<Vec<(f64, Rgb)>, Refused> {
+    Ok(stops_of(palette, s.get("stops"), path)?
+        .into_iter()
+        .map(|(at, c, _)| (at, c))
+        .collect())
+}
+
+/// The color at `t`, 0..1 along `stops`, mixed in OKLab.
+pub fn sample_stops(stops: &[(f64, Rgb)], t: f64) -> Rgb {
+    sample(stops, t)
+}
+
 impl Steps {
     /// The color at `t`, 0..1 along the stops.
     pub fn color(&self, t: f64) -> Rgb {
