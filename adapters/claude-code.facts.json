@@ -893,6 +893,15 @@
     },
     "mcp": { "tool": "tool" }
   },
+  "taskList": {
+    "readBy": "the session's own task list: the newest TodoWrite call of the turn's transcript, whose todos each name their content and status",
+    "conformance": "claude/taskList/open-at-stop",
+    "tool": "TodoWrite",
+    "items": "todos",
+    "text": "content",
+    "status": "status",
+    "open": ["pending", "in_progress"]
+  },
   "readUsage": {
     "readBy": "a turn's usage from the transcript: the model that answered, tokens by the agent's own count, a cost only with its basis",
     "conformance": "claude/readUsage/model-switch"

@@ -38,16 +38,3 @@ export function judgeStop(count: StallCount, stop: StopReading, anyRun = false):
   count.rounds += 1;
   return { sendBack: true, round: count.rounds };
 }
-
-/** The lines under a stop's "Still open:" heading, each one an open item, up to the first blank line. */
-export function stillOpen(words: string): string[] {
-  const lines = words.split('\n');
-  const at = lines.findIndex((l) => /^\s*(?:#+\s*)?still open:?\s*$/i.test(l));
-  if (at < 0) return [];
-  const out: string[] = [];
-  for (const line of lines.slice(at + 1)) {
-    if (!line.trim()) { if (out.length) break; continue; }
-    out.push(line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, '').trim());
-  }
-  return out.filter(Boolean);
-}

@@ -22,7 +22,11 @@
 // - While the account's plan window is at your reserve, the drafting job waits, so the definition does; a claim
 //   meanwhile is judged on the repo's spec, and once the window resets the lock lands and the claim is judged against it.
 // - At each claim the hash is recomputed from the stored definition and the checks' bytes on disk; a check changed
-//   since the lock is a proposal naming its file, never a new definition.
+//   since the lock is a proposal naming its file, never a new definition. A proposal for a changed file lists the
+//   verdicts it would make stale (#323): each standing verdict in the repo whose definition's checks read that file.
+// - A requirement may name the stable targets its check is about (#323), `<file>#<symbol>`: each is resolved in the
+//   folder the claim's snapshot is taken from before its checks run, and one that no longer resolves makes the claim
+//   INVALID, naming it, whatever its checks show.
 // - A requirement may declare the surface its check enters through (#874), carried to the gate runner's base run for
 //   a stand-in on a base with nothing to start; the stand-in's hash is recorded in its `stand_in`, which the hash
 //   leaves out. A surface with no fixed form goes to the early question before the definition locks.
@@ -32,6 +36,7 @@ import type { Asks, Delivery } from '@deepbuild/asks';
 import type { PaidKind } from '@deepbuild/gate';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { RecordError, ulid, type Connection, type EventInput } from '@deepbuild/record';
+import { solveLine } from '@deepbuild/gate';
 import type { ClaimCheck, DefinitionState, Surface } from './gate-runner.js';
 import { ISSUE_LINK, liveFetch, readIssue, recordedFetch, type Reading } from './github-source.js';
 import { headOf } from './session-facts.js';
@@ -117,7 +122,7 @@ const issueNumber = (source_id: string): number | undefined => { const m = /(\d+
 
 // ---- Definitions handed to the kernel, and the work source's readings.
 
-interface Requirement { expected_ms?: number; deadline_ms?: number; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; paid?: PaidKind }
+interface Requirement { expected_ms?: number; deadline_ms?: number; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; targets?: string[]; paid?: PaidKind }
 interface Author { handle: string; role: string; automated?: boolean }
 interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[] }
 /** A work source's work.item@2 reading: the test source's and the GitHub source's carry their body as text; an item carries the readings it came with (its comments among them). */
@@ -189,6 +194,8 @@ export interface AskTaskOptions {
   run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean }): Promise<void>;
   /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
   invalid(claim: string, commit: string, reason: string): Promise<void>;
+  /** The targets of a claim's requirements that didn't resolve before its runs (#323): each verdict made on it is INVALID, naming them. */
+  unresolved(claim: string, targets: { req: string; reason: string }[]): void;
 }
 
 export class AskTasks {
@@ -353,6 +360,7 @@ export class AskTasks {
       const check = typeof r.check === 'string' && r.check ? r.check : null;
       const references: { path: string; sha256: string }[] = [];
       for (const path of Array.isArray(r.references) ? r.references.filter((p): p is string => typeof p === 'string' && p !== '') : []) references.push({ path, sha256: await this.approve(t.cwd, path) });
+      const targets = Array.isArray(r.targets) ? r.targets.filter((p): p is string => typeof p === 'string' && p !== '') : [];
       requirements.push({
         id: String(r.id), text: String(r.text), source_line: String(r.source_line), refuted_by: String(r.refuted_by), check,
         check_sha256: check ? await this.approve(t.cwd, check) : null, on_base: String(r.on_base ?? 'fails'),
@@ -360,6 +368,7 @@ export class AskTasks {
         author: authorOf(String(r.source_line)), surface: surfaceOf(r.surface),
         ...(typeof r.expected_ms === 'number' ? { expected_ms: r.expected_ms } : {}), ...(typeof r.deadline_ms === 'number' ? { deadline_ms: r.deadline_ms } : {}),
         ...(references.length ? { references } : {}), ...(typeof r.command === 'string' && r.command ? { command: r.command } : {}), ...(typeof r.criterion === 'string' && r.criterion ? { criterion: r.criterion } : {}),
+        ...(targets.length ? { targets } : {}),
         // A check that costs money says what it spends on (#325), so the lock prices it.
         ...(check && PAID.has(String(r.paid)) ? { paid: r.paid as PaidKind } : {}),
       });
@@ -425,18 +434,26 @@ export class AskTasks {
     // A definition with nothing to meet locks nothing: a claim on it would pass with no check run.
     if (!definition.requirements.length) throw Error('it has no requirements left to lock');
     const ts = this.o.now();
+    let fresh = true;
     try {
       await this.o.append(this.o.connection(session, agent), {
-        v: 6, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
+        v: 7, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
         data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
       });
     } catch (error) {
       // The lock is in the log already under this ID (its ts differs, so a replayed hook or a second lock racing the first conflicts): the first lock stands.
       if (!(error instanceof RecordError && error.code === 'conflict')) throw error;
-      return;
+      fresh = false;
     }
-    // Its paid checks are priced now, and the issue's one budget asked for (#325).
-    await this.o.locked?.({ session, agent, task_ref: definition.task_ref, requirements: definition.requirements }).catch((error: unknown) => process.stderr.write(`deep hub: ${definition.task_ref}'s paid checks were not priced: ${error instanceof Error ? error.message : String(error)}\n`));
+    // What the definition shows of itself before any claim (#323): its one solve line, and each journey with no
+    // negative case, whose check nothing shows can fail.
+    const solve = solveLine(definition.requirements);
+    const flags = definition.requirements.filter((r) => r.depth === 'journey' && !r.near_misses.length).map((r) => `${r.id} is a journey with no negative case: no near miss shows that its check can fail`);
+    await this.o.append(this.o.connection(session, agent), {
+      v: 1, id: derivedId(at, `${definition.task_ref}:${handed}:checked`), kind: 'definition.checked', ts, data: { task_ref: definition.task_ref, solved: solve.solved, solve: solve.line, flags },
+    }).catch((error: unknown) => { if (!(error instanceof RecordError && error.code === 'conflict')) throw error; });
+    // Its paid checks are priced now, and the issue's one budget asked for once (#325).
+    if (fresh) await this.o.locked?.({ session, agent, task_ref: definition.task_ref, requirements: definition.requirements }).catch((error: unknown) => process.stderr.write(`deep hub: ${definition.task_ref}'s paid checks were not priced: ${error instanceof Error ? error.message : String(error)}\n`));
     // A claim made before the lock is judged against the definition now (#322).
     const early = this.early.get(definition.task_ref);
     if (early) {
@@ -456,6 +473,31 @@ export class AskTasks {
     const bytes = await this.bytesOf(cwd, check);
     if (!bytes) throw Error(`its check ${check} is not a file under the session's folder (a path or link out of it, a folder, nothing there, or the folder itself gone)`);
     return this.o.keep(bytes, check);
+  }
+  /**
+   * The verdicts a change to a file would make stale (#323): each standing verdict on another claim in the same repo
+   * whose definition's checks read the file, as their check or an expected output they reference.
+   */
+  private async staleIf(cwd: string, path: string, claim: string): Promise<string[]> {
+    const rows = (await this.o.raw(`SELECT v.id, v.handle, d.requirements FROM verdicts v JOIN claims c ON c.id = v.claim_id JOIN sessions s ON s.id = c.session_id
+      JOIN definitions d ON d.task_ref = c.subject_ref WHERE v.stale = 0 AND s.worktree = ? AND c.id != ? ORDER BY v.created`, [cwd, claim])) as { id: string; handle: string | null; requirements: string | null }[];
+    const reads = (r: Requirement) => r.check === path || (r.references ?? []).some((ref) => ref.path === path);
+    return [...new Set(rows.filter((row) => (JSON.parse(row.requirements ?? '[]') as Requirement[]).some(reads)).map((row) => row.handle ?? `verdict:${row.id}`))];
+  }
+  /**
+   * Why a target, `<file>#<symbol>`, doesn't resolve in the folder, or null when it does: the file is there and
+   * defines the symbol (a declaration of it, a property or assignment of it at a line's start, or a method of it).
+   */
+  private async unresolvedTarget(cwd: string, target: string): Promise<string | null> {
+    const at = target.lastIndexOf('#');
+    if (at <= 0 || at === target.length - 1) return `${target} doesn't resolve: it names no file and symbol (<file>#<symbol>)`;
+    const file = target.slice(0, at);
+    const symbol = target.slice(at + 1);
+    const bytes = await this.bytesOf(cwd, file);
+    if (!bytes) return `${target} doesn't resolve: ${file} is not in the claim's snapshot`;
+    const s = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const defines = new RegExp(`\\b(?:function\\*?|class|const|let|var|def|fn|struct|enum|trait|type|interface)\\s+${s}\\b|^\\s*(?:export\\s+)?(?:static\\s+)?(?:async\\s+)?['"]?${s}['"]?\\s*(?::|=(?!=)|\\([^)]*\\)\\s*\\{)|\\bexports\\.${s}\\s*=(?!=)`, 'm');
+    return defines.test(new TextDecoder().decode(bytes)) ? null : `${target} doesn't resolve: ${file} no longer defines ${symbol}`;
   }
   /** The bytes of a file the folder holds, by its real path: a link out of the folder, a folder and a missing file are undefined. */
   private async bytesOf(cwd: string, check: string): Promise<Uint8Array | undefined> {
@@ -586,12 +628,29 @@ export class AskTasks {
       const diff = `${c.check}: approved sha256 ${c.approved ?? 'none'}, now ${c.now ?? 'deleted'}`;
       const known = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'learn.proposed' AND json_extract(data, '$.diff') = ? LIMIT 1`, [diff]);
       if (known.length) continue;
+      // Before the change is approved, it lists the verdicts it would make stale (#323), each cited by its handle.
+      const stale = await this.staleIf(cwd, c.check, id);
       const at = this.o.now();
       await this.o.append(connection, {
         v: 1, id: ulid(at), kind: 'learn.proposed', ts: at,
-        data: { layer: 'learned', target: c.check, diff, evidence: [{ at: `claim:${id}`, quote: `${c.check} changed after ${task_ref}'s definition locked; its checks run the approved bytes` }], scope: `session:${letters(session)}`, replay: null, applied_by: null, supersedes: null },
+        data: {
+          layer: 'learned', target: c.check, diff, scope: `session:${letters(session)}`, replay: null, applied_by: null, supersedes: null,
+          evidence: [
+            { at: `claim:${id}`, quote: `${c.check} changed after ${task_ref}'s definition locked; its checks run the approved bytes${stale.length ? `; approving it would make ${stale.length} verdict${stale.length === 1 ? '' : 's'} stale: ${stale.join(', ')}` : '; approving it would make no verdict stale'}` },
+            ...stale.map((v) => ({ at: v, quote: `${v} would go stale: its checks read ${c.check}` })),
+          ],
+        },
       });
     }
+    // Each target its requirements name is resolved in the folder the claim's snapshot is taken from, before any run (#323).
+    const unresolved: { req: string; reason: string }[] = [];
+    for (const [i, r] of stored.entries()) {
+      for (const target of r.targets ?? []) {
+        const reason = await this.unresolvedTarget(cwd, target);
+        if (reason) unresolved.push({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, reason: `${r.id}'s target ${reason}` });
+      }
+    }
+    if (unresolved.length) this.o.unresolved(`claim:${id}`, unresolved);
     // Its checks start last, so a slow start holds up neither the claim nor its proposals.
     const onBase = (r: Requirement) => (r.on_base === 'passes' ? 'passes' as const : 'fails' as const);
     // Each with the requirement it judges and the surface it declares, for a stand-in on the base (#874), and the expected outputs it references by their approved digests.

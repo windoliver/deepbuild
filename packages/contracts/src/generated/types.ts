@@ -335,6 +335,15 @@ export interface AdapterFacts {
     };
   };
   readUsage?: AdapterFactsOperation;
+  taskList?: {
+    readBy: AdapterFactsText;
+    conformance: AdapterFactsText;
+    tool: AdapterFactsText;
+    items: AdapterFactsText;
+    text: AdapterFactsText;
+    status: AdapterFactsText;
+    open: AdapterFactsTexts;
+  };
   tokenizer?: {
     readBy: AdapterFactsText;
     conformance: AdapterFactsText;
@@ -2717,6 +2726,27 @@ export interface DefaultUndone {
   evidence?: Array<string>;
 }
 
+/** definition.checked@1 */
+export interface DefinitionChecked {
+  v: 1;
+  id: string;
+  kind: "definition.checked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    solved: boolean;
+    solve: string;
+    flags: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.drafted@1 */
 export interface DefinitionDrafted {
   v: 1;
@@ -3034,6 +3064,69 @@ export interface DefinitionLockedV6 {
       }>;
       command?: string;
       criterion?: string;
+      targets?: Array<string>;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** definition.locked@7 */
+export interface DefinitionLockedV7 {
+  v: 7;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+        automated?: boolean;
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+      references?: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      command?: string;
+      criterion?: string;
+      targets?: Array<string>;
       paid?: "live call" | "hosted browser run" | "model job";
     }>;
     deliverables: Array<string>;
@@ -4185,6 +4278,27 @@ export interface OpenItemClosed {
   evidence?: Array<string>;
 }
 
+/** open_item.closed@2 */
+export interface OpenItemClosedV2 {
+  v: 2;
+  id: string;
+  kind: "open_item.closed";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    text: string;
+    item: string;
+    by: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** open_item.opened@1 */
 export interface OpenItemOpened {
   v: 1;
@@ -4200,6 +4314,28 @@ export interface OpenItemOpened {
   data: {
     task_ref: string;
     text: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** open_item.opened@2 */
+export interface OpenItemOpenedV2 {
+  v: 2;
+  id: string;
+  kind: "open_item.opened";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    text: string;
+    item: string;
+    from: "agent" | "section" | "bug" | "issue" | "limit" | "placeholder" | "task" | "review_thread";
+    resolved_by?: string;
   };
   evidence?: Array<string>;
 }

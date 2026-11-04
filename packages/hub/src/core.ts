@@ -21,12 +21,12 @@ import { openRecord, RecordError, type Connection, type EventInput, type Message
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
 import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
-import { freshCount, judgeStop, openCheckouts, priceDefinition, slot, stillOpen, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule } from '@deepbuild/gate';
+import { freshCount, judgeStop, leftOpen, openCheckouts, priceDefinition, slot, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
 import { openLeases, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { after, openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
-import { predictionContradictions, recordVerdict, verdictHash, verdictLine, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
+import { predictionContradictions, recordVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
 import { Confirmer } from './confirm.js';
@@ -52,6 +52,8 @@ import { aboutCall, aboutPermission, standingRules, type About } from './standin
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, prUrlIn } from './forge.js';
+import { liveFetch, liveGraphql, recordedFetch, recordedGraphql } from './github-source.js';
+import { OpenItems } from './open-items.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
 import { apiHost, networkCheck, reachable, slackConfig, slackThread, slackThreads } from './reach.js';
 import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
@@ -371,6 +373,10 @@ export class Core {
   private readonly actionAsks = new Map<string, string>();
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
   private readonly tasks: AskTasks;
+  /** What claims leave open, as open items in the record (#323). */
+  private readonly openItems: OpenItems;
+  /** The commands each claim's final message told you to run, which its gate ran as the agent's own checks (#323). */
+  private readonly told = new Map<string, Set<string>>();
   /** The gate runner (#29): each claim's checks on its snapshot, in their lanes, under the stop's hold. */
   private readonly gate: GateRunner;
   /** Each session's last stop's final message, what its claims cite (#29). */
@@ -394,6 +400,8 @@ export class Core {
   private readonly switchAsks = new Map<string, { key: string; name: string; deployed: string; task: string; issue: number; session: string; agent: string }>();
   /** Claims in an untrusted repo whose spec names checks (#322): watch-only, so none of them passes. */
   private readonly watchOnlyClaims = new Set<string>();
+  /** Claims a target of whose requirements no longer resolves (#323): each verdict on them is INVALID, naming it. */
+  private readonly unresolvedTargets = new Map<string, { req: string; reason: string }[]>();
   /** Sessions told once that their repo's spec checks are watch-only until the project is trusted. */
   private readonly toldUntrusted = new Set<string>();
   /** Staging for destructive commands (#347): a delete whose reach can't be worked out, staged copy-on-write or asked about. */
@@ -584,6 +592,18 @@ export class Core {
       atReserve: (agent) => this.runner.atReserve(agent === 'claude' ? 'claude-code' : agent as Parameters<typeof this.runner.atReserve>[0], homedir()),
       pin: (cwd, question) => this.pinOf(cwd, question), keep: (bytes, source) => this.keep(bytes, source), run: (r) => this.runClaim(r),
       invalid: (claim, commit, reason) => this.invalid(claim, commit, reason), locked: (d) => this.priceLocked(d),
+      unresolved: (claim, targets) => this.unresolvedTargets.set(claim, targets),
+    });
+    this.openItems = new OpenItems({
+      raw: (query, params) => this.record.raw(query, params), append: (connection, input) => this.append(connection, input), now: this.now, plant: options.plant,
+      connection: (session, agent) => this.connection('core', session ? { session, ...(agent ? { agent } : {}) } : {}), asks: () => this.asks, pin: (cwd, question) => this.pinOf(cwd, question),
+      github: async () => {
+        if (options.github) return { fetch: recordedFetch(options.github), graphql: recordedGraphql(options.github) };
+        const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken();
+        const api = options.forge ?? 'https://api.github.com';
+        return { fetch: liveFetch(api, token), graphql: liveGraphql(api, token) };
+      },
+      taskList: (agent) => ((registry().get(agent === 'codex' ? 'codex' : 'claude').facts as Obj).taskList as TaskListFacts | undefined),
     });
     this.gate = new GateRunner({
       raw: (query, params) => this.record.raw(query, params), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
@@ -2787,7 +2807,7 @@ export class Core {
     const held = await this.questionHolds(meta.session);
     // The planted wrong program counts the stops a question holds, though it still doesn't send them back.
     if (held && this.options.plant !== 'counts-waiting-stops') return undefined;
-    const items = [...standing.filter((c) => c.result !== 'PASS').map((c) => `${c.check}: ${c.result}`), ...stillOpen(this.lastMessage.get(meta.session) ?? '')];
+    const items = [...standing.filter((c) => c.result !== 'PASS').map((c) => `${c.check}: ${c.result}`), ...leftOpen(this.lastMessage.get(meta.session) ?? '').map((o) => o.text)];
     const runs = ((await this.record.raw(`SELECT id FROM runs WHERE claim_id = ?`, [claim.slice(6)])) as { id: string }[]).map((r) => r.id);
     let count = this.stalls.get(task);
     if (!count) this.stalls.set(task, count = freshCount());
@@ -3226,6 +3246,7 @@ export class Core {
     const sendBack = ran.findings.length ? `DeepBuild sent this claim back before any check ran:\n${ran.findings.map((f) => `- ${f}`).join('\n')}`
       : failed.length ? `DeepBuild sent this claim back: ${failed.map((c) => {
         const reqs = c.covers.map((req) => named?.get(req)).filter((q): q is { id: string; text: string } => q !== undefined);
+        if (this.told.get(claim)?.has(c.check)) return `the command your final message tells you to run, \`${c.check}\`, ${c.result === 'FAIL' ? 'fails' : c.result}:\n${this.gate.outputOf(claim, c.check)}`;
         return reqs.length ? `${reqs.map((q) => `${q.id} ("${q.text}")`).join(' and ')} ${reqs.length === 1 ? 'is' : 'are'} unproven: its check ${c.check} ${c.result}` : `the repo's spec check ${c.check} ${c.result}`;
       }).join('; ')}.` : undefined;
     return { fast: ran.fast, slow: ran.slow, readyAt: ran.readyAt, ...(sendBack ? { sendBack } : {}) };
@@ -4350,12 +4371,49 @@ export class Core {
     // `deep inbox answer` names an option, and its prompt named the plan the card shows: an approval binds that one (#69).
     if (context.role === 'cli' && chosen?.decision === 'allow' && input.plan_hash === undefined) input.plan_hash = (await this.asks.card(handle)).plan?.hash ?? null;
     await answered();
+    // "I did it" to a task proved by a spec check runs that check again at once (#323): a claim never passes on it alone.
+    const data = JSON.parse(row.data) as Obj;
+    if (data.kind === 'unblock' && chosen?.id === 'done' && row.session && typeof data.proves === 'string' && this.checksOf(this.sessions.get(row.session)?.cwd ?? '').has(data.proves)) {
+      void this.didIt(handle, row.session, data).catch((error: unknown) => process.stderr.write(`deep hub: ${handle}'s check did not run again: ${error instanceof Error ? error.message : String(error)}\n`));
+    }
+    // Your waiver of an open item closes it (#323).
+    await this.openItems.answered(data, chosen?.id);
     // The asks core saved an option you chose for the ask's repo, or its session, never wider than its card showed.
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [handle])) as { data: string }[];
     const answer = chosen?.id ?? String(input.words ?? input.image);
     await this.syncStanding().catch(() => undefined);
     await syncRejected(this.raw, this.root.dir).catch(() => undefined);
     return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
+  }
+  /**
+   * Your "I did it" to a task (#323; design: Tasks only you can do): its check runs again at once, as your claim on the
+   * session's task, on a snapshot of the session's folder. One that still fails returns the task to you, raised again
+   * with what's missing; one that passes leaves it closed.
+   */
+  private async didIt(handle: string, session: string, data: Obj): Promise<void> {
+    const cwd = this.sessions.get(session)!.cwd;
+    const name = String(data.proves);
+    const check = this.checksOf(cwd).get(name)!;
+    const live = this.liveOf({ session, agent: this.sessions.get(session)!.agent, cwd } as HookMeta);
+    const task_ref = await this.turnTaskOf(session, live);
+    // Run on a snapshot of the session's folder, in a temporary checkout of it, as a claim's checks are (#29).
+    const commit = (await this.checkouts.snapshot(cwd)).commit;
+    const ts = this.now();
+    const id = ulid(ts);
+    const checkout = await this.checkouts.checkout({ worktree: cwd, commit, dependencies: ['node_modules', '.venv'], runs: [`claim:${id}`] });
+    const [before] = (await this.record.raw(`SELECT COUNT(*) AS n FROM claims WHERE session_id = ? AND subject_ref = ?`, [session, task_ref])) as { n: number }[];
+    await this.append(this.connection('core', { session, agent: live.agent }), { v: 2, id, kind: 'claim.made', ts, data: { task_ref, attempt: (before?.n ?? 0) + 1, commit, scope: 'session', predictions: [] } });
+    const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
+    const { run } = await this.runStart({ check: name, claim: `claim:${id}`, commit, argv: ['/bin/sh', '-c', check.run], command: check.run, cwd: checkout.dir }, deadline);
+    const outcome = await this.runEnded(String(run)).finally(() => this.checkouts.ended(checkout, `claim:${id}`).catch(() => undefined));
+    if (outcome === 'passed') return;
+    const [done] = (await this.record.raw(`SELECT json_extract(data, '$.findings') AS findings FROM events WHERE kind = 'run.finished' AND subject = ? LIMIT 1`, [String(run)])) as { findings: string | null }[];
+    const findings = (JSON.parse(done?.findings ?? '[]') as string[]).slice(0, 5);
+    const reasons = [`${name} still fails after your "I did it"${findings.length ? `: ${findings.join('; ')}` : ''}`];
+    const fields = ['kind', 'question', 'options', 'recommended', 'default', 'steps', 'where', 'why', 'unblocks', 'proves', 'fallback', 'provisional', 'owner', 'pinned_to'];
+    const again = { ...Object.fromEntries(fields.filter((f) => f in data).map((f) => [f, data[f]])), key: sha256Hex(canonicalize({ again: handle, key: data.key ?? null } as JsonValue)) };
+    await this.asks.raise(this.connection('core', { session, agent: live.agent }), 'deep_ask.unblock', again);
+    await this.asks.stillFails(name, reasons);
   }
   /** asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it. */
   private async undo(params: Obj, context: CallContext): Promise<Obj> {
@@ -5209,8 +5267,17 @@ export class Core {
     this.claimRequirements.set(r.claim, new Map(r.requirements.map((q) => [q.req, { id: q.id, text: q.text }])));
     this.paidChecks.set(r.claim, new Map(r.checks.flatMap((c) => (c.paid ? [[c.check, { paid: c.paid, task: r.task }] as const] : []))));
     const lane = (async () => {
+      const message = this.lastMessage.get(r.session) ?? '';
+      // What the claim leaves open becomes open items before any verdict is made on it (#323).
+      if (!r.joins) {
+        await this.openItems.atClaim({ session: r.session, agent: this.live.get(r.session)?.agent ?? 'claude-code', task: r.task, cwd: r.cwd, base: r.base, message, transcript: this.sessions.get(r.session)?.transcript, pr: await this.prOf(r.session) })
+          .catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s open items were not read: ${error instanceof Error ? error.message : String(error)}\n`));
+      }
+      // A command the final message tells you to run is the gate's to run first (#323), not a run the session cites.
+      const told = r.joins ? [] : toldToRun(message);
+      const cited = told.reduce((m, command) => m.replaceAll(`\`${command}\``, command), message);
       // The validity gate reads the claim against its definition: a claim with none yet, and none on its way, has nothing to be read against.
-      const findings = r.definition === 'pending' ? [] : validityGate({ claim: { claim: r.claim, message: this.lastMessage.get(r.session) ?? '' }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);
+      const findings = r.definition === 'pending' ? [] : validityGate({ claim: { claim: r.claim, message: cited }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);
       // A claim that fails the validity gate goes back naming what's missing, before any check runs.
       if (findings.length) return { fast: [], slow: [], snapshot: r.commit, readyAt: this.now(), findings };
       // The planted wrong program runs no check before the definition locks, the repo's spec included.
@@ -5247,6 +5314,10 @@ export class Core {
           }
         }
       }
+      // Each told command runs once on the claim's snapshot as the agent's own check: failing, it sends the claim back
+      // with its output; passing, it proves nothing, as the agent's own checks never pass a claim.
+      for (const command of told) checks.push({ check: command, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'own' });
+      if (told.length) this.told.set(r.claim, new Set(told));
       const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at, definition: r.definition, ...(r.joins ? { joins: true } : {}) });
       await this.judged(r.claim);
       return { ...ran, findings };
@@ -5316,6 +5387,26 @@ export class Core {
     if (!v || v.outcome === 'pending') return;
     // An untrusted repo's spec commands never ran, so its claim is watch-only: it never passes (#322).
     if (v.outcome === 'PASS' && this.watchOnlyClaims.has(claim)) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, 'project trust: the repo\'s spec checks never run until you trust the project, so this claim is watch-only'] };
+    // A target that no longer resolves makes the claim INVALID, naming it, whatever its checks show; a FAIL still goes first (#323).
+    const unresolved = this.unresolvedTargets.get(claim);
+    if (unresolved && v.outcome !== 'FAIL') {
+      const reqs = new Set(unresolved.map((u) => u.req));
+      v = { ...v, outcome: 'INVALID', reasons: [...unresolved.map((u) => u.reason), ...v.reasons], requirements: v.requirements.map((q) => (reqs.has(q.req) ? { ...q, outcome: 'INVALID' as const, smallest: unresolved.find((u) => u.req === q.req)!.reason } : q)) };
+    }
+    // A threshold without a unit makes its requirement's check BLOCKED (#323; design: Solved or not): no run can decide it.
+    const bare = [...(this.claimRequirements.get(claim) ?? [])].flatMap(([req, q]) => unitless(q.text).map((t) => ({ req, why: `${q.id}'s threshold “${t.text}” has no unit, so no run can decide it: name its unit, such as ${t.value} ms` })));
+    if (bare.length) {
+      const held = (o: Result): boolean => o !== 'FAIL' && o !== 'INVALID';
+      v = {
+        ...v, outcome: held(v.outcome) ? 'BLOCKED' : v.outcome, reasons: [...bare.map((b) => b.why), ...v.reasons],
+        requirements: v.requirements.map((q) => { const b = bare.find((x) => x.req === q.req); return b && held(q.outcome) ? { ...q, outcome: 'BLOCKED' as const, smallest: b.why } : q; }),
+      };
+    }
+    // Nor while what its task left open stays open (#323): an item closes on evidence, your answer or a rule, never the agent's word.
+    if (v.outcome === 'PASS') {
+      const open = (await this.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND task_ref = (SELECT subject_ref FROM claims WHERE id = ?)`, [claim.slice(6)])) as { text: string }[];
+      if (open.length) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, `open items: ${open.length} still open, each closed only by evidence, your answer or a rule: ${open.slice(0, 3).map((o) => `“${o.text.slice(0, 200)}”`).join('; ')}${open.length > 3 ? '; …' : ''}`] };
+    }
     const hash = verdictHash(v);
     if (this.verdictsMade.get(claim) === hash) return;
     try {
