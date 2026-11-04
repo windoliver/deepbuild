@@ -17,6 +17,20 @@
         "per": "item"
       },
       {
+        "operator": "scene3d.lights",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t",
+          "look"
+        ],
+        "writes": [
+          "scene3d.lights"
+        ],
+        "per": "document"
+      },
+      {
         "operator": "scene3d.mark",
         "module": "scene3d",
         "version": "1.0.0",

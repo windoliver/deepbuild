@@ -11,7 +11,7 @@ import type { Adapter, AdapterParts, AdapterRegistry, Drift, JsonObject } from '
 
 export type {
   Adapter, AdapterCaps, AdapterEvent, AdapterParts, AdapterRegistry, DoctorItem, Drift, HookRequestLine, JsonObject, Mapped, PermissionAnswer, Reading,
-  Skill, StopCause, StopReading, TurnUsage, Unsupported,
+  SessionRoute, Skill, StopCause, StopReading, TurnUsage, Unsupported,
 } from './types.js';
 
 /**
@@ -70,6 +70,7 @@ export function factsAdapter(facts: JsonValue, parts: AdapterParts): Adapter {
   };
   for (const operation of OPERATIONS) if (parts[operation]) (adapter as unknown as Record<string, unknown>)[operation] = parts[operation];
   if (parts.permissionReply) adapter.permissionReply = parts.permissionReply;
+  if (parts.routeAtStart) adapter.routeAtStart = parts.routeAtStart;
   return adapter;
 }
 
