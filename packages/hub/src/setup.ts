@@ -15,7 +15,7 @@ import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
 import { confirmed } from './authority.js';
 import { Confirmer } from './confirm.js';
-import { claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
+import { claudeCommand, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, hasCodex, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
 import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
@@ -96,7 +96,7 @@ async function install(cli: string, quiet = false): Promise<number> {
     editConfig(root, (c) => { c.hook = { binary: hook }; });
     // The waiter waits as long as your longest ask deadline, so an answer in time can still wake the session.
     const longest = longestDeadline(root) ?? 0;
-    const waiter = plant() === 'waiter-polls' ? `'${process.execPath}' '${cli}' waiter` : `${q(hook)} claude-code waiter`;
+    const waiter = plant() === 'waiter-polls' ? `'${process.execPath}' '${cli}' waiter` : claudeCommand(hook, 'waiter');
     const groups = ourGroups(hook, waiter, Math.max(600, Math.ceil(longest / 1000)));
     for (const file of [settingsFile, userFile]) keepOriginal(root, record, file);
     saveRecord(root, record);
