@@ -85,6 +85,8 @@ export interface HookMeta {
   notes?: Record<string, string>;
   /** The folders a delete whose reach can't be worked out names, by the entry that matched it, for the hub to stage (#347). */
   stage?: Record<string, string[]>;
+  /** The heavy.command@1 entry a shell call matched in deep-hook (#1015): the hub runs it under `deep lease` with its kinds. */
+  heavy?: { name: string; kinds: string[]; form: string };
   /** A spooled call deep-hook let through because the hub was late, and the guard entries it matched. */
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
@@ -215,6 +217,8 @@ export interface CoreOptions {
   sorter?: string;
   /** The definitions handed to the kernel, from DEEP_HUB_TEST_DRAFTS: by a prompt's text or a work item's ID; only tests set it. */
   drafts?: string;
+  /** The changes you accepted, a file named by DEEP_HUB_TEST_ACCEPTED: by repo, kind, base and commit; only tests set it (#324). */
+  accepted?: string;
   /** The test work source's work.item@1 readings, from DEEP_HUB_TEST_WORK; only tests set it. */
   work?: string;
   /** Paid checks' prices and their runs' cost readings, a file named by DEEP_HUB_TEST_PRICES; only tests set it (#325). */

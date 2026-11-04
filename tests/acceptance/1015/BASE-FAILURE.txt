@@ -1,0 +1,39 @@
+Base commit: 2ea0fb77 (Merge pull request #1233 from windoliver/worktree-github-issue-423-c16a7e)
+Commands (one file at a time, the repo's Node 24.22.0, packages/cli/dist and target/debug/deep-hook built at the base):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1015/<file>.test.ts -t "<the main test's name>"
+Date: 2026-11-04  vitest 5.0.5  darwin-arm64, Mac15,7, 12 cores, load 48-55 (the machine shared with other sessions)
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1015/tsconfig.json exits 0 at the base.
+
+Run at the base: the main tests whose surfaces plainly exist there (deep-hook, the hub, the record's leases, the
+sessions' rows), as a check that each fails at a named assertion for the reason the issue gives. Not run: every
+wrong-program test (the hub refuses a DEEP_HUB_PLANT it doesn't list, so each fails at startHub: "the hub didn't start
+with DEEP_HUB_PLANT=<plant> ... names no planted program"), and the main tests of AC4, AC5, AC6 and AC7, whose surface
+is `deep lease` or `scripts/lease`, neither of which exists at the base (the CLI has no `lease` command; there is no
+scripts/lease), nor the memory seam; AC8's perf-lane and p95 tests (no task names #1015; the p95 test skips as
+INCONCLUSIVE on this loaded machine before building anything). Trimmed to the relevant lines.
+
+== claude.test.ts (AC1): Tests 1 failed | 1 skipped (2), 85 s
+The Proof's reading: all eight `cargo test --workspace` ran as typed (no rewrite), started within 2 ms of each other:
+  AC1 as built: wt-1 (session 17792e51) ran `cargo test --workspace`: started +2 ms, ended +4500 ms; waiting lines: []
+  ... (wt-2 to wt-8 alike)
+  AC1 as built: waves [wt-1 wt-2 wt-3 wt-4 wt-5 wt-6 wt-7 wt-8]
+x AC1 #1015.081f8373 at most 5 of the eight commands run at once, the rest wait and then run, ...
+  AssertionError: the sixth command, `cargo test --workspace` in wt-8 (session 7bbb16a0-cde7-4034-9b08-d782c216e0d5), started while 5 others ran (wt-3, wt-6, wt-2, wt-7, wt-4): with `cpu.slot` a pool of 6, at most 5 leased commands run at once (8 did)
+
+== codex.test.ts (AC2): Tests 1 failed | 1 skipped (2), 29 s
+  AC2 as built: wt-1 call_0af749d5977e `cargo test --workspace` not denied; no retry; ran: no  ... (wt-2 to wt-8 alike)
+x AC2 #1015.b593e460 eight Codex sessions' `cargo test --workspace`: each denied once with its `deep lease` form, ...
+  AssertionError: wt-1: Codex's adapter can't rewrite, so the matched call call_0af749d5977e `cargo test --workspace` must be denied once with its `deep lease` form: exit 0, stdout "", stderr "": expected false to be true
+
+== focused.test.ts (AC3): Tests 1 failed | 1 skipped (2), 55 s
+The first half passes at the base (the focused calls run as written, at once, unleased); the repo entry does nothing:
+  AC3 with the repo entry: `npx vitest run src/cart.test.ts` → `npx vitest run src/cart.test.ts`
+x AC3 #1015.0ceaf8cf `npx vitest run src/cart.test.ts` and `cargo test -p cart` run as written and both at once; with done.yaml naming `npx vitest run`, the first one runs leased
+  AssertionError: with done.yaml naming `npx vitest run`, `npx vitest run src/cart.test.ts` must be rewritten into its `deep lease` form: exit 0, stdout "", stderr "": expected false to be true
+
+== budgets.test.ts (AC8, the hub-stopped test): Tests 1 failed | 2 skipped (3), 122 s
+The call ran as written with the hub stopped (as at the base, nothing matches it); no row says it ran unleased:
+x AC8 #1015.6118ebcf with the hub stopped, `cargo test --workspace` runs as written within deep-hook's fail-open time, and its session's row reads "ran unleased"
+  AssertionError: the session's row must read "ran unleased" for `cargo test --workspace`, which ran while the hub was stopped: {"id":"68aee633-…","repo":"shopb509be00","agent":"claude-code","state":"quiet","why":"last seen 1m ago","note":"This session's Claude Code home (…/h/.claude) loads mods DeepBuild couldn't read (no claude on PATH …)…"} | {"id":"68aee633-…",…,"status":"unknown",…}: expected false to be true
+  (That run predates the `claude` stub in the bin folder, which since lets the hub read the home: the note is gone
+  from later runs' rows. The assertion and its reason are unchanged.)

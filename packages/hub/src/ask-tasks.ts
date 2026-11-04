@@ -43,6 +43,7 @@ import { headOf } from './session-facts.js';
 import { derivedId, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sql = (s: string) => s.replace(/'/g, "''");
 const letters = (s: string) => s.replace(/[^0-9A-Za-z]/g, '');
 
@@ -126,13 +127,24 @@ interface Requirement { expected_ms?: number; deadline_ms?: number; runs?: numbe
 interface Author { handle: string; role: string; automated?: boolean }
 /** A held-out variant of a check (#1018): the files written over the claim's checkout for a run of its own, kept by digest. */
 export interface HeldOut { files: Record<string, string> }
-interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[] }
+interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[]; kind?: unknown; plan?: unknown }
+/**
+ * A task's plan (#324), handed with its definition: whether it marks the issue as large, and its scope section, the
+ * files and parts it will touch and the dependencies and top-level folders it names. A part is a part of the code by
+ * name, or a document's item by its stable ID.
+ */
+export interface Plan { large: boolean; scope: { files: string[]; parts: string[]; dependencies: string[]; folders: string[] } }
+const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x !== '') : []);
+function planOf(v: unknown): Plan | null {
+  if (!isObj(v) || !isObj(v.scope)) return null;
+  return { large: v.large === true, scope: { files: strings(v.scope.files), parts: strings(v.scope.parts), dependencies: strings(v.scope.dependencies), folders: strings(v.scope.folders) } };
+}
 /** A work source's work.item@2 reading: the test source's and the GitHub source's carry their body as text; an item carries the readings it came with (its comments among them). */
 export interface WorkItem { source_id: string; link: string; title: string; body: string; criteria?: string[]; authors: Author[]; updated: string; readings?: WorkItem[] }
 /** A definition as locked, without its hash: what the hash covers. */
 interface Definition { task_ref: string; requirements: Requirement[]; deliverables: string[]; issue_rev: string; base_commit: string; budget: JsonValue }
 /** The requirements your one answer can leave out: those outside text added, and those whose surface has no fixed form. */
-interface Pending { session: string; agent: string; definition: Definition; handed: string; held: string[]; at: number }
+interface Pending { session: string; agent: string; cwd: string; definition: Definition; handed: string; held: string[]; at: number }
 /** What a task's lock needs: the prompt that opened it and the item it came from. */
 interface Opening { session: string; agent: string; cwd: string; task_ref: string; text: string; at: number; item?: WorkItem }
 /** A claim made on a task before its definition locked (#322): judged against the definition once the lock lands. */
@@ -185,8 +197,8 @@ export interface AskTaskOptions {
   pin(cwd: string, question: string): Promise<Obj>;
   /** Keeps bytes in the evidence store, answering their SHA-256. */
   keep(bytes: Uint8Array, source: string): Promise<string>;
-  /** A definition just locked: its paid checks are priced and the issue's budget asked for once (#325). */
-  locked?(d: { session: string; agent: string; task_ref: string; requirements: { id: string; check: string | null; paid?: PaidKind }[] }): Promise<void>;
+  /** A definition just locked: its paid checks are priced and the issue's budget asked for once (#325), and its plan sized before any code (#324). */
+  locked?(d: { session: string; agent: string; cwd: string; task_ref: string; requirements: { id: string; check: string | null; paid?: PaidKind }[] }): Promise<void>;
   /**
    * Hands a claim's checks to the gate runner (#29), from the bytes the store keeps under each one's approved digest:
    * it takes the claim's snapshot and checkout, and starts the fast lane's checks, the repo's spec checks beside them.
@@ -397,7 +409,7 @@ export class AskTasks {
     // The early question (#874): a check whose surface has no fixed form has nothing to stand in for it on a base with
     // nothing to start, so its definition waits for your one answer too, in the same ask.
     const formless = requirements.filter((r) => r.surface && !hasForm(r.surface));
-    if (!outside.length && !waived && !formless.length) return this.record(t.session, t.agent, definition, digest, t.at);
+    if (!outside.length && !waived && !formless.length) return this.record(t.session, t.agent, t.cwd, definition, digest, t.at);
     const who = [...new Set(requirements.filter((r) => outside.includes(r.id)).map((r) => r.author.handle))];
     const said = [
       ...(outside.length || waived ? [`carries text from outside the repo${who.length ? ` (${who.join(', ')})` : ''}: ${outside.length ? `it adds ${outside.join(', ')}` : 'it asks to waive a requirement, which it can\'t'}`] : []),
@@ -414,7 +426,7 @@ export class AskTasks {
       key: sha256Hex(canonicalize({ kind: 'definition.outside', task_ref: t.task_ref, digest })), pinned_to: await this.o.pin(t.cwd, question),
     };
     const ask = await this.o.asks().raise(this.o.connection(t.session, t.agent), 'definition.draft', raised);
-    this.pending.set(ask, { session: t.session, agent: t.agent, definition, handed: digest, held: [...new Set([...outside, ...formless.map((r) => r.id)])], at: t.at });
+    this.pending.set(ask, { session: t.session, agent: t.agent, cwd: t.cwd, definition, handed: digest, held: [...new Set([...outside, ...formless.map((r) => r.id)])], at: t.at });
   }
   /** Your one answer about outside text or a formless surface: the definition locks, with the requirements it held or without them. */
   answered(delivery: Delivery): void {
@@ -424,7 +436,7 @@ export class AskTasks {
     // An answer that leaves nothing to lock locks nothing, and the draft keeps waiting: the default undone, your next answer can still lock it.
     if (!definition.requirements.length) return this.unlocked(definition.task_ref, Error('leaving the outside text out leaves it no requirement; undo the default to lock it with that text'));
     this.pending.delete(delivery.ask);
-    void this.record(p.session, p.agent, definition, p.handed, p.at).catch((error: unknown) => this.unlocked(definition.task_ref, error));
+    void this.record(p.session, p.agent, p.cwd, definition, p.handed, p.at).catch((error: unknown) => this.unlocked(definition.task_ref, error));
   }
   /** The task whose locked definition stands on a definition ask's answer, by the ask's key; undefined when none locked on it. */
   async lockedOn(ask: string): Promise<string | undefined> {
@@ -433,7 +445,7 @@ export class AskTasks {
     const locked = (await this.o.raw("SELECT task_ref, id FROM definitions WHERE state IN ('locked', 'revised')")) as { task_ref: string; id: string }[];
     return locked.find((d) => sha256Hex(canonicalize({ kind: 'definition.outside', task_ref: d.task_ref, digest: d.id })) === row.key)?.task_ref;
   }
-  private async record(session: string, agent: string, definition: Definition, handed: string, at: number): Promise<void> {
+  private async record(session: string, agent: string, cwd: string, definition: Definition, handed: string, at: number): Promise<void> {
     // A definition with nothing to meet locks nothing: a claim on it would pass with no check run.
     if (!definition.requirements.length) throw Error('it has no requirements left to lock');
     const ts = this.o.now();
@@ -455,8 +467,8 @@ export class AskTasks {
     await this.o.append(this.o.connection(session, agent), {
       v: 1, id: derivedId(at, `${definition.task_ref}:${handed}:checked`), kind: 'definition.checked', ts, data: { task_ref: definition.task_ref, solved: solve.solved, solve: solve.line, flags },
     }).catch((error: unknown) => { if (!(error instanceof RecordError && error.code === 'conflict')) throw error; });
-    // Its paid checks are priced now, and the issue's one budget asked for once (#325).
-    if (fresh) await this.o.locked?.({ session, agent, task_ref: definition.task_ref, requirements: definition.requirements }).catch((error: unknown) => process.stderr.write(`deep hub: ${definition.task_ref}'s paid checks were not priced: ${error instanceof Error ? error.message : String(error)}\n`));
+    // Its paid checks are priced now, and the issue's one budget asked for once (#325); its plan is sized (#324).
+    if (fresh) await this.o.locked?.({ session, agent, cwd, task_ref: definition.task_ref, requirements: definition.requirements }).catch((error: unknown) => process.stderr.write(`deep hub: ${definition.task_ref}'s lock was not followed up: ${error instanceof Error ? error.message : String(error)}\n`));
     // A claim made before the lock is judged against the definition now (#322).
     const early = this.early.get(definition.task_ref);
     if (early) {
@@ -474,6 +486,12 @@ export class AskTasks {
       variants.push({ files });
     }
     return variants;
+  }
+  /** The kind of issue and the plan a task's definition was handed with (#324), found again by the lock's digest of it. */
+  async scopeOf(task_ref: string): Promise<{ kind: string | null; plan: Plan | null }> {
+    const [row] = (await this.o.raw(`SELECT id FROM definitions WHERE task_ref = ? AND state IN ('locked', 'revised') LIMIT 1`, [task_ref])) as { id: string }[];
+    const handed = row ? (await this.json<Handed>(this.o.drafts, 'drafts')).find((d) => sha256Hex(canonicalize(d as unknown as JsonValue)) === row.id) : undefined;
+    return { kind: typeof handed?.kind === 'string' && handed.kind ? handed.kind : null, plan: planOf(handed?.plan) };
   }
   /** The definition's hash: every field it holds, each check's approved bytes by digest and each referenced output's among them. */
   private hashOf(d: Definition): string {

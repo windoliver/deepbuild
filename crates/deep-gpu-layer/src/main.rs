@@ -13,6 +13,8 @@
 
 #[cfg(feature = "test-meter")]
 mod allocations;
+mod calibrate;
+mod columns;
 mod compare;
 mod compile;
 mod conformance;
@@ -24,6 +26,7 @@ mod frames;
 mod golden;
 mod guard;
 mod host;
+mod interp_suite;
 mod levels;
 mod live;
 mod liveview;
@@ -35,8 +38,10 @@ mod scene;
 mod seam;
 mod session3;
 mod status;
+mod steps_ref;
 #[cfg(feature = "test-meter")]
 mod testgpu;
+mod textures;
 mod timing;
 mod tone;
 mod validation;
@@ -161,6 +166,24 @@ pub enum Planted {
     StatusBeforeToneMap,
     /// #418's: the bloom's lens dirt laid over the frame instead of multiplying its light.
     DirtOverlay,
+    /// #429's wrong programs (tests/acceptance/429/README.md: Planted programs).
+    RenderBackDrawsLiveOnly,
+    TakesDeclaredClass,
+    AttributeStride16,
+    PartialUpdate2Bytes,
+    RecopiesWholeColumn,
+    F32CompareFloorExact,
+    TrustsWriteIndex,
+    DropsSwizzleLast,
+    NoiseWeightHalved,
+    SettlesWithFallback,
+    /// #423's wrong programs (tests/acceptance/423/README.md: Planted programs): the
+    /// metallic-roughness map decoded from sRGB; a PNG's gAMA applied as it decodes; every map
+    /// sampled at anisotropy 1; a KTX2 normal map transcoded as sRGB color.
+    MrFromSrgb,
+    AppliesImageGamma,
+    AnisotropyOne,
+    NormalMapAsSrgb,
     /// #422's wrong programs (tests/acceptance/422/README.md: Planted programs): every final
     /// target black; the puffs not drawn; a cascade kept while the solid count holds; the
     /// environment prefiltered one mip a frame; the specular lobe uncompensated, or compensated on
@@ -252,6 +275,20 @@ impl Planted {
             "spot_counts_cone" => Planted::SpotCountsCone,
             "status_before_tone_map" => Planted::StatusBeforeToneMap,
             "dirt_overlay" => Planted::DirtOverlay,
+            "render_back_draws_live_only" => Planted::RenderBackDrawsLiveOnly,
+            "takes_declared_class" => Planted::TakesDeclaredClass,
+            "attribute_stride_16" => Planted::AttributeStride16,
+            "partial_update_2_bytes" => Planted::PartialUpdate2Bytes,
+            "recopies_whole_column" => Planted::RecopiesWholeColumn,
+            "f32_compare_floor_exact" => Planted::F32CompareFloorExact,
+            "trusts_write_index" => Planted::TrustsWriteIndex,
+            "drops_swizzle_last" => Planted::DropsSwizzleLast,
+            "noise_weight_halved" => Planted::NoiseWeightHalved,
+            "settles_with_fallback" => Planted::SettlesWithFallback,
+            "mr_from_srgb" => Planted::MrFromSrgb,
+            "applies_image_gamma" => Planted::AppliesImageGamma,
+            "anisotropy_one" => Planted::AnisotropyOne,
+            "normal_map_as_srgb" => Planted::NormalMapAsSrgb,
             "draws_black" => Planted::DrawsBlack,
             "drops_clouds" => Planted::DropsClouds,
             "cascade_cache_keeps_stale" => Planted::CascadeCacheKeepsStale,
@@ -293,6 +330,8 @@ pub struct App {
     pub validation: bool,
     /// Whether Vello GPU draws 2D writer layers, by its spike record (#385).
     pub vello: marks2d::Gate,
+    /// The run's decode worker and the maps it made (#423).
+    pub made: textures::Made,
 }
 
 pub fn refused(code: &str, reason: impl Into<String>) -> Value {
@@ -456,15 +495,21 @@ impl App {
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("workers") => textures::workers(self),
             Some("tone") => tone::call(self, out, call),
             Some("host") => host::call(self, out, call),
             Some("guard") => guard::call(self, out, call),
             Some("operators") => effects::operators(self),
+            Some("calibrate") => calibrate::calibrate(self),
             Some("reference") => effects::reference(self, out, call),
             Some("check_operator") => effects::check_operator(self, call),
             Some("op") => effects::op(self, call),
+            Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),
             Some("cross_gpu") => effects::cross_gpu(self, call),
+            Some("op_table") => steps_ref::op_table(),
+            Some("steps_reference") => steps_ref::steps_reference(self, out),
+            Some("interp_suite") => interp_suite::call(self, call),
             Some("golden") => golden::golden(self, out, call),
             Some("decide") => golden::decide(self, call),
             Some("live") => live::call(self, out, call),
@@ -525,7 +570,13 @@ fn bad_input() -> ! {
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    if args.next().as_deref() != Some("run") {
+    // #423: a copy of this binary started as the run's decode worker (deep-codecs).
+    let first = args.next();
+    if first.as_deref() == Some("decode-worker") {
+        let rest: Vec<String> = args.collect();
+        std::process::exit(deep_codecs::serve(deep_codecs::DECODE_WORKER, &rest));
+    }
+    if first.as_deref() != Some("run") {
         bad_input();
     }
     let (mut backend, mut planted) = (Backend::Gpu, None);
@@ -651,6 +702,7 @@ fn main() {
         jobs: 0,
         validation,
         vello,
+        made: Default::default(),
     };
     serve(|out, call| app.call(out, call));
 }

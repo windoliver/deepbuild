@@ -184,6 +184,47 @@
     }
   },
   {
+    "registry": "ease@1",
+    "owner": "core",
+    "fill": [
+      "module",
+      "pack"
+    ],
+    "resolve": "seal",
+    "since": "R6",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "number"
+        },
+        "ease": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "x": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "y": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "mode": {
+          "type": "string"
+        },
+        "overshoot": {}
+      }
+    }
+  },
+  {
     "registry": "gpu.function@1",
     "owner": "core",
     "fill": [

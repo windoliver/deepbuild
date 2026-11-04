@@ -42,7 +42,7 @@ pub use merge::{merge, Merged};
 pub use order::key_between;
 pub use packs::{Expansion, Pack, PackId, Packs, Planted as PackPlanted};
 pub use requires::{derived_kinds, write_required_kinds};
-pub use rules::{shown_inside, STATUS_ROLE};
+pub use rules::{shown_inside, story_issues, STATUS_ROLE};
 pub use shape::{canonical, canonical_in, extends_by_default, Canonical, DocShape};
 
 /// The check kind every issue here is raised by.
@@ -77,6 +77,7 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "constraints",
     "clips",
     "placements",
+    "time_remaps",
     "transitions",
     "shots",
     "markers",
@@ -105,6 +106,7 @@ pub const ID_MAPS: &[&str] = &[
     "constraints",
     "clips",
     "placements",
+    "time_remaps",
     "transitions",
     "shots",
     "markers",
@@ -268,6 +270,12 @@ impl Issue {
                 for (k, v) in fields {
                     out.entry(k.clone()).or_insert_with(|| v.clone());
                 }
+            }
+        }
+        // A pack kind's rule names its own code, `<pack>.<rule>` (#490).
+        if self.code == packs::KIND_RULE {
+            if let Some(rule) = self.actual.get("rule") {
+                out.insert("code".into(), rule.clone());
             }
         }
         if let Some(ops) = &self.fix_ops {

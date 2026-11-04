@@ -90,6 +90,10 @@ export type Plant =
   | 'git-inherits-env'
   // #907's: a cpu.slot pool slow runs may fill, and loop facts that count background subagents but not commands.
   | 'fills-every-slot' | 'background-subagents-only'
+  // #1015's: matched commands left as written, a Codex retry denied again, every cargo call leased, a release on the
+  // parent's exit, memory pressure ignored, an exclusive GPU lease beside shared ones, and scripts/lease run directly.
+  | 'runs-matched-as-written' | 'denies-every-retry' | 'leases-every-cargo' | 'releases-on-parent-exit' | 'ignores-memory-pressure'
+  | 'exclusive-beside-shared' | 'lease-script-runs-directly'
   // #874's: a declared surface never carried to the base checkout, a stand-in's hash never recorded, a stand-in built
   // where the part already starts, and a pass on a stand-in taken as proof.
   | 'stand-in-surface-dropped' | 'stand-in-unrecorded' | 'stand-in-always' | 'stand-in-pass-proves'
@@ -160,6 +164,8 @@ const PLANTS: readonly string[] = [
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
+  'runs-matched-as-written', 'denies-every-retry', 'leases-every-cargo', 'releases-on-parent-exit', 'ignores-memory-pressure',
+  'exclusive-beside-shared', 'lease-script-runs-directly',
   'any-nonzero-base-exit',
   'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
