@@ -65,6 +65,8 @@ pub struct Plants {
     /// #420 AC7's wrong cache: a result's memory goes back when a revision drops its last
     /// reader, while a frame that binds it is still in flight.
     releases_at_revision: bool,
+    /// #1173's: scene3d's sample count (session3::msaa_planted) and the claimed one.
+    planted: Option<Planted>,
 }
 
 impl Plants {
@@ -89,6 +91,7 @@ impl Plants {
             shares_meter_with_worker: p == Some(Planted::SharesMeterWithWorker),
             exports_live_surface: p == Some(Planted::ExportsLiveSurface),
             upscale: crate::session3::upscale_planted(p),
+            planted: p,
         }
     }
 }
@@ -1149,6 +1152,7 @@ impl Live {
                     rev.fit.history,
                     &self.args.look,
                     &mut self.labels,
+                    crate::session3::msaa_planted(self.plants.planted),
                 ) {
                     Ok(mut v) => {
                         v.plant(self.plants.upscale);
@@ -1905,6 +1909,8 @@ impl Live {
             surface,
             &self.args.assets,
             &mut self.labels,
+            self.plants.planted,
+            None,
         );
         if let Some(o) = c.as_object_mut() {
             o.insert("frame".into(), json!(frame));
@@ -2082,7 +2088,8 @@ impl Live {
 
 /// One canonical render of a stamped document at `t`: a fresh view of one slot, its own results,
 /// no history, at the class's base rung with every operator at full resolution; `live` is the
-/// planted worker's live rung and operator resolution.
+/// planted worker's live rung and operator resolution; `planted` the run's wrong program, and
+/// `out` where its picture is written as a PNG when asked (#1173).
 #[allow(clippy::too_many_arguments)]
 fn render_canonical(
     device: &Arc<Device>,
@@ -2096,6 +2103,8 @@ fn render_canonical(
     surface: Option<Surface>,
     assets: &BTreeMap<String, PathBuf>,
     labels: &mut Labels,
+    planted: Option<Planted>,
+    out: Option<&str>,
 ) -> Value {
     let _ = assets;
     let mut doc = doc.clone();
@@ -2105,7 +2114,19 @@ fn render_canonical(
         Err(r) => return refused(r.code, r.path),
     };
     let content = Content::Scene(Box::new(frames));
-    let mut view = match View::new(device, Path::Copy, size, 1, content, 1.0, 0, look, labels) {
+    let planted3 = crate::session3::msaa_planted(planted);
+    let mut view = match View::new(
+        device,
+        Path::Copy,
+        size,
+        1,
+        content,
+        1.0,
+        0,
+        look,
+        labels,
+        planted3,
+    ) {
         Ok(v) => v,
         Err(e) => return refused("no_view", e),
     };
@@ -2172,19 +2193,30 @@ fn render_canonical(
             operators.push(json!({"operator": m.name, "resolution": res}));
         }
     }
-    json!({
+    let claims = planted == Some(Planted::ClaimsMsaaOverSingleSample);
+    let (msaa, render_targets) = crate::session3::msaa(view.renderer(), claims);
+    let mut reply = json!({
         "purpose": purpose.name(),
-        "pixel_hash": pixels.map(|p| hex(&p)),
+        "pixel_hash": pixels.as_ref().map(|p| hex(p)),
         "rung": rung.name(),
         "internal_scale": if live.is_some() { rung.scale(1.0) } else { view.drew.0 },
         "upscale": view.drew.1,
         "operators": operators,
-    })
+        "msaa": msaa,
+        "render_targets": render_targets,
+    });
+    if let (Some(out), Some(bgra)) = (out, &pixels) {
+        match crate::view3d::write_final(out, bgra, size) {
+            Ok(name) => reply["final"] = json!(name),
+            Err(e) => return e,
+        }
+    }
+    reply
 }
 
 /// The `canonical` call: the same render a `canonical` event makes, in a process with no live
 /// session.
-pub fn canonical(app: &mut App, call: &Value) -> Value {
+pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
     let bad = |what: &str| refused("bad_input", what);
     let (Some(writer), Some(doc), Some(size), Some(frame), Some(purpose)) = (
         call["writer"].as_str().map(str::to_string),
@@ -2200,6 +2232,11 @@ pub fn canonical(app: &mut App, call: &Value) -> Value {
         Err(e) => return bad(&format!("look: {e}")),
     };
     let fps = call["fps"].as_u64().unwrap_or(60).max(1) as i64;
+    let planted = app.planted;
+    let out = call["targets"]
+        .as_array()
+        .is_some_and(|t| t.iter().any(|t| t == "final"))
+        .then(|| out.to_string());
     app.worker.call(move |state| {
         let device = match state.gpu.recover() {
             Ok(d) => d,
@@ -2233,6 +2270,8 @@ pub fn canonical(app: &mut App, call: &Value) -> Value {
             None,
             &BTreeMap::new(),
             &mut labels,
+            planted,
+            out.as_deref(),
         );
         if let Some(o) = c.as_object_mut() {
             o.insert("frame".into(), json!(frame));

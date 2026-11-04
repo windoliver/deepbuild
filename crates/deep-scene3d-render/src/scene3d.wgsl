@@ -19,10 +19,16 @@ struct Frame {
 
 @group(0) @binding(0) var<uniform> frame: Frame;
 
+// The object ID as two 16-bit halves: the multisampled ID target's format (#1173), which the
+// resolve pass joins again.
 struct Targets {
     @location(0) color: vec4<f32>,
-    @location(1) id: u32,
+    @location(1) id: vec2<u32>,
 };
+
+fn targets(color: vec4<f32>, id: u32) -> Targets {
+    return Targets(color, vec2<u32>(id & 0xffffu, id >> 16u));
+}
 
 fn srgb_decode(c: vec3<f32>) -> vec3<f32> {
     let lo = c / 12.92;
@@ -883,13 +889,13 @@ fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
         let s = m.s;
         let facing = m.n;
         if (in.flags & UNLIT) != 0u {
-            return Targets(see_through(s.base + m.emission, alpha, mode), in.pick);
+            return targets(see_through(s.base + m.emission, alpha, mode), in.pick);
         }
         let d = direct(in, facing, s, m.spread);
         // A shadow catcher writes black, as opaque as the share of light its shadow removes, at
         // its strength.
         if (in.flags & CATCH) != 0u {
-            return Targets(vec4<f32>(0.0, 0.0, 0.0, d.removed * alpha * in.base.w), in.pick);
+            return targets(vec4<f32>(0.0, 0.0, 0.0, d.removed * alpha * in.base.w), in.pick);
         }
         var ambient: vec3<f32>;
         if env.k.x > 0.0 {
@@ -899,7 +905,7 @@ fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
         }
         // A map's occlusion scales the ambient term alone (#423).
         let lit = fogged(d.color + ambient * m.occlusion + m.emission, in.world);
-        return Targets(see_through(lit, alpha, mode), in.pick);
+        return targets(see_through(lit, alpha, mode), in.pick);
     }
     let facing = max(dot(n, frame.light.xyz), 0.0);
     // A sun (w > 0) lights by its illuminance over an ambient quarter; with none, the view's own
@@ -919,7 +925,7 @@ fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
     let albedo = paint(in.color);
     let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
     let a = in.emission.w;
-    return Targets(vec4<f32>(fogged(albedo * lit + in.emission.rgb, in.world) * a, a), in.pick);
+    return targets(vec4<f32>(fogged(albedo * lit + in.emission.rgb, in.world) * a, a), in.pick);
 }
 
 // The ao prepass (#418): an opaque solid's world normal; its depth goes to the prepass's own
@@ -1126,7 +1132,7 @@ fn line_fs(in: LineOut) -> Targets {
         discard;
     }
     let alpha = cov * mix(in.alpha.x, in.alpha.y, t);
-    return Targets(vec4<f32>(paint(in.color) * alpha, alpha), select(0u, in.pick, cov >= 0.5));
+    return targets(vec4<f32>(paint(in.color) * alpha, alpha), select(0u, in.pick, cov >= 0.5));
 }
 
 // ---- points: a disc, square or diamond in px or m about the point's projection
@@ -1181,7 +1187,7 @@ fn point_fs(in: PointOut) -> Targets {
     if cov <= 0.0 {
         discard;
     }
-    return Targets(vec4<f32>(paint(in.color) * cov, cov), select(0u, in.pick, cov >= 0.5));
+    return targets(vec4<f32>(paint(in.color) * cov, cov), select(0u, in.pick, cov >= 0.5));
 }
 
 // ---- labels: a quad per glyph from the core's glyph atlas, in a label that faces the camera,
@@ -1256,7 +1262,7 @@ fn text_fs(in: TextOut) -> Targets {
         discard;
     }
     let shown = select(a, 0.0, in.later != 0u);
-    return Targets(vec4<f32>(paint(in.color) * shown, shown), select(0u, in.pick, a >= 0.5));
+    return targets(vec4<f32>(paint(in.color) * shown, shown), select(0u, in.pick, a >= 0.5));
 }
 
 // ---- the sky (#422): drawn first, behind everything, and what fog mixes toward
@@ -1332,7 +1338,7 @@ fn background(d: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn sky_fs(@builtin(position) pos: vec4<f32>) -> Targets {
-    return Targets(vec4<f32>(background(view_ray(pos.xy)), 1.0), 0u);
+    return targets(vec4<f32>(background(view_ray(pos.xy)), 1.0), 0u);
 }
 
 // Fog on a lit surface at `world` (#422; Sky `sky@1` and its height fog): the distance fog by
@@ -1439,5 +1445,5 @@ fn puff_fs(in: PuffOut) -> Targets {
         }
     }
     c = fogged(c * in.shape.z * 0.9, in.world);
-    return Targets(vec4<f32>(c * alpha, alpha), 0u);
+    return targets(vec4<f32>(c * alpha, alpha), 0u);
 }

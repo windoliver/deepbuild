@@ -306,6 +306,7 @@ pub fn planted_fx(p: Option<Planted>) -> fx::Planted {
         off_by_two: p == Some(Planted::PassOffByTwo),
         slow_glow: p == Some(Planted::SlowGlow),
         dirt_overlay: p == Some(Planted::DirtOverlay),
+        block_copy: p == Some(Planted::PuffBlockCopy),
     }
 }
 
