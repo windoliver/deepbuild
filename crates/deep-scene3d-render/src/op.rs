@@ -10,18 +10,39 @@ use deep_canvas_effects::graph::{From, Ty};
 use deep_canvas_effects::{check, emit, graph, interp, module};
 use deep_canvas_scene3d::scene::SolidOp;
 
-use crate::{bind_group, buffer_entry, draw_pipeline, mesh_buffers};
+use crate::{buffer_entry, draw_pipeline, mesh_buffers};
 
-/// The bind group the operator's inputs take, after the frame, the lights and ambient occlusion.
+/// The bind group the operator's inputs take, after the frame, the lights and ambient occlusion:
+/// the texture maps' (#423), at bindings after theirs.
 const INPUTS_GROUP: u32 = 3;
+const INPUTS_BINDING: u32 = 1 + 2 * crate::maps::SLOTS as u32;
 /// A group no layout holds: the operator's frame there becomes a private the entry fills.
 const FRAME_GROUP: u32 = 9;
 const ENTRY: &str = include_str!("op.wgsl");
 
-/// One material operator on the GPU: its pipeline and its inputs' bind group.
+/// One material operator on the GPU: its pipeline, and its group's layout and inputs, which
+/// bind with each solid's maps.
 pub(crate) struct MatOp {
     pub pipeline: wgpu::RenderPipeline,
-    pub bind: wgpu::BindGroup,
+    pub layout: wgpu::BindGroupLayout,
+    buffer: wgpu::Buffer,
+    sampler: wgpu::Sampler,
+}
+
+impl MatOp {
+    /// Its inputs as entries after the maps' own.
+    pub fn entries(&self) -> Vec<wgpu::BindGroupEntry<'_>> {
+        vec![
+            wgpu::BindGroupEntry {
+                binding: INPUTS_BINDING,
+                resource: self.buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: INPUTS_BINDING + 1,
+                resource: wgpu::BindingResource::Sampler(&self.sampler),
+            },
+        ]
+    }
 }
 
 /// What a solid's operator is keyed by: its item as the operator check reads it, so equal
@@ -85,22 +106,37 @@ pub(crate) fn compile(
     if !snippet.contains(&frame) {
         return Err("the emitter's frame binding moved".into());
     }
-    let source = format!("{scene}\n{}\n{ENTRY}", snippet.replace(&frame, ""));
+    // Its inputs move after the maps' bindings, which share the group.
+    let mut snippet = snippet.replace(&frame, "");
+    for (k, decl) in ["var<uniform> op_inputs", "var op_smp"].iter().enumerate() {
+        let at = format!("@group({INPUTS_GROUP}) @binding({k}) {decl}");
+        if !snippet.contains(&at) {
+            return Err("the emitter's input bindings moved".into());
+        }
+        snippet = snippet.replace(
+            &at,
+            &format!(
+                "@group({INPUTS_GROUP}) @binding({}) {decl}",
+                INPUTS_BINDING + k as u32
+            ),
+        );
+    }
+    let source = format!("{scene}\n{snippet}\n{ENTRY}");
+    let mut entries = crate::maps::layout_entries();
+    entries.push(buffer_entry(
+        INPUTS_BINDING,
+        wgpu::ShaderStages::FRAGMENT,
+        wgpu::BufferBindingType::Uniform,
+    ));
+    entries.push(wgpu::BindGroupLayoutEntry {
+        binding: INPUTS_BINDING + 1,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+        count: None,
+    });
     let inputs_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("scene3d material operator"),
-        entries: &[
-            buffer_entry(
-                0,
-                wgpu::ShaderStages::FRAGMENT,
-                wgpu::BufferBindingType::Uniform,
-            ),
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
+        entries: &entries,
     });
     let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
     let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -144,16 +180,12 @@ pub(crate) fn compile(
         min_filter: wgpu::FilterMode::Linear,
         ..Default::default()
     });
-    let bind = bind_group(
-        d,
-        "scene3d material operator",
-        &inputs_layout,
-        [
-            buffer.as_entire_binding(),
-            wgpu::BindingResource::Sampler(&sampler),
-        ],
-    );
-    Ok(MatOp { pipeline, bind })
+    Ok(MatOp {
+        pipeline,
+        layout: inputs_layout,
+        buffer,
+        sampler,
+    })
 }
 
 /// An error scope's result, which resolves at once on a device whose work is polled.

@@ -41,6 +41,7 @@ mod status;
 mod steps_ref;
 #[cfg(feature = "test-meter")]
 mod testgpu;
+mod textures;
 mod timing;
 mod tone;
 mod validation;
@@ -176,6 +177,13 @@ pub enum Planted {
     DropsSwizzleLast,
     NoiseWeightHalved,
     SettlesWithFallback,
+    /// #423's wrong programs (tests/acceptance/423/README.md: Planted programs): the
+    /// metallic-roughness map decoded from sRGB; a PNG's gAMA applied as it decodes; every map
+    /// sampled at anisotropy 1; a KTX2 normal map transcoded as sRGB color.
+    MrFromSrgb,
+    AppliesImageGamma,
+    AnisotropyOne,
+    NormalMapAsSrgb,
     /// #422's wrong programs (tests/acceptance/422/README.md: Planted programs): every final
     /// target black; the puffs not drawn; a cascade kept while the solid count holds; the
     /// environment prefiltered one mip a frame; the specular lobe uncompensated, or compensated on
@@ -277,6 +285,10 @@ impl Planted {
             "drops_swizzle_last" => Planted::DropsSwizzleLast,
             "noise_weight_halved" => Planted::NoiseWeightHalved,
             "settles_with_fallback" => Planted::SettlesWithFallback,
+            "mr_from_srgb" => Planted::MrFromSrgb,
+            "applies_image_gamma" => Planted::AppliesImageGamma,
+            "anisotropy_one" => Planted::AnisotropyOne,
+            "normal_map_as_srgb" => Planted::NormalMapAsSrgb,
             "draws_black" => Planted::DrawsBlack,
             "drops_clouds" => Planted::DropsClouds,
             "cascade_cache_keeps_stale" => Planted::CascadeCacheKeepsStale,
@@ -318,6 +330,8 @@ pub struct App {
     pub validation: bool,
     /// Whether Vello GPU draws 2D writer layers, by its spike record (#385).
     pub vello: marks2d::Gate,
+    /// The run's decode worker and the maps it made (#423).
+    pub made: textures::Made,
 }
 
 pub fn refused(code: &str, reason: impl Into<String>) -> Value {
@@ -481,6 +495,7 @@ impl App {
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("workers") => textures::workers(self),
             Some("tone") => tone::call(self, out, call),
             Some("host") => host::call(self, out, call),
             Some("guard") => guard::call(self, out, call),
@@ -555,7 +570,13 @@ fn bad_input() -> ! {
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    if args.next().as_deref() != Some("run") {
+    // #423: a copy of this binary started as the run's decode worker (deep-codecs).
+    let first = args.next();
+    if first.as_deref() == Some("decode-worker") {
+        let rest: Vec<String> = args.collect();
+        std::process::exit(deep_codecs::serve(deep_codecs::DECODE_WORKER, &rest));
+    }
+    if first.as_deref() != Some("run") {
         bad_input();
     }
     let (mut backend, mut planted) = (Backend::Gpu, None);
@@ -681,6 +702,7 @@ fn main() {
         jobs: 0,
         validation,
         vello,
+        made: Default::default(),
     };
     serve(|out, call| app.call(out, call));
 }

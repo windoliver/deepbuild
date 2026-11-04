@@ -59,8 +59,18 @@ struct Args {
     window: Option<Window3>,
     latency: Vec<u64>,
     counts: bool,
-    /// The glTF files `mesh.asset@1` items name, by sha256 (#420).
+    /// The glTF files `mesh.asset@1` items name, by sha256 (#420), and the images a material's
+    /// maps or a glTF name (#423).
     assets: std::collections::BTreeMap<String, std::path::PathBuf>,
+    /// A JSON glTF's external buffers and images: `{glTF sha → {uri → sha}}` (#423).
+    uris: BTreeMap<String, BTreeMap<String, String>>,
+    /// An asset's license, by its hash (#423).
+    licenses: BTreeMap<String, Value>,
+    /// The evidence store an import keeps each texture in, by hash (#423).
+    store: Option<std::path::PathBuf>,
+    /// Report each scene import and the maps' receipt (#423).
+    imports: bool,
+    receipt: bool,
     /// The documents an item may open by reference, by doc handle.
     docs: BTreeMap<String, std::path::PathBuf>,
     /// Report each label's glyphs and the atlas pages they sample (#381).
@@ -335,6 +345,27 @@ fn parse(call: &Value) -> Result<Args, Value> {
             .flatten()
             .filter_map(|(sha, p)| Some((sha.clone(), std::path::PathBuf::from(p.as_str()?))))
             .collect(),
+        uris: call["uris"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(sha, m)| {
+                let m = m
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|(u, s)| Some((u.clone(), s.as_str()?.to_string())))
+                    .collect();
+                (sha.clone(), m)
+            })
+            .collect(),
+        licenses: call["licenses"]
+            .as_object()
+            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            .unwrap_or_default(),
+        store: call["store"].as_str().map(std::path::PathBuf::from),
+        imports: call["imports"].as_bool().unwrap_or(false),
+        receipt: call["receipt"].as_bool().unwrap_or(false),
         labels: call["labels"].as_bool().unwrap_or(false),
         clicks,
         states,
@@ -504,6 +535,76 @@ fn pick(
         .iter()
         .find(|(_, v)| *v == p)
         .map(|(id, _)| id.clone())
+}
+
+/// Sub-sample k's offset from the pixel's centre, px: Halton's base 2 and base 3 at k, less ½.
+fn jitter(k: u32) -> [f64; 2] {
+    let halton = |mut i: u32, b: u32| {
+        let (mut f, mut r) = (1.0, 0.0);
+        while i > 0 {
+            f /= f64::from(b);
+            r += f * f64::from(i % b);
+            i /= b;
+        }
+        r
+    };
+    [halton(k, 2) - 0.5, halton(k, 3) - 0.5]
+}
+
+/// The frame as the mean of itself and its sub-samples: the linear target's f32 values, and
+/// the final BGRA bytes averaged in linear light.
+fn mean(drawn: &mut session3::Drawn, subs: &[session3::Drawn]) {
+    let n = (subs.len() + 1) as f32;
+    if let Some((linear, _)) = drawn.targets.as_mut() {
+        let mut acc: Vec<f32> = linear
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
+            .collect();
+        for s in subs {
+            if let Some((l, _)) = &s.targets {
+                for (a, b) in acc.iter_mut().zip(l.as_chunks::<4>().0) {
+                    *a += f32::from_le_bytes(*b);
+                }
+            }
+        }
+        *linear = acc.iter().flat_map(|v| (v / n).to_le_bytes()).collect();
+    }
+    let decode = |c: u8| {
+        let c = f32::from(c) / 255.0;
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let encode = |c: f32| {
+        let c = if c <= 0.003_130_8 {
+            c * 12.92
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        };
+        (c * 255.0).round().clamp(0.0, 255.0) as u8
+    };
+    if let Some(bytes) = drawn.bytes.as_mut() {
+        let mut acc: Vec<f32> = bytes.iter().map(|c| decode(*c)).collect();
+        for s in subs {
+            if let Some(b) = &s.bytes {
+                for (a, c) in acc.iter_mut().zip(b) {
+                    *a += decode(*c);
+                }
+            }
+        }
+        for (i, (out, a)) in bytes.iter_mut().zip(acc).enumerate() {
+            // Alpha averages as coverage, the color channels in linear light.
+            *out = if i % 4 == 3 {
+                (a / n).round().clamp(0.0, 255.0) as u8
+            } else {
+                encode(a / n)
+            };
+        }
+    }
 }
 
 pub(crate) fn png(rgba: &[u8], size: [u32; 2]) -> Result<Vec<u8>, Value> {
@@ -714,6 +815,25 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         std::mem::take(&mut args.docs),
         app.planted == Some(Planted::LoadsEverything),
     );
+    // An asset's bytes by hash, and a JSON glTF's external files as `<sha>/<uri>` (#423).
+    let (assets, uris) = (args.assets.clone(), args.uris.clone());
+    let read = move |key: &str| -> Option<Vec<u8>> {
+        let sha = match key.split_once('/') {
+            Some((gltf, uri)) => uris.get(gltf)?.get(uri)?.as_str(),
+            None => key,
+        };
+        std::fs::read(assets.get(sha)?).ok()
+    };
+    // Each scene import's report, and every image's path by hash for the decode worker.
+    let mut map_paths = args.assets.clone();
+    let import_report = crate::textures::imports(
+        &args.doc,
+        &read,
+        &args.licenses,
+        args.store.as_ref(),
+        &mut map_paths,
+    )?;
+    let mut receipt = Value::Null;
     let result = (|| -> Result<(), Value> {
         // The lights the policy last left out: a change is reported once, by ID (#421).
         let mut left_out: Vec<String> = Vec::new();
@@ -749,7 +869,6 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if !args.hidden.is_empty() {
                 composed = without_layers(&composed, &args.hidden);
             }
-            let read = |sha: &str| std::fs::read(args.assets.get(sha)?).ok();
             let mut scene = evaluate_with(&composed, t, &args.look, &mut labels, &read)
                 .map_err(|r| refused(r.code, r.path))?;
             let values = if args.evaluate.is_empty() {
@@ -757,6 +876,13 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             } else {
                 Some(values_at(&composed, t, &args.evaluate)?)
             };
+            // Its maps, made ready in the decode worker once per run and held to the
+            // document's decoded-image cap (#423).
+            let (texels, made) = crate::textures::prepare(app, &scene, &map_paths)?;
+            scene.texels = texels;
+            if n == args.from {
+                receipt = made;
+            }
             // A particles@1 count past its class's limit is refused, never clamped (#420).
             let class = args.doc.pointer("/budget/class").and_then(Value::as_str);
             if let Some(path) = effects::count_refusal(&scene, class) {
@@ -877,7 +1003,34 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
             }
             let evaluated = scene.clone();
-            let drawn = session3::draw(
+            // Look: samples (#423): a frame of n sub-samples is their mean in linear light,
+            // each offset by the sample's index alone (Halton 2, 3), drawn before the frame.
+            let samples = args.look.live_samples;
+            let mut subs = Vec::new();
+            let scene = if samples > 1 && !noop {
+                for k in 1..samples {
+                    let mut sub = (*scene).clone();
+                    sub.jitter = jitter(k + 1);
+                    subs.push(session3::draw(
+                        app,
+                        &opened,
+                        Arc::new(sub),
+                        args.look.clone(),
+                        n,
+                        0,
+                        true,
+                        false,
+                    )?);
+                    // Shown and passed over, so its slot frees for the next.
+                    let _ = ui.latch();
+                }
+                let mut first = (*scene).clone();
+                first.jitter = jitter(1);
+                Arc::new(first)
+            } else {
+                scene
+            };
+            let mut drawn = session3::draw(
                 app,
                 &opened,
                 scene,
@@ -887,6 +1040,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 read_targets,
                 shows && n == args.from,
             )?;
+            if !subs.is_empty() {
+                mean(&mut drawn, &subs);
+            }
             if n == args.from {
                 moved = drawn.moved;
                 // The first frame is settled once drawn: its time from the spawn, then which
@@ -993,7 +1149,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if c.lights_left_out != left_out || c.shadows_dropped != dropped {
                 left_out.clone_from(&c.lights_left_out);
                 dropped.clone_from(&c.shadows_dropped);
-                let notice = json!({"code": "lights_over_budget", "lights": left_out, "shadows": dropped});
+                let notice =
+                    json!({"code": "lights_over_budget", "lights": left_out, "shadows": dropped});
                 frame.insert("notices".into(), json!([notice]));
             }
             if args.counts {
@@ -1043,7 +1200,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         }
     }
     session3::close(app);
-    result?;
+    // An over-cap document is refused, its imports still reported: the import comes before the
+    // count it makes (#423).
+    if let Err(mut r) = result {
+        if args.imports && r["code"] == "over_budget" {
+            r["imports"] = json!(import_report);
+        }
+        return Err(r);
+    }
     // The frame's passes in order: the shadow map when a sun casts, geometry, the effects and
     // the output.
     let effects = lock(&fx);
@@ -1103,6 +1267,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         "frames": frames, "passes": passes, "status": status_report, "surface": drew,
         "layers": layers_report(&args.doc, &args.hidden),
     });
+    if args.imports {
+        reply["imports"] = json!(import_report);
+    }
+    if args.receipt {
+        reply["receipt"] = receipt;
+    }
     if let Some((_, report)) = cold {
         reply["cold"] = report;
     }
