@@ -295,7 +295,7 @@ pub struct Table {
 /// verdict, send-back and checks.
 #[derive(Clone, Debug, Default)]
 struct Session {
-    /// The newest time its events give, the core's readings of it aside.
+    /// The newest time its events give, but for the core's `session.state` and `session.gone` (#992).
     last_seen: Option<u64>,
     /// The state and cause the core last recorded for it as `session.state` (#992), from the one reading over the
     /// record that `deep status` lists.
@@ -304,6 +304,10 @@ struct Session {
     attention: Option<String>,
     /// The `log_pos` of its newest activity: an attention, a tool call or a prompt.
     activity: Option<u64>,
+    /// The `log_pos` of its newest work (#992): a tool call, a prompt, or an attention that it works or waits on you.
+    /// The sidebar row's claim is its stop's, which neither the turn's end the core records again after the claim nor
+    /// the idle prompt a minute later hides.
+    work: Option<u64>,
     /// Its newest claim.made: the claim's handle and its `log_pos`.
     claim: Option<(String, u64)>,
     /// Each claim's newest verdict: its outcome and the verdict's handle.
@@ -387,9 +391,13 @@ impl Table {
     /// The sidebar row's words after the session's title, and the status-map entry its mark draws (#992): the state
     /// the core last recorded for the session as `session.state`, so the sidebar and `deep status` name it the same,
     /// with "process gone mid-turn" for a process gone; then a claim's state, if the session's newest stop made one.
-    /// A session with no `session.state` yet reads as [`Table::state`] does.
+    /// A session with no `session.state` yet reads as [`Table::state`] does, but for its stop's claim, which it keeps.
     pub fn row(&self, session: &str, now: u64) -> (String, &'static str) {
-        let shown = self.state(session);
+        // The claim the row adds is its stop's, which only later work hides.
+        let shown = match self.sessions.get(session) {
+            Some(own) if self.open_asks(Some(session)).is_empty() => own.read(own.work),
+            _ => self.state(session),
+        };
         let Some((listed, cause)) = self.sessions.get(session).and_then(|s| s.listed.as_ref())
         else {
             return (shown.text(now), shown.entry());
@@ -473,10 +481,6 @@ impl Session {
         if let Some(ts) = event["ts"].as_u64() {
             self.last_seen = Some(self.last_seen.map_or(ts, |seen| seen.max(ts)));
         }
-        // A hook's idle prompt (#992), a minute after every stop, is no activity that hides the stop's claim.
-        if kind == "session.attention" && event["writer"] == "hook" && data["state"] == "finished" {
-            return;
-        }
         if kind == "session.attention" {
             self.attention = Some(data["state"].as_str().unwrap_or_default().to_owned());
         }
@@ -489,6 +493,13 @@ impl Session {
         .contains(&kind)
         {
             self.activity = Some(pos);
+            // A turn's end, the core's again after its claim, the idle prompt's a minute later (#992), or the core's
+            // quiet reading is no new work.
+            if kind != "session.attention"
+                || ["working", "waiting"].contains(&data["state"].as_str().unwrap_or_default())
+            {
+                self.work = Some(pos);
+            }
         }
         match kind {
             "claim.made" => {
@@ -540,10 +551,15 @@ impl Session {
 
     /// Its state, with no ask of it open.
     fn state(&self) -> State {
+        self.read(self.activity)
+    }
+
+    /// Its state, with no ask of it open, with `activity` as its newest activity: a claim made since shows.
+    fn read(&self, activity: Option<u64>) -> State {
         if let Some((claim, _)) = self
             .claim
             .as_ref()
-            .filter(|(_, at)| self.activity.is_none_or(|activity| activity < *at))
+            .filter(|(_, at)| activity.is_none_or(|activity| activity < *at))
         {
             let Some((outcome, verdict)) = self.verdicts.get(claim) else {
                 return State::SaysDone {
@@ -568,7 +584,7 @@ impl Session {
                 last_seen: self.last_seen.unwrap_or(0),
             },
             Some(_) => State::Working,
-            None if self.activity.is_some() => State::Working,
+            None if activity.is_some() => State::Working,
             None => State::Queued,
         }
     }
@@ -651,9 +667,22 @@ mod tests {
     }
 
     #[test]
+    fn every_hooks_attention_is_attention_as_the_whole_list_read_has_it() {
+        // #1141's equivalence: the fold reads a session as the record's whole-list reading does, so a hook's finished
+        // after the core read the session quiet is attention too, and the session works.
+        let events = vec![
+            json!({"kind": "session.attention", "writer": "core", "session": "s1", "log_pos": 1, "ts": 1,
+                   "data": {"state": "unknown"}}),
+            json!({"kind": "session.attention", "writer": "hook", "session": "s1", "log_pos": 2, "ts": 2,
+                   "data": {"state": "finished"}}),
+        ];
+        assert_eq!(table(&events).state("s1"), State::Working);
+    }
+
+    #[test]
     fn a_hooks_word_that_the_session_works_again_is_its_attention() {
-        // Only the idle prompt's finished is set aside (#992): a hook's working after the core read it quiet is the
-        // session at work again, as the record's whole-list reading has it (#1141).
+        // A hook's working after the core read the session quiet is the session at work again, as the record's
+        // whole-list reading has it (#1141).
         let events = vec![
             json!({"kind": "session.attention", "writer": "core", "session": "s1", "log_pos": 1, "ts": 1,
                    "data": {"state": "unknown"}}),
@@ -664,21 +693,29 @@ mod tests {
     }
 
     #[test]
-    fn an_idle_prompt_after_a_stop_hides_neither_its_claim_nor_its_state() {
-        // A turn's claim at its stop, then the idle prompt's Notification a minute later (#992), as the record has
-        // them: the claim still shows on every surface, and the sidebar names the state the core recorded.
+    fn the_sidebar_row_keeps_its_stops_claim_past_the_turns_end_and_the_idle_prompt() {
+        // A turn's claim at its stop, the turn's end the core records again after it, then the idle prompt's
+        // Notification a minute later (#992), as the hub's record has them: the sidebar names the state the core
+        // recorded, and the stop's claim, which neither the turn's end nor the idle prompt hides.
         let events = vec![
             json!({"kind": "tool.before", "writer": "hook", "session": "s1", "log_pos": 1, "ts": 1, "data": {}}),
             json!({"kind": "claim.made", "writer": "core", "session": "s1", "id": "c1", "log_pos": 2, "ts": 2, "data": {}}),
-            json!({"kind": "session.state", "writer": "core", "session": "s1", "log_pos": 3, "ts": 3,
+            json!({"kind": "session.attention", "writer": "core", "session": "s1", "log_pos": 3, "ts": 3,
+                   "data": {"state": "finished"}}),
+            json!({"kind": "session.state", "writer": "core", "session": "s1", "log_pos": 4, "ts": 4,
                    "data": {"state": "finished", "cause": "finished"}}),
-            json!({"kind": "session.attention", "writer": "hook", "session": "s1", "log_pos": 4, "ts": 60_000,
+            json!({"kind": "session.attention", "writer": "hook", "session": "s1", "log_pos": 5, "ts": 60_000,
                    "data": {"state": "finished"}}),
         ];
-        let table = table(&events);
-        assert!(matches!(table.state("s1"), State::SaysDone { .. }));
-        let (words, entry) = table.row("s1", 60_000);
+        let (words, entry) = table(&events).row("s1", 60_000);
         assert_eq!((words.as_str(), entry), ("finished · says done", "running"));
+        // Later work hides it: a tool call after the stop.
+        let mut later = events.clone();
+        later.push(json!({"kind": "tool.before", "writer": "hook", "session": "s1", "log_pos": 6, "ts": 61_000, "data": {}}));
+        assert_eq!(
+            table(&later).row("s1", 61_000),
+            ("finished".to_owned(), "idle")
+        );
     }
 
     #[test]
