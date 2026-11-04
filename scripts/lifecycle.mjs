@@ -175,12 +175,12 @@ const isObj = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
 const bare = (v) => (typeof v === 'string' ? v.replace(/^[a-z_]+:/, '') : null);
 const isAgent = (w) => w === 'hook' || w.startsWith('mcp:');
 
-/** What each guard reads in a log: the event's writer and stamp, the object's deadline, and the events before it. */
+/** What each guard reads in a log, as the record does: the event's writer, and the events before it. */
 const LOG_GUARDS = {
   core: (e) => e.writer === 'core',
   not_agent: (e) => !isAgent(e.writer),
   trusted_path: (e) => e.writer === 'app' || e.writer === 'cli',
-  past_deadline: (e, o) => typeof o.deadline !== 'number' || e.ts >= o.deadline,
+  past_deadline: (e) => e.writer === 'core',
   proven_ended: (e, _o, seen) => (Array.isArray(e.data?.proof) ? e.data.proof : []).every((id) => seen.has(id)),
 };
 
@@ -208,7 +208,7 @@ function replayLog(events, tables) {
     const d = isObj(e.data) ? e.data : {};
     const targets = [];
     switch (e.kind) {
-      case 'ask.created': born(`ask:${e.id}`, 'ask', { deadline: d.deadline }); break;
+      case 'ask.created': born(`ask:${e.id}`, 'ask'); break;
       case 'task.created': born(String(d.task_ref), 'ask_task'); break;
       case 'claim.made': born(`claim:${e.id}`, 'claim'); break;
       case 'ask.batched': for (const a of Array.isArray(d.asks) ? d.asks : []) if (known(`ask:${bare(a?.ask)}`)) targets.push(`ask:${bare(a.ask)}`); break;
@@ -253,11 +253,6 @@ function replayLog(events, tables) {
         o.state = row.to;
         moves++;
       } else if (table.moves.some((m) => m.event === e.kind)) problems.push(`event ${e.id} (${e.kind}) moves ${at} from ${o.state}; ${table.id} allows no such move`);
-    }
-    // The core's moves of a deadline, as the record keeps them: a minimum notice holds a default back but moves no deadline.
-    if ((e.kind === 'deadline.moved' && d.because !== 'notice') || e.kind === 'default.undone') {
-      const o = e.writer === 'core' ? known(`ask:${bare(e.subject)}`) : undefined;
-      if (o && typeof d.deadline === 'number') o.deadline = d.deadline;
     }
   }
   return { moves, problems, objects };
