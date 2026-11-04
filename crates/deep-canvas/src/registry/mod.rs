@@ -153,6 +153,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("hull", "scene3d"),
     ("curve", "scene3d"),
     ("material", "scene3d"),
+    ("sky", "scene3d"),
+    ("puff", "scene3d"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status

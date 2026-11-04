@@ -1,0 +1,86 @@
+{
+  "id": "familiar.point_light",
+  "version": "1.0",
+  "title": "Point light",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The library's PointLight: intensity in candela or power in lumens, as light.point@1 lumens (4π × cd); decay 2 only.",
+  "inputs": {
+    "color": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "intensity": {
+      "type": "number",
+      "default": 1,
+      "unit": "cd",
+      "min": 0,
+      "about": ""
+    },
+    "power": {
+      "type": "number",
+      "default": -1,
+      "unit": "lm",
+      "min": -1,
+      "about": "−1: from intensity; else the library's lumens"
+    },
+    "distance": {
+      "type": "number",
+      "default": 0,
+      "unit": "m",
+      "min": 0,
+      "max": 0,
+      "about": "0 only: a cut-off distance is another falloff, refused"
+    },
+    "decay": {
+      "type": "number",
+      "default": 2,
+      "min": 2,
+      "max": 2,
+      "about": "2 only, the inverse square: another decay is refused"
+    },
+    "position": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "m",
+      "about": ""
+    }
+  },
+  "let": {
+    "e0": "(floor(color / 65536) % 256) / 255",
+    "l0": "e0 <= 0.04045 ? e0 / 12.92 : pow((e0 + 0.055) / 1.055, 2.4)",
+    "e1": "(floor(color / 256) % 256) / 255",
+    "l1": "e1 <= 0.04045 ? e1 / 12.92 : pow((e1 + 0.055) / 1.055, 2.4)",
+    "e2": "(color % 256) / 255",
+    "l2": "e2 <= 0.04045 ? e2 / 12.92 : pow((e2 + 0.055) / 1.055, 2.4)",
+    "lm": "power >= 0 ? power : 4 * pi * intensity"
+  },
+  "steps": {
+    "light": {
+      "op": "item",
+      "kind": "light.point@1",
+      "params": {
+        "power": "lm",
+        "color": [
+          "l0",
+          "l1",
+          "l2"
+        ]
+      },
+      "at": {
+        "pos": [
+          "position[0]",
+          "position[1]",
+          "position[2]"
+        ]
+      }
+    }
+  }
+}

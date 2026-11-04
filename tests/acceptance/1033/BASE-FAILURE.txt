@@ -1,0 +1,148 @@
+# #1033 acceptance tests on the base (7b18ed17, origin/main, no implementation of #1033)
+
+$ npm ci && npm run build --workspaces && cargo build -p deep-hook --locked
+$ node node_modules/vitest/vitest.mjs run tests/acceptance/1033/
+(the checkout path reads <repo>, the home ~, a test temp folder /tmp/dh29-<id>; ANSI colors and code-frame lines dropped)
+
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/1033/facts.test.ts (3 tests | 2 failed) 153ms
+   ❯ AC4 #1033.3511f899 a Claude Code facts file without the mods entry fails the adapter-facts conformance case, naming the field; the entry's versions are the docs' (3)
+     × AC4 #1033.3511f899 adapters/claude-code.facts.json has a mods entry: first loaded in 2.1.287 in the terminal and 2.1.286 in the desktop app, tool.check past PreToolUse, and when that can't happen 4ms
+     × AC4 #1033.3511f899 node scripts/corpus.mjs check, given claude-code.facts.json without mods, fails the adapter-facts conformance case, naming the field 71ms
+ ❯ tests/acceptance/1033/doctor.test.ts (3 tests | 3 failed) 355ms
+   ❯ AC3 #1033.a97a9989 deep doctor reads each home's mods from claude plugin validate: a warn for a tool.check mod, OK for a band, not checked when unreadable (3)
+     × AC3 #1033.a97a9989 a home with approve-all installed: a warn naming the mod and tool.check, and the mod's code never loaded 118ms
+     × AC3 #1033.a97a9989 a home with only status-band, a mod that draws a band and handles no tool or prompt event: OK 111ms
+     × AC3 #1033.a97a9989 a home whose plugins it can't read: not checked, never OK, whether the plugin registry or claude plugin validate fails 124ms
+ ❯ tests/acceptance/1033/replay.test.ts (4 tests | 4 failed) 8926ms
+   ❯ AC1 #1033.80415399 a deny the fixture mod approved past is recorded, and the claim reads INCONCLUSIVE naming the call (2)
+     × AC1 #1033.80415399 the replay records the deny, then guard.overridden naming the call, the guard entry and the fixture mod 4ms
+     × AC1 #1033.80415399 the claim's verdict is INCONCLUSIVE naming the call, never PASS on that session's checks 1ms
+   ❯ AC2 #1033.2e71c00e the completed post_message send, repeated after a resume, denied as a duplicate and run by the mod, raises exactly one ask naming it (1)
+     × AC2 #1033.2e71c00e exactly one ask names the repeated send mcp__chat__post_message, and deep-hook denied the repeat 0ms
+   ❯ AC5 #1033.74a70e92 with managed settings on the machine the deny holds: no guard.overridden, and the claim is judged as usual (1)
+     × AC5 #1033.74a70e92 the managed machine's replay: the force push denied and never run, no guard.overridden, the claim PASS; the same session with no managed settings records guard.overridden 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1033/doctor.test.ts > AC3 #1033.a97a9989 deep doctor reads each home's mods from claude plugin validate: a warn for a tool.check mod, OK for a band, not checked when unreadable > AC3 #1033.a97a9989 a home with approve-all installed: a warn naming the mod and tool.check, and the mod's code never loaded
+AssertionError: deep doctor must warn about approve-all, naming it and tool.check, which can approve a call past a PreToolUse deny; its claude.mods items: none: expected 0 to be greater than 0
+ ❯ tests/acceptance/1033/doctor.test.ts:30:184
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  tests/acceptance/1033/doctor.test.ts > AC3 #1033.a97a9989 deep doctor reads each home's mods from claude plugin validate: a warn for a tool.check mod, OK for a band, not checked when unreadable > AC3 #1033.a97a9989 a home with only status-band, a mod that draws a band and handles no tool or prompt event: OK
+AssertionError: deep doctor must report the home's mods as a claude.mods item; it printed hub.socket, hub.disk, hub.ports, claude.hooks, claude.mcp, claude.statusline, claude.binary, claude.sign_in, claude.token, claude.billing, claude.prompt, canvas.gpu, canvas.headless, canvas.verdict, otlp.telemetry: expected 0 to be greater than 0
+ ❯ tests/acceptance/1033/doctor.test.ts:40:141
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  tests/acceptance/1033/doctor.test.ts > AC3 #1033.a97a9989 deep doctor reads each home's mods from claude plugin validate: a warn for a tool.check mod, OK for a band, not checked when unreadable > AC3 #1033.a97a9989 a home whose plugins it can't read: not checked, never OK, whether the plugin registry or claude plugin validate fails
+AssertionError: plugins/installed_plugins.json is not JSON: deep doctor must report the home's mods as not checked (code not_checked); its claude.mods items: none: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1033/doctor.test.ts:52:184
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  tests/acceptance/1033/facts.test.ts > AC4 #1033.3511f899 a Claude Code facts file without the mods entry fails the adapter-facts conformance case, naming the field; the entry's versions are the docs' > AC4 #1033.3511f899 adapters/claude-code.facts.json has a mods entry: first loaded in 2.1.287 in the terminal and 2.1.286 in the desktop app, tool.check past PreToolUse, and when that can't happen
+AssertionError: adapters/claude-code.facts.json must have a mods entry: expected undefined to be type of 'object'
+
+Expected: "object"
+Received: "undefined"
+
+ ❯ tests/acceptance/1033/facts.test.ts:35:76
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  tests/acceptance/1033/facts.test.ts > AC4 #1033.3511f899 a Claude Code facts file without the mods entry fails the adapter-facts conformance case, naming the field; the entry's versions are the docs' > AC4 #1033.3511f899 node scripts/corpus.mjs check, given claude-code.facts.json without mods, fails the adapter-facts conformance case, naming the field
+AssertionError: a FAIL line names the missing field, mods, of the Claude Code facts; the FAIL lines were: FAIL corpus: claude-code 2.1.299's set has no recorded FileChanged payload Fix: Record a session that fires FileChanged, or take it off that version's list. | FAIL corpus: claude-code 2.1.304's set has no recorded FileChanged payload Fix: Record a session that fires FileChanged, or take it off that version's list. | FAIL corpus: claude-code 2.1.308's set has no recorded FileChanged payload Fix: Record a session that fires FileChanged, or take it off that version's list. | FAIL corpus: codex 0.144.0's set has no recorded SubagentStart payload Fix: Record a session that fires SubagentStart, or take it off that version's list. | FAIL corpus: codex 0.144.0's set has no recorded SubagentStop payload Fix: Record a session that fires SubagentStop, or take it off that version's list. | FAIL corpus: codex 0.144.0's set has no recorded PreCompact payload Fix: Record a session that fires PreCompact, or take it off that version's list. | FAIL corpus: codex 0.144.0's set has no recorded PostCompact payload Fix: Record a session that fires PostCompact, or take it off that version's list. | FAIL corpus: codex 0.160.0's set has no recorded SubagentStart payload Fix: Record a session that fires SubagentStart, or take it off that version's list. | FAIL corpus: codex 0.160.0's set has no recorded SubagentStop payload Fix: Record a session that fires SubagentStop, or take it off that version's list. | FAIL corpus: codex 0.160.0's set has no recorded PreCompact payload Fix: Record a session that fires PreCompact, or take it off that version's list. | FAIL corpus: codex 0.160.0's set has no recorded PostCompact payload Fix: Record a session that fires PostCompact, or take it off that version's list. | FAIL corpus: codex 0.160.0's set has no recorded Interrupt payload Fix: Record a session that fires Interrupt, or take it off that version's list. | FAIL corpus: codex 0.163.0-alpha.10.2's set has no recorded SubagentStart payload Fix: Record a session that fires SubagentStart, or take it off that version's list. | FAIL corpus: codex 0.163.0-alpha.10.2's set has no recorded SubagentStop payload Fix: Record a session that fires SubagentStop, or take it off that version's list. | FAIL corpus: codex 0.163.0-alpha.10.2's set has no recorded PreCompact payload Fix: Record a session that fires PreCompact, or take it off that version's list. | FAIL corpus: codex 0.163.0-alpha.10.2's set has no recorded PostCompact payload Fix: Record a session that fires PostCompact, or take it off that version's list. | FAIL corpus: codex 0.163.0-alpha.10.2's set has no recorded Interrupt payload Fix: Record a session that fires Interrupt, or take it off that version's list.: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ tests/acceptance/1033/facts.test.ts:55:180
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  tests/acceptance/1033/replay.test.ts > AC1 #1033.80415399 a deny the fixture mod approved past is recorded, and the claim reads INCONCLUSIVE naming the call > AC1 #1033.80415399 the replay records the deny, then guard.overridden naming the call, the guard entry and the fixture mod
+AssertionError: the hub must record guard.overridden for the force push toolu_01ForcePushMain1033 (`git push --force origin main`), which deep-hook denied by no-force-push and which ran anyway:
+claim claim:01M6HRBJ316GQNWC7D53X7RTWK; verdicts [{"outcome":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run"]}]
+deep-hook on the force push: deny; on the repeated send: allow
+guard.overridden: none
+asks: none
+the session's kinds: session.start, task.created, user.ask, definition.locked, tool.before, tool.after, session.end, agent.stop, claim.made: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/1033/replay.test.ts:37:188
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  tests/acceptance/1033/replay.test.ts > AC1 #1033.80415399 a deny the fixture mod approved past is recorded, and the claim reads INCONCLUSIVE naming the call > AC1 #1033.80415399 the claim's verdict is INCONCLUSIVE naming the call, never PASS on that session's checks
+AssertionError: the claim claim:01M6HRBJ316GQNWC7D53X7RTWK ran in a session whose denied force push toolu_01ForcePushMain1033 (`git push --force origin main`) ran anyway, so it can't pass on that session's evidence:
+claim claim:01M6HRBJ316GQNWC7D53X7RTWK; verdicts [{"outcome":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run"]}]
+deep-hook on the force push: deny; on the repeated send: allow
+guard.overridden: none
+asks: none
+the session's kinds: session.start, task.created, user.ask, definition.locked, tool.before, tool.after, session.end, agent.stop, claim.made: expected [ 'PASS' ] to not include 'PASS'
+ ❯ tests/acceptance/1033/replay.test.ts:48:196
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  tests/acceptance/1033/replay.test.ts > AC2 #1033.2e71c00e the completed post_message send, repeated after a resume, denied as a duplicate and run by the mod, raises exactly one ask naming it > AC2 #1033.2e71c00e exactly one ask names the repeated send mcp__chat__post_message, and deep-hook denied the repeat
+AssertionError: the repeated send toolu_01PostMessageAgain1033 (mcp__chat__post_message to #releases), denied as a duplicate and run anyway by approve-all, may already have left, so exactly one ask names it; asks naming it: none
+claim claim:01M6HRBJ316GQNWC7D53X7RTWK; verdicts [{"outcome":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run"]}]
+deep-hook on the force push: deny; on the repeated send: allow
+guard.overridden: none
+asks: none
+the session's kinds: session.start, task.created, user.ask, definition.locked, tool.before, tool.after, session.end, agent.stop, claim.made: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/1033/replay.test.ts:61:268
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  tests/acceptance/1033/replay.test.ts > AC5 #1033.74a70e92 with managed settings on the machine the deny holds: no guard.overridden, and the claim is judged as usual > AC5 #1033.74a70e92 the managed machine's replay: the force push denied and never run, no guard.overridden, the claim PASS; the same session with no managed settings records guard.overridden
+AssertionError: on the machine with no managed settings the same session's force push toolu_01ForcePushMain1033 ran past its deny, and the hub must record guard.overridden for it; only the managed settings may keep it out:
+claim claim:01M6HRBJ316GQNWC7D53X7RTWK; verdicts [{"outcome":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run"]}]
+deep-hook on the force push: deny; on the repeated send: allow
+guard.overridden: none
+asks: none
+the session's kinds: session.start, task.created, user.ask, definition.locked, tool.before, tool.after, session.end, agent.stop, claim.made: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/1033/replay.test.ts:79:287
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  9 failed | 1 passed (10)
+   Start at  14:26:55
+   Duration  9.07s (tests 98%, import 1%, transform 1%)
+

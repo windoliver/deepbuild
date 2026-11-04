@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "guard.overridden",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "subject": "session:5a2d3e4f111142228333444455556666",
+  "data": {
+    "call": "toolu_01ABCDEF",
+    "tool": "Bash",
+    "label": "Bash `git push --force origin main`",
+    "guard": "no-force-push",
+    "send": true,
+    "mods": [
+      "approve-all"
+    ],
+    "mods_unread": null
+  }
+}

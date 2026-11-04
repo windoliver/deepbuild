@@ -94,6 +94,23 @@ function loopFactsCase(loops, corpus) {
   return [...missing].map(([tool, ref]) => [`the loop facts (loops.facts.json) name no entry for Claude Code's ${tool}, whose call in ${ref} started work whose events wake the session`, `Name ${tool} under agents.claude in adapters/loops.facts.json, with how its work is found and how it ends.`]);
 }
 
+/**
+ * The mods case (#1033): Claude Code from 2.1.287 loads mods, whose tool.check can approve a call past a PreToolUse
+ * deny, so its facts name them: the first versions, the event, how a mod is read without loading it, and the cases
+ * where the deny holds. A facts folder without Claude Code's facts has none to judge.
+ */
+function modsFactsCase(claude) {
+  if (!claude) return [];
+  const mods = claude.mods;
+  const fix = 'Give adapters/claude-code.facts.json its mods entry: since (terminal and desktop), validate, overrides, promptCalls and holdsWhen, as the permissions reference names them.';
+  if (!mods || typeof mods !== 'object') return [['the Claude Code facts (claude-code.facts.json) have no mods entry, so no core rule knows a mod can approve a call past a PreToolUse deny', fix]];
+  const missing = ['since', 'validate', 'overrides', 'promptCalls', 'holdsWhen'].filter((field) => mods[field] === undefined);
+  if (typeof mods.since?.terminal !== 'string' || typeof mods.since?.desktop !== 'string') missing.push('since.terminal and since.desktop');
+  const cases = new Set((Array.isArray(mods.holdsWhen) ? mods.holdsWhen : []).map((c) => c?.case));
+  for (const c of ['managed', 'login', 'plan', 'interactive']) if (!cases.has(c)) missing.push(`holdsWhen ${c}`);
+  return missing.length ? [[`the Claude Code facts' mods entry (claude-code.facts.json) lacks ${missing.join(', ')}`, fix]] : [];
+}
+
 async function replayCommand(options) {
   const started = performance.now();
   let failed = false;
@@ -119,6 +136,7 @@ async function checkCommand(options) {
     }
   }
   failures.push(...loopFactsCase(facts.loops?.facts, options.corpus));
+  failures.push(...modsFactsCase(facts['claude-code']?.facts));
   const bytes = size(options.corpus);
   say({ type: 'size', bytes, limit: LIMIT });
   if (bytes >= LIMIT) failures.push([`the corpus is ${bytes} bytes, over the 200 MB limit (${LIMIT} bytes)`, 'Trim transcripts or drop sessions that add no event, version or tag.']);

@@ -30,6 +30,8 @@ export type CoreMessage =
   // A line the chat showed of a wait (#120): kept as the session's reading.
   | { op: 'line'; session: string; agent: string; text: string }
   | { op: 'unsubscribe'; sub: string }
+  // A PreToolUse the gate's reply denied (#1033): what denied it, for a PostToolUse that shows it ran anyway.
+  | { op: 'denied'; session: string; call: string; guard: string; label: string }
   | (CoreRequest & { n: number });
 
 /** Runs one request against the core: the core's answer, or the refusal to write back. */
@@ -67,6 +69,7 @@ if (parentPort && workerData?.core) {
     if (message.op === 'later') return core.later(message.session, message.cwd, message.text);
     if (message.op === 'line') return void core.line(message.session, message.agent, message.text).catch(() => undefined);
     if (message.op === 'unsubscribe') return core.unsubscribe(message.sub);
+    if (message.op === 'denied') return core.denied(message.session, message.call, { guard: message.guard, label: message.label });
     const { n } = message;
     answer(core, message).then((result) => port.postMessage({ n, result }), (error: unknown) => port.postMessage({ n, error: asRefusal(error) }));
   });

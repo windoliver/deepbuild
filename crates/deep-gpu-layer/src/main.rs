@@ -176,6 +176,17 @@ pub enum Planted {
     DropsSwizzleLast,
     NoiseWeightHalved,
     SettlesWithFallback,
+    /// #422's wrong programs (tests/acceptance/422/README.md: Planted programs): every final
+    /// target black; the puffs not drawn; a cascade kept while the solid count holds; the
+    /// environment prefiltered one mip a frame; the specular lobe uncompensated, or compensated on
+    /// environment light alone; metallic premixed into one F0 before shading.
+    DrawsBlack,
+    DropsClouds,
+    CascadeCacheKeepsStale,
+    PrefilterOverFrames,
+    UncompensatedLobe,
+    CompensatesEnvironmentOnly,
+    PremixedMetallic,
 }
 
 impl Planted {
@@ -266,6 +277,13 @@ impl Planted {
             "drops_swizzle_last" => Planted::DropsSwizzleLast,
             "noise_weight_halved" => Planted::NoiseWeightHalved,
             "settles_with_fallback" => Planted::SettlesWithFallback,
+            "draws_black" => Planted::DrawsBlack,
+            "drops_clouds" => Planted::DropsClouds,
+            "cascade_cache_keeps_stale" => Planted::CascadeCacheKeepsStale,
+            "prefilter_over_frames" => Planted::PrefilterOverFrames,
+            "uncompensated_lobe" => Planted::UncompensatedLobe,
+            "compensates_environment_only" => Planted::CompensatesEnvironmentOnly,
+            "premixed_metallic" => Planted::PremixedMetallic,
             _ => return None,
         })
     }
