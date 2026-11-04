@@ -18,6 +18,8 @@ const EDIT_PROMPT = 'Read the README and add one line to it.';
 // bash-calls (#21): a day of real tool calls, as many as asked, each a Bash call of its own, so each runs the hooks.
 const CALLS_PROMPT = (n) => `Run these ${n} shell commands, each as its own separate Bash tool call, never joined into one command: \`echo call-1\`, \`echo call-2\`, and so on up to \`echo call-${n}\`. Make as many of the calls at once in each message as you can. When all ${n} have run, reply with only the word DONE.`;
 const FIX_PROMPT = 'Run the checkout tests once with `node --test`; they fail. Fix the bug in src/cart.js, run `node --test` again to see them pass, then commit the fix with `git commit -am "Fix the cart total"`.';
+// false-done (#567): the verdict spine's exit, an edit that fixes nothing and a "done" that isn't so, for DeepBuild's Stop hold to send back.
+const FALSE_DONE_PROMPT = 'Add the comment `// Tokens are checked here.` as the first line of src/auth.js, and run nothing. Then end your turn with exactly: Done. Expired tokens are rejected and all tests pass.';
 const SCRIPTED = 'This session is scripted: no one will answer a question, so choose for yourself and finish the task.';
 const PAIRS = [['held-stop', 'claude'], ['idle-wake', 'claude'], ['read-only-job', 'claude'], ['read-only-job', 'codex']];
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -74,12 +76,13 @@ function parseArgs(argv) {
     else options[valued[flag]] = ['costCapUsd', 'tokenCap', 'timeoutMs', 'calls'].includes(valued[flag]) ? Number(value) : value;
   }
   if (!['run', 'all', 'budgets'].includes(command)) throw Error('expected run, all or budgets');
-  if (command === 'run' && !['held-stop', 'idle-wake', 'read-only-job', 'add-readme-line', 'fix-checkout-test', 'settings-tamper', 'deep-answer', 'bash-calls'].includes(options.scenario)) throw Error('run needs a known --scenario');
+  if (command === 'run' && !['held-stop', 'idle-wake', 'read-only-job', 'add-readme-line', 'fix-checkout-test', 'settings-tamper', 'deep-answer', 'bash-calls', 'false-done'].includes(options.scenario)) throw Error('run needs a known --scenario');
   if (options.scenario === 'bash-calls' && (options.agent !== 'claude' || !options.workdir || !options.hooks || !(Number.isInteger(options.calls) && options.calls > 0))) throw Error('bash-calls runs claude and needs --workdir, --hooks and a positive whole --calls');
   if (options.calls !== undefined && options.scenario !== 'bash-calls') throw Error('--calls belongs to the bash-calls scenario');
   if (options.scenario === 'deep-answer' && (options.agent !== 'claude' || !options.workdir || !options.mcpConfig || !['stop-hold', 'idle-wake', 'next-prompt', 'resume', 'repeat'].includes(options.route))) throw Error('deep-answer runs claude and needs --workdir, --mcp-config and a --route of stop-hold, idle-wake, next-prompt, resume or repeat');
   if (options.scenario === 'add-readme-line' && (options.agent !== 'claude' || !options.workdir || !options.hooks)) throw Error('add-readme-line runs claude and needs --workdir and --hooks');
   if (options.scenario === 'fix-checkout-test' && (options.agent !== 'claude' || !options.workdir)) throw Error('fix-checkout-test runs claude and needs --workdir');
+  if (options.scenario === 'false-done' && (options.agent !== 'claude' || !options.workdir)) throw Error('false-done runs claude and needs --workdir');
   if (options.scenario === 'settings-tamper' && (options.agent !== 'claude' || !options.workdir || !options.script)) throw Error('settings-tamper runs claude and needs --workdir and --script');
   if (!['claude', 'codex'].includes(options.agent)) throw Error('--agent is claude or codex');
   return options;
@@ -161,9 +164,13 @@ async function run(options, scenario, agent = options.agent) {
   // add-readme-line and fix-checkout-test run in a checkout the caller made and keeps; the other scenarios in a folder
   // of their own. fix-checkout-test (#668) loads your user settings, so it runs whatever hooks are there.
   const fix = scenario === 'fix-checkout-test';
+  // false-done (#567) runs like fix-checkout-test, your user settings and DeepBuild's hold among them; the turn is over
+  // only once Claude Code wrote turn_duration after the last Stop, since a send-back makes the session go on.
+  const seeded = scenario === 'false-done';
   // bash-calls (#21) runs like add-readme-line: in the caller's folder, the --hooks file's hooks beside the harness's own, one turn, then /exit.
   const calls = scenario === 'bash-calls';
-  const edit = scenario === 'add-readme-line' || fix || calls;
+  const user = fix || seeded;
+  const edit = scenario === 'add-readme-line' || user || calls;
   const dir = join(options.out, token), work = edit ? resolve(options.workdir) : join(dir, 'work');
   mkdirSync(edit ? dir : work, { recursive: true });
   if (!existsSync(work)) return finish({ reason: `BLOCKED: the workdir ${work} does not exist` });
@@ -184,7 +191,7 @@ async function run(options, scenario, agent = options.agent) {
     const command = (mode) => [process.execPath, hook, mode, dir].map(quote).join(' ');
     const stop = scenario === 'idle-wake' ? { type: 'command', command: command('wake'), asyncRewake: true, timeout: 30 } : { type: 'command', command: command(edit ? 'event' : 'hold') };
     // add-readme-line's hooks are the --hooks file's, unchanged; the harness's own go beside them.
-    const given = edit && !fix ? JSON.parse(readFileSync(options.hooks, 'utf8')).hooks ?? {} : {};
+    const given = edit && !user ? JSON.parse(readFileSync(options.hooks, 'utf8')).hooks ?? {} : {};
     writeFileSync(settings, JSON.stringify({
       hooks: {
         ...given,
@@ -192,17 +199,20 @@ async function run(options, scenario, agent = options.agent) {
         Stop: [...(given.Stop ?? []), { hooks: [stop] }],
         // A turn whose model calls fail ends with StopFailure.
         ...(edit ? { StopFailure: [...(given.StopFailure ?? []), { hooks: [{ type: 'command', command: command('event') }] }] } : {}),
+        // false-done keeps every payload of the turn, each with the time it fired.
+        ...(seeded ? Object.fromEntries(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'SessionEnd'].map((name) => [name, [{ hooks: [{ type: 'command', command: command('event') }] }]])) : {}),
       },
       statusLine: { type: 'command', command: `cat > ${quote(join(dir, 'status.tmp'))} && mv ${quote(join(dir, 'status.tmp'))} ${quote(join(dir, 'status.json'))}`, refreshInterval: 1 },
     }, null, 2));
     // add-readme-line loads no setting source, so neither the checkout's settings nor yours run in it. It has only the
     // two tools its prompt needs, and accepts edits, so no permission prompt waits on a person.
     // fix-checkout-test loads your user settings only, never the checkout's, with the three tools its prompt needs, each allowed.
-    args = facts.launch.session.args.map((arg, at, all) => (arg === '{settings}' ? settings : edit && all[at - 1] === '--setting-sources' ? (fix ? 'user' : '') : arg));
+    args = facts.launch.session.args.map((arg, at, all) => (arg === '{settings}' ? settings : edit && all[at - 1] === '--setting-sources' ? (user ? 'user' : '') : arg));
     // The prompt is the person's, word for word; that no one answers a question back is the harness's to say.
     // A command run through a pipe exits as the pipe's last command, so a failing test run would read as passing.
     if (fix) args.push('--tools', 'Bash,Read,Edit', '--allowedTools', 'Bash,Read,Edit', '--append-system-prompt', `${SCRIPTED} Run each command the prompt names exactly as written, with no pipe or redirection added.`);
     // bash-calls has only Bash, allowed, so no permission prompt waits on a person and every call runs the hooks.
+    else if (seeded) args.push('--tools', 'Bash,Read,Edit', '--allowedTools', 'Bash,Read,Edit', '--append-system-prompt', SCRIPTED);
     else if (calls) args.push('--tools', 'Bash', '--allowedTools', 'Bash', '--append-system-prompt', `${SCRIPTED} Run each command the prompt names exactly as written, each as its own Bash call, never joined with && or ; or a loop.`);
     else if (edit) args.push('--tools', 'Read,Edit', '--permission-mode', 'acceptEdits', '--append-system-prompt', SCRIPTED);
   }
@@ -280,7 +290,7 @@ async function run(options, scenario, agent = options.agent) {
       // The person's own prompt says an answer will come, as a real ask does; the code word itself never is in it.
       if (start && !typedAt && Date.now() - start.at > 1500) {
         typedAt = Date.now();
-        child.stdin.write(fix ? FIX_PROMPT : calls ? CALLS_PROMPT(options.calls) : edit ? EDIT_PROMPT : 'Reply with only the word READY. After that, a DeepBuild hook will send you my answer, a code word; when it arrives, reply with only that code word.');
+        child.stdin.write(seeded ? FALSE_DONE_PROMPT : fix ? FIX_PROMPT : calls ? CALLS_PROMPT(options.calls) : edit ? EDIT_PROMPT : 'Reply with only the word READY. After that, a DeepBuild hook will send you my answer, a code word; when it arrives, reply with only that code word.');
         await sleep(300);
         child.stdin.write('\r');
       }
@@ -291,7 +301,8 @@ async function run(options, scenario, agent = options.agent) {
       // add-readme-line and fix-checkout-test end the session with /exit once its one turn has stopped, so its SessionEnd hooks run to their end.
       if (edit) {
         const ended = events.filter((event) => ['Stop', 'StopFailure'].includes(event.hook_event_name));
-        if (ended.length && !exiting) {
+        const over = !seeded || (ended.length && lines(transcript).some((entry) => entry.subtype === 'turn_duration' && Date.parse(entry.timestamp) >= ended.at(-1).at));
+        if (ended.length && over && !exiting) {
           exiting = Date.now();
           child.stdin.write('/exit');
           await sleep(300);
@@ -326,7 +337,7 @@ async function run(options, scenario, agent = options.agent) {
   return finish({
     verdict, stop, reason, model: usage.model, tokens: usage.tokens, cost, sessionId, transcript: existsSync(kept) ? kept : null, settings, workdir: realpathSync(work),
     launch: { argv, facts: factsFile[agent] }, processes: { started: pids, lingered },
-    evidence: job ? { probe } : edit ? { prompt: fix ? FIX_PROMPT : calls ? CALLS_PROMPT(options.calls) : EDIT_PROMPT, ...(calls ? { calls: options.calls } : {}) } : scenario === 'held-stop' ? { answer, token: tokenWord } : { token: tokenWord },
+    evidence: job ? { probe } : seeded ? { prompt: FALSE_DONE_PROMPT, events: join(dir, 'events.jsonl'), screen: join(dir, 'screen.log') } : edit ? { prompt: fix ? FIX_PROMPT : calls ? CALLS_PROMPT(options.calls) : EDIT_PROMPT, ...(calls ? { calls: options.calls } : {}) } : scenario === 'held-stop' ? { answer, token: tokenWord } : { token: tokenWord },
   });
 }
 
@@ -656,7 +667,7 @@ for (const name of signals) process.on(name, () => { interrupted = true; });
 
 let options;
 try { options = parseArgs(process.argv.slice(2)); } catch (error) {
-  console.error(`${error.message}\nUsage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job|add-readme-line|fix-checkout-test|settings-tamper|deep-answer|bash-calls> [--workdir <dir> [--hooks <settings.json> [--calls <n>] | --script <file> | --mcp-config <file> --route <stop-hold|idle-wake|next-prompt|resume|repeat> [--go <file>] [--rounds <n>]] [--pass-env <NAME>]...] [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]\n       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]\n       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]`);
+  console.error(`${error.message}\nUsage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job|add-readme-line|fix-checkout-test|settings-tamper|deep-answer|bash-calls|false-done> [--workdir <dir> [--hooks <settings.json> [--calls <n>] | --script <file> | --mcp-config <file> --route <stop-hold|idle-wake|next-prompt|resume|repeat> [--go <file>] [--rounds <n>]] [--pass-env <NAME>]...] [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]\n       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]\n       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]`);
   process.exit(2);
 }
 options.out = resolve(options.out ?? mkdtempSync(join(tmpdir(), 'deep-harness-')));
