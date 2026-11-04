@@ -70,24 +70,24 @@ fn register(r: &mut Registrar) {
         "path@1",
     )
     .drawn(drawn);
-    // The import's codes (svg_*) are deep-canvas-render's check's, which reads an SVG's bytes from
-    // its store; this build's hub reads none, so they join the catalog with their planted
-    // fixtures when the kit seals vector@1 (#399). The hub's frame can't draw a vector yet, which
-    // the fixture's codes name.
+    // The import's codes (svg_*) join the catalog with their planted fixtures when the kit seals
+    // vector@1 (#399). The hub draws a vector from the SVG its evidence store holds (#1162); the
+    // fixture names one no store holds, which its codes name.
     r.fixture("formula", formula(), None).sidecar(json!({
         "checks": [{"kind": "document.validate"}],
         "oracles": ["analytic"],
-        "codes": ["module_missing", "unknown_kind"],
+        "codes": ["asset_missing", "unknown_kind"],
     }));
 }
 
 /// What a vector item draws as in a frame (#1162): one `path@1` of its imported outline, which
 /// whoever holds the evidence store inlines as `params.outline` (`{d, role}`, in the item's own
-/// units, `lower::outline`), in the role its colors map to. One not inlined draws nothing.
+/// units, `lower::outline`), in the role its colors map to. One not inlined draws nothing: its
+/// SVG's absence is the import's `asset_missing`.
 fn drawn(params: &serde_json::Value) -> serde_json::Value {
     let outline = &params["outline"];
     json!({
-        "d": outline["d"].as_str().unwrap_or(""),
+        "d": outline["d"].as_str().unwrap_or("M0 0"),
         "paint": {"fill": {"role": outline["role"].as_str().unwrap_or("ink")}},
     })
 }
@@ -97,6 +97,7 @@ fn formula() -> serde_json::Value {
         "format": 1, "id": "vector-formula", "profile": "figure", "title": "A formula",
         "description": "A formula from the typeset job, its colors mapped to roles, over its caption.",
         "size": [320, 140],
+        "requires": {"modules": {"vector": "^1"}},
         "items": {"caption": {
             "id": "caption", "kind": "text@1", "name": "Caption", "order": "a1",
             "params": {"font": "body", "size": 13, "box": {"w": 300, "h": 20}, "text": "The formula"},
