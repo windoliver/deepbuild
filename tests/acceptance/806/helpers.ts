@@ -241,6 +241,10 @@ export class Stand implements t26.Mcp {
     await this.hook(hub, 'UserPromptSubmit');
     await this.hook(hub, 'PreToolUse');
   }
+  /** The PreToolUse a real Codex fires before it calls `tool` of `deep mcp` with `args` (#39: a Codex call binds only by it); Claude Code's binds by its process. */
+  async stamp(hub: t26.Hub, tool: string, args: Line): Promise<void> {
+    if (this.kind === 'codex') await this.hook(hub, 'PreToolUse', { tool_name: `mcp__deep__${tool}`, tool_input: args });
+  }
   /** One JSON-RPC request to this agent's own `deep mcp`, which the agent starts on first use. */
   async request(method: string, params: Line = {}, timeoutMs = 120_000): Promise<t26.Exchange> {
     const line = { jsonrpc: '2.0', id: t26.nextId(method), method, params };
