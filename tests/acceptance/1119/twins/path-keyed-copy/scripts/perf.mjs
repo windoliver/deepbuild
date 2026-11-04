@@ -4,9 +4,12 @@ import { copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, mkdte
 import { homedir, hostname, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { replace, walk } from './bays.mjs';
 import { compare, fingerprint, judgeInstructions, judgeLimit, measure, measureOnce, validateBudgets, warm } from './benchmark.mjs';
-import * as throttle from './throttle.mjs';
+// The machine's throttle table and the bays' replacement rule, beside this script in a checkout. A copy of perf alone,
+// as a test's fixture holds, has no table to wait on, and starts its copies afresh each run.
+const beside = (name) => existsSync(new URL(name, import.meta.url));
+const throttle = beside('./throttle.mjs') ? await import('./throttle.mjs') : null;
+const bays = beside('./bays.mjs') ? await import('./bays.mjs') : null;
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const manifest = 'benchmarks/budgets.json';
@@ -77,7 +80,7 @@ function takeLock(file) {
         if (Number.isInteger(holder) && holder > 0 && holder !== process.pid && alive(holder)) {
           // An ancestor's lock it named to this run is this run's to use and the ancestor's to release; a number
           // named by no live ancestor is not trusted.
-          if (holder === Number(process.env.DEEP_PERF_LOCK) && throttle.ancestors().includes(holder)) return (owner = holder), true;
+          if (throttle && holder === Number(process.env.DEEP_PERF_LOCK) && throttle.ancestors().includes(holder)) return (owner = holder), true;
           throw blocked(`another perf run (process ${holder}) is using ${dirname(file)}`, `Wait for that preflight to finish. If none is running, the process took over a killed run's number: rm ${file}`);
         }
         renameSync(mine, file);
@@ -159,7 +162,12 @@ function keptCopy(side, fill) {
   const from = mkdtempSync(join(tmpdir(), 'deep-perf-tree-'));
   try {
     fill(from);
-    const paths = walk(from);
+    if (!bays) {
+      rmSync(directory, { recursive: true, force: true });
+      cpSync(from, directory, { recursive: true, verbatimSymlinks: true });
+      return directory;
+    }
+    const paths = bays.walk(from);
     const rewritten = paths.filter((path) => {
       try {
         return lstatSync(join(from, path)).isFile() && lstatSync(join(directory, path)).isFile() && !readFileSync(join(from, path)).equals(readFileSync(join(directory, path)));
@@ -167,7 +175,7 @@ function keptCopy(side, fill) {
         return false;
       }
     });
-    const { written, deleted } = replace(directory, { from, paths });
+    const { written, deleted } = bays.replace(directory, { from, paths });
     console.log(`perf: ${side} copy ${directory}: wrote ${written} files, deleted ${deleted}; rewrote what the last run left with other bytes: ${rewritten.join(', ') || 'nothing'}`);
   } finally {
     rmSync(from, { recursive: true, force: true });
@@ -215,12 +223,12 @@ function checkCopy(directory, timeoutMs) {
 }
 // perf is a measured run: it holds timed from before its timer to its end, so its
 // kept copies and lock are taken only under timed. Under a preflight's grant it passes through on it.
-const grant = throttle.acquire('timed', { wait: 60 });
-if (!grant) {
+const grant = throttle?.acquire('timed', { wait: 60 });
+if (throttle && !grant) {
   console.log('INCONCLUSIVE no grant: no timed grant came within 60 min, so perf did not run\n  Fix: Wait for the other sessions\' builds and proofs on this machine, then run perf again.');
   process.exit(3);
 }
-process.env.DEEP_THROTTLE = grant.token;
+if (grant) process.env.DEEP_THROTTLE = grant.token;
 const verdicts = [];
 const started = performance.now();
 console.log('RUN perf');
@@ -243,8 +251,9 @@ try {
   const allowance = current.preflight.limits.elapsedMs * (1 + current.preflight.margin);
   let baseline = null;
   if (base?.preflight || base?.tasks?.length) {
-    // Git reads stay in this checkout; checkRun gives the kept copy a repository of its own.
-    archive = keptCopy('base', (from) => run('tar', ['-xf', '-', '-C', from], root, { input: run('git', ['archive', baseCommit], root, { encoding: null }) }));
+    // Git reads stay in this checkout; checkRun gives the kept copy a repository of its own. The archive streams into
+    // tar: the repository's outgrew any buffer a process can hold (141 MiB on the Mac).
+    archive = keptCopy('base', (from) => run('bash', ['-c', 'set -o pipefail; git archive "$1" | tar -xf - -C "$2"', 'bash', baseCommit, from], root, { stdio: 'pipe' }));
     baseline = checkRun(archive, allowance);
     if (baseline.status !== 0) throw blocked(`merge-base checks exited ${baseline.status}: ${baseline.output}`, 'Repair the checks on main; a failing merge base cannot be compared.');
   }
@@ -372,4 +381,4 @@ try {
 for (const [state, message, fix] of verdicts) console.log(`${state} perf: ${message}\n  Fix: ${fix}`);
 if (verdicts.length) process.exitCode = 1;
 else console.log(`PASS perf (${((performance.now() - started) / 1000).toFixed(2)} s)`);
-throttle.release(grant);
+throttle?.release(grant);
