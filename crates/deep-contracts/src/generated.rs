@@ -42260,7 +42260,7 @@ impl Contract for RunStaleData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["session", "run", "check", "claim", "newer_claim"])?;
         deep_contracts::check_member(members, at, "session", &RULE_85)?;
-        deep_contracts::check_member(members, at, "run", &RULE_111)?;
+        deep_contracts::check_member(members, at, "run", &RULE_114)?;
         deep_contracts::check_member(members, at, "check", &RULE_9)?;
         deep_contracts::check_member(members, at, "claim", &RULE_93)?;
         deep_contracts::check_member(members, at, "newer_claim", &RULE_93)?;
