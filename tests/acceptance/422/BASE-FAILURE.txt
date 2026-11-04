@@ -1,0 +1,47 @@
+# #422 acceptance suite at the base, 34fe4930 (Merge pull request #1203), before any implementation.
+#
+# Not run at the base. The owner asked for a fast job, and the surfaces plainly don't exist there; no cargo binary was
+# built. What was checked instead:
+#
+#   npm ci
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/422/tsconfig.json   -> exit 0, no errors
+#
+# Why each test fails at the base, read from the base's code (crates/deep-gpu-layer, crates/deep-scene3d-render,
+# crates/deep-canvas-scene3d, crates/deep-canvas) and files (packs/examples/castle.json). deep-gpu refuses every
+# --planted name this suite uses at startup (Planted::parse has none of draws_black, drops_clouds,
+# cascade_cache_keeps_stale, prefilter_over_frames, uncompensated_lobe, compensates_environment_only,
+# premixed_metallic: bad_input, exit 1), so every half that runs a planted program fails there too.
+#
+#   castle.test.ts            AC1  both tests: castle() fails first. The base's castle.json has one
+#                                  composites.island@1 and no sky@1, and packs/examples/castle.look.json doesn't
+#                                  exist. Past that: view3d reads no `packs` (the composites recipes don't expand),
+#                                  golden has no `oracle: "hash"` (it would judge by FLIP), and tests/goldens/422
+#                                  doesn't exist (BLOCKED no_golden).
+#   window-budget.test.ts     AC2  the fixture test: scene.rs reads sky@1 for ambient_top/ambient_low only, so the
+#                                  frame without the fog equals the frame with it (0% changed, under 0.5%); puff@1 is
+#                                  no kind, so the frame without the clouds equals it too. The budget test is
+#                                  INCONCLUSIVE off a reference Mac; on one, the base's cheaper frame (no fog, no
+#                                  clouds) may fit 2 ms, which the fixture test keeps from counting.
+#   cascade-cache.test.ts     AC3  the base draws one shadow map with no cascade cache, so its shipped half may pass;
+#                                  --planted cascade_cache_keeps_stale is refused at startup.
+#   showpiece-fixture.test.ts AC4  the budget test: view3d reads no `cascades` field, so no frame carries
+#                                  cascades.splits ("reports four cascades" fails); environment and fog_height aren't
+#                                  read either. The seek test's shipped half may pass at the base (no environment to
+#                                  prefilter); --planted prefilter_over_frames is refused.
+#   furnace-materials.test.ts AC5  the furnace test: no environment is prefiltered and the sky's top/low draw no
+#                                  background, so the furnace's background doesn't read 1 (furnaceBackground fails)
+#                                  and the balls read about 0. The sun test checks #421's shading core, which the base
+#                                  has; it may pass at the base.
+#   policy.test.ts            AC6  the light-cut test may pass at the base (#421's policy keeps 32 by (score bucket,
+#                                  ID) and reports lights_over_budget). The splits test: no `cascades` report, so
+#                                  frames carry no splits.
+#   layers.test.ts            AC7  view3d reads no `hidden`, so H still draws their box and its shadow: no floor pixel
+#                                  is darker in A than in H (0 of 300), and H shows the box; the reply has no `layers`.
+#   metal-furnace.test.ts     AC8  the furnace test: the furnace's background doesn't read 1 and the balls read about
+#                                  0, not 1. The sun test's shipped half may pass (the base compensates direct light);
+#                                  --planted compensates_environment_only is refused.
+#   metallic-mix.test.ts      AC9  the furnace's background doesn't read 1; --planted premixed_metallic is refused.
+#   taste.test.ts             AC10 castle() fails first, as in AC1; with no TASTE.json the run would be
+#                                  INCONCLUSIVE, never PASS.
+#
+# A run at the base, when one is made, is recorded beside this note by the job that runs it.

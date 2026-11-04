@@ -1,5 +1,20 @@
 {
   "module": "vector",
-  "phases": {},
+  "phases": {
+    "items": [
+      {
+        "operator": "vector.paint",
+        "module": "vector",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "vector.paint"
+        ],
+        "per": "item"
+      }
+    ]
+  },
   "contributions": {}
 }

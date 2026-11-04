@@ -82,6 +82,10 @@ struct Args {
     packs: Vec<(String, std::path::PathBuf)>,
     /// The paths whose evaluated values each frame reports (#429).
     evaluate: Vec<String>,
+    /// Writer layers not visible in this session, which draw, light and cast nothing (#422).
+    hidden: BTreeSet<String>,
+    /// Each frame reports the key sun's cascade splits (#422).
+    cascades: bool,
 }
 
 /// Milliseconds from this process's spawn, as the kernel records its start, to now.
@@ -130,11 +134,127 @@ pub(crate) fn pair(v: &Value) -> Option<[u32; 2]> {
     ])
 }
 
+/// `doc` without the items of the `hidden` writer layers, nor those layers (#422: a layer not
+/// visible draws, lights and casts nothing, as if absent).
+fn without_layers(doc: &Value, hidden: &BTreeSet<String>) -> Value {
+    let mut d = doc.clone();
+    if let Some(items) = d.get_mut("items").and_then(Value::as_object_mut) {
+        items.retain(|_, item| !item["layer"].as_str().is_some_and(|l| hidden.contains(l)));
+    }
+    if let Some(layers) = d.get_mut("layers").and_then(Value::as_object_mut) {
+        layers.retain(|id, _| !hidden.contains(id));
+    }
+    d
+}
+
+/// The document's visible writer layers back to front (#422): by the band their writer's kind
+/// gives (Band; deep-canvas's `Writer::band`), then by their order key and ID.
+fn layers_report(doc: &Value, hidden: &BTreeSet<String>) -> Value {
+    use deep_canvas::show::{Writer, WriterKind};
+    let mut rows: Vec<(deep_canvas::show::Band, String, String, String)> = Vec::new();
+    for (id, layer) in doc["layers"].as_object().into_iter().flatten() {
+        if hidden.contains(id) {
+            continue;
+        }
+        let text = layer["writer"].as_str().unwrap_or_default();
+        let (kind, rest) = text.split_once(':').unwrap_or((text, ""));
+        let kind = match kind {
+            "you" => WriterKind::You,
+            "shell" => WriterKind::Shell,
+            "record" => WriterKind::Record,
+            "plugin" => WriterKind::Plugin,
+            _ => WriterKind::Agent,
+        };
+        let band = Writer {
+            kind,
+            id: rest.to_string(),
+        }
+        .band();
+        let order = layer["order"].as_str().unwrap_or_default().to_string();
+        rows.push((band, order, id.clone(), text.to_string()));
+    }
+    rows.sort();
+    json!(rows
+        .into_iter()
+        .map(|(band, _, layer, writer)| json!({"layer": layer, "writer": writer, "band": band.name()}))
+        .collect::<Vec<_>>())
+}
+
+/// A pack folder as one manifest (#422; as deep-show's store reads one): `pack.json`, its `id`
+/// `deepbuild/<name>`, each recipe file it names inlined.
+fn pack_manifest(dir: &std::path::Path) -> Result<Value, String> {
+    let read = |p: &std::path::Path| -> Result<Value, String> {
+        let bytes = std::fs::read(p).map_err(|e| format!("{}: {e}", p.display()))?;
+        serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", p.display()))
+    };
+    let mut manifest = read(&dir.join("pack.json"))?;
+    let name = manifest["name"].as_str().unwrap_or_default().to_string();
+    manifest["id"] = json!(format!("deepbuild/{name}"));
+    if let Some(Value::Object(recipes)) = manifest.get_mut("recipes") {
+        for entry in recipes.values_mut() {
+            if let Some(file) = entry.as_str() {
+                *entry = read(&dir.join(file))?;
+            }
+        }
+    }
+    Ok(manifest)
+}
+
+/// `doc` with every recipe instance of the packs in `dirs` expanded, as the check expands them
+/// (Recipe: expansion at check, never per frame); a pack or an expansion with an error refuses.
+fn expand_packs(doc: &Value, dirs: &[std::path::PathBuf]) -> Result<Value, Value> {
+    // The shipped modules and the building module, whose kinds packs' recipes may name.
+    static SEALED: std::sync::OnceLock<Option<deep_canvas::registry::Sealed>> =
+        std::sync::OnceLock::new();
+    let sealed = SEALED
+        .get_or_init(|| {
+            crate::plugin::shipped_modules()
+                .into_iter()
+                .chain([deep_canvas_scene3d::building::module()])
+                .fold(
+                    deep_canvas::registry::Registry::new(deep_canvas::registry::BuildSet::Full),
+                    deep_canvas::registry::Registry::with,
+                )
+                .seal()
+                .ok()
+        })
+        .as_ref()
+        .ok_or_else(|| refused("render_failed", "the pack build's modules don't seal"))?;
+    let mut packs = deep_canvas::document::Packs::new(Default::default());
+    for dir in dirs {
+        let manifest = pack_manifest(dir).map_err(|e| refused("bad_input", &format!("packs: {e}")))?;
+        if let Err(issues) = packs.admit(&manifest, sealed) {
+            let first = issues.first().map(|i| i.to_json()).unwrap_or(Value::Null);
+            return Err(refused("pack_refused", &first.to_string()));
+        }
+    }
+    let checked = deep_canvas::document::check_packed(doc, sealed, &packs);
+    if let Some(i) = checked
+        .issues
+        .iter()
+        .find(|i| i.severity == "error" && checked.expansions.is_empty())
+    {
+        return Err(refused(i.code, &i.path));
+    }
+    Ok(checked.lowered)
+}
+
 fn parse(call: &Value) -> Result<Args, Value> {
     let bad = |what: &str| refused("bad_input", what);
     let path = call["doc"].as_str().ok_or_else(|| bad("doc is a path"))?;
     let text = std::fs::read_to_string(path).map_err(|e| bad(&format!("doc: {e}")))?;
     let mut doc: Value = serde_json::from_str(&text).map_err(|e| bad(&format!("doc: {e}")))?;
+    // The packs the document's recipes expand from (#422).
+    let pack_dirs: Vec<std::path::PathBuf> = call["packs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(std::path::PathBuf::from)
+        .collect();
+    if !pack_dirs.is_empty() {
+        doc = expand_packs(&doc, &pack_dirs)?;
+    }
     let theme = status::theme_of(call)?;
     let look_json = status::themed(&call["look"], &theme);
     let look = Look3::read(&look_json).map_err(|e| bad(&format!("look: {e}")))?;
@@ -267,6 +387,14 @@ fn parse(call: &Value) -> Result<Args, Value> {
         status,
         cold: call["cold"].as_bool().unwrap_or(false),
         surface: surface_of(call.get("surface")).map_err(|e| bad(&e))?,
+        hidden: call["hidden"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect(),
+        cascades: call["cascades"].as_bool().unwrap_or(false),
     })
 }
 
@@ -658,7 +786,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
             levels.collect();
-            let (composed, resident) = levels.compose(lowered_doc.as_ref().unwrap_or(&args.doc));
+            let (mut composed, resident) = levels.compose(lowered_doc.as_ref().unwrap_or(&args.doc));
+            if !args.hidden.is_empty() {
+                composed = without_layers(&composed, &args.hidden);
+            }
             let read = |sha: &str| std::fs::read(args.assets.get(sha)?).ok();
             let mut scene = evaluate_with(&composed, t, &args.look, &mut labels, &read)
                 .map_err(|r| refused(r.code, r.path))?;
@@ -919,6 +1050,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
                 frame.insert("segments".into(), Value::Object(edge_segments));
             }
+            if args.cascades {
+                frame.insert(
+                    "cascades".into(),
+                    json!({"splits": drawn.counts.cascade_splits}),
+                );
+            }
             if let Some((gpu_ms, passes)) = &drawn.timing {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
                 frame.insert("passes_ms".into(), json!(passes));
@@ -1003,8 +1140,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         "sharpen": args.surface.sharpen,
         "size_px": size, "internal_px": internal,
     });
-    let mut reply =
-        json!({"frames": frames, "passes": passes, "status": status_report, "surface": drew});
+    let mut reply = json!({
+        "frames": frames, "passes": passes, "status": status_report, "surface": drew,
+        "layers": layers_report(&args.doc, &args.hidden),
+    });
     if let Some((_, report)) = cold {
         reply["cold"] = report;
     }

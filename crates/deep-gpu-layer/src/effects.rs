@@ -370,10 +370,11 @@ pub fn settings(
             ("ground_3d.fade".to_string(), json!(fade)),
         ])
     });
+    // A scene of materials shades the sun's shadow through its cascades instead (#422).
     let shadow = scene
         .sun
         .as_ref()
-        .filter(|s| s.shadow)
+        .filter(|s| s.shadow && !scene.cascaded())
         .map(|s| (BTreeMap::new(), seeding.key(item_seed(doc_seed, &s.id))));
     let sparks = scene
         .others
