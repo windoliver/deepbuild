@@ -200,7 +200,7 @@ impl Hub<'_> {
     }
 
     /// A popped-out panel's rect in its own window's px, and that window's display size.
-    fn placed(&self, panel: &str) -> Option<([f64; 4], [f64; 2])> {
+    pub(crate) fn placed(&self, panel: &str) -> Option<([f64; 4], [f64; 2])> {
         let w = self.placement.window_of(panel)?;
         if w.view.as_deref() != Some(panel) {
             return None;

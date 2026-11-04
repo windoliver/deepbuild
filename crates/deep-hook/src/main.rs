@@ -41,8 +41,9 @@ const BILLING_KEYS: &[&str] = &[
 ];
 
 /// Who is calling: Cursor's CLI and Grok run the hooks in Claude Code's settings file, so a hook installed for Claude
-/// Code may come from either. Each sets variables of its own in its hooks' environment, and Claude Code sets
-/// CLAUDECODE; a hook that has another tool's and not Claude Code's is sent under that tool's name.
+/// Code may come from either. Each sets variables of its own in its hooks' environment, and a hook that has another
+/// tool's is sent under that tool's name. Claude Code's CLAUDECODE says nothing here: a tool started from a shell
+/// inside a Claude Code session inherits it (#993). The hub checks the name against the payload's own fields.
 const CALLERS: &[(&str, &[&str])] = &[
     ("grok", &["GROK_HOOK_EVENT", "GROK_SESSION_ID"]),
     ("cursor", &["CURSOR_VERSION", "CURSOR_PROJECT_DIR"]),
@@ -50,7 +51,7 @@ const CALLERS: &[(&str, &[&str])] = &[
 
 /// The agent a hook comes from: the one its command names, unless another tool's variables say it runs it.
 fn caller(agent: &str) -> &str {
-    if agent != "claude-code" || env::var_os("CLAUDECODE").is_some() {
+    if agent != "claude-code" {
         return agent;
     }
     CALLERS

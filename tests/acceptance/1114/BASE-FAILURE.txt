@@ -1,0 +1,323 @@
+# #1114 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (34fe4930, which holds d2623d97; no `timed` export in lanes.mjs, no --timed in affected.mjs)
+
+$ node --test 'tests/acceptance/1114/*.test.mjs'
+(stack-trace lines dropped; the checkout's path reads <checkout>, temporary folders <tmp>, home paths ~)
+
+Six tests fail at their assertions. The AC5 test (#1114.f626edec) passes here, as it must: on the base the change's
+scripts are the merge base's, so "before" and "after" are one program. Its wrong program is the twin
+timed-fail-inconclusive, below.
+
+✖ #1114.9fc6be33 with no flag, a timed file in the affected set is not run and the summary is INCONCLUSIVE, listing it; with no timed file in the set, PASS remains possible (1844.573626ms)
+✖ #1114.dc4376fb with --timed, the throttle log shows the timed grant around the timed files (1138.727652ms)
+✔ #1114.f626edec failures on main equal today's: a run with the merge base's scripts and one with the change's, on the same paths, list the same FAIL ids (2780.67474ms)
+✖ #1114.52a78dd9 in the before lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (3303.844374ms)
+✖ #1114.52a78dd9 in the trace lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (3255.882411ms)
+✖ #1114.f3e38214 every test file calling a timing helper is in lanes.mjs timed list, by a grep of the tree (186.601532ms)
+✖ #1114.f3e38214 a planted timed list missing one file fails the grep check, naming the file (30.250589ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 1
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6751.985355
+
+✖ failing tests:
+
+test at tests/acceptance/1114/affected.test.mjs:22:1
+✖ #1114.9fc6be33 with no flag, a timed file in the affected set is not run and the summary is INCONCLUSIVE, listing it; with no timed file in the set, PASS remains possible (1844.573626ms)
+  AssertionError [ERR_ASSERTION]: the timed file tests/acceptance/568/judge.test.mjs ran without --timed
+  events:
+  {"name":"plain","event":"start","t":1793760058677,"throttle":"test:99eb0b67531c6d4e","pid":503853,"cwd":"<tmp>/deep-1114-XXXXXX/tree","ancestors":["node --test --test-reporter=./scripts/proof-reporter.mjs --test-repo","node scripts/throttle.mjs test --wait 30 -- ~/.local/opt/no","node scripts/affected.mjs tests/acceptance/568/judge.test.mjs tests/","node --test-coverage-functions=0 --test-concurrency=0 --inspect-publ"]}
+  {"name":"timed","event":"start","t":1793760058698,"throttle":"test:99eb0b67531c6d4e","pid":503851,"cwd":"<tmp>/deep-1114-XXXXXX/tree","ancestors":["node --test --test-reporter=./scripts/proof-reporter.mjs --test-repo","node scripts/throttle.mjs test --wait 30 -- ~/.local/opt/no","node scripts/affected.mjs tests/acceptance/568/judge.test.mjs tests/","node --test-coverage-functions=0 --test-concurrency=0 --inspect-publ"]}
+  {"name":"plain","event":"end","t":1793760058977,"throttle":"test:99eb0b67531c6d4e","pid":503853,"cwd":"<tmp>/deep-1114-XXXXXX/tree"}
+  {"name":"timed","event":"end","t":1793760058998,"throttle":"test:99eb0b67531c6d4e","pid":503851,"cwd":"<tmp>/deep-1114-XXXXXX/tree"}
+  log:
+  {"at":"2026-11-04T02:40:58.592Z","event":"granted","class":"build","grant":"top-level","id":"d52b6a84c76fe4e8","pid":503727,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:40:58.597Z","event":"granted","class":"build","grant":"top-level","id":"86e466043059289f","pid":503726,"index":2,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:40:58.608Z","event":"released","class":"build","id":"d52b6a84c76fe4e8","pid":503727}
+  {"at":"2026-11-04T02:40:58.610Z","event":"granted","class":"test","grant":"top-level","id":"99eb0b67531c6d4e","pid":503724,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:40:58.619Z","event":"released","class":"build","id":"86e466043059289f","pid":503726}
+  {"at":"2026-11-04T02:40:58.803Z","event":"granted","class":"build","grant":"top-level","id":"8321b9c8a3f3dfc3","pid":503734,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:40:58.828Z","event":"released","class":"build","id":"8321b9c8a3f3dfc3","pid":503734}
+  {"at":"2026-11-04T02:40:58.837Z","event":"granted","class":"build","grant":"top-level","id":"8c55845852207d92","pid":503745,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:40:58.861Z","event":"released","class":"build","id":"8c55845852207d92","pid":503745}
+  {"at":"2026-11-04T02:40:59.015Z","event":"released","class":"test","id":"99eb0b67531c6d4e","pid":503724}
+  {"at":"2026-11-04T02:40:59.053Z","event":"granted","class":"build","grant":"top-level","id":"307e551779bb0eec","pid":503752,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:40:59.076Z","event":"released","class":"build","id":"307e551779bb0eec","pid":503752}
+  {"at":"2026-11-04T02:40:59.147Z","event":"granted","class":"build","grant":"top-level","id":"5412f703f4022124","pid":503779,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:40:59.162Z","event":"released","class":"build","id":"5412f703f4022124","pid":503779}
+  {"at":"2026-11-04T02:40:59.208Z","event":"granted","class":"build","grant":"top-level","id":"778f73aab749a20e","pid":503770,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:40:59.227Z","event":"released","class":"build","id":"778f73aab749a20e","pid":503770}
+  {"at":"2026-11-04T02:40:59.409Z","event":"granted","class":"build","grant":"top-level","id":"6a0b81b77a45304b","pid":503761,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:40:59.434Z","event":"released","class":"build","id":"6a0b81b77a45304b","pid":503761}
+  {"at":"2026-11-04T02:40:59.587Z","event":"granted","class":"build","grant":"top-level","id":"56339493c904053c","pid":503786,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:40:59.603Z","event":"released","class":"build","id":"56339493c904053c","pid":503786}
+  exit 0
+  stdout:
+  parallel node: tests/acceptance/568/judge.test.mjs tests/fixture-1114/plain.test.mjs
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 2 passed, in 1 s at load 3; logs in <tmp>/deep-affected-XXXXXX
+  
+  stderr:
+  
+  
+  1 !== 0
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1114/affected.test.mjs:43:1
+✖ #1114.dc4376fb with --timed, the throttle log shows the timed grant around the timed files (1138.727652ms)
+  AssertionError [ERR_ASSERTION]: the timed file ran outside a timed grant: it ran under DEEP_THROTTLE=test:970be8a289513f2f, not a timed grant
+  events:
+  {"name":"plain","event":"start","t":1793760060215,"throttle":"test:970be8a289513f2f","pid":504851,"cwd":"<tmp>/deep-1114-XXXXXX/tree","ancestors":["node --test --test-reporter=./scripts/proof-reporter.mjs --test-repo","node scripts/throttle.mjs test --wait 30 -- ~/.local/opt/no","node scripts/affected.mjs --timed tests/acceptance/568/judge.test.mj","node --test-coverage-functions=0 --test-concurrency=0 --inspect-publ"]}
+  {"name":"timed","event":"start","t":1793760060228,"throttle":"test:970be8a289513f2f","pid":504845,"cwd":"<tmp>/deep-1114-XXXXXX/tree","ancestors":["node --test --test-reporter=./scripts/proof-reporter.mjs --test-repo","node scripts/throttle.mjs test --wait 30 -- ~/.local/opt/no","node scripts/affected.mjs --timed tests/acceptance/568/judge.test.mj","node --test-coverage-functions=0 --test-concurrency=0 --inspect-publ"]}
+  {"name":"plain","event":"end","t":1793760060516,"throttle":"test:970be8a289513f2f","pid":504851,"cwd":"<tmp>/deep-1114-XXXXXX/tree"}
+  {"name":"timed","event":"end","t":1793760060529,"throttle":"test:970be8a289513f2f","pid":504845,"cwd":"<tmp>/deep-1114-XXXXXX/tree"}
+  log:
+  {"at":"2026-11-04T02:41:00.114Z","event":"granted","class":"build","grant":"top-level","id":"f24b9e904ebed310","pid":504730,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:41:00.117Z","event":"granted","class":"build","grant":"top-level","id":"1e6a248061cebc73","pid":504736,"index":2,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:41:00.119Z","event":"granted","class":"test","grant":"top-level","id":"970be8a289513f2f","pid":504729,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:41:00.133Z","event":"released","class":"build","id":"1e6a248061cebc73","pid":504736}
+  {"at":"2026-11-04T02:41:00.147Z","event":"released","class":"build","id":"f24b9e904ebed310","pid":504730}
+  {"at":"2026-11-04T02:41:00.331Z","event":"granted","class":"build","grant":"top-level","id":"7c45f99d895ca602","pid":504742,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:41:00.356Z","event":"released","class":"build","id":"7c45f99d895ca602","pid":504742}
+  {"at":"2026-11-04T02:41:00.363Z","event":"granted","class":"build","grant":"top-level","id":"06a8cd5fad1afe77","pid":504749,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:41:00.379Z","event":"released","class":"build","id":"06a8cd5fad1afe77","pid":504749}
+  {"at":"2026-11-04T02:41:00.513Z","event":"granted","class":"build","grant":"top-level","id":"6d0dfef396c61094","pid":504757,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:41:00.529Z","event":"granted","class":"build","grant":"top-level","id":"12344f6a5d2a7daa","pid":504778,"index":2,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:41:00.537Z","event":"released","class":"build","id":"6d0dfef396c61094","pid":504757}
+  {"at":"2026-11-04T02:41:00.545Z","event":"released","class":"build","id":"12344f6a5d2a7daa","pid":504778}
+  {"at":"2026-11-04T02:41:00.552Z","event":"released","class":"test","id":"970be8a289513f2f","pid":504729}
+  {"at":"2026-11-04T02:41:00.556Z","event":"granted","class":"build","grant":"top-level","id":"2654a5c63eb8a564","pid":504786,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:41:00.580Z","event":"released","class":"build","id":"2654a5c63eb8a564","pid":504786}
+  {"at":"2026-11-04T02:41:00.624Z","event":"granted","class":"build","grant":"top-level","id":"d1f3ebbec91ede19","pid":504765,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:41:00.648Z","event":"released","class":"build","id":"d1f3ebbec91ede19","pid":504765}
+  {"at":"2026-11-04T02:41:00.719Z","event":"granted","class":"build","grant":"top-level","id":"eb06a03bdb67e8fd","pid":504796,"index":1,"load":3.42,"cores":20,"wait":30}
+  {"at":"2026-11-04T02:41:00.742Z","event":"released","class":"build","id":"eb06a03bdb67e8fd","pid":504796}
+  exit 0
+  stdout:
+  parallel node: tests/acceptance/568/judge.test.mjs tests/fixture-1114/plain.test.mjs
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 2 passed, in 1 s at load 3; logs in <tmp>/deep-affected-XXXXXX
+  
+  stderr:
+  
+  + actual - expected
+  
+  + 'it ran under DEEP_THROTTLE=test:970be8a289513f2f, not a timed grant'
+  - null
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'it ran under DEEP_THROTTLE=test:970be8a289513f2f, not a timed grant',
+    expected: null,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1114/lanes.test.mjs:85:1
+✖ #1114.52a78dd9 in the before lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (3303.844374ms)
+  AssertionError [ERR_ASSERTION]: a run of the timed set (in <tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-htJpV4) was not inside its timed grant: it ran under DEEP_THROTTLE=null, not a timed grant
+  events:
+  {"name":"neighbour","event":"start","t":1793760058057,"throttle":"build:a725a5029bd9c0ea","pid":503362}
+  {"name":"timed","event":"start","t":1793760058539,"throttle":null,"pid":503678,"cwd":"<tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-htJpV4","ancestors":["node --test --test-reporter=file://~/deepbuild/.claude/work","node <checkout>/","node --test-coverage-functions=0 --test-concurrency=0 --inspect-publ","node --test tests/acceptance/1114/*.test.mjs"]}
+  {"name":"plain","event":"start","t":1793760058552,"throttle":null,"pid":503685,"cwd":"<tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-htJpV4","ancestors":["node --test --test-reporter=file://~/deepbuild/.claude/work","node <checkout>/","node --test-coverage-functions=0 --test-concurrency=0 --inspect-publ","node --test tests/acceptance/1114/*.test.mjs"]}
+  {"name":"plain","event":"start","t":1793760058999,"throttle":null,"pid":504025,"cwd":"<tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-LlDUM0","ancestors":["node --test --test-reporter=file://~/deepbuild/.claude/work","node <checkout>/","node --test-coverage-functions=0 --test-concurrency=0 --inspect-publ","node --test tests/acceptance/1114/*.test.mjs"]}
+  {"name":"timed","event":"start","t":1793760059008,"throttle":null,"pid":504023,"cwd":"<tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-LlDUM0","ancestors":["node --test --test-reporter=file://~/deepbuild/.claude/work","node <checkout>/","node --test-coverage-functions=0 --test-concurrency=0 --inspect-publ","node --test tests/acceptance/1114/*.test.mjs"]}
+  {"name":"plain","event":"end","t":1793760059300,"throttle":null,"pid":504025,"cwd":"<tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-LlDUM0"}
+  {"name":"timed","event":"end","t":1793760059309,"throttle":null,"pid":504023,"cwd":"<tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-LlDUM0"}
+  {"name":"neighbour","event":"end","t":1793760061059,"throttle":"build:a725a5029bd9c0ea","pid":503362}
+  log:
+  {"at":"2026-11-04T02:40:58.034Z","event":"granted","class":"build","grant":"top-level","id":"a725a5029bd9c0ea","pid":503332,"index":1,"load":2.58,"cores":20,"wait":1}
+  {"at":"2026-11-04T02:41:01.075Z","event":"released","class":"build","id":"a725a5029bd9c0ea","pid":503332}
+  exit 0
+  stdout:
+  PASS before: tests/acceptance/568/judge.test.mjs › #9114.33b3693b the value is two within its budget: failed on the merge base at its assertion
+  PASS before: tests/acceptance/9114/plain.test.mjs › #9114.8a9a2b66 the value is two: failed on the merge base at its assertion
+  
+  stderr:
+  
+  exit 0
+  stdout:
+  
+  stderr:
+  
+  + actual - expected
+  
+  + 'it ran under DEEP_THROTTLE=null, not a timed grant'
+  - null
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'it ran under DEEP_THROTTLE=null, not a timed grant',
+    expected: null,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1114/lanes.test.mjs:87:1
+✖ #1114.52a78dd9 in the trace lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (3255.882411ms)
+  AssertionError [ERR_ASSERTION]: a run of the timed set (in <tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-dRvh1h) was not inside its timed grant: it ran under DEEP_THROTTLE=null, not a timed grant
+  events:
+  {"name":"neighbour","event":"start","t":1793760061312,"throttle":"build:6316d12d0c212e94","pid":505410}
+  {"name":"timed","event":"start","t":1793760061752,"throttle":null,"pid":505572,"cwd":"<tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-dRvh1h","ancestors":["node --test --test-reporter=file://~/deepbuild/.claude/work","node <checkout>/","node --test-coverage-functions=0 --test-concurrency=0 --inspect-publ","node --test tests/acceptance/1114/*.test.mjs"]}
+  {"name":"plain","event":"start","t":1793760061756,"throttle":null,"pid":505573,"cwd":"<tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-dRvh1h","ancestors":["node --test --test-reporter=file://~/deepbuild/.claude/work","node <checkout>/","node --test-coverage-functions=0 --test-concurrency=0 --inspect-publ","node --test tests/acceptance/1114/*.test.mjs"]}
+  {"name":"plain","event":"start","t":1793760062204,"throttle":null,"pid":505745,"cwd":"<tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-ORX1hN","ancestors":["node --test --test-reporter=file://~/deepbuild/.claude/work","node <checkout>/","node --test-coverage-functions=0 --test-concurrency=0 --inspect-publ","node --test tests/acceptance/1114/*.test.mjs"]}
+  {"name":"timed","event":"start","t":1793760062205,"throttle":null,"pid":505744,"cwd":"<tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-ORX1hN","ancestors":["node --test --test-reporter=file://~/deepbuild/.claude/work","node <checkout>/","node --test-coverage-functions=0 --test-concurrency=0 --inspect-publ","node --test tests/acceptance/1114/*.test.mjs"]}
+  {"name":"plain","event":"end","t":1793760062504,"throttle":null,"pid":505745,"cwd":"<tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-ORX1hN"}
+  {"name":"timed","event":"end","t":1793760062506,"throttle":null,"pid":505744,"cwd":"<tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-ORX1hN"}
+  {"name":"neighbour","event":"end","t":1793760064314,"throttle":"build:6316d12d0c212e94","pid":505410}
+  log:
+  {"at":"2026-11-04T02:41:01.287Z","event":"granted","class":"build","grant":"top-level","id":"6316d12d0c212e94","pid":505371,"index":1,"load":3.42,"cores":20,"wait":1}
+  {"at":"2026-11-04T02:41:04.336Z","event":"released","class":"build","id":"6316d12d0c212e94","pid":505371}
+  exit 0
+  stdout:
+  PASS before: tests/acceptance/568/judge.test.mjs › #9114.33b3693b the value is two within its budget: failed on the merge base at its assertion
+  PASS before: tests/acceptance/9114/plain.test.mjs › #9114.8a9a2b66 the value is two: failed on the merge base at its assertion
+  PASS trace: Part of #9114: each of its 2 criteria has a tagged test that ran, passed and failed on a wrong program
+  
+  stderr:
+  
+  exit 0
+  stdout:
+  
+  stderr:
+  
+  + actual - expected
+  
+  + 'it ran under DEEP_THROTTLE=null, not a timed grant'
+  - null
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'it ran under DEEP_THROTTLE=null, not a timed grant',
+    expected: null,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1114/timed-list.test.mjs:8:1
+✖ #1114.f3e38214 every test file calling a timing helper is in lanes.mjs timed list, by a grep of the tree (186.601532ms)
+  AssertionError [ERR_ASSERTION]: scripts/lanes.mjs exports no timed list of files and folders (got undefined)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1114/timed-list.test.mjs:14:1
+✖ #1114.f3e38214 a planted timed list missing one file fails the grep check, naming the file (30.250589ms)
+  AssertionError [ERR_ASSERTION]: scripts/lanes.mjs exports no timed list (got undefined)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+
+## The planted wrong programs (twins/, twins.json)
+
+Each twin was laid over a reference implementation the blind job wrote only to check these tests (lanes.mjs with a
+`timed` list of the grep's 90 files, affected.mjs with --timed; not committed). On that reference all 7 tests pass.
+Each twin's tests were then run with the twin's files laid over it; the lines kept are each test's result and its
+first assertion line.
+
+## twin list-misses-one: scripts/lanes.mjs laid over the reference; node --test tests/acceptance/1114/timed-list.test.mjs
+✖ #1114.f3e38214 every test file calling a timing helper is in lanes.mjs timed list, by a grep of the tree (263.568231ms)
+✔ #1114.f3e38214 a planted timed list missing one file fails the grep check, naming the file (283.934223ms)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+✖ failing tests:
+✖ #1114.f3e38214 every test file calling a timing helper is in lanes.mjs timed list, by a grep of the tree (263.568231ms)
+  AssertionError [ERR_ASSERTION]: files that call environmentProblem, judgeTiming, judgeLimit, referenceMacProblem, notReference but are not in lanes.mjs's timed list:
+
+## twin runs-timed-anyway: scripts/affected.mjs laid over the reference; node --test tests/acceptance/1114/affected.test.mjs
+✖ #1114.9fc6be33 with no flag, a timed file in the affected set is not run and the summary is INCONCLUSIVE, listing it; with no timed file in the set, PASS remains possible (1987.831853ms)
+✔ #1114.dc4376fb with --timed, the throttle log shows the timed grant around the timed files (1806.076377ms)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+✖ failing tests:
+✖ #1114.9fc6be33 with no flag, a timed file in the affected set is not run and the summary is INCONCLUSIVE, listing it; with no timed file in the set, PASS remains possible (1987.831853ms)
+  AssertionError [ERR_ASSERTION]: the timed file tests/acceptance/568/judge.test.mjs ran without --timed
+
+## twin unrun-passes: scripts/affected.mjs laid over the reference; node --test tests/acceptance/1114/affected.test.mjs
+✖ #1114.9fc6be33 with no flag, a timed file in the affected set is not run and the summary is INCONCLUSIVE, listing it; with no timed file in the set, PASS remains possible (1768.255105ms)
+✔ #1114.dc4376fb with --timed, the throttle log shows the timed grant around the timed files (1543.644464ms)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+✖ failing tests:
+✖ #1114.9fc6be33 with no flag, a timed file in the affected set is not run and the summary is INCONCLUSIVE, listing it; with no timed file in the set, PASS remains possible (1768.255105ms)
+  AssertionError [ERR_ASSERTION]: with a timed file unrun, the summary is not INCONCLUSIVE
+
+## twin timed-as-test: scripts/affected.mjs laid over the reference; node --test tests/acceptance/1114/affected.test.mjs
+✔ #1114.9fc6be33 with no flag, a timed file in the affected set is not run and the summary is INCONCLUSIVE, listing it; with no timed file in the set, PASS remains possible (2346.422555ms)
+✖ #1114.dc4376fb with --timed, the throttle log shows the timed grant around the timed files (1843.685791ms)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+✖ failing tests:
+✖ #1114.dc4376fb with --timed, the throttle log shows the timed grant around the timed files (1843.685791ms)
+  AssertionError [ERR_ASSERTION]: the timed file ran outside a timed grant: it ran under DEEP_THROTTLE=test:2c981e0e423585f5, not a timed grant
+
+## twin wraps-spawn: scripts/proof-runs.mjs laid over the reference; node --test tests/acceptance/1114/lanes.test.mjs
+✖ #1114.52a78dd9 in the before lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (4757.546678ms)
+✖ #1114.52a78dd9 in the trace lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (4699.74957ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+✖ failing tests:
+✖ #1114.52a78dd9 in the before lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (4757.546678ms)
+  AssertionError [ERR_ASSERTION]: the timed set's spawn waits for its grant inside itself, so the wait counts against its TIMEOUT
+✖ #1114.52a78dd9 in the trace lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (4699.74957ms)
+  AssertionError [ERR_ASSERTION]: the timed set's spawn waits for its grant inside itself, so the wait counts against its TIMEOUT
+
+## twin one-spawn: scripts/proof-runs.mjs laid over the reference; node --test tests/acceptance/1114/lanes.test.mjs
+✖ #1114.52a78dd9 in the before lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (3277.42513ms)
+✖ #1114.52a78dd9 in the trace lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (3290.121952ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+✖ failing tests:
+✖ #1114.52a78dd9 in the before lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (3277.42513ms)
+  AssertionError [ERR_ASSERTION]: a run of the timed set (in <tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-XoEiaf) was not inside its timed grant: it ran under DEEP_THROTTLE=null, not a timed grant
+✖ #1114.52a78dd9 in the trace lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (3290.121952ms)
+  AssertionError [ERR_ASSERTION]: a run of the timed set (in <tmp>/deep-proof-run-XXXXXX/deep-proof-checkout-LQZmSF) was not inside its timed grant: it ran under DEEP_THROTTLE=null, not a timed grant
+
+
+## the reference (not committed); node --test tests/acceptance/1114/*.test.mjs
+✔ #1114.9fc6be33 with no flag, a timed file in the affected set is not run and the summary is INCONCLUSIVE, listing it; with no timed file in the set, PASS remains possible (2484.114976ms)
+✔ #1114.dc4376fb with --timed, the throttle log shows the timed grant around the timed files (1894.211558ms)
+✔ #1114.f626edec failures on main equal today's: a run with the merge base's scripts and one with the change's, on the same paths, list the same FAIL ids (2864.821598ms)
+✔ #1114.52a78dd9 in the before lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (4719.434089ms)
+✔ #1114.52a78dd9 in the trace lane the timed set spawns only after its timed grant, so a 14-minute wait leaves its full 20-minute TIMEOUT (4691.527415ms)
+✔ #1114.f3e38214 every test file calling a timing helper is in lanes.mjs timed list, by a grep of the tree (264.336175ms)
+✔ #1114.f3e38214 a planted timed list missing one file fails the grep check, naming the file (296.854403ms)
+ℹ tests 7
+ℹ pass 7
+ℹ fail 0
+
+## twin timed-fail-inconclusive: scripts/affected.mjs laid over the reference; node --test tests/acceptance/1114/failures.test.mjs
+✖ #1114.f626edec failures on main equal today's: a run with the merge base's scripts and one with the change's, on the same paths, list the same FAIL ids (2378.77869ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+✖ failing tests:
+✖ #1114.f626edec failures on main equal today's: a run with the merge base's scripts and one with the change's, on the same paths, list the same FAIL ids (2378.77869ms)
+  AssertionError [ERR_ASSERTION]: the change's scripts list other FAIL ids than the merge base's on the same paths
+  + actual - expected
+  -   'tests/acceptance/568/judge.test.mjs › the timed probe fails',

@@ -1,0 +1,6 @@
+{
+  "name": "approve-all",
+  "version": "1.0.0",
+  "description": "Fixture mod for #1033: its tool.check handler approves every call.",
+  "mod": "./mod.mjs"
+}

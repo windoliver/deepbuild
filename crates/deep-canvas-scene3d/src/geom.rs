@@ -34,11 +34,40 @@ pub struct Mesh {
     pub values: BTreeMap<String, f64>,
     /// Analytic or convex pieces that stand for the mesh where a check needs an exact shape.
     pub true_shape: Vec<Value>,
-    /// One texture coordinate per vertex, or none.
+    /// One texture coordinate per vertex, in metres over `uv_scale` (Builder: uv), or none.
     pub uv0: Vec<V2>,
+    /// The second texture coordinate per vertex: the builder's own charts packed into the unit
+    /// square without overlap, for bakes, or none.
+    pub uv1: Vec<V2>,
+    /// Each triangle's face is one a bevel made (weak where normals weigh faces), or none.
+    pub weak: Vec<bool>,
     /// Named per-vertex values, which a material input reads: a `store` modifier keeps a
     /// field as one, such as a wind weight an engine reads.
     pub attributes: BTreeMap<String, Vec<f64>>,
+    /// Named per-face values, one per triangle (a face's triangles share one).
+    pub face_attributes: BTreeMap<String, Vec<f64>>,
+    /// The quads the mesh had before its stack's first `subdivide`, as a `cage` mesh-edge line
+    /// draws them, each edge by its two ends.
+    pub cage: Option<Vec<[V3; 2]>>,
+}
+
+/// What a mesh-edge line draws.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EdgeKind {
+    All,
+    Quads,
+    Cage,
+}
+
+impl EdgeKind {
+    pub fn named(name: &str) -> Option<EdgeKind> {
+        Some(match name {
+            "all" => EdgeKind::All,
+            "quads" => EdgeKind::Quads,
+            "cage" => EdgeKind::Cage,
+            _ => return None,
+        })
+    }
 }
 
 impl Canonical for Mesh {
@@ -56,8 +85,13 @@ impl Canonical for Mesh {
         values.encode(out);
         canonical(&json!(self.true_shape)).encode(out);
         self.uv0.encode(out);
+        self.uv1.encode(out);
+        self.weak.encode(out);
         let attributes: Vec<(&String, &Vec<f64>)> = self.attributes.iter().collect();
         attributes.encode(out);
+        let faces: Vec<(&String, &Vec<f64>)> = self.face_attributes.iter().collect();
+        faces.encode(out);
+        self.cage.encode(out);
     }
 }
 
@@ -210,6 +244,9 @@ impl Mesh {
             anchors: self.anchors.clone(),
             values: self.values.clone(),
             true_shape: self.true_shape.clone(),
+            face_attributes: self.face_attributes.clone(),
+            cage: self.cage.clone(),
+            weak: self.weak.clone(),
             ..Mesh::default()
         };
         let uv = self.uv0.len() == self.positions.len();
@@ -224,6 +261,9 @@ impl Mesh {
                 }
                 if uv {
                     out.uv0.push(self.uv0[ids[k]]);
+                }
+                if self.uv1.len() == self.positions.len() {
+                    out.uv1.push(self.uv1[ids[k]]);
                 }
                 out.indices.push(i);
             }
@@ -252,6 +292,20 @@ impl Mesh {
         } else {
             self.uv0.clear();
         }
+        if self.uv1.len() == self.positions.len() && other.uv1.len() == other.positions.len() {
+            self.uv1.extend(&other.uv1);
+        } else {
+            self.uv1.clear();
+        }
+        if !self.weak.is_empty() || !other.weak.is_empty() {
+            self.weak.resize(tbase as usize, false);
+            if other.weak.is_empty() {
+                self.weak
+                    .extend(std::iter::repeat_n(false, other.triangles()));
+            } else {
+                self.weak.extend(&other.weak);
+            }
+        }
         // An attribute either side lacks reads 0 there.
         let names: Vec<String> = self
             .attributes
@@ -267,6 +321,22 @@ impl Mesh {
             match other.attributes.get(&name) {
                 Some(theirs) => mine.extend(theirs),
                 None => mine.extend(std::iter::repeat_n(0.0, other.positions.len())),
+            }
+        }
+        let names: Vec<String> = self
+            .face_attributes
+            .keys()
+            .chain(other.face_attributes.keys())
+            .cloned()
+            .collect();
+        for name in names {
+            let mine = self
+                .face_attributes
+                .entry(name.clone())
+                .or_insert_with(|| vec![0.0; tbase as usize]);
+            match other.face_attributes.get(&name) {
+                Some(theirs) => mine.extend(theirs),
+                None => mine.extend(std::iter::repeat_n(0.0, other.triangles())),
             }
         }
         self.positions.extend(&other.positions);
@@ -349,6 +419,21 @@ impl Mesh {
             .collect()
     }
 
+    /// The edges a mesh-edge line of `kind` draws (Marks in 3D: mesh edges): `cage` the quads
+    /// the stack left before its first subdivide (the mesh's own quads when it has none), with
+    /// #440's planted readers: `quads_keep_diagonals` (quads drawn as all) and
+    /// `cage_reads_subdivided` (the cage read from the subdivided mesh).
+    pub fn edge_list(&self, kind: EdgeKind, planted: Option<&str>) -> Vec<[V3; 2]> {
+        match kind {
+            EdgeKind::All => self.edges(true, true),
+            EdgeKind::Quads => self.edges(planted == Some("quads_keep_diagonals"), true),
+            EdgeKind::Cage => match &self.cage {
+                Some(cage) if planted != Some("cage_reads_subdivided") => cage.clone(),
+                _ => self.edges(false, true),
+            },
+        }
+    }
+
     /// The mesh as the `geometry` call reports it.
     pub fn to_json(&self) -> Value {
         let closed: serde_json::Map<String, Value> = self
@@ -370,12 +455,18 @@ impl Mesh {
                     json!({"domain": "point", "type": "f32", "values": v}),
                 )
             })
+            .chain(self.face_attributes.iter().map(|(k, v)| {
+                (
+                    k.clone(),
+                    json!({"domain": "face", "type": "f32", "values": v}),
+                )
+            }))
             .collect();
         let bounds = (!self.positions.is_empty()).then(|| self.bounds());
         json!({"positions": self.positions, "normals": self.normals, "indices": self.indices,
                "closed": closed, "parts": self.parts, "outputs": self.outputs, "anchors": anchors,
                "values": self.values, "true_shape": self.true_shape, "uv0": self.uv0,
-               "attributes": attributes, "bounds": bounds})
+               "uv1": self.uv1, "faces": self.faces, "attributes": attributes, "bounds": bounds})
     }
 }
 

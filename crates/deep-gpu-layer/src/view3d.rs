@@ -78,6 +78,10 @@ struct Args {
     status: Option<Status>,
     /// The GPU surface the view draws through (#386).
     surface: Surface,
+    /// Writer layers not visible in this session, which draw, light and cast nothing (#422).
+    hidden: BTreeSet<String>,
+    /// Each frame reports the key sun's cascade splits (#422).
+    cascades: bool,
 }
 
 /// Milliseconds from this process's spawn, as the kernel records its start, to now.
@@ -126,11 +130,127 @@ pub(crate) fn pair(v: &Value) -> Option<[u32; 2]> {
     ])
 }
 
+/// `doc` without the items of the `hidden` writer layers, nor those layers (#422: a layer not
+/// visible draws, lights and casts nothing, as if absent).
+fn without_layers(doc: &Value, hidden: &BTreeSet<String>) -> Value {
+    let mut d = doc.clone();
+    if let Some(items) = d.get_mut("items").and_then(Value::as_object_mut) {
+        items.retain(|_, item| !item["layer"].as_str().is_some_and(|l| hidden.contains(l)));
+    }
+    if let Some(layers) = d.get_mut("layers").and_then(Value::as_object_mut) {
+        layers.retain(|id, _| !hidden.contains(id));
+    }
+    d
+}
+
+/// The document's visible writer layers back to front (#422): by the band their writer's kind
+/// gives (Band; deep-canvas's `Writer::band`), then by their order key and ID.
+fn layers_report(doc: &Value, hidden: &BTreeSet<String>) -> Value {
+    use deep_canvas::show::{Writer, WriterKind};
+    let mut rows: Vec<(deep_canvas::show::Band, String, String, String)> = Vec::new();
+    for (id, layer) in doc["layers"].as_object().into_iter().flatten() {
+        if hidden.contains(id) {
+            continue;
+        }
+        let text = layer["writer"].as_str().unwrap_or_default();
+        let (kind, rest) = text.split_once(':').unwrap_or((text, ""));
+        let kind = match kind {
+            "you" => WriterKind::You,
+            "shell" => WriterKind::Shell,
+            "record" => WriterKind::Record,
+            "plugin" => WriterKind::Plugin,
+            _ => WriterKind::Agent,
+        };
+        let band = Writer {
+            kind,
+            id: rest.to_string(),
+        }
+        .band();
+        let order = layer["order"].as_str().unwrap_or_default().to_string();
+        rows.push((band, order, id.clone(), text.to_string()));
+    }
+    rows.sort();
+    json!(rows
+        .into_iter()
+        .map(|(band, _, layer, writer)| json!({"layer": layer, "writer": writer, "band": band.name()}))
+        .collect::<Vec<_>>())
+}
+
+/// A pack folder as one manifest (#422; as deep-show's store reads one): `pack.json`, its `id`
+/// `deepbuild/<name>`, each recipe file it names inlined.
+fn pack_manifest(dir: &std::path::Path) -> Result<Value, String> {
+    let read = |p: &std::path::Path| -> Result<Value, String> {
+        let bytes = std::fs::read(p).map_err(|e| format!("{}: {e}", p.display()))?;
+        serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", p.display()))
+    };
+    let mut manifest = read(&dir.join("pack.json"))?;
+    let name = manifest["name"].as_str().unwrap_or_default().to_string();
+    manifest["id"] = json!(format!("deepbuild/{name}"));
+    if let Some(Value::Object(recipes)) = manifest.get_mut("recipes") {
+        for entry in recipes.values_mut() {
+            if let Some(file) = entry.as_str() {
+                *entry = read(&dir.join(file))?;
+            }
+        }
+    }
+    Ok(manifest)
+}
+
+/// `doc` with every recipe instance of the packs in `dirs` expanded, as the check expands them
+/// (Recipe: expansion at check, never per frame); a pack or an expansion with an error refuses.
+fn expand_packs(doc: &Value, dirs: &[std::path::PathBuf]) -> Result<Value, Value> {
+    // The shipped modules and the building module, whose kinds packs' recipes may name.
+    static SEALED: std::sync::OnceLock<Option<deep_canvas::registry::Sealed>> =
+        std::sync::OnceLock::new();
+    let sealed = SEALED
+        .get_or_init(|| {
+            crate::plugin::shipped_modules()
+                .into_iter()
+                .chain([deep_canvas_scene3d::building::module()])
+                .fold(
+                    deep_canvas::registry::Registry::new(deep_canvas::registry::BuildSet::Full),
+                    deep_canvas::registry::Registry::with,
+                )
+                .seal()
+                .ok()
+        })
+        .as_ref()
+        .ok_or_else(|| refused("render_failed", "the pack build's modules don't seal"))?;
+    let mut packs = deep_canvas::document::Packs::new(Default::default());
+    for dir in dirs {
+        let manifest = pack_manifest(dir).map_err(|e| refused("bad_input", &format!("packs: {e}")))?;
+        if let Err(issues) = packs.admit(&manifest, sealed) {
+            let first = issues.first().map(|i| i.to_json()).unwrap_or(Value::Null);
+            return Err(refused("pack_refused", &first.to_string()));
+        }
+    }
+    let checked = deep_canvas::document::check_packed(doc, sealed, &packs);
+    if let Some(i) = checked
+        .issues
+        .iter()
+        .find(|i| i.severity == "error" && checked.expansions.is_empty())
+    {
+        return Err(refused(i.code, &i.path));
+    }
+    Ok(checked.lowered)
+}
+
 fn parse(call: &Value) -> Result<Args, Value> {
     let bad = |what: &str| refused("bad_input", what);
     let path = call["doc"].as_str().ok_or_else(|| bad("doc is a path"))?;
     let text = std::fs::read_to_string(path).map_err(|e| bad(&format!("doc: {e}")))?;
     let mut doc: Value = serde_json::from_str(&text).map_err(|e| bad(&format!("doc: {e}")))?;
+    // The packs the document's recipes expand from (#422).
+    let pack_dirs: Vec<std::path::PathBuf> = call["packs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(std::path::PathBuf::from)
+        .collect();
+    if !pack_dirs.is_empty() {
+        doc = expand_packs(&doc, &pack_dirs)?;
+    }
     let theme = status::theme_of(call)?;
     let look_json = status::themed(&call["look"], &theme);
     let look = Look3::read(&look_json).map_err(|e| bad(&format!("look: {e}")))?;
@@ -160,9 +280,9 @@ fn parse(call: &Value) -> Result<Args, Value> {
         .collect::<BTreeSet<_>>();
     if targets
         .iter()
-        .any(|t| !matches!(t.as_str(), "final" | "linear" | "ids"))
+        .any(|t| !matches!(t.as_str(), "final" | "linear" | "ids" | "pre_tone" | "dirt"))
     {
-        return Err(bad("targets are final, linear and ids"));
+        return Err(bad("targets are final, linear, ids, pre_tone and dirt"));
     }
     let capture = match &call["capture"] {
         Value::String(s) if s == "every" => Capture::Every,
@@ -247,6 +367,14 @@ fn parse(call: &Value) -> Result<Args, Value> {
         status,
         cold: call["cold"].as_bool().unwrap_or(false),
         surface: surface_of(call.get("surface")).map_err(|e| bad(&e))?,
+        hidden: call["hidden"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect(),
+        cascades: call["cascades"].as_bool().unwrap_or(false),
     })
 }
 
@@ -364,6 +492,46 @@ pub(crate) fn picks_json(picks: &[(String, u32)]) -> Value {
 }
 
 /// Writes `bytes` under `out`, named by their SHA-256 with `ext`; returns the name.
+/// A lens dirt PNG from the call's assets (#418): each pixel's value its red channel ÷ 255.
+fn dirt_png(
+    assets: &BTreeMap<String, std::path::PathBuf>,
+    sha: &str,
+) -> Result<deep_canvas_effects::interp::Image, Value> {
+    let path = "look/bloom/dirt/texture";
+    let file = assets
+        .get(sha)
+        .ok_or_else(|| refused("asset_missing", path))?;
+    let bytes = std::fs::read(file).map_err(|_| refused("asset_missing", path))?;
+    let img = image::load_from_memory(&bytes)
+        .map_err(|_| refused("out_of_range", path))?
+        .to_rgba8();
+    let mut out = deep_canvas_effects::interp::Image::new(img.width(), img.height());
+    for (p, px) in out.px.iter_mut().zip(img.pixels()) {
+        let d = f64::from(px.0[0]) / 255.0;
+        *p = [d, d, d, 1.0];
+    }
+    Ok(out)
+}
+
+/// The dirt image as the bloom's mix reads it at each pixel of a `size` frame, stretched over it:
+/// f32 RGBA with d in red, green and blue.
+fn dirt_target(dirt: &deep_canvas_effects::interp::Image, size: [u32; 2]) -> Vec<u8> {
+    let mut out = Vec::with_capacity((size[0] * size[1] * 16) as usize);
+    for y in 0..size[1] {
+        for x in 0..size[0] {
+            let uv = [
+                (f64::from(x) + 0.5) / f64::from(size[0]),
+                (f64::from(y) + 0.5) / f64::from(size[1]),
+            ];
+            let d = dirt.sample(uv)[0] as f32;
+            for v in [d, d, d, 1.0] {
+                out.extend_from_slice(&v.to_le_bytes());
+            }
+        }
+    }
+    out
+}
+
 pub(crate) fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, Value> {
     let name = hex(bytes);
     std::fs::write(
@@ -477,12 +645,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut strokes = false;
     // Held slots, each with the frame whose present releases it.
     let mut held: Vec<(u64, usize)> = Vec::new();
-    let wants_targets = args.targets.contains("linear") || args.targets.contains("ids");
+    let wants_targets = ["linear", "ids", "pre_tone"]
+        .iter()
+        .any(|t| args.targets.contains(*t));
+    // The bloom's lens dirt (#418): a PNG the assets name, its red channel ÷ 255, or seeded, made
+    // once for the whole call; and as the `dirt` target, sampled at each pixel of the frame.
+    let dirt = match args.look_json["bloom"]["dirt"]["texture"].as_str() {
+        Some("seeded") | None => None,
+        Some(sha) => Some(Arc::new(dirt_png(&args.assets, sha)?)),
+    };
+    let mut dirt_file: Option<String> = None;
     let mut levels = Levels::new(
         std::mem::take(&mut args.docs),
         app.planted == Some(Planted::LoadsEverything),
     );
     let result = (|| -> Result<(), Value> {
+        // The lights the policy last left out: a change is reported once, by ID (#421).
+        let mut left_out: Vec<String> = Vec::new();
+        let mut dropped: Vec<String> = Vec::new();
         for n in args.from..args.from + args.frames {
             // A seek applies every patch up to the frame it opens at.
             let mut patched = false;
@@ -507,7 +687,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
             levels.collect();
-            let (composed, resident) = levels.compose(&args.doc);
+            let (mut composed, resident) = levels.compose(&args.doc);
+            if !args.hidden.is_empty() {
+                composed = without_layers(&composed, &args.hidden);
+            }
             let read = |sha: &str| std::fs::read(args.assets.get(sha)?).ok();
             let mut scene = evaluate_with(&composed, t, &args.look, &mut labels, &read)
                 .map_err(|r| refused(r.code, r.path))?;
@@ -568,6 +751,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 doc_seed,
                 seeding,
             );
+            let mut settings = settings;
+            if dirt.is_some() {
+                settings.dirt = dirt.clone();
+            }
+            if args.targets.contains("dirt") && dirt_file.is_none() {
+                if let Some(d) = &settings.dirt {
+                    dirt_file = Some(write_named(out, &dirt_target(d, size), "f32")?);
+                }
+            }
             lock(&fx).settings = settings;
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
@@ -697,6 +889,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 if let (Some(bgra), true) = (&drawn.bytes, args.targets.contains("final")) {
                     frame.insert("final".into(), json!(write_final(out, bgra, size)?));
                 }
+                if let (Some(pre), true) = (&drawn.pre_tone, args.targets.contains("pre_tone")) {
+                    frame.insert("pre_tone".into(), json!(write_named(out, pre, "f32")?));
+                }
+                if let Some(name) = &dirt_file {
+                    frame.insert("dirt".into(), json!(name));
+                }
                 if let Some((linear, ids)) = &drawn.targets {
                     if args.targets.contains("linear") {
                         frame.insert("linear".into(), json!(write_named(out, linear, "f32")?));
@@ -717,6 +915,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("labels".into(), labels);
                 frame.insert("pages".into(), pages);
             }
+            // Lights the budget left out, and shadows it dropped, reported once per change.
+            let c = &drawn.counts;
+            if c.lights_left_out != left_out || c.shadows_dropped != dropped {
+                left_out.clone_from(&c.lights_left_out);
+                dropped.clone_from(&c.shadows_dropped);
+                let notice = json!({"code": "lights_over_budget", "lights": left_out, "shadows": dropped});
+                frame.insert("notices".into(), json!([notice]));
+            }
             if args.counts {
                 let c = &drawn.counts;
                 let encoded: Vec<Value> = c
@@ -729,6 +935,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("instances_written".into(), json!(c.instances_written));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
                 frame.insert("segments".into(), Value::Object(edge_segments));
+            }
+            if args.cascades {
+                frame.insert(
+                    "cascades".into(),
+                    json!({"splits": drawn.counts.cascade_splits}),
+                );
             }
             if let Some((gpu_ms, passes)) = &drawn.timing {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
@@ -814,8 +1026,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         "sharpen": args.surface.sharpen,
         "size_px": size, "internal_px": internal,
     });
-    let mut reply =
-        json!({"frames": frames, "passes": passes, "status": status_report, "surface": drew});
+    let mut reply = json!({
+        "frames": frames, "passes": passes, "status": status_report, "surface": drew,
+        "layers": layers_report(&args.doc, &args.hidden),
+    });
     if let Some((_, report)) = cold {
         reply["cold"] = report;
     }

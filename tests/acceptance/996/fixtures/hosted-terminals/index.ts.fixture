@@ -1,0 +1,33 @@
+// The piece whose terminals #996's AC2 reattaches: one tab per terminal the hub hosts for it, each the session that
+// runs in it (design: Starting a session from the app). Adapted from #104's agent-terminals fixture, without opening
+// terminals of its own: the test seeds the hub's terminals index, so nothing here needs a pseudo-terminal.
+//
+// Actions:
+// - tabs: every entry `deep.terminal.list()` gives, passed through whole, so a tab that reads lost shows as lost:
+//   {tabs: [...]}
+// - read: a terminal's output from a byte offset: {text, next}, or {refused: the host's message}
+const message = (e: unknown): string => String((e as Error)?.message ?? e);
+
+export default function (deep: any): void {
+  deep.registerAction('ext.hosted-terminals.tabs', { declares: 'read', input: { type: 'object' } }, async () => {
+    const terminals: any[] = await deep.terminal.list();
+    return { tabs: terminals };
+  });
+
+  deep.registerAction('ext.hosted-terminals.read', {
+    declares: 'read',
+    input: {
+      type: 'object',
+      properties: { terminal: { type: 'string' }, from: { type: 'integer', minimum: 0 } },
+      required: ['terminal', 'from'],
+      additionalProperties: false,
+    },
+  }, async (input: any) => {
+    try {
+      const r = await deep.terminal.read(input.terminal, input.from);
+      return { text: r.text, next: r.next };
+    } catch (e) {
+      return { refused: message(e) };
+    }
+  });
+}

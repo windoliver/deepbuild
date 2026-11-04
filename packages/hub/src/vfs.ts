@@ -10,7 +10,7 @@ import Database, { type Statement } from 'better-sqlite3';
 import type { Backend } from '@deepbuild/record';
 import type { VfsSettings } from './wire.js';
 
-export type PointKind = 'commit' | 'log_pos_block' | 'spool_read' | 'spool_removal' | 'evidence_rename' | 'rules_rewrite';
+export type PointKind = 'commit' | 'log_pos_block' | 'spool_read' | 'spool_removal' | 'evidence_rename' | 'rules_rewrite' | 'journal_rewrite' | 'terminals_rewrite';
 
 export interface Durable {
   /** Marks a durable write point just made. */
@@ -61,6 +61,16 @@ export function writeSynced(path: string, bytes: Uint8Array): void {
   renameSync(tmp, path);
   // The rename lasts only once its folder is synced too.
   syncPath(dirname(path));
+}
+
+/**
+ * Keeps the bytes of a state file that can't be read aside, synced, under its name and the time `now`, before anything
+ * writes over it (#996): a cut before the rewrite finds the damaged file again, never an empty one. The new path.
+ */
+export function keepAside(path: string, bytes: Uint8Array, now: number): string {
+  const aside = `${path}.${new Date(now).toISOString().replace(/:/g, '-')}`;
+  writeSynced(aside, bytes);
+  return aside;
 }
 
 /** Syncs the file or folder at `path`: its bytes, or for a folder the names in it. */
