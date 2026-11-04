@@ -33,8 +33,11 @@ function flag(name) {
   const at = process.argv.indexOf(`--${name}`);
   return at < 0 ? undefined : process.argv[at + 1];
 }
-/** Runs a settings entry's command line as Claude Code runs a hook, the shell replaced by the command. */
-const shell = (command, cwd) => spawn('/bin/sh', ['-c', `exec ${command}`], { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+/**
+ * Runs a settings entry's command line as Claude Code runs a hook, the shell replaced by the command: setup writes
+ * `exec '<deep-hook>' claude-code <event>` on main, and wrote it without the exec at the merge base.
+ */
+const shell = (command, cwd) => spawn('/bin/sh', ['-c', /^exec\s/.test(command) ? command : `exec ${command}`], { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
 const within = (promise, what, ms = STEP_MS) => {
   let timer;
   const late = new Promise((_, reject) => { timer = setTimeout(() => reject(new Blocked(`${what}: nothing within ${ms / 1000} s`)), ms).unref(); });
