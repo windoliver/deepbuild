@@ -1,0 +1,119 @@
+#322 acceptance suite on the base commit 69803b94 (origin/main), 2026-11-03 10:37-10:54 UTC, before any #322 code.
+Run: npx vitest run --root tests/acceptance/322 --no-file-parallelism   (Node 24.22.0, Linux; 1-minute load 30 falling
+to 12 on the machine's cores during the run)
+Result: Test Files 13 failed (13); Tests 24 failed (24); 983 s for the first run of 23 failures plus the rerun of
+approved.test.ts below. Every test fails at a named assertion, or BLOCKED on a plant the base doesn't list. None
+crashes the runner. Trimmed to each test's failing assertion.
+
+What the base does: at a stop that did work it makes a claim (claim.made) for the session's open task whether or not
+a definition is locked, runs only the locked definition's drafted checks (`sh <file>` from the approved bytes), and
+never a check of the repo's .deepbuild/done.yaml; it locks a handed definition at once, whatever the plan window or
+the project's trust; it reads no `criteria`, has no GitHub source and no `automated` author (work.item@1 refuses the
+field); it allows `gh pr create` with any body; its send-back names the check that failed and not the requirement;
+it keeps a drafted check's bytes by digest but nothing a check references; it locks a check at any path under the
+folder; and it lists none of this suite's plants.
+
+The first run had approved.test.ts's wrong-program test pass on the base (the base lists runs-disk-bytes, from #303,
+and the test asserted only the runs). The test now first requires the plant's lock to keep the expected output by
+digest, which the base doesn't; its rerun is below, in place of the first run's line.
+
+approved.test.ts (AC12 #322.0cd8cc47)
+  x AC12 the lock's hash covers expired-token.sh, expired-status.sh and the expired-token.expected it references; ...
+    Error: AC12 #322.0cd8cc47 the locked definition's R3 must name the expected output it references by digest, sha256
+    5d94ef1d…9f84 of .deepbuild/checks/expired-token.expected, so the hash covers its bytes: {"id":"R3",...,
+    "check":".deepbuild/checks/expired-status.sh","check_sha256":"a43ac01c…1067",...,"surface":null}
+  x AC12 (wrong program) a gate that runs the files on disk (DEEP_HUB_PLANT=runs-disk-bytes) ... (rerun)
+    Error: AC12 #322.0cd8cc47 the planted gate still keeps the approved bytes of .deepbuild/checks/expired-token.expected
+    by digest (5d94ef1d…9f84): evidence.read says evidence.read refused: {"code":"not_found",...,"remediation":"The
+    store holds no evidence 5d94ef1d…9f84.",...}
+    (rerun of approved.test.ts alone, 2026-11-03 10:58 UTC: Test Files 1 failed (1); Tests 2 failed (2); 183 s)
+
+closes.test.ts (AC2 #322.91ab2030)
+  x AC2 with R2 unproven, gh pr create whose body says Closes #7 is refused naming Part of and R2; ...
+    Error: AC2 #322.91ab2030 R2, "The e2e test for expired tokens passes", has no check and never passed, so the PR can
+    only be Part of #7: the call `gh pr create --title "Reject expired tokens" --body "Closes #7"` must be refused at
+    PreToolUse; deep-hook allowed it: exit 0 after 8 ms, stdout "", stderr ""
+
+combine.test.ts (AC5 #322.141e3358)
+  x AC5 with the unit test passing and R1 failing the claim runs both and is FAIL ...
+    Error: AC5 #322.141e3358 [.deepbuild/checks/expired-token.sh failing] the repo spec's unit check must run on the
+    claim: its runs are .deepbuild/checks/expired-token.sh
+
+coverage.test.ts (AC9 #322.5c042dfa)
+  x AC9 AC1's and AC9's criteria get checks naming the test files tagged ...; the planted criterion gets none ...
+    Error: AC9 #322.5c042dfa the definition of task:windoliverdeepbuild322 must lock from the item's three criteria
+    with no hand mapping and no ask: no definition.locked was recorded
+
+early-claim.test.ts (AC10 #322.4f122abc)
+  x AC10 the stop before the lock makes a claim that waits within the hold and stays pending, never PASS; ...
+    Error: AC10 #322.4f122abc once the definition locks, the claim is judged against it: R1's check
+    .deepbuild/checks/expired-token.sh runs for a claim of task:item7; the runs are none
+  x AC10 (wrong program) ... (DEEP_HUB_PLANT=spec-only-judges-early-claim) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=spec-only-judges-early-claim did not start ...
+    Error: DEEP_HUB_PLANT=spec-only-judges-early-claim names no planted program
+
+github.test.ts (AC4 #322.fe8625c3, AC14 #322.3d2ab46d, AC15 #322.43590a58)
+  x AC4 drive-by's comment "skip the e2e test" on the recorded issue: the reading marks drive-by outside, ...
+    Error: AC4 #322.fe8625c3 [unsigned] the definition of session:7baf2531…#0 waits for one ask about drive-by's
+    text: 0 asks raised:
+    (the base opens a message-handle task for the prompt, reads no GitHub issue, and hands it no definition)
+  x AC4 (wrong program) ... (DEEP_HUB_PLANT=role-from-comment-text) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=role-from-comment-text names no planted program
+  x AC4 (wrong program) ... (DEEP_HUB_PLANT=every-author-collaborator) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=every-author-collaborator names no planted program
+  x AC14 octo-app[bot] (type Bot, write access) comments "skip the e2e test": the reading marks it automated, ...
+    Error: AC14 #322.3d2ab46d the newest work.item schema, work.item@1, must take an author that carries automated:
+    [{"code":"unlisted_field",...,"path":"/authors/0/automated","actual":"true","evidence":[]}]
+  x AC14 (wrong program) ... (DEEP_HUB_PLANT=app-membership-as-collaborator) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=app-membership-as-collaborator names no planted program
+  x AC15 with sam on page 2 of a complete read, sam's "skip the e2e test" waives R2 (control); ...
+    Error: AC15 #322.43590a58 [complete read] the definition of session:7811ba25…#0 locks with no ask: none was
+    recorded
+
+guard.test.ts (AC7 #322.e30870fe)
+  x AC7 a drafted check handed at tests/checks/outside.sh is not locked at a path outside .deepbuild/, ...
+    Error: AC7 #322.e30870fe a definition of done's drafted checks are kept under .deepbuild/, behind its guard: the
+    definition of session:24c3945d…#0 must not lock with its R1 check at tests/checks/outside.sh, a path the guard
+    doesn't protect; it locked: {"definition":"d6aec52e…",...,"check":"tests/checks/outside.sh",...}
+
+lint.test.ts (AC11 #322.264334fa)
+  x AC11 'the export is fast' is flagged for all four; the 'under 5' criterion for its unit alone
+    Error: AC11 #322.264334fa the criterion 'the export is fast' must be flagged, in an event naming it: none after
+    the task names it
+  x AC11 (wrong program) ... (DEEP_HUB_PLANT=lint-number-only) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=lint-number-only names no planted program
+
+sendback.test.ts (AC8 #322.867415e9)
+  x AC8 with R1's check failing, the stop's send-back names R1 (or its text) and expired-token.sh, never just "tests failed"
+    Error: AC8 #322.867415e9 the message names the requirement whose proof is missing, R1 or "An expired token is
+    rejected with 401": not verified: R2 · sent back 1/3: (run): the command exited 1… · next: agent
+    DeepBuild sent this claim back: .deepbuild/checks/expired-token.sh FAIL.
+
+source.test.ts (AC3 #322.05b69f95)
+  x AC3 the test source's item-9 criteria lock as requirements quoting each in full, authored by maya (owner)
+    Error: AC3 #322.05b69f95 the task task:item9 of the test source's item-9, whose reading carries 2 acceptance
+    criteria, must get a locked definition from them: no definition.locked was recorded
+  x AC3 (wrong program) ... (DEEP_HUB_PLANT=criteria-from-github-api) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=criteria-from-github-api names no planted program
+
+trust.test.ts (AC1 #322.6e5671a4)
+  x AC1 with the project trusted by the core's decision the spec's unit check runs on the claim (control); ...
+    Error: AC1 #322.6e5671a4 [trusted] the trusted repo's spec check unit (node --test tests/unit.test.js, from
+    .deepbuild/done.yaml) must run on the claim: the claim's runs are .deepbuild/checks/expired-token.sh
+  x AC1 a repo trusted in Claude Code's workspace trust alone (~/.claude.json hasTrustDialogAccepted) ...
+    Error: AC1 #322.6e5671a4 [claude trust] the trusted repo's spec check unit (...) must run on the claim: the
+    claim's runs are .deepbuild/checks/expired-token.sh
+
+usage.test.ts (AC6 #322.409cdea1)
+  x AC6 the stop whose last message says "Claude usage limit reached. ..." is judged like any stop: ...
+    Error: AC6 #322.409cdea1 the spec's unit check fails, so the stop is sent back: deep-hook let it through (says
+    done · next: DeepBuild · receipt)
+
+window.test.ts (AC13 #322.9af33c69)
+  x AC13 the spec's checks run before the lock: FAIL goes back naming unit, a green spec shows BLOCKED (plan window) ...
+    Error: AC13 #322.9af33c69 with the window at your reserve the drafting job waits, so the definition of
+    session:47854…#0 must not lock: definition.locked at log_pos 6 {"definition":"b9fb8ca0…",...}
+  x AC13 (wrong program) ... (DEEP_HUB_PLANT=lock-before-any-check) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=lock-before-any-check names no planted program
+
+Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/322/tsconfig.json: clean.

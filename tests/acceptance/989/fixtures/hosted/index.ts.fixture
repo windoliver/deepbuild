@@ -1,0 +1,62 @@
+// The #989 acceptance tests' piece: terminals the hub hosts for it, at the start size its caller asks for, listed,
+// read and closed through `deep.terminal.*`. It has no way to type into a terminal or size one: those come from the app.
+//
+// Actions:
+// - open: a terminal running `argv` in `cwd`, titled `title`, of `cols` x `rows` cells: {opened: {terminal, run, pid}},
+//   or {refused: the host's message}
+// - tabs: {tabs: [{terminal, title, pid, run}]}, from deep.terminal.list()
+// - read: a terminal's output from a byte offset: {text, next}
+// - close: closes a terminal: {closed: true}, or {refused: the host's message}
+const message = (e: unknown): string => String((e as Error)?.message ?? e);
+
+export default function (deep: any): void {
+  deep.registerAction('ext.hosted.open', {
+    declares: 'change',
+    input: {
+      type: 'object',
+      properties: {
+        argv: { type: 'array', items: { type: 'string' }, minItems: 1 }, cwd: { type: 'string' }, title: { type: 'string' },
+        cols: { type: 'integer', minimum: 1 }, rows: { type: 'integer', minimum: 1 },
+      },
+      required: ['argv', 'cwd', 'title', 'cols', 'rows'],
+      additionalProperties: false,
+    },
+  }, async (input: any) => {
+    try {
+      const t = await deep.terminal.open({ argv: input.argv, cwd: input.cwd, cols: input.cols, rows: input.rows, title: input.title });
+      return { opened: { terminal: t.terminal, run: t.run, pid: t.pid } };
+    } catch (e) {
+      return { refused: message(e) };
+    }
+  });
+
+  deep.registerAction('ext.hosted.tabs', { declares: 'read', input: { type: 'object' } }, async () => {
+    const terminals: any[] = await deep.terminal.list();
+    return { tabs: terminals.map((t) => ({ terminal: t.terminal, title: t.title, pid: t.pid, run: t.run })) };
+  });
+
+  deep.registerAction('ext.hosted.read', {
+    declares: 'read',
+    input: {
+      type: 'object',
+      properties: { terminal: { type: 'string' }, from: { type: 'integer', minimum: 0 } },
+      required: ['terminal', 'from'],
+      additionalProperties: false,
+    },
+  }, async (input: any) => {
+    const r = await deep.terminal.read(input.terminal, input.from);
+    return { text: r.text, next: r.next };
+  });
+
+  deep.registerAction('ext.hosted.close', {
+    declares: 'change',
+    input: { type: 'object', properties: { terminal: { type: 'string' } }, required: ['terminal'], additionalProperties: false },
+  }, async (input: any) => {
+    try {
+      await deep.terminal.close(input.terminal);
+      return { closed: true };
+    } catch (e) {
+      return { refused: message(e) };
+    }
+  });
+}

@@ -176,3 +176,27 @@ fn an_action_with_its_target_in_a_drags_drop_field_is_refused_naming_locator() {
         "a drag still takes its drop target: {dropped}"
     );
 }
+
+#[test]
+fn a_replica_launched_dark_draws_its_chrome_dark() {
+    let mut ground = Vec::new();
+    for theme in ["light", "dark"] {
+        let (mut drive, _) = Drive::launch(
+            theme,
+            json!({"from": "fixture", "panel": PANEL, "size": [800, 600], "scale": 1, "theme": theme}),
+        );
+        let shot = drive.call(json!({"call": "screenshot", "screenshot": {"target": "window"}}));
+        let image = image::open(shot["path"].as_str().unwrap())
+            .expect("the screenshot")
+            .to_luma8();
+        let mean = image.pixels().map(|p| u64::from(p.0[0])).sum::<u64>()
+            / u64::from(image.width() * image.height());
+        ground.push(mean);
+    }
+    assert!(
+        ground[0] > 160 && ground[1] < 96,
+        "mean luma light {} and dark {}: a dark launch draws a dark window",
+        ground[0],
+        ground[1]
+    );
+}

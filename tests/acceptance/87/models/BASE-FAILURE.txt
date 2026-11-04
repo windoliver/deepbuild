@@ -1,0 +1,45 @@
+Base run of the #87 `models` acceptance tests, on base commit 29d29ba5 (origin/main), macOS, Node 24.22.0,
+vitest 5.0.5, from the worktree root (shown as <worktree>), with the agent's own nesting variables (CLAUDECODE,
+CLAUDE_CODE_*) unset as a terminal outside Claude Code has them:
+
+  npx vitest run --root tests/acceptance/87/models --testTimeout=600000
+
+ Test Files  7 failed (7)
+      Tests  12 failed | 1 passed (13)
+   Duration  11.88s
+
+Eleven tests fail on their own at their first call into the review check: the package @deepbuild/checks-review
+isn't at the base, and the tests import it lazily (helpers.ts, `review()`), so each throws
+
+  Error: Cannot find module '/packages/checks-review/src/index.ts' imported from <worktree>/tests/acceptance/87/models/helpers.ts
+
+(the wrong-program tests show it as "expected [Function] to throw error matching /…/ but got 'Cannot find module
+'/packages/checks…'"). That covers plan-window, same-model (3), model-unknown, budgets, canonical (3) and
+proxied-route (2). Had the package been there, Claude Code's adapter has no `routeAtStart` at the base either, and
+every test's change session would throw "Claude Code's adapter records no route at session start
+(Adapter.routeAtStart)".
+
+answering-model.test.ts, on the real runner with the fake `claude` (a real job through the supervisor's sandbox):
+
+  ✓ a Claude Code review job whose usage lists claude-haiku-4-5 with 40 output tokens first and claude-sonnet-4-5
+    with 3,000 records claude-sonnet-4-5
+  × (wrong program) a runner that takes the first model listed records the other, and fails
+    AssertionError: promise resolved "undefined" instead of rejecting
+
+The first passes at the base: the base's runner records the last assistant message's model, and in this recorded
+run every message is sonnet's (README, Readings: "Most output tokens in its usage"). The second fails because the
+runner has no `first-model-listed` switch (an unknown plant is ignored at run time), so the planted runner still
+records sonnet; it passes once the switch exists and records the first model the usage lists.
+
+Type check at the base:
+
+  npx tsc -p tests/acceptance/87/models/tsconfig.json     (exit 2)
+
+  answering-model.test.ts(30,28): error TS2345: Argument of type '"first-model-listed"' is not assignable to parameter of type 'Plant | undefined'.
+  canonical.test.ts(6,33), helpers.ts(17,46), (23,29), (24,53), proxied-route.test.ts(9,33), same-model.test.ts(7,33):
+    error TS2307: Cannot find module '../../../../packages/checks-review/src/index.ts' or its corresponding type declarations.
+  helpers.ts(181,21), (182,79): error TS2339: Property 'routeAtStart' does not exist on type 'Adapter'.
+
+With a declaration-only copy of the surface under test (README) placed temporarily (packages/checks-review/src/index.ts;
+SessionRoute and Adapter.routeAtStart in packages/adapters; 'first-model-listed' in the runner's Plant) and removed
+afterwards, the same command exits 0 with no output.

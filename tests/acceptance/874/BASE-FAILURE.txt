@@ -28,7 +28,7 @@ libuv), which is an environment problem: use Node 24.22.
 Raw output of the run:
 
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/tests/acceptance/874
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/tests/acceptance/874
 
  ❯ invalid.test.ts (3 tests | 3 failed) 6363ms
    ❯ AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID (3)
@@ -73,15 +73,15 @@ AssertionError: .deepbuild/checks/health.sh on the base must reach the stand-in 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
 
  FAIL  empty.test.ts > AC1 #874.b1e77128 through a real hub, in an empty repo, a drafted check that declares a surface runs on the base against a stand-in, and the record holds its hash > AC1 (wrong program) a hub that never carries the declared surface to the base checkout fails this test, naming the stand-in
-Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-surface-dropped did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-surface-dropped did not start: file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 
 Error: DEEP_HUB_PLANT=stand-in-surface-dropped names no planted program
-    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
-    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
-    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
+    at plantOf (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
 
 Node.js v24.22.0
 
@@ -98,15 +98,15 @@ Node.js v24.22.0
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
 
  FAIL  empty.test.ts > AC1 #874.b1e77128 through a real hub, in an empty repo, a drafted check that declares a surface runs on the base against a stand-in, and the record holds its hash > AC1 (wrong program) a hub that builds the stand-in but records no hash fails this test, naming stand_in
-Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-unrecorded did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-unrecorded did not start: file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 
 Error: DEEP_HUB_PLANT=stand-in-unrecorded names no planted program
-    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
-    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
-    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
+    at plantOf (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
 
 Node.js v24.22.0
 
@@ -149,15 +149,15 @@ AssertionError: .deepbuild/checks/health.sh on the base must reach the stand-in 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
 
  FAIL  invalid.test.ts > AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID > AC3 (wrong program) a hub that counts a pass on a stand-in as proof fails this test, naming INVALID
-Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-pass-proves did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-pass-proves did not start: file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 
 Error: DEEP_HUB_PLANT=stand-in-pass-proves names no planted program
-    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
-    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
-    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
+    at plantOf (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
 
 Node.js v24.22.0
 
@@ -174,15 +174,15 @@ Node.js v24.22.0
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
 
  FAIL  invalid.test.ts > AC3 #874.555fd457 a drafted check that passes on its stand-in is INVALID > AC3 (wrong program) a hub that never carries the declared surface to the base checkout fails this test, naming the stand-in
-Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-surface-dropped did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-surface-dropped did not start: file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 
 Error: DEEP_HUB_PLANT=stand-in-surface-dropped names no planted program
-    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
-    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
-    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
+    at plantOf (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
 
 Node.js v24.22.0
 
@@ -199,15 +199,15 @@ Node.js v24.22.0
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
 
  FAIL  starts.test.ts > AC2 #874.f1e74512 through a real hub, in a repo whose app already starts, a check for a new route gets no stand-in > AC2 (wrong program) a hub that builds a stand-in where the app already starts fails this test, naming the stand-in
-Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-always did not start: file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stand-in-always did not start: file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 
 Error: DEEP_HUB_PLANT=stand-in-always names no planted program
-    at plantOf (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
-    at runHub (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
-    at hubCommand (file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
-    at file:///Users/tafeng/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
+    at plantOf (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/plant.js:40:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/server.js:1081:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-874-0cdff6/agent-a391686ca3bf606e8/packages/cli/dist/main.js:178:30
 
 Node.js v24.22.0
 
