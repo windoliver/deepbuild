@@ -1,6 +1,6 @@
 {
   "id": "ask.machine@1",
-  "description": "An ask's life, as the record's asks table holds it: open until it is answered, defaulted at its deadline, decided for you, or closed without an answer. The first of an answer and the deadline to append decides; the core's undo reopens a defaulted ask.",
+  "description": "An ask's life, as the record's asks table holds it: open (or later) until it is answered, defaulted at its deadline, decided for you, escalated, or closed without an answer. The first of them to append decides; the core's undo reopens a defaulted ask.",
   "x-since": "R1",
   "x-stability": "stable",
   "states": [
@@ -19,6 +19,7 @@
     "answered",
     "defaulted",
     "decided",
+    "escalated",
     "cancelled",
     "moot",
     "superseded"
@@ -105,46 +106,6 @@
       "to": "escalated"
     },
     {
-      "from": "escalated",
-      "event": "ask.answered",
-      "to": "answered"
-    },
-    {
-      "from": "escalated",
-      "event": "ask.defaulted",
-      "guard": "past_deadline",
-      "to": "defaulted"
-    },
-    {
-      "from": "escalated",
-      "event": "decision.applied",
-      "to": "decided"
-    },
-    {
-      "from": "escalated",
-      "event": "ask.cancelled",
-      "guard": "not_agent",
-      "to": "cancelled"
-    },
-    {
-      "from": "escalated",
-      "event": "ask.moot",
-      "guard": "not_agent",
-      "to": "moot"
-    },
-    {
-      "from": "escalated",
-      "event": "ask.superseded",
-      "guard": "not_agent",
-      "to": "superseded"
-    },
-    {
-      "from": "escalated",
-      "event": "ask.escalated",
-      "guard": "not_agent",
-      "to": "escalated"
-    },
-    {
       "from": "open",
       "event": "ask.later",
       "guard": "core",
@@ -200,6 +161,13 @@
       ]
     },
     {
+      "name": "first_to_close:answered_or_escalated",
+      "events": [
+        "ask.answered",
+        "ask.escalated"
+      ]
+    },
+    {
       "name": "first_to_close:answered_or_cancelled",
       "events": [
         "ask.answered",
@@ -228,6 +196,13 @@
       ]
     },
     {
+      "name": "first_to_close:defaulted_or_escalated",
+      "events": [
+        "ask.defaulted",
+        "ask.escalated"
+      ]
+    },
+    {
       "name": "first_to_close:defaulted_or_cancelled",
       "events": [
         "ask.defaulted",
@@ -249,6 +224,13 @@
       ]
     },
     {
+      "name": "first_to_close:applied_or_escalated",
+      "events": [
+        "decision.applied",
+        "ask.escalated"
+      ]
+    },
+    {
       "name": "first_to_close:applied_or_cancelled",
       "events": [
         "decision.applied",
@@ -266,6 +248,27 @@
       "name": "first_to_close:applied_or_superseded",
       "events": [
         "decision.applied",
+        "ask.superseded"
+      ]
+    },
+    {
+      "name": "first_to_close:escalated_or_cancelled",
+      "events": [
+        "ask.escalated",
+        "ask.cancelled"
+      ]
+    },
+    {
+      "name": "first_to_close:escalated_or_moot",
+      "events": [
+        "ask.escalated",
+        "ask.moot"
+      ]
+    },
+    {
+      "name": "first_to_close:escalated_or_superseded",
+      "events": [
+        "ask.escalated",
         "ask.superseded"
       ]
     },

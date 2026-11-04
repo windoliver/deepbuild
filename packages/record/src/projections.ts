@@ -104,7 +104,7 @@ const TOOL = new Set(['tool.before', 'tool.after']);
 const WIKI_KINDS = new Set(['learn.applied', 'learn.widened', 'learn.rolled_back', 'learn_check.made']);
 const ENDED = new Set(['finished', 'failed']);
 /** The kinds that do more than move a lifecycle object: a refused move leaves out only the move. */
-const PARTIAL = new Set(['ask.batched', 'run.started', 'verdict.made']);
+const PARTIAL = new Set(['ask.batched', 'decision.applied', 'run.started', 'verdict.made', 'claim.sent_back', 'claim.stalled']);
 
 export class Projector {
   private readonly statements = new Map<string, Statement<unknown[]>>();
@@ -203,8 +203,11 @@ export class Projector {
       .run(reading, JSON.stringify(amount), unit, e.ts, e.writer);
   }
 
-  /** Projects one event, and returns the moves its lifecycle tables refuse, which it leaves out (lifecycle.ts). */
-  apply(e: Projected): Refusal[] {
+  /**
+   * Projects one event, and returns the moves its lifecycle tables refuse, which it leaves out (lifecycle.ts). An
+   * event from before the record had its gate isn't gated.
+   */
+  apply(e: Projected, gated = true): Refusal[] {
     const d: Obj = isObj(e.data) ? e.data : {};
     if (e.session) {
       // The newest stamp seen: a late or spooled event never moves a session back.
@@ -224,7 +227,7 @@ export class Projector {
       // Nor is a subagent's stop: it ends no turn of the session's.
       if (e.kind !== 'session.reading' && !d.child) this.turn(e, d);
     }
-    const { moves, refused } = gate(e, (sql, ...params) => this.stmt(sql).get(...params) as Row | undefined);
+    const { moves, refused } = gate(e, (sql, ...params) => this.stmt(sql).get(...params) as Row | undefined, gated);
     // An event that does more than move objects keeps the rest; one that only moves them changes nothing more.
     if (refused.length && !PARTIAL.has(e.kind)) return refused;
     const moved = (object: string): string | undefined => moves.find((m) => m.object === object)?.to;
@@ -377,7 +380,7 @@ export class Projector {
         this.up('decisions', { id: e.id, key: str(d.key), scope: json(d.scope), answer: json(d.answer), by: e.actor, ask_id: bare(d.ask), state: 'active', created: e.ts });
         break;
       case 'decision.applied':
-        this.up('asks', { id: bare(d.ask), status: 'decided', outcome: 'decided_for_you', answered: e.ts });
+        if (moved(`ask:${bare(d.ask)}`)) this.up('asks', { id: bare(d.ask), status: 'decided', outcome: 'decided_for_you', answered: e.ts });
         this.stmt('UPDATE decisions SET applied = applied + 1 WHERE id = ?').run(bare(d.decision));
         break;
       case 'decision.revoked':
@@ -437,7 +440,9 @@ export class Projector {
         this.up('checks', { id: str(d.check), name: str(d.check) });
         break;
       case 'task.created':
-        this.up('tasks', { task_ref: str(d.task_ref), thread: str(d.thread), owner: str(d.owner), title: str(d.title), state: 'queued', created: e.ts });
+        this.up('tasks', { task_ref: str(d.task_ref), thread: str(d.thread), owner: str(d.owner), title: str(d.title), created: e.ts });
+        // A task's state moves only through its table: a second task.created never reopens it.
+        this.fill('tasks', { task_ref: str(d.task_ref), state: 'queued' });
         break;
       case 'task.closed':
         this.set('tasks', { state: 'closed', closed: e.ts, by_verdict: str(d.by_verdict) }, { task_ref: e.subject });

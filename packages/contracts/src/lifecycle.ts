@@ -10,7 +10,7 @@ export const MACHINE_FILE = /^([a-z_]+)\.machine@(\d+)\.json$/;
 
 export interface MachineMove { from: string; event: string; guard?: string; to: string }
 /** A pair of events whose two arrival orders may end an object in different states, named so the order is chosen. */
-export interface MachineConflict { name: string; events: [string, string] }
+interface MachineConflict { name: string; events: [string, string] }
 export interface Machine {
   id: string;
   description?: string;
@@ -28,12 +28,12 @@ export const LIFECYCLE_OBJECTS: readonly string[] = ['ask', 'ask_task', 'lease',
  * The guards a move may name, each what the record and the enumerator's world both read it as. A guard outside
  * this list has no meaning, so the contract test refuses a table that names one.
  */
-export const LIFECYCLE_GUARDS: Readonly<Record<string, string>> = {
+const LIFECYCLE_GUARDS: Readonly<Record<string, string>> = {
   core: 'the core wrote the event',
   not_agent: 'no agent wrote it: neither a hook nor an MCP connection',
   trusted_path: 'you wrote it on your trusted path: the app or the CLI',
   past_deadline: "it is stamped at or after the object's deadline",
-  holder_ended: "the events its proof cites, the holder's end and its processes' ends, are in the log",
+  proven_ended: "its end is proven: every event its proof cites, the holder's end or its processes' ends, is earlier in the log",
   newer_attempt: 'it starts a newer attempt at the same task',
   own_session: "it ends the attempt's own session",
 };
@@ -58,6 +58,8 @@ export function machineProblems(table: Machine, published: (kind: string) => boo
   if (states.size !== table.states.length) problems.push(`${at}: a state is listed twice`);
   if (!states.has(table.initial)) problems.push(`${at}: its initial state ${table.initial} is not one of its states`);
   if (!table.final.length) problems.push(`${at}: it names no final state`);
+  // A life that starts ended passes every check with any moves at all.
+  if (table.final.includes(table.initial)) problems.push(`${at}: its initial state ${table.initial} is final`);
   for (const f of table.final) if (!states.has(f)) problems.push(`${at}: final state ${f} is not one of its states`);
   for (const m of table.moves) {
     const row = `${m.from} --${m.event}${m.guard ? `[${m.guard}]` : ''}--> ${m.to}`;

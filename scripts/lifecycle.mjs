@@ -47,10 +47,10 @@ const WORLD_GUARDS = {
   trusted_path: () => true,
   newer_attempt: () => true,
   past_deadline: (env) => env.clock === 'past',
-  holder_ended: (env, tables) => env.session !== null && tables.get('session_binding')?.final.includes(env.session),
+  proven_ended: (env, tables) => env.session !== null && tables.get('session_binding')?.final.includes(env.session),
   own_session: (env, tables) => env.session !== null && tables.get('session_binding')?.final.includes(env.session),
 };
-const LINKED = new Set(['holder_ended', 'own_session']);
+const LINKED = new Set(['proven_ended', 'own_session']);
 
 /** The world's objects: two sessions, two asks, a lease S1 holds, an attempt S2 runs, one of every other table. */
 function objectsOf(tables) {
@@ -114,6 +114,9 @@ function world(tables) {
   let crashes = 0;
   const tableProblems = new Map();
   const problem = (id, text) => (tableProblems.get(id) ?? tableProblems.set(id, []).get(id)).push(text);
+  // Each finding once per table: the second ask of the world finds what the first found.
+  const once = new Map();
+  const first = (id, key) => { const keys = once.get(id) ?? once.set(id, new Set()).get(id); return !keys.has(key) && keys.add(key); };
   const counts = new Map();
   for (const [object, table] of tables) {
     for (const m of table.moves) if (m.guard !== undefined && !(m.guard in WORLD_GUARDS)) problem(table.id, `BLOCKED|the guard ${m.guard} of ${m.from} --${m.event}--> ${m.to} has no meaning in the world`);
@@ -130,14 +133,12 @@ function world(tables) {
       const reaches = new Set(ends);
       for (const queue = [...ends]; queue.length;) for (const k of into.get(queue.shift()) ?? []) if (!reaches.has(k)) { reaches.add(k); queue.push(k); }
       const stuck = [...nodes.values()].find((n) => !reaches.has(`${n.state}|${n.clock}|${n.back}|${n.restarted}|${n.session}|${n.logged}`));
-      if (stuck) problem(table.id, `${item.object} ${item.name} stays ${stuck.state} after ${stuck.path.join(' → ') || 'its start'}; no move reaches a final state`);
-      const seen = new Set();
+      if (stuck && first(table.id, `stuck ${stuck.state}`)) problem(table.id, `${item.object} ${item.name} stays ${stuck.state} after ${stuck.path.join(' → ') || 'its start'}; no move reaches a final state`);
       for (const n of nodes.values()) {
         // A crash here, replayed from the log alone, recovers the state the object is in.
         crashes++;
         const back = replay(n.log);
-        if (back !== n.state && !seen.has(`crash ${n.state}`)) {
-          seen.add(`crash ${n.state}`);
+        if (back !== n.state && first(table.id, `crash ${n.state}`)) {
           problem(table.id, `${item.object} ${item.name} recovers from the log as ${back}, not ${n.state}, after ${n.path.join(' → ')}`);
         }
         // Two events in either order, or one from both devices, end alike or in a conflict the table names.
@@ -149,8 +150,7 @@ function world(tables) {
           const once = deliver(table, n.state, a, env, tables);
           const pair = [a, b].sort().join(' ');
           if (a === b ? ab === once || named(a, a) : ab === ba || named(a, b)) continue;
-          if (seen.has(pair)) continue;
-          seen.add(pair);
+          if (!first(table.id, pair)) continue;
           problem(table.id, a === b
             ? `${item.object} ${item.name} in ${n.state}: ${a} from one device ends ${once}, ${a} from both devices ends ${ab}, and no conflict is named`
             : `${item.object} ${item.name} in ${n.state}: ${a} then ${b} ends ${ab}, ${b} then ${a} ends ${ba}, and no conflict is named`);
@@ -181,19 +181,22 @@ const LOG_GUARDS = {
   not_agent: (e) => !isAgent(e.writer),
   trusted_path: (e) => e.writer === 'app' || e.writer === 'cli',
   past_deadline: (e, o) => typeof o.deadline !== 'number' || e.ts >= o.deadline,
-  holder_ended: (e, o, seen) => {
-    const proof = Array.isArray(e.data?.proof) ? e.data.proof : [];
-    return !(String(o.holder ?? '').startsWith('session:') && !proof.length) && proof.every((id) => seen.has(id));
-  },
+  proven_ended: (e, _o, seen) => (Array.isArray(e.data?.proof) ? e.data.proof : []).every((id) => seen.has(id)),
 };
 
 /**
  * Replays one log: each event finds the objects it would move, as the record does, and moves them by their
- * tables. An event a move.refused cites was refused by the record and moves nothing. Returns the moves made,
- * the problems found and every object's state.
+ * tables. An object the core's move.refused names after an event was refused that move by the record, and the
+ * event moves it not at all. Returns the moves made, the problems found and every object's state.
  */
 function replayLog(events, tables) {
-  const refused = new Set(events.filter((e) => e.kind === 'move.refused').map((e) => e.data?.event_id));
+  const refused = new Map();
+  for (const r of events) {
+    if (r.kind !== 'move.refused' || r.writer !== 'core') continue;
+    const key = `${r.data?.event_id} ${r.data?.object}`;
+    refused.set(key, Math.max(refused.get(key) ?? 0, r.log_pos ?? Infinity));
+  }
+  const excused = (e, at) => (refused.get(`${e.id} ${at}`) ?? 0) > (e.log_pos ?? 0);
   const objects = new Map();
   const seen = new Set();
   const problems = [];
@@ -202,7 +205,6 @@ function replayLog(events, tables) {
   const known = (id) => objects.get(id);
   for (const e of events) {
     seen.add(e.id);
-    if (refused.has(e.id)) continue;
     const d = isObj(e.data) ? e.data : {};
     const targets = [];
     switch (e.kind) {
@@ -217,9 +219,12 @@ function replayLog(events, tables) {
         const r = isObj(d.resource) ? d.resource : {};
         const at = `lease:${r.kind}/${r.key}`;
         const now = objects.get(at);
-        const own = now && ['held', 'stale'].includes(now.state) && now.holder === d.holder && e.kind !== 'lease.denied';
-        if (!own && !(now && ['held', 'stale'].includes(now.state) && e.kind === 'lease.denied')) objects.set(at, { table: 'lease', state: tables.get('lease').initial, holder: d.holder });
-        if (!(now && ['held', 'stale'].includes(now.state) && e.kind === 'lease.denied')) targets.push(at);
+        const live = now && ['held', 'stale'].includes(now.state);
+        const own = live && now.holder === d.holder && e.kind !== 'lease.denied';
+        // A denial of a held key is not about the lease that holds it.
+        if (live && e.kind === 'lease.denied') break;
+        if (!own && !excused(e, at)) objects.set(at, { table: 'lease', state: tables.get('lease').initial, holder: d.holder });
+        targets.push(at);
         break;
       }
       case 'open_item.opened': case 'open_item.closed': {
@@ -240,6 +245,7 @@ function replayLog(events, tables) {
         if (e.subject && known(`ask:${bare(e.subject)}`) && tables.get('ask').moves.some((m) => m.event === e.kind)) targets.push(`ask:${bare(e.subject)}`);
     }
     for (const at of targets) {
+      if (excused(e, at)) continue;
       const o = objects.get(at);
       const table = tables.get(o.table);
       const row = table.moves.find((m) => m.from === o.state && m.event === e.kind && (m.guard === undefined || LOG_GUARDS[m.guard]?.(e, o, seen)));
@@ -248,7 +254,11 @@ function replayLog(events, tables) {
         moves++;
       } else if (table.moves.some((m) => m.event === e.kind)) problems.push(`event ${e.id} (${e.kind}) moves ${at} from ${o.state}; ${table.id} allows no such move`);
     }
-    if (e.kind === 'deadline.moved' || e.kind === 'default.undone') { const o = known(`ask:${bare(e.subject)}`); if (o && typeof d.deadline === 'number') o.deadline = d.deadline; }
+    // The core's moves of a deadline, as the record keeps them: a minimum notice holds a default back but moves no deadline.
+    if ((e.kind === 'deadline.moved' && d.because !== 'notice') || e.kind === 'default.undone') {
+      const o = e.writer === 'core' ? known(`ask:${bare(e.subject)}`) : undefined;
+      if (o && typeof d.deadline === 'number') o.deadline = d.deadline;
+    }
   }
   return { moves, problems, objects };
 }
