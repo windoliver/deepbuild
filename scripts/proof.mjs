@@ -34,6 +34,7 @@ function say(state, lane, detail, fix) {
 }
 
 const root = process.cwd();
+const started = Date.now();
 try {
   const change = readChange(root);
   const issue = readIssue(root, change);
@@ -69,6 +70,8 @@ try {
   // A cleanup failure is printed, never thrown: it would replace the lanes' own result.
   const left = removeTemporaries();
   if (left) print(`cleanup: ${left}`);
+  // A reading, never a criterion (parallel-proof, section 10).
+  print(`proof: wall time ${((Date.now() - started) / 1000).toFixed(1)} s`);
 }
 process.exitCode = failed ? 1 : 0;
 
