@@ -75,7 +75,11 @@ fn control_value(control: &Value, id: &str, input: &[Value]) -> Option<f64> {
         if e.get("control").and_then(Value::as_str) != Some(id) {
             continue;
         }
-        let (t, seq, v) = (e.get("t")?.as_i64()?, e.get("seq")?.as_i64()?, e.get("value")?.as_f64()?);
+        let (t, seq, v) = (
+            e.get("t")?.as_i64()?,
+            e.get("seq")?.as_i64()?,
+            e.get("value")?.as_f64()?,
+        );
         if latest.is_none_or(|(lt, ls, _)| (t, seq) >= (lt, ls)) {
             latest = Some((t, seq, v));
         }
@@ -91,22 +95,41 @@ pub fn reply(c: &Map<String, Value>) -> Value {
         return refused("bad_input", json!({"why": "no expr"}));
     };
     let Some(cap) = cap(c.get("context").and_then(Value::as_str)) else {
-        return refused("bad_input", json!({"why": "context is driver, field or path"}));
+        return refused(
+            "bad_input",
+            json!({"why": "context is driver, field or path"}),
+        );
     };
-    let packs = c.get("packs").and_then(Value::as_array).cloned().unwrap_or_default();
+    let packs = c
+        .get("packs")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let mut scope = match Scope::of_packs(&packs) {
         Ok(s) => s,
         Err(e) => return refused("bad_table", e.refusal.to_json(&e.name)),
     };
-    match c.get("planted").map(|p| p.as_str().and_then(Planted::named)) {
+    match c
+        .get("planted")
+        .map(|p| p.as_str().and_then(Planted::named))
+    {
         None => {}
         Some(Some(p)) => scope.planted = Some(p),
         Some(None) => return refused("bad_input", json!({"why": "unknown planted form"})),
     }
     // Vars bound to controls: each its control's value, its declared max the range's top.
-    let input = c.get("input").and_then(Value::as_array).cloned().unwrap_or_default();
+    let input = c
+        .get("input")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let mut bound: Vec<(String, f64)> = Vec::new();
-    for (name, path) in c.get("vars").and_then(Value::as_object).into_iter().flatten() {
+    for (name, path) in c
+        .get("vars")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         let id = path
             .as_str()
             .and_then(|p| p.strip_prefix("controls/"))
@@ -160,7 +183,10 @@ pub fn reply(c: &Map<String, Value>) -> Value {
         (lo <= hi).then(|| Iv::new(lo, hi))
     };
     if let Some(at) = c.get("at").and_then(Value::as_array) {
-        let values: Vec<Value> = at.iter().map(|p| value_json(expr.eval(&vars_at(p)))).collect();
+        let values: Vec<Value> = at
+            .iter()
+            .map(|p| value_json(expr.eval(&vars_at(p))))
+            .collect();
         return json!({"values": values});
     }
     if let Some(over) = c.get("over").and_then(Value::as_array) {
@@ -178,7 +204,10 @@ pub fn reply(c: &Map<String, Value>) -> Value {
         let points = search.get("points").and_then(Value::as_u64);
         let seed = search.get("seed").and_then(Value::as_i64);
         let (Some(ranges), Some(points), Some(seed)) = (ranges, points, seed) else {
-            return refused("bad_input", json!({"why": "search takes ranges, points and seed"}));
+            return refused(
+                "bad_input",
+                json!({"why": "search takes ranges, points and seed"}),
+            );
         };
         let Some(ranges) = ranges.iter().map(range_of).collect::<Option<Vec<_>>>() else {
             return refused("bad_input", json!({"why": "a range is [a, b] with a ≤ b"}));
@@ -210,7 +239,8 @@ pub fn reply(c: &Map<String, Value>) -> Value {
                         max = Some((p, y));
                     }
                 }
-                let ext = |e: Option<(f64, f64)>| e.map_or(Value::Null, |(x, y)| json!({"x": x, "y": y}));
+                let ext =
+                    |e: Option<(f64, f64)>| e.map_or(Value::Null, |(x, y)| json!({"x": x, "y": y}));
                 let mut row = bound_json(b);
                 row["min"] = ext(min);
                 row["max"] = ext(max);
@@ -226,7 +256,11 @@ pub fn reply(c: &Map<String, Value>) -> Value {
 /// own units, one list of points per sub-path, and the notices its drawing raised (an
 /// estimate's names its x range).
 pub fn path_reply(document: &Value, item: &str) -> Value {
-    let Some(params) = document.get("items").and_then(|i| i.get(item)).and_then(|i| i.get("params")) else {
+    let Some(params) = document
+        .get("items")
+        .and_then(|i| i.get(item))
+        .and_then(|i| i.get("params"))
+    else {
         return json!({"outcome": "refused", "code": "ref_unresolved", "item": item});
     };
     if let Some(f) = params.get("fn") {
@@ -239,10 +273,15 @@ pub fn path_reply(document: &Value, item: &str) -> Value {
                     "what": "drawn from its samples: the bound can't settle this stretch within 2,000 points",
                 })).collect::<Vec<_>>(),
             }),
-            Err(r) => json!({"outcome": "refused", "code": "bad_doc", "item": item, "path": format!("params/fn/{}", r.field), "why": r.why}),
+            Err(r) => {
+                json!({"outcome": "refused", "code": "bad_doc", "item": item, "path": format!("params/fn/{}", r.field), "why": r.why})
+            }
         };
     }
-    let verbs = params.get("d").and_then(Value::as_str).and_then(deep_canvas_marks::path::parse);
+    let verbs = params
+        .get("d")
+        .and_then(Value::as_str)
+        .and_then(deep_canvas_marks::path::parse);
     let Some(verbs) = verbs else {
         return json!({"outcome": "refused", "code": "bad_path_data", "item": item});
     };

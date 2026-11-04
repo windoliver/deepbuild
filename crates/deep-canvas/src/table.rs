@@ -82,7 +82,10 @@ fn refuse(at: impl Into<String>, why: impl Into<String>) -> Refusal {
 fn over_cap(key: &str, n: usize) -> Refusal {
     Refusal {
         cap: Some(MAX_POINTS),
-        ..refuse(key, format!("holds {n} points, past the cap of {MAX_POINTS}"))
+        ..refuse(
+            key,
+            format!("holds {n} points, past the cap of {MAX_POINTS}"),
+        )
     }
 }
 
@@ -93,7 +96,10 @@ fn numbers(v: &Value, key: &str) -> Result<Vec<f64>, Refusal> {
     let list: Vec<Option<f64>> = match v.get(key) {
         Some(Value::Array(list)) => list.iter().map(Value::as_f64).collect(),
         Some(Value::Object(o)) => {
-            let Some(bytes) = o.get("f64").and_then(Value::as_str).and_then(crate::base64::decode)
+            let Some(bytes) = o
+                .get("f64")
+                .and_then(Value::as_str)
+                .and_then(crate::base64::decode)
             else {
                 return Err(refuse(key, "is not base64 f64 bytes"));
             };
@@ -133,7 +139,12 @@ impl Table {
         let mode = match v.get("mode").and_then(Value::as_str) {
             None | Some("linear") => Mode::Linear,
             Some("monotone") => Mode::Monotone,
-            Some(m) => return Err(refuse("mode", format!("`{m}` is neither linear nor monotone"))),
+            Some(m) => {
+                return Err(refuse(
+                    "mode",
+                    format!("`{m}` is neither linear nor monotone"),
+                ))
+            }
         };
         Table::new(x, y, mode)
     }
@@ -153,18 +164,20 @@ impl Table {
         }
         for (i, v) in x.iter().chain(&y).enumerate() {
             if !v.is_finite() {
-                let (k, i) = if i < x.len() { ("x", i) } else { ("y", i - x.len()) };
-                return Err(refuse(format!("{k}[{i}]"), format!("index {i} is not finite")).index(i));
+                let (k, i) = if i < x.len() {
+                    ("x", i)
+                } else {
+                    ("y", i - x.len())
+                };
+                return Err(
+                    refuse(format!("{k}[{i}]"), format!("index {i} is not finite")).index(i),
+                );
             }
         }
         if let Some(i) = (1..x.len()).find(|&i| x[i] <= x[i - 1]) {
             return Err(refuse(
                 format!("x[{i}]"),
-                format!(
-                    "index {i}: x {} doesn't increase past {}",
-                    x[i],
-                    x[i - 1]
-                ),
+                format!("index {i}: x {} doesn't increase past {}", x[i], x[i - 1]),
             )
             .index(i));
         }
@@ -226,9 +239,11 @@ impl Table {
 
     /// The least and greatest knot values.
     pub fn extremes(&self) -> (f64, f64) {
-        self.y.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
-            (lo.min(v), hi.max(v))
-        })
+        self.y
+            .iter()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
+                (lo.min(v), hi.max(v))
+            })
     }
 }
 
@@ -313,7 +328,12 @@ impl EaseTable {
                 (Some(a), Some(b)) if a <= b => Overshoot::Within(a, b),
                 _ => return Err(refuse("overshoot", "is not a range [min, max]")),
             },
-            Some(_) => return Err(refuse("overshoot", "is neither none nor a range [min, max]")),
+            Some(_) => {
+                return Err(refuse(
+                    "overshoot",
+                    "is neither none nor a range [min, max]",
+                ))
+            }
         };
         Ok(EaseTable { table, overshoot })
     }
@@ -405,8 +425,10 @@ mod tests {
 
     #[test]
     fn a_monotone_table_stays_between_each_pair_of_knots() {
-        let t = Table::parse(&json!({"x": [0, 1, 2, 3, 4], "y": [0, 3, 2.5, 2.6, 10], "mode": "monotone"}))
-            .unwrap();
+        let t = Table::parse(
+            &json!({"x": [0, 1, 2, 3, 4], "y": [0, 3, 2.5, 2.6, 10], "mode": "monotone"}),
+        )
+        .unwrap();
         for i in 0..4 {
             let (lo, hi) = (t.y[i].min(t.y[i + 1]), t.y[i].max(t.y[i + 1]));
             for k in 0..=1000 {

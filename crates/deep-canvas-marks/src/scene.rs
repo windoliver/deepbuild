@@ -3832,9 +3832,13 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 .subpaths
                 .iter()
                 .flat_map(|s| {
-                    s.iter()
-                        .enumerate()
-                        .map(|(i, p)| if i == 0 { Verb::Move(*p) } else { Verb::Line(*p) })
+                    s.iter().enumerate().map(|(i, p)| {
+                        if i == 0 {
+                            Verb::Move(*p)
+                        } else {
+                            Verb::Line(*p)
+                        }
+                    })
                 })
                 .collect();
             return Ok((format!("fn:{f}"), verbs));

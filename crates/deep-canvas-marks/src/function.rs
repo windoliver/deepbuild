@@ -56,14 +56,24 @@ pub fn draw(f: &Value) -> Result<Drawn, Refusal> {
     }
     let x_of = |x: f64| -> Vec<f64> { expr.vars.iter().map(|_| x).collect() };
     let y = |x: f64| expr.eval_num(&x_of(x));
-    let bound = |lo: f64, hi: f64| expr.bound_num(&expr.vars.iter().map(|_| Iv::new(lo, hi)).collect::<Vec<_>>());
+    let bound = |lo: f64, hi: f64| {
+        expr.bound_num(
+            &expr
+                .vars
+                .iter()
+                .map(|_| Iv::new(lo, hi))
+                .collect::<Vec<_>>(),
+        )
+    };
     let (xs, estimates) = match f.get("samples") {
         None => adaptive(a, b, &y, &bound),
         Some(Value::String(s)) if s == "adaptive" => adaptive(a, b, &y, &bound),
         Some(v) => match v.as_u64() {
             Some(n) if (2..=MAX_POINTS as u64).contains(&n) => {
                 let n = n as usize;
-                let xs = (0..n).map(|i| a + (b - a) * i as f64 / (n - 1) as f64).collect();
+                let xs = (0..n)
+                    .map(|i| a + (b - a) * i as f64 / (n - 1) as f64)
+                    .collect();
                 (xs, Vec::new())
             }
             _ => return Err(refuse("samples", "samples is adaptive or 2 to 2,000")),
@@ -189,7 +199,12 @@ mod tests {
     #[test]
     fn a_pole_leaves_points_for_both_sides() {
         let d = draw(&json!({"y": "1 / x", "over": [-3, 3]})).unwrap();
-        assert_eq!(d.subpaths.len(), 2, "{:?}", d.subpaths.iter().map(Vec::len).collect::<Vec<_>>());
+        assert_eq!(
+            d.subpaths.len(),
+            2,
+            "{:?}",
+            d.subpaths.iter().map(Vec::len).collect::<Vec<_>>()
+        );
         assert!(d.subpaths.iter().all(|s| s.len() > 100));
     }
 
@@ -199,7 +214,11 @@ mod tests {
         assert!(d.subpaths.len() >= 2);
         // No drawn segment jumps across the pole.
         for s in &d.subpaths {
-            assert!(s.windows(2).all(|w| (w[0][0] - 0.1) * (w[1][0] - 0.1) >= 0.0), "a wall across x = 0.1");
+            assert!(
+                s.windows(2)
+                    .all(|w| (w[0][0] - 0.1) * (w[1][0] - 0.1) >= 0.0),
+                "a wall across x = 0.1"
+            );
         }
     }
 

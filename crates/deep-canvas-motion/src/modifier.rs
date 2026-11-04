@@ -151,7 +151,9 @@ impl Modifier {
             (p.min(q), p.max(q))
         };
         match &self.kind {
-            Kind::Wave { amplitude, offset, .. } => {
+            Kind::Wave {
+                amplitude, offset, ..
+            } => {
                 let (a, b) = scaled(offset - amplitude.abs(), offset + amplitude.abs());
                 (lo + a, hi + b)
             }
@@ -159,7 +161,12 @@ impl Modifier {
                 let (a, b) = scaled(-amplitude.abs(), amplitude.abs());
                 (lo + a, hi + b)
             }
-            Kind::Pulse { amount, shape, ease, .. } => {
+            Kind::Pulse {
+                amount,
+                shape,
+                ease,
+                ..
+            } => {
                 // The shape reads the ease up and back, so it keeps the ease's extremes, with 0.
                 let (e0, e1) = ease.extremes();
                 let (s0, s1) = match shape {
@@ -176,7 +183,10 @@ impl Modifier {
                 // value + k(clamp(value) − value): the clamp's move, mixed by k, from each end.
                 let at = |v: f64| v + k * (v.clamp(*min, *max) - v);
                 let ends = [at(lo), at(hi), at(min.clamp(lo, hi)), at(max.clamp(lo, hi))];
-                ends.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(*v), b.max(*v)))
+                ends.iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| {
+                        (a.min(*v), b.max(*v))
+                    })
             }
         }
     }

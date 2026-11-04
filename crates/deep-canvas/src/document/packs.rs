@@ -986,16 +986,31 @@ fn read_rules(
     for (i, r) in list.iter().enumerate() {
         let at = format!("rules/{i}");
         let code = r.get("code").and_then(Value::as_str).unwrap_or_default();
-        if !code.strip_prefix(&format!("{pack}.")).is_some_and(well_named) {
-            issues.push(bad(&format!("{at}/code"), json!(code), &format!("a kind rule's code is `{pack}.<rule>`")));
+        if !code
+            .strip_prefix(&format!("{pack}."))
+            .is_some_and(well_named)
+        {
+            issues.push(bad(
+                &format!("{at}/code"),
+                json!(code),
+                &format!("a kind rule's code is `{pack}.<rule>`"),
+            ));
             continue;
         }
         if r.get("at").and_then(Value::as_str) != Some("rest") {
-            issues.push(bad(&format!("{at}/at"), r.get("at").cloned().unwrap_or(Value::Null), "a kind rule reads its instance at rest"));
+            issues.push(bad(
+                &format!("{at}/at"),
+                r.get("at").cloned().unwrap_or(Value::Null),
+                "a kind rule reads its instance at rest",
+            ));
             continue;
         }
         let Some(text) = r.get("expr").and_then(Value::as_str) else {
-            issues.push(bad(&format!("{at}/expr"), r.get("expr").cloned().unwrap_or(Value::Null), "a kind rule's expr is text"));
+            issues.push(bad(
+                &format!("{at}/expr"),
+                r.get("expr").cloned().unwrap_or(Value::Null),
+                "a kind rule's expr is text",
+            ));
             continue;
         };
         let expr = match crate::expr::Expr::compile(text, &RuleScope(sealed), 256) {
@@ -1015,33 +1030,60 @@ fn read_rules(
             }
         };
         if let Some(n) = expr.vars.iter().find(|n| !inputs.contains_key(*n)) {
-            issues.push(bad(&format!("{at}/expr"), json!(text), &format!("rule `{code}` reads `{n}`, which is no input of the recipe")));
+            issues.push(bad(
+                &format!("{at}/expr"),
+                json!(text),
+                &format!("rule `{code}` reads `{n}`, which is no input of the recipe"),
+            ));
             continue;
         }
         rules.push(KindRule {
             code: code.to_string(),
             expr,
-            fix: r.get("fix").and_then(Value::as_str).unwrap_or_default().to_string(),
+            fix: r
+                .get("fix")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
         });
     }
     // The kind kit: each rule's planted twin must fail it.
-    let twins = fields.get("twins").and_then(Value::as_array).cloned().unwrap_or_default();
+    let twins = fields
+        .get("twins")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     for rule in &rules {
         let mine: Vec<&Value> = twins
             .iter()
             .filter(|t| t.get("expect").and_then(Value::as_str) == Some(rule.code.as_str()))
             .collect();
         if mine.is_empty() {
-            issues.push(bad("twins", json!(rule.code), &format!("rule `{}` has no planted twin for the kind kit", rule.code)));
+            issues.push(bad(
+                "twins",
+                json!(rule.code),
+                &format!("rule `{}` has no planted twin for the kind kit", rule.code),
+            ));
         }
         for twin in mine {
-            let mut values: Map<String, Value> =
-                inputs.iter().map(|(n, i)| (n.clone(), i.default.clone())).collect();
-            for (k, v) in twin.get("params").and_then(Value::as_object).into_iter().flatten() {
+            let mut values: Map<String, Value> = inputs
+                .iter()
+                .map(|(n, i)| (n.clone(), i.default.clone()))
+                .collect();
+            for (k, v) in twin
+                .get("params")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+            {
                 values.insert(k.clone(), v.clone());
             }
             if rule.holds(&values) {
-                issues.push(bad("twins", twin.clone(), &format!("the kind kit admits rule `{}`'s planted twin", rule.code)));
+                issues.push(bad(
+                    "twins",
+                    twin.clone(),
+                    &format!("the kind kit admits rule `{}`'s planted twin", rule.code),
+                ));
             }
         }
     }
