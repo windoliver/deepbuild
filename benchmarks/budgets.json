@@ -1077,6 +1077,17 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #1098 first measurement: the merge base places no target of a plan. One process opens a record with an evidence store and the asks core, archives a session transcript of 5,000 tool results, and raises one authority ask whose step names eight targets of every kind, until its card shows each placed, with no model in the path; p50 includes Node's start, so the issue's 20 ms limit stays in tests/acceptance/1098/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "journey-run",
+      "command": [
+        "node",
+        "benchmarks/journeys.mjs",
+        "run"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #37 first measurement: the merge base has no journey runner. One process opens the supervisor and an evidence store and runs a three-step browser journey (a navigation, a click and an expect, then an end-state check) through the journey check kind against a small Node page that env-local starts, five runs after a warm-up, and prints the medians of Playwright's own time, what the runner adds beyond it and the evidence one run stores; p50 includes Node's start and the browser's launch. The issue's 20 MB and 10% stay in tests/acceptance/37/redraft-ac16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

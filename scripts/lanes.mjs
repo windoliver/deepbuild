@@ -50,7 +50,8 @@ export const alone = ['tests/acceptance/20/', 'tests/acceptance/103/', 'tests/ac
  * kind (#30) reads its here-document check as untraced, so it never passes on a snapshot; its blind redraft, redraft/,
  * runs in its place. #37's first AC18 draft is kept as written, by hand only: its two line assertions search the
  * journey file for a flow-style substring that the suite's own YAML rewrite never writes, so they expect line 0; its
- * blind redraft, redraft/, runs in its place.
+ * blind redraft, redraft/, runs in its place. #37's first AC16 draft is kept by hand too: it counts the stack's start
+ * and teardown as the runner's addition; its blind redraft, redraft-ac16/, runs in its place.
  */
 export const byHand = ['tests/acceptance/685/', 'tests/acceptance/666/session.live.test.ts', 'tests/acceptance/668/session.live.test.ts', 'tests/acceptance/18/mapping/record.live.test.ts', 'tests/acceptance/18/install/tamper.live.test.ts', 'tests/acceptance/21/sessions.live.test.ts',
   'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/112/live.test.ts', 'tests/acceptance/27/session.live.test.ts', 'tests/acceptance/27/desktop.test.ts', 'tests/acceptance/27/desktop-redraft/', 'tests/acceptance/27/outcomes.test.ts', 'tests/acceptance/806/live.test.ts',
