@@ -52,6 +52,18 @@ impl Shown {
     }
 }
 
+impl Run {
+    /// A run of `check` recorded from its tool's report, as the hub records it; `None` for a
+    /// report that isn't that tool's JSON report.
+    pub fn from_report(run: String, check: String, tool: &str, report: &[u8]) -> Option<Run> {
+        Some(Run {
+            run,
+            check,
+            assertions: runs::assertions(tool, report)?,
+        })
+    }
+}
+
 thread_local! {
     static BOUND: RefCell<Vec<Shown>> = const { RefCell::new(Vec::new()) };
 }
