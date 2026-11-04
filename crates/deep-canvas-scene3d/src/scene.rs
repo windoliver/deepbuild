@@ -90,6 +90,8 @@ pub struct Solid {
     pub alpha: f64,
     /// Its material's emission × emission_strength, linear RGB.
     pub emission: [f64; 3],
+    /// Its material's texture maps (#423), which the renderer samples from the scene's `texels`.
+    pub maps: Option<Arc<crate::light::Maps>>,
 }
 
 /// An object's outline: its silhouette drawn `width` device px wide in `color`, which a status
@@ -527,6 +529,11 @@ pub struct Scene {
     pub curves: BTreeMap<String, Vec<Vec3>>,
     /// The core's glyph atlas pages the labels' glyphs sample, by page number.
     pub pages: Vec<AtlasPage>,
+    /// The texels of every map the solids sample, by the image's SHA-256, as the host had the
+    /// decode worker make them (#423); a map whose texels aren't here draws without it.
+    pub texels: BTreeMap<String, Arc<crate::light::Texels>>,
+    /// The frame's sub-pixel offset, px right and down (#423: Look: samples).
+    pub jitter: [f64; 2],
 }
 
 impl Scene {
@@ -614,13 +621,29 @@ fn turn(m: &Affine3, d: Vec3) -> Vec3 {
     ]
 }
 
-/// An item's own `at`: scale, then rotate about X, Y and Z in turn, then move to `pos`.
+/// An item's own `at`: subtract the pivot, scale, then rotate about X, Y and Z in turn, then move
+/// to `pos` (Units and axes).
 fn local(item: &Value, extra_scale: Vec3) -> Affine3 {
     let at = item.get("at");
     let pos = vec3(at.and_then(|a| a.get("pos"))).unwrap_or([0.0; 3]);
     let rot = vec3(at.and_then(|a| a.get("rot"))).unwrap_or([0.0; 3]);
     let sc = size3(at.and_then(|a| a.get("scale")), [1.0; 3]).unwrap_or([1.0; 3]);
-    local_of(pos, rot, sc, extra_scale)
+    pivoted(local_of(pos, rot, sc, extra_scale), item)
+}
+
+/// An item's vector `at.pivot`, if it has one (a box-point pivot is the core's to resolve).
+pub(crate) fn pivot_of(item: &Value) -> Option<Vec3> {
+    vec3(item.get("at").and_then(|a| a.get("pivot")))
+}
+
+/// `m` after subtracting the item's pivot: the pivot lands at `pos` (#433).
+fn pivoted(mut m: Affine3, item: &Value) -> Affine3 {
+    if let Some(p) = pivot_of(item) {
+        for row in &mut m {
+            row[3] -= row[0] * p[0] + row[1] * p[1] + row[2] * p[2];
+        }
+    }
+    m
 }
 
 /// [`local`] from the numbers themselves.
@@ -746,11 +769,14 @@ impl<'a> Items<'a> {
                         default
                     }
                 };
-                local_of(
-                    group(0, [0.0; 3]),
-                    group(1, [0.0; 3]),
-                    group(2, [1.0; 3]),
-                    [1.0; 3],
+                pivoted(
+                    local_of(
+                        group(0, [0.0; 3]),
+                        group(1, [0.0; 3]),
+                        group(2, [1.0; 3]),
+                        [1.0; 3],
+                    ),
+                    item,
                 )
             }
             None => local(item, [1.0; 3]),
@@ -1544,6 +1570,126 @@ fn asset_mesh(
     Ok((mesh, Some(format!("{sha}#{node}"))))
 }
 
+/// A built solid's world bounds' corners.
+fn corners_of(s: &Solid) -> Vec<Vec3> {
+    let Some(mesh) = &s.mesh else {
+        return Vec::new();
+    };
+    let [lo, hi] = mesh.bounds();
+    (0..8)
+        .map(|c| {
+            let p = [
+                if c & 1 == 0 { lo[0] } else { hi[0] },
+                if c & 2 == 0 { lo[1] } else { hi[1] },
+                if c & 4 == 0 { lo[2] } else { hi[2] },
+            ];
+            apply(&s.model, p)
+        })
+        .collect()
+}
+
+/// Whether the node a `mesh.asset@1` names has a primitive that names one of the file's materials
+/// (#423), so it draws with them rather than with the item's paint.
+fn asset_has_materials(read: Assets<'_>, params: &Value) -> bool {
+    let Some(bytes) = params.get("sha256").and_then(Value::as_str).and_then(read) else {
+        return false;
+    };
+    let node = params.get("node").cloned().unwrap_or(Value::from(0));
+    crate::gltf::node_materials(&bytes, &node)
+}
+
+/// A `mesh.asset@1` naming a file's scene (#423): one solid per triangle primitive of each node,
+/// picked as `<item>#<node name>` (or its index), placed at the item's `model` × the node's world
+/// matrix, shaded by the `material@1` the import made of its glTF material. Naming one node, it
+/// draws that node's primitives alone, in the node's own space, picked as the item.
+fn asset_scene(
+    read: Assets<'_>,
+    id: &str,
+    params: &Value,
+    model: &Affine3,
+    look: &Look3,
+) -> Result<Vec<Solid>, Refused> {
+    let path = format!("items/{id}/params/sha256");
+    let Some(sha) = params.get("sha256").and_then(Value::as_str) else {
+        return refused("out_of_range", path);
+    };
+    let Some(bytes) = read(sha) else {
+        return refused("asset_missing", path);
+    };
+    let scene_i = params
+        .pointer("/node/scene")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as usize;
+    let one = params.get("node").filter(|n| n.get("scene").is_none());
+    let imported = crate::gltf::import(&bytes, sha, scene_i, read).map_err(|p| Refused {
+        code: "out_of_range",
+        path: format!("items/{id}/{p}"),
+    })?;
+    let mut out = Vec::new();
+    for (k, node) in imported.nodes.iter().enumerate() {
+        let named = |n: &Value| match n {
+            Value::Number(i) => i.as_u64() == Some(node.index as u64),
+            Value::String(s) => *s == node.name,
+            _ => false,
+        };
+        if one.is_some_and(|n| !named(n)) {
+            continue;
+        }
+        let solid_model = match one {
+            Some(_) => *model,
+            None => matmul(model, &node.world),
+        };
+        for (p, prim) in node.primitives.iter().enumerate() {
+            if prim.mesh.triangles() == 0 {
+                continue;
+            }
+            let pick = match one {
+                Some(_) => id.to_string(),
+                None => format!("{id}#{}", node.name),
+            };
+            let mat_id = format!("{id}#material{}", prim.material.map_or(-1, |m| m as i64));
+            let mat_item = serde_json::json!({"kind": "material@1", "params": prim
+                .material
+                .and_then(|m| imported.materials.get(m))
+                .map_or_else(|| serde_json::json!({"metallic": 1.0, "roughness": 1.0, "base_color": [1, 1, 1, 1]}), |m| m.params.clone())});
+            let holder = serde_json::json!({"material": mat_id});
+            let named = |n: &str| (n == mat_id).then_some(&mat_item);
+            let material = light::material(&holder, named, look, id)?;
+            let maps = light::maps(&holder, named)?;
+            let mut h = deep_canvas::schedule::Hasher::new("scene3d.mesh");
+            h.text(&format!("{sha}#scene{scene_i}#{k}#{p}"));
+            let key = h.finish().0;
+            let hash = u64::from_le_bytes([
+                key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
+            ]);
+            // Its coverage: the factor's alpha, which a mask's cutoff and a blend read with the
+            // base color map's (opaque parts whole).
+            let alpha = material.as_ref().map_or(1.0, |m| match m.alpha_mode {
+                light::AlphaMode::Opaque => 1.0,
+                _ => m.base[3],
+            });
+            out.push(Solid {
+                id: pick,
+                shape: Shape::Built(hash),
+                model: solid_model,
+                color: material
+                    .as_ref()
+                    .map_or([204; 3], |m| [m.base[0], m.base[1], m.base[2]].map(encode8)),
+                stroke: None,
+                mesh: Some(Arc::new(prim.mesh.clone())),
+                cast_shadow: true,
+                receive_shadow: true,
+                emission: material.as_ref().map_or([0.0; 3], |m| m.emission),
+                material,
+                sort_bias: 0.0,
+                alpha,
+                maps,
+            });
+        }
+    }
+    Ok(out)
+}
+
 /// A figure lights one item at most (Object: `tone`, "one lit per figure"), and every tone is
 /// of the closed list.
 fn tones(map: &Map<String, Value>) -> Result<(), Refused> {
@@ -1679,11 +1825,13 @@ pub(crate) fn evaluate_compiled(
                     );
                     bounds.extend(corners(&model));
                     let material = light::material(item, |m| items.get(m), look, id)?;
+                    let maps = light::maps(item, |m| items.get(m))?;
                     let surface = surface(&items, look, id, item)?;
                     if surface.alpha <= 0.0 {
                         continue;
                     }
                     layer.solids.push(Solid {
+                        maps,
                         id: id.clone(),
                         shape,
                         model,
@@ -1717,6 +1865,20 @@ pub(crate) fn evaluate_compiled(
                     layer.lines.push(l);
                 }
                 "mesh.asset@1" if assets.is_none() => {}
+                // A glTF file's whole scene (#423): each node at its world transform in the file,
+                // drawn with the materials the file declares.
+                "mesh.asset@1"
+                    if params.pointer("/node/scene").is_some()
+                        || (item.get("material").is_none()
+                            && asset_has_materials(assets.expect("matched above"), params)) =>
+                {
+                    let read = assets.expect("matched above");
+                    let model = world(&items, id);
+                    for s in asset_scene(read, id, params, &model, look)? {
+                        bounds.extend(corners_of(&s));
+                        layer.solids.push(s);
+                    }
+                }
                 k if crate::builders::KINDS.contains(&k)
                     || crate::building::KINDS.contains(&k)
                     || k == "mesh.asset@1" =>
@@ -1747,6 +1909,7 @@ pub(crate) fn evaluate_compiled(
                     };
                     let key = h.finish().0;
                     let material = light::material(item, |m| items.get(m), look, id)?;
+                    let maps = light::maps(item, |m| items.get(m))?;
                     let hash = u64::from_le_bytes([
                         key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
                     ]);
@@ -1755,6 +1918,7 @@ pub(crate) fn evaluate_compiled(
                         continue;
                     }
                     layer.solids.push(Solid {
+                        maps,
                         id: id.clone(),
                         shape: Shape::Built(hash),
                         model,
@@ -1982,6 +2146,8 @@ pub(crate) fn evaluate_compiled(
         others,
         curves,
         pages: labels.pages(),
+        texels: BTreeMap::new(),
+        jitter: [0.0; 2],
     })
 }
 

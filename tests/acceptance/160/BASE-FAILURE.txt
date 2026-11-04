@@ -1,0 +1,1103 @@
+Base commit: 69803b946abf4881f818485c5898865949a2a871
+Command: npx vitest run --root tests/acceptance/160 --no-file-parallelism
+Date: 2026-11-03T10:34:30Z  Node v24.22.0  vitest 5.0.5 linux-arm64  cargo 1.99.1
+Every one of the 49 tests fails at the base, in both runs below.
+
+== Run 1: the base as committed (git archive 69803b94), with only these test files and the repo's node_modules ==
+deep-canvas-render does not build on Linux at the base: deep-app's src/show.rs calls the image crate, which
+crates/deep-app/Cargo.toml lists only under its macOS dependencies (an unrelated break on main since #806). Every
+test fails on 'the binary builds'. The cargo errors, from the run's output:
+
+    + error[E0433]: cannot find module or crate `image` in this scope
+    + error[E0433]: cannot find module or crate `image` in this scope
+    + error[E0433]: cannot find module or crate `image` in this scope
+    + For more information about this error, try `rustc --explain E0433`.
+    + error: could not compile `deep-app` (lib) due to 3 previous errors; 1 warning emitted
+     Test Files  13 failed (13)
+          Tests  49 failed (49)
+
+== Run 2: the same export with one change outside this folder, image moved to deep-app's [dependencies] ==
+(the export lives in the session scratchpad; nothing in the checkout was changed). deep-canvas-render builds,
+and each test fails for its own reason at the base:
+  - 'deep-canvas-render path exited 2' with its usage line: the base has no path subcommand (AC1-3, AC5, AC7,
+    AC9-13, AC17, and the parts of AC8 read through path);
+  - ref_unresolved on channels whose targets are items/<id>/params/ops/...: the base check knows no ops (AC4's
+    loader and burst, AC5's film fixtures, AC9's 1080p figure);
+  - unknown_field at items/dot/params/z: circle@1 has no z at the base (AC16);
+  - bad_input for raster's planted merge_zero_fills, a value the base doesn't know (AC8);
+  - pixels drawn without the field the base ignores: the taper (AC6), the union outline (AC14), draw_order
+    (AC15); and checks that raise nothing: no column_length (AC8), no segment_budget (AC3), no out_of_range for
+    the path-ops twin (AC5).
+
+
+ RUN  v5.0.5 <base export>/tests/acceptance/160
+
+ × repeater.test.ts > AC2 a fractional repeater > AC2 a repeater with 3.5 copies has four copies, the last at half its opacity, and copy k's transform is the repeater's applied k times within 1e-6 8ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × repeater.test.ts > AC2 a fractional repeater > AC2 the four copies draw where they are, three in full and the last at half opacity, and no fifth 4ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × repeater.test.ts > AC17 partial copies and lag > AC17 at copies 2.5, partial: slide with out_cubic draws three bars at full opacity, the third at 56.25° within 1e-6° 3ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × repeater.test.ts > AC17 partial copies and lag > AC17 at copies 2.5, partial: fade draws the third bar at 60° at half opacity 3ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × repeater.test.ts > AC17 partial copies and lag > AC17 with lag 0.2057 s and a child scale wave of 1 ± 0.22 with period 2.35 s, copy k's scale equals the child's at t − k × 0.2057 s within 1e-9 6ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × repeater.test.ts > AC17 partial copies and lag > AC17 a planted repeater that evaluates every copy at t draws all twelve at one scale and fails, naming the op 5ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 every op matches its CPU reference within 0.01 u 14ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in trim's output (moved:trim) fails its reference 4ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in round_corners's output (moved:round_corners) fails its reference 4ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in offset_path's output (moved:offset_path) fails its reference 3ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in zigzag's output (moved:zigzag) fails its reference 2ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in pucker's output (moved:pucker) fails its reference 2ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in twist's output (moved:twist) fails its reference 3ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in repeater's output (moved:repeater) fails its reference 3ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × parity.test.ts > AC5 the parity fixtures and their planted-fault twins > AC5 path-ops.scene: the same raster in two processes; its twin fails with out_of_range at items/zigzag/params/ops/0/ridges, naming zigzag 281ms
+   → path-ops.scene's twin fails with exactly its code: expected [] to deeply equal [ 'out_of_range' ]
+ × parity.test.ts > AC5 the parity fixtures and their planted-fault twins > AC5 loader.film: the same raster in two processes; its twin fails with out_of_range at items/loader/params/ops, naming loader 11ms
+   → loader.film: the check raises no error: expected [ …(3) ] to deeply equal []
+ × parity.test.ts > AC5 the parity fixtures and their planted-fault twins > AC5 burst.film: the same raster in two processes; its twin fails with out_of_range at items/burst/params/ops/1/copies, naming burst 10ms
+   → burst.film: the check raises no error: expected [ …(2) ] to deeply equal []
+ × parity.test.ts > AC5 the parity fixtures and their planted-fault twins > a path line that is not JSON, lacks its document or item, or names an unknown planted value is bad_input with no panic 4ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × ends.test.ts > AC7 an arrow rides a trim, and an attached end stops short of its box > AC7 a path drawn on by a trim from 0 to 1 over 1 s has its arrow's tip at the trim's end within 0.1 u at 0.25, 0.5 and 1 s, along the tangent within 1° 10ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × ends.test.ts > AC7 an arrow rides a trim, and an attached end stops short of its box > AC7 an end attached with a 4 px gap to a 100 × 40 u box at (200, 100), from a start at (0, 120), ends at (196, 120) 5ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × ends.test.ts > AC10 a head is at most a quarter of its path > AC10 an arrow 20 u long at stroke 3 with size 4 draws a head 5 u long, not 12; on a 100 u path the same head is 12 3ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × ends.test.ts > AC12 attach at the true outline, or at the box > AC12 an arrow attached at outline to a circle of radius 50 u from 45° stops 4 px (its gap) from the circle within 0.5 px 4ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × ends.test.ts > AC12 attach at the true outline, or at the box > AC12 at edge the same arrow stops 4 px before the box corner, 24.7 u short of the circle 3ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × draw-order.test.ts > AC15 draw_order as an enum channel > AC15 draw_order moves a hand from behind the body to in front exactly on its key 115ms
+   → at 0 s the hand is behind the body: expected [ 230, 160, 30 ] to deeply equal [ 40, 90, 160 ]
+ × draw-order.test.ts > AC15 draw_order as an enum channel > AC15 seeking equals playing across the swap 459ms
+   → the seek to 352800000 flicks shows the hand behind the body: expected [ 230, 160, 30 ] to deeply equal [ 40, 90, 160 ]
+ × draw-order.test.ts > AC16 z across the tree, and inside an isolated group > AC16 a dot in group A with z 1 draws over a line in group B with z 0 though B comes later 12ms
+   → the two groups: the check raises no error: expected [ Array(1) ] to deeply equal []
+ × draw-order.test.ts > AC16 z across the tree, and inside an isolated group > AC16 inside an isolated group the same dot stays under B, with the notice z_inside_isolated 13ms
+   → a notice doesn't refuse the document: expected false to be true // Object.is equality
+ × budgets.test.ts > AC9 budgets on the reference Mac > AC9 building 8 ops on a 1,000-segment path takes under 1 ms on change (median of frames 10–69 at 60 fps, five fresh processes after a warm-up) 9ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × budgets.test.ts > AC9 budgets on the reference Mac > AC9 a still path costs nothing per frame (no build after the first frame, five fresh processes) 5ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × budgets.test.ts > AC9 budgets on the reference Mac > AC9 a 64-copy repeater stays within the figure budget at 1080p (the check's figure class, and 4 ms of frame CPU to build it per changed frame) 16ms
+   → the 1080p figure with a 64-copy repeater passes its figure budget check: expected [ 'ref_unresolved' ] to deeply equal []
+ × outline.test.ts > AC14 a union outline > AC14 a union outline draws one ring around overlapping parts with no inner seam 1532ms
+   → the union outline:
+  pixel (38, 80), 1.5 px west of a, reads ground, not rim: [255,255,255]
+  pixel (100, 38), 1.5 px north of a, reads ground, not rim: [255,255,255]
+  pixel (241, 120), 1.5 px east of b, reads ground, not rim: [255,255,255]
+  pixel (180, 161), 1.5 px south of b, reads ground, not rim: [255,255,255]
+  pixel (161, 70), 1.5 px east of a, above b, reads ground, not rim: [255,255,255]
+  the rim pixels form 0 rings, not one: expected [ …(6) ] to deeply equal []
+ × outline.test.ts > AC14 a union outline > AC14 a slit child keeps its own line inside the union 50ms
+   → 1.5 px west of b's west edge, inside a, the slit b draws its own line: [40,90,160]: expected 'body' to be 'rim' // Object.is equality
+ × columns.test.ts > AC8 per-point columns never zero-fill > AC8 a path whose opacity column is one row short of its points is refused with column_length, naming the column 15ms
+   → the only error is the column's length: expected [] to deeply equal [ 'column_length' ]
+ × columns.test.ts > AC8 per-point columns never zero-fill > AC8 a path whose width column is one row short of its points is refused with column_length, naming the column 11ms
+   → the only error is the column's length: expected [] to deeply equal [ 'column_length' ]
+ × columns.test.ts > AC8 per-point columns never zero-fill > AC8 a union of a path with an opacity column and one without draws the joined points at opacity 1 19ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × columns.test.ts > AC8 per-point columns never zero-fill > AC8 a planted merge that zero-fills draws the joined points invisible and fails by evaluated value, naming the column 6ms
+   → raster the union under the planted merge refused: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × seek-play.test.ts > AC4 seeking equals playing, and a still path rebuilds nothing > AC4 loader.film: seeking to 0.5, 1, 1.234 and 1.5 s gives the same tessellation and pixels as playing to them 16ms
+   → loader.film: the check raises no error: expected [ …(3) ] to deeply equal []
+ × seek-play.test.ts > AC4 seeking equals playing, and a still path rebuilds nothing > AC4 burst.film: seeking to 0.5, 1, 1.234 and 1.5 s gives the same tessellation and pixels as playing to them 7ms
+   → burst.film: the check raises no error: expected [ …(2) ] to deeply equal []
+ × seek-play.test.ts > AC4 seeking equals playing, and a still path rebuilds nothing > AC4 a still path rebuilds nothing while the loader plays beside it, and neither does a path with still ops that moves 11ms
+   → the loader with a moving spinner: the check raises no error: expected [ …(3) ] to deeply equal []
+ × bend.test.ts > AC11 bend: an attached two-point path as an arc > AC11 a path attached from A to B with bend 60 is an arc turning 60° within 0.1° whose ends land on the edges within 0.5 u, still so after B moves 80 u 9ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × trim.test.ts > AC1 a trim with an offset travels round a closed path > AC1 a trim with start 0, end 0.25 and offset 90° on a circle covers the quarter of its length that starts 90° round it, within 0.01 u at 64 sampled points 9ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × trim.test.ts > AC1 a trim with an offset travels round a closed path > AC1 an offset of 450° gives the same arc as 90° 4ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × segments.test.ts > AC3 segment counts computed from params before anything builds > AC3 zigzag with 5 ridges on a 4-segment path builds the 24 segments computed before the build, as Lottie's zig zag does 13ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × segments.test.ts > AC3 segment counts computed from params before anything builds > AC3 a repeater whose computed segments pass 50,000 is refused before anything builds, naming the op 18ms
+   → the only error is the segment budget: expected [] to deeply equal [ 'segment_budget' ]
+ × taper.test.ts > AC6 stroke taper > AC6 a taper from 1 to 0 over the last 20% of a stroke draws widths that follow its ease within 2% at sampled lengths 41ms
+   → the taper's widths against its ease:
+  at arc length 330.5 u the stroke draws 12.000 u wide, not 10.425 ± 0.24
+  at arc length 340.5 u the stroke draws 12.000 u wide, not 8.925 ± 0.24
+  at arc length 350.5 u the stroke draws 12.000 u wide, not 7.425 ± 0.24
+  at arc length 360.5 u the stroke draws 12.000 u wide, not 5.925 ± 0.24
+  at arc length 370.5 u the stroke draws 12.000 u wide, not 4.425 ± 0.24
+  at arc length 380.5 u the stroke draws 12.000 u wide, not 2.925 ± 0.24
+  at arc length 390.5 u the stroke draws 12.000 u wide, not 1.425 ± 0.24: expected [ …(7) ] to deeply equal []
+ × taper.test.ts > AC6 stroke taper > AC6 a width under 1 device px draws at 1 px with its alpha scaled by its width 29ms
+   → the sub-pixel end:
+  at arc length 394.5 u (width 0.825 px) the column sums to 12.000, not its width ± 0.05
+  at arc length 394.5 u a pixel is 1.000 covered, more than the width 0.825 allows (drawn opaque, not with its alpha scaled)
+  at arc length 395.5 u (width 0.675 px) the column sums to 12.000, not its width ± 0.05
+  at arc length 395.5 u a pixel is 1.000 covered, more than the width 0.675 allows (drawn opaque, not with its alpha scaled)
+  at arc length 396.5 u (width 0.525 px) the column sums to 12.000, not its width ± 0.05
+  at arc length 396.5 u a pixel is 1.000 covered, more than the width 0.525 allows (drawn opaque, not with its alpha scaled)
+  at arc length 397.5 u (width 0.375 px) the column sums to 12.000, not its width ± 0.05
+  at arc length 397.5 u a pixel is 1.000 covered, more than the width 0.375 allows (drawn opaque, not with its alpha scaled)
+  at arc length 398.5 u (width 0.225 px) the column sums to 12.000, not its width ± 0.05
+  at arc length 398.5 u a pixel is 1.000 covered, more than the width 0.225 allows (drawn opaque, not with its alpha scaled): expected [ …(10) ] to deeply equal []
+ × anchors.test.ts > AC13 read-only anchors by arc length > AC13 #at:0.5 of a 100 u line then a 300 u line lies 100 u into the second line within 0.1 u, along it, and #length reads 400 ± 0.01 u 13ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × anchors.test.ts > AC13 read-only anchors by arc length > AC13 every path-like item reads out #length: a rect's perimeter and a star's ten edges 7ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ × anchors.test.ts > AC13 read-only anchors by arc length > AC13 an attachment that names two#at:0.5 lands on it 6ms
+   → deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 49 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  anchors.test.ts > AC13 read-only anchors by arc length > AC13 #at:0.5 of a 100 u line then a 300 u line lies 100 u into the second line within 0.1 u, along it, and #length reads 400 ± 0.01 u
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ anchors.test.ts:25:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/49]⎯
+
+ FAIL  anchors.test.ts > AC13 read-only anchors by arc length > AC13 every path-like item reads out #length: a rect's perimeter and a star's ten edges
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ anchors.test.ts:34:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/49]⎯
+
+ FAIL  anchors.test.ts > AC13 read-only anchors by arc length > AC13 an attachment that names two#at:0.5 lands on it
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ anchors.test.ts:40:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/49]⎯
+
+ FAIL  bend.test.ts > AC11 bend: an attached two-point path as an arc > AC11 a path attached from A to B with bend 60 is an arc turning 60° within 0.1° whose ends land on the edges within 0.5 u, still so after B moves 80 u
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ bend.test.ts:59:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/49]⎯
+
+ FAIL  budgets.test.ts > AC9 budgets on the reference Mac > AC9 building 8 ops on a 1,000-segment path takes under 1 ms on change (median of frames 10–69 at 60 fps, five fresh processes after a warm-up)
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ playMs budgets.test.ts:46:18
+ ❯ budgets.test.ts:54:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/49]⎯
+
+ FAIL  budgets.test.ts > AC9 budgets on the reference Mac > AC9 a still path costs nothing per frame (no build after the first frame, five fresh processes)
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ still budgets.test.ts:62:22
+ ❯ budgets.test.ts:66:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/49]⎯
+
+ FAIL  budgets.test.ts > AC9 budgets on the reference Mac > AC9 a 64-copy repeater stays within the figure budget at 1080p (the check's figure class, and 4 ms of frame CPU to build it per changed frame)
+AssertionError: the 1080p figure with a 64-copy repeater passes its figure budget check: expected [ 'ref_unresolved' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ref_unresolved",
++ ]
+
+ ❯ budgets.test.ts:74:114
+     72|   it('AC9 a 64-copy repeater stays within the figure budget at 1080p (…
+     73|     const errors = errorsOf(check(burst64));
+     74|     expect(errors.map((e) => e.code), 'the 1080p figure with a 64-copy…
+       |                                                                                                                  ^
+     75|     const warm = playMs(burst64, 'petal');
+     76|     if (problem) ctx.skip(`INCONCLUSIVE (reading only, ${warm.toFixed(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/49]⎯
+
+ FAIL  columns.test.ts > AC8 per-point columns never zero-fill > AC8 a path whose opacity column is one row short of its points is refused with column_length, naming the column
+ FAIL  columns.test.ts > AC8 per-point columns never zero-fill > AC8 a path whose width column is one row short of its points is refused with column_length, naming the column
+AssertionError: the only error is the column's length: expected [] to deeply equal [ 'column_length' ]
+
+- Expected
++ Received
+
+- [
+-   "column_length",
+- ]
++ []
+
+ ❯ columns.test.ts:50:83
+     48|       const doc = short(column);
+     49|       const errors = errorsOf(check(doc));
+     50|       expect(errors.map((e) => e.code), 'the only error is the column\…
+       |                                                                                   ^
+     51|       expect(errors[0]!.ids, 'it names the path').toContain('stroke');
+     52|       expect(errors[0]!.path, 'it names the column').toBe(`items/strok…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/49]⎯
+
+ FAIL  columns.test.ts > AC8 per-point columns never zero-fill > AC8 a union of a path with an opacity column and one without draws the joined points at opacity 1
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ columns.test.ts:62:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/49]⎯
+
+ FAIL  columns.test.ts > AC8 per-point columns never zero-fill > AC8 a planted merge that zero-fills draws the joined points invisible and fails by evaluated value, naming the column
+AssertionError: raster the union under the planted merge refused: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readRaster helpers.ts:249:67
+    247| export function readRaster(input: JsonObject, out: JsonValue | undefin…
+    248|   const report = obj(out, `raster ${what}: the answer`);
+    249|   expect(report['ok'], `raster ${what} refused: ${show(report)}`).toBe…
+       |                                                                   ^
+    250|   const size = arr(obj(input['doc'], 'doc')['size'], 'doc.size').map((…
+    251|   const image = readPng(String(input['out']));
+ ❯ raster helpers.ts:259:10
+ ❯ columns.test.ts:68:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/49]⎯
+
+ FAIL  draw-order.test.ts > AC15 draw_order as an enum channel > AC15 draw_order moves a hand from behind the body to in front exactly on its key
+AssertionError: at 0 s the hand is behind the body: expected [ 230, 160, 30 ] to deeply equal [ 40, 90, 160 ]
+
+- Expected
++ Received
+
+  [
+-   40,
+-   90,
++   230,
+    160,
++   30,
+  ]
+
+ ❯ draw-order.test.ts:36:57
+     34|     const drawn = rasterPlay(dir, puppet, times, 'the puppet');
+     35|     const at = (i: number): number[] => pixel(drawn[i]!.image, ...OVER…
+     36|     expect(at(0), 'at 0 s the hand is behind the body').toEqual(role('…
+       |                                                         ^
+     37|     expect(at(1), 'at 0.5 s the hand is behind the body').toEqual(role…
+     38|     expect(at(2), 'one flick before the key the hand is still behind t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/49]⎯
+
+ FAIL  draw-order.test.ts > AC15 draw_order as an enum channel > AC15 seeking equals playing across the swap
+AssertionError: the seek to 352800000 flicks shows the hand behind the body: expected [ 230, 160, 30 ] to deeply equal [ 40, 90, 160 ]
+
+- Expected
++ Received
+
+  [
+-   40,
+-   90,
++   230,
+    160,
++   30,
+  ]
+
+ ❯ draw-order.test.ts:50:134
+     48|       const seek = raster(dir, puppet, `the puppet seeked to ${t}`, t);
+     49|       // The seek lands on the right side of the swap, so the two can'…
+     50|       expect(pixel(seek.image, ...OVERLAP), `the seek to ${t} flicks s…
+       |                                                                                                                                      ^
+     51|       expect(firstDifference(seek.image, drawn[times.indexOf(t)]!.imag…
+     52|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/49]⎯
+
+ FAIL  draw-order.test.ts > AC16 z across the tree, and inside an isolated group > AC16 a dot in group A with z 1 draws over a line in group B with z 0 though B comes later
+AssertionError: the two groups: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "unknown_field dot items/dot/params/z",
++ ]
+
+ ❯ expectClean helpers.ts:223:109
+    221|   const result = check(doc, look);
+    222|   const errors = errorsOf(result);
+    223|   expect(errors.map((e) => `${e.code} ${e.ids.join(',')} ${e.path}`), …
+       |                                                                                                             ^
+    224|   expect(result.ok, `${what}: the check passes`).toBe(true);
+    225| }
+ ❯ draw-order.test.ts:71:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/49]⎯
+
+ FAIL  draw-order.test.ts > AC16 z across the tree, and inside an isolated group > AC16 inside an isolated group the same dot stays under B, with the notice z_inside_isolated
+AssertionError: a notice doesn't refuse the document: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ draw-order.test.ts:80:64
+     78|     const doc = groups(true);
+     79|     const result = check(doc);
+     80|     expect(result.ok, 'a notice doesn\'t refuse the document').toBe(tr…
+       |                                                                ^
+     81|     const notices = result.issues.filter((i) => i.code === 'z_inside_i…
+     82|     expect(notices.map((n) => n.severity), 'one notice z_inside_isolat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/49]⎯
+
+ FAIL  ends.test.ts > AC7 an arrow rides a trim, and an attached end stops short of its box > AC7 a path drawn on by a trim from 0 to 1 over 1 s has its arrow's tip at the trim's end within 0.1 u at 0.25, 0.5 and 1 s, along the tangent within 1°
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ ends.test.ts:49:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/49]⎯
+
+ FAIL  ends.test.ts > AC7 an arrow rides a trim, and an attached end stops short of its box > AC7 an end attached with a 4 px gap to a 100 × 40 u box at (200, 100), from a start at (0, 120), ends at (196, 120)
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ ends.test.ts:69:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/49]⎯
+
+ FAIL  ends.test.ts > AC10 a head is at most a quarter of its path > AC10 an arrow 20 u long at stroke 3 with size 4 draws a head 5 u long, not 12; on a 100 u path the same head is 12
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ ends.test.ts:86:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/49]⎯
+
+ FAIL  ends.test.ts > AC12 attach at the true outline, or at the box > AC12 an arrow attached at outline to a circle of radius 50 u from 45° stops 4 px (its gap) from the circle within 0.5 px
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ probe ends.test.ts:105:23
+ ❯ ends.test.ts:112:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/49]⎯
+
+ FAIL  ends.test.ts > AC12 attach at the true outline, or at the box > AC12 at edge the same arrow stops 4 px before the box corner, 24.7 u short of the circle
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ probe ends.test.ts:105:23
+ ❯ ends.test.ts:118:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/49]⎯
+
+ FAIL  outline.test.ts > AC14 a union outline > AC14 a union outline draws one ring around overlapping parts with no inner seam
+AssertionError: the union outline:
+  pixel (38, 80), 1.5 px west of a, reads ground, not rim: [255,255,255]
+  pixel (100, 38), 1.5 px north of a, reads ground, not rim: [255,255,255]
+  pixel (241, 120), 1.5 px east of b, reads ground, not rim: [255,255,255]
+  pixel (180, 161), 1.5 px south of b, reads ground, not rim: [255,255,255]
+  pixel (161, 70), 1.5 px east of a, above b, reads ground, not rim: [255,255,255]
+  the rim pixels form 0 rings, not one: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "pixel (38, 80), 1.5 px west of a, reads ground, not rim: [255,255,255]",
++   "pixel (100, 38), 1.5 px north of a, reads ground, not rim: [255,255,255]",
++   "pixel (241, 120), 1.5 px east of b, reads ground, not rim: [255,255,255]",
++   "pixel (180, 161), 1.5 px south of b, reads ground, not rim: [255,255,255]",
++   "pixel (161, 70), 1.5 px east of a, above b, reads ground, not rim: [255,255,255]",
++   "the rim pixels form 0 rings, not one",
++ ]
+
+ ❯ none helpers.ts:92:73
+     90| /** No failures; the message lists them. */
+     91| export function none(failures: readonly string[], what: string): void {
+     92|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     93| }
+     94|
+ ❯ outline.test.ts:83:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/49]⎯
+
+ FAIL  outline.test.ts > AC14 a union outline > AC14 a slit child keeps its own line inside the union
+AssertionError: 1.5 px west of b's west edge, inside a, the slit b draws its own line: [40,90,160]: expected 'body' to be 'rim' // Object.is equality
+
+Expected: "rim"
+Received: "body"
+
+ ❯ outline.test.ts:89:150
+     87|     const { image: slit } = raster(dir, puppet(['b']), 'the group with…
+     88|     const { image: plain } = raster(dir, puppet(null), 'the group with…
+     89|     expect(label(slit, 118, 100), `1.5 px west of b's west edge, insid…
+       |                                                                                                                                                      ^
+     90|     expect(label(slit, 136, 78), `1.5 px north of b's north edge, insi…
+     91|     expect(label(plain, 118, 100), 'without the slit the same pixel is…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/49]⎯
+
+ FAIL  parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 every op matches its CPU reference within 0.01 u
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ frames parity.test.ts:125:16
+ ❯ parity.test.ts:132:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/49]⎯
+
+ FAIL  parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in trim's output (moved:trim) fails its reference
+ FAIL  parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in round_corners's output (moved:round_corners) fails its reference
+ FAIL  parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in offset_path's output (moved:offset_path) fails its reference
+ FAIL  parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in zigzag's output (moved:zigzag) fails its reference
+ FAIL  parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in pucker's output (moved:pucker) fails its reference
+ FAIL  parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in twist's output (moved:twist) fails its reference
+ FAIL  parity.test.ts > AC5 each path op against its CPU reference on parity/2d/path-ops.scene > AC5 a planted change in repeater's output (moved:repeater) fails its reference
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ frames parity.test.ts:125:16
+ ❯ parity.test.ts:140:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/49]⎯
+
+ FAIL  parity.test.ts > AC5 the parity fixtures and their planted-fault twins > AC5 path-ops.scene: the same raster in two processes; its twin fails with out_of_range at items/zigzag/params/ops/0/ridges, naming zigzag
+AssertionError: path-ops.scene's twin fails with exactly its code: expected [] to deeply equal [ 'out_of_range' ]
+
+- Expected
++ Received
+
+- [
+-   "out_of_range",
+- ]
++ []
+
+ ❯ parity.test.ts:169:103
+    167|       f.plant(planted);
+    168|       const errors = errorsOf(check(planted));
+    169|       expect([...new Set(errors.map((e) => e.code))], `${f.name}'s twi…
+       |                                                                                                       ^
+    170|       expect(errors.some((e) => e.ids.includes(f.item) && e.path === f…
+    171|       expectRefused('raster', rasterInput(dir, planted), f.code, `${f.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/49]⎯
+
+ FAIL  parity.test.ts > AC5 the parity fixtures and their planted-fault twins > AC5 loader.film: the same raster in two processes; its twin fails with out_of_range at items/loader/params/ops, naming loader
+AssertionError: loader.film: the check raises no error: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ref_unresolved loader-end channels/loader-end/target",
++   "ref_unresolved loader-offset channels/loader-offset/target",
++   "ref_unresolved loader-start channels/loader-start/target",
++ ]
+
+ ❯ expectClean helpers.ts:223:109
+    221|   const result = check(doc, look);
+    222|   const errors = errorsOf(result);
+    223|   expect(errors.map((e) => `${e.code} ${e.ids.join(',')} ${e.path}`), …
+       |                                                                                                             ^
+    224|   expect(result.ok, `${what}: the check passes`).toBe(true);
+    225| }
+ ❯ parity.test.ts:161:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/49]⎯
+
+ FAIL  parity.test.ts > AC5 the parity fixtures and their planted-fault twins > AC5 burst.film: the same raster in two processes; its twin fails with out_of_range at items/burst/params/ops/1/copies, naming burst
+AssertionError: burst.film: the check raises no error: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ref_unresolved burst-copies channels/burst-copies/target",
++   "ref_unresolved burst-pucker channels/burst-pucker/target",
++ ]
+
+ ❯ expectClean helpers.ts:223:109
+    221|   const result = check(doc, look);
+    222|   const errors = errorsOf(result);
+    223|   expect(errors.map((e) => `${e.code} ${e.ids.join(',')} ${e.path}`), …
+       |                                                                                                             ^
+    224|   expect(result.ok, `${what}: the check passes`).toBe(true);
+    225| }
+ ❯ parity.test.ts:161:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/49]⎯
+
+ FAIL  parity.test.ts > AC5 the parity fixtures and their planted-fault twins > a path line that is not JSON, lacks its document or item, or names an unknown planted value is bad_input with no panic
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ parity.test.ts:176:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/49]⎯
+
+ FAIL  repeater.test.ts > AC2 a fractional repeater > AC2 a repeater with 3.5 copies has four copies, the last at half its opacity, and copy k's transform is the repeater's applied k times within 1e-6
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ repeater.test.ts:37:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/49]⎯
+
+ FAIL  repeater.test.ts > AC2 a fractional repeater > AC2 the four copies draw where they are, three in full and the last at half opacity, and no fifth
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ repeater.test.ts:65:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/49]⎯
+
+ FAIL  repeater.test.ts > AC17 partial copies and lag > AC17 at copies 2.5, partial: slide with out_cubic draws three bars at full opacity, the third at 56.25° within 1e-6°
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ repeater.test.ts:93:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/49]⎯
+
+ FAIL  repeater.test.ts > AC17 partial copies and lag > AC17 at copies 2.5, partial: fade draws the third bar at 60° at half opacity
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ repeater.test.ts:109:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/49]⎯
+
+ FAIL  repeater.test.ts > AC17 partial copies and lag > AC17 with lag 0.2057 s and a child scale wave of 1 ± 0.22 with period 2.35 s, copy k's scale equals the child's at t − k × 0.2057 s within 1e-9
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ childScales repeater.test.ts:158:20
+ ❯ repeater.test.ts:163:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/49]⎯
+
+ FAIL  repeater.test.ts > AC17 partial copies and lag > AC17 a planted repeater that evaluates every copy at t draws all twelve at one scale and fails, naming the op
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ childScales repeater.test.ts:158:20
+ ❯ repeater.test.ts:177:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/49]⎯
+
+ FAIL  seek-play.test.ts > AC4 seeking equals playing, and a still path rebuilds nothing > AC4 loader.film: seeking to 0.5, 1, 1.234 and 1.5 s gives the same tessellation and pixels as playing to them
+AssertionError: loader.film: the check raises no error: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ref_unresolved loader-end channels/loader-end/target",
++   "ref_unresolved loader-offset channels/loader-offset/target",
++   "ref_unresolved loader-start channels/loader-start/target",
++ ]
+
+ ❯ expectClean helpers.ts:223:109
+    221|   const result = check(doc, look);
+    222|   const errors = errorsOf(result);
+    223|   expect(errors.map((e) => `${e.code} ${e.ids.join(',')} ${e.path}`), …
+       |                                                                                                             ^
+    224|   expect(result.ok, `${what}: the check passes`).toBe(true);
+    225| }
+ ❯ seekEqualsPlay seek-play.test.ts:27:3
+ ❯ seek-play.test.ts:50:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/49]⎯
+
+ FAIL  seek-play.test.ts > AC4 seeking equals playing, and a still path rebuilds nothing > AC4 burst.film: seeking to 0.5, 1, 1.234 and 1.5 s gives the same tessellation and pixels as playing to them
+AssertionError: burst.film: the check raises no error: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ref_unresolved burst-copies channels/burst-copies/target",
++   "ref_unresolved burst-pucker channels/burst-pucker/target",
++ ]
+
+ ❯ expectClean helpers.ts:223:109
+    221|   const result = check(doc, look);
+    222|   const errors = errorsOf(result);
+    223|   expect(errors.map((e) => `${e.code} ${e.ids.join(',')} ${e.path}`), …
+       |                                                                                                             ^
+    224|   expect(result.ok, `${what}: the check passes`).toBe(true);
+    225| }
+ ❯ seekEqualsPlay seek-play.test.ts:27:3
+ ❯ seek-play.test.ts:54:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/49]⎯
+
+ FAIL  seek-play.test.ts > AC4 seeking equals playing, and a still path rebuilds nothing > AC4 a still path rebuilds nothing while the loader plays beside it, and neither does a path with still ops that moves
+AssertionError: the loader with a moving spinner: the check raises no error: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ref_unresolved loader-end channels/loader-end/target",
++   "ref_unresolved loader-offset channels/loader-offset/target",
++   "ref_unresolved loader-start channels/loader-start/target",
++ ]
+
+ ❯ expectClean helpers.ts:223:109
+    221|   const result = check(doc, look);
+    222|   const errors = errorsOf(result);
+    223|   expect(errors.map((e) => `${e.code} ${e.ids.join(',')} ${e.path}`), …
+       |                                                                                                             ^
+    224|   expect(result.ok, `${what}: the check passes`).toBe(true);
+    225| }
+ ❯ seek-play.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/49]⎯
+
+ FAIL  segments.test.ts > AC3 segment counts computed from params before anything builds > AC3 zigzag with 5 ridges on a 4-segment path builds the 24 segments computed before the build, as Lottie's zig zag does
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ segments.test.ts:34:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/49]⎯
+
+ FAIL  segments.test.ts > AC3 segment counts computed from params before anything builds > AC3 a repeater whose computed segments pass 50,000 is refused before anything builds, naming the op
+AssertionError: the only error is the segment budget: expected [] to deeply equal [ 'segment_budget' ]
+
+- Expected
++ Received
+
+- [
+-   "segment_budget",
+- ]
++ []
+
+ ❯ segments.test.ts:45:79
+     43|     const result = check(over);
+     44|     const errors = errorsOf(result);
+     45|     expect(errors.map((e) => e.code), 'the only error is the segment b…
+       |                                                                               ^
+     46|     const e = errors[0]!;
+     47|     expect(e.ids, 'it names the item').toContain('big');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/49]⎯
+
+ FAIL  taper.test.ts > AC6 stroke taper > AC6 a taper from 1 to 0 over the last 20% of a stroke draws widths that follow its ease within 2% at sampled lengths
+AssertionError: the taper's widths against its ease:
+  at arc length 330.5 u the stroke draws 12.000 u wide, not 10.425 ± 0.24
+  at arc length 340.5 u the stroke draws 12.000 u wide, not 8.925 ± 0.24
+  at arc length 350.5 u the stroke draws 12.000 u wide, not 7.425 ± 0.24
+  at arc length 360.5 u the stroke draws 12.000 u wide, not 5.925 ± 0.24
+  at arc length 370.5 u the stroke draws 12.000 u wide, not 4.425 ± 0.24
+  at arc length 380.5 u the stroke draws 12.000 u wide, not 2.925 ± 0.24
+  at arc length 390.5 u the stroke draws 12.000 u wide, not 1.425 ± 0.24: expected [ …(7) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "at arc length 330.5 u the stroke draws 12.000 u wide, not 10.425 ± 0.24",
++   "at arc length 340.5 u the stroke draws 12.000 u wide, not 8.925 ± 0.24",
++   "at arc length 350.5 u the stroke draws 12.000 u wide, not 7.425 ± 0.24",
++   "at arc length 360.5 u the stroke draws 12.000 u wide, not 5.925 ± 0.24",
++   "at arc length 370.5 u the stroke draws 12.000 u wide, not 4.425 ± 0.24",
++   "at arc length 380.5 u the stroke draws 12.000 u wide, not 2.925 ± 0.24",
++   "at arc length 390.5 u the stroke draws 12.000 u wide, not 1.425 ± 0.24",
++ ]
+
+ ❯ none helpers.ts:92:73
+     90| /** No failures; the message lists them. */
+     91| export function none(failures: readonly string[], what: string): void {
+     92|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     93| }
+     94|
+ ❯ taper.test.ts:40:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/49]⎯
+
+ FAIL  taper.test.ts > AC6 stroke taper > AC6 a width under 1 device px draws at 1 px with its alpha scaled by its width
+AssertionError: the sub-pixel end:
+  at arc length 394.5 u (width 0.825 px) the column sums to 12.000, not its width ± 0.05
+  at arc length 394.5 u a pixel is 1.000 covered, more than the width 0.825 allows (drawn opaque, not with its alpha scaled)
+  at arc length 395.5 u (width 0.675 px) the column sums to 12.000, not its width ± 0.05
+  at arc length 395.5 u a pixel is 1.000 covered, more than the width 0.675 allows (drawn opaque, not with its alpha scaled)
+  at arc length 396.5 u (width 0.525 px) the column sums to 12.000, not its width ± 0.05
+  at arc length 396.5 u a pixel is 1.000 covered, more than the width 0.525 allows (drawn opaque, not with its alpha scaled)
+  at arc length 397.5 u (width 0.375 px) the column sums to 12.000, not its width ± 0.05
+  at arc length 397.5 u a pixel is 1.000 covered, more than the width 0.375 allows (drawn opaque, not with its alpha scaled)
+  at arc length 398.5 u (width 0.225 px) the column sums to 12.000, not its width ± 0.05
+  at arc length 398.5 u a pixel is 1.000 covered, more than the width 0.225 allows (drawn opaque, not with its alpha scaled): expected [ …(10) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "at arc length 394.5 u (width 0.825 px) the column sums to 12.000, not its width ± 0.05",
++   "at arc length 394.5 u a pixel is 1.000 covered, more than the width 0.825 allows (drawn opaque, not with its alpha scaled)",
++   "at arc length 395.5 u (width 0.675 px) the column sums to 12.000, not its width ± 0.05",
++   "at arc length 395.5 u a pixel is 1.000 covered, more than the width 0.675 allows (drawn opaque, not with its alpha scaled)",
++   "at arc length 396.5 u (width 0.525 px) the column sums to 12.000, not its width ± 0.05",
++   "at arc length 396.5 u a pixel is 1.000 covered, more than the width 0.525 allows (drawn opaque, not with its alpha scaled)",
++   "at arc length 397.5 u (width 0.375 px) the column sums to 12.000, not its width ± 0.05",
++   "at arc length 397.5 u a pixel is 1.000 covered, more than the width 0.375 allows (drawn opaque, not with its alpha scaled)",
++   "at arc length 398.5 u (width 0.225 px) the column sums to 12.000, not its width ± 0.05",
++   "at arc length 398.5 u a pixel is 1.000 covered, more than the width 0.225 allows (drawn opaque, not with its alpha scaled)",
++ ]
+
+ ❯ none helpers.ts:92:73
+     90| /** No failures; the message lists them. */
+     91| export function none(failures: readonly string[], what: string): void {
+     92|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     93| }
+     94|
+ ❯ taper.test.ts:54:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/49]⎯
+
+ FAIL  trim.test.ts > AC1 a trim with an offset travels round a closed path > AC1 a trim with start 0, end 0.25 and offset 90° on a circle covers the quarter of its length that starts 90° round it, within 0.01 u at 64 sampled points
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ traced trim.test.ts:24:13
+ ❯ startAndSense trim.test.ts:31:17
+ ❯ trim.test.ts:52:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/49]⎯
+
+ FAIL  trim.test.ts > AC1 a trim with an offset travels round a closed path > AC1 an offset of 450° gives the same arc as 90°
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll helpers.ts:348:16
+ ❯ pathFrames helpers.ts:354:10
+ ❯ pathAt helpers.ts:359:10
+ ❯ traced trim.test.ts:24:13
+ ❯ startAndSense trim.test.ts:31:17
+ ❯ trim.test.ts:59:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/49]⎯
+
+
+ Test Files  13 failed (13)
+      Tests  49 failed (49)
+   Start at  02:33:27
+   Duration  8.90s (tests 98%, import 1%, transform 1%)
+
+    Isolate  13 workers spawned · ~57ms startup each (spawn + environment, per file)
+             at least ~681ms faster with isolate: false — reuses workers across files instead of one per file
+
+exit 1

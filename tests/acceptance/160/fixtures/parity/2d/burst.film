@@ -1,0 +1,98 @@
+{
+  "format": 1,
+  "id": "parity-burst",
+  "profile": "film",
+  "title": "Radial burst",
+  "description": "One petal fanned into a burst by a repeater whose copies grow from 1 to 12 over a second, 30 degrees apart and fading from first to last, after a pucker that deepens.",
+  "size": [
+    300,
+    300
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "burst": {
+      "id": "burst",
+      "kind": "path@1",
+      "layer": "main",
+      "name": "Burst",
+      "order": "a00",
+      "params": {
+        "d": "M 0 0 C 10 -20 10 -50 0 -70 C -10 -50 -10 -20 0 0 Z",
+        "ops": [
+          {
+            "pucker": {
+              "amount": 0
+            }
+          },
+          {
+            "repeater": {
+              "copies": 1,
+              "at": {
+                "rot": 30
+              },
+              "opacity": [
+                1,
+                0.4
+              ]
+            }
+          }
+        ],
+        "paint": {
+          "fill": {
+            "role": "petal"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          150,
+          150,
+          0
+        ]
+      }
+    }
+  },
+  "transport": {
+    "span": "2s"
+  },
+  "channels": {
+    "burst-copies": {
+      "target": "items/burst/params/ops/1/copies",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 1,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "1s",
+          "value": 12,
+          "interp": "linear"
+        }
+      }
+    },
+    "burst-pucker": {
+      "target": "items/burst/params/ops/0/amount",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "2s",
+          "value": -0.3,
+          "interp": "linear"
+        }
+      }
+    }
+  }
+}

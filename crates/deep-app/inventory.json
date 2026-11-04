@@ -10,7 +10,9 @@
       "panel": "deepbuild/home",
       "entry": "crates/deep-app/src/views.rs Shipped, Kind::Home",
       "roles": [
-        "ink_primary"
+        "ground",
+        "ink_primary",
+        "ink_secondary"
       ],
       "literals": []
     },
