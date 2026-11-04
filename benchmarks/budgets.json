@@ -793,6 +793,16 @@
       "initialReason": "Issue #40 first measurement: the merge base has no pi package. One process runs interleaved 20-call pi sessions with and without the package against a hub, on real pi (DEEP_PI_CLI) and a scripted model; p50 includes pi's start. The issue's 1 ms per event stays in tests/acceptance/40/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "paseo-plugin",
+      "command": [
+        "node",
+        "benchmarks/paseo-plugin.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #55 first measurement: the merge base has no paseo plugin. One process loads the plugin into suite 55's stand-in for paseo's daemon against a hub and fires 40 rounds of a Copilot agent's permission requests and turn ends; p50 includes the hub's start. The issue's 10 ms per gated event stays in tests/acceptance/55/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "terminal-60hz",
       "command": [
         "node",

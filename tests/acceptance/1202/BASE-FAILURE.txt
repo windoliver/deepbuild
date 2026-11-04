@@ -1,0 +1,56 @@
+Base commit db09e652 (detached, unmodified but for this folder), November 3, 2026, on Linux aarch64 (Ubuntu, /bin/sh ->
+dash 0.5.12-6ubuntu5) with Node 24.22.0, workspaces built and target/debug/deep-hook built:
+
+  node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/1202
+  Test Files  2 failed | 1 passed (3)
+       Tests  3 failed | 1 passed (4)
+    Duration  about 15 s
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1202/tsconfig.json   -> no errors
+
+Why each test fails at the base (the first failing assertion's message, shortened; temp paths shown as /tmp/dh1202-…):
+
+AC1 entries.test.ts, entries
+  x  deep setup ran with the hub answering (exit 0) and wrote 12 entries, the waiter under Stop and StopFailure among
+     them; the hub was stopped; the bash control passed (under /bin/bash SessionStart's deep-hook sent pid = the shell's
+     PID and ppid = the stand-in's). Then
+     "AC1 #1202.3792a9e0 each entry's deep-hook must be a child of the process that runs the command (Claude Code, here
+     the stand-in), under /usr/bin/dash and /bin/sh; these weren't": 24 entries, all 12 under each shell, e.g.
+       "/usr/bin/dash -c SessionStart entry "'/tmp/dh1202-…/s/target/debug/deep-hook' claude-code SessionStart":
+        deep-hook ran as a child of the shell the stand-in started (PID 4092433), not of the process that runs the
+        command (the stand-in, PID 4092419): its request says pid 4092434, ppid 4092433 (the shell that ran the command)"
+       "/usr/bin/dash -c Stop background entry (the waiter) "'/tmp/dh1202-…/s/target/debug/deep-hook' claude-code waiter":
+        deep-hook (PID 4092477) is a child of PID 4092474 (/usr/bin/dash), the shell that ran the command, not of the
+        process that runs the command (the stand-in, PID 4092419)"
+     and the same for UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolUseFailure, Stop,
+     StopFailure (and its waiter), SessionEnd and FileChanged, then all 12 again under /bin/sh (dash here). The issue's
+     reason: dash doesn't exec a lone command, so deep-hook's parent is a new sh for every hook.
+
+AC1 entries.test.ts, the record
+  x  Every DeepBuild entry the stand-in ran through dash -c exited 0; all six hook events reached the record;
+     session.start is verified. Then
+     "AC1 #1202.3792a9e0 run through dash -c from one Claude Code process, every hook event after SessionStart is
+     checked against that process as session.start was; these weren't":
+       "user.ask: verified false", "tool.before: verified false", "tool.after: verified false",
+       "agent.stop: verified false", "session.end: verified false"
+     The issue's "What happens": the hub's verify() compares each hook's ppid (a fresh dash) with the one SessionStart
+     set up.
+
+AC2 programs.test.ts
+  v  passes at the base, as it should: the base's entries start with the quoted program, which both checks read. It
+     guards the fix. On a throwaway twin (the base dist edited so setup writes `exec '<deep-hook>' claude-code <Hook>`
+     and `exec '<deep-hook>' claude-code waiter`, reverted after; not kept) it failed:
+       "AC2 #1202.d1a1edc6 with /tmp/dh1202-…/s/target/debug/deep-hook in place, deep doctor must find the program each
+        entry runs; it read: {"item":"claude.hooks",…,"code":"hook_program_missing","level":"fail","evidence":"DeepBuild's
+        SessionStart, …, FileChanged hook entries in /tmp/dh1202-…/h/.claude/settings.json run exec, which is gone, …"}"
+     and, with the doctor's asserts taken out of a throwaway copy of the file, on the hub:
+       "AC2 #1202.d1a1edc6 with /tmp/dh1202-…/s/target/debug/deep-hook in place, the hub's hook-program check must find
+        it; it says on the session that hooks can't run: expected [ Array(1) ] to deeply equal []"
+     On the same twin both AC1 tests passed, so the twin is a fix of AC1 that breaks AC2.
+
+AC3 session.live.test.ts
+  x  "AC3 #1202.cbf2a1cb BLOCKED: this test starts a real Claude Code session on your plan; run it by hand with
+     DEEP_HARNESS_LIVE=1". Not run with the opt-in at the base: it spends plan usage, and this machine's claude is
+     2.1.317, so with the opt-in (and a dummy token) it fails "BLOCKED: …/claude/versions/2.1.317 is Claude Code
+     2.1.317, not 2.1.308, the version this criterion names". The fast AC1 record test shows what it would find at the
+     base: every event after session.start unverified.

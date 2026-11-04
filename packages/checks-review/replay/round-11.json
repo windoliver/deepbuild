@@ -1,0 +1,30 @@
+{
+  "claim": "client-token",
+  "diff": "diff --git a/src/client.ts b/src/client.ts\nindex bc3fef0..d207570 100644\n--- a/src/client.ts\n+++ b/src/client.ts\n@@ -1,3 +1,4 @@\n export const client = new Client({\n   url: process.env.API_URL,\n+  token: 'tok_test_0000',\n });\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [
+      {
+        "title": "[P1] Token committed in source",
+        "body": "Read the token from the environment like the URL above.",
+        "priority": 1,
+        "confidence_score": 0.9,
+        "file": "src/client.ts",
+        "line": 3,
+        "rule": "secret-in-code",
+        "quote": "token: 'tok_test_0000',"
+      }
+    ],
+    "overall_correctness": "patch is incorrect",
+    "overall_explanation": "A credential is hard-coded.",
+    "overall_confidence_score": 0.88
+  },
+  "since": []
+}

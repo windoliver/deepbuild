@@ -58,6 +58,8 @@ export const API = Object.freeze([
   { method: 'deep.terminal.open', needs: 'run_as_you' },
   { method: 'deep.terminal.list', needs: 'run_as_you' },
   { method: 'deep.terminal.read', needs: 'run_as_you' },
+  // #989: closes a terminal: its host and program stop, and its log and checkpoint go.
+  { method: 'deep.terminal.close', needs: 'run_as_you' },
   // #411: a canvas revision's evaluated values by stable ID, for a check runner, under its grant's documents.
   { method: 'deep.canvas.read', needs: 'canvas' },
 ].map((m) => Object.freeze(m)));

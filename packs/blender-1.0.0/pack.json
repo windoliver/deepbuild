@@ -1,0 +1,35 @@
+{
+  "name": "blender",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "Blender's light and camera words (#433): point and spot lights in radiant watts, a camera's lens and sensor, +Z up, each with its stated conversion. A word with no mapping is refused.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "scene3d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "blender.light@1": "light@1.json",
+    "blender.camera@1": "camera@1.json"
+  },
+  "aliases": {
+    "POINT": {
+      "target": "blender.light@1",
+      "conversion": "energy (W) × 683 lm/W; location Z-up to Y-up"
+    },
+    "SPOT": {
+      "target": "blender.light@1",
+      "conversion": "energy (W) × 683 lm/W over the whole sphere; spot_size ÷ 2 in degrees"
+    },
+    "Light": {
+      "target": "blender.light@1",
+      "conversion": "type POINT or SPOT",
+      "renamed_from": "Lamp"
+    },
+    "Camera": {
+      "target": "blender.camera@1",
+      "conversion": "lens and sensor to fov across the wider side; Z-up to Y-up"
+    }
+  }
+}

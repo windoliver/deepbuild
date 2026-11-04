@@ -24,9 +24,12 @@ export function prUrlIn(text: string): string | undefined {
  * for the one gh printed. Read left to right as the shell does: a quote inside the other kind of quotes never
  * hides an operator, and a heredoc ends at its terminator line alone (`<<-` lets it be indented by tabs).
  */
-export function isPrCreate(command: string): boolean {
+export const isPrCreate = (command: string): boolean => isPrCommand(command, 'create');
+/** Whether a shell command is one `gh pr edit` invocation and nothing else, read as `gh pr create` is (#87). */
+export const isPrEdit = (command: string): boolean => isPrCommand(command, 'edit');
+function isPrCommand(command: string, verb: 'create' | 'edit'): boolean {
   const cmd = command.trimEnd();
-  if (!/^\s*gh\s+pr\s+create\b/.test(cmd)) return false;
+  if (!new RegExp(`^\\s*gh\\s+pr\\s+${verb}\\b`).test(cmd)) return false;
   const HEREDOC = /^<<(-?)[ \t]*(["']?)(\w+)\2/;
   // The end of a heredoc body that starts after the newline at `from`: the index past its terminator line.
   const bodyEnd = (from: number, tag: string, dash: boolean): number | undefined => {
@@ -76,8 +79,10 @@ export function isPrCreate(command: string): boolean {
   }
   return quote === undefined && pending === undefined;
 }
-/** `Closes #n` in a PR body: the issue it closes. */
-const closes = (body: string): number | undefined => { const m = /\bCloses #(\d+)/i.exec(body); return m ? Number(m[1]) : undefined; };
+/** The issue a PR body closes: `#n` after any of GitHub's closing keywords (close, fix, resolve and their forms). */
+const closes = (body: string): number | undefined => { const m = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)/i.exec(body); return m ? Number(m[1]) : undefined; };
+/** The issue a `gh pr create` or `gh pr edit` command's body says it closes, by `Closes #n` in the command's text (#322); undefined when it says none. */
+export const closesIssue = (command: string): number | undefined => closes(command);
 /** An issue's epic, `**Epic:** #n` in its body. */
 const epicOf = (body: string): number | undefined => { const m = /\*\*Epic:\*\*\s*#(\d+)/.exec(body); return m ? Number(m[1]) : undefined; };
 /** The issues an issue depends on: the `#n` items under its `### Depends on` heading. */

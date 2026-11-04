@@ -105,9 +105,83 @@ pub fn numbers(doc: &Map<String, Value>) -> (Vec<Value>, Vec<Issue>) {
             }
         }
         shown.extend(found);
+        shown.extend(text_numbers(doc, id, item));
         issues.extend(changed_cells(id, item));
     }
     (shown, issues)
+}
+
+/// What a text item's numbers trace to, beyond a bound value (#406): each story number a
+/// template shows, and each digit run a quote holds, which is quotation, with its raw bytes.
+fn text_numbers(doc: &Map<String, Value>, id: &str, item: &Value) -> Vec<Value> {
+    if item.get("kind").and_then(Value::as_str) != Some("text@1") {
+        return Vec::new();
+    }
+    let p = object_or_empty(item.get("params"));
+    if let Some(Value::String(t)) = p.get("template") {
+        let doc = Value::Object(doc.clone());
+        return deep_canvas::template::story_numbers(&doc, t)
+            .into_iter()
+            .map(|(slot, text)| json!({"item": id, "text": text, "source": {"story": slot}}))
+            .collect();
+    }
+    let (Some(quote), Some(Value::String(raw))) = (p.get("quote"), p.get("raw")) else {
+        return Vec::new();
+    };
+    crate::code::digits(&crate::code::display(raw, crate::code::tab(p)))
+        .into_iter()
+        .map(|(text, bytes)| {
+            json!({"item": id, "text": text,
+                   "source": {"quotation": quote, "raw": [bytes.start, bytes.end]}})
+        })
+        .collect()
+}
+
+/// Each quoting code item whose raw bytes differ from its source's lines, line ends included
+/// (`quote_mismatch`, naming the first line and byte that differ), or whose source `bytes` can't
+/// read by its sha256 (`asset_missing`). The display text never decides it (Text `text@1`: code).
+pub fn quotes(doc: &Map<String, Value>, bytes: impl Fn(&str) -> Option<Vec<u8>>) -> Vec<Issue> {
+    let mut issues = Vec::new();
+    for (id, item) in object_or_empty(doc.get("items")) {
+        let p = object_or_empty(item.get("params"));
+        let (Some(quote), Some(Value::String(raw))) = (p.get("quote"), p.get("raw")) else {
+            continue;
+        };
+        let source = quote.get("source").and_then(Value::as_str).unwrap_or("");
+        let Some(found) = bytes(source) else {
+            issues.push(Issue::error(
+                "asset_missing",
+                id,
+                format!("items/{id}/params/quote/source"),
+                json!(source),
+                "no stored source has this sha256",
+            ));
+            continue;
+        };
+        let line = |k: usize| {
+            quote
+                .get("lines")
+                .and_then(|l| l.get(k))
+                .and_then(Value::as_u64)
+                .map_or(1, |n| n as usize)
+        };
+        if let Some((line, byte)) =
+            crate::code::mismatch(raw.as_bytes(), &found, [line(0), line(1)])
+        {
+            issues.push(Issue {
+                fix: "Quote the source's bytes exactly, line ends included, or don't quote it."
+                    .into(),
+                ..Issue::error(
+                    "quote_mismatch",
+                    id,
+                    format!("items/{id}/params/raw"),
+                    json!({"line": line, "byte": byte}),
+                    &format!("the raw bytes differ from the source's at line {line}, byte {byte}"),
+                )
+            });
+        }
+    }
+    issues
 }
 
 /// A table cell quoted by a mark set whose bytes, as the table keeps them, differ from the file's
@@ -347,18 +421,38 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
                 .strip_prefix("items/")
                 .and_then(|rest| rest.split(['/', ':']).next())
                 .unwrap_or("");
+            // A segment budget names the count the ops declared (#160).
+            let actual = if r.code == "segment_budget" {
+                scene::declared_of(items, id).map_or(
+                    Value::Null,
+                    |n| json!({"segments": n, "limit": crate::pathops::MAX_PATH_SEGMENTS}),
+                )
+            } else {
+                Value::Null
+            };
             issues.push(Issue {
                 fix: "Change the item so the 2D marks module can draw it.".into(),
-                ..Issue::error(
-                    r.code,
-                    id,
-                    r.path.clone(),
-                    Value::Null,
-                    "marks2d refuses it",
-                )
+                ..Issue::error(r.code, id, r.path.clone(), actual, "marks2d refuses it")
             });
             break;
         }
+    }
+    // #160: a child whose own z would lift it out of the isolated group it draws inside, as a
+    // notice (Frame and group: draw order).
+    for (id, group) in scene::lifted(items) {
+        issues.push(Issue {
+            fix: "Give the child the group's z, or draw it outside the isolated group.".into(),
+            ..Issue {
+                severity: "notice",
+                ..Issue::error(
+                    "z_inside_isolated",
+                    &id,
+                    format!("items/{id}/params/z"),
+                    json!({"item": id, "group": group}),
+                    "its z orders it only inside the isolated group, which draws as one unit at its own z",
+                )
+            }
+        });
     }
     glyph_issues(items, &look.light_type, &mut issues);
     if look.dark_type != look.light_type {
