@@ -102,6 +102,17 @@ pub struct Effects {
     sparks: Option<SparkDraw>,
     /// The lens dirt on the GPU, with the image it holds; black with none.
     dirt: Option<(Option<Arc<Image>>, wgpu::TextureView)>,
+    /// The document whose composed operators the chain runs, with the emitter's and the
+    /// check's planted programs: built into `docops` on the device at the next frame.
+    pub op_doc: Option<(Value, Options, deep_canvas_effects::check::CheckOptions)>,
+    /// The document's composed pass and compute operators (#429), run in the effects chain.
+    pub docops: Option<crate::docops::DocOps>,
+    /// Each operator's resolution this frame, by item; 1 when not given.
+    pub op_resolution: BTreeMap<String, f64>,
+    /// A canonical render, where live-only operators draw their fallback.
+    pub op_canonical: bool,
+    /// What each operator drew last frame.
+    pub op_rows: Vec<crate::docops::Row>,
 }
 
 struct SparkDraw {
@@ -146,6 +157,11 @@ impl Effects {
             targets: Vec::new(),
             sparks: None,
             dirt: None,
+            op_doc: None,
+            docops: None,
+            op_resolution: BTreeMap::new(),
+            op_canonical: false,
+            op_rows: Vec::new(),
         }
     }
 
@@ -559,6 +575,36 @@ impl Post for Effects {
             ));
             cur = out;
         }
+        if let Some((doc, options, planted)) = self.op_doc.take() {
+            self.docops = Some(crate::docops::DocOps::new(device, &doc, options, planted, &[]));
+        }
+        if let Some(ops) = self.docops.as_mut() {
+            let res = self.op_resolution.clone();
+            let (rows, recs, out) = ops.plan(
+                device,
+                &cur,
+                Some(frame.ids),
+                Some(frame.depth),
+                size,
+                &camera.frame(),
+                &s.roles,
+                &|i| res.get(i).copied().unwrap_or(1.0),
+                self.op_canonical,
+            );
+            self.op_rows = rows;
+            for r in recs {
+                let profiler = self.profiler.clone();
+                jobs.push((
+                    r.mark.into(),
+                    Box::new(move |e| {
+                        r.record(e, &mut crate::docops::Profiled::new(profiler));
+                    }),
+                ));
+            }
+            if let Some(o) = out {
+                cur = o;
+            }
+        }
         if let Some(bloom) = &s.bloom {
             let (runs, mut params) = glow::chain(size, bloom);
             if self.planted.dirt_overlay {
@@ -679,7 +725,19 @@ impl Post for Shared {
             ns_per_px,
             determinism: Determinism::SameMachine,
         };
-        vec![
+        // The document's composed operators, after the shipped effects in the effects chain.
+        let fx = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        let marks: Vec<(String, f64)> = match (&fx.docops, &fx.op_doc) {
+            (Some(ops), _) => ops
+                .ops
+                .iter()
+                .map(|o| (o.mark.to_string(), o.declared_ns))
+                .collect(),
+            (None, Some((doc, ..))) => crate::docops::marks(doc),
+            (None, None) => Vec::new(),
+        };
+        drop(fx);
+        let mut out = vec![
             pass(GRID, "effects", 0, vec!["linear", "depth"], 0.12),
             pass(
                 SHADOW,
@@ -691,7 +749,20 @@ impl Post for Shared {
             pass(SPARKS, "effects", 2, vec!["linear", "depth"], 0.05),
             pass(OUTLINE, "effects", 3, vec!["linear", "ids"], 0.06),
             pass(GLOW, "bloom", 0, vec!["linear"], 0.25),
-        ]
+        ];
+        for (k, (name, ns)) in marks.into_iter().enumerate() {
+            out.push(Pass {
+                name,
+                place: "effects",
+                order: 4 + k as u32,
+                reads: vec!["linear"],
+                writes: vec!["linear"],
+                resolution: Resolution::Full,
+                ns_per_px: ns as f32,
+                determinism: Determinism::SameMachine,
+            });
+        }
+        out
     }
 
     fn shadows(&self) -> bool {
