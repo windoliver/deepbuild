@@ -1126,8 +1126,14 @@ fn trim_one(subs: &[Sub], start: f64, end: f64, offset: f64) -> Vec<Sub> {
     }
     let turn = offset / 360.0;
     let shift = (turn - turn.floor()) * total;
-    let s0 = start * total + shift;
-    let s1 = end * total + shift;
+    // A window whose start passes the end wraps whole, so it starts inside 0..total.
+    let wrap = if start * total + shift >= total {
+        total
+    } else {
+        0.0
+    };
+    let s0 = start * total + shift - wrap;
+    let s1 = end * total + shift - wrap;
     // The windows in 0..total: one, or two when the window wraps past the end.
     let windows: Vec<(f64, f64)> = if s1 <= total {
         vec![(s0, s1)]
@@ -1849,6 +1855,32 @@ fn repeat_from(r: &Repeater, source: &dyn Fn(usize) -> Vec<Sub>, opacity: f64) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_trim_whose_start_wraps_past_the_end_keeps_its_window() {
+        // #160: the loader's window late in its play, start 0.6, end 0.8 and offset 324°, on a
+        // closed square of side 100 (400 u): both ends of the window pass the path's end, so
+        // it's the 80 u from 200 u (1.5 × 400 − 400) to 280 u, one piece along the third side.
+        let sq = |x: f64, y: f64| [x, y];
+        let sub = Sub {
+            segs: vec![
+                Seg::Line(sq(0.0, 0.0), sq(100.0, 0.0)),
+                Seg::Line(sq(100.0, 0.0), sq(100.0, 100.0)),
+                Seg::Line(sq(100.0, 100.0), sq(0.0, 100.0)),
+                Seg::Line(sq(0.0, 100.0), sq(0.0, 0.0)),
+            ],
+            closed: true,
+        };
+        let out = trim(&[sub], 0.6, 0.8, 324.0, false);
+        let length: f64 = out.iter().map(Sub::length).sum();
+        assert!(
+            (length - 80.0).abs() < 1e-9,
+            "the window is 80 u, got {length} in {out:?}"
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].segs[0].start(), [100.0, 100.0]);
+        assert_eq!(out[0].segs[0].end(), [20.0, 100.0]);
+    }
 
     #[test]
     fn a_curve_measures_its_arc_length_by_quadrature() {
