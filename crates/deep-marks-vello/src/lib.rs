@@ -299,8 +299,23 @@ pub fn bez(verbs: &[Verb], by: [f64; 2], zoom: f64) -> BezPath {
             Verb::Close => path.close_path(),
         }
     }
+    // A line that goes nowhere, as flattening leaves where one curve meets the next or a
+    // rounding apart at a curve's end, has no direction a stroke's join can read: dropped, so a
+    // miter can't spike from it (#160).
     let mut flat = BezPath::new();
-    vello_cpu::kurbo::flatten(&path, FLATTEN / zoom, |e| flat.push(e));
+    let mut at: Option<Point> = None;
+    vello_cpu::kurbo::flatten(&path, FLATTEN / zoom, |e| {
+        if let (PathEl::LineTo(p), Some(q)) = (e, at) {
+            if p.distance(q) <= 1e-9 {
+                return;
+            }
+        }
+        at = match e {
+            PathEl::ClosePath => None,
+            _ => e.end_point(),
+        };
+        flat.push(e);
+    });
     flat
 }
 
@@ -950,5 +965,36 @@ mod tests {
         // A dash across the bend keeps the corner.
         let one = dash(&path, 1);
         assert_eq!(subpaths(&one)[0].0.len(), 3, "M, the corner, the end");
+    }
+    #[test]
+    fn a_flattened_path_holds_no_zero_length_line() {
+        // #160: the loader's trim at 0.83 s, as the path frame reports it. Flattening its last
+        // curve ended on a line 3e-14 u long, whose direction is noise; stroked with miter joins it
+        // drew a wedge past the butt end. No line of the flattened path may be that short.
+        let verbs = vec![
+            Verb::Move([50.70563658393808, 160.00529103660958]),
+            Verb::Cubic(
+                [43.89693938174226, 148.23716069652875],
+                [40.0, 134.57366983056266],
+                [40.0, 120.0],
+            ),
+            Verb::Cubic([40.0, 75.81722], [75.81722, 40.0], [120.0, 40.0]),
+            Verb::Cubic([164.18278, 40.0], [200.0, 75.81722], [200.0, 120.0]),
+            Verb::Cubic(
+                [200.0, 136.07247109425282],
+                [195.26029726471032, 151.03792529511662],
+                [187.10236224457452, 163.57489215214784],
+            ),
+        ];
+        let flat = bez(&verbs, [0.0, 0.0], 2.0);
+        let mut last = None;
+        for e in flat.elements() {
+            if let (Some(p), Some(q)) = (last, e.end_point()) {
+                if matches!(e, PathEl::LineTo(_)) {
+                    assert!(Point::distance(p, q) > 1e-9, "a line from {p:?} to {q:?}");
+                }
+            }
+            last = e.end_point();
+        }
     }
 }
