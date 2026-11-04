@@ -25,7 +25,7 @@ import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_
 import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
 import { freshCount, judgeStop, leftOpen, openCheckouts, priceDefinition, slot, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
-import { openLeases, type LeaseTable } from '@deepbuild/leases';
+import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { after, openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, recordVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
@@ -64,6 +64,7 @@ import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
 import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { driveCall, Replica, REPLICA_LEASE } from './drive.js';
+import { draftedPools, HeavyQueue } from './heavy.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { copySynced, disk, keepAside, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
@@ -473,6 +474,8 @@ export class Core {
   private checkouts!: Checkouts;
   /** The kernel's lease table (#237), read by deep env down for who holds a port now, and the gate runner's cpu.slot. */
   private leases!: LeaseTable;
+  /** The queue `deep lease` waits in, and the heavy commands it holds leases for (#1015). */
+  private heavy!: HeavyQueue;
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   private index!: Promise<IndexFill | undefined>;
   /** A package's index, once rebuilt from the pages. */
@@ -824,6 +827,24 @@ export class Core {
     await leases.declare('core', REPLICA_LEASE);
     for (const v of await leases.leases()) if (v.lease.resource.kind === REPLICA_LEASE.name) await leases.release(v.lease.id, []);
     this.every('leases', 1000, () => leases.tick());
+    // Heavy commands' kinds beside cpu.slot (#1015): browsers and stacks as pools drafted from the machine; the GPU
+    // is env-local's, shared or exclusive.
+    const pools = draftedPools(CORES);
+    for (const [name, n] of Object.entries(pools)) await leases.declare('core', { name, match: `pool(${n})`, cap: 1000, cooldown: 0, cost: 0 });
+    this.heavy = new HeavyQueue({
+      table: leases, slow: SLOW_SLOT, now: this.now, ...(this.options.plant ? { plant: this.options.plant } : {}),
+      append: async (kind, v, data, subject, session) => {
+        const ts = this.now();
+        const id = ulid(ts);
+        const agent = session ? this.sessions.get(session)?.agent : undefined;
+        await this.append(this.connection('core', session ? { session, ...(agent ? { agent } : {}) } : {}), { v, id, kind, ts, data: data as JsonValue, ...(subject ? { subject } : {}) });
+        return id;
+      },
+      worktreeOf: (s) => [...this.sessions.values()].find((x) => letters(x.id) === s || x.id === s)?.cwd,
+      agentOf: (s) => { const x = this.sessions.get(s); return x ? { pid: x.pid, start: x.start } : undefined; },
+    });
+    await this.heavy.recover(this.raw);
+    this.every('heavy', 500, () => this.heavy.tick());
     this.every('gone', 1000, () => this.goneSessions());
     // Each session's state as last recorded, then any change since; a session goes quiet after a day with no hook.
     for (const row of (await this.record.raw("SELECT session_id, json_extract(data, '$.state') AS state, json_extract(data, '$.cause') AS cause FROM events WHERE kind = 'session.state' AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; state: string; cause: string }[]) this.states.set(row.session_id, `${row.state}/${row.cause}`);
@@ -1176,6 +1197,12 @@ export class Core {
         if (meta.late && Number((known[0] as { late?: unknown }).late) !== 1) return { settled: this.lateAnswered(meta, meta.late.matched) };
         return { settled: Promise.resolve() };
       }
+    }
+    // A heavy command deep-hook let through with the hub away ran unleased (#1015): its session's row says so. With
+    // the hub only late, deep-hook leased it itself where the agent's call can be rewritten or denied.
+    const leasedAlone = meta.late && (meta.agent === 'claude-code' || meta.agent === 'codex');
+    if (replayed && meta.event === 'PreToolUse' && meta.heavy && !leasedAlone && typeof meta.call?.input.command === 'string') {
+      await this.appendReading(meta.session, meta.agent, `\`${excerpt(meta.call.input.command)}\` ran unleased: the hub was away when it started, so it took no cpu.slot (heavy command ${meta.heavy.name})`).catch(() => undefined);
     }
     // A call whose prompt went to you has run, live or replayed: offered back as a decision to save (#23).
     if (meta.event === 'PostToolUse' && meta.call) void this.offerBack(meta).catch(() => undefined);
@@ -4615,6 +4642,9 @@ export class Core {
       case 'run.start': return this.runStart(params);
       case 'test.load': return this.testLoad(params);
       case 'record.backup': return this.backup(params);
+      case 'lease.wait': return this.heavy.wait(params, context.peer, () => this.agentAbove(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
+      case 'lease.started': return this.heavy.started(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
+      case 'lease.exited': return this.heavy.exited(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'env.up': return this.envUp(params, context);
       case 'env.down': return this.envDown(params, context);
       case 'wiki.build': {
