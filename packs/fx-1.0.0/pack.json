@@ -1,0 +1,409 @@
+{
+  "name": "fx",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "fx@1, the first-party pack of named operators (canvas primitives: Pack: fx@1 named operators): composed pass graphs from the public steps only, each with its params, its cost and its grow, under the full operator check. This version holds the ones today's op table expresses; levels, curves, corner pin and the hue ranges wait for the spline, homography and HSL steps.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "effects": ">=0.0.0"
+    }
+  },
+  "operators": {
+    "fx.exposure@1": {
+      "id": "fx.exposure@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Exposure: the color's rgb times 2 to the power of stops; alpha kept.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "stops": {"type": "f32", "unit": "stops", "from": {"param": "stops"}, "range": [-8.0, 8.0], "default": 0.75}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "k": {"op": "exp2@1", "args": {"x": "stops"}},
+        "m": {"op": "compose@1", "args": {"x": "k", "y": "k", "z": "k", "w": 1.0}},
+        "out": {"op": "mul@1", "args": {"a": "c", "b": "m"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.0076}, "resolution": "full"
+    },
+    "fx.brightness_contrast@1": {
+      "id": "fx.brightness_contrast@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Brightness and contrast: rgb scaled about middle grey by contrast, then lifted by brightness; alpha kept.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "brightness": {"type": "f32", "unit": "linear", "from": {"param": "brightness"}, "range": [-1.0, 1.0], "default": 0.1},
+        "contrast": {"type": "f32", "unit": "ratio", "from": {"param": "contrast"}, "range": [0.0, 4.0], "default": 1.25}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "half": {"op": "mul@1", "args": {"a": "contrast", "b": -0.5}},
+        "pivot": {"op": "add@1", "args": {"a": "half", "b": 0.5}},
+        "lift": {"op": "add@1", "args": {"a": "pivot", "b": "brightness"}},
+        "scale": {"op": "compose@1", "args": {"x": "contrast", "y": "contrast", "z": "contrast", "w": 1.0}},
+        "bias": {"op": "compose@1", "args": {"x": "lift", "y": "lift", "z": "lift", "w": 0.0}},
+        "scaled": {"op": "mul@1", "args": {"a": "c", "b": "scale"}},
+        "out": {"op": "add@1", "args": {"a": "scaled", "b": "bias"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.0074}, "resolution": "full"
+    },
+    "fx.invert@1": {
+      "id": "fx.invert@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Invert: rgb to one less itself, mixed in by amount; alpha kept.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "amount": {"type": "f32", "unit": "ratio", "from": {"param": "amount"}, "range": [0.0, 1.0], "default": 1.0}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "flipped": {"op": "mul@1", "args": {"a": "c", "b": [-1.0, -1.0, -1.0, 1.0]}},
+        "inverted": {"op": "add@1", "args": {"a": "flipped", "b": [1.0, 1.0, 1.0, 0.0]}},
+        "out": {"op": "mix@1", "args": {"a": "c", "b": "inverted", "t": "amount"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.0094}, "resolution": "full"
+    },
+    "fx.gamma_pedestal_gain@1": {
+      "id": "fx.gamma_pedestal_gain@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Gamma, pedestal and gain: rgb to the power 1 / gamma, times gain, plus pedestal; alpha kept.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "gamma": {"type": "f32", "unit": "exponent", "from": {"param": "gamma"}, "range": [0.1, 10.0], "default": 1.4},
+        "pedestal": {"type": "f32", "unit": "linear", "from": {"param": "pedestal"}, "range": [-1.0, 1.0], "default": 0.02},
+        "gain": {"type": "f32", "unit": "ratio", "from": {"param": "gain"}, "range": [0.0, 8.0], "default": 1.1}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "rgb": {"op": "split@1", "args": {"x": "c", "pick": "rgb"}},
+        "floor": {"op": "max@1", "args": {"a": "rgb", "b": 0.0001}},
+        "inv": {"op": "div@1", "args": {"a": 1.0, "b": "gamma"}},
+        "curved": {"op": "pow@1", "args": {"a": "floor", "b": "inv"}},
+        "gained": {"op": "mul@1", "args": {"a": "curved", "b": "gain"}},
+        "lifted": {"op": "add@1", "args": {"a": "gained", "b": "pedestal"}},
+        "alpha": {"op": "split@1", "args": {"x": "c", "pick": "a"}},
+        "out": {"op": "compose@1", "args": {"x": "lifted", "y": "alpha"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.0133}, "resolution": "full"
+    },
+    "fx.black_white@1": {
+      "id": "fx.black_white@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Black and white: grey from the channels by their weights; alpha kept.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "red": {"type": "f32", "unit": "weight", "from": {"param": "red"}, "range": [-2.0, 2.0], "default": 0.3},
+        "green": {"type": "f32", "unit": "weight", "from": {"param": "green"}, "range": [-2.0, 2.0], "default": 0.59},
+        "blue": {"type": "f32", "unit": "weight", "from": {"param": "blue"}, "range": [-2.0, 2.0], "default": 0.11}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "w": {"op": "compose@1", "args": {"x": "red", "y": "green", "z": "blue", "w": 0.0}},
+        "grey": {"op": "dot@1", "args": {"a": "c", "b": "w"}},
+        "alpha": {"op": "split@1", "args": {"x": "c", "pick": "a"}},
+        "out": {"op": "compose@1", "args": {"x": "grey", "y": "grey", "z": "grey", "w": "alpha"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.0055}, "resolution": "full"
+    },
+    "fx.tint@1": {
+      "id": "fx.tint@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Tint: black mapped to one color and white to another by luminance, mixed in by amount; alpha kept.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "black": {"type": "vec3<f32>", "unit": "linear rgb", "from": {"param": "black"}, "range": [0.0, 16.0], "default": [0.05, 0.02, 0.1]},
+        "white": {"type": "vec3<f32>", "unit": "linear rgb", "from": {"param": "white"}, "range": [0.0, 16.0], "default": [1.0, 0.95, 0.8]},
+        "amount": {"type": "f32", "unit": "ratio", "from": {"param": "amount"}, "range": [0.0, 1.0], "default": 1.0}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "rgb": {"op": "split@1", "args": {"x": "c", "pick": "rgb"}},
+        "l": {"op": "luminance@1", "args": {"rgb": "rgb"}},
+        "mapped": {"op": "mix@1", "args": {"a": "black", "b": "white", "t": "l"}},
+        "tinted": {"op": "mix@1", "args": {"a": "rgb", "b": "mapped", "t": "amount"}},
+        "alpha": {"op": "split@1", "args": {"x": "c", "pick": "a"}},
+        "out": {"op": "compose@1", "args": {"x": "tinted", "y": "alpha"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.0097}, "resolution": "full"
+    },
+    "fx.channel_mixer@1": {
+      "id": "fx.channel_mixer@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Channel mixer: each output channel a weighted sum of the input's, by a column-major matrix; alpha kept.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "weights": {"type": "mat4x4<f32>", "unit": "weights", "from": {"param": "weights"}, "range": [-2.0, 2.0],
+          "default": [0.8, 0.1, 0.1, 0.0, 0.2, 0.7, 0.1, 0.0, 0.0, 0.2, 0.9, 0.0, 0.0, 0.0, 0.0, 1.0]}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "mixed": {"op": "mul@1", "args": {"a": "weights", "b": "c"}},
+        "rgb": {"op": "split@1", "args": {"x": "mixed", "pick": "rgb"}},
+        "alpha": {"op": "split@1", "args": {"x": "c", "pick": "a"}},
+        "out": {"op": "compose@1", "args": {"x": "rgb", "y": "alpha"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.0057}, "resolution": "full"
+    },
+    "fx.posterize@1": {
+      "id": "fx.posterize@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Posterize: each of rgb rounded to one of levels steps; alpha kept.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "levels": {"type": "f32", "unit": "steps", "from": {"param": "levels"}, "range": [2.0, 64.0], "default": 6.0}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "s": {"op": "mul@1", "args": {"a": "c", "b": "levels"}},
+        "near": {"op": "add@1", "args": {"a": "s", "b": 0.5}},
+        "f": {"op": "floor@1", "args": {"x": "near"}},
+        "q": {"op": "div@1", "args": {"a": "f", "b": "levels"}},
+        "keep": {"op": "const@1", "args": {"value": [false, false, false, true], "type": "vec4<bool>"}},
+        "out": {"op": "select@1", "args": {"f": "q", "t": "c", "cond": "keep"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.0122}, "resolution": "full"
+    },
+    "fx.threshold@1": {
+      "id": "fx.threshold@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Threshold: white where luminance is above level, black elsewhere; alpha kept.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "level": {"type": "f32", "unit": "luminance", "from": {"param": "level"}, "range": [0.0, 1.0], "default": 0.5}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "l": {"op": "dot@1", "args": {"a": "c", "b": [0.2126, 0.7152, 0.0722, 0.0]}},
+        "on": {"op": "gt@1", "args": {"a": "l", "b": "level"}},
+        "v": {"op": "select@1", "args": {"f": 0.0, "t": 1.0, "cond": "on"}},
+        "alpha": {"op": "split@1", "args": {"x": "c", "pick": "a"}},
+        "out": {"op": "compose@1", "args": {"x": "v", "y": "v", "z": "v", "w": "alpha"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.006}, "resolution": "full"
+    },
+    "fx.mosaic@1": {
+      "id": "fx.mosaic@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Mosaic: the frame as cells across, each the color at its centre.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "cells": {"type": "f32", "unit": "cells", "from": {"param": "cells"}, "range": [1.0, 512.0], "default": 12.0}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "s": {"op": "mul@1", "args": {"a": "uv", "b": "cells"}},
+        "f": {"op": "floor@1", "args": {"x": "s"}},
+        "centre": {"op": "add@1", "args": {"a": "f", "b": 0.5}},
+        "at": {"op": "div@1", "args": {"a": "centre", "b": "cells"}},
+        "out": {"op": "sample@1", "args": {"tex": "src", "uv": "at", "lod": 0.0}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.008}, "resolution": "full"
+    },
+    "fx.twirl@1": {
+      "id": "fx.twirl@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Twirl: the frame turned about centre by angle, fading to none at radius.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "angle": {"type": "f32", "unit": "rad", "from": {"param": "angle"}, "range": [-12.6, 12.6], "default": 2.0},
+        "radius": {"type": "f32", "unit": "uv", "from": {"param": "radius"}, "range": [0.01, 2.0], "default": 0.45},
+        "center": {"type": "vec2<f32>", "unit": "uv", "from": {"param": "center"}, "range": [0.0, 1.0], "default": [0.5, 0.5]}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "d": {"op": "sub@1", "args": {"a": "uv", "b": "center"}},
+        "r": {"op": "length@1", "args": {"x": "d"}},
+        "t": {"op": "div@1", "args": {"a": "r", "b": "radius"}},
+        "k": {"op": "clamp@1", "args": {"x": "t", "lo": 0.0, "hi": 1.0}},
+        "w": {"op": "sub@1", "args": {"a": 1.0, "b": "k"}},
+        "a": {"op": "mul@1", "args": {"a": "angle", "b": "w"}},
+        "ca": {"op": "cos@1", "args": {"x": "a"}},
+        "sa": {"op": "sin@1", "args": {"x": "a"}},
+        "dx": {"op": "split@1", "args": {"x": "d", "pick": "x"}},
+        "dy": {"op": "split@1", "args": {"x": "d", "pick": "y"}},
+        "x1": {"op": "mul@1", "args": {"a": "dx", "b": "ca"}},
+        "x2": {"op": "mul@1", "args": {"a": "dy", "b": "sa"}},
+        "rx": {"op": "sub@1", "args": {"a": "x1", "b": "x2"}},
+        "y1": {"op": "mul@1", "args": {"a": "dx", "b": "sa"}},
+        "y2": {"op": "mul@1", "args": {"a": "dy", "b": "ca"}},
+        "ry": {"op": "add@1", "args": {"a": "y1", "b": "y2"}},
+        "turned": {"op": "compose@1", "args": {"x": "rx", "y": "ry"}},
+        "at": {"op": "add@1", "args": {"a": "center", "b": "turned"}},
+        "out": {"op": "sample@1", "args": {"tex": "src", "uv": "at", "lod": 0.0}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.014}, "resolution": "full"
+    },
+    "fx.checkerboard@1": {
+      "id": "fx.checkerboard@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Checkerboard: squares across the frame in two colors, blended over the source by opacity.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "squares": {"type": "f32", "unit": "squares", "from": {"param": "squares"}, "range": [1.0, 256.0], "default": 8.0},
+        "color_a": {"type": "vec3<f32>", "unit": "linear rgb", "from": {"param": "color_a"}, "range": [0.0, 16.0], "default": [0.9, 0.9, 0.9]},
+        "color_b": {"type": "vec3<f32>", "unit": "linear rgb", "from": {"param": "color_b"}, "range": [0.0, 16.0], "default": [0.1, 0.1, 0.1]},
+        "opacity": {"type": "f32", "unit": "ratio", "from": {"param": "opacity"}, "range": [0.0, 1.0], "default": 0.75}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "s": {"op": "mul@1", "args": {"a": "uv", "b": "squares"}},
+        "f": {"op": "floor@1", "args": {"x": "s"}},
+        "fx": {"op": "split@1", "args": {"x": "f", "pick": "x"}},
+        "fy": {"op": "split@1", "args": {"x": "f", "pick": "y"}},
+        "sum": {"op": "add@1", "args": {"a": "fx", "b": "fy"}},
+        "m": {"op": "mod@1", "args": {"a": "sum", "b": 2.0}},
+        "odd": {"op": "ge@1", "args": {"a": "m", "b": 1.0}},
+        "square": {"op": "select@1", "args": {"f": "color_a", "t": "color_b", "cond": "odd"}},
+        "px": {"op": "compose@1", "args": {"x": "square", "y": 1.0}},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "out": {"op": "mix@1", "args": {"a": "c", "b": "px", "t": "opacity"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.0106}, "resolution": "full"
+    },
+    "fx.directional_blur@1": {
+      "id": "fx.directional_blur@1", "kind": "pass", "origin": "pack", "grow": 16,
+      "about": "Directional blur: the mean of taps samples along direction, centred on the pixel.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "direction": {"type": "vec2<f32>", "unit": "uv", "from": {"param": "direction"}, "range": [-0.25, 0.25], "default": [0.03, 0.01]},
+        "taps": {"type": "u32", "unit": "samples", "from": {"param": "taps"}, "range": [2.0, 24.0], "default": 9}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "n": {"op": "convert@1", "args": {"x": "taps", "to": "f32"}},
+        "span": {"op": "sub@1", "args": {"a": "n", "b": 1.0}},
+        "den": {"op": "max@1", "args": {"a": "span", "b": 1.0}},
+        "taps_sum": {"op": "repeat@1", "args": {
+          "count": "taps", "index": "i", "accumulate": {"sum": [0.0, 0.0, 0.0, 0.0]},
+          "body": {
+            "fi": {"op": "convert@1", "args": {"x": "i", "to": "f32"}},
+            "t": {"op": "div@1", "args": {"a": "fi", "b": "den"}},
+            "centred": {"op": "sub@1", "args": {"a": "t", "b": 0.5}},
+            "off": {"op": "mul@1", "args": {"a": "direction", "b": "centred"}},
+            "at": {"op": "add@1", "args": {"a": "uv", "b": "off"}},
+            "tap": {"op": "sample@1", "args": {"tex": "src", "uv": "at", "lod": 0.0}},
+            "sum": {"op": "add@1", "args": {"a": "sum", "b": "tap"}}
+          }
+        }},
+        "out": {"op": "div@1", "args": {"a": "taps_sum.sum", "b": "n"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.187}, "resolution": "full"
+    },
+    "fx.find_edges@1": {
+      "id": "fx.find_edges@1", "kind": "pass", "origin": "pack", "grow": 1,
+      "about": "Find edges: the luminance gradient's magnitude from the four neighbours, times amount; alpha kept.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "amount": {"type": "f32", "unit": "ratio", "from": {"param": "amount"}, "range": [0.0, 4.0], "default": 1.0}
+      },
+      "steps": {
+        "pix": {"op": "pixel@1"},
+        "p": {"op": "convert@1", "args": {"x": "pix", "to": "vec2<i32>"}},
+        "ol": {"op": "const@1", "args": {"value": [-1, 0], "type": "vec2<i32>"}},
+        "or": {"op": "const@1", "args": {"value": [1, 0], "type": "vec2<i32>"}},
+        "ou": {"op": "const@1", "args": {"value": [0, -1], "type": "vec2<i32>"}},
+        "od": {"op": "const@1", "args": {"value": [0, 1], "type": "vec2<i32>"}},
+        "pl": {"op": "add@1", "args": {"a": "p", "b": "ol"}},
+        "pr": {"op": "add@1", "args": {"a": "p", "b": "or"}},
+        "pu": {"op": "add@1", "args": {"a": "p", "b": "ou"}},
+        "pd": {"op": "add@1", "args": {"a": "p", "b": "od"}},
+        "cl": {"op": "load@1", "args": {"tex": "src", "ixy": "pl"}},
+        "cr": {"op": "load@1", "args": {"tex": "src", "ixy": "pr"}},
+        "cu": {"op": "load@1", "args": {"tex": "src", "ixy": "pu"}},
+        "cd": {"op": "load@1", "args": {"tex": "src", "ixy": "pd"}},
+        "ll": {"op": "dot@1", "args": {"a": "cl", "b": [0.2126, 0.7152, 0.0722, 0.0]}},
+        "lr": {"op": "dot@1", "args": {"a": "cr", "b": [0.2126, 0.7152, 0.0722, 0.0]}},
+        "lu": {"op": "dot@1", "args": {"a": "cu", "b": [0.2126, 0.7152, 0.0722, 0.0]}},
+        "ld": {"op": "dot@1", "args": {"a": "cd", "b": [0.2126, 0.7152, 0.0722, 0.0]}},
+        "gx": {"op": "sub@1", "args": {"a": "lr", "b": "ll"}},
+        "gy": {"op": "sub@1", "args": {"a": "ld", "b": "lu"}},
+        "g": {"op": "compose@1", "args": {"x": "gx", "y": "gy"}},
+        "e": {"op": "length@1", "args": {"x": "g"}},
+        "v": {"op": "mul@1", "args": {"a": "e", "b": "amount"}},
+        "c": {"op": "load@1", "args": {"tex": "src", "ixy": "p"}},
+        "alpha": {"op": "split@1", "args": {"x": "c", "pick": "a"}},
+        "out": {"op": "compose@1", "args": {"x": "v", "y": "v", "z": "v", "w": "alpha"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.029}, "resolution": "full"
+    },
+    "fx.noise@1": {
+      "id": "fx.noise@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Noise: seeded per-pixel noise of amount added to rgb, keyed by the pixel and the item's seed; alpha kept.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "amount": {"type": "f32", "unit": "linear", "from": {"param": "amount"}, "range": [0.0, 1.0], "default": 0.1},
+        "seed": {"type": "u32", "from": "seed"}
+      },
+      "steps": {
+        "pix": {"op": "pixel@1"},
+        "px": {"op": "split@1", "args": {"x": "pix", "pick": "x"}},
+        "py": {"op": "split@1", "args": {"x": "pix", "pick": "y"}},
+        "h": {"op": "hash@1", "args": {"a": "px", "b": "py", "c": "seed"}},
+        "r": {"op": "rand@1", "args": {"key": "h"}},
+        "centred": {"op": "sub@1", "args": {"a": "r", "b": 0.5}},
+        "k": {"op": "mul@1", "args": {"a": "centred", "b": "amount"}},
+        "grain": {"op": "compose@1", "args": {"x": "k", "y": "k", "z": "k", "w": 0.0}},
+        "uv": {"op": "screen_uv@1"},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "out": {"op": "add@1", "args": {"a": "c", "b": "grain"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.0092}, "resolution": "full"
+    },
+    "fx.radial_wipe@1": {
+      "id": "fx.radial_wipe@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Radial wipe: the frame shown where the angle about centre is past progress, its edge feathered.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "progress": {"type": "f32", "unit": "ratio", "from": {"param": "progress"}, "range": [0.0, 1.0], "default": 0.4},
+        "feather": {"type": "f32", "unit": "turns", "from": {"param": "feather"}, "range": [0.001, 1.0], "default": 0.05},
+        "center": {"type": "vec2<f32>", "unit": "uv", "from": {"param": "center"}, "range": [0.0, 1.0], "default": [0.5, 0.5]}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "d": {"op": "sub@1", "args": {"a": "uv", "b": "center"}},
+        "dx": {"op": "split@1", "args": {"x": "d", "pick": "x"}},
+        "dy": {"op": "split@1", "args": {"x": "d", "pick": "y"}},
+        "ang": {"op": "atan2@1", "args": {"y": "dy", "x": "dx"}},
+        "turns": {"op": "mul@1", "args": {"a": "ang", "b": 0.15915494309189535}},
+        "t": {"op": "add@1", "args": {"a": "turns", "b": 0.5}},
+        "edge": {"op": "sub@1", "args": {"a": "t", "b": "progress"}},
+        "shown": {"op": "smoothstep@1", "args": {"lo": 0.0, "hi": "feather", "x": "edge"}},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "out": {"op": "mul@1", "args": {"a": "c", "b": "shown"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.0101}, "resolution": "full"
+    },
+    "fx.luma_key@1": {
+      "id": "fx.luma_key@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Luma key: the color kept where its luminance is above threshold, softened over softness, as premultiplied coverage.",
+      "inputs": {
+        "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+        "threshold": {"type": "f32", "unit": "luminance", "from": {"param": "threshold"}, "range": [0.0, 1.0], "default": 0.3},
+        "softness": {"type": "f32", "unit": "luminance", "from": {"param": "softness"}, "range": [0.001, 1.0], "default": 0.1}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "c": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+        "l": {"op": "dot@1", "args": {"a": "c", "b": [0.2126, 0.7152, 0.0722, 0.0]}},
+        "top": {"op": "add@1", "args": {"a": "threshold", "b": "softness"}},
+        "kept": {"op": "smoothstep@1", "args": {"lo": "threshold", "hi": "top", "x": "l"}},
+        "out": {"op": "mul@1", "args": {"a": "c", "b": "kept"}}
+      },
+      "outputs": {"color": "out", "blend": "replace"},
+      "cost": {"ns_per_px": 0.008}, "resolution": "full"
+    }
+  }
+}
