@@ -48,7 +48,7 @@
   "modelFamily": {
     "readBy": "which rate card and context window a model name belongs to",
     "conformance": "claude/modelFamily/known-names",
-    "families": { "claude-opus-5-5": "opus", "claude-sonnet-5-5": "sonnet", "claude-haiku-5-5": "haiku", "claude-fable-5-1": "fable" }
+    "families": { "claude-opus-5-5": "opus", "claude-sonnet-5-5": "sonnet", "claude-haiku-5-5": "haiku", "claude-fable-5-1": "fable", "claude-opus-4-1": "opus", "claude-sonnet-4-5": "sonnet", "claude-haiku-4-5": "haiku" }
   },
   "billing": {
     "readBy": "whether a session bills a plan or an API account: set, these variables mean the API",
@@ -66,6 +66,20 @@
     "readBy": "which tool calls are questions to the person, so each one is caught as a permission request of kind question",
     "conformance": "claude/questionTools/question-is-a-request",
     "tools": ["AskUserQuestion"]
+  },
+  "mods": {
+    "readBy": "a mod that handles the overriding event can approve a call past a PreToolUse deny: deep doctor names each one a home loads, a PostToolUse for a call deep-hook denied is recorded as guard.overridden and keeps its session's claims from passing, and a session in a home with one reads its guard as watch-only unless a case below holds the deny",
+    "conformance": "claude/mods/override-recorded",
+    "since": { "terminal": "2.1.287", "desktop": "2.1.286" },
+    "validate": { "args": ["plugin", "validate"], "hooks": "hooks:", "calls": "calls:" },
+    "overrides": { "event": "tool.check", "past": "PreToolUse" },
+    "promptCalls": ["$.prompt.submit"],
+    "holdsWhen": [
+      { "case": "managed", "text": "managed settings are present on the machine" },
+      { "case": "login", "text": "the session's credential is a Team or Enterprise login", "subscriptionTypes": ["team", "enterprise"] },
+      { "case": "plan", "text": "the session is in plan mode and the call isn't read-only", "mode": "plan" },
+      { "case": "interactive", "text": "the call is AskUserQuestion or another tool that needs your interaction, from 2.1.292", "since": "2.1.292", "tools": ["AskUserQuestion"] }
+    ]
   },
   "transcripts": {
     "readBy": "a run keeps its session's own transcript",
@@ -978,6 +992,15 @@
       "NotebookEdit": "tool_input.notebook_path"
     },
     "mcp": { "tool": "tool" }
+  },
+  "taskList": {
+    "readBy": "the session's own task list: the newest TodoWrite call of the turn's transcript, whose todos each name their content and status",
+    "conformance": "claude/taskList/open-at-stop",
+    "tool": "TodoWrite",
+    "items": "todos",
+    "text": "content",
+    "status": "status",
+    "open": ["pending", "in_progress"]
   },
   "readUsage": {
     "readBy": "a turn's usage from the transcript: the model that answered, tokens by the agent's own count, a cost only with its basis",

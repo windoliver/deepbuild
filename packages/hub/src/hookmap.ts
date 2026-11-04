@@ -13,6 +13,7 @@ import { derivedId, refusal, signature, type Draft, type HookMeta, type Parsed, 
 /** The hub's moments an agent's own event names stand for, where the agent's differ from the hook names the core reads. */
 const MOMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   pi: { session_start: 'SessionStart', session_shutdown: 'SessionEnd', input: 'UserPromptSubmit', tool_call: 'PreToolUse', tool_result: 'PostToolUse', agent_before_settle: 'Stop' },
+  paseo: { 'agent.turn.after': 'Stop', 'agent.permission.before': 'PermissionRequest' },
 };
 const TOOL_KINDS = ['shell', 'read', 'edit', 'write', 'search', 'fetch', 'mcp', 'unknown'];
 const FROM = ['person', 'scheduled', 'subagent', 'session', 'continuation', 'unknown'];
@@ -182,6 +183,17 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
   if (Object.keys(fields).length) meta.fields = fields;
   if (name === 'pi' && str(payload.parent)) meta.parent = str(payload.parent);
+  if (name === 'paseo') {
+    const provider = str(payload.provider);
+    meta.paseo = { provider, agent: str(payload.paseo_agent), bind: str(payload.bind) };
+    for (const [key, field] of [['request', 'request_id'], ['kind', 'permission_kind'], ['behavior', 'behavior'], ['from', 'from']] as const) if (str(payload[field])) meta.paseo[key] = str(payload[field]);
+    // A provider the facts have no entry for is watch-only, and says which facts it lacks (#55).
+    const providers = (registry().get(name).facts as JsonObject).providers;
+    if (!isObj(providers) || !isObj(providers[provider])) {
+      meta.watchOnly = true;
+      meta.paseo.lacks = `This session runs ${provider || 'an unnamed provider'} through paseo, which DeepBuild's paseo facts have no entry for, so it is watch-only: nothing is held, answered or sent for it. The facts it lacks: bridge (its pinned bridge version), permissions (its permission quirks), modelCheck (the check of the exact model before the first prompt) and timeouts.`;
+    }
+  }
   const tool = str(payload.tool_name);
   if (event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
   if (plant === 'writer-from-payload' && typeof payload.writer === 'string') meta.payloadWriter = payload.writer;
@@ -364,7 +376,7 @@ function failure(failed: boolean, payload: JsonObject, kind: string, cwd: string
   return { outcome: 'failed', exit_code: exit !== null && exit <= 255 ? exit : null, signature: signature(`${kind}:${cause}`, error, cwd), cause, owner: cause === 'permission_denied' ? 'you' : 'agent' };
 }
 
-/** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands. */
+/** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands, and monitors' watches. */
 export function loopFact(name: string, tool: string, event: string, payload: JsonObject, what: string): HookMeta['loop'] {
   if (event !== 'PostToolUse') return undefined;
   const facts = loopsOf(name);
@@ -385,6 +397,15 @@ export function loopFact(name: string, tool: string, event: string, payload: Jso
   if (typeof background === 'string' && at(payload, background) === true) return { background: 'subagent', call, what };
   const command = isObj(facts.commands) ? facts.commands[tool] : undefined;
   if (typeof command === 'string' && at(payload, command) === true) return { background: 'command', call, what };
+  // A watch whose events wake the session (#997): looping until a stop call names it, or it ends.
+  const monitor = isObj(facts.monitors) ? facts.monitors[tool] : undefined;
+  if (isObj(monitor)) {
+    const id = at(payload, String(monitor.id));
+    const timeout = at(payload, String(monitor.timeoutMs));
+    if (typeof id === 'string' && id) return { monitor: id, what, command: str(at(payload, String(monitor.command))), timeout: typeof timeout === 'number' && timeout > 0 ? timeout : null };
+  }
+  const stop = isObj(facts.stops) ? facts.stops[tool] : undefined;
+  if (isObj(stop)) return { stopped: String(at(payload, String(stop.id)) ?? '') };
   return undefined;
 }
 

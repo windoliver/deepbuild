@@ -68,8 +68,13 @@ fn geometry(shape: Shape) -> (Vec<f32>, Vec<u32>) {
                     let (c, s) = around(k);
                     push(&mut v, [0.5 * c, y, 0.5 * s], [0., ny, 0.]);
                 }
+                // Counter-clockwise from outside, as back-face culling reads it (#421).
                 for k in 0..SEGMENTS {
-                    i.extend([centre, centre + 1 + k, centre + 2 + k]);
+                    if ny > 0.0 {
+                        i.extend([centre, centre + 2 + k, centre + 1 + k]);
+                    } else {
+                        i.extend([centre, centre + 1 + k, centre + 2 + k]);
+                    }
                 }
             }
         }
@@ -88,7 +93,7 @@ fn geometry(shape: Shape) -> (Vec<f32>, Vec<u32>) {
             for r in 0..RINGS {
                 for k in 0..SEGMENTS {
                     let a = r * row + k;
-                    i.extend([a, a + row, a + 1, a + 1, a + row, a + row + 1]);
+                    i.extend([a, a + 1, a + row, a + 1, a + row + 1, a + row]);
                 }
             }
         }
@@ -125,6 +130,42 @@ impl Mesh {
                 usage: wgpu::BufferUsages::INDEX,
             }),
             count: i.len() as u32,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_unit_mesh_is_wound_counter_clockwise_from_outside() {
+        for shape in [Shape::Box, Shape::Cylinder, Shape::Sphere] {
+            let (v, i) = geometry(shape);
+            let at = |k: u32| {
+                let o = k as usize * 6;
+                ([v[o], v[o + 1], v[o + 2]], [v[o + 3], v[o + 4], v[o + 5]])
+            };
+            for t in i.chunks_exact(3) {
+                let (a, n) = at(t[0]);
+                let (b, _) = at(t[1]);
+                let (c, _) = at(t[2]);
+                let e = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+                let f = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+                let x = [
+                    e[1] * f[2] - e[2] * f[1],
+                    e[2] * f[0] - e[0] * f[2],
+                    e[0] * f[1] - e[1] * f[0],
+                ];
+                let area = (x[0] * x[0] + x[1] * x[1] + x[2] * x[2]).sqrt();
+                // A pole's triangles have no area.
+                if area > 1e-9 {
+                    assert!(
+                        x[0] * n[0] + x[1] * n[1] + x[2] * n[2] > 0.0,
+                        "{shape:?} {t:?}"
+                    );
+                }
+            }
         }
     }
 }

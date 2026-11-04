@@ -59,12 +59,18 @@ export const installed = (root: string): Installed | undefined => {
 };
 export const commands = (record: Installed): Set<string> => new Set(Object.values(record.hooks).flatMap((groups) => groups.flatMap((g) => (g.hooks as Obj[]).map((h) => String(h.command)))));
 
+/**
+ * The command of one of our entries: deep-hook as Claude Code's `claude-code` adapter, with its argument. Claude Code
+ * runs it with `/bin/sh -c`, and `exec` makes deep-hook the agent's own child, whose parent the hub checks a hook by:
+ * dash runs a lone command in a child of the shell, a new process for every hook.
+ */
+export const claudeCommand = (deepHook: string, arg: string): string => `exec '${deepHook.replaceAll("'", `'\\''`)}' claude-code ${arg}`;
+
 /** Our groups: one entry per hook, plus the waiter under Stop and under StopFailure. Each runs deep-hook, or the deep CLI's waiter. */
 export function ourGroups(deepHook: string, waiter: string, waiterTimeoutS: number): Record<string, Obj[]> {
-  const q = (path: string) => `'${path.replaceAll("'", `'\\''`)}'`;
   const groups: Record<string, Obj[]> = {};
   for (const hook of HOOKS) {
-    const entry = { type: 'command', command: `${q(deepHook)} claude-code ${hook}` };
+    const entry = { type: 'command', command: claudeCommand(deepHook, hook) };
     groups[hook] = [TOOL_HOOKS.has(hook) ? { matcher: '*', hooks: [entry] } : { hooks: [entry] }];
   }
   // A background waiter wakes an idle session with an answer; its timeout covers your longest ask deadline. A turn

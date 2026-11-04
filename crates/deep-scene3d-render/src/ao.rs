@@ -74,7 +74,7 @@ fn tex(binding: u32, sample_type: wgpu::TextureSampleType) -> wgpu::BindGroupLay
     }
 }
 
-fn invert(m: &[f64; 16]) -> [f64; 16] {
+pub(crate) fn invert(m: &[f64; 16]) -> [f64; 16] {
     // Column-major 4 × 4; cofactor expansion.
     let a = |c: usize, r: usize| m[c * 4 + r];
     let mut out = [0.0; 16];

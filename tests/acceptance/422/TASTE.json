@@ -1,0 +1,17 @@
+{
+  "issue": 422,
+  "criterion": "#422.99034ca1",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), judging at the owner's request in the session (\"can you judge for me\"); not the owner's own call",
+  "when": "2026-11-03T21:44:43-08:00",
+  "screenshots": {
+    "castle-t0.png": "dca8cb285b360b3250e5f8654021e84454b10493ca84aa4791a5ef14d9837a56",
+    "castle-t1.png": "4d3839864af864aac40d6d500f452e29c67fe779688a947e75625704fe56b81b",
+    "castle-t2.png": "a305edd0c117f45da6dbe60c13521e14154afb168ee2c672a2ad1402f7260979",
+    "castle-t3.png": "14f0759d71e321435b427b13d86dca09e64350b22a5129979226b4b153fb7a64",
+    "furnace-metal.png": "937f2e8d98eb067418488832af235f858f012d3f3c52b6ed70f55ff612a670c2",
+    "sunlit-metal.png": "e722654cf6783ab289e2c024be7afcf8d3b4196d6a4bbb67ee3b7404a28c4a2c",
+    "castle-orbit.apng": "79b49a6b30a3a5f352d76be6fe32857c705e75993ae90b5d6c835ba0f330d7f3"
+  },
+  "note": "The castle reads at every quarter-turn: towers with lit windows, cascaded shadows, a second island, puffs and height fog below; furnace spheres vanish; sun-lit lobes widen with roughness. Weak points: the dusk sky is gold-to-peach with no blue above the horizon, shaded faces go muddy brown, and thin bright slivers show at some tower edges (light leaking at shadow seams)."
+}
