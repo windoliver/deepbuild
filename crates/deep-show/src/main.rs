@@ -12,6 +12,7 @@ mod ask;
 mod capture;
 mod costs;
 mod efficiency;
+mod familiar;
 mod evidence;
 mod frames;
 mod gate;
@@ -1044,10 +1045,16 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .and_then(Value::as_str)
         .filter(|p| deep_canvas_scene3d::PLANTED.contains(p))
         .map(str::to_string);
+    // #433's wrong programs are twins of the familiar@1 pack.
+    let pack_planted = input
+        .get("planted")
+        .and_then(Value::as_str)
+        .filter(|p| familiar::PLANTED.contains(p))
+        .map(str::to_string);
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
         Some(None) => return None,
-        Some(Some(_)) if module_planted.is_some() => None,
+        Some(Some(_)) if module_planted.is_some() || pack_planted.is_some() => None,
         Some(Some(p)) => match placement_planted.flag(p) {
             // #400's wrong programs live in the placement.
             Some(flag) => {
@@ -1334,6 +1341,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         fault,
         planted,
         module_planted,
+        pack_planted,
         calls,
         at,
         seeds,
