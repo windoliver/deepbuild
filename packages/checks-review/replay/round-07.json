@@ -1,0 +1,40 @@
+{
+  "claim": "users-query",
+  "diff": "diff --git a/src/users.ts b/src/users.ts\nindex 21a7f80..a3bac1b 100644\n--- a/src/users.ts\n+++ b/src/users.ts\n@@ -1 +1,9 @@\n import { db } from './db';\n+\n+export function byName(name: string) {\n+  return db.query(\"SELECT * FROM users WHERE name = '\" + name + \"'\");\n+}\n+\n+export function byEmail(email: string) {\n+  return db.query(\"SELECT * FROM users WHERE email = '\" + email + \"'\");\n+}\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [
+      {
+        "title": "[P0] SQL injection in byName",
+        "body": "`name` comes from the query string and is concatenated into the statement. Use a bound parameter.",
+        "priority": 0,
+        "confidence_score": 0.93,
+        "file": "src/users.ts",
+        "line": 4,
+        "rule": "sql-concat",
+        "quote": "\"SELECT * FROM users WHERE name = '\" + name + \"'\""
+      },
+      {
+        "title": "[P0] SQL injection in byEmail",
+        "body": "Same pattern as byName.",
+        "priority": 0,
+        "confidence_score": 0.92,
+        "file": "src/users.ts",
+        "line": 8,
+        "rule": "sql-concat",
+        "quote": "\"SELECT * FROM users WHERE email = '\" + email + \"'\""
+      }
+    ],
+    "overall_correctness": "patch is incorrect",
+    "overall_explanation": "Both new lookups build SQL from user input.",
+    "overall_confidence_score": 0.91
+  },
+  "since": []
+}

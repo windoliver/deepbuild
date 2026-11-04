@@ -33,7 +33,7 @@ import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
@@ -173,6 +173,8 @@ export interface ExtensionHostOptions {
    * whose users are the pieces whose runs used what it provides. A version the host last saw otherwise is a new one.
    */
   firstParty?: { id: string; version: string; provides: string[] }[];
+  /** Marks each write of the hosted terminals index as a durable write point, as the hub's test disk numbers them (#996). */
+  point?: () => void;
 }
 export interface InstallFrom {
   from: string;
@@ -838,6 +840,7 @@ class Host implements ExtensionHost {
         void options.record.append(CORE, { v: 1, id: ulid(now), kind: 'terminal.refused', ts: now, data: { terminal, pid } }).catch(() => undefined);
       },
       ...((TERMINAL_PLANTS as readonly string[]).includes(plant as string) ? { plant: plant as TerminalPlant } : {}),
+      ...(options.point ? { point: options.point } : {}), now: options.now,
     });
     const series = this.series = options.evidence ? new SeriesStore({
       record: options.record, evidence: options.evidence, now: options.now, connection: CORE,
@@ -1221,7 +1224,8 @@ class Host implements ExtensionHost {
       }
       return;
     }
-    await Promise.all(owned.map((t) => this.terminals.stop(t)));
+    // A lost one stays listed as lost: what it runs can't be proven from damaged bytes.
+    await Promise.all(owned.filter((t) => !t.lost).map((t) => this.terminals.stop(t)));
   }
   async rawInput(connection: Connection, terminal: string, text: string): Promise<void> {
     if (connection.writer !== 'app' && this.options.plant !== 'input-from-any-writer') {
@@ -2419,7 +2423,7 @@ class Host implements ExtensionHost {
         return { terminal: t.terminal, run: t.run, pid: t.pid };
       }
       case 'deep.terminal.list':
-        return this.terminals.of(id).map((t) => ({ terminal: t.terminal, run: t.run, pid: t.pid, title: t.title }));
+        return this.terminals.of(id).map((t) => ({ terminal: t.terminal, run: t.run, pid: t.pid, title: t.title, ...(t.lost ? { lost: true } : {}) }));
       case 'deep.terminal.read':
         return this.terminals.read(id, args[0] as string, args[1] as number);
       case 'deep.terminal.close': {
@@ -3510,6 +3514,22 @@ class Host implements ExtensionHost {
     return out.sort((a, b) => (a.user + a.uses).localeCompare(b.user + b.uses));
   }
 
+  /** One reading names a terminals index this start couldn't read whole, and the terminals it lost (#996). */
+  async opened(): Promise<void> {
+    const damaged = this.terminals.damaged;
+    if (!damaged) return;
+    // The reading first, then the index written again: a cut in between finds the index damaged and reads it again.
+    const now = this.options.now();
+    await this.options.record.append(CORE, {
+      v: 1, id: ulid(now), kind: 'reading.recorded', ts: now,
+      data: {
+        reading: `reading:${ulid(now)}`, value: damaged.lost.length, unit: 'terminals lost', as_of: now, n: 1, outside: false,
+        source: `terminals.json couldn't be read whole, so it was kept aside as ${basename(damaged.aside)}; lost: ${damaged.lost.slice(0, 50).join(', ') || 'none'}${damaged.lost.length > 50 ? ` and ${damaged.lost.length - 50} more` : ''}`,
+      },
+    });
+    this.terminals.settle();
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -3545,5 +3565,7 @@ function copyPackage(from: string, to: string): void {
 }
 
 export async function openExtensionHost(options: ExtensionHostOptions): Promise<ExtensionHost> {
-  return new Host(options);
+  const host = new Host(options);
+  await host.opened();
+  return host;
 }

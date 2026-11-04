@@ -43,7 +43,7 @@
   "modelFamily": {
     "readBy": "which rate card and context window a model name belongs to",
     "conformance": "codex/modelFamily/known-names",
-    "families": { "gpt-reserve": "gpt-reserve", "gpt-reserve-mini": "gpt-reserve-mini" }
+    "families": { "gpt-reserve": "gpt-reserve", "gpt-reserve-mini": "gpt-reserve-mini", "gpt-5-codex": "gpt-5-codex" }
   },
   "billing": {
     "readBy": "whether a session bills a plan or an API account: set, these variables mean the API",
@@ -710,6 +710,15 @@
     "messageText": "payload.content",
     "values": { "<codex_internal_context source=\"goal\">": "continuation" },
     "otherwise": "unknown"
+  },
+  "taskList": {
+    "readBy": "the session's own plan: the rollout's newest update_plan function call, whose arguments' plan steps each name their words and status",
+    "conformance": "codex/taskList/open-at-stop",
+    "tool": "update_plan",
+    "items": "plan",
+    "text": "step",
+    "status": "status",
+    "open": ["pending", "in_progress"]
   },
   "readUsage": {
     "readBy": "a turn's usage from the transcript: the model that answered, tokens by the agent's own count, a cost only with its basis",

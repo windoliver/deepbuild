@@ -1,0 +1,25 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "issue.drafted",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "subject": "task:01K74G1Z3X5V7T9R1P3N5M7K9H",
+  "data": {
+    "task_ref": "task:01K74G1Z3X5V7T9R1P3N5M7K9H",
+    "issue": "acme/shop#7",
+    "because": "split",
+    "decision": "decision:01K74G1Z3X5V7T9R1P3N5M7K9J",
+    "title": "Rest of acme/shop#7: a dropped connection is retried",
+    "items": [
+      {
+        "id": "R2",
+        "text": "A dropped connection is retried",
+        "needs": "its check .deepbuild/checks/retry.sh to pass"
+      }
+    ],
+    "follow_up": "File this issue for what the split moved out of acme/shop#7."
+  }
+}

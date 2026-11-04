@@ -22,6 +22,8 @@ use serde_json::{Map, Value};
 
 pub use crate::label::Labels;
 use crate::label::{AtlasPage, Glyph, WORLD_EM_PX};
+use crate::light;
+pub use crate::light::{Light, Material};
 use crate::look::Look3;
 
 /// Why a document can't be drawn: a closed-list code and the path it names.
@@ -79,6 +81,10 @@ pub struct Solid {
     /// Object: `cast_shadow` and `receive_shadow`, both true unless the item says not.
     pub cast_shadow: bool,
     pub receive_shadow: bool,
+    /// The `material@1` it names (#421), which shades it under the lights in place of `color`.
+    pub material: Option<Material>,
+    /// Object: see-through order's `sort_bias`, in m along the view axis (#421).
+    pub sort_bias: f64,
     /// Its coverage (#418): its material's alpha (1 opaque, 0 or 1 under a mask) times the item's
     /// `adjust.opacity`. Below 1 it draws see-through and writes no ambient-occlusion depth.
     pub alpha: f64,
@@ -423,6 +429,8 @@ pub struct Scene {
     pub overlays: Vec<Overlay>,
     /// The first sun in item order, which shades the solids and casts the shadow.
     pub sun: Option<Sun>,
+    /// Every light, in layer and item order (#421): what shades the solids that name a material.
+    pub lights: Vec<Light>,
     /// The first `sky@1`'s ambient light from above and below, linear RGB (#418); with none, the
     /// solids keep the fixed ambient term.
     pub sky: Option<[[f64; 3]; 2]>,
@@ -1179,7 +1187,7 @@ fn paint_or_muted(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], R
 
 /// The camera's evaluated pose on a frame of `size`, with near and far from the params or
 /// from `bounds` (each a world point the scene draws).
-fn camera(
+pub(crate) fn camera(
     params: &Map<String, Value>,
     size: [f64; 2],
     bounds: &[Vec3],
@@ -1328,9 +1336,90 @@ fn evaluate_any(
     evaluate_compiled(map, &program, t, look, labels, assets)
 }
 
+/// Each item of `doc` at `t` as evaluated, in item order, with its world transform without its
+/// size: what the spatial index (#421) bounds and queries.
+pub fn placed_at(doc: &Value, t: i64) -> Result<Vec<(String, Value, Affine3)>, Refused> {
+    let Some(map) = doc.as_object() else {
+        return refused("out_of_range", "");
+    };
+    let program = Program::compile(map).map_err(|r| Refused {
+        code: r.code,
+        path: r.path,
+    })?;
+    let mut state = program.state();
+    program.evaluate_local(t, eval::Validity::Full, &mut state);
+    let empty = Map::new();
+    let doc_items = map
+        .get("items")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let written = eval::written(map, &program, &state);
+    let items = Items::new(doc_items, &written, &state);
+    Ok(items
+        .iter()
+        .map(|(id, item)| (id.clone(), item.clone(), world(&items, id)))
+        .collect())
+}
+
 /// An item's Object shadow flag: true unless it says false.
 fn shadows(item: &Value, name: &str) -> bool {
     item.get(name).and_then(Value::as_bool).unwrap_or(true)
+}
+
+/// Whether a solid casts: its Object flag, and its material's `shadow` (#421).
+fn casts(item: &Value, material: &Option<Material>) -> bool {
+    shadows(item, "cast_shadow") && material.as_ref().is_none_or(|m| m.casts)
+}
+
+/// A solid's outline: its own stroke, else its material's ink in the ink's role at its weight;
+/// an ink on a part the outline can't follow is refused as a stroke there is (#421).
+fn inked(
+    own: Option<Stroke>,
+    material: &Option<Material>,
+    shape: Shape,
+    path: &str,
+) -> Result<Option<Stroke>, Refused> {
+    let Some((color, width)) = material.as_ref().and_then(|m| m.ink) else {
+        return Ok(own);
+    };
+    if own.is_some() {
+        return Ok(own);
+    }
+    if shape != Shape::Box {
+        return refused("stroke_shape", format!("{path}/material"));
+    }
+    Ok(Some(Stroke {
+        color,
+        width,
+        exact: false,
+    }))
+}
+
+/// A light's face axes: its local +X and +Y in the world, unit.
+fn axes(m: &Affine3) -> [Vec3; 2] {
+    [
+        normalize(turn(m, [1.0, 0.0, 0.0])),
+        normalize(turn(m, [0.0, 1.0, 0.0])),
+    ]
+}
+
+/// A light's flicker: a gain, or the value at t of the document channel its `flicker` names; 1
+/// with none.
+fn flicker(program: &Program, state: &State, params: &Value, path: &str) -> Result<f64, Refused> {
+    match params.get("flicker") {
+        None | Some(Value::Null) => Ok(1.0),
+        Some(Value::Number(_)) => num(params.get("flicker")).ok_or(Refused {
+            code: "out_of_range",
+            path: format!("{path}/flicker"),
+        }),
+        Some(v) => v
+            .as_str()
+            .and_then(|c| program.channel_value(state, c))
+            .ok_or(Refused {
+                code: "ref_unresolved",
+                path: format!("{path}/flicker"),
+            }),
+    }
 }
 
 /// A `mesh.asset@1`'s mesh, read from the store, with the name every item of that asset and
@@ -1449,6 +1538,7 @@ pub(crate) fn evaluate_compiled(
     let mut doc_value: Option<Value> = None;
     let mut bounds: Vec<Vec3> = Vec::new();
     let mut sun = None;
+    let mut lights = Vec::new();
     let mut sky = None;
     let mut others = Vec::new();
     let mut curves = BTreeMap::new();
@@ -1487,6 +1577,7 @@ pub(crate) fn evaluate_compiled(
                         ],
                     );
                     bounds.extend(corners(&model));
+                    let material = light::material(item, |m| items.get(m), look, id)?;
                     let surface = surface(&items, look, id, item)?;
                     if surface.alpha <= 0.0 {
                         continue;
@@ -1495,14 +1586,25 @@ pub(crate) fn evaluate_compiled(
                         id: id.clone(),
                         shape,
                         model,
-                        color: match surface.color {
-                            Some(c) => c,
-                            None => paint(look, params, &path)?,
+                        color: match (surface.color, &material) {
+                            (Some(c), _) => c,
+                            // A material's default base color (#421), unless paint gives one.
+                            (None, Some(m)) if params.pointer("/paint/fill").is_none() => {
+                                [m.base[0], m.base[1], m.base[2]].map(encode8)
+                            }
+                            (None, _) => paint(look, params, &path)?,
                         },
-                        stroke: stroke(look, params, shape, &path)?,
+                        stroke: inked(
+                            stroke(look, params, shape, &path)?,
+                            &material,
+                            shape,
+                            &path,
+                        )?,
                         mesh: None,
-                        cast_shadow: shadows(item, "cast_shadow"),
+                        cast_shadow: casts(item, &material),
                         receive_shadow: shadows(item, "receive_shadow"),
+                        material,
+                        sort_bias: num(item.get("sort_bias")).unwrap_or(0.0),
                         alpha: surface.alpha,
                         emission: surface.emission,
                     });
@@ -1543,6 +1645,7 @@ pub(crate) fn evaluate_compiled(
                         None => h.bytes(&deep_canvas::schedule::Canonical::canonical_bytes(&mesh)),
                     };
                     let key = h.finish().0;
+                    let material = light::material(item, |m| items.get(m), look, id)?;
                     let hash = u64::from_le_bytes([
                         key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
                     ]);
@@ -1554,14 +1657,20 @@ pub(crate) fn evaluate_compiled(
                         id: id.clone(),
                         shape: Shape::Built(hash),
                         model,
-                        color: match surface.color {
-                            Some(c) => c,
-                            None => paint_or_muted(look, params, &path)?,
+                        color: match (surface.color, &material) {
+                            (Some(c), _) => c,
+                            // A material's default base color (#421), unless paint gives one.
+                            (None, Some(m)) if params.pointer("/paint/fill").is_none() => {
+                                [m.base[0], m.base[1], m.base[2]].map(encode8)
+                            }
+                            (None, _) => paint_or_muted(look, params, &path)?,
                         },
-                        stroke: None,
+                        stroke: inked(None, &material, Shape::Built(hash), &path)?,
                         mesh: Some(Arc::new(mesh)),
-                        cast_shadow: shadows(item, "cast_shadow"),
+                        cast_shadow: casts(item, &material),
                         receive_shadow: shadows(item, "receive_shadow"),
+                        material,
+                        sort_bias: num(item.get("sort_bias")).unwrap_or(0.0),
                         alpha: surface.alpha,
                         emission: surface.emission,
                     });
@@ -1652,8 +1761,19 @@ pub(crate) fn evaluate_compiled(
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
                 "light.sun@1" if sun.is_none() => {
-                    // It shines along its local −Z, glTF's convention for lights.
+                    // A light shines along its local −Z, glTF's convention for lights.
                     let m = world(&items, id);
+                    let dir = normalize(turn(&m, [0.0, 0.0, -1.0]));
+                    let flicker = flicker(program, &state, params, &path)?;
+                    lights.extend(light::light(
+                        id,
+                        kind,
+                        params,
+                        origin(&m),
+                        dir,
+                        axes(&m),
+                        flicker,
+                    ));
                     sun = Some(Sun {
                         id: id.clone(),
                         toward: normalize(turn(&m, [0.0, 0.0, 1.0])),
@@ -1676,8 +1796,22 @@ pub(crate) fn evaluate_compiled(
                     };
                     sky = Some([rgb("ambient_top")?, rgb("ambient_low")?]);
                 }
+                "light.sun@1" | "light.point@1" | "light.spot@1" | "light.area@1" => {
+                    let m = world(&items, id);
+                    let dir = normalize(turn(&m, [0.0, 0.0, -1.0]));
+                    let flicker = flicker(program, &state, params, &path)?;
+                    lights.extend(light::light(
+                        id,
+                        kind,
+                        params,
+                        origin(&m),
+                        dir,
+                        axes(&m),
+                        flicker,
+                    ));
+                }
                 // A material draws nothing itself; the objects naming it read it (#418).
-                "light.sun@1" | "camera@1" | "sky@1" | "material@1" => {}
+                "camera@1" | "sky@1" | "material@1" => {}
                 _ => others.push(Other {
                     id: id.clone(),
                     kind: kind.to_string(),
@@ -1718,7 +1852,7 @@ pub(crate) fn evaluate_compiled(
             } else {
                 l.em
             };
-            labels.place(&l.text, l.role, &mut l.glyphs, l.bounds, em_px);
+            labels.place(&l.text, l.role, &mut l.glyphs, l.bounds, em_px, l.world);
         }
         if pass == 1 || !labels.make_room() {
             break;
@@ -1736,6 +1870,7 @@ pub(crate) fn evaluate_compiled(
         layers,
         overlays,
         sun,
+        lights,
         sky,
         others,
         curves,

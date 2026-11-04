@@ -1,0 +1,10 @@
+{
+  "id": "test/hosted-terminals",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["run_as_you"] },
+  "host": { "runs": "terminals", "lives": "past_app", "owns": ["terminals"] },
+  "panels": [{ "name": "terminals", "area": "tab" }],
+  "actions": ["ext.hosted-terminals.tabs", "ext.hosted-terminals.read"],
+  "requires": { "preview": ["deep.registerAction", "deep.terminal.list", "deep.terminal.read"] }
+}
