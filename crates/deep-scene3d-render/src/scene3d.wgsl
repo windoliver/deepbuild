@@ -15,6 +15,10 @@ struct Frame {
     // A sky's ambient light from above and below (#418), w 1 with a sky.
     sky_top: vec4<f32>,
     sky_low: vec4<f32>,
+    // Clip to world, and the eye with the near plane in w: what a material operator's camera
+    // step reads (#429).
+    inverse_clip: mat4x4<f32>,
+    eye: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -128,6 +132,10 @@ struct MeshOut {
     @location(8) @interpolate(flat) emission: vec4<f32>,
     // Where it is in its part's own space, in m: what a pattern reads.
     @location(9) local: vec3<f32>,
+    // Its normal in its mesh's own space; its material operator's time (f32 bits), seed and the
+    // item's opacity (f32 bits), which a material operator reads (#429).
+    @location(10) object_n: vec3<f32>,
+    @location(11) @interpolate(flat) op: vec4<u32>,
 };
 
 @vertex
@@ -145,8 +153,11 @@ fn mesh_vs(
     @location(10) base: vec4<f32>,
     @location(11) surface: vec4<f32>,
     @location(12) specular: vec4<f32>,
+    @location(13) op: vec4<u32>,
 ) -> MeshOut {
     var out: MeshOut;
+    out.object_n = n;
+    out.op = op;
     out.emission = emission;
     let world = vec3<f32>(dot(r0.xyz, p) + r0.w, dot(r1.xyz, p) + r1.w, dot(r2.xyz, p) + r2.w);
     out.pos = frame.clip * vec4<f32>(world, 1.0);
@@ -604,10 +615,14 @@ fn occlusion(pos: vec2<f32>, albedo: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
-    let n = normalize(in.normal);
     // Derivatives first, while every pixel of the quad still runs: the face's normal in its
     // part's own space, which a pattern reads.
     let local_n = normalize(cross(dpdx(in.local), dpdy(in.local)) + vec3<f32>(0.0, 1e-9, 0.0));
+    return shade(in, front, local_n);
+}
+
+fn shade(in: MeshOut, front: bool, local_n: vec3<f32>) -> Targets {
+    let n = normalize(in.normal);
     if (in.flags & MATERIAL) != 0u {
         // Its back faces are culled; a negative determinant turns its winding over.
         if (front == ((in.flags & MIRRORED) != 0u)) && (in.flags & DOUBLE_SIDED) == 0u {
@@ -629,6 +644,12 @@ fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
         // its strength.
         if (in.flags & CATCH) != 0u {
             return Targets(vec4<f32>(0.0, 0.0, 0.0, d.removed * alpha * in.base.w), in.pick);
+        }
+        // With no light and no sky, the view's own key light, as a solid without a material
+        // takes it (#429).
+        if lights.count.x == 0u && frame.sky_top.w <= 0.0 {
+            let key = 0.45 * occlusion(in.pos.xy, s.base) + 0.55 * max(dot(facing, frame.light.xyz), 0.0);
+            return Targets(see_through(s.base * key + in.emission.rgb, alpha, mode), in.pick);
         }
         let ambient = sky_light(in, facing, s);
         return Targets(see_through(d.color + ambient + in.emission.rgb, alpha, mode), in.pick);

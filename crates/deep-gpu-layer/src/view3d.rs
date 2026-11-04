@@ -9,12 +9,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use deep_canvas::document::{apply_ops, writer_layer, Writing};
+use deep_canvas::document::{apply_ops, check_packed, writer_layer, Issue, Packs, Writing};
 use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate_with, Labels, Scene};
+use deep_canvas_scene3d::scene::{evaluate_with, placed_at, Labels, Scene};
 use deep_gpu::device::Backend;
 use deep_scene3d_render::status::{Mode, COLORS_PASS, GUARD_PASS};
 use deep_scene3d_render::SHADOW_PASS;
@@ -78,6 +78,10 @@ struct Args {
     status: Option<Status>,
     /// The GPU surface the view draws through (#386).
     surface: Surface,
+    /// The pack folders installed before the document's check, by `owner/name` (#429).
+    packs: Vec<(String, std::path::PathBuf)>,
+    /// The paths whose evaluated values each frame reports (#429).
+    evaluate: Vec<String>,
 }
 
 /// Milliseconds from this process's spawn, as the kernel records its start, to now.
@@ -211,7 +215,23 @@ fn parse(call: &Value) -> Result<Args, Value> {
         };
         clicks.push((frame, at));
     }
+    let mut packs = Vec::new();
+    for p in call["packs"].as_array().into_iter().flatten() {
+        let (Some(id), Some(dir)) = (p["id"].as_str(), p["dir"].as_str()) else {
+            return Err(bad("a pack is {id, dir}"));
+        };
+        packs.push((id.to_string(), std::path::PathBuf::from(dir)));
+    }
+    let mut evaluate = Vec::new();
+    for p in call["evaluate"].as_array().into_iter().flatten() {
+        match p.as_str() {
+            Some(path) if path.starts_with("items/") => evaluate.push(path.to_string()),
+            _ => return Err(bad("evaluate lists paths items/<id>/…")),
+        }
+    }
     Ok(Args {
+        packs,
+        evaluate,
         docs,
         doc,
         look,
@@ -248,6 +268,73 @@ fn parse(call: &Value) -> Result<Args, Value> {
         cold: call["cold"].as_bool().unwrap_or(false),
         surface: surface_of(call.get("surface")).map_err(|e| bad(&e))?,
     })
+}
+
+/// The packs a call installs (#429): each folder read as deep-show's pack store reads one
+/// (`pack.json`, its `id` set to `owner/name`, each recipe file it names inlined) and admitted
+/// through the pack check once.
+fn install(packs: &[(String, std::path::PathBuf)]) -> Result<Packs, Value> {
+    let read = |p: &std::path::Path| -> Result<Value, Value> {
+        let at = |e: String| refused("bad_input", format!("{}: {e}", p.display()));
+        let text = std::fs::read_to_string(p).map_err(|e| at(e.to_string()))?;
+        serde_json::from_str(&text).map_err(|e| at(e.to_string()))
+    };
+    let mut out = Packs::default();
+    for (id, dir) in packs {
+        let mut manifest = read(&dir.join("pack.json"))?;
+        let Some(fields) = manifest.as_object_mut() else {
+            return Err(refused("bad_input", format!("{id}: a pack is an object")));
+        };
+        fields.insert("id".into(), json!(id));
+        if let Some(Value::Object(recipes)) = fields.get_mut("recipes") {
+            for entry in recipes.values_mut() {
+                if let Some(file) = entry.as_str() {
+                    *entry = read(&dir.join(file))?;
+                }
+            }
+        }
+        out.admit(&manifest, crate::live::sealed())
+            .map_err(|issues| issues_refused(&issues))?;
+    }
+    Ok(out)
+}
+
+fn issues_refused(issues: &[Issue]) -> Value {
+    json!({"code": "refused", "issues": issues.iter().map(Issue::to_json).collect::<Vec<_>>()})
+}
+
+/// A document that names packs, as the check lowers it: its recipe instances expanded into their
+/// derived items and their channels; refused with the check's issues (#429).
+fn lowered(doc: &Value, packs: &Packs) -> Result<Value, Value> {
+    let checked = check_packed(doc, crate::live::sealed(), packs);
+    if !checked.ok {
+        let errors: Vec<Issue> = checked
+            .issues
+            .into_iter()
+            .filter(|i| i.severity == "error")
+            .collect();
+        return Err(issues_refused(&errors));
+    }
+    Ok(checked.lowered)
+}
+
+/// Each path of `paths` (`items/<id>/<field>…`) as the canvas core evaluates `doc` at `t`
+/// (#429): null where the item or field isn't there.
+fn values_at(doc: &Value, t: i64, paths: &[String]) -> Result<Value, Value> {
+    let items = placed_at(doc, t).map_err(|r| refused(r.code, r.path))?;
+    let mut out = Map::new();
+    for path in paths {
+        let rest = path.strip_prefix("items/").unwrap_or_default();
+        let (id, field) = rest.split_once('/').unwrap_or((rest, ""));
+        let value = items
+            .iter()
+            .find(|(i, _, _)| i == id)
+            .and_then(|(_, item, _)| item.pointer(&format!("/{field}")))
+            .cloned()
+            .unwrap_or(Value::Null);
+        out.insert(path.clone(), value);
+    }
+    Ok(Value::Object(out))
 }
 
 /// A patch's ops applied as `writer`, to the layer its connection stands for.
@@ -456,6 +543,15 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
 
 fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut args = parse(call)?;
+    // A document that names packs draws as the check lowers it, the call's packs installed
+    // first (#429).
+    let packs = install(&args.packs)?;
+    let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
+    let mut lowered_doc = if packed {
+        Some(lowered(&args.doc, &packs)?)
+    } else {
+        None
+    };
     let noop = app.backend == Backend::Noop;
     if noop && !args.clicks.is_empty() {
         return Err(refused(
@@ -548,6 +644,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             // remove one, only leave one dangling, which refuses), and its roles keep the
             // distance.
             if patched {
+                if packed {
+                    lowered_doc = Some(lowered(&args.doc, &packs)?);
+                }
                 bindings = status::bindings(&args.doc)?;
                 if let Some(status) = status.as_ref().filter(|_| bound) {
                     if let Some(r) =
@@ -559,10 +658,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
             levels.collect();
-            let (composed, resident) = levels.compose(&args.doc);
+            let (composed, resident) = levels.compose(lowered_doc.as_ref().unwrap_or(&args.doc));
             let read = |sha: &str| std::fs::read(args.assets.get(sha)?).ok();
             let mut scene = evaluate_with(&composed, t, &args.look, &mut labels, &read)
                 .map_err(|r| refused(r.code, r.path))?;
+            let values = if args.evaluate.is_empty() {
+                None
+            } else {
+                Some(values_at(&composed, t, &args.evaluate)?)
+            };
             // A particles@1 count past its class's limit is refused, never clamped (#420).
             let class = args.doc.pointer("/budget/class").and_then(Value::as_str);
             if let Some(path) = effects::count_refusal(&scene, class) {
@@ -706,6 +810,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     *report = json!({"since_spawn_ms": ms, "pipelines": pipelines});
                 }
             }
+            // A material operator that can't draw refuses the frame, never drawn without it.
+            if let Some((op, why)) = drawn.counts.operators_refused.first() {
+                return Err(refused("operator_compile", format!("{op}: {why}")));
+            }
             if delay > 0 {
                 held.push((n + delay, drawn.slot));
             }
@@ -729,6 +837,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             frame.insert("frame".into(), json!(n));
             frame.insert("settled".into(), json!(settled));
             frame.insert("resident".into(), json!(resident));
+            if let Some(values) = values {
+                frame.insert("values".into(), values);
+            }
             if let Some(bytes) = drawn.gpu_bytes {
                 frame.insert("gpu_bytes".into(), json!(bytes));
             }

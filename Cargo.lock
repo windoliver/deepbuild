@@ -2249,6 +2249,7 @@ name = "deep-scene3d-render"
 version = "0.0.0"
 dependencies = [
  "bytemuck",
+ "deep-canvas-effects",
  "deep-canvas-scene3d",
  "deep-gpu",
  "serde_json",

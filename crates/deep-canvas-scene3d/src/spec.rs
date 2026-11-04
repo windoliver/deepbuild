@@ -690,6 +690,9 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             unit("catch_strength", 1.0, 1.0, 0.5),
             flag("unlit"),
             flag("double_sided"),
+            // A `gpu.material@1` item whose outputs lay over these per pixel (#429); the sweep
+            // leaves it unset, since the fixture holds no operator.
+            p("op", "ID", "", Value::Null, S, Value::Null, Value::Null),
         ],
         reads: None,
         fixture: json!({"it": item("material@1", json!({"roughness": 0.4}))}),
