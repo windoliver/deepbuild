@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "24c0d4e750b52c3daff4b6d091b8352e0b09a88593a439ae409a4c84192726c0",
+  "set_digest": "938e2ae3879e8118afa11bce18564adb1a901e7e8784349c3e15618b06e1468c",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -92,7 +92,7 @@
       }
     },
     "effects@1": {
-      "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+      "digest": "b86db5643ceb584359f99eef0ecfbf3755f647fc6e8a6e88e2d53b9b698451ff",
       "reference": "effects",
       "kit": [
         "fixtures",
@@ -306,7 +306,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "73b4b3f5c3013115637da8ecdcee94b264979b94e781a8116ffb17596a5fc675",
+      "digest": "be973bccd272ede9b3c2718cfb0895a390b29d653d811c0c17ea9ee111a9e1b1",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -393,7 +393,7 @@
       }
     },
     "vector@1": {
-      "digest": "9562a2c63d098fcdd42fad55cebcbc5ea742203ee4488eca36925762d425f996",
+      "digest": "69f3afc6fddede15eca7dc55b08b4f9e635da29e3510bb3dcd7b3f26c6162f0d",
       "reference": "vector",
       "kit": [
         "fixtures",
@@ -534,7 +534,8 @@
         "reads": [
           "motion.program",
           "t",
-          "view(reduced_motion)"
+          "view(reduced_motion)",
+          "self"
         ],
         "writes": [
           "motion.at",
@@ -741,7 +742,7 @@
         "module": "text",
         "version": "1.0.0",
         "reads": [
-          "core.lowered",
+          "core.fields",
           "refs",
           "reading",
           "view(locale)"

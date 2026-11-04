@@ -363,6 +363,34 @@ workloads.class = () => {
   }
 };
 
+// #429: a composed operator's GPU time in its class. The data_view fixture with a composed pass that tints the
+// frame (resolution half, the class's), five runs of 300 frames after 30 of warm-up, each run the p95 of the
+// operator's own pass; the perf lane compares it with the merge base, which draws no operator item.
+const OPERATOR_LIMITS = { data_view: 0.5 };
+workloads.operator = () => {
+  const cls = process.argv[3] ?? 'data_view';
+  if (!(cls in OPERATOR_LIMITS)) throw Error(`Unknown class ${cls}; one of: ${Object.keys(OPERATOR_LIMITS).join(', ')}`);
+  const doc = JSON.parse(readFileSync(join(root, 'benchmarks', 'canvas', `${cls}.json`), 'utf8'));
+  doc.requires.modules.effects = '^1';
+  doc.items.tint = { id: 'tint', kind: 'gpu.pass@1', name: 'Tint', order: 'z0', params: {
+    about: 'The #429 benchmark pass: adds 0.6 to the frame\'s red.', origin: 'composed',
+    inputs: { src: { type: 'texture', from: { texture: { target: { op: 'core', output: 'color' } } } } },
+    steps: { uv: { op: 'screen_uv@1', args: {} }, c: { op: 'sample@1', args: { tex: 'src', uv: 'uv', lod: 0 } },
+      red: { op: 'const@1', args: { value: [0.6, 0, 0, 0], type: 'vec4' } }, out: { op: 'add@1', args: { a: 'c', b: 'red' } } },
+    outputs: { color: 'out' }, chain: 'effects', order: 'a0', resolution: 'half', cost: { ns_per_px: 50 }, fallback: 'look' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const runs = liveCalls(dir, Array.from({ length: 5 }, () => ({ docs: [doc], frames: WARM_UP + WARM_FRAMES, report: ['passes'] })));
+    const report = { task: 'operator', class: cls, limit_ms: OPERATOR_LIMITS[cls], fingerprint: fingerprint(), runs: runs.map((r) => {
+      const ms = r.frames.slice(WARM_UP).map((f) => f.passes.filter((p) => p.operator === 'tint').reduce((s, p) => s + (p.end_ns - p.start_ns) / 1e6, 0));
+      return { frames: ms.length, operator_p95_ms: p95(ms) };
+    }) };
+    console.log(JSON.stringify(report));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #386: the upscale's two passes on a 1080p frame of 12 px labels and thin diagonal lines, drawn at
 // internal scale 0.5 through the edge-adaptive upscale: each frame's time the two passes cover, by their
 // timestamps, five runs after a warm-up one.

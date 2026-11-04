@@ -11,6 +11,18 @@ use serde_json::Value;
 /// The ledger this build embeds.
 const LEDGER: &str = include_str!(concat!(env!("OUT_DIR"), "/kit-ledger.json"));
 
+/// A module's kit result as this build's ledger records it (#1162: deep_kinds' module rows): its
+/// verdict at this digest; a record of another digest, or none, never reads PASS.
+pub fn kit_of(name: &str, digest: &str) -> Value {
+    let ledger: Value = serde_json::from_str(LEDGER).unwrap_or(Value::Null);
+    let record = &ledger[name];
+    if record["digest"] == digest {
+        serde_json::json!({"verdict": record["verdict"], "digest": digest})
+    } else {
+        serde_json::json!({"verdict": "INCONCLUSIVE", "digest": digest, "reason": "the ledger holds no kit run at this digest"})
+    }
+}
+
 /// The modules a release build refuses, as the seal's refusal; nothing in a debug build.
 pub fn admit(sealed: &Sealed) -> Result<(), Box<SealError>> {
     if cfg!(debug_assertions) {

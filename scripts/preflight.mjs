@@ -37,7 +37,8 @@ try {
 const checksMs = performance.now() - started;
 let perfStatus = 1;
 if (checkStatus) console.log('RUN perf\nBLOCKED perf: the check lanes did not pass, so their workload was not measured\n  Fix: Repair the failing lanes above; perf runs once they pass.');
-else perfStatus = spawnSync(process.execPath, ['scripts/perf.mjs', JSON.stringify(observation)], { cwd: root, stdio: 'inherit' }).status ?? 1;
+// The perf lane's builds and runs hold a cpu.slot of the calling session's through scripts/lease (#1015).
+else perfStatus = spawnSync(join(root, 'scripts/lease'), [process.execPath, 'scripts/perf.mjs', JSON.stringify(observation)], { cwd: root, stdio: 'inherit' }).status ?? 1;
 // The checks and their builds share one budget; perf's merge-base run is extra.
 const budgets = JSON.parse(readFileSync(new URL('../benchmarks/budgets.json', import.meta.url), 'utf8'));
 const budgetMs = budgets.preflight.limits.elapsedMs;

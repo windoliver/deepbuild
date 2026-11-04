@@ -1,0 +1,20 @@
+{
+  "id": "remap.cube",
+  "version": "1.0",
+  "title": "A cube whose width keys over 2 s",
+  "license": "MIT",
+  "author": "the #429 acceptance suite",
+  "description": "One 1 m box drawn with the document's material `redm`; its own channel keys its width from 1 m at 0 s to 3 m at 2 s, linearly, so the width it reads gives the instance's child time.",
+  "inputs": {},
+  "steps": {
+    "box": {
+      "op": "mark",
+      "kind": "mark.box@1",
+      "params": { "size": [1, 1, 1] },
+      "material": "redm",
+      "channels": {
+        "grow": { "target": "params/size/0", "type": "f32", "keys": { "k0": { "t": "0s", "value": 1, "interp": "linear" }, "k1": { "t": "2s", "value": 3, "interp": "linear" } } }
+      }
+    }
+  }
+}

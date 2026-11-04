@@ -15,6 +15,7 @@ mod efficiency;
 mod familiar;
 mod evidence;
 mod frames;
+mod function;
 mod gate;
 mod geometry;
 mod host;
@@ -535,6 +536,14 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             })
         }
         "registries" => return Some(Call::Registries),
+        // #490: the closed function list's point and interval forms, and their search.
+        "fn" => return Some(Call::Fn(Box::new(c.clone()))),
+        "path" => {
+            return Some(Call::Path {
+                doc: doc()?,
+                item: c.get("item")?.as_str()?.to_string(),
+            })
+        }
         // #412: deep_kinds checks its own fields, so each refusal is error@2 at its path.
         "deep_kinds" => return Some(Call::Kinds(Value::Object(c.clone()))),
         "sandbox" => return Some(Call::Sandbox),
@@ -1130,6 +1139,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "background_at_live_priority" => Planted::BackgroundAtLivePriority,
                 "accepts_every_sample_rate_8_to_192k" => Planted::AcceptsEverySampleRate8To192k,
                 "prefix_reads_final" => Planted::PrefixReadsFinal,
+                "relation_from_previous_box" => Planted::RelationFromPreviousBox,
                 "why_names_operator_only" => Planted::WhyNamesOperatorOnly,
                 "why_names_key_only" => Planted::WhyNamesKeyOnly,
                 "cuts_by_row_order" => Planted::CutsByRowOrder,
@@ -1242,9 +1252,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .iter()
         .map(|c| {
             // deep_query's `at` is the times it reads (#411), geometry's the curve fractions it
-            // reads (#441): on the clock either arrives at `arrives`.
+            // reads (#441) and fn's the points (#490): on the clock each arrives at `arrives`.
             let arrives = if c.get("call") == Some(&json!("deep_query"))
                 || c.get("call") == Some(&json!("geometry"))
+                || c.get("call") == Some(&json!("fn"))
             {
                 "arrives"
             } else {
@@ -1397,7 +1408,23 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
             else {
                 return bad_input();
             };
-            screen(&scenario, startup, out)
+            // The time the window shows (a time or flicks, 0 by default) and its scale (#1162).
+            let t = match input.get("t") {
+                None => 0,
+                Some(Value::String(text)) => match hub::flicks(text) {
+                    Some(t) => t,
+                    None => return bad_input(),
+                },
+                Some(v) => match v.as_i64() {
+                    Some(t) => t,
+                    None => return bad_input(),
+                },
+            };
+            let scale = input.get("scale").and_then(Value::as_f64).unwrap_or(1.0);
+            if !(1.0..=4.0).contains(&scale) {
+                return bad_input();
+            }
+            screen(&scenario, startup, out, t, scale)
         }
         _ => bad_input(),
     }
@@ -1437,7 +1464,7 @@ impl CanvasSide {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                let arrives = if c["call"] == "deep_query" || c["call"] == "geometry" {
+                let arrives = if c["call"] == "deep_query" || c["call"] == "geometry" || c["call"] == "fn" {
                     "arrives"
                 } else {
                     "at"
@@ -1477,7 +1504,7 @@ impl CanvasSide {
             // The window as the calls leave it, drawn and written to `out`; the reply is the
             // `screen` call's own, with the picture's size and each item's box beside it.
             Some(out) if scenario.window.is_some() => {
-                let mut drawn = screen(&scenario, startup, out);
+                let mut drawn = screen(&scenario, startup, out, 0, 1.0);
                 let Some(Value::Array(mut replies)) = drawn.get_mut("replies").map(Value::take)
                 else {
                     return drawn;
@@ -1513,14 +1540,14 @@ impl CanvasSide {
 }
 
 #[cfg(target_os = "macos")]
-fn screen(scenario: &Scenario, startup: &Startup, out: &str) -> Value {
+fn screen(scenario: &Scenario, startup: &Startup, out: &str, t: i64, scale: f64) -> Value {
     let mut hub = hub::Hub::new(scenario, startup);
     let replies = hub.run_calls();
-    window::draw(&mut hub, replies, out)
+    window::draw(&mut hub, replies, out, t, scale)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn screen(_: &Scenario, _: &Startup, _: &str) -> Value {
+fn screen(_: &Scenario, _: &Startup, _: &str, _: i64, _: f64) -> Value {
     json!({"ok": false, "code": "unsupported_platform"})
 }
 
@@ -1790,6 +1817,33 @@ fn modules(set: BuildSet) -> Vec<Module> {
     // #489: a build without the data module, whose motion@1 digest equals the full set's.
     #[cfg(feature = "test-leave-out-data")]
     out.retain(|m| m.manifest.name != "data");
+    // #490: a build without the motion module, which still resolves ease@1, the core's; and the
+    // planted layout that declares ease@1 in the motion module instead.
+    #[cfg(feature = "test-leave-out-motion")]
+    {
+        // With motion go the modules that require it (building), so the set still seals.
+        out.retain(|m| m.manifest.name != "motion");
+        while let Some(i) = out.iter().position(|m| {
+            m.manifest
+                .depends_on
+                .iter()
+                .any(|(dep, d)| !d.optional && !out.iter().any(|o| o.manifest.name == *dep))
+        }) {
+            out.remove(i);
+        }
+    }
+    #[cfg(feature = "test-ease-in-motion")]
+    for m in &mut out {
+        if m.manifest.name == "motion" {
+            *m = deep_canvas_motion::module::declaring_eases();
+        }
+    }
+    #[cfg(feature = "test-ease-renumbered")]
+    for m in &mut out {
+        if m.manifest.name == "motion" {
+            *m = deep_canvas_motion::module::renumbered();
+        }
+    }
     out
 }
 
@@ -1994,6 +2048,13 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
     }
     if cfg!(feature = "test-steps-in-effects") {
         registry = registry.plant(Fault::BaseStepsElsewhere);
+    }
+    // #490's planted openings of ease@1: its entries renumbered, or declared by motion.
+    if cfg!(feature = "test-ease-renumbered") {
+        registry = registry.plant(Fault::EaseRenumbered);
+    }
+    if cfg!(feature = "test-ease-in-motion") {
+        registry = registry.plant(Fault::EaseInMotion);
     }
     // #412: the fixture ring keeps the bare name the issue gives it (`ring@1`, `ring@2`).
     if cfg!(any(feature = "test-ring-a", feature = "test-ring-b")) {

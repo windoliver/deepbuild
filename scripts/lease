@@ -1,0 +1,13 @@
+#!/bin/sh
+# DeepBuild's own lease script (#1015; #29): runs its arguments through `deep lease`, so a block of the preflight, of
+# scripts/affected.mjs, of the perf lane or of the canvas kit holds a cpu.slot of the calling session's while it runs,
+# at a lower priority. The gate runner calls it for an agent's heavy commands. With no `deep` on PATH it uses the
+# built CLI; with neither, or with no hub, the command runs unleased and says so.
+set -eu
+# The planted wrong program for #1015's AC7 runs the command directly.
+if [ "${DEEP_HUB_PLANT:-}" = lease-script-runs-directly ]; then exec "$@"; fi
+if command -v deep >/dev/null 2>&1; then exec deep lease -- "$@"; fi
+cli="$(dirname "$0")/../packages/cli/dist/main.js"
+if [ -f "$cli" ]; then exec node "$cli" lease -- "$@"; fi
+echo "scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so \`$*\` runs unleased" >&2
+exec "$@"
