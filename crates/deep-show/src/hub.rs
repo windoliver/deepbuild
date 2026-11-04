@@ -1978,6 +1978,10 @@ impl<'a> Hub<'a> {
                 !(n.code == "deprecated"
                     && self.scenario.planted == Some(Planted::LoadsDeprecatedSilently))
             })
+            // A kind this build draws without a registry entry is drawn, not skipped (#1162).
+            .filter(|n| {
+                !(n.code == "unknown_kind" && n.actual.as_str().is_some_and(crate::shared::knows))
+            })
             .map(Notice::to_json)
             .collect()
     }
