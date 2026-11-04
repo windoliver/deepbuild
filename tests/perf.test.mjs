@@ -1,13 +1,31 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import test from 'node:test';
+import test, { after } from 'node:test';
 
 const scripts = new URL('../scripts/', import.meta.url);
+// perf takes the throttle's timed class, so the fixtures share a table of their own, and the suite holds one timed
+// grant in it for every run, as a preflight does for its perf: each run passes through on it instead of waiting.
+const home = realpathSync(mkdtempSync(join(tmpdir(), 'deep-perf-home-')));
+const { acquire, release } = await import(new URL('throttle.mjs', scripts));
+const inHome = (act) => {
+  const previous = process.env.HOME;
+  process.env.HOME = home;
+  try {
+    return act();
+  } finally {
+    process.env.HOME = previous;
+  }
+};
+const grant = inHome(() => acquire('timed', { wait: 60 }));
+assert.ok(grant, 'no timed grant came within 60 min');
+after(() => {
+  inHome(() => release(grant));
+  rmSync(home, { recursive: true, force: true });
+});
 
 // A throwaway repository whose merge base already has budgets, so perf measures a real base.
 function repository(t, checks) {
@@ -17,14 +35,16 @@ function repository(t, checks) {
   const cwd = join(box, 'repo');
   const cache = join(box, 'cache');
   for (const directory of [cwd, cache]) mkdirSync(directory);
-  for (const directory of ['scripts', 'benchmarks']) mkdirSync(join(cwd, directory));
-  for (const file of ['perf.mjs', 'benchmark.mjs', 'lanes.mjs']) copyFileSync(new URL(file, scripts), join(cwd, 'scripts', file));
+  mkdirSync(join(cwd, 'benchmarks'));
+  // perf imports scripts beside it, and through them packages of this checkout's node_modules.
+  cpSync(fileURLToPath(scripts), join(cwd, 'scripts'), { recursive: true });
+  symlinkSync(fileURLToPath(new URL('../node_modules', import.meta.url)), join(cwd, 'node_modules'));
   const files = {
     'scripts/checks.mjs': checks(cwd),
     'package.json': JSON.stringify({ name: 'fixture', private: true, scripts: { build: `node -e "require('node:fs').writeFileSync('warm', '')"` } }),
     'package-lock.json': JSON.stringify({ name: 'fixture', lockfileVersion: 3, requires: true, packages: { '': { name: 'fixture' } } }),
     'benchmarks/budgets.json': JSON.stringify({ preflight: { margin: 0.5, limits: { elapsedMs: 300_000 }, initialReason: 'Fixture base.' }, tasks: [] }),
-    '.gitignore': 'warm\nnode_modules/\n',
+    '.gitignore': 'warm\nnode_modules\n',
   };
   for (const [path, content] of Object.entries(files)) writeFileSync(join(cwd, path), content);
   const git = (...args) => execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd });
@@ -32,8 +52,10 @@ function repository(t, checks) {
   git('add', '.');
   git('commit', '-qm', 'base');
   git('update-ref', 'refs/remotes/origin/main', 'HEAD');
-  const perf = (observation) => spawnSync(process.execPath, ['scripts/perf.mjs', JSON.stringify(observation)], { cwd, encoding: 'utf8', env: { ...process.env, XDG_CACHE_HOME: cache } });
-  return { cwd, git, perf, cache };
+  const env = { ...process.env, HOME: home, XDG_CACHE_HOME: cache, DEEP_THROTTLE: grant.token };
+  delete env.DEEP_PERF_LOCK;
+  const perf = (observation) => spawnSync(process.execPath, ['scripts/perf.mjs', JSON.stringify(observation)], { cwd, encoding: 'utf8', env });
+  return { cwd, git, perf, cache, env };
 }
 
 test('the merge base is timed warm, so a slower checkout cannot hide behind its cold build', (t) => {
@@ -145,21 +167,21 @@ test('the merge base builds at one path every run, outside the checkout, from fi
   for (const { mtimeMs } of runs) assert.ok(mtimeMs >= started - 1000, `the merge base kept its commit time ${new Date(mtimeMs).toISOString()}, which Cargo reads as fresh`);
 });
 
-// The directory perf keeps a checkout's copies in, under the fixture's cache directory.
-const keptRoot = (cwd, cache) => join(cache, 'deepbuild-perf', createHash('sha256').update(cwd).digest('hex').slice(0, 16));
+// The directory perf keeps this machine's copies in, under the fixture's cache directory.
+const keptRoot = (cache) => join(cache, 'deepbuild-perf', hostname().replace(/[^\w.-]/g, '_'));
 
 test('kept copies another user could write to are refused, since perf runs what it builds there', (t) => {
   const { cwd, perf, cache } = repository(t, () => '');
-  mkdirSync(keptRoot(cwd, cache), { recursive: true });
-  chmodSync(keptRoot(cwd, cache), 0o777);
+  mkdirSync(keptRoot(cache), { recursive: true });
+  chmodSync(keptRoot(cache), 0o777);
   const result = perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /BLOCKED perf: .+ is not a directory only this user can use\n\s+Fix: Remove it/);
 });
 
-test('one perf run per checkout at a time: a live run\'s lock blocks, a killed run\'s is taken over and released', (t) => {
+test('one perf run per machine at a time: a live run\'s lock blocks, a killed run\'s is taken over and released', (t) => {
   const { cwd, perf, cache } = repository(t, () => '');
-  const kept = keptRoot(cwd, cache);
+  const kept = keptRoot(cache);
   mkdirSync(kept, { recursive: true, mode: 0o700 });
   writeFileSync(join(kept, 'lock'), String(process.pid));
   const held = perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
@@ -254,17 +276,17 @@ test('the copy without the change\'s own tests keeps links as links and skips a 
 });
 
 test('perf runs racing for a killed run\'s lock never check at the same time', async (t) => {
-  const { cwd, cache } = repository(t, (root) => `
+  const { cwd, cache, env } = repository(t, (root) => `
     import { appendFileSync } from 'node:fs';
     const start = Date.now();
     await new Promise((done) => setTimeout(done, 300));
     appendFileSync(${JSON.stringify(join(root, 'base-spans'))}, JSON.stringify([start, Date.now()]) + '\\n');
   `);
-  const kept = keptRoot(cwd, cache);
+  const kept = keptRoot(cache);
   mkdirSync(kept, { recursive: true, mode: 0o700 });
   writeFileSync(join(kept, 'lock'), String(spawnSync(process.execPath, ['-e', '']).pid));
   const once = () => new Promise((done) => {
-    const child = spawn(process.execPath, ['scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })], { cwd, env: { ...process.env, XDG_CACHE_HOME: cache } });
+    const child = spawn(process.execPath, ['scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })], { cwd, env });
     let output = '';
     child.stdout.on('data', (chunk) => { output += chunk; });
     child.on('close', (status) => done({ status, output }));
@@ -281,19 +303,19 @@ test('perf runs racing for a killed run\'s lock never check at the same time', a
 // chance: A takes the killed run's lock at once; C read the killed pid before that, acts 150 ms later
 // on what is now A's live lock and holds it aside for 500 ms; D acts at 300 ms, in C's gap.
 test('perf runs racing for a killed run\'s lock never check at the same time, however they interleave', async (t) => {
-  const { cwd, cache } = repository(t, (root) => `
+  const { cwd, cache, env } = repository(t, (root) => `
     import { appendFileSync } from 'node:fs';
     const start = Date.now();
     await new Promise((done) => setTimeout(done, 1000));
     appendFileSync(${JSON.stringify(join(root, 'base-spans'))}, JSON.stringify([start, Date.now()]) + '\\n');
   `);
-  const kept = keptRoot(cwd, cache);
+  const kept = keptRoot(cache);
   mkdirSync(kept, { recursive: true, mode: 0o700 });
   writeFileSync(join(kept, 'lock'), String(spawnSync(process.execPath, ['-e', '']).pid));
   const preload = fileURLToPath(new URL('fixtures/slow-lock.cjs', import.meta.url));
   const held = (readMs, renameMs) => new Promise((done) => {
     const child = spawn(process.execPath, ['-r', preload, 'scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })],
-      { cwd, env: { ...process.env, XDG_CACHE_HOME: cache, SLOW_LOCK_READ_MS: String(readMs), SLOW_LOCK_RENAME_MS: String(renameMs) } });
+      { cwd, env: { ...env, SLOW_LOCK_READ_MS: String(readMs), SLOW_LOCK_RENAME_MS: String(renameMs) } });
     let output = '';
     child.stdout.on('data', (chunk) => { output += chunk; });
     child.on('close', (status) => done({ status, output }));
