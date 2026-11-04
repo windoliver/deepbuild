@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "670030c77c56b39a2fb4a38b4b797a932c93138daec0332147bd155680e3f2f4",
+  "set_digest": "4614578c59a8b3e546114aeb7862e4713cb60029e50b2f5f1f1b0c1c2b86c1f6",
   "interfaces": {
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
@@ -237,7 +237,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "7b2d9855f0aefd5059c4a4551de2695922bd1f469ba9294eec57e7dfd6bc7e8e",
+      "digest": "73b4b3f5c3013115637da8ecdcee94b264979b94e781a8116ffb17596a5fc675",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -560,6 +560,20 @@
           "scene3d.built"
         ],
         "per": "item"
+      },
+      {
+        "operator": "scene3d.lights",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t",
+          "look"
+        ],
+        "writes": [
+          "scene3d.lights"
+        ],
+        "per": "document"
       },
       {
         "operator": "scene3d.mark",
