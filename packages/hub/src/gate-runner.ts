@@ -124,8 +124,15 @@ export class GateRunner {
   constructor(private readonly o: GateOptions) {}
 
   /** A run's closed record, kept for the verdicts of the claim it ran for. */
-  recorded(run: string, record: RecordedRun): void {
+  recorded<R extends RecordedRun>(run: string, record: R): R {
+    // #669's planted runner reads a masked run by its exit alone: the claim's own run as a clean pass, its report's
+    // failures dropped, and a base run by its report, so a check that can't fail proves its fix and passes.
+    if (this.o.plant === 'runner-passes-masked-exit' && record.mask !== null) {
+      const base = [...this.claims.values()].some((list) => list.some((c) => [...c.entries.values()].some((e) => e.base === run)));
+      record = { ...record, mask: null, ...(base ? { outcome: record.failures.length ? 'failed' : 'passed' } : { outcome: 'passed', failures: [] }) };
+    }
     this.records.set(run, record);
+    return record;
   }
   /** The files a check's last run on the snapshot read under the test, fixture and script folders: its own (#875). */
   private ownOf(e: Entry): string[] {
