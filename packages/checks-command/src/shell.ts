@@ -146,13 +146,35 @@ export function programsIn(command: string, cwd?: string): string[] {
     return [...(program !== undefined && !BUILTINS.has(program) ? [program] : []), ...(script ? programsIn(script.lines.join('\n')) : [])];
   });
 }
-/** The command's mask, or a mask in the script it runs, named with the file (the core's one rule, on each): null for none. */
-export function maskOf(command: string, cwd: string): string | null {
+/** The package managers whose `<pm> test` or `<pm> run <name>` runs a script of the checkout's package.json. */
+const PACKAGE_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun']);
+/**
+ * The package.json script a segment runs, as `npm test` or `npm run <name>` (pnpm, yarn and bun alike), read from
+ * the checkout, with its `pre` and `post` scripts, which run with it; null for any other segment.
+ */
+export function packageScriptOf(segment: string, cwd: string): Script | null {
+  const [pm, verb, name] = wordsOf(segment).filter((w) => !ASSIGNMENT.test(w));
+  if (!pm || !PACKAGE_MANAGERS.has(pm.split('/').pop() ?? pm) || !verb) return null;
+  const script = verb === 'test' || verb === 't' ? 'test' : (verb === 'run' || verb === 'run-script') && name && !name.startsWith('-') ? name : null;
+  if (!script) return null;
+  let scripts: unknown;
+  try { scripts = (JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as { scripts?: unknown }).scripts; } catch { return null; }
+  if (!scripts || typeof scripts !== 'object') return null;
+  const lines = [`pre${script}`, script, `post${script}`].map((n) => (scripts as Record<string, unknown>)[n]).filter((l): l is string => typeof l === 'string');
+  return lines.length ? { file: `package.json's ${script} script`, lines } : null;
+}
+/**
+ * The command's mask, or a mask in the script it runs, named with the file (the core's one rule, on each): null for
+ * none. A script is read through what it runs in turn, a package.json script included (`sh check.sh` running
+ * `npm test` whose script is `vitest run || true`), a few levels deep.
+ */
+export function maskOf(command: string, cwd: string, depth = 0): string | null {
   const own = maskIn(command);
   if (own !== null) return own;
+  if (depth >= 4) return null;
   for (const segment of segmentsOf(command)) {
-    const script = scriptOf(segment, cwd);
-    const mask = script && maskIn(script.lines.join('\n'));
+    const script = scriptOf(segment, cwd) ?? packageScriptOf(segment, cwd);
+    const mask = script && maskOf(script.lines.join('\n'), cwd, depth + 1);
     if (mask) return `${mask} in ${script.file}`;
   }
   return null;
