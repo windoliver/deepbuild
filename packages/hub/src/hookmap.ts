@@ -179,6 +179,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (request.late === true) meta.late = { matched: request.matched };
   if (request.notes) meta.notes = request.notes;
   if (request.stage) meta.stage = request.stage;
+  if (request.heavy) meta.heavy = request.heavy;
   const fields: NonNullable<HookMeta['fields']> = {};
   for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
   if (Object.keys(fields).length) meta.fields = fields;
