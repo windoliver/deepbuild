@@ -522,3 +522,5 @@ try {
   try { await browser?.close(); } catch { /* gone */ }
 }
 flush();
+// The report is whole: the kind may read it while this process exits.
+writeFileSync(join(out, 'done'), '');

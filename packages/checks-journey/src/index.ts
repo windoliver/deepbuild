@@ -301,13 +301,13 @@ async function keepScript(o: JourneyRunOptions, journey: Journey, text: string, 
   if (run.script) run.evidence.push(run.script);
 }
 
-/** A browser journey through the driver, its report read as the run's record and its files stored as evidence. */
 /** A step's deadline; the planted runner sets it under its expect's timeout. */
 const stepDeadline = (o: JourneyRunOptions, s: Journey['steps'][number]): number => (o.plant === 'deadline-under-expect' ? Math.floor(s.timeoutMs / 2) : s.deadlineMs);
 const browserDeadline = (o: JourneyRunOptions, journey: Journey, extra: Internal): number =>
   journey.steps.reduce((sum, s) => sum + stepDeadline(o, s), 0) + 30_000 + journey.endState.length * 3000 + (extra.settle ? journey.steps.length * 5000 : 0);
 /** How long a prestarted driver may wait for its stack, beyond the run's own deadline. */
 const STACK_WAIT_MS = 120_000;
+/** A browser journey through the driver, its report read as the run's record and its files stored as evidence. */
 async function runBrowser(o: JourneyRunOptions, journey: Journey, text: string, stack: Stack, run: JourneyRun, writer: Writer, scrub: (s: string) => string, records: StackRecords, swaps: string[], reducedMotion: 'reduce' | 'no-preference', extra: Internal, pre: Prestarted): Promise<{ report: Report | null; render: Render | null }> {
   const plantedDeadline = o.plant === 'deadline-under-expect';
   const deadlineOf = (s: Journey['steps'][number]): number => stepDeadline(o, s);
@@ -340,6 +340,7 @@ async function runBrowser(o: JourneyRunOptions, journey: Journey, text: string, 
     await record(o, journey, text, stack.url, run, driven, writer, scrub);
     return { report: driven.report, render: driven.report ? renderOf(driven) : null };
   } finally {
+    await driven.settled;
     discard(driven);
   }
 }
@@ -374,19 +375,31 @@ async function record(o: JourneyRunOptions, journey: Journey, text: string, url:
     return put.status === 'stored' ? put.evidence.sha256 : null;
   };
   // Evidence an uncounted run keeps stays in the record, marked uncounted, and never stands as the claim's evidence.
-  const cite = (sha: string | null): void => { if (sha && !uncounted) run.evidence.push(sha); };
+  const cite = (sha: string | null): void => { if (sha && !uncounted && !run.evidence.includes(sha)) run.evidence.push(sha); };
   const pageErrors: PageError[] = report.errors.map((e) => (e.kind === 'uncaught' ? { kind: 'uncaught', message: scrub(e.message), step: e.step ?? '' } : { kind: 'request', url: e.url, status: e.status, unfinished: e.unfinished, step: e.step ?? '' }));
   run.expectedErrors = pageErrors.filter((e) => expectedBy(journey, e));
   const failedErrors = pageErrors.filter((e) => !expectedBy(journey, e));
   const ran = new Map(report.steps.map((s) => [s.id, s]));
-  const videoSteps: { step: string; startMs: number; endMs: number }[] = [];
+  const videoSteps = journey.steps.flatMap((s) => { const r = ran.get(s.id); return r && r.endMs !== null ? [{ step: s.id, startMs: r.startMs, endMs: r.endMs }] : []; });
+  // Every file goes into the store at once, each put once, and is cited in the run's order as it lands.
+  const puts = new Map<string, Promise<string | null>>();
+  const once = (name: string | null, kind: string, redaction: Redaction, extra: { steps?: typeof videoSteps } = {}): Promise<string | null> => {
+    const key = `${name}|${kind}|${redaction}`;
+    let put = puts.get(key);
+    if (!put) puts.set(key, (put = store(name, kind, redaction, extra)));
+    return put;
+  };
+  const shots = journey.steps.map((s, i) => { const r = ran.get(s.id); return r ? once(r.screenshot, 'journey.screenshot', redactionOf(i)) : Promise.resolve(null); });
+  const ends = new Map(report.endState.map((r) => [r.id, once(r.screenshot, 'journey.end-state', run.redaction)]));
+  const video = once(report.video, 'journey.video', run.redaction, { steps: videoSteps });
+  // The trace holds every action's values, a typed secret among them, so it is incomplete once one was typed.
+  const trace = once(report.trace, 'journey.trace', report.secretTyped ? 'incomplete' : run.redaction);
   run.steps = [];
   for (const [i, s] of journey.steps.entries()) {
     const r = ran.get(s.id);
     if (!r) { run.steps.push({ ...unrun(journey)[i]!, outcome: stopped ? 'stopped' : 'unrun' }); continue; }
-    const screenshot = await store(r.screenshot, 'journey.screenshot', redactionOf(i));
+    const screenshot = await shots[i]!;
     cite(screenshot);
-    if (r.endMs !== null) videoSteps.push({ step: s.id, startMs: r.startMs, endMs: r.endMs });
     run.steps.push({
       id: s.id, outcome: r.outcome, startMs: r.startMs, endMs: r.endMs ?? r.startMs, route: r.route ? `${r.route.path}${r.route.query ? `?${r.route.query}` : ''}` : '', raw: r.route?.raw ?? '',
       controls: r.controls ?? { appeared: [], left: [], changed: [] }, screenshot, errors: pageErrors.filter((e) => e.step === s.id),
@@ -399,7 +412,7 @@ async function record(o: JourneyRunOptions, journey: Journey, text: string, url:
   for (const c of journey.endState) {
     const r = report.endState.find((e) => e.id === c.id);
     if (!r) continue;
-    const screenshot = await store(r.screenshot, 'journey.end-state', run.redaction);
+    const screenshot = await ends.get(r.id)!;
     cite(screenshot);
     // A reading (a model's, or a person's to come) is never one of the tests the run ran.
     run.testsRun += r.outcome === 'reading' ? 0 : 1;
@@ -419,9 +432,8 @@ async function record(o: JourneyRunOptions, journey: Journey, text: string, url:
   }
   const allRan = report.steps.length === journey.steps.length && report.steps.every((s) => s.outcome === 'passed');
   if (allRan) await readbacks(o, journey, url, run, null);
-  run.video = await store(report.video, 'journey.video', run.redaction, { steps: videoSteps });
-  // The trace holds every action's values and DOM snapshots, a typed secret among them, so it is incomplete once one was typed.
-  run.trace = await store(report.trace, 'journey.trace', report.secretTyped ? 'incomplete' : run.redaction);
+  run.video = await video;
+  run.trace = await trace;
   cite(run.video); cite(run.trace);
   const recording = writer.text({ kind: 'journey.recording', source: o.run, redaction: 'complete', license: LICENSE, run: { env: o.secrets ?? {}, held: Object.values(o.secrets ?? {}) } });
   await recording.write(JSON.stringify({ journey: journey.id, requests: report.requests.map((r) => ({ url: r.url, method: r.method, status: r.status, size: r.size, type: r.type, unfinished: r.unfinished })) }));
