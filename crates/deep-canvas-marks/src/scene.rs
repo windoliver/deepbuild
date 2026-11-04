@@ -39,6 +39,19 @@ pub const KINDS: &[&str] = &[
     "group@1", "star@1", "frame@1", "series@1",
 ];
 
+/// The kinds of [`KINDS`] the data module owns: R1's mark sets, scales and axes, which marks2d
+/// draws for it (the data module's manifest). A build without the data module lacks them.
+pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1"];
+
+/// The canvas module that owns one of [`KINDS`]: the data module's, or marks2d's.
+pub fn module_of(kind: &str) -> &'static str {
+    if DATA_KINDS.contains(&kind) {
+        "data"
+    } else {
+        "marks2d"
+    }
+}
+
 /// An sRGB-encoded color, 0–255 per channel, as the look's roles resolve for a 2D writer layer.
 pub type Rgb = [u8; 3];
 
@@ -2512,6 +2525,7 @@ pub(crate) fn laid_out<'a>(
             path: format!("items/{}", r.item),
         })?;
     let mut out = items.clone();
+    let mut moved: BTreeMap<String, [f64; 2]> = BTreeMap::new();
     for (id, [x, y, w, h]) in boxes {
         let parent = items
             .get(&id)
@@ -2524,12 +2538,38 @@ pub(crate) fn laid_out<'a>(
             continue;
         }
         let at = item.entry("at").or_insert_with(|| json!({}));
-        let z = num(at.get("pos").and_then(|p| p.get(2))).unwrap_or(0.0);
+        let pos = at.get("pos");
+        let was = [0, 1].map(|i| num(pos.and_then(|p| p.get(i))).unwrap_or(0.0));
+        let z = num(pos.and_then(|p| p.get(2))).unwrap_or(0.0);
         at["pos"] = json!([x, y, z]);
+        moved.insert(id.clone(), [x - was[0], y - was[1]]);
         if item.get("kind").and_then(Value::as_str) != Some("text@1") {
             let params = item.entry("params").or_insert_with(|| json!({}));
             params["box"] = json!([0.0, 0.0, w, h]);
         }
+    }
+    // What hangs from a laid-out item and isn't laid out itself moves with it (#1162): a chart's
+    // marks ride the chart where the row put it, by its nearest laid-out ancestor's move.
+    let parent_of = |id: &str| items.get(id)?.get("parent")?.as_str();
+    for (id, item) in out.iter_mut() {
+        if moved.contains_key(id) {
+            continue;
+        }
+        let mut up = parent_of(id);
+        let by = loop {
+            match up {
+                None => break None,
+                Some(p) if moved.contains_key(p) => break moved.get(p).copied(),
+                Some(p) => up = parent_of(p),
+            }
+        };
+        let (Some([dx, dy]), Some(item)) = (by, item.as_object_mut()) else {
+            continue;
+        };
+        let at = item.entry("at").or_insert_with(|| json!({}));
+        let pos = at.get("pos");
+        let p = [0, 1, 2].map(|i| num(pos.and_then(|p| p.get(i))).unwrap_or(0.0));
+        at["pos"] = json!([p[0] + dx, p[1] + dy, p[2]]);
     }
     Ok(Cow::Owned(out))
 }

@@ -405,9 +405,5 @@ impl deep_canvas::schedule::Canonical for Program {
         );
         deep_canvas::schedule::Canonical::encode(&(&self.drivers, &self.limits), out);
         deep_canvas::schedule::Canonical::encode(&(&self.follows, &self.inputs), out);
-        // Only a program with keyed data values carries them, so every other one keeps its key.
-        if !self.keyed_data.is_empty() {
-            deep_canvas::schedule::Canonical::encode(&self.keyed_data, out);
-        }
     }
 }
