@@ -5,6 +5,7 @@
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Statement } from 'better-sqlite3';
 import { CHECKED, judge, parseClaimLine, ROLLERS, YOURS, type LearnedChange } from './learned.js';
+import { gate, type Refusal } from './lifecycle.js';
 import type { Db } from './storage.js';
 
 /** One event as the projections read it: the stored row, with its data parsed and migrated. */
@@ -34,7 +35,7 @@ const T = (name: string, pk: string[], columns: string, indexes?: string[]): Tab
 /** Every projection, with the columns the design's data model names (and the ones the record adds). */
 const TABLES: readonly TableDef[] = [
   T('sessions', ['id'], 'id TEXT, thread_id TEXT, parent_id TEXT, agent TEXT, project_id TEXT, worktree TEXT, branch TEXT, pid INTEGER, status TEXT NOT NULL DEFAULT \'running\', last_seen INTEGER, ended_log_pos INTEGER, transcript TEXT, cause TEXT'),
-  T('claims', ['id'], 'id TEXT, session_id TEXT, kind TEXT, subject_ref TEXT, text TEXT, created INTEGER, verdict_id TEXT, attempt INTEGER, commit_sha TEXT, round INTEGER, stalled_rule TEXT'),
+  T('claims', ['id'], 'id TEXT, session_id TEXT, kind TEXT, subject_ref TEXT, text TEXT, created INTEGER, verdict_id TEXT, attempt INTEGER, commit_sha TEXT, round INTEGER, stalled_rule TEXT, state TEXT'),
   T('definitions', ['task_ref'], 'task_ref TEXT, id TEXT, thread_id TEXT, issue_rev TEXT, base_commit TEXT, requirements TEXT, deliverables TEXT, budget TEXT, hash TEXT, locked_at INTEGER, state TEXT, dispute_ask TEXT'),
   T('attempts', ['task_ref', 'attempt'], 'task_ref TEXT, attempt INTEGER, session_id TEXT, child_id TEXT, worktree TEXT, base TEXT'),
   T('checks', ['id'], 'id TEXT, project_id TEXT, name TEXT, type TEXT, spec_hash TEXT, lane TEXT, min_runs INTEGER, owner TEXT, protected INTEGER'),
@@ -102,6 +103,8 @@ const TOOL = new Set(['tool.before', 'tool.after']);
 /** The kinds that can change which wiki claim is in force. */
 const WIKI_KINDS = new Set(['learn.applied', 'learn.widened', 'learn.rolled_back', 'learn_check.made']);
 const ENDED = new Set(['finished', 'failed']);
+/** The kinds that do more than move a lifecycle object: a refused move leaves out only the move. */
+const PARTIAL = new Set(['ask.batched', 'decision.applied', 'run.started', 'verdict.made', 'claim.sent_back', 'claim.stalled']);
 
 export class Projector {
   private readonly statements = new Map<string, Statement<unknown[]>>();
@@ -200,7 +203,11 @@ export class Projector {
       .run(reading, JSON.stringify(amount), unit, e.ts, e.writer);
   }
 
-  apply(e: Projected): void {
+  /**
+   * Projects one event, and returns the moves its lifecycle tables refuse, which it leaves out (lifecycle.ts). An
+   * event from before the record had its gate isn't gated.
+   */
+  apply(e: Projected, gated = true): Refusal[] {
     const d: Obj = isObj(e.data) ? e.data : {};
     // The core's reading of a session's state, and its finding the agent's process gone (#992), are no sign of the
     // session: they move neither when it was last seen nor its turn.
@@ -224,6 +231,10 @@ export class Projector {
       // Nor is a subagent's stop: it ends no turn of the session's.
       if (e.kind !== 'session.reading' && !d.child) this.turn(e, d);
     }
+    const { moves, refused } = gate(e, (sql, ...params) => this.stmt(sql).get(...params) as Row | undefined, gated);
+    // An event that does more than move objects keeps the rest; one that only moves them changes nothing more.
+    if (refused.length && !PARTIAL.has(e.kind)) return refused;
+    const moved = (object: string): string | undefined => moves.find((m) => m.object === object)?.to;
     switch (e.kind) {
       case 'session.reading':
         if (e.session) this.add('session_readings', { session_id: e.session, reading: str(d.reading), since: e.log_pos });
@@ -292,21 +303,24 @@ export class Projector {
         const commit = str(d.commit);
         this.up('claims', { id: e.id, session_id: e.session, kind: str(d.scope), subject_ref: str(d.task_ref), created: e.ts, attempt: int(d.attempt), commit_sha: commit });
         const attempt = int(d.attempt);
+        // A verdict can land first; then its claim stays judged.
+        this.fill('claims', { id: e.id, state: 'pending' });
         if (attempt !== null && typeof d.task_ref === 'string') this.up('attempts', { task_ref: d.task_ref, attempt, session_id: e.session, base: commit });
         if (commit) this.up('commits', { sha: commit, session_id: e.session, created: e.ts });
         break;
       }
       case 'claim.sent_back':
-        this.set('claims', { round: int(d.round) }, { id: bare(d.claim) });
+        this.set('claims', { round: int(d.round), ...this.claimState(moved, d) }, { id: bare(d.claim) });
         break;
       case 'claim.stalled':
-        this.set('claims', { stalled_rule: str(d.rule) }, { id: bare(d.claim) });
+        this.set('claims', { stalled_rule: str(d.rule), ...this.claimState(moved, d) }, { id: bare(d.claim) });
         break;
       case 'verdict.made': {
         const claim = bare(d.claim);
         this.up('verdicts', { id: e.id, handle: str(d.verdict), claim_id: claim, outcome: str(d.outcome), reasons: json(d.reasons), requirements: json(d.requirements), smallest: str(d.smallest), points_to: str(d.points_to), commit_sha: str(d.commit), key: json(d.key), created: e.ts });
-        // An upsert: a verdict commits FULL at once and can land before the queued claim it judges.
-        this.up('claims', { id: claim, verdict_id: e.id });
+        // An upsert: a verdict commits FULL at once and can land before the queued claim it judges. A verdict its
+        // claim's table refused judges nothing there.
+        if (moved(`claim:${claim}`)) this.up('claims', { id: claim, verdict_id: e.id, ...this.claimState(moved, d) });
         break;
       }
       case 'verdict.stale':
@@ -367,13 +381,13 @@ export class Projector {
         // Shown again: an ask hidden by Later is back to open.
         // Only the core shows an ask, under the identity it was raised for.
         if (e.writer !== 'core' || !Array.isArray(d.asks)) break;
-        for (const a of d.asks) if (isObj(a)) this.stmt("UPDATE asks SET batch_id = ?, status = CASE status WHEN 'later' THEN 'open' ELSE status END WHERE id = ? AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)").run(str(d.batch), bare(a.ask), e.actor, e.scope);
+        for (const a of d.asks) if (isObj(a) && moved(`ask:${bare(a.ask)}`)) this.stmt("UPDATE asks SET batch_id = ?, status = CASE status WHEN 'later' THEN 'open' ELSE status END WHERE id = ? AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)").run(str(d.batch), bare(a.ask), e.actor, e.scope);
         break;
       case 'decision.created':
         this.up('decisions', { id: e.id, key: str(d.key), scope: json(d.scope), answer: json(d.answer), by: e.actor, ask_id: bare(d.ask), state: 'active', created: e.ts });
         break;
       case 'decision.applied':
-        this.up('asks', { id: bare(d.ask), status: 'decided', outcome: 'decided_for_you', answered: e.ts });
+        if (moved(`ask:${bare(d.ask)}`)) this.up('asks', { id: bare(d.ask), status: 'decided', outcome: 'decided_for_you', answered: e.ts });
         this.stmt('UPDATE decisions SET applied = applied + 1 WHERE id = ?').run(bare(d.decision));
         break;
       case 'decision.revoked':
@@ -418,6 +432,7 @@ export class Projector {
         const start = { id: bare(d.run), check_id: str(d.check), claim_id: bare(d.claim), commit_sha: str(d.commit), started: e.ts, ...(d.host !== undefined ? { host: str(d.host), needs: json(d.needs) } : {}) };
         if (e.writer === 'core') this.up('runs', start);
         else this.once('runs', start, 'started');
+        if (moved(`claim:${bare(d.claim)}`)) this.up('claims', { id: bare(d.claim), ...this.claimState(moved, d) });
       }
         this.up('checks', { id: str(d.check), name: str(d.check) });
         break;
@@ -432,10 +447,16 @@ export class Projector {
         this.up('checks', { id: str(d.check), name: str(d.check) });
         break;
       case 'task.created':
-        this.up('tasks', { task_ref: str(d.task_ref), thread: str(d.thread), owner: str(d.owner), title: str(d.title), state: 'queued', created: e.ts });
+        this.up('tasks', { task_ref: str(d.task_ref), thread: str(d.thread), owner: str(d.owner), title: str(d.title), created: e.ts });
+        // A task's state moves only through its table: a second task.created never reopens it.
+        this.fill('tasks', { task_ref: str(d.task_ref), state: 'queued' });
         break;
       case 'task.closed':
         this.set('tasks', { state: 'closed', closed: e.ts, by_verdict: str(d.by_verdict) }, { task_ref: e.subject });
+        break;
+      case 'task.withdrawn':
+        // Its table lets only your trusted path withdraw a task (#341).
+        this.set('tasks', { state: 'withdrawn', closed: e.ts }, { task_ref: e.subject });
         break;
       case 'pr.merged':
         this.up('commits', { sha: str(d.merge_sha), session_id: e.session, created: e.ts });
@@ -580,6 +601,12 @@ export class Projector {
         break;
     }
     if (WIKI_KINDS.has(e.kind)) this.wikiClaims(d);
+    return refused;
+  }
+  /** The state its table moved the event's claim to, as a column to write; none when it moved none. */
+  private claimState(moved: (object: string) => string | undefined, d: Obj): Row {
+    const to = moved(`claim:${bare(d.claim)}`);
+    return to ? { state: to } : {};
   }
 
   /**
