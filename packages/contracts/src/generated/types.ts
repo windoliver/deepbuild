@@ -4522,6 +4522,28 @@ export interface MergeDryRun {
   evidence?: Array<string>;
 }
 
+/** move.refused@1 */
+export interface MoveRefused {
+  v: 1;
+  id: string;
+  kind: "move.refused";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    object: string;
+    table: string;
+    state: string;
+    event: string;
+    event_id: string;
+    guard?: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** note.closed@1 */
 export interface NoteClosed {
   v: 1;
@@ -5230,6 +5252,28 @@ export interface RunKept {
   log_pos?: number;
   data: {
     run: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** run.stale@1 */
+export interface RunStale {
+  v: 1;
+  id: string;
+  kind: "run.stale";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    run: string;
+    check: string;
+    claim: string;
+    newer_claim: string;
   };
   evidence?: Array<string>;
 }
@@ -6035,6 +6079,23 @@ export interface TaskCreated {
     thread: string;
     owner: string;
     title: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** task.withdrawn@1 */
+export interface TaskWithdrawn {
+  v: 1;
+  id: string;
+  kind: "task.withdrawn";
+  subject: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
   };
   evidence?: Array<string>;
 }
@@ -6910,6 +6971,46 @@ export type Verdict = {
   key: VerdictKey;
   checkout: string;
 };
+
+/** waiver.ended@1 */
+export interface WaiverEnded {
+  v: 1;
+  id: string;
+  kind: "waiver.ended";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    waiver: string;
+    why: "date" | "condition" | "revoked";
+  };
+  evidence?: Array<string>;
+}
+
+/** waiver.granted@1 */
+export interface WaiverGranted {
+  v: 1;
+  id: string;
+  kind: "waiver.granted";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    check: string;
+    error: string;
+    owner: string;
+    approved_by: string;
+    until?: number;
+    condition?: string;
+  };
+  evidence?: Array<string>;
+}
 
 /** wiki.read@1 */
 export interface WikiRead {

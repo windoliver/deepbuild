@@ -7,6 +7,8 @@ import { randomBytes } from 'node:crypto';
 import { appendFileSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { access, chmod, copyFile, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { writtenOf as wikiWritten } from '@deepbuild/wiki';
+import { UsageTail } from '@deepbuild/readings';
+import { Numbers } from './numbers.js';
 import { availableParallelism, homedir, networkInterfaces } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -232,7 +234,7 @@ interface Live {
    * claim; the newest claim the line reads and the turn it was made in; the line last delivered to the chat, so
    * one that lands later goes with the next prompt.
    */
-  turn: number; turnTask?: string | undefined; judged: boolean; claiming?: Promise<string[]> | undefined; deferred?: (() => Promise<string[]>) | undefined; workedSinceClaim?: boolean; claim?: string | undefined; claimTurn?: number; delivered?: string | undefined;
+  turn: number; turnTask?: string | undefined; turnAsk?: string | undefined; judged: boolean; claiming?: Promise<string[]> | undefined; deferred?: (() => Promise<string[]>) | undefined; workedSinceClaim?: boolean; claim?: string | undefined; heldClaim?: string | undefined; claimTurn?: number; delivered?: string | undefined;
 }
 /**
  * A turn of a transcript: where its prompt starts there, its tool calls, and for a closed one when the hub read
@@ -437,7 +439,10 @@ export class Core {
   /** Each session's last stop's final message, what its claims cite (#29). */
   private readonly lastMessage = new Map<string, string>();
   /** What each claim's stop waits on: its fast lane, and what the hold reports of it. */
-  private readonly lanes = new Map<string, Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; findings: string[] }>>();
+  private readonly lanes = new Map<string, Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost?: string[]; changed?: boolean; findings: string[] }>>();
+  private readonly numbers: Numbers;
+  /** Each live session's running usage, from its transcript and its subagents'. */
+  private readonly tails = new Map<string, UsageTail>();
   /** The project trust decision the core holds (#348), which the done gate reads for a repo's spec checks (#322). */
   private trust!: ProjectTrust;
   /** Each claim's requirements by handle, with the ID and text a send-back names (#322). */
@@ -703,6 +708,14 @@ export class Core {
       capped: (session, checks) => void this.backgroundCapped(session, checks).catch(() => undefined), plant: options.plant,
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
+    });
+    this.numbers = new Numbers({
+      raw: (query) => this.record.raw(query), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
+      root: this.root.dir, forge: this.options.forge ?? 'https://api.github.com',
+      token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
+      held: () => this.options.held,
+      keep: (bytes, source) => this.keep(bytes, source),
+      evidence: (sha) => this.store.read(sha).catch(() => null),
     });
     this.ready = this.init();
     this.ready.then(() => { this.opened = true; }, () => undefined);
@@ -2016,6 +2029,7 @@ export class Core {
       }
       if (read && read.usage !== undefined) data.usage = read.usage;
     }
+    if (meta.transcript && !meta.fields?.agent_id) void this.recordUsage(meta).catch(() => undefined);
     const cause = String(data.cause);
     if (cause === 'unknown') return;
     data.signature = signature(`stop:${cause}`, meta.fields?.error ?? cause, meta.cwd);
@@ -2023,6 +2037,29 @@ export class Core {
     data.owner = cause === 'sign_in_required' || cause === 'token_refresh_failed' || meta.fields?.error === 'billing_error' ? 'you' : cause === 'rate_limited' || cause === 'plan_window_spent' || cause === 'timed_out' ? 'service' : 'agent';
     // The payload can't tell a dropped connection from a network you must reconnect, so the hub tried it (#85).
     if (cause === 'timed_out' && meta.network && !meta.network.reached) { data.owner = 'you'; data.signature = signature('stop:network', meta.network.host); }
+  }
+
+  /**
+   * What the session has spent so far, as turn.usage (#45), off the hook's path: Claude Code's from its transcript and
+   * its subagents', estimated from the rate card; Codex's from its rollout, by its adapter, unpriced. A stop that reads
+   * nothing records nothing, so that turn's usage reads unknown.
+   */
+  private async recordUsage(meta: HookMeta): Promise<void> {
+    let usage: Obj | undefined;
+    if (meta.agent === 'claude-code') {
+      const tail = this.tails.get(meta.session) ?? new UsageTail();
+      this.tails.set(meta.session, tail);
+      const { tokens, cost, model } = await tail.read(meta.transcript);
+      if (model) usage = { turn: this.live.get(meta.session)?.turnAsk ?? meta.fields?.prompt_id ?? meta.id, model, covers: 'session', tokens: { input: tokens.input + tokens.cache_write, cached: tokens.cache_read, output: tokens.output, exact: true }, cost };
+    } else if (meta.agent === 'codex') {
+      const text = await readFile(meta.transcript, 'utf8').catch(() => '');
+      const lines = text.split('\n').flatMap((l) => { try { return [JSON.parse(l) as JsonValue]; } catch { return []; } });
+      // The session's total, the last it reads; counted as the growth since the one before.
+      usage = registry().get('codex').readUsage?.(lines).at(-1) as unknown as Obj | undefined;
+    }
+    if (!usage) return;
+    const ts = this.now();
+    await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'turn.usage', ts, subject: `session:${letters(meta.session)}`, data: usage as never });
   }
 
   /**
@@ -2094,8 +2131,11 @@ export class Core {
       live.turn++;
       live.judged = false;
       // The task the prompt opened: on its draft, or on the queue's draft of it when the queue showed it first.
-      const ask = drafts.find((d) => d.kind === 'user.ask')?.data.tasks ?? this.sessions.get(meta.session)?.spliced?.get(meta.id)?.task?.data.tasks;
+      const opened = drafts.find((d) => d.kind === 'user.ask') ?? this.sessions.get(meta.session)?.spliced?.get(meta.id)?.task;
+      const ask = opened?.data.tasks;
       live.turnTask = Array.isArray(ask) && typeof ask[0] === 'string' ? ask[0] : undefined;
+      // The ask that began the turn is the turn's handle, the one its usage carries (#45).
+      live.turnAsk = opened?.id;
       this.askingSoon();
     }
     for (const draft of drafts) {
@@ -3561,6 +3601,7 @@ export class Core {
       else delete lane.sendBack;
     }
     let proceeded = false;
+    let questionMs = 0;
     try {
       if (lane && !lane.sendBack && judged?.claim && meta.agent === 'codex' && lane.slow.length) {
         const failed = await this.slowStop(meta, r, judged.claim, held);
@@ -3575,7 +3616,12 @@ export class Core {
         proceeded = true;
         const delivered = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
         block = [r.sendBacks.shift(), delivered, lane?.sendBack, proceed].filter(Boolean).join('\n\n');
-      } else block = lane?.sendBack ?? (r.places ? undefined : await this.stopHold(meta, r, until));
+      } else if (lane?.sendBack) block = lane.sendBack;
+      else if (!r.places) {
+        const waited = this.now();
+        block = await this.stopHold(meta, r, until);
+        questionMs = this.now() - waited;
+      }
     } finally {
       this.abandoned.delete(meta.id);
       r.holding--;
@@ -3608,8 +3654,16 @@ export class Core {
     // The chat has seen it once it is replied in time; a reply past the hold is not, and the next prompt shows the line.
     if (line && judged && Date.now() < held) judged.delivered = line;
     if (block && line) block = `${line}\n${block}`;
-    if (lane && judged?.claim) {
-      await this.gate.held({ session: meta.session, stop: meta.id, claim: judged.claim, stopAt, readyAt: lane.readyAt, replyAt: this.now(), question: false, codeChanging: lane.fast.length + lane.slow.length > 0 }).catch(() => undefined);
+    if (judged?.claim) {
+      // A later stop on the same claim ran no lane: only its own hold counts, never the lane's times or its budget cost again.
+      const again = judged.heldClaim === judged.claim;
+      judged.heldClaim = judged.claim;
+      const replyAt = this.now();
+      const own = replyAt - questionMs;
+      const record = (ran: { readyAt: number; changed?: boolean; budgetCost?: string[] }) => this.gate.held({ session: meta.session, stop: meta.id, claim: judged.claim!, stopAt, readyAt: again ? own : ran.readyAt, replyAt, questionMs, codeChanging: !again && ran.changed === true, budgetCost: again ? [] : ran.budgetCost ?? [] });
+      if (lane) await record(lane).catch(() => undefined);
+      // A fast lane still going when the hold ran out: its hold counts all the same, once the lane says what it was.
+      else void this.lanes.get(judged.claim)?.then(record).catch(() => undefined);
     }
     return { ...(block ? { block } : {}), ...(line ? { message: line } : {}) };
   }
@@ -3639,7 +3693,7 @@ export class Core {
    * A claim's fast lane as the stop's hold sees it (#29), waited for until `until`: the validity gate's findings and a
    * fast-lane check that failed send the claim back, naming what's missing or which check failed.
    */
-  private async laneOf(claim: string, until: number): Promise<{ fast: string[]; slow: string[]; readyAt: number; sendBack?: string } | undefined> {
+  private async laneOf(claim: string, until: number): Promise<{ fast: string[]; slow: string[]; readyAt: number; budgetCost?: string[]; changed?: boolean; sendBack?: string } | undefined> {
     const lane = this.lanes.get(claim);
     if (!lane) return undefined;
     let timer: NodeJS.Timeout | undefined;
@@ -3659,7 +3713,7 @@ export class Core {
         if (this.told.get(claim)?.has(c.check)) return `the command your final message tells you to run, \`${c.check}\`, ${c.result === 'FAIL' ? 'fails' : c.result}:\n${this.gate.outputOf(claim, c.check)}`;
         return reqs.length ? `${reqs.map((q) => `${q.id} ("${q.text}")`).join(' and ')} ${reqs.length === 1 ? 'is' : 'are'} unproven: its check ${c.check} ${c.result}` : `the repo's spec check ${c.check} ${c.result}`;
       }).join('; ')}.` : undefined;
-    return { fast: ran.fast, slow: ran.slow, readyAt: ran.readyAt, ...(sendBack ? { sendBack } : {}) };
+    return { fast: ran.fast, slow: ran.slow, readyAt: ran.readyAt, ...(ran.budgetCost ? { budgetCost: ran.budgetCost } : {}), ...(ran.changed === undefined ? {} : { changed: ran.changed }), ...(sendBack ? { sendBack } : {}) };
   }
   /**
    * A Codex stop with slow checks (#39): held for them only when each one's deadline ends at least 5 s before the Stop
@@ -4536,7 +4590,10 @@ export class Core {
       case 'events.read': return this.read(params);
       case 'inbox.read': return this.reflecting(() => this.inbox());
       case 'sessions.read': return this.reflecting(async () => ({ sessions: await this.sessionRows() }));
-      case 'numbers.read': return this.reflecting(async () => ({ numbers: (await this.record.table('readings')).rows }));
+      case 'numbers.read': return this.reflecting(async () => this.numbers.read() as unknown as Obj);
+      case 'numbers.baseline': await this.notAnAgent(context, method); return this.numbers.baseline(String(params.manifest));
+      case 'numbers.refresh': await this.notAnAgent(context, method); return this.numbers.refresh();
+      case 'numbers.sample': await this.notAnAgent(context, method); return this.numbers.sample(Number(params.before), typeof params.manifest === 'string' ? params.manifest : undefined);
       case 'changes.read': return this.change(params);
       case 'evidence.read': return this.evidence(params);
       case 'ask.answer': return this.answer(params, context);
@@ -4919,6 +4976,11 @@ export class Core {
     return { device };
   }
 
+  /** What feeds your numbers or labels is yours to run: an agent's word is never evidence. */
+  private async notAnAgent(context: CallContext, method: string): Promise<void> {
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `Nothing changed: this deep command runs inside agent session ${agent}'s process tree, and no agent feeds its own numbers. Run it from your own terminal.`, method));
+  }
   /**
    * deep-confirm's key set up again, lost or replaced (#880): from the app alone, signed by a device you paired, and
    * counted once you confirm with the new key, when the old one stops counting. The helper's code signature is
@@ -5435,6 +5497,7 @@ export class Core {
     return search({
       query, index: await this.wikiIndex(), raw: (q, params) => this.record.raw(q, params), worktree, session: everyone ? { everyone: true } : session, covers,
       trustsIndex: this.options.plant === 'trusts-index',
+      readings: (q) => this.numbers.search(q, everyone ? { everyone: true } : session),
     });
   }
   /** The wiki's index: a loaded package's in place of the shipped one, rebuilt from the pages when it first serves (#355). */
@@ -6597,12 +6660,16 @@ export class Core {
   }
 
   /**
-   * The retention pass: keeps the files decisions and verdicts cite, the transcripts transcript.archived links and the
+   * The retention pass: keeps the files decisions, verdicts and recorded readings cite, the transcripts transcript.archived links and the
    * CI logs ci.archived links, which outlive the forge's own retention only if ours keeps them.
    */
   private async retain(): Promise<void> {
-    // What a decision or verdict cites, and the series batches a notice cites for 30 days (#262).
+    // What a decision or verdict cites, the series batches a notice cites for 30 days (#262), and a reading's evidence (#45).
     const cited = this.options.plant === 'empty-cited' ? new Set<string>() : await citedEvidence(this.record, this.now());
+    if (this.options.plant !== 'empty-cited') {
+      const readings = (await this.record.raw("SELECT evidence FROM events WHERE kind = 'reading.recorded' AND evidence IS NOT NULL")) as { evidence: string }[];
+      for (const r of readings) for (const h of JSON.parse(r.evidence) as string[]) cited.add(h);
+    }
     const linked = (await this.record.raw("SELECT json_extract(data, '$.evidence') AS sha FROM events WHERE kind = 'transcript.archived'")) as { sha: string | null }[];
     const logs = (await this.record.raw("SELECT evidence FROM events WHERE kind = 'ci.archived' AND evidence IS NOT NULL")) as { evidence: string }[];
     const archived = new Set([...linked.flatMap((r) => (r.sha ? [r.sha] : [])), ...logs.flatMap((r) => JSON.parse(r.evidence) as string[])]);

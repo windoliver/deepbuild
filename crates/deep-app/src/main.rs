@@ -61,7 +61,7 @@
 
 use std::{path::PathBuf, time::Instant};
 
-use deep_app::{init, menu_bar_title, mount_panel, sessions, Spike};
+use deep_app::{init, menu_bar_line, mount_panel, sessions, Spike};
 use gpui_kit::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -143,7 +143,7 @@ fn main() {
         gpui_kit::init(cx);
         init(cx);
         menu_bar::set_dock_icon();
-        menu_bar::show_title(&menu_bar_title(&sessions()));
+        menu_bar::show_title(&menu_bar_line(&sessions()));
         if mode == Mode::Window {
             notifications::start(cx);
         }

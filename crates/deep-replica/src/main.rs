@@ -1,7 +1,8 @@
-//! `deep-replica --view <needs-you|sidebar|session> --out <dir> [--appearance <light|dark>]`: the
+//! `deep-replica (--view <needs-you|sidebar|session> | --first-screen) --out <dir> [--appearance <light|dark>]`: the
 //! replica. Opens the app's shell headless at the reference window on gpui's virtual clock, draws
 //! the view over the fixture record as macOS would in that appearance (light when none is given),
-//! and writes `snapshots/<view>.json` and `screens/<view>.png` under `out`.
+//! and writes `snapshots/<view>.json` and `screens/<view>.png` under `out`. `--first-screen` draws Home for the HOME it
+//! runs with, over that home's own record, and writes `menu-bar.txt` too (#1002).
 //! A launch is timed from this process's spawn to the first-frame line it prints.
 
 fn main() {
@@ -35,8 +36,20 @@ mod replica {
             |name: &str| phases.push(format!("{name} {}ms", started.elapsed().as_millis()));
         let mut cx = deep_replica::headless_context();
         phase("context and init");
-        deep_app::views::set_state(deep_replica::load_state());
-        let layout = Layout::shipped(&view);
+        let first = view == deep_replica::FIRST_SCREEN;
+        if first {
+            // A launch reads this home's hub, when one answers; a setup that stopped left none.
+            let root = deep_app::hub::root();
+            if let Ok(reader) = deep_app::record::RecordReader::open(
+                &deep_app::hub::address(),
+                &root.join("control.token"),
+            ) {
+                deep_app::record::install(reader);
+            }
+        } else {
+            deep_app::views::set_state(deep_replica::load_state());
+        }
+        let layout = Layout::shipped(if first { "home" } else { &view });
         let (handle, _) = cx.update(|cx| open_shell(&layout, cx, |_, _| {}));
         phase("window");
         // The first frame is the launch; the line goes out as soon as it is drawn. The second
@@ -70,6 +83,12 @@ mod replica {
         image
             .save(out.join("screens").join(format!("{view}.png")))
             .expect("the screenshot is written");
+        if first {
+            // The menu bar's count is an AppKit status item the offscreen window can't capture, so its title is written.
+            let title = deep_app::menu_bar_line(&deep_app::sessions());
+            std::fs::write(out.join("menu-bar.txt"), format!("{title}\n"))
+                .expect("the menu bar's title is written");
+        }
         phase("written");
         eprintln!("deep-replica phases: {}", phases.join(", "));
         println!(
