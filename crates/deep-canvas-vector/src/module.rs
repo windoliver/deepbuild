@@ -1,6 +1,7 @@
 //! The vector canvas module's manifest and register call (Registry and seal, #305): it
 //! implements `vector@1` on marks2d.
 
+use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{
     Dependency, Implementation, Manifest, Module, Range, Registrar, Semver,
 };
@@ -39,6 +40,35 @@ pub fn module() -> Module {
 }
 
 fn register(r: &mut Registrar) {
+    // The kind (Vector and formula `vector@1`), with its fields as the design lists them.
+    let field = |name: &'static str| Param {
+        name,
+        ty: ParamType::Json,
+        unit: "",
+        default: serde_json::Value::Null,
+        min: None,
+        max: None,
+        minor: 0,
+        module: "",
+        operator: "",
+    };
+    r.kind(
+        Entry {
+            family: "",
+            name: "vector",
+            versions: vec![Version {
+                major: 1,
+                minor: 0,
+                params: ["src", "size", "colors", "lines", "hotspot", "alt", "numbers", "write_on", "parts"]
+                    .into_iter()
+                    .map(field)
+                    .collect(),
+            }],
+            migrations: Vec::new(),
+        },
+        &[],
+        "",
+    );
     // The import's codes (svg_*) are deep-canvas-render's check's, which reads an SVG's bytes from
     // its store; this build's hub reads none, so they join the catalog with their planted
     // fixtures when the kit seals vector@1 (#399). The hub's frame can't draw a vector yet, which

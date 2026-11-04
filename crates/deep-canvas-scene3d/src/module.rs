@@ -268,6 +268,21 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         &[],
         "",
     );
+    // The sky (Sky `sky@1`): the ambient light the scene's solids take from above and below.
+    r.kind(
+        Entry {
+            family: "",
+            name: "sky",
+            versions: vec![Version {
+                major: 1,
+                minor: 0,
+                params: vec![json_param("ambient_top"), json_param("ambient_low")],
+            }],
+            migrations: Vec::new(),
+        },
+        &[],
+        "",
+    );
     // The trusted builders and the curve, named bare as the design names them, with their
     // build, mark and shade operators (Builder; Curve `curve@1`; #420).
     for spec in crate::spec::scene3d() {
