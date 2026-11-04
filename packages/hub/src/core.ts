@@ -63,11 +63,14 @@ import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { driveCall, Replica, REPLICA_LEASE } from './drive.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
+import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { copySynced, disk, keepAside, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
 
 /** A process running Codex's own binary, by the path it was started from. */
 const CODEX_BINARY = /^(?:\S*\/)?codex(?:-[^\s/]+)?(?:\s|$)/;
+/** A Claude Code process: its native binary (`claude`, `claude.exe`, `claude/versions/<version>`) or its npm entry. */
+const CLAUDE_BINARY = /^(?:\S*\/)?claude(?:\.exe)?(?:\s|$)|^\S*\/claude\/versions\/[^\s/]+(?:\s|$)|@anthropic-ai\/claude-code\//;
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 /** A value quoted into SQL. */
@@ -264,16 +267,50 @@ interface Routes {
 /** Whether a stop's cause holds the turns DeepBuild would start in its session until its task closes (#85). */
 /** A call of the cut-off turn with no recorded end (#85): how the block names it, the key an identical send matches by, and whether it is a send that opens a pull request. */
 interface CutOff { key: string; label: string; send: boolean; pr: boolean }
-/** The effect classes each `effect:` guard entry in `<dir>/rules.json` stands for, by the entry's name. */
-function effectEntries(dir: string): Map<string, string[]> {
-  const classes = new Map<string, string[]>();
-  const entries = readJson(join(dir, 'rules.json'));
+/**
+ * What `<dir>/rules.json` says calls do: the effect classes each `effect:` guard entry stands for, by the entry's
+ * name, and the class its `classes` give a tool, as deep-hook reads them.
+ */
+let rulesSeen: { key: string; value: ReturnType<typeof readEffects> } | undefined;
+function effectEntries(dir: string): ReturnType<typeof readEffects> {
+  const file = join(dir, 'rules.json');
+  const key = `${file}\0${statKey(file)}`;
+  if (rulesSeen?.key !== key) rulesSeen = { key, value: readEffects(dir) };
+  return rulesSeen.value;
+}
+function readEffects(dir: string): { effects: Map<string, string[]>; tools: Map<string, string> } {
+  const effects = new Map<string, string[]>();
+  const rules = readJson(join(dir, 'rules.json'));
+  const entries = isObj(rules) && isObj(rules.entries) ? rules.entries : rules;
   for (const [name, entry] of Object.entries(isObj(entries) ? entries : {})) {
     const effect = isObj(entry) && typeof entry.match === 'string' ? /^effect:([\w-]+)$/.exec(entry.match)?.[1] : undefined;
-    if (effect) classes.set(name, [effect]);
+    if (effect) effects.set(name, [effect]);
   }
-  return classes;
+  return { effects, tools: new Map(Object.entries(isObj(rules) && isObj(rules.classes) ? rules.classes : {}).map(([tool, c]) => [tool, String(c)])) };
 }
+/**
+ * A call's tool.before as a person reads it, and whether it sends: a shell call that opens a pull request, one the
+ * `effect:` guard entries deep-hook matched read as a push, merge, dispatch, send or delete, or an MCP tool whose
+ * facts give it such an effect.
+ */
+function callOf(d: Obj, { effects, tools }: ReturnType<typeof effectEntries>): { label: string; send: boolean; pr: boolean } {
+  const kind = String(d.kind);
+  const command = typeof d.command === 'string' ? d.command : undefined;
+  const matched = (Array.isArray(d.matched) ? d.matched : []).flatMap((n) => effects.get(String(n)) ?? []);
+  const pr = kind === 'shell' && command !== undefined && isPrCreate(command);
+  // An MCP tool sends when its facts give it such an effect, or when it counts as send or destructive, by its facts or your rules.json.
+  const counts = kind === 'mcp' ? tools.get(`mcp__${String(d.server)}__${String(d.tool)}`) ?? d.counts : undefined;
+  const send = pr || matched.some((c) => EFFECTS.has(c)) || (kind === 'mcp' && ((typeof d.effect === 'string' && EFFECTS.has(d.effect)) || counts === 'send' || counts === 'destructive'));
+  const paths = Array.isArray(d.paths) ? d.paths.map(String).join(', ') : '';
+  const label = kind === 'shell' ? `Bash \`${command ?? ''}\`` : kind === 'mcp' ? `${String(d.server)} ${String(d.tool)}` : `${kind} ${paths}`;
+  return { label, send, pr };
+}
+/** A file's identity, size and time, so a change is read once; 'none' while it is missing. */
+const statKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } };
+/** How long a home's mods, once read, stand without a change to what they're listed from. */
+const MODS_MS = 300_000;
+/** The key an identical send matches by: a shell call's command, an MCP call's tool and the digest of its input (#1033). */
+const sendKey = (tool: string, command: string | undefined, input: unknown): string => (command !== undefined ? `shell:${command}` : `mcp:${tool}#${sha256Hex(canonicalize((input ?? null) as JsonValue))}`);
 /** How long the gate waits on the forge for a cut-off send's result (#85): well inside the gate's 10 s hold. */
 const PULL_LOOKUP_MS = 4000;
 /**
@@ -521,7 +558,17 @@ export class Core {
   /** The log position of the last session.continued the hub routed (#85). */
   private continuedPos = 0;
   /** The sends each session's cut-off turn started with no recorded end (#85), by the key an identical call matches: denied at PreToolUse with the earlier result. */
-  private readonly unknownSends = new Map<string, Map<string, { label: string; pr: boolean; denied?: boolean }>>();
+  private readonly unknownSends = new Map<string, Map<string, { label: string; pr: boolean; denied?: boolean; done?: boolean }>>();
+  /** The calls a guard entry or the gate denied at PreToolUse, by session and call (#1033): what denied each, and the call in words. */
+  private readonly denials = new Map<string, Map<string, { guard: string; label: string }>>();
+  /** Each session's denied calls that ran anyway (#1033), as they arrive: its claims don't pass on its own evidence. */
+  private readonly overrides = new Map<string, { call: string; label: string; ts: number }[]>();
+  /** Each session's sends in its turn under way, by call (#1033): the key an identical send matches by, and whether it completed. */
+  private readonly turnSends = new Map<string, Map<string, { key: string; label: string; done: boolean }>>();
+  /** When this core started: a deny from before it is read back from the record (#1033). */
+  private readonly bootAt = Date.now();
+  /** Each Claude Code home's mods as last read, by what they were read from (#1033). */
+  private readonly modsSeen = new Map<string, { at: number; read: HomeMods }>();
   /** The continues being read, one reading at a time, so the timer's and a prompt's never carry the same one twice. */
   private continuing: Promise<void> = Promise.resolve();
   /** deep_wait and deep_run calls, by the ask or run they wait on, each woken by the event that settles it (#823). */
@@ -1301,7 +1348,130 @@ export class Core {
         void this.queue(async () => this.judge(session), true).catch(() => undefined);
       });
     }
+    if (verified && meta.session) this.watchCalls(drafts, meta, settled);
     return { settled };
+  }
+
+  /**
+   * What a session's calls show of its guard (#1033). A call denied at PreToolUse whose PostToolUse or
+   * PostToolUseFailure arrives ran anyway, as a Claude Code mod's tool.check can make it: guard.overridden. A send that
+   * completed in a turn cut off isn't made again once the session resumes, as the cut-off turn's unfinished sends
+   * aren't (#85). A start reads whether the session's home loads a mod that can override the guard.
+   */
+  private watchCalls(drafts: Draft[], meta: HookMeta, settled: Promise<void>): void {
+    const { session, toolUse: call } = meta;
+    const before = drafts.find((d) => d.kind === 'tool.before');
+    if (before && call) {
+      const { label, send } = callOf(before.data as Obj, effectEntries(this.root.dir));
+      if (meta.blockedBy?.length) this.denied(session, call, { guard: meta.blockedBy.join(', '), label: label.slice(0, 2000) });
+      const command = before.data.kind === 'shell' && typeof before.data.command === 'string' ? before.data.command : undefined;
+      if (send && meta.call) (this.turnSends.get(session) ?? this.turnSends.set(session, new Map()).get(session)!).set(call, { key: sendKey(meta.call.tool, command, meta.call.input), label, done: false });
+    }
+    const after = drafts.find((d) => d.kind === 'tool.after');
+    if (after && call) {
+      const sent = this.turnSends.get(session)?.get(call);
+      if (sent) sent.done = after.data.outcome !== 'failed';
+      const denial = this.denials.get(session)?.get(call);
+      if (denial) this.denials.get(session)!.delete(call);
+      const failed = (error: unknown) => process.stderr.write(`deep hub: ${call}'s override was not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
+      if (denial) {
+        (this.overrides.get(session) ?? this.overrides.set(session, []).get(session)!).push({ call, label: denial.label, ts: this.now() });
+        void settled.then(() => this.overridden(meta, call, denial)).catch(failed);
+      } else {
+        // A deny from before this hub started (a restart, a spooled PostToolUse) is read back from what its call matched.
+        void settled.then(() => this.deniedBefore(session, call)).then((before) => {
+          if (!before) return;
+          (this.overrides.get(session) ?? this.overrides.set(session, []).get(session)!).push({ call, label: before.label, ts: this.now() });
+          return this.overridden(meta, call, before);
+        }).catch(failed);
+      }
+    }
+    // A turn ends at its stop, or at the next prompt when it ended with none (an interrupt): its sends go with it.
+    if (drafts.some((d) => (d.kind === 'agent.stop' && !d.data.child) || d.kind === 'user.ask')) this.turnSends.delete(session);
+    // A session's sends wait past its end for a resume; what it denied and saw run is the record's from then on.
+    if (meta.event === 'SessionEnd') { this.denials.delete(session); this.overrides.delete(session); }
+    if (meta.event === 'SessionStart') {
+      const done = meta.fields?.source === 'resume' ? [...(this.turnSends.get(session)?.values() ?? [])].filter((s) => s.done) : [];
+      this.turnSends.delete(session);
+      const sends = done.length ? this.unknownSends.get(session) ?? this.unknownSends.set(session, new Map()).get(session)! : undefined;
+      for (const s of done) sends!.set(s.key, { label: s.label, pr: false, done: true });
+      // The server gates a resumed session's calls until it hears again which sessions have sends to match.
+      if (meta.fields?.source === 'resume') { this.askingSent = ''; this.askingSoon(); }
+      if (meta.agent === 'claude-code' || meta.agent === 'claude') void settled.then(() => this.modsReading(meta)).catch(() => undefined);
+    }
+  }
+  /** A PreToolUse the server's reply denied (#1033): what denied it and the call in words. */
+  denied(session: string, call: string, denial: { guard: string; label: string }): void {
+    (this.denials.get(session) ?? this.denials.set(session, new Map()).get(session)!).set(call, { guard: denial.guard.slice(0, 2000), label: denial.label.slice(0, 2000) });
+  }
+  /** The mods of the Claude Code home a session's transcript lives in, and the folders its command line loads; another agent loads none. */
+  private async sessionMods(meta: HookMeta): Promise<HomeMods> {
+    if (meta.agent !== 'claude-code' && meta.agent !== 'claude') return { home: '', mods: [] };
+    const dirs = pluginDirs(await argsOf(meta.ppid).catch(() => ''));
+    const home = homeOfTranscript(meta.transcript) ?? claudeHomes(process.env)[0]!;
+    // Read again only when what Claude Code lists them from changes, or after MODS_MS: each read starts claude several times.
+    const key = JSON.stringify([home, meta.cwd, dirs, ...[join(home, 'plugins', 'installed_plugins.json'), join(home, 'settings.json'), join(home, 'skills'), ...dirs].map(statKey)]);
+    const seen = this.modsSeen.get(key);
+    if (seen && this.now() - seen.at < MODS_MS) return seen.read;
+    const read = await homeMods(home, claudeOnPath(process.env), process.env, { cwd: meta.cwd, dirs });
+    this.modsSeen.set(key, { at: this.now(), read });
+    return read;
+  }
+  /**
+   * A denied call that ran anyway (#1033): guard.overridden with what denied it and the home's mods that could have
+   * approved it, one line on the session's row, its claims judged again, and for a send, which may already have left,
+   * one ask naming it.
+   */
+  private async overridden(meta: HookMeta, call: string, denial: { guard: string; label: string }): Promise<void> {
+    const [row] = (await this.record.raw(`SELECT data FROM events WHERE session_id = ? AND kind = 'tool.before' AND json_extract(data, '$.call') = ? ORDER BY log_pos DESC LIMIT 1`, [meta.session, call])) as { data: string | Obj }[];
+    const d = row ? ((typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj) : { kind: 'unknown' };
+    const { send } = callOf(d, effectEntries(this.root.dir));
+    const read = await this.sessionMods(meta);
+    const mods = 'mods' in read ? read.mods.filter((m) => m.overrides).map((m) => m.name) : [];
+    const tool = meta.call?.tool ?? (d.kind === 'mcp' ? `mcp__${String(d.server)}__${String(d.tool)}` : String(d.kind));
+    await this.appendSession(meta.session, meta.agent, 'guard.overridden', { call, tool: tool.slice(0, 2000), label: denial.label, guard: denial.guard, send, mods: mods.map((m) => m.slice(0, 2000)), mods_unread: 'unread' in read ? read.unread.slice(0, 2000) : null });
+    // Its claims first, so a verdict that passed before the override arrived doesn't stand on what follows failing.
+    const claims = (await this.record.raw(`SELECT id FROM events WHERE kind = 'claim.made' AND session_id = ?`, [meta.session])) as { id: string }[];
+    for (const { id } of claims) await this.judged(`claim:${id}`);
+    const by = mods.length ? `, approved past the deny by ${mods.join(', ')}` : '';
+    await this.appendReading(meta.session, meta.agent, `DeepBuild denied ${denial.label} (${denial.guard}) and it ran anyway${by}: this session's claims can't pass on its own checks.`.slice(0, 8000));
+    if (send) {
+      const question = `A send DeepBuild denied ran anyway: ${denial.label.slice(0, 1000)} (call ${call})${by}. It may already have left. Check whether it went out?`;
+      const options = [{ id: 'checked', label: 'I checked it', decision: 'none' }, { id: 'later', label: 'Not now', decision: 'none' }];
+      const raised = { kind: 'exception', question, options, recommended: 'checked', deadline: this.now() + 2 * 86_400_000, fallback: 'you', default: 'later', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'guard.overridden', session: meta.session, call } as JsonValue)), pinned_to: await this.pinOf(meta.cwd, question) };
+      await this.asks.raise(this.connection('core', { session: meta.session, agent: meta.agent }), 'guard.overridden', raised);
+    }
+  }
+  /**
+   * At a Claude Code session's start (#1033): a home that loads a mod able to approve a call past the guard reads its
+   * guard as watch-only on the session's row, unless the setup holds the deny: managed settings, or a Team or Enterprise login.
+   */
+  private async modsReading(meta: HookMeta): Promise<void> {
+    const read = await this.sessionMods(meta);
+    const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env));
+    const risky = held || !('mods' in read) ? [] : read.mods.filter((m) => m.overrides);
+    let reading: string | undefined;
+    if ('unread' in read && !held) reading = `${MODS_WATCH} (${read.home}) loads mods DeepBuild couldn't read (${read.unread}), so whether one can approve a call past the guard is not checked: its holds and blocks may be watch-only.`;
+    else if (risky.length) reading = `${MODS_WATCH} (${read.home}) loads ${risky.map((m) => `the mod ${m.name}, which ${overrideWords(m)!}`).join('; ')}: its holds and blocks are watch-only until the mod is gone or the setup holds the deny (managed settings, or a Team or Enterprise login).`;
+    else {
+      // The line a start before this one left on the session's row is taken back.
+      const [said] = (await this.record.raw(`SELECT json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [meta.session, `${MODS_WATCH}%`, `${MODS_GONE}%`])) as { text: string }[];
+      if (said?.text.startsWith(MODS_WATCH)) reading = `${MODS_GONE} that can approve a call past the guard${held ? ` that ${held} doesn't hold` : ''}: its holds and blocks apply again.`;
+    }
+    if (reading) await this.appendReading(meta.session, meta.agent, reading.slice(0, 8000));
+  }
+  /**
+   * What denied a call before this hub started, read from its tool.before: the block-mode guard entries it matched, as
+   * the reply denies them; undefined when none did.
+   */
+  private async deniedBefore(session: string, call: string): Promise<{ guard: string; label: string } | undefined> {
+    const [row] = (await this.record.raw(`SELECT ts, data FROM events WHERE session_id = ? AND kind = 'tool.before' AND json_extract(data, '$.call') = ? ORDER BY log_pos DESC LIMIT 1`, [session, call])) as { ts: number; data: string | Obj }[];
+    if (!row || row.ts >= this.bootAt) return undefined;
+    const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+    const rules = readJson(join(this.root.dir, 'rules.json'));
+    const entries = isObj(rules) && isObj(rules.entries) ? rules.entries : {};
+    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete)$/.test(String(e.match)); });
+    return blocks.length ? { guard: blocks.join(', ').slice(0, 2000), label: callOf(d, effectEntries(this.root.dir)).label.slice(0, 2000) } : undefined;
   }
 
   // ---- What the core reads beside a session's hooks (#18).
@@ -2420,18 +2590,15 @@ export class Core {
       if (row.kind === 'tool.before') open.set(d.call, d);
       else open.delete(d.call);
     }
-    const effects = effectEntries(this.root.dir);
+    const rules = effectEntries(this.root.dir);
     const found: CutOff[] = [];
     for (const d of open.values()) {
       const kind = String(d.kind);
       const command = typeof d.command === 'string' ? d.command : undefined;
-      const matched = (Array.isArray(d.matched) ? d.matched : []).flatMap((n) => effects.get(String(n)) ?? []);
-      const pr = kind === 'shell' && command !== undefined && isPrCreate(command);
-      const send = pr || matched.some((c) => EFFECTS.has(c)) || (kind === 'mcp' && typeof d.effect === 'string' && EFFECTS.has(d.effect));
+      const { label, send, pr } = callOf(d, rules);
       const change = kind === 'edit' || kind === 'write';
       if (!send && !change) continue;
       const paths = Array.isArray(d.paths) ? d.paths.map(String).join(', ') : '';
-      const label = kind === 'shell' ? `Bash \`${command ?? ''}\`` : kind === 'mcp' ? `${String(d.server)} ${String(d.tool)}` : `${kind} ${paths}`;
       found.push({ key: kind === 'mcp' ? `mcp:${String(d.server)}/${String(d.tool)}` : `${kind}:${command ?? paths}`, label, send, pr });
     }
     return found;
@@ -2447,7 +2614,7 @@ export class Core {
     if (!sends?.size || !call) return undefined;
     const command = typeof call.input.command === 'string' ? call.input.command : undefined;
     // The recorded command was scrubbed by the parser with the values it held then; either spelling matches.
-    const keys = command === undefined ? [] : [...new Set([`shell:${scrubText(command, { held: this.options.held })}`, `shell:${command}`])];
+    const keys = command === undefined ? (call.tool.startsWith('mcp__') ? [sendKey(call.tool, undefined, call.input)] : []) : [...new Set([`shell:${scrubText(command, { held: this.options.held })}`, `shell:${command}`])];
     const key = keys.find((k) => sends.has(k));
     const found = key ? sends.get(key) : undefined;
     if (!key || !found) {
@@ -2455,6 +2622,11 @@ export class Core {
       for (const [k, v] of sends) if (v.denied) sends.delete(k);
       if (!sends.size) { this.unknownSends.delete(meta.session); this.askingSoon(); }
       return undefined;
+    }
+    // A send the cut-off turn made and saw complete (#1033): denied once, so the resumed session doesn't make it twice.
+    if (found.done) {
+      found.denied = true;
+      return `DeepBuild denied this: ${found.label} is the send the turn that was cut off already made, and it completed. Don't make it again; go on from there.`;
     }
     const result = found.pr ? await this.pullFor(meta) : undefined;
     if (result === null) {
@@ -2614,13 +2786,16 @@ export class Core {
     }
   }
 
-  /** A PreToolUse the hub held for the gate: why its call waits for you, or nothing when it runs (#321). */
-  async toolGate(meta: HookMeta, call: Gated): Promise<{ held?: string; allow?: string; deny?: string }> {
+  /**
+   * A PreToolUse the hub held for the gate: why its call waits for you, or nothing when it runs (#321), and the rule
+   * that denied it, which the server keeps with the deny it sends (#1033).
+   */
+  async toolGate(meta: HookMeta, call: Gated): Promise<{ held?: string; allow?: string; deny?: string; rule?: string }> {
     await this.ready;
     // A pull request says Closes only when every requirement of the issue's task passed (#322; design: At the claim).
     if (call.pr && call.command && meta.session && !FOREIGN.has(meta.agent)) {
       const deny = await this.closesGate(meta.session, call.command).catch(() => undefined);
-      if (deny) return { deny };
+      if (deny) return { deny, rule: "the gate's Closes rule (#322)" };
       if (!call.classes.length && !call.mcp && !call.decided?.length && call.stage === undefined && !call.screen && !call.resend) return {};
     }
     // Computer use stays on what the session leases (#332), so your own screen and browser are never touched.
@@ -2628,10 +2803,12 @@ export class Core {
       const deny = await this.offScreen(meta.session, meta.call.tool, meta.call.input);
       if (deny) return { deny };
     }
-    // A send the cut-off turn started with no recorded end isn't made again (#85): denied with the earlier result.
+    // A send the cut-off turn started with no recorded end isn't made again (#85): denied with the earlier result. The
+    // hooks before this one go first, so a resume's start has said which sends its cut-off turn made (#1033).
     if (call.resend) {
+      await this.queue(async () => undefined);
       const deny = await this.resent(meta).catch(() => undefined);
-      if (deny) return { deny };
+      if (deny) return { deny, rule: "the gate's repeated-send rule (#85)" };
       if (!call.classes.length && !call.mcp && !call.decided?.length && call.stage === undefined) return {};
     }
     // A cloud resource nobody can be asked about from here stays denied, as with the hub down; a delete whose reach
@@ -4104,9 +4281,12 @@ export class Core {
       return true;
     }
     // A Codex thread's identity is its payload's: resumed in a new Codex process, once the old one is gone or the session
-    // ended, it is bound to that process from its start.
-    if (meta.agent === 'codex' && transcript === session.transcript && meta.event === 'SessionStart' && (meta.fields?.source === 'resume' || meta.fields?.source === 'startup')
-      && (session.ended || await this.startOf(session.pid, true) !== session.start) && CODEX_BINARY.test(await argsOf(meta.ppid))) {
+    // ended, it is bound to that process from its start. A Claude Code session resumed in a new process (`--resume`, the
+    // desktop app opened again) is too, by its own resume start (#1033).
+    const binary = meta.agent === 'codex' ? CODEX_BINARY : meta.agent === 'claude-code' || meta.agent === 'claude' ? CLAUDE_BINARY : undefined;
+    const resumed = meta.fields?.source === 'resume' || (meta.agent === 'codex' && meta.fields?.source === 'startup');
+    if (binary && transcript === session.transcript && meta.event === 'SessionStart' && resumed
+      && (session.ended || await this.startOf(session.pid, true) !== session.start) && binary.test(await argsOf(meta.ppid))) {
       Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd, ended: false });
       return true;
     }
@@ -5530,6 +5710,11 @@ export class Core {
       const open = (await this.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND task_ref = (SELECT subject_ref FROM claims WHERE id = ?)`, [claim.slice(6)])) as { text: string }[];
       if (open.length) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, `open items: ${open.length} still open, each closed only by evidence, your answer or a rule: ${open.slice(0, 3).map((o) => `“${o.text.slice(0, 200)}”`).join('; ')}${open.length > 3 ? '; …' : ''}`] };
     }
+    // A call DeepBuild denied ran anyway in the claim's session (#1033): its own checks can't pass it.
+    if (v.outcome === 'PASS') {
+      const ran = await this.overridesFor(claim);
+      if (ran.length) v = { ...v, outcome: 'INCONCLUSIVE', reasons: [...v.reasons, `a call DeepBuild denied ran anyway in this session: ${ran.map((o) => `${o.label} (${o.call})`).join('; ')}; its own checks can't pass it`.slice(0, 8000)] };
+    }
     const hash = verdictHash(v);
     if (this.verdictsMade.get(claim) === hash) return;
     try {
@@ -5733,6 +5918,14 @@ export class Core {
     return { run };
   }
 
+  /** The denied calls that ran anyway in a claim's session (#1033): as they arrived, and as the record holds them. */
+  private async overridesFor(claim: string): Promise<{ call: string; label: string; ts: number }[]> {
+    const [row] = (await this.record.raw(`SELECT session_id FROM events WHERE kind = 'claim.made' AND id = ? LIMIT 1`, [claim.slice(6)])) as { session_id: string | null }[];
+    if (!row?.session_id) return [];
+    const recorded = (await this.record.raw(`SELECT ts, json_extract(data, '$.call') AS call, json_extract(data, '$.label') AS label FROM events WHERE session_id = ? AND kind = 'guard.overridden'`, [row.session_id])) as { call: string; label: string; ts: number }[];
+    const seen = this.overrides.get(row.session_id) ?? [];
+    return [...seen, ...recorded.filter((r) => !seen.some((s) => s.call === r.call))];
+  }
   /** The session a claim was made in, as a lease holder; the core's own for a claim the record doesn't hold. */
   private async claimSession(claim: string): Promise<string> {
     const [row] = (await this.record.raw(`SELECT session_id FROM events WHERE kind = 'claim.made' AND id = ? LIMIT 1`, [claim.slice(6)])) as { session_id: string | null }[];

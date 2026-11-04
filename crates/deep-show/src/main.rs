@@ -1647,8 +1647,18 @@ fn modules(set: BuildSet) -> Vec<Module> {
     if set >= BuildSet::R1 {
         out.extend([
             deep_canvas_marks::modules::marks2d(),
-            deep_canvas_marks::modules::data(),
-            deep_canvas_graph::module::module(),
+            // #399: `test-data-m4-drops-last` and `test-graph-tie-by-registration` seal the
+            // planted data@1 and graph@1 implementations in their places.
+            if cfg!(feature = "test-data-m4-drops-last") {
+                deep_canvas_marks::modules::data_m4_drops_last()
+            } else {
+                deep_canvas_marks::modules::data()
+            },
+            if cfg!(feature = "test-graph-tie-by-registration") {
+                deep_canvas_graph::module::tie_by_registration()
+            } else {
+                deep_canvas_graph::module::module()
+            },
             deep_canvas_record::module::module(),
             deep_canvas_sheet::module::module(),
             deep_canvas_motion::module::module(),
@@ -1669,8 +1679,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_canvas_effects::module::module()
         });
-        // Issue #398: SVG import and formulas, drawn as marks2d's items.
-        out.push(deep_canvas_vector::module::module());
+        // Issue #398: SVG import and formulas, drawn as marks2d's items; #399's
+        // `test-vector-currentcolor-ink` seals the planted vector@1 implementation in its place.
+        out.push(if cfg!(feature = "test-vector-currentcolor-ink") {
+            deep_canvas_vector::module::currentcolor_ink()
+        } else {
+            deep_canvas_vector::module::module()
+        });
     }
     if set >= BuildSet::Full {
         // Issue #420: walls, openings, slabs, roofs and stairs as trusted builders.
@@ -1839,16 +1854,16 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             if sandbox {
                 parts.push(kit::SANDBOX_PART.to_string());
             }
-            // #418: look@1's reference is the shipped look, whichever a test build holds.
-            let reference = if sandbox {
-                deep_canvas_sandbox::module::module()
-            } else if interface == "look@1" {
-                deep_canvas_marks::modules::look()
-            } else if m.manifest.name == "scene3d" {
-                // #421: scene3d@1's reference is the shipped module, whichever a test build holds.
-                deep_canvas_scene3d::module::module()
-            } else {
-                m
+            // #418, #399, #421: look@1's, data@1's, graph@1's, vector@1's and scene3d@1's
+            // references are the shipped modules, whichever a test build holds.
+            let reference = match interface.as_str() {
+                _ if sandbox => deep_canvas_sandbox::module::module(),
+                "look@1" => deep_canvas_marks::modules::look(),
+                "data@1" => deep_canvas_marks::modules::data(),
+                "graph@1" => deep_canvas_graph::module::module(),
+                "vector@1" => deep_canvas_vector::module::module(),
+                _ if m.manifest.name == "scene3d" => deep_canvas_scene3d::module::module(),
+                _ => m,
             };
             deep_canvas::registry::Interface {
                 name: interface,
