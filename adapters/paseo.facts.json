@@ -1,0 +1,228 @@
+{
+  "schema": "adapter.facts@3",
+  "versions": [
+    "0.15.0"
+  ],
+  "agent": "paseo",
+  "hookTimeouts": {
+    "readBy": "a hold waits no longer than the agent lets a hook run",
+    "conformance": "paseo/hookTimeouts/notifications",
+    "defaultMs": null
+  },
+  "continuation": {
+    "readBy": "only a turn's end may send a claim back: the plugin sends the hub's words as the session's next prompt",
+    "conformance": "paseo/continuation/turn-end",
+    "hook": "agent.turn.after"
+  },
+  "launch": {
+    "readBy": "DeepBuild starts no job through paseo: the plugin only gates the agents paseo runs",
+    "conformance": "paseo/launch/none"
+  },
+  "install": {
+    "readBy": "setup installs the plugin through paseo's own manager, at the one version these facts cover",
+    "conformance": "paseo/install/pinned",
+    "source": "npm:@deepbuild/paseo@0.1.0"
+  },
+  "modelFamily": {
+    "readBy": "which rate card and context window a model name belongs to",
+    "conformance": "paseo/modelFamily/known-names",
+    "families": {}
+  },
+  "billing": {
+    "readBy": "whether a session bills a plan or an API account: paseo runs each agent with its own sign-in",
+    "conformance": "paseo/billing/api-key-variables",
+    "apiKeyVariables": [
+      "ANTHROPIC_API_KEY",
+      "OPENAI_API_KEY",
+      "GITHUB_TOKEN"
+    ]
+  },
+  "usage": {
+    "readBy": "each agent's own adapter counts its usage; paseo's turn end carries none",
+    "conformance": "paseo/usage/none",
+    "cost": "unpriced",
+    "tokens": "none: each agent's own adapter reads them",
+    "costFrom": "none: each agent its own"
+  },
+  "questionTools": {
+    "readBy": "which tool calls are questions to the person, so each one is caught as a permission request of kind question",
+    "conformance": "paseo/questionTools/none",
+    "tools": []
+  },
+  "transcripts": {
+    "readBy": "paseo keeps each agent's saved file; the plugin reads none, since each agent keeps its own history",
+    "conformance": "paseo/transcripts/none",
+    "home": [
+      "~/.paseo"
+    ],
+    "path": "agents/{project}/{agent}.json"
+  },
+  "appLinks": {
+    "readBy": "Open on a session's row",
+    "conformance": "paseo/appLinks/open",
+    "open": "none: paseo's app opens an agent by its own ID"
+  },
+  "errorTexts": {
+    "readBy": "a stop's cause from the error the agent reports, never from its words; a stop that matches none is unknown, never a pass",
+    "conformance": "pi/errorTexts/unknown-otherwise",
+    "causes": {
+      "401": "sign_in_required",
+      "403": "sign_in_required",
+      "authentication": "sign_in_required",
+      "unauthorized": "sign_in_required",
+      "invalid api key": "sign_in_required",
+      "no api key": "sign_in_required",
+      "429": "rate_limited",
+      "rate limit": "rate_limited",
+      "overloaded": "rate_limited",
+      "context length": "context_overflow",
+      "context window": "context_overflow"
+    }
+  },
+  "events": {
+    "readBy": "a payload is held to its version's strict schema: a missing or retyped field marks the session unverified",
+    "conformance": "paseo/events/plugin",
+    "versions": {
+      "0.15.0": {
+        "agent.turn.before": {
+          "required": {
+            "hook_event_name": "string",
+            "session_id": "string",
+            "cwd": "string",
+            "provider": "string",
+            "paseo_agent": "string",
+            "bind": "string"
+          },
+          "optional": {
+            "turn_id": "string"
+          }
+        },
+        "agent.turn.after": {
+          "required": {
+            "hook_event_name": "string",
+            "session_id": "string",
+            "cwd": "string",
+            "provider": "string",
+            "paseo_agent": "string",
+            "bind": "string",
+            "outcome": "string"
+          },
+          "optional": {
+            "turn_id": "string",
+            "error": "string"
+          }
+        },
+        "agent.permission.before": {
+          "required": {
+            "hook_event_name": "string",
+            "session_id": "string",
+            "cwd": "string",
+            "provider": "string",
+            "paseo_agent": "string",
+            "bind": "string",
+            "request_id": "string",
+            "permission_kind": "string",
+            "tool_name": "string",
+            "tool_input": "object"
+          },
+          "optional": {
+            "turn_id": "string",
+            "title": "string"
+          }
+        },
+        "agent.permission.after": {
+          "required": {
+            "hook_event_name": "string",
+            "session_id": "string",
+            "cwd": "string",
+            "provider": "string",
+            "paseo_agent": "string",
+            "bind": "string",
+            "request_id": "string",
+            "behavior": "string",
+            "from": "string"
+          },
+          "optional": {
+            "turn_id": "string"
+          }
+        }
+      }
+    }
+  },
+  "mapping": {
+    "readBy": "the adapter maps each hook payload to events by these entries, and deep explain names the entry behind each event; a value names a payload field, or =text a constant",
+    "conformance": "paseo/mapping/explain",
+    "common": {
+      "session": "session_id"
+    },
+    "agent.turn.before": {
+      "kind": "session.activity",
+      "data": {
+        "activity": "=turn_start"
+      }
+    },
+    "agent.turn.after": {
+      "kind": "agent.stop",
+      "data": {
+        "outcome": "outcome"
+      }
+    },
+    "agent.permission.before": {
+      "kind": "permission.request",
+      "data": {
+        "kind": "permission_kind",
+        "tool": "tool_name"
+      }
+    }
+  },
+  "toolKinds": {
+    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name or name prefix",
+    "conformance": "paseo/toolKinds/unknown-otherwise",
+    "tools": {
+      "Bash": "shell",
+      "bash": "shell",
+      "shell": "shell"
+    },
+    "prefixes": {
+      "mcp__": "mcp"
+    },
+    "otherwise": "unknown"
+  },
+  "toolDetail": {
+    "readBy": "what a call of each kind carries: a shell call's command",
+    "conformance": "paseo/toolDetail/command",
+    "command": {
+      "shell": "tool_input.command"
+    }
+  },
+  "providers": {
+    "claude": {
+      "readBy": "deep-hook gates Claude Code's sessions inside paseo, since paseo appends its hooks to yours: the plugin relays",
+      "conformance": "paseo/providers/own-hooks",
+      "hooks": "own"
+    },
+    "codex": {
+      "readBy": "deep-hook gates Codex's sessions inside paseo, which run through app-server with your Codex home: the plugin relays",
+      "conformance": "paseo/providers/own-hooks",
+      "hooks": "own"
+    },
+    "pi": {
+      "readBy": "the pi package gates pi's sessions inside paseo: the plugin relays",
+      "conformance": "paseo/providers/own-hooks",
+      "hooks": "own"
+    },
+    "copilot": {
+      "readBy": "the plugin gates GitHub Copilot's ACP sessions, which have no hooks of their own",
+      "conformance": "paseo/providers/acp",
+      "hooks": "plugin",
+      "bridge": "1.0.105",
+      "permissions": "Each tool call asks through ACP's session/request_permission with allow_once, allow_always and reject_once options; only allow_once is ever chosen, from your decision or your answer, never by default.",
+      "modelCheck": "The session's model, as paseo's snapshot reads it in runtimeInfo.model, is checked against the model you picked before the first prompt goes in; a different one holds the prompt and asks you.",
+      "timeouts": {
+        "initialize": 30000,
+        "prompt": 600000,
+        "permission": 86400000
+      }
+    }
+  }
+}
