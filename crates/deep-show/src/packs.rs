@@ -24,7 +24,8 @@ pub struct Row {
 
 /// The half of the pack check that runs a pack's programs, after the core's half admitted it:
 /// its layouts' rows and the issues that refuse it (#238).
-pub type Vet<'v> = &'v mut dyn FnMut(&Value, &deep_canvas::document::Pack) -> (Vec<Value>, Vec<Issue>);
+pub type Vet<'v> =
+    &'v mut dyn FnMut(&Value, &deep_canvas::document::Pack) -> (Vec<Value>, Vec<Issue>);
 
 /// Reads a pack folder as one manifest: `pack.json`, its `id` set to `owner/name`, and each
 /// `recipes` entry's file inlined.
@@ -61,7 +62,11 @@ fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
     // the programs and data the sandbox module runs at the pack check.
     if let Some(Value::Array(assets)) = fields.get_mut("assets") {
         for (i, a) in assets.iter_mut().enumerate() {
-            let path = a.get("path").and_then(Value::as_str).unwrap_or_default().to_string();
+            let path = a
+                .get("path")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
             let bytes = fs::read(dir.join(&path)).ok();
             let sha = bytes.as_deref().map(deep_canvas::schedule::sha256_hex);
             let listed = a.get("sha256").and_then(Value::as_str);
@@ -70,14 +75,14 @@ fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
                 Some(b) if sha.as_deref() == listed && size == Some(b.len() as u64) => {
                     a["hex"] = json!(b.iter().map(|x| format!("{x:02x}")).collect::<String>());
                 }
-                _ => {
-                    return Err(vec![Issue::envelope(
-                        "ref_unresolved",
-                        format!("assets/{i}"),
-                        a.clone(),
-                        &format!("the asset `{path}` isn't there with the sha256 and size the pack lists"),
-                    )])
-                }
+                _ => return Err(vec![Issue::envelope(
+                    "ref_unresolved",
+                    format!("assets/{i}"),
+                    a.clone(),
+                    &format!(
+                        "the asset `{path}` isn't there with the sha256 and size the pack lists"
+                    ),
+                )]),
             }
         }
     }
@@ -105,12 +110,16 @@ pub fn install(
     sealed: &Sealed,
     id: &str,
     dir: &Path,
+    twin: Option<&str>,
     vet: Vet<'_>,
 ) -> Value {
     let mut layouts = Vec::new();
     let (version, outcome, issues) = match load(id, dir) {
         Err(issues) => (String::new(), "refused", issues),
-        Ok(manifest) => {
+        Ok(mut manifest) => {
+            if let Some(planted) = twin {
+                crate::familiar::twin(planted, id, &mut manifest);
+            }
             let version = manifest["version"].as_str().unwrap_or_default().to_string();
             match packs.admit(&manifest, sealed).cloned() {
                 Ok(pack) => {
