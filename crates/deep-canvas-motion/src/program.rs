@@ -1034,6 +1034,13 @@ impl Program {
             || self.limits.iter().any(|(first, _)| hits(*first, 3))
     }
 
+    /// Document channel `id`'s value at `state`'s time, its first component, before it is
+    /// stored in its target: what a light's `flicker` scales its power by (#421).
+    pub fn channel_value(&self, state: &State, id: &str) -> Option<f64> {
+        let c = self.motion.channels.iter().position(|c| c.id == id)?;
+        state.values.get(*self.values.get(c)?).copied()
+    }
+
     /// The slot the field `field` of item `owner` takes, if anything in the program reads or
     /// writes it: its transform's for `at/pos|rot|scale/k`, or a field's of its own.
     pub fn slot_of(&self, owner: &str, field: &[String]) -> Option<usize> {
