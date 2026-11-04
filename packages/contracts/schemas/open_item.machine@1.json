@@ -1,0 +1,40 @@
+{
+  "id": "open_item.machine@1",
+  "description": "An open item's life, as the record's open_items table holds it: open until the done gate closes it, and open again when a later final message leaves it open.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "states": [
+    "open",
+    "closed"
+  ],
+  "initial": "open",
+  "final": [
+    "closed"
+  ],
+  "moves": [
+    {
+      "from": "open",
+      "event": "open_item.closed",
+      "to": "closed"
+    },
+    {
+      "from": "closed",
+      "event": "open_item.opened",
+      "to": "open"
+    },
+    {
+      "from": "open",
+      "event": "open_item.opened",
+      "to": "open"
+    }
+  ],
+  "conflicts": [
+    {
+      "name": "closed_or_left_open",
+      "events": [
+        "open_item.closed",
+        "open_item.opened"
+      ]
+    }
+  ]
+}
