@@ -1,0 +1,2025 @@
+Base run of tests/acceptance/490-oracle at 37fed05f (no implementation), on Linux, once:
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/490-oracle --no-file-parallelism
+Expected: every fn-call test fails because base deep-show run refuses a scenario holding a fn call ({"ok":false,"code":"bad_input"}). Four pass at base: the fixture count, the MT19937 self-check, and the there_and_back and pause pulses (motion already has those modifiers); the wiggle pulse fails (base reads sin(2π·count·u), manim sin(count·π·u)).
+The checkout path is replaced by <repo>; lines past 400 characters are cut.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/490-oracle
+
+ ❯ eases-bevy.test.ts (5 tests | 5 failed) 813ms
+   ❯ criterion 1 (formula): bevy 12a94e0cd6 easing.rs identities and formulas, in f64, for every closed ease name (5)
+     × criterion 1: every closed ease name reads exactly 0 at 0 and exactly 1 at 1 (bevy ease_functions_zero_to_one, in f64) 40ms
+     × criterion 1: each in-out form against its in and out forms at the deciles, and the midpoints (bevy ease_function_inout_deciles, ease_function_midpoints) 13ms
+     × criterion 1: the symmetry of in-out at 1,001 samples: out(x) = 1 − in(1 − x) and in_out(1 − x) = 1 − in_out(x) for every Penner family, s(1 − x) = 1 − s(x) for the symmetric eases 45ms
+     × criterion 1: every monotonic family never falls over 1,001 samples 32ms
+     × criterion 1 (formula): each name bevy's easing_functions define equals bevy's formula in f64 within 1e-12 at 1,001 samples 21ms
+ ❯ rate-functions-manim.test.ts (7 tests | 5 failed) 1059ms
+   ❯ criterion 9 (formula): manim-ce a6d5cc02b4 rate_functions.py against our eases (4)
+     × criterion 9: rush_in(10) equals rush_into = 2·smooth(x ÷ 2) within 1e-12 at 1,001 points 33ms
+     × criterion 9: sigmoid(10), rush_out and double_sigmoid equal manim's smooth, rush_from and double_smooth within 1e-12 at 1,001 points 11ms
+     × criterion 9: running_start(−0.5) equals manim's six-degree Bernstein curve within 1e-12 at 1,001 points and dips to −0.1848 ± 1e-4 near x = 0.29; its interval form over [0, 1] reaches down to that dip and no further than 1e-4 past it 10ms
+     × criterion 9: exp_decay(0.1) equals (1 − e^(−x/0.1)) ÷ (1 − e^(−10)) within 1e-12 at 1,001 points, and reads 0.6321 ± 1e-4 at 0.1, as manim's exponential_decay(0.1) does 18ms
+   ❯ criterion 9 (formula): the pulse shapes are manim's there_and_back, there_and_back_with_pause and wiggle (3)
+     × criterion 9: a wiggle pulse of 0.2 on a scale of 1 over 1 s reads 1 + 0.2 × manim's wiggle within 1e-12 at 1,001 times, and exactly 1 at both ends 105ms
+ ❯ tables-numpy-scipy.test.ts (11 tests | 10 failed) 541ms
+   ❯ criterion 4 (port): numpy a3d0ef1df0 TestInterp against our linear function tables (6)
+     × criterion 4: TestInterp.test_basic: x and y linspace(0, 1, 5) read x0 = linspace(0, 1, 50) almost equal 34ms
+     × criterion 4: TestInterp.test_right_left_behavior: sizes 2 to 9 of x = arange(size), y = ones hold 1 at −1, 0, size − 1 and size, in either order 11ms
+     × criterion 4: TestInterp.test_scalar_interpolation_point and test_zero_dimensional_interpolation_point: 0, 0.3 and float32(0.3) on linspace read themselves; xp 0, 2, 4 with fp 1, −1, 1 read exactly 0 at 1 19ms
+     × criterion 4: TestInterp.test_empty_x: no points read no values 19ms
+     × criterion 4: TestInterp.test_exceptions: a table of no points and one whose x and y differ in length are refused, as is a one-point table (np.interp special-cases size 1; ours holds 2 to 4,096 points) 19ms
+     × criterion 4: the criterion's linear table x 0, 1, 2, 4 and y 0, 1, 1.5, 1.75 reads np.interp's 1.625 at 3, 0 at −1 and 1.75 at 5 11ms
+   ❯ criterion 4 (port): scipy e4e854eaa8 TestPCHIP test_overshoot and test_monotone against our monotone tables (5)
+     × criterion 4: TestPCHIP.test_overshoot: 10 samples between every pair of knots lie between those knots' values (within upstream's 1e-15) 19ms
+     × criterion 4: test_overshoot at the criterion's 1,000 samples between every pair of knots 37ms
+     × criterion 4: TestPCHIP.test_monotone: each sample past a segment's first moves the way its knots do, (y2 − y1)·(yp[1:] − yp[:1]) > 0 21ms
+     × criterion 4: TestPCHIP.test_all_zeros: x arange(10), y zeros read exactly 0 at linspace(0, 9, 101) 11ms
+ ❯ interval-itf1788.test.ts (35 tests | 34 failed) 830ms
+   ❯ criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms (35)
+     × criterion 3: minimal_neg_test — 7 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 25ms
+     × criterion 3: minimal_add_test — 7 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 11ms
+     × criterion 3: minimal_sub_test — 7 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 18ms
+     × criterion 3: minimal_mul_test — 16 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 18ms
+     × criterion 3: minimal_div_test — 4 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 11ms
+     × criterion 3: minimal_recip_test — 2 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 11ms
+     × criterion 3: minimal_sqr_test — 9 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 11ms
+     × criterion 3: minimal_sqrt_test — 6 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 10ms
+     × criterion 3: minimal_pown_test — 82 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 11ms
+     × criterion 3: minimal_pow_test — 70 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 12ms
+     × criterion 3: minimal_exp_test — 12 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 10ms
+     × criterion 3: minimal_exp2_test — 11 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 10ms
+     × criterion 3: minimal_exp10_test — 12 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 10ms
+     × criterion 3: minimal_log_test — 10 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 11ms
+     × criterion 3: minimal_log2_test — 8 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 19ms
+     × criterion 3: minimal_log10_test — 9 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 18ms
+     × criterion 3: minimal_sin_test — 46 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 19ms
+     × criterion 3: minimal_cos_test — 46 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 11ms
+     × criterion 3: minimal_tan_test — 27 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 19ms
+     × criterion 3: minimal_asin_test — 8 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 19ms
+     × criterion 3: minimal_acos_test — 8 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 19ms
+     × criterion 3: minimal_atan_test — 4 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 19ms
+     × criterion 3: minimal_atan2_test — 16 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 11ms
+     × criterion 3: minimal_sinh_test — 5 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 19ms
+     × criterion 3: minimal_cosh_test — 5 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 11ms
+     × criterion 3: minimal_tanh_test — 5 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 10ms
+     × criterion 3: minimal_asinh_test — 5 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 11ms
+     × criterion 3: minimal_acosh_test — 4 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 13ms
+     × criterion 3: minimal_atanh_test — 4 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 19ms
+     × criterion 3: minimal_sign_test — 9 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 19ms
+     × criterion 3: minimal_ceil_test — 9 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 18ms
+     × criterion 3: minimal_floor_test — 9 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 10ms
+     × criterion 3: minimal_round_ties_to_away_test — 14 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 9ms
+     × criterion 3: minimal_abs_test — 8 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends 9ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 54 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  eases-bevy.test.ts > criterion 1 (formula): bevy 12a94e0cd6 easing.rs identities and formulas, in f64, for every closed ease name > criterion 1: every closed ease name reads exactly 0 at 0 and exactly 1 at 1 (bevy ease_functions_zero_to_one, in f64)
+AssertionError: deep-show run accepts a scenario of 38 fn calls (the first: {"call":"fn","expr":"ease(in_quad, x)","at":[0,1]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ easeAt eases-bevy.test.ts:71:19
+ ❯ eases-bevy.test.ts:80:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/54]⎯
+
+ FAIL  eases-bevy.test.ts > criterion 1 (formula): bevy 12a94e0cd6 easing.rs identities and formulas, in f64, for every closed ease name > criterion 1: each in-out form against its in and out forms at the deciles, and the midpoints (bevy ease_function_inout_deciles, ease_function_midpoints)
+AssertionError: deep-show run accepts a scenario of 23 fn calls (the first: {"call":"fn","expr":"ease(in_quad, x)","at":[0.1,0.2,0.3,0.4,0.6,0.7,0.8,0.9,0.5,0.19999999999999996,0.3999999999999999,0.6000000000000001]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ easeAt eases-bevy.test.ts:71:19
+ ❯ eases-bevy.test.ts:90:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/54]⎯
+
+ FAIL  eases-bevy.test.ts > criterion 1 (formula): bevy 12a94e0cd6 easing.rs identities and formulas, in f64, for every closed ease name > criterion 1: the symmetry of in-out at 1,001 samples: out(x) = 1 − in(1 − x) and in_out(1 − x) = 1 − in_out(x) for every Penner family, s(1 − x) = 1 − s(x) for the symmetric eases
+AssertionError: deep-show run accepts a scenario of 34 fn calls (the first: {"call":"fn","expr":"ease(in_quad, x)","at":[0,0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.009,0.01,0.011,0.012,0.013,0.014,0.015,0.016,0.017,0.018,0.019,0.02,0.021,0.022,0.023,0.024,0.025,0.026,0.027,0.028,0.029,0.03,0.031,0.032,0.033,0.034,0.035,0.036,0.037,0.038,0.039,0.04,0.041,0.042,0.043,0.044,0.045,0.046,0.047 … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ easeAt eases-bevy.test.ts:71:19
+ ❯ eases-bevy.test.ts:135:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/54]⎯
+
+ FAIL  eases-bevy.test.ts > criterion 1 (formula): bevy 12a94e0cd6 easing.rs identities and formulas, in f64, for every closed ease name > criterion 1: every monotonic family never falls over 1,001 samples
+AssertionError: deep-show run accepts a scenario of 28 fn calls (the first: {"call":"fn","expr":"ease(in_quad, x)","at":[0,0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.009,0.01,0.011,0.012,0.013,0.014,0.015,0.016,0.017,0.018,0.019,0.02,0.021,0.022,0.023,0.024,0.025,0.026,0.027,0.028,0.029,0.03,0.031,0.032,0.033,0.034,0.035,0.036,0.037,0.038,0.039,0.04,0.041,0.042,0.043,0.044,0.045,0.046,0.047 … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ easeAt eases-bevy.test.ts:71:19
+ ❯ eases-bevy.test.ts:157:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/54]⎯
+
+ FAIL  eases-bevy.test.ts > criterion 1 (formula): bevy 12a94e0cd6 easing.rs identities and formulas, in f64, for every closed ease name > criterion 1 (formula): each name bevy's easing_functions define equals bevy's formula in f64 within 1e-12 at 1,001 samples
+AssertionError: deep-show run accepts a scenario of 30 fn calls (the first: {"call":"fn","expr":"ease(in_quad, x)","at":[0,0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.009,0.01,0.011,0.012,0.013,0.014,0.015,0.016,0.017,0.018,0.019,0.02,0.021,0.022,0.023,0.024,0.025,0.026,0.027,0.028,0.029,0.03,0.031,0.032,0.033,0.034,0.035,0.036,0.037,0.038,0.039,0.04,0.041,0.042,0.043,0.044,0.045,0.046,0.047 … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ easeAt eases-bevy.test.ts:71:19
+ ❯ eases-bevy.test.ts:164:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_neg_test — 7 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"-x","over":[[1,2],[0,2],[0,2],[-2,0],[-2,0],[0,0],[0,0]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_add_test — 7 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 8 fn calls (the first: {"call":"fn","expr":"x + 0","over":[[1,1.7976931348623157e+308],[1,1.7976931348623157e+308]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_sub_test — 7 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 8 fn calls (the first: {"call":"fn","expr":"x - 0","over":[[1,1.7976931348623157e+308],[1,1.7976931348623157e+308]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_mul_test — 16 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 4 fn calls (the first: {"call":"fn","expr":"x * 0","over":[[0,0],[0,0],[0,0],[0,0],[1,5],[1,5],[-1,5],[-1,5],[-10,-5],[-10,-5]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_div_test — 4 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"0 / x","over":[[-5,-3],[3,5],[-5,-3],[3,5]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_recip_test — 2 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"1/x","over":[[-50,-10],[10,50]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_sqr_test — 9 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"x^2","over":[[-1,1],[0,1],[0,1],[-5,3],[-5,0],[-5,0],[0.1,0.1],[-1.9999999999999964,0.1],[-1.9999999999999964,-1.9999999999999964]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_sqrt_test — 6 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"sqrt(x)","over":[[0,1],[0,1],[0,25],[0,25],[0.1,0.1],[0.1,1.9999999999999964]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_pown_test — 82 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 22 fn calls (the first: {"call":"fn","expr":"x^0","over":[[0,0],[0,0],[13.1,13.1],[-7451.145,-7451.145],[1.7976931348623157e+308,1.7976931348623157e+308],[-1.7976931348623157e+308,-1.7976931348623157e+308],[-324.3,2.5]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_pow_test — 70 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 14 fn calls (the first: {"call":"fn","expr":"pow(x, 0)","over":[[0.1,0.5],[0.1,0.5],[0.1,1],[0.1,1],[0.5,1.5],[0.5,1.5],[1,1.5],[1,1.5],[1.1,1.5],[1.1,1.5]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_exp_test — 12 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"exp(x)","over":[[709.7827128933841,709.7827128933841],[0,709.7827128933823],[0,709.7827128933823],[-708.3964185322642,709.7827128933823],[-354.1982092661321,709.7827128933823],[-354.1982092661321,0],[-354.1982092661321,0],[-354.1982092661321,1],[1,5],[-3.3219280948873626,1.8073549220576042],[0.765534746 … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_exp2_test — 11 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"pow(2, x)","over":[[1024,1024],[0,1023],[0,1023],[-1022,1023],[-1022,0],[-1022,0],[-1022,1],[1,5],[-3.3219280948873626,1.8073549220576042],[0.7655347463629769,98.83328352961747],[11.750288269015629,25.990462258377743]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_exp10_test — 12 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"pow(10, x)","over":[[308.25471555991675,308.25471555991675],[0,308.2547155599167],[0,308.2547155599167],[-307.6526555685888,308.2547155599167],[-145,308.2547155599167],[-145,0],[-145,0],[-145,1],[1,5],[-3.3219280948873626,1.8073549220576042],[0.7655347463629769,98.83328352961747],[11.750288269015629,25. … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_log_test — 10 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"log(x)","over":[[1,1.7976931348623157e+308],[5e-324,1.7976931348623157e+308],[5e-324,1],[2.718281828459045,2.718281828459045],[2.7182818284590455,2.7182818284590455],[5e-324,2.7182818284590455],[2.718281828459045,32],[0.1,3.5],[1.7,5.646546544444444e+29],[3445.000003400303,66666666.6666666]]}); it answe … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_log2_test — 8 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"log2(x)","over":[[1,1.7976931348623157e+308],[5e-324,1.7976931348623157e+308],[5e-324,1],[5e-324,2],[2,32],[0.1,3.5],[1.7,5.646546544444444e+29],[3445.000003400303,66666666.6666666]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_log10_test — 9 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"log10(x)","over":[[1,1.7976931348623157e+308],[5e-324,1.7976931348623157e+308],[5e-324,1],[5e-324,10],[10,100000],[0.1,3.5],[0.1,0.1],[1.7,5.646546544444444e+29],[3445.000003400303,66666666.6666666]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_sin_test — 46 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"sin(x)","over":[[0,0],[0,0],[1.5707963267948966,1.5707963267948966],[1.5707963267948968,1.5707963267948968],[1.5707963267948966,1.5707963267948968],[0,1.5707963267948966],[0,1.5707963267948966],[0,1.5707963267948968],[0,1.5707963267948968],[3.141592653589793,3.141592653589793],[3.1415926535897936,3.1415 … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_cos_test — 46 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"cos(x)","over":[[0,0],[0,0],[1.5707963267948966,1.5707963267948966],[1.5707963267948968,1.5707963267948968],[1.5707963267948966,1.5707963267948968],[0,1.5707963267948966],[0,1.5707963267948966],[0,1.5707963267948968],[0,1.5707963267948968],[3.141592653589793,3.141592653589793],[3.1415926535897936,3.1415 … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_tan_test — 27 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"tan(x)","over":[[0,0],[0,0],[1.5707963267948966,1.5707963267948966],[1.5707963267948968,1.5707963267948968],[1.5707963267948966,1.5707963267948968],[3.141592653589793,3.141592653589793],[3.1415926535897936,3.1415926535897936],[0,1.5707963267948966],[0,1.5707963267948966],[0,1.5707963267948968],[0,1.5707 … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_asin_test — 8 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"asin(x)","over":[[-1,1],[-1,-1],[1,1],[0,0],[0,0],[-0.1,0.1],[-0.33,0.9999999999999999],[-0.9999999999999999,0.9999999999999999]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_acos_test — 8 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"acos(x)","over":[[-1,1],[-1,-1],[1,1],[0,0],[0,0],[-0.1,0.1],[-0.33,0.9999999999999999],[-0.9999999999999999,0.9999999999999999]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_atan_test — 4 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"atan(x)","over":[[0,0],[0,0],[1,43534534.67567],[-546675434554.668,-565.8889722]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_atan2_test — 16 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 4 fn calls (the first: {"call":"fn","expr":"atan2(0, x)","over":[[-2,-0.1],[0.1,1],[-2,-0.1],[0.1,1],[-2,-0.1],[0.1,1],[-2,-0.1],[0.1,1]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_sinh_test — 5 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"sinh(x)","over":[[0,0],[0,0],[1,300.5632345],[-546675434554.668,-565.8889722],[-1.1,2.3]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_cosh_test — 5 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"cosh(x)","over":[[0,0],[0,0],[1,300.5632345],[-546675434554.668,-565.8889722],[-1.1,2.3]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_tanh_test — 5 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"tanh(x)","over":[[0,0],[0,0],[1,300.5632345],[-546675434554.668,-565.8889722],[-1.1,2.3]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_asinh_test — 5 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"asinh(x)","over":[[0,0],[0,0],[1,300.5632345],[-546675434554.668,-565.8889722],[-1.1,2.3]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_acosh_test — 4 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"acosh(x)","over":[[1,1],[1,300.5632345],[1.1,2.3],[35434.45345435,777747747.5642]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_atanh_test — 4 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"atanh(x)","over":[[0,0],[0,0],[0.3242345,0.9999999999999999],[-0.999454934,0.1]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_sign_test — 9 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"sign(x)","over":[[1,2],[-1,2],[-1,0],[0,2],[0,2],[-5,-2],[0,0],[0,0],[0,0]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_ceil_test — 9 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"ceil(x)","over":[[1.1,2],[-1.1,2],[-1.1,0],[-1.1,0],[-1.1,-0.4],[-1.9,2.2],[-1,2.2],[0,2.2],[0,2.2]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_floor_test — 9 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"floor(x)","over":[[1.1,2],[-1.1,2],[-1.1,0],[-1.1,0],[-1.1,-0.4],[-1.9,2.2],[-1,2.2],[0,2.2],[0,2.2]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_round_ties_to_away_test — 14 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"round(x)","over":[[1.1,2.1],[-1.1,2],[-1.1,0],[-1.1,0],[-1.1,-0.4],[-1.9,2.2],[-1,2.2],[0.5,2.1],[-2.5,2],[-1.1,-0.5],[-1.9,2.5],[-1.5,2.5],[0,2.5],[0,2.5]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/54]⎯
+
+ FAIL  interval-itf1788.test.ts > criterion 3 (port): the IEEE 1788 suite (libieeep1788_elem.rs, inari 9e519ce47c) against our interval forms > criterion 3: minimal_abs_test — 8 cases: our bound is no estimate, holds the tight enclosure, is at most 1e-12 × max(1, |end|) wider, and holds our point form at both ends
+AssertionError: deep-show run accepts a scenario of 2 fn calls (the first: {"call":"fn","expr":"abs(x)","over":[[1.1,2.1],[-1.1,2],[-1.1,0],[-1.1,0],[-1.1,-0.4],[-1.9,0.2],[0,0.2],[0,0.2]]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ interval-itf1788.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/54]⎯
+
+ FAIL  rate-functions-manim.test.ts > criterion 9 (formula): manim-ce a6d5cc02b4 rate_functions.py against our eases > criterion 9: rush_in(10) equals rush_into = 2·smooth(x ÷ 2) within 1e-12 at 1,001 points
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"ease(rush_in, x)","at":[0,0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.009,0.01,0.011,0.012,0.013,0.014,0.015,0.016,0.017,0.018,0.019,0.02,0.021,0.022,0.023,0.024,0.025,0.026,0.027,0.028,0.029,0.03,0.031,0.032,0.033,0.034,0.035,0.036,0.037,0.038,0.039,0.04,0.041,0.042,0.043,0.044,0.045,0.046,0.047, … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ easeAt rate-functions-manim.test.ts:53:22
+ ❯ formulaFailures rate-functions-manim.test.ts:58:15
+ ❯ rate-functions-manim.test.ts:64:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/54]⎯
+
+ FAIL  rate-functions-manim.test.ts > criterion 9 (formula): manim-ce a6d5cc02b4 rate_functions.py against our eases > criterion 9: sigmoid(10), rush_out and double_sigmoid equal manim's smooth, rush_from and double_smooth within 1e-12 at 1,001 points
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"ease(sigmoid, x)","at":[0,0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.009,0.01,0.011,0.012,0.013,0.014,0.015,0.016,0.017,0.018,0.019,0.02,0.021,0.022,0.023,0.024,0.025,0.026,0.027,0.028,0.029,0.03,0.031,0.032,0.033,0.034,0.035,0.036,0.037,0.038,0.039,0.04,0.041,0.042,0.043,0.044,0.045,0.046,0.047, … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ easeAt rate-functions-manim.test.ts:53:22
+ ❯ formulaFailures rate-functions-manim.test.ts:58:15
+ ❯ rate-functions-manim.test.ts:68:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/54]⎯
+
+ FAIL  rate-functions-manim.test.ts > criterion 9 (formula): manim-ce a6d5cc02b4 rate_functions.py against our eases > criterion 9: running_start(−0.5) equals manim's six-degree Bernstein curve within 1e-12 at 1,001 points and dips to −0.1848 ± 1e-4 near x = 0.29; its interval form over [0, 1] reaches down to that dip and no further than 1e-4 past it
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"ease(running_start, x)","at":[0,0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.009,0.01,0.011,0.012,0.013,0.014,0.015,0.016,0.017,0.018,0.019,0.02,0.021,0.022,0.023,0.024,0.025,0.026,0.027,0.028,0.029,0.03,0.031,0.032,0.033,0.034,0.035,0.036,0.037,0.038,0.039,0.04,0.041,0.042,0.043,0.044,0.045,0.046, … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ easeAt rate-functions-manim.test.ts:53:22
+ ❯ formulaFailures rate-functions-manim.test.ts:58:15
+ ❯ rate-functions-manim.test.ts:72:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/54]⎯
+
+ FAIL  rate-functions-manim.test.ts > criterion 9 (formula): manim-ce a6d5cc02b4 rate_functions.py against our eases > criterion 9: exp_decay(0.1) equals (1 − e^(−x/0.1)) ÷ (1 − e^(−10)) within 1e-12 at 1,001 points, and reads 0.6321 ± 1e-4 at 0.1, as manim's exponential_decay(0.1) does
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"ease(exp_decay, x)","at":[0,0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.009,0.01,0.011,0.012,0.013,0.014,0.015,0.016,0.017,0.018,0.019,0.02,0.021,0.022,0.023,0.024,0.025,0.026,0.027,0.028,0.029,0.03,0.031,0.032,0.033,0.034,0.035,0.036,0.037,0.038,0.039,0.04,0.041,0.042,0.043,0.044,0.045,0.046,0.04 … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ easeAt rate-functions-manim.test.ts:53:22
+ ❯ formulaFailures rate-functions-manim.test.ts:58:15
+ ❯ rate-functions-manim.test.ts:92:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[43/54]⎯
+
+ FAIL  rate-functions-manim.test.ts > criterion 9 (formula): the pulse shapes are manim's there_and_back, there_and_back_with_pause and wiggle > criterion 9: a wiggle pulse of 0.2 on a scale of 1 over 1 s reads 1 + 0.2 × manim's wiggle within 1e-12 at 1,001 times, and exactly 1 at both ends
+AssertionError: the wiggle pulse: 998 failures:
+  at 0.001 s the scale reads 1.000000342055991, manim's shape gives 1.0000001710313715
+  at 0.002 s the scale reads 1.0000013817442561, manim's shape gives 1.0000006909266808
+  at 0.003 s the scale reads 1.000003139576515, manim's shape gives 1.0000015700671763
+  at 0.004 s the scale reads 1.0000056363741217, manim's shape gives 1.0000028190773556
+  at 0.005 s the scale reads 1.000008893269547, manim's shape gives 1.0000044488300026
+  at 0.006 s the scale reads 1.0000129317077462, manim's shape gives 1.0000064704513059
+  at 0.007 s the scale reads 1.0000177734474036, manim's shape gives 1.0000088953260633
+  at 0.008 s the scale reads 1.0000234405620505, manim's shape gives 1.0000117351029696
+  at 0.009 s the scale reads 1.0000299554410486, manim's shape gives 1.00001500169999
+  at 0.01 s the scale reads 1.0000373407904315, manim's shape gives 1.0000187073098183
+  at 0.011 s the scale reads 1.0000456196336007, manim's shape gives 1.0000228644054228
+  at 0.012 s the scale reads 1.0000548153118638, manim's shape gives 1.0000274857456768
+  at 0.013 s the scale reads 1.0000649514848117, manim's shape gives 1.0000325843810773
+  at 0.014 s the scale reads 1.0000760521305265, manim's shape gives 1.0000381736595516
+  at 0.015 s the scale reads 1.000088141545611, manim's shape gives 1.0000442672323497
+  at 0.016 s the scale reads 1.0001012443450328, manim's shape gives 1.0000508790600264
+  at 0.017 s the scale reads 1.0001153854617746, manim's shape gives 1.0000580234185112
+  at 0.018 s the scale reads 1.0001305901462831, manim's shape gives 1.0000657149052654
+  at 0.019 s the scale reads 1.0001468839657073, manim's shape gives 1.0000739684455298
+  at 0.02 s the scale reads 1.0001642928029149, manim's shape gives 1.0000827992986583
+  at 0.021 s the scale reads 1.0001828428552832, manim's shape gives 1.0000922230645426
+  at 0.022 s the scale reads 1.0002025606332505, manim's shape gives 1.0001022556901233
+  at 0.023 s the scale reads 1.000223472958618, manim's shape gives 1.0001129134759907
+  at 0.024 s the scale reads 1.0002456069625973, manim's shape gives 1.0001242130830723
+  at 0.025 s the scale reads 1.00026899008359, manim's shape gives 1.0001361715394088
+  at 0.026 s the scale reads 1.000293650064685, manim's shape gives 1.0001488062470176
+  at 0.027 s the scale reads 1.000319614950874, manim's shape gives 1.0001621349888423
+  at 0.028 s the scale reads 1.0003469130859615, manim's shape gives 1.0001761759357897
+  at 0.029 s the scale reads 1.0003755731091677, manim's shape gives 1.00019094765385
+  at 0.03 s the scale reads 1.000405623951409, manim's shape gives 1.0002064691113053
+  at 0.031 s the scale reads 1.0004370948312429, manim's shape gives 1.0002227596860185
+  at 0.032 s the scale reads 1.00047001525047, manim's shape gives 1.0002398391728073
+  at 0.033 s the scale reads 1.0005044149893767, manim's shape gives 1.0002577277908995
+  at 0.034 s the scale reads 1.000540324101607, manim's shape gives 1.000276446191468
+  at 0.035 s the scale reads 1.0005777729086536, manim's shape gives 1.000296015465246
+  at 0.036 s the scale reads 1.0006167919939495, manim's shape gives 1.0003164571502199
+  at 0.037 s the scale reads 1.0006574121965546, manim's shape gives 1.0003377932393973
+  at 0.038 s the scale reads 1.0006996646044148, manim's shape gives 1.0003600461886502
+  at 0.039 s the scale reads 1.0007435805471874, manim's shape gives 1.0003832389246299
+  at 0.04 s the scale reads 1.0007891915886147, manim's shape gives 1.0004073948527532: expected [ …(998) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "at 0.001 s the scale reads 1.000000342055991, manim's shape gives 1.0000001710313715",
++   "at 0.002 s the scale reads 1.0000013817442561, manim's shape gives 1.0000006909266808",
++   "at 0.003 s the scale reads 1.000003139576515, manim's shape gives 1.0000015700671763",
++   "at 0.004 s the scale reads 1.0000056363741217, manim's shape gives 1.0000028190773556",
++   "at 0.005 s the scale reads 1.000008893269547, manim's shape gives 1.0000044488300026",
++   "at 0.006 s the scale reads 1.0000129317077462, manim's shape gives 1.0000064704513059",
++   "at 0.007 s the scale reads 1.0000177734474036, manim's shape gives 1.0000088953260633",
++   "at 0.008 s the scale reads 1.0000234405620505, manim's shape gives 1.0000117351029696",
++   "at 0.009 s the scale reads 1.0000299554410486, manim's shape gives 1.00001500169999",
++   "at 0.01 s the scale reads 1.0000373407904315, manim's shape gives 1.0000187073098183",
++   "at 0.011 s the scale reads 1.0000456196336007, manim's shape gives 1.0000228644054228",
++   "at 0.012 s the scale reads 1.0000548153118638, manim's shape gives 1.0000274857456768",
++   "at 0.013 s the scale reads 1.0000649514848117, manim's shape gives 1.0000325843810773",
++   "at 0.014 s the scale reads 1.0000760521305265, manim's shape gives 1.0000381736595516",
++   "at 0.015 s the scale reads 1.000088141545611, manim's shape gives 1.0000442672323497",
++   "at 0.016 s the scale reads 1.0001012443450328, manim's shape gives 1.0000508790600264",
++   "at 0.017 s the scale reads 1.0001153854617746, manim's shape gives 1.0000580234185112",
++   "at 0.018 s the scale reads 1.0001305901462831, manim's shape gives 1.0000657149052654",
++   "at 0.019 s the scale reads 1.0001468839657073, manim's shape gives 1.0000739684455298",
++   "at 0.02 s the scale reads 1.0001642928029149, manim's shape gives 1.0000827992986583",
++   "at 0.021 s the scale reads 1.0001828428552832, manim's shape gives 1.0000922230645426",
++   "at 0.022 s the scale reads 1.0002025606332505, manim's shape gives 1.0001022556901233",
++   "at 0.023 s the scale reads 1.000223472958618, manim's shape gives 1.0001129134759907",
++   "at 0.024 s the scale reads 1.0002456069625973, manim's shape gives 1.0001242130830723",
++   "at 0.025 s the scale reads 1.00026899008359, manim's shape gives 1.0001361715394088",
++   "at 0.026 s the scale reads 1.000293650064685, manim's shape gives 1.0001488062470176",
++   "at 0.027 s the scale reads 1.000319614950874, manim's shape gives 1.0001621349888423",
++   "at 0.028 s the scale reads 1.0003469130859615, manim's shape gives 1.0001761759357897",
++   "at 0.029 s the scale reads 1.0003755731091677, manim's shape gives 1.00019094765385",
++   "at 0.03 s the scale reads 1.000405623951409, manim's shape gives 1.0002064691113053",
++   "at 0.031 s the scale reads 1.0004370948312429, manim's shape gives 1.0002227596860185",
++   "at 0.032 s the scale reads 1.00047001525047, manim's shape gives 1.0002398391728073",
++   "at 0.033 s the scale reads 1.0005044149893767, manim's shape gives 1.0002577277908995",
++   "at 0.034 s the scale reads 1.000540324101607, manim's shape gives 1.000276446191468",
++   "at 0.035 s the scale reads 1.0005777729086536, manim's shape gives 1.000296015465246",
++   "at 0.036 s the scale reads 1.0006167919939495, manim's shape gives 1.0003164571502199",
++   "at 0.037 s the scale reads 1.0006574121965546, manim's shape gives 1.0003377932393973",
++   "at 0.038 s the scale reads 1.0006996646044148, manim's shape gives 1.0003600461886502",
++   "at 0.039 s the scale reads 1.0007435805471874, manim's shape gives 1.0003832389246299",
++   "at 0.04 s the scale reads 1.0007891915886147, manim's shape gives 1.0004073948527532",
++   "at 0.041 s the scale reads 1.000836529518431, manim's shape gives 1.0004325378652552",
++   "at 0.042 s the scale reads 1.0008856263437913, manim's shape gives 1.0004586923493084",
++   "at 0.043 s the scale reads 1.0009365142802042, manim's shape gives 1.0004858831952048",
++   "at 0.044 s the scale reads 1.000989225741954, manim's shape gives 1.0005141358045986",
++   "at 0.045 s the scale reads 1.0010437933319964, manim's shape gives 1.0005434760988046",
++   "at 0.046 s the scale reads 1.0011002498313155, manim's shape gives 1.0005739305271524",
++   "at 0.047 s the scale reads 1.0011586281877185, manim's shape gives 1.0006055260753906",
++   "at 0.048 s the scale reads 1.001218961504061, manim's shape gives 1.0006382902741375",
++   "at 0.049 s the scale reads 1.0012812830258775, manim's shape gives 1.0006722512073754",
++   "at 0.05 s the scale reads 1.001345626128408, manim's shape gives 1.0007074375209843",
++   "at 0.051 s the scale reads 1.0014120243029967, manim's shape gives 1.0007438784313105",
++   "at 0.052 s the scale reads 1.001480511142852, manim's shape gives 1.0007816037337647",
++   "at 0.053 s the scale reads 1.0015511203281444, manim's shape gives 1.0008206438114458",
++   "at 0.054 s the scale reads 1.0016238856104283, manim's shape gives 1.0008610296437868",
++   "at 0.055 s the scale reads 1.001698840796368, manim's shape gives 1.000902792815213",
++   "at 0.056 s the scale reads 1.0017760197307513, manim's shape gives 1.000945965523812",
++   "at 0.057 s the scale reads 1.0018554562787687, manim's shape gives 1.0009905805900052",
++   "at 0.058 s the scale reads 1.0019371843075449, manim's shape gives 1.0010366714652184",
++   "at 0.059 s the scale reads 1.0020212376668989, manim's shape gives 1.0010842722405418",
++   "at 0.06 s the scale reads 1.0021076501693151, manim's shape gives 1.0011334176553743",
++   "at 0.061 s the scale reads 1.0021964555691103, manim's shape gives 1.001184143106044",
++   "at 0.062 s the scale reads 1.002287687540769, manim's shape gives 1.0012364846543982",
++   "at 0.063 s the scale reads 1.002381379656436, manim's shape gives 1.0012904790363544",
++   "at 0.064 s the scale reads 1.002477565362544, manim's shape gives 1.001346163670403",
++   "at 0.065 s the scale reads 1.0025762779555507, manim's shape gives 1.0014035766660563",
++   "at 0.066 s the scale reads 1.002677550556778, manim's shape gives 1.0014627568322296",
++   "at 0.067 s the scale reads 1.0027814160863213, manim's shape gives 1.00152374368555",
++   "at 0.068 s the scale reads 1.002887907236017, manim's shape gives 1.0015865774585808",
++   "at 0.069 s the scale reads 1.002997056441445, manim's shape gives 1.0016512991079491",
++   "at 0.07 s the scale reads 1.0031088958529482, manim's shape gives 1.0017179503223712",
++   "at 0.071 s the scale reads 1.0032234573056484, manim's shape gives 1.0017865735305576",
++   "at 0.072 s the scale reads 1.0033407722884395, manim's shape gives 1.0018572119089928",
++   "at 0.073 s the scale reads 1.0034608719119373, manim's shape gives 1.0019299093895735",
++   "at 0.074 s the scale reads 1.0035837868753705, manim's shape gives 1.0020047106670926",
++   "at 0.075 s the scale reads 1.0037095474323876, manim's shape gives 1.0020816612065588",
++   "at 0.076 s the scale reads 1.0038381833557668, manim's shape gives 1.0021608072503354",
++   "at 0.077 s the scale reads 1.0039697239010072, manim's shape gives 1.0022421958250844",
++   "at 0.078 s the scale reads 1.0041041977687826, manim's shape gives 1.0023258747485035",
++   "at 0.079 s the scale reads 1.0042416330662414, manim's shape gives 1.0024118926358379",
++   "at 0.08 s the scale reads 1.0043820572671354, manim's shape gives 1.0025002989061524",
++   "at 0.081 s the scale reads 1.0045254971707576, manim's shape gives 1.0025911437883486",
++   "at 0.082 s the scale reads 1.0046719788596752, manim's shape gives 1.0026844783269078",
++   "at 0.083 s the scale reads 1.004821527656239, manim's shape gives 1.0027803543873435",
++   "at 0.084 s the scale reads 1.0049741680778583, manim's shape gives 1.0028788246613463",
++   "at 0.085 s the scale reads 1.0051299237910178, manim's shape gives 1.0029799426716004",
++   "at 0.086 s the scale reads 1.0052888175640324, manim's shape gives 1.0030837627762548",
++   "at 0.087 s the scale reads 1.0054508712185186, manim's shape gives 1.0031903401730256",
++   "at 0.088 s the scale reads 1.0056161055795731, manim's shape gives 1.0032997309029132",
++   "at 0.089 s the scale reads 1.005784540424647, manim's shape gives 1.0034119918535114",
++   "at 0.09 s the scale reads 1.0059561944311033, manim's shape gives 1.0035271807618835",
++   "at 0.091 s the scale reads 1.0061310851224476, manim's shape gives 1.003645356216989",
++   "at 0.092 s the scale reads 1.0063092288132265, manim's shape gives 1.003766577661632",
++   "at 0.093 s the scale reads 1.0064906405525809, manim's shape gives 1.0038909053939111",
++   "at 0.094 s the scale reads 1.0066753340664527, manim's shape gives 1.0040184005681438",
++   "at 0.095 s the scale reads 1.0068633216984375, manim's shape gives 1.004149125195243",
++   "at 0.096 s the scale reads 1.0070546143492778, manim's shape gives 1.0042831421425171",
++   "at 0.097 s the scale reads 1.0072492214150006, manim's shape gives 1.0044205151328682",
++   "at 0.098 s the scale reads 1.0074471507236922, manim's shape gives 1.0045613087433622",
++   "at 0.099 s the scale reads 1.0076484084709139, manim's shape gives 1.0047055884031413",
++   "at 0.1 s the scale reads 1.0078529991537652, manim's shape gives 1.0048534203906512",
++   "at 0.101 s the scale reads 1.0080609255035926, manim's shape gives 1.0050048718301539",
++   "at 0.102 s the scale reads 1.008272188417356, manim's shape gives 1.0051600106874963",
++   "at 0.103 s the scale reads 1.008486786887659, manim's shape gives 1.005318905765104",
++   "at 0.104 s the scale reads 1.008704717931457, manim's shape gives 1.0054816266961673",
++   "at 0.105 s the scale reads 1.0089259765174516, manim's shape gives 1.005648243937993",
++   "at 0.106 s the scale reads 1.0091505554921938, manim's shape gives 1.0058188287644831",
++   "at 0.107 s the scale reads 1.0093784455049069, manim's shape gives 1.005993453257711",
++   "at 0.108 s the scale reads 1.009609634931058, manim's shape gives 1.006172190298563",
++   "at 0.109 s the scale reads 1.009844109794694, manim's shape gives 1.0063551135564062",
++   "at 0.11 s the scale reads 1.0100818536895766, manim's shape gives 1.0065422974777543",
++   "at 0.111 s the scale reads 1.0103228476991382, manim's shape gives 1.0067338172738907",
++   "at 0.112 s the scale reads 1.0105670703152991, manim's shape gives 1.0069297489074167",
++   "at 0.113 s the scale reads 1.0108144973561757, manim's shape gives 1.007130169077688",
++   "at 0.114 s the scale reads 1.0110651018827235, manim's shape gives 1.007335155205102",
++   "at 0.115 s the scale reads 1.0113188541143558, manim's shape gives 1.0075447854142001",
++   "at 0.116 s the scale reads 1.0115757213435863, manim's shape gives 1.0077591385155487",
++   "at 0.117 s the scale reads 1.011835667849744, manim's shape gives 1.007978293986358",
++   "at 0.118 s the scale reads 1.0120986548118172, manim's shape gives 1.0082023319498068",
++   "at 0.119 s the scale reads 1.0123646402204822, manim's shape gives 1.008431333153028",
++   "at 0.12 s the scale reads 1.0126335787893845, manim's shape gives 1.0086653789437232",
++   "at 0.121 s the scale reads 1.012905421865731, manim's shape gives 1.008904551245366",
++   "at 0.122 s the scale reads 1.0131801173402737, manim's shape gives 1.0091489325309542",
++   "at 0.123 s the scale reads 1.0134576095567553, manim's shape gives 1.0093986057952749",
++   "at 0.124 s the scale reads 1.0137378392208978, manim's shape gives 1.0096536545256445",
++   "at 0.125 s the scale reads 1.0140207433090216, manim's shape gives 1.009914162671085",
++   "at 0.126 s the scale reads 1.0143062549763846, manim's shape gives 1.0101802146099004",
++   "at 0.127 s the scale reads 1.0145943034653353, manim's shape gives 1.0104518951156127",
++   "at 0.128 s the scale reads 1.0148848140133824, manim's shape gives 1.0107292893212272",
++   "at 0.129 s the scale reads 1.0151777077612862, manim's shape gives 1.011012482681783",
++   "at 0.13 s the scale reads 1.0154729016612831, manim's shape gives 1.0113015609351617",
++   "at 0.131 s the scale reads 1.0157703083855585, manim's shape gives 1.0115966100611116",
++   "at 0.132 s the scale reads 1.0160698362350928, manim's shape gives 1.0118977162384601",
++   "at 0.133 s the scale reads 1.016371389049007, manim's shape gives 1.0122049658004764",
++   "at 0.134 s the scale reads 1.0166748661145408, manim's shape gives 1.0125184451883562",
++   "at 0.135 s the scale reads 1.016980162077805, manim's shape gives 1.012838240902796",
++   "at 0.136 s the scale reads 1.0172871668554495, manim's shape gives 1.0131644394536286",
++   "at 0.137 s the scale reads 1.0175957655474026, manim's shape gives 1.01349712730749",
++   "at 0.138 s the scale reads 1.0179058383508361, manim's shape gives 1.0138363908334955",
++   "at 0.139 s the scale reads 1.0182172604755173, manim's shape gives 1.0141823162468966",
++   "at 0.14 s the scale reads 1.018529902060721, manim's shape gives 1.0145349895506965",
++   "at 0.141 s the scale reads 1.0188436280938733, manim's shape gives 1.0148944964752078",
++   "at 0.142 s the scale reads 1.0191582983311083, manim's shape gives 1.0152609224155273",
++   "at 0.143 s the scale reads 1.019473767219925, manim's shape gives 1.015634352366919",
++   "at 0.144 s the scale reads 1.0197898838241366, manim's shape gives 1.0160148708580854",
++   "at 0.145 s the scale reads 1.0201064917513087, manim's shape gives 1.0164025618823216",
++   "at 0.146 s the scale reads 1.0204234290828929, manim's shape gives 1.0167975088265404",
++   "at 0.147 s the scale reads 1.020740528307262, manim's shape gives 1.0171997943981648",
++   "at 0.148 s the scale reads 1.0210576162558649, manim's shape gives 1.0176095005498884",
++   "at 0.149 s the scale reads 1.0213745140427166, manim's shape gives 1.0180267084023003",
++   "at 0.15 s the scale reads 1.021691037007453, manim's shape gives 1.018451498164384",
++   "at 0.151 s the scale reads 1.0220069946621757, manim's shape gives 1.0188839490518986",
++   "at 0.152 s the scale reads 1.0223221906423248, manim's shape gives 1.0193241392036534",
++   "at 0.153 s the scale reads 1.0226364226618163, manim's shape gives 1.0197721455956927",
++   "at 0.154 s the scale reads 1.0229494824726877, manim's shape gives 1.0202280439534155",
++   "at 0.155 s the scale reads 1.0232611558294977, manim's shape gives 1.0206919086616515",
++   "at 0.156 s the scale reads 1.0235712224587303, manim's shape gives 1.0211638126727267",
++   "at 0.157 s the scale reads 1.0238794560334572, manim's shape gives 1.0216438274125517",
++   "at 0.158 s the scale reads 1.0241856241535119, manim's shape gives 1.0221320226847754",
++   "at 0.159 s the scale reads 1.0244894883314355, manim's shape gives 1.022628466573046",
++   "at 0.16 s the scale reads 1.024790803984454, manim's shape gives 1.0231332253414331",
++   "at 0.161 s the scale reads 1.0250893204327451, manim's shape gives 1.0236463633330668",
++   "at 0.162 s the scale reads 1.0253847809042598, manim's shape gives 1.0241679428670523",
++   "at 0.163 s the scale reads 1.0256769225463584, manim's shape gives 1.024698024133733",
++   "at 0.164 s the scale reads 1.0259654764445232, manim's shape gives 1.025236665088371",
++   "at 0.165 s the scale reads 1.0262501676484084, manim's shape gives 1.0257839213433286",
++   "at 0.166 s the scale reads 1.026530715205485, manim's shape gives 1.0263398460588329",
++   "at 0.167 s the scale reads 1.026806832202539, manim's shape gives 1.02690448983242",
++   "at 0.168 s the scale reads 1.027078225815274, manim's shape gives 1.0274779005871546",
++   "at 0.169 s the scale reads 1.0273445973662703, manim's shape gives 1.0280601234587312",
++   "at 0.17 s the scale reads 1.0276056423915427, manim's shape gives 1.028651200681569",
++   "at 0.171 s the scale reads 1.0278610507159398, manim's shape gives 1.0292511714740196",
++   "at 0.172 s the scale reads 1.0281105065376144, manim's shape gives 1.029860071922812",
++   "at 0.173 s the scale reads 1.0283536885217957, manim's shape gives 1.0304779348668671",
++   "at 0.174 s the scale reads 1.0285902699040765, manim's shape gives 1.0311047897806205",
++   "at 0.175 s the scale reads 1.0288199186034315, manim's shape gives 1.0317406626569998",
++   "at 0.176 s the scale reads 1.0290422973451587, manim's shape gives 1.032385575890208",
++   "at 0.177 s the scale reads 1.02925706379394, manim's shape gives 1.0330395481584727",
++   "at 0.178 s the scale reads 1.029463870697193, manim's shape gives 1.0337025943069242",
++   "at 0.179 s the scale reads 1.029662366038883, manim's shape gives 1.0343747252307793",
++   "at 0.18 s the scale reads 1.0298521932039415, manim's shape gives 1.0350559477590036",
++   "at 0.181 s the scale reads 1.0300329911534318, manim's shape gives 1.0357462645386404",
++   "at 0.182 s the scale reads 1.0302043946105803, manim's shape gives 1.036445673919996",
++   "at 0.183 s the scale reads 1.0303660342577778, manim's shape gives 1.0371541698428772",
++   "at 0.184 s the scale reads 1.0305175369446378, manim's shape gives 1.0378717417240835",
++   "at 0.185 s the scale reads 1.0306585259071777, manim's shape gives 1.0385983743463607",
++   "at 0.186 s the scale reads 1.0307886209981747, manim's shape gives 1.0393340477490296",
++   "at 0.187 s the scale reads 1.030907438928721, manim's shape gives 1.0400787371205047",
++   "at 0.188 s the scale reads 1.0310145935209851, manim's shape gives 1.0408324126929267",
++   "at 0.189 s the scale reads 1.0311096959721642, manim's shape gives 1.041595039639132",
++   "at 0.19 s the scale reads 1.0311923551295858, manim's shape gives 1.04236657797219",
++   "at 0.191 s the scale reads 1.0312621777768982, manim's shape gives 1.0431469824477386",
++   "at 0.192 s the scale reads 1.0313187689312568, manim's shape gives 1.0439362024693546",
++   "at 0.193 s the scale reads 1.031361732151397, manim's shape gives 1.044734181997194",
++   "at 0.194 s the scale reads 1.0313906698564463, manim's shape gives 1.0455408594601419",
++   "at 0.195 s the scale reads 1.0314051836553149, manim's shape gives 1.046356167671711",
++   "at 0.196 s the scale reads 1.031404874686462, manim's shape gives 1.0471800337499302",
++   "at 0.197 s the scale reads 1.031389343967819, manim's shape gives 1.048012379041461",
++   "at 0.198 s the scale reads 1.0313581927566142, manim's shape gives 1.048853119050183",
++   "at 0.199 s the scale reads 1.0313110229188167, manim's shape gives 1.0497021633704846",
++   "at 0.2 s the scale reads 1.0312474373078897, manim's shape gives 1.0505594156254972",
++   "at 0.201 s the scale reads 1.0311670401525113, manim's shape gives 1.0514247734105016",
++   "at 0.202 s the scale reads 1.031069437452891, manim's shape gives 1.0522981282417416",
++   "at 0.203 s the scale reads 1.0309542373852831, manim's shape gives 1.0531793655108646",
++   "at 0.204 s the scale reads 1.030821050714264, manim's shape gives 1.0540683644452113",
++   "at 0.205 s the scale reads 1.0306694912123149, manim's shape gives 1.0549649980741722",
++   "at 0.206 s the scale reads 1.0304991760862197, manim's shape gives 1.055869133201812",
++   "at 0.207 s the scale reads 1.03030972640976, manim's shape gives 1.0567806303859686",
++   "at 0.208 s the scale reads 1.030100767562158, manim's shape gives 1.0576993439240157",
++   "at 0.209 s the scale reads 1.0298719296716956, manim's shape gives 1.0586251218454727",
++   "at 0.21 s the scale reads 1.0296228480639038, manim's shape gives 1.059557805911639",
++   "at 0.211 s the scale reads 1.029353163713697, manim's shape gives 1.060497231622411",
++   "at 0.212 s the scale reads 1.0290625237007966, manim's shape gives 1.0614432282304378",
++   "at 0.213 s the scale reads 1.028750581667765, manim's shape gives 1.062395618762756",
++   "at 0.214 s the scale reads 1.0284169982799491, manim's shape gives 1.0633542200500292",
++   "at 0.215 s the scale reads 1.028061441686613, manim's shape gives 1.064318842763509",
++   "at 0.216 s the scale reads 1.0276835879825081, manim's shape gives 1.0652892914598149",
++   "at 0.217 s the scale reads 1.02728312166913, manim's shape gives 1.0662653646336226",
++   "at 0.218 s the scale reads 1.0268597361148704, manim's shape gives 1.0672468547783287",
++   "at 0.219 s the scale reads 1.0264131340132776, manim's shape gives 1.0682335484547465",
++   "at 0.22 s the scale reads 1.0259430278386124, manim's shape gives 1.0692252263678719",
++   "at 0.221 s the scale reads 1.025449140297881, manim's shape gives 1.0702216634517405",
++   "at 0.222 s the scale reads 1.0249312047785137, manim's shape gives 1.0712226289623799",
++   "at 0.223 s the scale reads 1.0243889657908531, manim's shape gives 1.0722278865788426",
++   "at 0.224 s the scale reads 1.0238221794046098, manim's shape gives 1.0732371945122885",
++   "at 0.225 s the scale reads 1.0232306136784366, manim's shape gives 1.074250305623068",
++   "at 0.226 s the scale reads 1.0226140490817808, manim's shape gives 1.0752669675457316",
++   "at 0.227 s the scale reads 1.0219722789081667, manim's shape gives 1.0762869228218879",
++   "at 0.228 s the scale reads 1.0213051096790668, manim's shape gives 1.0773099090407907",
++   "at 0.229 s the scale reads 1.0206123615375355, manim's shape gives 1.0783356589875432",
++   "at 0.23 s the scale reads 1.0198938686307715, manim's shape gives 1.0793639007987637",
++   "at 0.231 s the scale reads 1.0191494794808074, manim's shape gives 1.0803943581255566",
++   "at 0.232 s the scale reads 1.0183790573425209, manim's shape gives 1.081426750303604",
++   "at 0.233 s the scale reads 1.0175824805481901, manim's shape gives 1.0824607925301781",
++   "at 0.234 s the scale reads 1.0167596428378323, manim's shape gives 1.0834961960478562",
++   "at 0.235 s the scale reads 1.0159104536745844, manim's shape gives 1.0845326683347025",
++   "at 0.236 s the scale reads 1.015034838544413, manim's shape gives 1.0855699133006622",
++   "at 0.237 s the scale reads 1.014132739239461, manim's shape gives 1.0866076314898996",
++   "at 0.238 s the scale reads 1.0132041141243766, manim's shape gives 1.0876455202887918",
++   "at 0.239 s the scale reads 1.0122489383849926, manim's shape gives 1.0886832741392785",
++   "at 0.24 s the scale reads 1.0112672042587627, manim's shape gives 1.0897205847572475",
++   "at 0.241 s the scale reads 1.0102589212463964, manim's shape gives 1.0907571413556303",
++   "at 0.242 s the scale reads 1.0092241163041678, manim's shape gives 1.0917926308718595",
++   "at 0.243 s the scale reads 1.0081628340164195, manim's shape gives 1.0928267381993322",
++   "at 0.244 s the scale reads 1.0070751367478175, manim's shape gives 1.093859146422515",
++   "at 0.245 s the scale reads 1.0059611047749588, manim's shape gives 1.0948895370553087",
++   "at 0.246 s the scale reads 1.0048208363969775, manim's shape gives 1.0959175902822862",
++   "at 0.247 s the scale reads 1.0036544480248386, manim's shape gives 1.0969429852024104",
++   "at 0.248 s the scale reads 1.0024620742490578, manim's shape gives 1.0979654000748247",
++   "at 0.249 s the scale reads 1.0012438678856297, manim's shape gives 1.098984512566311",
++   "at 0.25 s the scale reads 1, manim's shape gives 1.1",
++   "at 0.251 s the scale reads 0.9987306599089592, manim's shape gives 1.1010115396049167",
++   "at 0.252 s the scale reads 0.9974360551603901, manim's shape gives 1.1020188087659386",
++   "at 0.253 s the scale reads 0.9961164114908518, manim's shape gives 1.1030214852737514",
++   "at 0.254 s the scale reads 0.9947719727610237, manim's shape gives 1.1040192475743738",
++   "at 0.255 s the scale reads 0.9934030008690962, manim's shape gives 1.1050117750178376",
++   "at 0.256 s the scale reads 0.9920097756422309, manim's shape gives 1.1059987481056028",
++   "at 0.257 s the scale reads 0.9905925947062708, manim's shape gives 1.1069798487362927",
++   "at 0.258 s the scale reads 0.9891517733339247, manim's shape gives 1.107954760449344",
++   "at 0.259 s the scale reads 0.9876876442717, manim's shape gives 1.1089231686661647",
++   "at 0.26 s the scale reads 0.9862005575459019, manim's shape gives 1.1098847609284068",
++   "at 0.261 s the scale reads 0.984690880248065, manim's shape gives 1.1108392271329666",
++   "at 0.262 s the scale reads 0.9831589963002252, manim's shape gives 1.1117862597633308",
++   "at 0.263 s the scale reads 0.9816053062004844, manim's shape gives 1.1127255541169063",
++   "at 0.264 s the scale reads 0.9800302267493578, manim's shape gives 1.1136568085279723",
++   "at 0.265 s the scale reads 0.9784341907574395, manim's shape gives 1.1145797245859135",
++   "at 0.266 s the scale reads 0.9768176467349508, manim's shape gives 1.1154940073484039",
++   "at 0.267 s the scale reads 0.9751810585637791, manim's shape gives 1.1163993655492217",
++   "at 0.268 s the scale reads 0.9735249051526446, manim's shape gives 1.1172955118003978",
++   "at 0.269 s the scale reads 0.9718496800760624, manim's shape gives 1.118182162788406",
++   "at 0.27 s the scale reads 0.9701558911978004, manim's shape gives 1.119059039464132",
++   "at 0.271 s the scale reads 0.9684440602795561, manim's shape gives 1.1199258672263581",
++   "at 0.272 s the scale reads 0.9667147225756019, manim's shape gives 1.1207823760985396",
++   "at 0.273 s the scale reads 0.9649684264141714, manim's shape gives 1.1216283008986425",
++   "at 0.274 s the scale reads 0.9632057327663739, manim's shape gives 1.1224633814018512",
++   "at 0.275 s the scale reads 0.961427214803447, manim's shape gives 1.1232873624959598",
++   "at 0.276 s the scale reads 0.9596334574431679, manim's shape gives 1.124099994329285",
++   "at 0.277 s the scale reads 0.9578250568862559, manim's shape gives 1.1249010324509572",
++   "at 0.278 s the scale reads 0.9560026201436103, manim's shape gives 1.1256902379434612",
++   "at 0.279 s the scale reads 0.9541667645552308, manim's shape gives 1.1264673775473255",
++   "at 0.28 s the scale reads 0.9523181173016767, manim's shape gives 1.1272322237778658",
++   "at 0.281 s the scale reads 0.9504573149089174, manim's shape gives 1.1279845550339203",
++   "at 0.282 s the scale reads 0.94858500274743, manim's shape gives 1.1287241556985206",
++   "at 0.283 s the scale reads 0.9467018345263976, manim's shape gives 1.1294508162314718",
++   "at 0.284 s the scale reads 0.9448084717838513, manim's shape gives 1.1301643332538238",
++   "at 0.285 s the scale reads 0.9429055833735984, manim's shape gives 1.1308645096242405",
++   "at 0.286 s the scale reads 0.9409938449497627, manim's shape gives 1.131551154507286",
++   "at 0.287 s the scale reads 0.9390739384497585, manim's shape gives 1.1322240834336694",
++   "at 0.288 s the scale reads 0.9371465515764992, manim's shape gives 1.132883118352497",
++   "at 0.289 s the scale reads 0.9352123772806306, manim's shape gives 1.1335280876756102",
++   "at 0.29 s the scale reads 0.9332721132435607, manim's shape gives 1.1341588263140872",
++   "at 0.291 s the scale reads 0.9313264613620373, manim's shape gives 1.1347751757070141",
++   "at 0.292 s the scale reads 0.9293761272350061, manim's shape gives 1.135376983842639",
++   "at 0.293 s the scale reads 0.9274218196534588, manim's shape gives 1.1359641052720333",
++   "at 0.294 s the scale reads 0.9254642500939606, manim's shape gives 1.136536401115405",
++   "at 0.295 s the scale reads 0.9235041322165155, manim's shape gives 1.1370937390612164",
++   "at 0.296 s the scale reads 0.9215421813674102, manim's shape gives 1.1376359933582638",
++   "at 0.297 s the scale reads 0.9195791140876457, manim's shape gives 1.1381630448009017",
++   "at 0.298 s the scale reads 0.9176156476275399, manim's shape gives 1.138674780707587",
++   "at 0.299 s the scale reads 0.9156524994680578, manim's shape gives 1.139171094892942",
++   "at 0.3 s the scale reads 0.9136903868493951, manim's shape gives 1.1396518876335335",
++   "at 0.301 s the scale reads 0.9117300263073129, manim's shape gives 1.1401170656275743",
++   "at 0.302 s the scale reads 0.9097721332176931, manim's shape gives 1.1405665419487658",
++   "at 0.303 s the scale reads 0.9078174213497521, manim's shape gives 1.1410002359945",
++   "at 0.304 s the scale reads 0.9058666024283217, manim's shape gives 1.1414180734286428",
++   "at 0.305 s the scale reads 0.9039203857055769, manim's shape gives 1.141819986119134",
++   "at 0.306 s the scale reads 0.9019794775425575, manim's shape gives 1.142205912070633",
++   "at 0.307 s the scale reads 0.9000445810008058, manim's shape gives 1.1425757953524445",
++   "at 0.308 s the scale reads 0.8981163954444066, manim's shape gives 1.1429295860219677",
++   "at 0.309 s the scale reads 0.8961956161526933, manim's shape gives 1.1432672400439037",
++   "at 0.31 s the scale reads 0.8942829339438482, manim's shape gives 1.1435887192054603",
++   "at 0.311 s the scale reads 0.8923790348096033, manim's shape gives 1.1438939910278003",
++   "at 0.312 s the scale reads 0.8904845995612154, manim's shape gives 1.144183028673965",
++   "at 0.313 s the scale reads 0.8886003034868639, manim's shape gives 1.1444558108535183",
++   "at 0.314 s the scale reads 0.8867268160205932, manim's shape gives 1.1447123217241444",
++   "at 0.315 s the scale reads 0.8848648004228953, manim's shape gives 1.1449525507904355",
++   "at 0.316 s the scale reads 0.883014913473003, manim's shape gives 1.1451764928001",
++   "at 0.317 s the scale reads 0.8811778051729415, manim's shape gives 1.1453841476378233",
++   "at 0.318 s the scale reads 0.8793541184633595, manim's shape gives 1.145575520217003",
++   "at 0.319 s the scale reads 0.8775444889511422, manim's shape gives 1.1457506203695829",
++   "at 0.32 s the scale reads 0.8757495446487837, manim's shape gives 1.1459094627342004",
++   "at 0.321 s the scale reads 0.8739699057254784, manim's shape gives 1.146052066642861",
++   "at 0.322 s the scale reads 0.8722061842698694, manim's shape gives 1.14617845600635",
++   "at 0.323 s the scale reads 0.8704589840643729, manim's shape gives 1.1462886591985746",
++   "at 0.324 s the scale reads 0.8687289003709834, manim's shape gives 1.1463827089400447",
++   "at 0.325 s the scale reads 0.867016519728442, manim's shape gives 1.1464606421806738",
++   "at 0.326 s the scale reads 0.8653224197606397, manim's shape gives 1.1465224999820884",
++   "at 0.327 s the scale reads 0.86364716899611, manim's shape gives 1.1465683273996239",
++   "at 0.328 s the scale reads 0.8619913266984519, manim's shape gives 1.1465981733641786",
++   "at 0.329 s the scale reads 0.8603554427075114, manim's shape gives 1.1466120905640917",
++   "at 0.33 s the scale reads 0.8587400572911397, manim's shape gives 1.1466101353272038",
++   "at 0.331 s the scale reads 0.8571457010073318, manim's shape gives 1.146592367503253",
++   "at 0.332 s the scale reads 0.8555728945765435, manim's shape gives 1.1465588503467505",
++   "at 0.333 s the scale reads 0.8540221487639719, manim's shape gives 1.146509650400478",
++   "at 0.334 s the scale reads 0.8524939642715799, manim's shape gives 1.1464448373797342",
++   "at 0.335 s the scale reads 0.8509888316396357, manim's shape gives 1.1463644840574603",
++   "at 0.336 s the scale reads 0.8495072311575326, manim's shape gives 1.1462686661503594",
++   "at 0.337 s the scale reads 0.8480496327836495, manim's shape gives 1.1461574622061261",
++   "at 0.338 s the scale reads 0.846616496074007, manim's shape gives 1.146030953491886",
++   "at 0.339 s the scale reads 0.845208270119471, manim's shape gives 1.1458892238839498",
++   "at 0.34 s the scale reads 0.8438253934912501, manim's shape gives 1.14573235975897",
++   "at 0.341 s the scale reads 0.8424682941944365, manim's shape gives 1.145560449886588",
++   "at 0.342 s the scale reads 0.8411373896293283, manim's shape gives 1.1453735853236529",
++   "at 0.343 s the scale reads 0.8398330865602831, manim's shape gives 1.1451718593100826",
++   "at 0.344 s the scale reads 0.8385557810918388, manim's shape gives 1.1449553671664359",
++   "at 0.345 s the scale reads 0.8373058586518474, manim's shape gives 1.144724206193261",
++   "at 0.346 s the scale reads 0.8360836939813653, manim's shape gives 1.1444784755722701",
++   "at 0.347 s the scale reads 0.8348896511310414, manim's shape gives 1.1442182762693978",
++   "at 0.348 s the scale reads 0.8337240834637518, manim's shape gives 1.1439437109397834",
++   "at 0.349 s the scale reads 0.8325873336632268, manim's shape gives 1.14365488383472",
++   "at 0.35 s the scale reads 0.8314797337484223, manim's shape gives 1.1433519007106057",
++   "at 0.351 s the scale reads 0.830401605093388, manim's shape gives 1.143034868739924",
++   "at 0.352 s the scale reads 0.8293532584523897, manim's shape gives 1.1427038964242868",
++   "at 0.353 s the scale reads 0.8283349939900448, manim's shape gives 1.1423590935095493",
++   "at 0.354 s the scale reads 0.8273471013162381, manim's shape gives 1.1420005709030268",
++   "at 0.355 s the scale reads 0.8263898595255826, manim's shape gives 1.1416284405928163",
++   "at 0.356 s the scale reads 0.825463537241202, manim's shape gives 1.1412428155692382",
++   "at 0.357 s the scale reads 0.8245683926626096, manim's shape gives 1.1408438097483986",
++   "at 0.358 s the scale reads 0.8237046736174696, manim's shape gives 1.1404315378978773",
++   "at 0.359 s the scale reads 0.8228726176170238, manim's shape gives 1.1400061155645391",
++   "at 0.36 s the scale reads 0.8220724519149832, manim's shape gives 1.1395676590044612",
++   "at 0.361 s the scale reads 0.8213043935696762, manim's shape gives 1.1391162851149734",
++   "at 0.362 s the scale reads 0.8205686495092626, manim's shape gives 1.1386521113687942",
++   "at 0.363 s the scale reads 0.8198654165998199, manim's shape gives 1.1381752557502545",
++   "at 0.364 s the scale reads 0.8191948817161192, manim's shape gives 1.1376858366935922",
++   "at 0.365 s the scale reads 0.8185572218149095, manim's shape gives 1.1371839730232958",
++   "at 0.366 s the scale reads 0.8179526040105393, manim's shape gives 1.13666978389648",
++   "at 0.367 s the scale reads 0.817381185652747, manim's shape gives 1.1361433887472714",
++   "at 0.368 s the scale reads 0.8168431144064583, manim's shape gives 1.1356049072331746",
++   "at 0.369 s the scale reads 0.8163385283334357, manim's shape gives 1.1350544591834004",
++   "at 0.37 s the scale reads 0.8158675559756288, manim's shape gives 1.1344921645491208",
++   "at 0.371 s the scale reads 0.8154303164400828, manim's shape gives 1.1339181433556265",
++   "at 0.372 s the scale reads 0.8150269194852645, manim's shape gives 1.1333325156563543",
++   "at 0.373 s the scale reads 0.8146574656086754, manim's shape gives 1.1327354014887534",
++   "at 0.374 s the scale reads 0.8143220461356214, manim's shape gives 1.1321269208319567",
++   "at 0.375 s the scale reads 0.8140207433090216, manim's shape gives 1.1315071935662244",
++   "at 0.376 s the scale reads 0.8137536303801345, manim's shape gives 1.1308763394341255",
++   "at 0.377 s the scale reads 0.8135207717000953, manim's shape gives 1.1302344780034197",
++   "at 0.378 s the scale reads 0.8133222228121559, manim's shape gives 1.1295817286316068",
++   "at 0.379 s the scale reads 0.8131580305445274, manim's shape gives 1.1289182104321036",
++   "at 0.38 s the scale reads 0.8130282331037302, manim's shape gives 1.1282440422420146",
++   "at 0.381 s the scale reads 0.8129328601683595, manim's shape gives 1.127559342591456",
++   "at 0.382 s the scale reads 0.8128719329831826, manim's shape gives 1.126864229674398",
++   "at 0.383 s the scale reads 0.812845464453484, manim's shape gives 1.1261588213209859",
++   "at 0.384 s the scale reads 0.8128534592395847, manim's shape gives 1.1254432349713017",
++   "at 0.385 s the scale reads 0.8128959138514603, manim's shape gives 1.1247175876505302",
++   "at 0.386 s the scale reads 0.8129728167433933, manim's shape gives 1.1239819959454893",
++   "at 0.387 s the scale reads 0.813084148408593, manim's shape gives 1.1232365759824878",
++   "at 0.388 s the scale reads 0.8132298814737255, manim's shape gives 1.1224814434064723",
++   "at 0.389 s the scale reads 0.8134099807932972, manim's shape gives 1.1217167133614263",
++   "at 0.39 s the scale reads 0.8136244035438388, manim's shape gives 1.1209425004719837",
++   "at 0.391 s the scale reads 0.8138730993178447, manim's shape gives 1.1201589188262189",
++   "at 0.392 s the scale reads 0.8141560102174192, manim's shape gives 1.1193660819595772",
++   "at 0.393 s the scale reads 0.8144730709475916, manim's shape gives 1.1185641028399114",
++   "at 0.394 s the scale reads 0.814824208909259, manim's shape gives 1.1177530938535838",
++   "at 0.395 s the scale reads 0.8152093442917255, manim's shape gives 1.1169331667926021",
++   "at 0.396 s the scale reads 0.8156283901648023, manim's shape gives 1.1161044328427538",
++   "at 0.397 s the scale reads 0.8160812525704418, manim's shape gives 1.115267002572701",
++   "at 0.398 s the scale reads 0.8165678306138808, manim's shape gives 1.1144209859240073",
++   "at 0.399 s the scale reads 0.817088016554264, manim's shape gives 1.113566492202058",
++   "at 0.4 s the scale reads 0.8176416958947345, manim's shape gives 1.1127036300678437",
++   "at 0.401 s the scale reads 0.818228747471965, manim's shape gives 1.111832507530574",
++   "at 0.402 s the scale reads 0.8188490435451192, manim's shape gives 1.1109532319410913",
++   "at 0.403 s the scale reads 0.8195024498842259, manim's shape gives 1.11006590998605",
++   "at 0.404 s the scale reads 0.8201888258579554, manim's shape gives 1.1091706476828342",
++   "at 0.405 s the scale reads 0.8209080245207871, manim's shape gives 1.108267550375183",
++   "at 0.406 s the scale reads 0.8216598926995612, manim's shape gives 1.1073567227294938",
++   "at 0.407 s the scale reads 0.8224442710794068, manim's shape gives 1.1064382687317749",
++   "at 0.408 s the scale reads 0.823260994289043, manim's shape gives 1.1055122916852218",
++   "at 0.409 s the scale reads 0.8241098909854485, manim's shape gives 1.104578894208386",
++   "at 0.41 s the scale reads 0.8249907839378994, manim's shape gives 1.103638178233916",
++   "at 0.411 s the scale reads 0.8259034901113729, manim's shape gives 1.1026902450078355",
++   "at 0.412 s the scale reads 0.8268478207493204, manim's shape gives 1.101735195089346",
++   "at 0.413 s the scale reads 0.8278235814558096, manim's shape gives 1.1007731283511164",
++   "at 0.414 s the scale reads 0.8288305722770417, manim's shape gives 1.0998041439800466",
++   "at 0.415 s the scale reads 0.8298685877822451, manim's shape gives 1.0988283404784738",
++   "at 0.416 s the scale reads 0.8309374171439532, manim's shape gives 1.097845815665806",
++   "at 0.417 s the scale reads 0.8320368442176721, manim's shape gives 1.0968566666805548",
++   "at 0.418 s the scale reads 0.8331666476209446, manim's shape gives 1.0958609899827505",
++   "at 0.419 s the scale reads 0.8343266008118191, manim's shape gives 1.094858881356718",
++   "at 0.42 s the scale reads 0.8355164721667323, manim's shape gives 1.0938504359141907",
++   "at 0.421 s the scale reads 0.8367360250578129, manim's shape gives 1.0928357480977502",
++   "at 0.422 s the scale reads 0.8379850179296199, manim's shape gives 1.091814911684563",
++   "at 0.423 s the scale reads 0.8392632043753216, manim's shape gives 1.0907880197904074",
++   "at 0.424 s the scale reads 0.8405703332123301, manim's shape gives 1.0897551648739623",
++   "at 0.425 s the scale reads 0.8419061485573981, manim's shape gives 1.0887164387413506",
++   "at 0.426 s the scale reads 0.8432703899011953, manim's shape gives 1.0876719325509139",
++   "at 0.427 s the scale reads 0.8446627921823704, manim's shape gives 1.086621736818207",
++   "at 0.428 s the scale reads 0.8460830858611157, manim's shape gives 1.0855659414211938",
++   "at 0.429 s the scale reads 0.8475309969922438, manim's shape gives 1.0845046356056343",
++   "at 0.43 s the scale reads 0.8490062472977904, manim's shape gives 1.0834379079906435",
++   "at 0.431 s the scale reads 0.8505085542391554, manim's shape gives 1.0823658465744121",
++   "at 0.432 s the scale reads 0.8520376310887963, manim's shape gives 1.0812885387400761",
++   "at 0.433 s the scale reads 0.8535931870014849, manim's shape gives 1.0802060712617199",
++   "at 0.434 s the scale reads 0.8551749270851432, manim's shape gives 1.079118530310503",
++   "at 0.435 s the scale reads 0.8567825524712684, manim's shape gives 1.0780260014608998",
++   "at 0.436 s the scale reads 0.8584157603849625, manim's shape gives 1.0769285696970372",
++   "at 0.437 s the scale reads 0.8600742442145791, manim's shape gives 1.0758263194191249",
++   "at 0.438 s the scale reads 0.861757693580999, manim's shape gives 1.074719334449962",
++   "at 0.439 s the scale reads 0.8634657944065492, manim's shape gives 1.0736076980415161",
++   "at 0.44 s the scale reads 0.8651982289835775, manim's shape gives 1.0724914928815614",
++   "at 0.441 s the scale reads 0.8669546760426938, manim's shape gives 1.0713708011003673",
++   "at 0.442 s the scale reads 0.8687348108206946, manim's shape gives 1.0702457042774318",
++   "at 0.443 s the scale reads 0.8705383051281774, manim's shape gives 1.0691162834482466",
++   "at 0.444 s the scale reads 0.8723648274168624, manim's shape gives 1.0679826191110915",
++   "at 0.445 s the scale reads 0.8742140428466302, manim's shape gives 1.0668447912338452",
++   "at 0.446 s the scale reads 0.8760856133522883, manim's shape gives 1.0657028792608105",
++   "at 0.447 s the scale reads 0.8779791977100775, manim's shape gives 1.0645569621195428",
++   "at 0.448 s the scale reads 0.8798944516039309, manim's shape gives 1.0634071182276774",
++   "at 0.449 s the scale reads 0.8818310276914928, manim's shape gives 1.0622534254997504",
++   "at 0.45 s the scale reads 0.8837885756699132, manim's shape gives 1.0610959613540052",
++   "at 0.451 s the scale reads 0.8857667423414239, manim's shape gives 1.0599348027191795",
++   "at 0.452 s the scale reads 0.8877651716787096, manim's shape gives 1.0587700260412696",
++   "at 0.453 s the scale reads 0.889783504890081, manim's shape gives 1.0576017072902637",
++   "at 0.454 s the scale reads 0.8918213804844617, manim's shape gives 1.056429921966843",
++   "at 0.455 s the scale reads 0.8938784343361973, manim's shape gives 1.0552547451090413",
++   "at 0.456 s the scale reads 0.8959542997496949, manim's shape gives 1.0540762512988664",
++   "at 0.457 s the scale reads 0.898048607523903, manim's shape gives 1.0528945146688702",
++   "at 0.458 s the scale reads 0.9001609860166392, manim's shape gives 1.051709608908671",
++   "at 0.459 s the scale reads 0.9022910612087726, manim's shape gives 1.0505216072714212",
++   "at 0.46 s the scale reads 0.9044384567682716, manim's shape gives 1.0493305825802177",
++   "at 0.461 s the scale reads 0.906602794114121, manim's shape gives 1.0481366072344516",
++   "at 0.462 s the scale reads 0.9087836924801173, manim's shape gives 1.046939753216095",
++   "at 0.463 s the scale reads 0.9109807689785482, manim's shape gives 1.0457400920959208",
++   "at 0.464 s the scale reads 0.9131936386637631, manim's shape gives 1.0445376950396563",
++   "at 0.465 s the scale reads 0.915421914595639, manim's shape gives 1.0433326328140624",
++   "at 0.466 s the scale reads 0.9176652079029501, manim's shape gives 1.042124975792943",
++   "at 0.467 s the scale reads 0.9199231278466441, manim's shape gives 1.0409147939630767",
++   "at 0.468 s the scale reads 0.9221952818830296, manim's shape gives 1.039702156930074",
++   "at 0.469 s the scale reads 0.9244812757268824, manim's shape gives 1.0384871339241537",
++   "at 0.47 s the scale reads 0.9267807134144732, manim's shape gives 1.0372697938058397",
++   "at 0.471 s the scale reads 0.9290931973665175, manim's shape gives 1.0360502050715776",
++   "at 0.472 s the scale reads 0.931418328451058, manim's shape gives 1.0348284358592656",
++   "at 0.473 s the scale reads 0.9337557060462767, manim's shape gives 1.0336045539537044",
++   "at 0.474 s the scale reads 0.9361049281032432, manim's shape gives 1.0323786267919592",
++   "at 0.475 s the scale reads 0.9384655912086004, manim's shape gives 1.0311507214686375",
++   "at 0.476 s the scale reads 0.9408372906471905, manim's shape gives 1.0299209047410791",
++   "at 0.477 s the scale reads 0.9432196204646224, manim's shape gives 1.0286892430344596",
++   "at 0.478 s the scale reads 0.9456121735297852, manim's shape gives 1.0274558024468043",
++   "at 0.479 s the scale reads 0.9480145415973038, manim's shape gives 1.026220648753914",
++   "at 0.48 s the scale reads 0.9504263153699438, manim's shape gives 1.0249838474142026",
++   "at 0.481 s the scale reads 0.9528470845609622, manim's shape gives 1.0237454635734442",
++   "at 0.482 s the scale reads 0.9552764379564068, manim's shape gives 1.0225055620694308",
++   "at 0.483 s the scale reads 0.9577139634773635, manim's shape gives 1.0212642074365408",
++   "at 0.484 s the scale reads 0.9601592482421514, manim's shape gives 1.0200214639102165",
++   "at 0.485 s the scale reads 0.9626118786284662, manim's shape gives 1.0187773954313533",
++   "at 0.486 s the scale reads 0.9650714403354714, manim's shape gives 1.017532065650597",
++   "at 0.487 s the scale reads 0.9675375184458348, manim's shape gives 1.0162855379325542",
++   "at 0.488 s the scale reads 0.9700096974877122, manim's shape gives 1.0150378753599099",
++   "at 0.489 s the scale reads 0.972487561496673, manim's shape gives 1.0137891407374584",
++   "at 0.49 s the scale reads 0.9749706940775705, manim's shape gives 1.0125393965960443",
++   "at 0.491 s the scale reads 0.977458678466352, manim's shape gives 1.011288705196415",
++   "at 0.492 s the scale reads 0.9799510975918075, manim's shape gives 1.0100371285329843",
++   "at 0.493 s the scale reads 0.982447534137255, manim's shape gives 1.0087847283375098",
++   "at 0.494 s the scale reads 0.9849475706021596, manim's shape gives 1.0075315660826811",
++   "at 0.495 s the scale reads 0.9874507893636844, manim's shape gives 1.0062777029856231",
++   "at 0.496 s the scale reads 0.9899567727381675, manim's shape gives 1.005023200011312",
++   "at 0.497 s the scale reads 0.992465103042528, manim's shape gives 1.0037681178759055",
++   "at 0.498 s the scale reads 0.9949753626555886, manim's shape gives 1.0025125170499898",
++   "at 0.499 s the scale reads 0.9974871340793204, manim's shape gives 1.0012564577617402",
++   "at 0.501 s the scale reads 1.0025128659206795, manim's shape gives 0.9987435422382598",
++   "at 0.502 s the scale reads 1.0050246373444114, manim's shape gives 0.9974874829500102",
++   "at 0.503 s the scale reads 1.007534896957472, manim's shape gives 0.9962318821240945",
++   "at 0.504 s the scale reads 1.0100432272618325, manim's shape gives 0.9949767999886882",
++   "at 0.505 s the scale reads 1.0125492106363156, manim's shape gives 0.993722297014377",
++   "at 0.506 s the scale reads 1.0150524293978402, manim's shape gives 0.992468433917319",
++   "at 0.507 s the scale reads 1.0175524658627448, manim's shape gives 0.9912152716624902",
++   "at 0.508 s the scale reads 1.0200489024081922, manim's shape gives 0.9899628714670157",
++   "at 0.509 s the scale reads 1.0225413215336479, manim's shape gives 0.9887112948035851",
++   "at 0.51 s the scale reads 1.0250293059224294, manim's shape gives 0.9874606034039557",
++   "at 0.511 s the scale reads 1.027512438503327, manim's shape gives 0.9862108592625417",
++   "at 0.512 s the scale reads 1.0299903025122876, manim's shape gives 0.9849621246400901",
++   "at 0.513 s the scale reads 1.032462481554165, manim's shape gives 0.9837144620674458",
++   "at 0.514 s the scale reads 1.0349285596645286, manim's shape gives 0.9824679343494029",
++   "at 0.515 s the scale reads 1.0373881213715337, manim's shape gives 0.9812226045686469",
++   "at 0.516 s the scale reads 1.0398407517578485, manim's shape gives 0.9799785360897835",
++   "at 0.517 s the scale reads 1.0422860365226363, manim's shape gives 0.9787357925634592",
++   "at 0.518 s the scale reads 1.044723562043593, manim's shape gives 0.9774944379305692",
++   "at 0.519 s the scale reads 1.0471529154390378, manim's shape gives 0.9762545364265558",
++   "at 0.52 s the scale reads 1.049573684630056, manim's shape gives 0.9750161525857974",
++   "at 0.521 s the scale reads 1.051985458402696, manim's shape gives 0.9737793512460861",
++   "at 0.522 s the scale reads 1.0543878264702147, manim's shape gives 0.9725441975531958",
++   "at 0.523 s the scale reads 1.0567803795353774, manim's shape gives 0.9713107569655404",
++   "at 0.524 s the scale reads 1.0591627093528095, manim's shape gives 0.9700790952589209",
++   "at 0.525 s the scale reads 1.0615344087913996, manim's shape gives 0.9688492785313626",
++   "at 0.526 s the scale reads 1.0638950718967568, manim's shape gives 0.9676213732080409",
++   "at 0.527 s the scale reads 1.0662442939537233, manim's shape gives 0.9663954460462956",
++   "at 0.528 s the scale reads 1.068581671548942, manim's shape gives 0.9651715641407344",
++   "at 0.529 s the scale reads 1.0709068026334825, manim's shape gives 0.9639497949284225",
++   "at 0.53 s the scale reads 1.0732192865855268, manim's shape gives 0.9627302061941603",
++   "at 0.531 s the scale reads 1.0755187242731175, manim's shape gives 0.9615128660758464",
++   "at 0.532 s the scale reads 1.0778047181169705, manim's shape gives 0.9602978430699259",
++   "at 0.533 s the scale reads 1.0800768721533558, manim's shape gives 0.9590852060369234",
++   "at 0.534 s the scale reads 1.0823347920970496, manim's shape gives 0.9578750242070572",
++   "at 0.535 s the scale reads 1.084578085404361, manim's shape gives 0.9566673671859376",
++   "at 0.536 s the scale reads 1.086806361336237, manim's shape gives 0.9554623049603437",
++   "at 0.537 s the scale reads 1.089019231021452, manim's shape gives 0.9542599079040791",
++   "at 0.538 s the scale reads 1.0912163075198829, manim's shape gives 0.9530602467839051",
++   "at 0.539 s the scale reads 1.0933972058858792, manim's shape gives 0.9518633927655484",
++   "at 0.54 s the scale reads 1.0955615432317285, manim's shape gives 0.9506694174197823",
++   "at 0.541 s the scale reads 1.0977089387912276, manim's shape gives 0.9494783927285788",
++   "at 0.542 s the scale reads 1.0998390139833607, manim's shape gives 0.9482903910913291",
++   "at 0.543 s the scale reads 1.1019513924760969, manim's shape gives 0.9471054853311298",
++   "at 0.544 s the scale reads 1.1040457002503052, manim's shape gives 0.9459237487011335",
++   "at 0.545 s the scale reads 1.1061215656638028, manim's shape gives 0.9447452548909586",
++   "at 0.546 s the scale reads 1.1081786195155383, manim's shape gives 0.9435700780331571",
++   "at 0.547 s the scale reads 1.1102164951099192, manim's shape gives 0.9423982927097362",
++   "at 0.548 s the scale reads 1.1122348283212904, manim's shape gives 0.9412299739587304",
++   "at 0.549 s the scale reads 1.114233257658576, manim's shape gives 0.9400651972808205",
++   "at 0.55 s the scale reads 1.116211424330087, manim's shape gives 0.9389040386459949",
++   "at 0.551 s the scale reads 1.1181689723085073, manim's shape gives 0.9377465745002496",
++   "at 0.552 s the scale reads 1.1201055483960691, manim's shape gives 0.9365928817723227",
++   "at 0.553 s the scale reads 1.1220208022899223, manim's shape gives 0.9354430378804572",
++   "at 0.554 s the scale reads 1.1239143866477117, manim's shape gives 0.9342971207391895",
++   "at 0.555 s the scale reads 1.12578595715337, manim's shape gives 0.9331552087661548",
++   "at 0.556 s the scale reads 1.1276351725831377, manim's shape gives 0.9320173808889086",
++   "at 0.557 s the scale reads 1.1294616948718228, manim's shape gives 0.9308837165517534",
++   "at 0.558 s the scale reads 1.1312651891793055, manim's shape gives 0.9297542957225682",
++   "at 0.559 s the scale reads 1.1330453239573062, manim's shape gives 0.9286291988996327",
++   "at 0.56 s the scale reads 1.1348017710164227, manim's shape gives 0.9275085071184386",
++   "at 0.561 s the scale reads 1.1365342055934506, manim's shape gives 0.9263923019584839",
++   "at 0.562 s the scale reads 1.138242306419001, manim's shape gives 0.9252806655500381",
++   "at 0.563 s the scale reads 1.1399257557854208, manim's shape gives 0.9241736805808751",
++   "at 0.564 s the scale reads 1.1415842396150375, manim's shape gives 0.9230714303029628",
++   "at 0.565 s the scale reads 1.1432174475287313, manim's shape gives 0.9219739985391003",
++   "at 0.566 s the scale reads 1.1448250729148566, manim's shape gives 0.9208814696894971",
++   "at 0.567 s the scale reads 1.146406812998515, manim's shape gives 0.9197939287382803",
++   "at 0.568 s the scale reads 1.1479623689112035, manim's shape gives 0.918711461259924",
++   "at 0.569 s the scale reads 1.1494914457608445, manim's shape gives 0.917634153425588",
++   "at 0.57 s the scale reads 1.1509937527022096, manim's shape gives 0.9165620920093567",
++   "at 0.571 s the scale reads 1.152469003007756, manim's shape gives 0.9154953643943657",
++   "at 0.572 s the scale reads 1.1539169141388843, manim's shape gives 0.9144340585788062",
++   "at 0.573 s the scale reads 1.1553372078176296, manim's shape gives 0.9133782631817932",
++   "at 0.574 s the scale reads 1.1567296100988047, manim's shape gives 0.9123280674490862",
++   "at 0.575 s the scale reads 1.1580938514426018, manim's shape gives 0.9112835612586496",
++   "at 0.576 s the scale reads 1.1594296667876698, manim's shape gives 0.9102448351260379",
++   "at 0.577 s the scale reads 1.1607367956246781, manim's shape gives 0.9092119802095928",
++   "at 0.578 s the scale reads 1.16201498207038, manim's shape gives 0.9081850883154371",
++   "at 0.579 s the scale reads 1.163263974942187, manim's shape gives 0.90716425190225",
++   "at 0.58 s the scale reads 1.1644835278332675, manim's shape gives 0.9061495640858094",
++   "at 0.581 s the scale reads 1.1656733991881807, manim's shape gives 0.9051411186432822",
++   "at 0.582 s the scale reads 1.1668333523790553, manim's shape gives 0.9041390100172495",
++   "at 0.583 s the scale reads 1.1679631557823278, manim's shape gives 0.9031433333194453",
++   "at 0.584 s the scale reads 1.1690625828560466, manim's shape gives 0.9021541843341941",
++   "at 0.585 s the scale reads 1.1701314122177546, manim's shape gives 0.9011716595215263",
++   "at 0.586 s the scale reads 1.171169427722958, manim's shape gives 0.9001958560199536",
++   "at 0.587 s the scale reads 1.1721764185441903, manim's shape gives 0.8992268716488836",
++   "at 0.588 s the scale reads 1.1731521792506796, manim's shape gives 0.8982648049106541",
++   "at 0.589 s the scale reads 1.174096509888627, manim's shape gives 0.8973097549921645",
++   "at 0.59 s the scale reads 1.1750092160621006, manim's shape gives 0.8963618217660841",
++   "at 0.591 s the scale reads 1.1758901090145515, manim's shape gives 0.8954211057916138",
++   "at 0.592 s the scale reads 1.176739005710957, manim's shape gives 0.8944877083147783",
++   "at 0.593 s the scale reads 1.1775557289205931, manim's shape gives 0.8935617312682251",
++   "at 0.594 s the scale reads 1.1783401073004387, manim's shape gives 0.8926432772705063",
++   "at 0.595 s the scale reads 1.1790919754792129, manim's shape gives 0.891732449624817",
++   "at 0.596 s the scale reads 1.1798111741420445, manim's shape gives 0.8908293523171659",
++   "at 0.597 s the scale reads 1.1804975501157742, manim's shape gives 0.8899340900139501",
++   "at 0.598 s the scale reads 1.1811509564548808, manim's shape gives 0.8890467680589087",
++   "at 0.599 s the scale reads 1.1817712525280348, manim's shape gives 0.8881674924694261",
++   "at 0.6 s the scale reads 1.1823583041052654, manim's shape gives 0.8872963699321564",
++   "at 0.601 s the scale reads 1.182911983445736, manim's shape gives 0.8864335077979419",
++   "at 0.602 s the scale reads 1.1834321693861192, manim's shape gives 0.8855790140759927",
++   "at 0.603 s the scale reads 1.183918747429558, manim's shape gives 0.8847329974272989",
++   "at 0.604 s the scale reads 1.1843716098351977, manim's shape gives 0.8838955671572463",
++   "at 0.605 s the scale reads 1.1847906557082744, manim's shape gives 0.8830668332073979",
++   "at 0.606 s the scale reads 1.185175791090741, manim's shape gives 0.8822469061464163",
++   "at 0.607 s the scale reads 1.1855269290524084, manim's shape gives 0.8814358971600886",
++   "at 0.608 s the scale reads 1.1858439897825808, manim's shape gives 0.8806339180404228",
++   "at 0.609 s the scale reads 1.1861269006821553, manim's shape gives 0.8798410811737812",
++   "at 0.61 s the scale reads 1.1863755964561613, manim's shape gives 0.8790574995280163",
++   "at 0.611 s the scale reads 1.1865900192067027, manim's shape gives 0.8782832866385737",
++   "at 0.612 s the scale reads 1.1867701185262745, manim's shape gives 0.8775185565935278",
++   "at 0.613 s the scale reads 1.1869158515914071, manim's shape gives 0.8767634240175123",
++   "at 0.614 s the scale reads 1.1870271832566068, manim's shape gives 0.8760180040545107",
++   "at 0.615 s the scale reads 1.1871040861485396, manim's shape gives 0.8752824123494698",
++   "at 0.616 s the scale reads 1.1871465407604154, manim's shape gives 0.8745567650286983",
++   "at 0.617 s the scale reads 1.1871545355465158, manim's shape gives 0.8738411786790141",
++   "at 0.618 s the scale reads 1.1871280670168174, manim's shape gives 0.873135770325602",
++   "at 0.619 s the scale reads 1.1870671398316404, manim's shape gives 0.8724406574085439",
++   "at 0.62 s the scale reads 1.1869717668962698, manim's shape gives 0.8717559577579854",
++   "at 0.621 s the scale reads 1.1868419694554726, manim's shape gives 0.8710817895678964",
++   "at 0.622 s the scale reads 1.186677777187844, manim's shape gives 0.8704182713683932",
++   "at 0.623 s the scale reads 1.1864792282999046, manim's shape gives 0.8697655219965803",
++   "at 0.624 s the scale reads 1.1862463696198655, manim's shape gives 0.8691236605658745",
++   "at 0.625 s the scale reads 1.1859792566909784, manim's shape gives 0.8684928064337756",
++   "at 0.626 s the scale reads 1.1856779538643785, manim's shape gives 0.8678730791680433",
++   "at 0.627 s the scale reads 1.1853425343913246, manim's shape gives 0.8672645985112466",
++   "at 0.628 s the scale reads 1.1849730805147354, manim's shape gives 0.8666674843436457",
++   "at 0.629 s the scale reads 1.1845696835599173, manim's shape gives 0.8660818566443735",
++   "at 0.63 s the scale reads 1.1841324440243712, manim's shape gives 0.8655078354508793",
++   "at 0.631 s the scale reads 1.1836614716665643, manim's shape gives 0.8649455408165996",
++   "at 0.632 s the scale reads 1.1831568855935417, manim's shape gives 0.8643950927668254",
++   "at 0.633 s the scale reads 1.1826188143472531, manim's shape gives 0.8638566112527286",
++   "at 0.634 s the scale reads 1.1820473959894606, manim's shape gives 0.8633302161035198",
++   "at 0.635 s the scale reads 1.1814427781850905, manim's shape gives 0.8628160269767042",
++   "at 0.636 s the scale reads 1.1808051182838808, manim's shape gives 0.8623141633064078",
++   "at 0.637 s the scale reads 1.1801345834001802, manim's shape gives 0.8618247442497455",
++   "at 0.638 s the scale reads 1.1794313504907374, manim's shape gives 0.8613478886312059",
++   "at 0.639 s the scale reads 1.1786956064303238, manim's shape gives 0.8608837148850266",
++   "at 0.64 s the scale reads 1.1779275480850169, manim's shape gives 0.8604323409955387",
++   "at 0.641 s the scale reads 1.1771273823829762, manim's shape gives 0.859993884435461",
++   "at 0.642 s the scale reads 1.1762953263825304, manim's shape gives 0.8595684621021226",
++   "at 0.643 s the scale reads 1.1754316073373903, manim's shape gives 0.8591561902516014",
++   "at 0.644 s the scale reads 1.1745364627587982, manim's shape gives 0.8587571844307618",
++   "at 0.645 s the scale reads 1.1736101404744175, manim's shape gives 0.8583715594071836",
++   "at 0.646 s the scale reads 1.1726528986837619, manim's shape gives 0.8579994290969732",
++   "at 0.647 s the scale reads 1.1716650060099552, manim's shape gives 0.8576409064904507",
++   "at 0.648 s the scale reads 1.1706467415476103, manim's shape gives 0.8572961035757132",
++   "at 0.649 s the scale reads 1.169598394906612, manim's shape gives 0.8569651312600758",
++   "at 0.65 s the scale reads 1.1685202662515777, manim's shape gives 0.8566480992893944",
++   "at 0.651 s the scale reads 1.1674126663367732, manim's shape gives 0.8563451161652799",
++   "at 0.652 s the scale reads 1.1662759165362482, manim's shape gives 0.8560562890602167",
++   "at 0.653 s the scale reads 1.1651103488689587, manim's shape gives 0.8557817237306024",
++   "at 0.654 s the scale reads 1.1639163060186348, manim's shape gives 0.85552152442773",
++   "at 0.655 s the scale reads 1.1626941413481526, manim's shape gives 0.8552757938067391",
++   "at 0.656 s the scale reads 1.1614442189081613, manim's shape gives 0.8550446328335641",
++   "at 0.657 s the scale reads 1.160166913439717, manim's shape gives 0.8548281406899175",
++   "at 0.658 s the scale reads 1.1588626103706716, manim's shape gives 0.8546264146763471",
++   "at 0.659 s the scale reads 1.1575317058055636, manim's shape gives 0.8544395501134121",
++   "at 0.66 s the scale reads 1.1561746065087497, manim's shape gives 0.8542676402410301",
++   "at 0.661 s the scale reads 1.154791729880529, manim's shape gives 0.8541107761160501",
++   "at 0.662 s the scale reads 1.1533835039259928, manim's shape gives 0.8539690465081139",
++   "at 0.663 s the scale reads 1.1519503672163505, manim's shape gives 0.8538425377938739",
++   "at 0.664 s the scale reads 1.1504927688424675, manim's shape gives 0.8537313338496406",
++   "at 0.665 s the scale reads 1.1490111683603643, manim's shape gives 0.8536355159425398",
++   "at 0.666 s the scale reads 1.1475060357284201, manim's shape gives 0.8535551626202659",
++   "at 0.667 s the scale reads 1.1459778512360281, manim's shape gives 0.8534903495995221",
++   "at 0.668 s the scale reads 1.1444271054234565, manim's shape gives 0.8534411496532496",
++   "at 0.669 s the scale reads 1.142854298992668, manim's shape gives 0.8534076324967471",
++   "at 0.67 s the scale reads 1.1412599427088603, manim's shape gives 0.8533898646727961",
++   "at 0.671 s the scale reads 1.1396445572924885, manim's shape gives 0.8533879094359081",
++   "at 0.672 s the scale reads 1.138008673301548, manim's shape gives 0.8534018266358213",
++   "at 0.673 s the scale reads 1.13635283100389, manim's shape gives 0.8534316726003761",
++   "at 0.674 s the scale reads 1.1346775802393603, manim's shape gives 0.8534775000179116",
++   "at 0.675 s the scale reads 1.132983480271558, manim's shape gives 0.8535393578193262",
++   "at 0.676 s the scale reads 1.1312710996290165, manim's shape gives 0.8536172910599553",
++   "at 0.677 s the scale reads 1.1295410159356272, manim's shape gives 0.8537113408014255",
++   "at 0.678 s the scale reads 1.1277938157301306, manim's shape gives 0.8538215439936501",
++   "at 0.679 s the scale reads 1.1260300942745216, manim's shape gives 0.8539479333571388",
++   "at 0.68 s the scale reads 1.1242504553512163, manim's shape gives 0.8540905372657998",
++   "at 0.681 s the scale reads 1.1224555110488577, manim's shape gives 0.854249379630417",
++   "at 0.682 s the scale reads 1.1206458815366405, manim's shape gives 0.854424479782997",
++   "at 0.683 s the scale reads 1.1188221948270585, manim's shape gives 0.8546158523621767",
++   "at 0.684 s the scale reads 1.116985086526997, manim's shape gives 0.8548235071999001",
++   "at 0.685 s the scale reads 1.1151351995771046, manim's shape gives 0.8550474492095645",
++   "at 0.686 s the scale reads 1.1132731839794068, manim's shape gives 0.8552876782758555",
++   "at 0.687 s the scale reads 1.1113996965131359, manim's shape gives 0.8555441891464817",
++   "at 0.688 s the scale reads 1.1095154004387848, manim's shape gives 0.8558169713260351",
++   "at 0.689 s the scale reads 1.1076209651903968, manim's shape gives 0.8561060089721997",
++   "at 0.69 s the scale reads 1.105717066056152, manim's shape gives 0.8564112807945397",
++   "at 0.691 s the scale reads 1.1038043838473068, manim's shape gives 0.8567327599560963",
++   "at 0.692 s the scale reads 1.1018836045555935, manim's shape gives 0.8570704139780323",
++   "at 0.693 s the scale reads 1.0999554189991945, manim's shape gives 0.8574242046475555",
++   "at 0.694 s the scale reads 1.0980205224574426, manim's shape gives 0.857794087929367",
++   "at 0.695 s the scale reads 1.0960796142944234, manim's shape gives 0.8581800138808658",
++   "at 0.696 s the scale reads 1.0941333975716785, manim's shape gives 0.8585819265713572",
++   "at 0.697 s the scale reads 1.0921825786502481, manim's shape gives 0.8589997640055",
++   "at 0.698 s the scale reads 1.0902278667823069, manim's shape gives 0.8594334580512342",
++   "at 0.699 s the scale reads 1.0882699736926873, manim's shape gives 0.8598829343724257",
++   "at 0.7 s the scale reads 1.086309613150605, manim's shape gives 0.8603481123664664",
++   "at 0.701 s the scale reads 1.0843475005319423, manim's shape gives 0.8608289051070578",
++   "at 0.702 s the scale reads 1.0823843523724603, manim's shape gives 0.861325219292413",
++   "at 0.703 s the scale reads 1.0804208859123545, manim's shape gives 0.8618369551990983",
++   "at 0.704 s the scale reads 1.07845781863259, manim's shape gives 0.8623640066417362",
++   "at 0.705 s the scale reads 1.0764958677834846, manim's shape gives 0.8629062609387835",
++   "at 0.706 s the scale reads 1.0745357499060395, manim's shape gives 0.8634635988845949",
++   "at 0.707 s the scale reads 1.0725781803465413, manim's shape gives 0.8640358947279667",
++   "at 0.708 s the scale reads 1.0706238727649942, manim's shape gives 0.8646230161573609",
++   "at 0.709 s the scale reads 1.0686735386379627, manim's shape gives 0.8652248242929858",
++   "at 0.71 s the scale reads 1.0667278867564396, manim's shape gives 0.8658411736859128",
++   "at 0.711 s the scale reads 1.0647876227193696, manim's shape gives 0.8664719123243898",
++   "at 0.712 s the scale reads 1.062853448423501, manim's shape gives 0.8671168816475029",
++   "at 0.713 s the scale reads 1.0609260615502418, manim's shape gives 0.8677759165663306",
++   "at 0.714 s the scale reads 1.0590061550502374, manim's shape gives 0.8684488454927138",
++   "at 0.715 s the scale reads 1.0570944166264018, manim's shape gives 0.8691354903757595",
++   "at 0.716 s the scale reads 1.0551915282161488, manim's shape gives 0.8698356667461762",
++   "at 0.717 s the scale reads 1.0532981654736027, manim's shape gives 0.8705491837685282",
++   "at 0.718 s the scale reads 1.0514149972525701, manim's shape gives 0.8712758443014794",
++   "at 0.719 s the scale reads 1.0495426850910827, manim's shape gives 0.8720154449660796",
++   "at 0.72 s the scale reads 1.0476818826983232, manim's shape gives 0.8727677762221341",
++   "at 0.721 s the scale reads 1.0458332354447692, manim's shape gives 0.8735326224526746",
++   "at 0.722 s the scale reads 1.0439973798563897, manim's shape gives 0.8743097620565389",
++   "at 0.723 s the scale reads 1.0421749431137441, manim's shape gives 0.8750989675490429",
++   "at 0.724 s the scale reads 1.0403665425568323, manim's shape gives 0.8759000056707149",
++   "at 0.725 s the scale reads 1.038572785196553, manim's shape gives 0.8767126375040403",
++   "at 0.726 s the scale reads 1.0367942672336263, manim's shape gives 0.8775366185981488",
++   "at 0.727 s the scale reads 1.0350315735858286, manim's shape gives 0.8783716991013575",
++   "at 0.728 s the scale reads 1.0332852774243981, manim's shape gives 0.8792176239014604",
++   "at 0.729 s the scale reads 1.031555939720444, manim's shape gives 0.8800741327736419",
++   "at 0.73 s the scale reads 1.0298441088021997, manim's shape gives 0.880940960535868",
++   "at 0.731 s the scale reads 1.0281503199239375, manim's shape gives 0.8818178372115938",
++   "at 0.732 s the scale reads 1.0264750948473556, manim's shape gives 0.8827044881996022",
++   "at 0.733 s the scale reads 1.024818941436221, manim's shape gives 0.8836006344507783",
++   "at 0.734 s the scale reads 1.0231823532650492, manim's shape gives 0.8845059926515961",
++   "at 0.735 s the scale reads 1.0215658092425606, manim's shape gives 0.8854202754140864",
++   "at 0.736 s the scale reads 1.019969773250642, manim's shape gives 0.8863431914720277",
++   "at 0.737 s the scale reads 1.0183946937995159, manim's shape gives 0.8872744458830936",
++   "at 0.738 s the scale reads 1.0168410036997748, manim's shape gives 0.8882137402366691",
++   "at 0.739 s the scale reads 1.015309119751935, manim's shape gives 0.8891607728670333",
++   "at 0.74 s the scale reads 1.0137994424540981, manim's shape gives 0.8901152390715931",
++   "at 0.741 s the scale reads 1.0123123557283, manim's shape gives 0.8910768313338353",
++   "at 0.742 s the scale reads 1.0108482266660754, manim's shape gives 0.892045239550656",
++   "at 0.743 s the scale reads 1.0094074052937292, manim's shape gives 0.8930201512637072",
++   "at 0.744 s the scale reads 1.0079902243577692, manim's shape gives 0.8940012518943972",
++   "at 0.745 s the scale reads 1.0065969991309038, manim's shape gives 0.8949882249821622",
++   "at 0.746 s the scale reads 1.0052280272389764, manim's shape gives 0.8959807524256262",
++   "at 0.747 s the scale reads 1.0038835885091482, manim's shape gives 0.8969785147262486",
++   "at 0.748 s the scale reads 1.00256394483961, manim's shape gives 0.8979811912340613",
++   "at 0.749 s the scale reads 1.0012693400910408, manim's shape gives 0.8989884603950833",
++   "at 0.75 s the scale reads 1, manim's shape gives 0.9",
++   "at 0.751 s the scale reads 0.9987561321143705, manim's shape gives 0.9010154874336892",
++   "at 0.752 s the scale reads 0.9975379257509424, manim's shape gives 0.9020345999251754",
++   "at 0.753 s the scale reads 0.9963455519751614, manim's shape gives 0.9030570147975896",
++   "at 0.754 s the scale reads 0.9951791636030224, manim's shape gives 0.9040824097177138",
++   "at 0.755 s the scale reads 0.9940388952250412, manim's shape gives 0.9051104629446914",
++   "at 0.756 s the scale reads 0.9929248632521825, manim's shape gives 0.9061408535774851",
++   "at 0.757 s the scale reads 0.9918371659835806, manim's shape gives 0.9071732618006679",
++   "at 0.758 s the scale reads 0.9907758836958322, manim's shape gives 0.9082073691281406",
++   "at 0.759 s the scale reads 0.9897410787536037, manim's shape gives 0.9092428586443696",
++   "at 0.76 s the scale reads 0.9887327957412374, manim's shape gives 0.9102794152427526",
++   "at 0.761 s the scale reads 0.9877510616150075, manim's shape gives 0.9113167258607215",
++   "at 0.762 s the scale reads 0.9867958858756235, manim's shape gives 0.9123544797112081",
++   "at 0.763 s the scale reads 0.985867260760539, manim's shape gives 0.9133923685101004",
++   "at 0.764 s the scale reads 0.984965161455587, manim's shape gives 0.9144300866993378",
++   "at 0.765 s the scale reads 0.9840895463254156, manim's shape gives 0.9154673316652976",
++   "at 0.766 s the scale reads 0.9832403571621678, manim's shape gives 0.9165038039521438",
++   "at 0.767 s the scale reads 0.9824175194518099, manim's shape gives 0.917539207469822",
++   "at 0.768 s the scale reads 0.9816209426574792, manim's shape gives 0.9185732496963961",
++   "at 0.769 s the scale reads 0.9808505205191926, manim's shape gives 0.9196056418744435",
++   "at 0.77 s the scale reads 0.9801061313692285, manim's shape gives 0.9206360992012363",
++   "at 0.771 s the scale reads 0.9793876384624647, manim's shape gives 0.9216643410124569",
++   "at 0.772 s the scale reads 0.978694890320933, manim's shape gives 0.9226900909592093",
++   "at 0.773 s the scale reads 0.9780277210918334, manim's shape gives 0.9237130771781122",
++   "at 0.774 s the scale reads 0.9773859509182191, manim's shape gives 0.9247330324542684",
++   "at 0.775 s the scale reads 0.9767693863215635, manim's shape gives 0.9257496943769322",
++   "at 0.776 s the scale reads 0.9761778205953902, manim's shape gives 0.9267628054877115",
++   "at 0.777 s the scale reads 0.9756110342091467, manim's shape gives 0.9277721134211575",
++   "at 0.778 s the scale reads 0.9750687952214864, manim's shape gives 0.9287773710376201",
++   "at 0.779 s the scale reads 0.9745508597021191, manim's shape gives 0.9297783365482595",
++   "at 0.78 s the scale reads 0.9740569721613876, manim's shape gives 0.9307747736321281",
++   "at 0.781 s the scale reads 0.9735868659867224, manim's shape gives 0.9317664515452535",
++   "at 0.782 s the scale reads 0.9731402638851296, manim's shape gives 0.9327531452216713",
++   "at 0.783 s the scale reads 0.97271687833087, manim's shape gives 0.9337346353663774",
++   "at 0.784 s the scale reads 0.972316412017492, manim's shape gives 0.9347107085401851",
++   "at 0.785 s the scale reads 0.9719385583133872, manim's shape gives 0.9356811572364909",
++   "at 0.786 s the scale reads 0.9715830017200509, manim's shape gives 0.9366457799499708",
++   "at 0.787 s the scale reads 0.9712494183322351, manim's shape gives 0.9376043812372441",
++   "at 0.788 s the scale reads 0.9709374762992034, manim's shape gives 0.9385567717695623",
++   "at 0.789 s the scale reads 0.9706468362863031, manim's shape gives 0.9395027683775891",
++   "at 0.79 s the scale reads 0.9703771519360963, manim's shape gives 0.9404421940883609",
++   "at 0.791 s the scale reads 0.9701280703283044, manim's shape gives 0.9413748781545273",
++   "at 0.792 s the scale reads 0.9698992324378419, manim's shape gives 0.9423006560759843",
++   "at 0.793 s the scale reads 0.96969027359024, manim's shape gives 0.9432193696140313",
++   "at 0.794 s the scale reads 0.9695008239137802, manim's shape gives 0.9441308667981879",
++   "at 0.795 s the scale reads 0.9693305087876852, manim's shape gives 0.9450350019258278",
++   "at 0.796 s the scale reads 0.969178949285736, manim's shape gives 0.9459316355547888",
++   "at 0.797 s the scale reads 0.9690457626147168, manim's shape gives 0.9468206344891356",
++   "at 0.798 s the scale reads 0.968930562547109, manim's shape gives 0.9477018717582584",
++   "at 0.799 s the scale reads 0.9688329598474887, manim's shape gives 0.9485752265894984",
++   "at 0.8 s the scale reads 0.9687525626921103, manim's shape gives 0.949440584374503",
++   "at 0.801 s the scale reads 0.9686889770811833, manim's shape gives 0.9502978366295154",
++   "at 0.802 s the scale reads 0.9686418072433859, manim's shape gives 0.951146880949817",
++   "at 0.803 s the scale reads 0.9686106560321811, manim's shape gives 0.951987620958539",
++   "at 0.804 s the scale reads 0.9685951253135382, manim's shape gives 0.9528199662500698",
++   "at 0.805 s the scale reads 0.9685948163446852, manim's shape gives 0.9536438323282891",
++   "at 0.806 s the scale reads 0.9686093301435538, manim's shape gives 0.9544591405398581",
++   "at 0.807 s the scale reads 0.9686382678486031, manim's shape gives 0.955265818002806",
++   "at 0.808 s the scale reads 0.9686812310687432, manim's shape gives 0.9560637975306454",
++   "at 0.809 s the scale reads 0.9687378222231019, manim's shape gives 0.9568530175522615",
++   "at 0.81 s the scale reads 0.9688076448704142, manim's shape gives 0.9576334220278101",
++   "at 0.811 s the scale reads 0.9688903040278358, manim's shape gives 0.9584049603608681",
++   "at 0.812 s the scale reads 0.9689854064790148, manim's shape gives 0.9591675873070734",
++   "at 0.813 s the scale reads 0.9690925610712791, manim's shape gives 0.9599212628794953",
++   "at 0.814 s the scale reads 0.9692113790018254, manim's shape gives 0.9606659522509704",
++   "at 0.815 s the scale reads 0.9693414740928225, manim's shape gives 0.9614016256536392",
++   "at 0.816 s the scale reads 0.9694824630553622, manim's shape gives 0.9621282582759164",
++   "at 0.817 s the scale reads 0.969633965742222, manim's shape gives 0.9628458301571227",
++   "at 0.818 s the scale reads 0.9697956053894197, manim's shape gives 0.9635543260800039",
++   "at 0.819 s the scale reads 0.9699670088465682, manim's shape gives 0.9642537354613595",
++   "at 0.82 s the scale reads 0.9701478067960585, manim's shape gives 0.9649440522409963",
++   "at 0.821 s the scale reads 0.9703376339611168, manim's shape gives 0.9656252747692206",
++   "at 0.822 s the scale reads 0.9705361293028069, manim's shape gives 0.9662974056930758",
++   "at 0.823 s the scale reads 0.9707429362060601, manim's shape gives 0.9669604518415273",
++   "at 0.824 s the scale reads 0.9709577026548414, manim's shape gives 0.9676144241097918",
++   "at 0.825 s the scale reads 0.9711800813965685, manim's shape gives 0.9682593373430002",
++   "at 0.826 s the scale reads 0.9714097300959235, manim's shape gives 0.9688952102193794",
++   "at 0.827 s the scale reads 0.9716463114782043, manim's shape gives 0.9695220651331329",
++   "at 0.828 s the scale reads 0.9718894934623855, manim's shape gives 0.970139928077188",
++   "at 0.829 s the scale reads 0.9721389492840602, manim's shape gives 0.9707488285259805",
++   "at 0.83 s the scale reads 0.9723943576084573, manim's shape gives 0.9713487993184311",
++   "at 0.831 s the scale reads 0.9726554026337298, manim's shape gives 0.9719398765412688",
++   "at 0.832 s the scale reads 0.972921774184726, manim's shape gives 0.9725220994128453",
++   "at 0.833 s the scale reads 0.9731931677974611, manim's shape gives 0.9730955101675799",
++   "at 0.834 s the scale reads 0.973469284794515, manim's shape gives 0.9736601539411671",
++   "at 0.835 s the scale reads 0.9737498323515916, manim's shape gives 0.9742160786566714",
++   "at 0.836 s the scale reads 0.9740345235554768, manim's shape gives 0.9747633349116289",
++   "at 0.837 s the scale reads 0.9743230774536417, manim's shape gives 0.9753019758662671",
++   "at 0.838 s the scale reads 0.9746152190957402, manim's shape gives 0.9758320571329477",
++   "at 0.839 s the scale reads 0.9749106795672549, manim's shape gives 0.9763536366669332",
++   "at 0.84 s the scale reads 0.9752091960155459, manim's shape gives 0.9768667746585667",
++   "at 0.841 s the scale reads 0.9755105116685644, manim's shape gives 0.977371533426954",
++   "at 0.842 s the scale reads 0.9758143758464882, manim's shape gives 0.9778679773152246",
++   "at 0.843 s the scale reads 0.9761205439665428, manim's shape gives 0.9783561725874482",
++   "at 0.844 s the scale reads 0.9764287775412697, manim's shape gives 0.9788361873272734",
++   "at 0.845 s the scale reads 0.9767388441705024, manim's shape gives 0.9793080913383485",
++   "at 0.846 s the scale reads 0.9770505175273123, manim's shape gives 0.9797719560465845",
++   "at 0.847 s the scale reads 0.9773635773381838, manim's shape gives 0.9802278544043073",
++   "at 0.848 s the scale reads 0.9776778093576753, manim's shape gives 0.9806758607963466",
++   "at 0.849 s the scale reads 0.9779930053378244, manim's shape gives 0.9811160509481013",
++   "at 0.85 s the scale reads 0.978308962992547, manim's shape gives 0.981548501835616",
++   "at 0.851 s the scale reads 0.9786254859572834, manim's shape gives 0.9819732915976997",
++   "at 0.852 s the scale reads 0.9789423837441351, manim's shape gives 0.9823904994501115",
++   "at 0.853 s the scale reads 0.979259471692738, manim's shape gives 0.9828002056018351",
++   "at 0.854 s the scale reads 0.9795765709171071, manim's shape gives 0.9832024911734597",
++   "at 0.855 s the scale reads 0.9798935082486911, manim's shape gives 0.9835974381176783",
++   "at 0.856 s the scale reads 0.9802101161758633, manim's shape gives 0.9839851291419146",
++   "at 0.857 s the scale reads 0.9805262327800749, manim's shape gives 0.984365647633081",
++   "at 0.858 s the scale reads 0.9808417016688918, manim's shape gives 0.9847390775844727",
++   "at 0.859 s the scale reads 0.9811563719061268, manim's shape gives 0.9851055035247923",
++   "at 0.86 s the scale reads 0.9814700979392791, manim's shape gives 0.9854650104493035",
++   "at 0.861 s the scale reads 0.9817827395244827, manim's shape gives 0.9858176837531035",
++   "at 0.862 s the scale reads 0.9820941616491639, manim's shape gives 0.9861636091665045",
++   "at 0.863 s the scale reads 0.9824042344525973, manim's shape gives 0.9865028726925101",
++   "at 0.864 s the scale reads 0.9827128331445506, manim's shape gives 0.9868355605463714",
++   "at 0.865 s the scale reads 0.9830198379221949, manim's shape gives 0.9871617590972038",
++   "at 0.866 s the scale reads 0.9833251338854591, manim's shape gives 0.9874815548116438",
++   "at 0.867 s the scale reads 0.9836286109509931, manim's shape gives 0.9877950341995235",
++   "at 0.868 s the scale reads 0.9839301637649073, manim's shape gives 0.9881022837615399",
++   "at 0.869 s the scale reads 0.9842296916144415, manim's shape gives 0.9884033899388884",
++   "at 0.87 s the scale reads 0.9845270983387169, manim's shape gives 0.9886984390648385",
++   "at 0.871 s the scale reads 0.9848222922387138, manim's shape gives 0.9889875173182171",
++   "at 0.872 s the scale reads 0.9851151859866176, manim's shape gives 0.9892707106787729",
++   "at 0.873 s the scale reads 0.9854056965346647, manim's shape gives 0.9895481048843872",
++   "at 0.874 s the scale reads 0.9856937450236153, manim's shape gives 0.9898197853900995",
++   "at 0.875 s the scale reads 0.9859792566909784, manim's shape gives 0.9900858373289149",
++   "at 0.876 s the scale reads 0.9862621607791023, manim's shape gives 0.9903463454743556",
++   "at 0.877 s the scale reads 0.9865423904432448, manim's shape gives 0.9906013942047253",
++   "at 0.878 s the scale reads 0.9868198826597263, manim's shape gives 0.9908510674690458",
++   "at 0.879 s the scale reads 0.987094578134269, manim's shape gives 0.991095448754634",
++   "at 0.88 s the scale reads 0.9873664212106155, manim's shape gives 0.9913346210562769",
++   "at 0.881 s the scale reads 0.9876353597795177, manim's shape gives 0.9915686668469722",
++   "at 0.882 s the scale reads 0.9879013451881828, manim's shape gives 0.9917976680501932",
++   "at 0.883 s the scale reads 0.9881643321502559, manim's shape gives 0.9920217060136419",
++   "at 0.884 s the scale reads 0.9884242786564136, manim's shape gives 0.9922408614844515",
++   "at 0.885 s the scale reads 0.9886811458856442, manim's shape gives 0.9924552145857999",
++   "at 0.886 s the scale reads 0.9889348981172765, manim's shape gives 0.992664844794898",
++   "at 0.887 s the scale reads 0.9891855026438242, manim's shape gives 0.992869830922312",
++   "at 0.888 s the scale reads 0.9894329296847009, manim's shape gives 0.9930702510925834",
++   "at 0.889 s the scale reads 0.9896771523008617, manim's shape gives 0.9932661827261094",
++   "at 0.89 s the scale reads 0.9899181463104235, manim's shape gives 0.9934577025222457",
++   "at 0.891 s the scale reads 0.9901558902053059, manim's shape gives 0.9936448864435938",
++   "at 0.892 s the scale reads 0.9903903650689421, manim's shape gives 0.993827809701437",
++   "at 0.893 s the scale reads 0.990621554495093, manim's shape gives 0.9940065467422889",
++   "at 0.894 s the scale reads 0.9908494445078062, manim's shape gives 0.9941811712355169",
++   "at 0.895 s the scale reads 0.9910740234825482, manim's shape gives 0.9943517560620069",
++   "at 0.896 s the scale reads 0.991295282068543, manim's shape gives 0.9945183733038327",
++   "at 0.897 s the scale reads 0.991513213112341, manim's shape gives 0.9946810942348961",
++   "at 0.898 s the scale reads 0.9917278115826441, manim's shape gives 0.9948399893125036",
++   "at 0.899 s the scale reads 0.9919390744964074, manim's shape gives 0.9949951281698461",
++   "at 0.9 s the scale reads 0.9921470008462348, manim's shape gives 0.9951465796093489",
++   "at 0.901 s the scale reads 0.9923515915290861, manim's shape gives 0.9952944115968587",
++   "at 0.902 s the scale reads 0.9925528492763079, manim's shape gives 0.9954386912566378",
++   "at 0.903 s the scale reads 0.9927507785849993, manim's shape gives 0.9955794848671318",
++   "at 0.904 s the scale reads 0.9929453856507222, manim's shape gives 0.9957168578574829",
++   "at 0.905 s the scale reads 0.9931366783015626, manim's shape gives 0.9958508748047569",
++   "at 0.906 s the scale reads 0.9933246659335472, manim's shape gives 0.9959815994318562",
++   "at 0.907 s the scale reads 0.9935093594474191, manim's shape gives 0.9961090946060889",
++   "at 0.908 s the scale reads 0.9936907711867735, manim's shape gives 0.9962334223383679",
++   "at 0.909 s the scale reads 0.9938689148775524, manim's shape gives 0.996354643783011",
++   "at 0.91 s the scale reads 0.9940438055688967, manim's shape gives 0.9964728192381166",
++   "at 0.911 s the scale reads 0.9942154595753528, manim's shape gives 0.9965880081464887",
++   "at 0.912 s the scale reads 0.9943838944204269, manim's shape gives 0.9967002690970868",
++   "at 0.913 s the scale reads 0.9945491287814815, manim's shape gives 0.9968096598269746",
++   "at 0.914 s the scale reads 0.9947111824359676, manim's shape gives 0.9969162372237452",
++   "at 0.915 s the scale reads 0.9948700762089822, manim's shape gives 0.9970200573283995",
++   "at 0.916 s the scale reads 0.9950258319221417, manim's shape gives 0.9971211753386539",
++   "at 0.917 s the scale reads 0.9951784723437608, manim's shape gives 0.9972196456126566",
++   "at 0.918 s the scale reads 0.9953280211403249, manim's shape gives 0.9973155216730922",
++   "at 0.919 s the scale reads 0.9954745028292424, manim's shape gives 0.9974088562116514",
++   "at 0.92 s the scale reads 0.9956179427328646, manim's shape gives 0.9974997010938477",
++   "at 0.921 s the scale reads 0.9957583669337587, manim's shape gives 0.9975881073641623",
++   "at 0.922 s the scale reads 0.9958958022312175, manim's shape gives 0.9976741252514965",
++   "at 0.923 s the scale reads 0.9960302760989928, manim's shape gives 0.9977578041749156",
++   "at 0.924 s the scale reads 0.9961618166442331, manim's shape gives 0.9978391927496646",
++   "at 0.925 s the scale reads 0.9962904525676124, manim's shape gives 0.9979183387934412",
++   "at 0.926 s the scale reads 0.9964162131246295, manim's shape gives 0.9979952893329074",
++   "at 0.927 s the scale reads 0.9965391280880627, manim's shape gives 0.9980700906104265",
++   "at 0.928 s the scale reads 0.9966592277115606, manim's shape gives 0.9981427880910072",
++   "at 0.929 s the scale reads 0.9967765426943515, manim's shape gives 0.9982134264694426",
++   "at 0.93 s the scale reads 0.9968911041470517, manim's shape gives 0.9982820496776289",
++   "at 0.931 s the scale reads 0.997002943558555, manim's shape gives 0.9983487008920509",
++   "at 0.932 s the scale reads 0.9971120927639829, manim's shape gives 0.9984134225414193",
++   "at 0.933 s the scale reads 0.9972185839136786, manim's shape gives 0.99847625631445",
++   "at 0.934 s the scale reads 0.9973224494432219, manim's shape gives 0.9985372431677705",
++   "at 0.935 s the scale reads 0.9974237220444493, manim's shape gives 0.9985964233339436",
++   "at 0.936 s the scale reads 0.9975224346374562, manim's shape gives 0.9986538363295968",
++   "at 0.937 s the scale reads 0.9976186203435639, manim's shape gives 0.9987095209636456",
++   "at 0.938 s the scale reads 0.9977123124592312, manim's shape gives 0.9987635153456017",
++   "at 0.939 s the scale reads 0.9978035444308897, manim's shape gives 0.998815856893956",
++   "at 0.94 s the scale reads 0.9978923498306848, manim's shape gives 0.9988665823446257",
++   "at 0.941 s the scale reads 0.9979787623331012, manim's shape gives 0.9989157277594581",
++   "at 0.942 s the scale reads 0.998062815692455, manim's shape gives 0.9989633285347815",
++   "at 0.943 s the scale reads 0.9981445437212313, manim's shape gives 0.9990094194099948",
++   "at 0.944 s the scale reads 0.9982239802692487, manim's shape gives 0.999054034476188",
++   "at 0.945 s the scale reads 0.9983011592036319, manim's shape gives 0.9990972071847869",
++   "at 0.946 s the scale reads 0.9983761143895716, manim's shape gives 0.9991389703562132",
++   "at 0.947 s the scale reads 0.9984488796718555, manim's shape gives 0.9991793561885542",
++   "at 0.948 s the scale reads 0.9985194888571479, manim's shape gives 0.9992183962662354",
++   "at 0.949 s the scale reads 0.9985879756970033, manim's shape gives 0.9992561215686894",
++   "at 0.95 s the scale reads 0.9986543738715922, manim's shape gives 0.9992925624790155",
++   "at 0.951 s the scale reads 0.9987187169741225, manim's shape gives 0.9993277487926246",
++   "at 0.952 s the scale reads 0.998781038495939, manim's shape gives 0.9993617097258626",
++   "at 0.953 s the scale reads 0.9988413718122814, manim's shape gives 0.9993944739246094",
++   "at 0.954 s the scale reads 0.9988997501686845, manim's shape gives 0.9994260694728476",
++   "at 0.955 s the scale reads 0.9989562066680034, manim's shape gives 0.9994565239011955",
++   "at 0.956 s the scale reads 0.999010774258046, manim's shape gives 0.9994858641954014",
++   "at 0.957 s the scale reads 0.9990634857197956, manim's shape gives 0.9995141168047951",
++   "at 0.958 s the scale reads 0.9991143736562087, manim's shape gives 0.9995413076506916",
++   "at 0.959 s the scale reads 0.9991634704815691, manim's shape gives 0.9995674621347447",
++   "at 0.96 s the scale reads 0.9992108084113853, manim's shape gives 0.9995926051472467",
++   "at 0.961 s the scale reads 0.9992564194528125, manim's shape gives 0.9996167610753701",
++   "at 0.962 s the scale reads 0.9993003353955852, manim's shape gives 0.99963995381135",
++   "at 0.963 s the scale reads 0.9993425878034454, manim's shape gives 0.9996622067606027",
++   "at 0.964 s the scale reads 0.9993832080060504, manim's shape gives 0.9996835428497801",
++   "at 0.965 s the scale reads 0.9994222270913465, manim's shape gives 0.999703984534754",
++   "at 0.966 s the scale reads 0.9994596758983929, manim's shape gives 0.999723553808532",
++   "at 0.967 s the scale reads 0.9994955850106233, manim's shape gives 0.9997422722091004",
++   "at 0.968 s the scale reads 0.9995299847495299, manim's shape gives 0.9997601608271925",
++   "at 0.969 s the scale reads 0.9995629051687571, manim's shape gives 0.9997772403139815",
++   "at 0.97 s the scale reads 0.9995943760485911, manim's shape gives 0.9997935308886947",
++   "at 0.971 s the scale reads 0.9996244268908322, manim's shape gives 0.99980905234615",
++   "at 0.972 s the scale reads 0.9996530869140385, manim's shape gives 0.9998238240642104",
++   "at 0.973 s the scale reads 0.9996803850491259, manim's shape gives 0.9998378650111577",
++   "at 0.974 s the scale reads 0.9997063499353149, manim's shape gives 0.9998511937529825",
++   "at 0.975 s the scale reads 0.9997310099164101, manim's shape gives 0.9998638284605912",
++   "at 0.976 s the scale reads 0.9997543930374025, manim's shape gives 0.9998757869169277",
++   "at 0.977 s the scale reads 0.9997765270413822, manim's shape gives 0.9998870865240093",
++   "at 0.978 s the scale reads 0.9997974393667496, manim's shape gives 0.9998977443098767",
++   "at 0.979 s the scale reads 0.9998171571447166, manim's shape gives 0.9999077769354574",
++   "at 0.98 s the scale reads 0.9998357071970851, manim's shape gives 0.9999172007013417",
++   "at 0.981 s the scale reads 0.9998531160342928, manim's shape gives 0.9999260315544702",
++   "at 0.982 s the scale reads 0.9998694098537169, manim's shape gives 0.9999342850947345",
++   "at 0.983 s the scale reads 0.9998846145382255, manim's shape gives 0.9999419765814888",
++   "at 0.984 s the scale reads 0.9998987556549672, manim's shape gives 0.9999491209399736",
++   "at 0.985 s the scale reads 0.9999118584543889, manim's shape gives 0.9999557327676504",
++   "at 0.986 s the scale reads 0.9999239478694734, manim's shape gives 0.9999618263404484",
++   "at 0.987 s the scale reads 0.9999350485151883, manim's shape gives 0.9999674156189227",
++   "at 0.988 s the scale reads 0.9999451846881363, manim's shape gives 0.9999725142543232",
++   "at 0.989 s the scale reads 0.9999543803663993, manim's shape gives 0.9999771355945771",
++   "at 0.99 s the scale reads 0.9999626592095685, manim's shape gives 0.9999812926901817",
++   "at 0.991 s the scale reads 0.9999700445589516, manim's shape gives 0.9999849983000101",
++   "at 0.992 s the scale reads 0.9999765594379494, manim's shape gives 0.9999882648970304",
++   "at 0.993 s the scale reads 0.9999822265525963, manim's shape gives 0.9999911046739368",
++   "at 0.994 s the scale reads 0.9999870682922538, manim's shape gives 0.9999935295486942",
++   "at 0.995 s the scale reads 0.999991106730453, manim's shape gives 0.9999955511699975",
++   "at 0.996 s the scale reads 0.9999943636258785, manim's shape gives 0.9999971809226443",
++   "at 0.997 s the scale reads 0.999996860423485, manim's shape gives 0.9999984299328238",
++   "at 0.998 s the scale reads 0.9999986182557438, manim's shape gives 0.9999993090733192",
++   "at 0.999 s the scale reads 0.9999996579440089, manim's shape gives 0.9999998289686285",
++ ]
+
+ ❯ none helpers.ts:41:102
+     39| /** No failures; the message lists the first of them and how many ther…
+     40| export function none(failures: readonly string[], what: string): void {
+     41|   expect(failures, `${what}: ${failures.length} failures:\n  ${failure…
+       |                                                                                                      ^
+     42| }
+     43|
+ ❯ rate-functions-manim.test.ts:121:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[44/54]⎯
+
+ FAIL  tables-numpy-scipy.test.ts > criterion 4 (port): numpy a3d0ef1df0 TestInterp against our linear function tables > criterion 4: TestInterp.test_basic: x and y linspace(0, 1, 5) read x0 = linspace(0, 1, 50) almost equal
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"table(oracle.t, x)","context":"driver","packs":[{"name":"oracle","tables":{"t":{"x":[0,0.25,0.5,0.75,1],"y":[0,0.25,0.5,0.75,1]}}}],"at":[0,0.02040816326530612,0.04081632653061224,0.061224489795918366,0.08163265306122448,0.1020408163265306,0.12244897959183673,0.14285714285714285,0.16326530612244897,0.18 … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ tableAt tables-numpy-scipy.test.ts:20:10
+ ❯ readTable tables-numpy-scipy.test.ts:23:22
+ ❯ tables-numpy-scipy.test.ts:43:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[45/54]⎯
+
+ FAIL  tables-numpy-scipy.test.ts > criterion 4 (port): numpy a3d0ef1df0 TestInterp against our linear function tables > criterion 4: TestInterp.test_right_left_behavior: sizes 2 to 9 of x = arange(size), y = ones hold 1 at −1, 0, size − 1 and size, in either order
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"table(oracle.t, x)","context":"driver","packs":[{"name":"oracle","tables":{"t":{"x":[0,1],"y":[1,1]}}}],"at":[-1,0,1,2,2,1,0,-1]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ tableAt tables-numpy-scipy.test.ts:20:10
+ ❯ readTable tables-numpy-scipy.test.ts:23:22
+ ❯ tables-numpy-scipy.test.ts:52:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[46/54]⎯
+
+ FAIL  tables-numpy-scipy.test.ts > criterion 4 (port): numpy a3d0ef1df0 TestInterp against our linear function tables > criterion 4: TestInterp.test_scalar_interpolation_point and test_zero_dimensional_interpolation_point: 0, 0.3 and float32(0.3) on linspace read themselves; xp 0, 2, 4 with fp 1, −1, 1 read exactly 0 at 1
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"table(oracle.t, x)","context":"driver","packs":[{"name":"oracle","tables":{"t":{"x":[0,0.25,0.5,0.75,1],"y":[0,0.25,0.5,0.75,1]}}}],"at":[0,0.3,0.30000001192092896]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ tableAt tables-numpy-scipy.test.ts:20:10
+ ❯ readTable tables-numpy-scipy.test.ts:23:22
+ ❯ tables-numpy-scipy.test.ts:61:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[47/54]⎯
+
+ FAIL  tables-numpy-scipy.test.ts > criterion 4 (port): numpy a3d0ef1df0 TestInterp against our linear function tables > criterion 4: TestInterp.test_empty_x: no points read no values
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"table(oracle.t, x)","context":"driver","packs":[{"name":"oracle","tables":{"t":{"x":[1,2],"y":[3,4]}}}],"at":[]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ tableAt tables-numpy-scipy.test.ts:20:10
+ ❯ readTable tables-numpy-scipy.test.ts:23:22
+ ❯ tables-numpy-scipy.test.ts:69:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[48/54]⎯
+
+ FAIL  tables-numpy-scipy.test.ts > criterion 4 (port): numpy a3d0ef1df0 TestInterp against our linear function tables > criterion 4: TestInterp.test_exceptions: a table of no points and one whose x and y differ in length are refused, as is a one-point table (np.interp special-cases size 1; ours holds 2 to 4,096 points)
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"table(oracle.t, x)","context":"driver","packs":[{"name":"oracle","tables":{"t":{"x":[],"y":[]}}}],"at":[0]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ tableAt tables-numpy-scipy.test.ts:20:10
+ ❯ tables-numpy-scipy.test.ts:76:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[49/54]⎯
+
+ FAIL  tables-numpy-scipy.test.ts > criterion 4 (port): numpy a3d0ef1df0 TestInterp against our linear function tables > criterion 4: the criterion's linear table x 0, 1, 2, 4 and y 0, 1, 1.5, 1.75 reads np.interp's 1.625 at 3, 0 at −1 and 1.75 at 5
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"table(oracle.t, x)","context":"driver","packs":[{"name":"oracle","tables":{"t":{"x":[0,1,2,4],"y":[0,1,1.5,1.75],"mode":"linear"}}}],"at":[3,-1,5]}); it answered {"ok":false,"code":"bad_input"}
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ tableAt tables-numpy-scipy.test.ts:20:10
+ ❯ readTable tables-numpy-scipy.test.ts:23:22
+ ❯ tables-numpy-scipy.test.ts:87:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[50/54]⎯
+
+ FAIL  tables-numpy-scipy.test.ts > criterion 4 (port): scipy e4e854eaa8 TestPCHIP test_overshoot and test_monotone against our monotone tables > criterion 4: TestPCHIP.test_overshoot: 10 samples between every pair of knots lie between those knots' values (within upstream's 1e-15)
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"table(oracle.t, x)","context":"driver","packs":[{"name":"oracle","tables":{"t":{"x":[0.013768449590682241,0.1915194503788923,0.2725926052826416,0.2764642551430967,0.35781726995786667,0.37025075479039493,0.4377277390071145,0.5009951255234587,0.5030831653078097,0.5611961860656249,0.6221087710398319,0.6834 … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ tableAt tables-numpy-scipy.test.ts:20:10
+ ❯ readTable tables-numpy-scipy.test.ts:23:22
+ ❯ between tables-numpy-scipy.test.ts:106:17
+ ❯ overshoot tables-numpy-scipy.test.ts:111:31
+ ❯ tables-numpy-scipy.test.ts:119:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[51/54]⎯
+
+ FAIL  tables-numpy-scipy.test.ts > criterion 4 (port): scipy e4e854eaa8 TestPCHIP test_overshoot and test_monotone against our monotone tables > criterion 4: test_overshoot at the criterion's 1,000 samples between every pair of knots
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"table(oracle.t, x)","context":"driver","packs":[{"name":"oracle","tables":{"t":{"x":[0.013768449590682241,0.1915194503788923,0.2725926052826416,0.2764642551430967,0.35781726995786667,0.37025075479039493,0.4377277390071145,0.5009951255234587,0.5030831653078097,0.5611961860656249,0.6221087710398319,0.6834 … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ tableAt tables-numpy-scipy.test.ts:20:10
+ ❯ readTable tables-numpy-scipy.test.ts:23:22
+ ❯ between tables-numpy-scipy.test.ts:106:17
+ ❯ overshoot tables-numpy-scipy.test.ts:111:31
+ ❯ tables-numpy-scipy.test.ts:123:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[52/54]⎯
+
+ FAIL  tables-numpy-scipy.test.ts > criterion 4 (port): scipy e4e854eaa8 TestPCHIP test_overshoot and test_monotone against our monotone tables > criterion 4: TestPCHIP.test_monotone: each sample past a segment's first moves the way its knots do, (y2 − y1)·(yp[1:] − yp[:1]) > 0
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"table(oracle.t, x)","context":"driver","packs":[{"name":"oracle","tables":{"t":{"x":[0.013768449590682241,0.1915194503788923,0.2725926052826416,0.2764642551430967,0.35781726995786667,0.37025075479039493,0.4377277390071145,0.5009951255234587,0.5030831653078097,0.5611961860656249,0.6221087710398319,0.6834 … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ tableAt tables-numpy-scipy.test.ts:20:10
+ ❯ readTable tables-numpy-scipy.test.ts:23:22
+ ❯ between tables-numpy-scipy.test.ts:106:17
+ ❯ tables-numpy-scipy.test.ts:128:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[53/54]⎯
+
+ FAIL  tables-numpy-scipy.test.ts > criterion 4 (port): scipy e4e854eaa8 TestPCHIP test_overshoot and test_monotone against our monotone tables > criterion 4: TestPCHIP.test_all_zeros: x arange(10), y zeros read exactly 0 at linspace(0, 9, 101)
+AssertionError: deep-show run accepts a scenario of 1 fn calls (the first: {"call":"fn","expr":"table(oracle.t, x)","context":"driver","packs":[{"name":"oracle","tables":{"t":{"x":[0,1,2,3,4,5,6,7,8,9],"y":[0,0,0,0,0,0,0,0,0,0],"mode":"monotone"}}}],"at":[0,0.09,0.18,0.27,0.36,0.44999999999999996,0.54,0.63,0.72,0.8099999999999999,0.8999999999999999,0.99,1.08,1.17,1.26,1.3499999999999999,1.44,1.53, … (line cut at 400 characters)
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runFns helpers.ts:117:192
+
+ ❯ tableAt tables-numpy-scipy.test.ts:20:10
+ ❯ readTable tables-numpy-scipy.test.ts:23:22
+ ❯ tables-numpy-scipy.test.ts:138:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[54/54]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  54 failed | 4 passed (58)
+   Start at  12:02:36
+   Duration  3.62s (tests 97%, transform 2%, import 1%)
+

@@ -3935,7 +3935,28 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             path: format!("{path}/params/center"),
         })
     };
-    let path_data = || -> Result<(&String, Vec<Verb>), Refused> {
+    let path_data = || -> Result<(String, Vec<Verb>), Refused> {
+        // #490: a path function in place of `d`, drawn from its samples; its text keys it.
+        if let Some(f) = params.get("fn") {
+            let drawn = crate::function::draw(f).map_err(|r| Refused {
+                code: "bad_doc",
+                path: format!("{path}/params/fn/{}", r.field),
+            })?;
+            let verbs = drawn
+                .subpaths
+                .iter()
+                .flat_map(|s| {
+                    s.iter().enumerate().map(|(i, p)| {
+                        if i == 0 {
+                            Verb::Move(*p)
+                        } else {
+                            Verb::Line(*p)
+                        }
+                    })
+                })
+                .collect();
+            return Ok((format!("fn:{f}"), verbs));
+        }
         let Some(Value::String(d)) = params.get("d") else {
             return refuse("bad_doc", format!("{path}/params/d"));
         };
@@ -3943,7 +3964,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             code: "bad_path_data",
             path: format!("{path}/params/d"),
         })?;
-        Ok((d, verbs))
+        Ok((d.clone(), verbs))
     };
     // R1's rect, circle and path draw an item that only moves, in the paint R1 knows.
     // Issue #160: a path with ops, ends, an attachment or a bend, or a stroke that tapers or
@@ -4200,7 +4221,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 let color = role(ctx.palette, color_role, &format!("{path}/params/paint"))?;
                 Mark::Path {
                     item: id.clone(),
-                    d: d.clone(),
+                    d,
                     geometry: Geometry {
                         verbs,
                         stroke: stroke.map(|s| num(s.get("width")).unwrap_or(1.0)),

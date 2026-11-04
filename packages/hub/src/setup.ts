@@ -30,6 +30,13 @@ const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 const claudeJson = (): string => join(homedir(), '.claude.json');
 const skillDir = (): string => join(dirname(claudeSettings()), 'skills', 'deepbuild');
 const q = (path: string) => `'${path.replaceAll("'", `'\\''`)}'`;
+// #1002: setup's first step writes the second, and keeps in it why it stopped and the fix; its last step writes the
+// first, with its version, and takes the second away. The app and the first `deep` command offer Set up while setup
+// hasn't finished: no folder yet, or one a setup started in and didn't finish. A folder with neither file is a home set
+// up before these records, or a hub run on its own, and is left as it is.
+const finishedFile = (root: string) => join(root, 'setup-finished.json');
+const stoppedFile = (root: string) => join(root, 'setup-stopped.json');
+const unfinished = (root: string) => !existsSync(finishedFile(root)) && (!existsSync(root) || existsSync(stoppedFile(root)));
 
 
 /** `deep setup [--undo]`. `cli` is the deep command's script. */
@@ -46,12 +53,12 @@ export async function setupCommand(cli: string, args: readonly string[] = []): P
 export const SET_UP_LINE = 'DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo\'s checks, and started the hub at login; deep setup --undo removes it all.';
 
 /**
- * The first `deep` command (#326): in a home with nothing of DeepBuild in it, `deep setup`'s steps run without asking,
+ * The first `deep` command (#326): in a home where setup hasn't finished (#1002), `deep setup`'s steps run without asking,
  * and the one line goes to stderr, so the command's own output stays on stdout. 0 when nothing was needed or all of
  * it is in place; else setup's exit code.
  */
 export async function setUpFirst(cli: string): Promise<number> {
-  if (existsSync(installedRoot())) return 0;
+  if (!unfinished(installedRoot())) return 0;
   const code = await install(cli, true);
   if (code === 0) process.stderr.write(`${SET_UP_LINE}\n`);
   return code;
@@ -64,6 +71,10 @@ export async function setUpFirst(cli: string): Promise<number> {
 async function install(cli: string, quiet = false): Promise<number> {
   const root = installedRoot();
   mkdirSync(root, { recursive: true, mode: 0o700 });
+  rmSync(finishedFile(root), { force: true });
+  // Kept until the last step, so a setup that stops anywhere, even killed, is offered again.
+  stopped(root, 0, 'it was interrupted before it finished', 'Set up again.');
+  const deepbuild = version(cli);
   const settingsFile = claudeSettings();
   const userFile = claudeJson();
   // Every file is planned before any is written: one that won't parse refuses the whole setup.
@@ -81,7 +92,7 @@ async function install(cli: string, quiet = false): Promise<number> {
       mkdirSync(dirname(copy), { recursive: true, mode: 0o700 });
       writeFileSync(copy, text, { mode: 0o600 });
       process.stderr.write(`deep setup: ${file} ${read.refused}, so setup left it byte-for-byte as it was and wrote nothing; a copy is at ${copy}. Fix it, then run deep setup again.\n`);
-      return 1;
+      return stopped(root, 1, `${file} ${read.refused}`, 'Fix the file, then Set up again.');
     }
     planned.set(file, read.value);
   }
@@ -115,8 +126,9 @@ async function install(cli: string, quiet = false): Promise<number> {
     if (plant() === 'setup-writes-project-settings') writeJson(join(process.cwd(), '.claude', 'settings.json'), withHooks(root, {}, groups));
     const user = planned.get(userFile)!;
     const servers = isObj(user.mcpServers) ? user.mcpServers : {};
-    // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools.
-    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: process.execPath, args: [cli, 'mcp'] }, 'deep-actions': { type: 'stdio', command: process.execPath, args: [cli, 'mcp', 'actions'] } } });
+    // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools. deep-hook
+    // serves it, so a session runs one Node server, not two (#824's memory per session).
+    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: process.execPath, args: [cli, 'mcp'] }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } } });
     noteWritten(record, userFile);
     const skill = skillDir();
     if (!existsSync(skill) || record.created.includes(skill)) {
@@ -126,18 +138,29 @@ async function install(cli: string, quiet = false): Promise<number> {
     saveRecord(root, record);
   } catch (error) {
     saveRecord(root, record);
-    process.stderr.write(`deep setup: ${error instanceof Error ? error.message : String(error)}\n`);
-    return 1;
+    const why = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`deep setup: ${why}\n`);
+    return stopped(root, 1, why, 'Set up again once that is fixed.');
   }
   if (!quiet) console.log(`DeepBuild added its hooks and status line forwarder to ${settingsFile}, beside yours; its MCP server to ${userFile}; its skill at ${skillDir()}; its safety rules at ${join(root, 'rules.json')}. Its gates are watch-only until you approve a repo's checks. deep setup --undo removes it all.`);
   if (!quiet) for (const r of relations(root)) console.log(`${r.holds ? 'OK' : 'BROKEN'} ${r.text}`);
   const started = await startHub({ cli });
   if (started !== 0) {
     process.stderr.write('deep setup: the hub didn\'t start through its login service; deep doctor names what is missing.\n');
-    return 3;
+    return stopped(root, 3, 'the hub didn\'t start through its login service', 'Run deep doctor, which names what is missing, then Set up again.');
   }
-  return readHistory(quiet);
+  const code = await readHistory(quiet);
+  writeFileSync(finishedFile(root), `${JSON.stringify({ version: deepbuild, at: new Date().toISOString() })}\n`, { mode: 0o600 });
+  rmSync(stoppedFile(root), { force: true });
+  return code;
 }
+/** Keeps why setup stopped, and its fix, for the app to show beside Set up; answers `code`. */
+function stopped(root: string, code: number, reason: string, fix: string): number {
+  writeFileSync(stoppedFile(root), `${JSON.stringify({ reason, fix, at: new Date().toISOString() })}\n`, { mode: 0o600 });
+  return code;
+}
+/** DeepBuild's version, as `deep --version` says it: the CLI's package, beside its script's folder. */
+const version = (cli: string): string => (JSON.parse(readFileSync(join(dirname(cli), '..', 'package.json'), 'utf8')) as { version: string }).version;
 /**
  * Once the hub is up, it reads your Claude Code and Codex history into the wiki (#356): pattern matching written first,
  * then each reading job finished or waiting on the plan reserve. Each wiki page that changed gets a line, unless quiet.
@@ -159,17 +182,25 @@ async function readHistory(quiet: boolean): Promise<number> {
     return 4;
   }
 }
-/** deep-hook as this checkout built it; from a checkout with none, setup builds it once (a release ships it built, #41). */
+/**
+ * deep-hook as this checkout built it; from a checkout with none, or one built before it served deep-actions (#824),
+ * setup builds it once (a release ships it built, #41).
+ */
 function builtHook(): string {
+  // Whether a build lists deep-actions; undefined when its --help can't be read, which is no reason to rebuild.
+  const serves = (hook: string) => { try { return execFileSync(hook, ['--help'], { encoding: 'utf8', timeout: 10_000 }).includes('mcp actions'); } catch { return undefined; } };
   try {
-    return deepHook();
-  } catch {
-    // Cargo and rustup live in your account's home, whatever HOME a script runs setup with.
-    const home = userInfo().homedir;
-    const env = { ...process.env, CARGO_HOME: process.env.CARGO_HOME ?? join(home, '.cargo'), RUSTUP_HOME: process.env.RUSTUP_HOME ?? join(home, '.rustup') };
-    execFileSync('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { cwd: REPO, env, stdio: 'ignore', timeout: 900_000 });
-    return deepHook();
-  }
+    const hook = deepHook();
+    if (serves(hook) !== false) return hook;
+  } catch { /* none built */ }
+  // Cargo and rustup live in your account's home, whatever HOME a script runs setup with.
+  const home = userInfo().homedir;
+  const env = { ...process.env, CARGO_HOME: process.env.CARGO_HOME ?? join(home, '.cargo'), RUSTUP_HOME: process.env.RUSTUP_HOME ?? join(home, '.rustup') };
+  execFileSync('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { cwd: REPO, env, stdio: 'ignore', timeout: 900_000 });
+  // The build just made, even where an older release build is newer on disk.
+  const built = join(REPO, 'target', 'debug', 'deep-hook');
+  if (serves(built) === false) throw Error(`${built} doesn't serve deep-actions after cargo build -p deep-hook`);
+  return built;
 }
 function lenient(text: string): { value: Obj } | { refused: string } {
   try {
@@ -302,6 +333,8 @@ async function undo(): Promise<number> {
   for (const dir of record.created) rmSync(dir, { recursive: true, force: true });
   rmSync(installedRecord(root), { force: true });
   rmSync(join(root, 'setup.json'), { force: true });
+  rmSync(finishedFile(root), { force: true });
+  rmSync(stoppedFile(root), { force: true });
   for (const note of notes) console.log(note);
   console.log(`DeepBuild is removed from Claude Code: its hooks, status line forwarder, MCP server, skill and the hub's login service are gone, and your settings are as they were. Your record, evidence and wiki stay in ${root}; deleting that folder is yours to do.`);
   return 0;

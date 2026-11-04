@@ -521,6 +521,10 @@ pub enum Call {
     },
     /// #200: `deep://registries/<core version>`.
     Registries,
+    /// #490: `fn`, one expression of the closed function list.
+    Fn(Box<Map<String, Value>>),
+    /// #490: `path`, an item's drawn path.
+    Path { doc: String, item: String },
     /// #412: deep_kinds, its fields as the call gave them.
     Kinds(Value),
     /// #238: the sandbox module's counts of checks, links, rewrites and check-time runs.
@@ -1474,6 +1478,11 @@ impl<'a> Hub<'a> {
                 self.install_pack(id, dir, session.as_deref())
             }
             Call::Registries => self.registries_reply(),
+            Call::Fn(c) => crate::function::reply(c),
+            Call::Path { doc, item } => match self.current(doc) {
+                Some(row) => crate::function::path_reply(&row.doc, item),
+                None => json!({"outcome": "refused", "code": "no_revision"}),
+            },
             Call::Kinds(c) => self.kinds_reply(c),
             Call::Sandbox => json!({
                 "module": "sandbox",
@@ -2059,10 +2068,9 @@ impl<'a> Hub<'a> {
                 !(n.code == "deprecated"
                     && self.scenario.planted == Some(Planted::LoadsDeprecatedSilently))
             })
-            // A kind this build draws without a registry entry is drawn, not skipped (#1162).
-            .filter(|n| {
-                !(n.code == "unknown_kind" && n.actual.as_str().is_some_and(crate::shared::knows))
-            })
+            // A kind this build draws without a kind registry entry (rect@1, path@1) is drawn,
+            // not skipped, as `unknown_items` reads it, so no notice says it is (#490).
+            .filter(|n| !(n.code == "unknown_kind" && n.actual.as_str().is_some_and(shared::knows)))
             .map(Notice::to_json)
             .collect()
     }

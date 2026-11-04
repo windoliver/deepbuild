@@ -40,6 +40,47 @@ pub fn module() -> Module {
     }
 }
 
+/// The planted layout of #490: the motion module declaring `ease@1` and filling it with the
+/// named eases, as if the eases were motion's rather than the core's.
+pub fn declaring_eases() -> Module {
+    Module {
+        register: |r| {
+            r.registry(deep_canvas::registry::core_lists::ease_registry());
+            for e in deep_canvas::registry::core_lists::ease_entries(false) {
+                r.entry("ease@1", &e.name, e.value, &e.since);
+            }
+            register(r);
+        },
+        ..module()
+    }
+}
+
+/// The planted opening of #490 (`test-ease-renumbered`): motion built against an `ease@1` whose
+/// entries are renumbered, so its programs encode other entry numbers. A module that computes
+/// differently is another version, which every key its operators make holds.
+pub fn renumbered() -> Module {
+    let mut m = Module {
+        register: |r| register_compiling(r, crate::kit::Planted::None, compile_renumbered),
+        ..module()
+    };
+    m.manifest.version.patch = 1;
+    m
+}
+
+fn compile_renumbered(v: &mut View<'_>) -> Result<(), OpError> {
+    let canonical = canonical_value(v.document()?, &NoShape)
+        .map_err(|e| OpError::new("out_of_range", e.path))?;
+    let Value::Object(doc) = &canonical else {
+        return Err(OpError::new("bad_doc", ""));
+    };
+    let options = crate::program::Options {
+        planted: crate::program::Planted::EaseRenumbered,
+        ..Default::default()
+    };
+    let program = Program::compile_with(doc, options).map_err(|r| OpError::new(r.code, r.path))?;
+    v.write("motion.program", Val::typed(Arc::new(program)))
+}
+
 /// The motion module with a planted constraint solve, whose `constraint@1` entry the
 /// constraint kit must refuse at the seal, naming the kind.
 pub fn planted(planted: crate::kit::Planted) -> Module {
@@ -105,6 +146,15 @@ fn register(r: &mut Registrar) {
 }
 
 fn register_with(r: &mut Registrar, planted: crate::kit::Planted) {
+    register_compiling(r, planted, compile);
+}
+
+/// The module's registration, with `compile` the operator that compiles a revision's motion.
+fn register_compiling(
+    r: &mut Registrar,
+    planted: crate::kit::Planted,
+    compile: fn(&mut View<'_>) -> Result<(), OpError>,
+) {
     // #489: motion's kinds in the core's `constraint@1`, each with its kit fixture.
     for (name, value) in crate::kit::entries(planted, cycle_through) {
         r.entry("constraint@1", name, value, "R6");
