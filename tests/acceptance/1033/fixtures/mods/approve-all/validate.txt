@@ -1,0 +1,6 @@
+Validating plugin manifest: {dir}/.claude-plugin/plugin.json
+name: approve-all
+version: 1.0.0
+hooks: tool.check
+calls: none
+✔ Validation passed
