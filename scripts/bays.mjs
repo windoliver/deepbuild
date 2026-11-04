@@ -9,11 +9,13 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, 
 import { constants, homedir, tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { git, listFiles } from './proof-change.mjs';
 import { acquire, holds, release } from './throttle.mjs';
 
 // What a bay keeps across runs: its builds, and the git folder it gets anew each run.
 const KEPT = ['.git', 'target', 'node_modules'];
+// proof-change.mjs reads with TypeScript, so only the CLI loads it: perf imports replace and walk from a checkout or
+// a test's fixture that may have no node_modules.
+let git, listFiles;
 const bays = () => join(homedir(), 'deepbuild-bays');
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const real = (path) => {
@@ -245,6 +247,7 @@ function stopLeftover(file) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  ({ git, listFiles } = await import('./proof-change.mjs'));
   const args = process.argv.slice(2);
   const [role, split] = args;
   const command = args.slice(2);
