@@ -140,6 +140,22 @@ export class GateRunner {
     return head?.read.filter(ownRead) ?? [];
   }
   /**
+   * The files the claim's checks read on its snapshot (#324): what a check reaches, from each one's last run there.
+   * Undefined while any of them has no recorded run yet, since a file one would reach can't be told from one it won't;
+   * none for a claim with no check.
+   */
+  reached(claim: string): string[] | undefined {
+    const c = this.claimOf(claim);
+    if (!c) return undefined;
+    const read = new Set<string>();
+    for (const e of c.entries.values()) {
+      const last = e.runs.length ? this.records.get(e.runs[e.runs.length - 1]!) : undefined;
+      if (!last) return undefined;
+      for (const path of last.read) read.add(path);
+    }
+    return [...read].sort();
+  }
+  /**
    * How a fix check ran on the merge base (#31), from that run's record, and why a failure there proves nothing: it
    * proves the fix only by failing at an assertion its check names (#875), never before its tests ran or elsewhere. A
    * base run that never ended as a run (missing, stopped, uncounted) is no run on the base.

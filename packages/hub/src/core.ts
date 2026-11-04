@@ -37,6 +37,7 @@ import { statusRows } from './status.js';
 import { addGuards, writeStanding } from './guards.js';
 import { captureRejected, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
+import { SizeScope } from './scope.js';
 import { codexTrusted } from './codex-settings.js';
 import { Holds } from './holds.js';
 import { Staging } from './staging.js';
@@ -412,6 +413,7 @@ export class Core {
   private readonly actionAsks = new Map<string, string>();
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
   private readonly tasks: AskTasks;
+  private readonly sizing: SizeScope;
   /** What claims leave open, as open items in the record (#323). */
   private readonly openItems: OpenItems;
   /** The commands each claim's final message told you to run, which its gate ran as the agent's own checks (#323). */
@@ -426,6 +428,8 @@ export class Core {
   private trust!: ProjectTrust;
   /** Each claim's requirements by handle, with the ID and text a send-back names (#322). */
   private readonly claimRequirements = new Map<string, Map<string, { id: string; text: string }>>();
+  /** Each claim's task, base and folder, for its size and scope at its stop (#324). */
+  private readonly claimScopes = new Map<string, { task: string; base: string; cwd: string }>();
   /** The one ledger of the budgets you approved (#86), each issue's budget ask with the budget your yes approves, and each claim's paid checks (#325). */
   private ledger!: Ledger;
   private readonly budgetAsks = new Map<string, BudgetInput>();
@@ -652,8 +656,19 @@ export class Core {
       // The window reading of the account the session's agent runs on, in the hub's own home (#322).
       atReserve: (agent) => this.runner.atReserve(agent === 'claude' ? 'claude-code' : agent as Parameters<typeof this.runner.atReserve>[0], homedir()),
       pin: (cwd, question) => this.pinOf(cwd, question), keep: (bytes, source) => this.keep(bytes, source), run: (r) => this.runClaim(r),
-      invalid: (claim, commit, reason) => this.invalid(claim, commit, reason), locked: (d) => this.priceLocked(d),
+      invalid: (claim, commit, reason) => this.invalid(claim, commit, reason),
+      // A definition just locked: its paid checks priced (#325), and a plan marked large sized before any code (#324).
+      locked: async (d) => {
+        await this.priceLocked(d).catch((error: unknown) => process.stderr.write(`deep hub: ${d.task_ref}'s paid checks were not priced: ${error instanceof Error ? error.message : String(error)}\n`));
+        await this.sizing.planned(d);
+      },
       unresolved: (claim, targets) => this.unresolvedTargets.set(claim, targets),
+    });
+    this.sizing = new SizeScope({
+      raw: (query, params) => this.record.raw(query, params), append: (connection, input) => this.append(connection, input),
+      connection: (session, agent) => this.connection('core', { session, agent }), asks: () => this.asks, now: this.now,
+      pin: (cwd, question) => this.pinOf(cwd, question), keep: (bytes, source) => this.keep(bytes, source), scopeOf: (task) => this.tasks.scopeOf(task),
+      evidence: this.root.evidence, accepted: options.accepted,
     });
     this.openItems = new OpenItems({
       raw: (query, params) => this.record.raw(query, params), append: (connection, input) => this.append(connection, input), now: this.now, plant: options.plant,
@@ -3050,8 +3065,12 @@ export class Core {
    * take, an exception, or a taste call or choice that isn't provisional, open, or answered and not yet delivered.
    */
   private async questionHolds(session: string): Promise<boolean> {
-    return ((await this.record.raw(`SELECT 1 FROM asks WHERE session_id = ? AND status IN ('open', 'later', 'answered') AND id NOT IN (SELECT delivery FROM deliveries WHERE outcome = 'delivered')
-      AND (kind IN ('unblock', 'exception') OR (kind IN ('taste', 'choice') AND provisional = 0)) LIMIT 1`, [session])) as unknown[]).length > 0;
+    const asks = (await this.record.raw(`SELECT key FROM asks WHERE session_id = ? AND status IN ('open', 'later', 'answered') AND id NOT IN (SELECT delivery FROM deliveries WHERE outcome = 'delivered')
+      AND (kind IN ('unblock', 'exception') OR (kind IN ('taste', 'choice') AND provisional = 0))`, [session])) as { key: string }[];
+    if (!asks.length) return false;
+    // Size and scope's own asks (#324) are DeepBuild's readings, not a question the agent left: they hold no send-back.
+    const sized = await this.sizing.keysIn(session);
+    return asks.some((a) => !sized.has(a.key));
   }
   /** A claim that stalled (#325): recorded, and one decision for you instead of another send-back: split the issue, fund the live runs, or accept what's proven. */
   private async stalled(meta: HookMeta, claim: string, task: string, rule: StallRule): Promise<void> {
@@ -3408,6 +3427,8 @@ export class Core {
       if (back) lane.sendBack = back;
       else delete lane.sendBack;
     }
+    // Size and scope (#324): a reading, never a verdict; what it sends back once rides with a failing check's send-back.
+    const sized = judged?.claim ? await this.sizedAt(judged.claim, meta) : undefined;
     let proceeded = false;
     try {
       if (lane && !lane.sendBack && judged?.claim && meta.agent === 'codex' && lane.slow.length) {
@@ -3422,8 +3443,8 @@ export class Core {
       if (proceed) {
         proceeded = true;
         const delivered = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
-        block = [r.sendBacks.shift(), delivered, lane?.sendBack, proceed].filter(Boolean).join('\n\n');
-      } else block = lane?.sendBack ?? (r.places ? undefined : await this.stopHold(meta, r, until));
+        block = [r.sendBacks.shift(), delivered, lane?.sendBack, sized, proceed].filter(Boolean).join('\n\n');
+      } else block = [lane?.sendBack, sized].filter(Boolean).join('\n\n') || (r.places ? undefined : await this.stopHold(meta, r, until));
     } finally {
       this.abandoned.delete(meta.id);
       r.holding--;
@@ -3508,6 +3529,16 @@ export class Core {
         return reqs.length ? `${reqs.map((q) => `${q.id} ("${q.text}")`).join(' and ')} ${reqs.length === 1 ? 'is' : 'are'} unproven: its check ${c.check} ${c.result}` : `the repo's spec check ${c.check} ${c.result}`;
       }).join('; ')}.` : undefined;
     return { fast: ran.fast, slow: ran.slow, readyAt: ran.readyAt, ...(sendBack ? { sendBack } : {}) };
+  }
+  /** A judged stop's size and scope (#324): measured and recorded as claim.sized; what it sends back once, or undefined. */
+  private async sizedAt(claim: string, meta: HookMeta): Promise<string | undefined> {
+    const c = this.claimScopes.get(claim);
+    if (!c) return undefined;
+    const requirements = [...(this.claimRequirements.get(claim)?.values() ?? [])];
+    return this.sizing.atStop({ claim, ...c, session: meta.session, agent: meta.agent, requirements, reached: this.gate.reached(claim) }).catch(async (e: unknown) => {
+      await this.appendReading(meta.session, meta.agent, `This stop's size and scope could not be read: ${e instanceof Error ? e.message : String(e)}`).catch(() => undefined);
+      return undefined;
+    });
   }
   /**
    * A Codex stop with slow checks (#39): held for them only when each one's deadline ends at least 5 s before the Stop
@@ -5568,6 +5599,7 @@ export class Core {
   private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean }): Promise<void> {
     const at = this.now();
     this.claimRequirements.set(r.claim, new Map(r.requirements.map((q) => [q.req, { id: q.id, text: q.text }])));
+    this.claimScopes.set(r.claim, { task: r.task, base: r.base, cwd: r.cwd });
     this.paidChecks.set(r.claim, new Map(r.checks.flatMap((c) => (c.paid ? [[c.check, { paid: c.paid, task: r.task }] as const] : []))));
     const lane = (async () => {
       const message = this.lastMessage.get(r.session) ?? '';
