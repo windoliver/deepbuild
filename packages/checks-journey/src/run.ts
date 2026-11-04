@@ -41,7 +41,7 @@ export interface Report {
 }
 /** A file the run wrote, kept with its digest and size, checked when read. */
 export interface Artifact { name: string; path: string; sha256: string; size: number; kind: 'png' | 'webm' | 'zip' | 'json' }
-export interface DriverRun { report: Report | null; dir: string; out: string; artifacts: Artifact[]; exit: { code: number | null; cause: 'exit' | 'deadline' | 'stop'; failed: string | null; output: string }; wallMs: number }
+export interface DriverRun { report: Report | null; dir: string; out: string; artifacts: Artifact[]; exit: { code: number | null; cause: 'exit' | 'deadline' | 'stop'; failed: string | null; output: string }; wallMs: number; /** The driver process gone, awaited before its folder is removed. */ settled: Promise<unknown> }
 
 export const sha256 = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
 /** Where Playwright installed its browsers: as told, else the cache under this home, else under the account's own home (a run with HOME moved aside still finds them). */
@@ -127,9 +127,15 @@ export async function drive(o: DriveOptions): Promise<DriverRun> {
   renameSync(`${p.jobFile}.part`, p.jobFile);
   const read = (): Report | null => { try { return JSON.parse(readFileSync(join(out, 'report.json'), 'utf8')) as Report; } catch { return null; } };
   const started = Date.now();
-  const running = p.running;
   const between = o.between ? o.between(out, read, p.exited).catch(() => undefined) : Promise.resolve();
-  const exit = await running;
+  // A driver that finished its report says so before it exits; its exit then overlaps storing what it wrote.
+  let polling = true;
+  const finished = (async (): Promise<DriverRun['exit'] | null> => {
+    while (polling) { if (existsSync(join(out, 'done'))) return { code: 0, cause: 'exit', failed: null, output: '' }; await new Promise((r) => setTimeout(r, 5)); }
+    return null;
+  })();
+  const exit = (await Promise.race([p.running, finished])) ?? (await p.running);
+  polling = false;
   await between;
   const wallMs = Date.now() - started;
   const report = read();
@@ -143,7 +149,7 @@ export async function drive(o: DriveOptions): Promise<DriverRun> {
   for (const f of readdirSync(out)) { if (f.endsWith('.png')) keep(f, 'png'); else if (f.endsWith('.webm')) keep(f, 'webm'); }
   keep('trace.zip', 'zip');
   keep('report.json', 'json');
-  return { report, dir, out, artifacts, exit, wallMs };
+  return { report, dir, out, artifacts, exit, wallMs, settled: p.running };
 }
 /** Removes a run's folder once its artifacts are in the store. */
 export function discard(run: { dir: string }): void { rmSync(run.dir, { recursive: true, force: true }); }
