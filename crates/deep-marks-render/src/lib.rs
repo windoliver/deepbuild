@@ -748,6 +748,9 @@ pub fn main() {
 }
 
 mod asset;
+/// A mark set's table columns read from a `deep-show run` evidence store, with their traces: the
+/// hub's honest-numbers check reads them as `check` does (#1162).
+pub use asset::tables;
 pub mod gpu;
 pub mod layer;
 #[cfg(target_os = "macos")]

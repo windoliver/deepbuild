@@ -25,6 +25,9 @@ struct Current<'h> {
     doc: &'h Value,
 }
 
+/// The core's honest-numbers check kind (canvas primitives: Honest numbers, the check).
+const HONEST: &str = "honest_numbers";
+
 /// The verdicts a claim can get, worst first: the claim's is the worst of its requirements'.
 const WORST_FIRST: [&str; 5] = ["INVALID", "BLOCKED", "FAIL", "INCONCLUSIVE", "PASS"];
 
@@ -312,7 +315,8 @@ impl<'a> Hub<'a> {
             }
             return done(row, "BLOCKED", vec![b]);
         }
-        if core && kind != CHECK {
+        let honest = kind == HONEST;
+        if core && kind != CHECK && !honest {
             // The core's other kinds land with R6 (Check input: Lands); unrun, they never pass.
             let b = json!({"code": "not_run", "kind": kind, "ids": []});
             return done(row, "BLOCKED", vec![b]);
@@ -321,6 +325,9 @@ impl<'a> Hub<'a> {
         let mut blocked: Vec<Value> = Vec::new();
         let mut by_kind = BTreeMap::new();
         let mut own: Vec<(String, String)> = Vec::new();
+        // Honest numbers (canvas primitives: Honest numbers, the check): every number each
+        // deliverable shows, with what it traces to.
+        let mut numbers: Vec<Value> = Vec::new();
         for (doc, cur) in docs {
             // Checked with the pack store, so a deliverable that names an installed pack resolves
             // it, as its show did (#200).
@@ -379,6 +386,15 @@ impl<'a> Hub<'a> {
                     &input,
                 ));
             }
+            if honest {
+                match self.honest_numbers(cur.doc) {
+                    Ok((found, raised_here)) => {
+                        numbers.extend(found);
+                        raised.extend(raised_here.iter().map(Issue::to_json));
+                    }
+                    Err(b) => blocked.push(b),
+                }
+            }
             for i in &mut raised {
                 i["doc"] = json!(doc);
             }
@@ -406,7 +422,25 @@ impl<'a> Hub<'a> {
             "PASS"
         };
         row.insert("issues".into(), Value::Array(issues));
+        if honest {
+            row.insert("numbers".into(), Value::Array(numbers));
+        }
         done(row, result, blocked)
+    }
+
+    /// The honest-numbers check on one deliverable: its mark sets' table columns read from the
+    /// evidence store with their traces (#397), then every number it shows and the issues
+    /// tracing them raises, a table an agent wrote where status can show among them. A table it
+    /// can't read blocks the check, naming the column.
+    fn honest_numbers(&self, doc: &Value) -> Result<(Vec<Value>, Vec<Issue>), Value> {
+        let mut doc = doc.as_object().cloned().unwrap_or_default();
+        if let Err(refused) =
+            deep_marks_render::tables(&mut doc, Some(self.scenario.evidence.as_path()))
+        {
+            return Err(json!({"code": refused["code"], "kind": HONEST, "ids": [],
+                              "path": refused["path"]}));
+        }
+        Ok(deep_canvas_marks::check::numbers(&doc))
     }
 }
 
