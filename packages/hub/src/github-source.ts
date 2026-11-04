@@ -58,6 +58,36 @@ export function liveFetch(api: string, token: string | undefined): Fetch {
   };
 }
 
+/** How the gate reaches GitHub's GraphQL API (#323): one query with its variables. */
+export type Graphql = (query: string, variables: Obj) => Promise<Answer>;
+/** The recorded GraphQL answers (tests only): an entry matches when each variable it records equals the request's. */
+export function recordedGraphql(file: string): Graphql {
+  return async (_query, variables) => {
+    let answers: Obj[] = [];
+    try {
+      const value = (JSON.parse(await readFile(file, 'utf8')) as Obj).answers;
+      answers = Array.isArray(value) ? value.filter(isObj) : [];
+    } catch {
+      answers = [];
+    }
+    const found = answers.find((a) => a.method === 'POST' && a.path === '/graphql' && Object.entries(isObj(a.variables) ? a.variables : {}).every(([k, v]) => variables[k] === v));
+    return found ? { status: Number(found.status ?? 200), headers: {}, body: found.body } : { status: 404, headers: {}, body: { message: 'Not Found' } };
+  };
+}
+/** The live GraphQL API at `api`, the token as a bearer when set; a request that fails to reach it reads as a 599. */
+export function liveGraphql(api: string, token: string | undefined): Graphql {
+  return async (query, variables) => {
+    const headers: Record<string, string> = { accept: 'application/vnd.github+json', 'content-type': 'application/json' };
+    if (token) headers.authorization = `Bearer ${token}`;
+    try {
+      const res = await fetch(`${api}/graphql`, { method: 'POST', headers, body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(20_000) });
+      return { status: res.status, headers: {}, body: await res.json().catch(() => undefined) };
+    } catch {
+      return { status: 599, headers: {}, body: undefined };
+    }
+  };
+}
+
 /** The acceptance criteria an issue body lists: its `- [ ]` lines under the Acceptance criteria heading, as scripts/proof-change.mjs reads them. */
 export function criteriaOf(body: string): string[] {
   const m = /^#+\s*acceptance criteria\s*$([\s\S]*?)(?=^#+\s|(?![\s\S]))/im.exec(body);

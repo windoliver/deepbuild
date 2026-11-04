@@ -1,0 +1,6 @@
+Validating plugin manifest: {dir}/.claude-plugin/plugin.json
+name: status-band
+version: 1.0.0
+hooks: session.start
+calls: band.set
+✔ Validation passed

@@ -18,13 +18,13 @@ import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
 import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
+import { claudeHomes, denyHolds, homeMods, managedSettings, overrideWords } from './mods.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 export interface Item { item: string; agent: string; code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 import { codexHooks, hooksDisabled, installedCodex, modified, readTrust, recordedHome, trustProblems } from './codex-settings.js';
-const MANAGED = process.platform === 'darwin' ? '/Library/Application Support/ClaudeCode/managed-settings.json' : '/etc/claude-code/managed-settings.json';
 const OURS = /deep-hook|packages\/cli\/dist\/main\.js/;
 
 /** Runs a program with a 10 s cap; its exit code and output, or null when it couldn't start. */
@@ -205,6 +205,7 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
     else add('claude.token', agent, 'healthy', 'ok', `your sign-in token expires at ${when}`, 'Nothing to do; a run planned past then won\'t start, saying so.');
   }
   billing(agent, 'Claude Code', env, add);
+  await modItems(claude, env, signed?.loggedIn === true ? signed.subscriptionType : undefined, add);
   if (env.CLAUDECODE) add('claude.nesting', agent, 'nested_session', 'warn', 'deep doctor runs inside a Claude Code session (CLAUDECODE is set), so what it reads is that session\'s environment', 'Run deep doctor from your own terminal.');
   if (!prompt && plant() !== 'prompt-without-flag') {
     // The planted wrong program shows the prompt it didn't send as ok.
@@ -217,6 +218,29 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
   try { result = JSON.parse(answer?.out ?? '') as Obj; } catch { result = undefined; }
   if (result?.subtype === 'success' && result.is_error === false) add('claude.prompt', agent, 'healthy', 'ok', `a test prompt came back: ${String(result.result).slice(0, 80)}`, 'Nothing to do.');
   else add('claude.prompt', agent, 'prompt_failed', 'fail', `the test prompt didn't come back as a success (exit ${answer?.code ?? 'none'}): ${(answer?.err || answer?.out || '').slice(0, 200)}`, 'Run claude -p "Reply with OK." yourself and read what it says.');
+}
+/**
+ * The mods each Claude Code home loads (#1033), read from `claude plugin validate`, never by loading one: a warn for
+ * each that can approve a call past a PreToolUse deny or submit prompts, unless the setup holds the deny; OK
+ * when none can; not checked when the home's plugins can't be read.
+ */
+async function modItems(claude: string, env: NodeJS.ProcessEnv, plan: unknown, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
+  const agent = 'claude-code';
+  for (const [i, home] of claudeHomes(env).entries()) {
+    // The sign-in already read is the first home's, the one `claude auth status` reads with this environment.
+    const held = await denyHolds({ ...env, CLAUDE_CONFIG_DIR: home }, claude, i === 0 ? { plan } : undefined);
+    const read = await homeMods(home, claude, env);
+    if ('unread' in read) {
+      add('claude.mods', agent, 'not_checked', 'skip', `the mods ${home} loads couldn't be read: ${read.unread}`, `Run claude plugin validate on each plugin in ${home}/plugins yourself, and remove or fix the one it can't read.`);
+      continue;
+    }
+    const risky = read.mods.flatMap((m) => { const words = overrideWords(m); return words ? [{ m, words }] : []; });
+    for (const { m, words } of risky) {
+      if (held) add('claude.mods', agent, 'healthy', 'ok', `${home} loads the mod ${m.name} (${m.plugin}), which ${words}, but ${held}, which holds DeepBuild's deny`, 'Nothing to do.');
+      else add('claude.mods', agent, 'mod_overrides_guard', 'warn', `${home} loads the mod ${m.name} (${m.plugin}), which ${words}: ${m.overrides ? "a call it approves runs though DeepBuild denied it, and that home's sessions read their guard as watch-only" : 'a prompt it submits reaches the agent as if you typed it'}`, `Disable ${m.plugin} (claude plugin disable ${m.plugin}) if you want ${m.overrides ? "DeepBuild's denials to hold" : 'only your prompts to reach the agent'}.`);
+    }
+    if (!risky.length) add('claude.mods', agent, 'healthy', 'ok', read.mods.length ? `${home} loads ${read.mods.map((m) => m.name).join(', ')}, none of which handles a tool or prompt event` : `${home} loads no mods`, 'Nothing to do.');
+  }
 }
 async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
   const agent = 'codex';
@@ -284,7 +308,7 @@ function hooksOff(file: string, settings: Obj | undefined, cwd: string, env: Nod
     const repoFile = join(repo, '.claude', name);
     if (readJson(repoFile)?.disableAllHooks === true) out.push({ evidence: `disableAllHooks is true in ${repoFile}, so DeepBuild's hooks won't run in ${repo}`, fix: `Take disableAllHooks out of ${repoFile} to have DeepBuild watch sessions in ${repo}.` });
   }
-  const managedFile = env.DEEP_HUB_TEST_MANAGED_SETTINGS || MANAGED;
+  const managedFile = managedSettings(env);
   const managed = readJson(managedFile);
   if (managed?.allowManagedHooksOnly === true) out.push({ evidence: `allowManagedHooksOnly is true in Claude Code's managed settings (${managedFile}), so only managed hooks run and DeepBuild's user-level hooks won't run anywhere`, fix: 'Ask whoever manages this Mac to add DeepBuild\'s hooks to the managed settings, or to allow user hooks.' });
   if (managed?.disableAllHooks === true) out.push({ evidence: `disableAllHooks is true in Claude Code's managed settings (${managedFile}), so no hook runs`, fix: 'Ask whoever manages this Mac to allow hooks.' });
