@@ -15,7 +15,7 @@ import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type
 import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
-import { isPrCreate } from './forge.js';
+import { isPrCreate, isPrEdit } from './forge.js';
 import { registry } from './hookmap.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
@@ -695,8 +695,9 @@ class Hub {
     const screen = SCREEN_TOOLS.some((prefix) => meta.call?.tool.startsWith(prefix));
     // A shell or MCP call in a session whose cut-off turn started a send with no recorded end is checked against it (#85).
     const resend = this.resend.has(meta.session) && (data.kind === 'shell' || data.kind === 'mcp');
-    // A `gh pr create` is checked for its body's Closes against the issue's task (#322), whatever else it needs.
-    const pr = data.kind === 'shell' && typeof data.command === 'string' && isPrCreate(data.command);
+    // A `gh pr create`, or a `gh pr edit` of its body (#87), is checked for its body's Closes against the issue's task
+    // (#322), whatever else it needs.
+    const pr = data.kind === 'shell' && typeof data.command === 'string' && (isPrCreate(data.command) || isPrEdit(data.command));
     if (!authority.length && !mcp && !decided.length && stage === undefined && !screen && !resend && !pr) return undefined;
     const label = mcp ? `${mcp.server} ${mcp.tool}` : screen ? meta.call!.tool : typeof data.command === 'string' ? data.command : String(data.kind);
     const command = typeof data.command === 'string' ? { command: data.command } : {};
