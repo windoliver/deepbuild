@@ -220,6 +220,8 @@ impl Canonical for TextSpec {
         self.size.encode(out);
         self.weight.encode(out);
         self.width.encode(out);
+        self.max_lines.encode(out);
+        self.mask.encode(out);
         (self.align as u8).encode(out);
         self.bound.encode(out);
     }
