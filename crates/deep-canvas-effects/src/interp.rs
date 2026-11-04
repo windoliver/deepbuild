@@ -401,7 +401,7 @@ impl<'a> Prog<'a> {
                     p.images.push(img);
                     V::T(p.images.len() - 1)
                 }
-                From::Storage { .. } => {
+                From::Storage { .. } | From::Column { .. } | From::Attribute { .. } => {
                     let i = p
                         .storage
                         .iter()
@@ -1015,13 +1015,12 @@ impl<'a> Prog<'a> {
                     return Err(format!("step {}: read names a storage input", p.id));
                 };
                 let words = &self.storage[b].1;
-                one(
-                    sc,
-                    words
-                        .get(i.min(words.len().saturating_sub(1)))
-                        .copied()
-                        .unwrap_or(0.0),
-                )
+                // An element of n lanes at its packed stride, the index clamped into the elements.
+                let at = i.min((words.len() / n).saturating_sub(1)) * n;
+                let lanes: Vec<f64> = (at..at + n)
+                    .map(|k| words.get(k).copied().unwrap_or(0.0))
+                    .collect();
+                V::N(sc, L::of(&lanes))
             }
             "bitcast" => {
                 let from = sc_of(&gt("x")).0;
@@ -1087,7 +1086,10 @@ pub fn inputs(
     let mut out = BTreeMap::new();
     for (name, input) in &c.op.inputs {
         let v = match &input.from {
-            From::Target { .. } | From::Storage { .. } => Val::T(name.clone()),
+            From::Target { .. }
+            | From::Storage { .. }
+            | From::Column { .. }
+            | From::Attribute { .. } => Val::T(name.clone()),
             From::Role(r) => Val::N(
                 Sc::F32,
                 roles

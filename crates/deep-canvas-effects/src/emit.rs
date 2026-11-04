@@ -580,7 +580,18 @@ impl W<'_> {
                 } else {
                     format!("{buf}[min({i}, arrayLength(&{buf}) - 1u)]")
                 };
-                if sc == Sc::Bool {
+                if let (Ty::V(_, l @ 2..), false) = (&out, self.options.attribute_stride_16) {
+                    // An attribute's element at its packed stride, by the core's own indexing.
+                    let last = if n > 0 {
+                        format!("{}u", n - 1)
+                    } else {
+                        format!("arrayLength(&{buf}) / {l}u - 1u")
+                    };
+                    let e = format!("min({i}, {last}) * {l}u");
+                    let lanes: Vec<String> =
+                        (0..*l).map(|k| format!("{buf}[{e} + {k}u]")).collect();
+                    format!("{}({})", out.wgsl(), lanes.join(", "))
+                } else if sc == Sc::Bool {
                     format!("{at} != 0u")
                 } else {
                     at
@@ -699,10 +710,13 @@ pub struct Options {
     pub off_by_two: bool,
     /// The planted emitter that drops a swizzle's last lane (writes it as zero).
     pub drops_swizzle_last: bool,
+    /// The planted binding that declares a vec3 attribute at WGSL's 16-byte `vec3` stride over
+    /// its packed 12-byte data.
+    pub attribute_stride_16: bool,
 }
 
 /// The inputs' uniform, the sampler and the texture and storage bindings, in binding order.
-fn bindings(c: &Checked, m: &mut String) {
+fn bindings(c: &Checked, options: Options, m: &mut String) {
     m.push_str(FRAME);
     m.push_str(HASH);
     m.push_str("struct Inputs {\n    unused: vec4<f32>,\n");
@@ -726,11 +740,19 @@ fn bindings(c: &Checked, m: &mut String) {
         b += 1;
     }
     for name in &c.storage_inputs {
+        let input = &c.op.inputs[name];
+        let ty = match (&input.from, &input.ty) {
+            (From::Attribute { lanes: l @ 2.., .. }, Ty::Storage(sc, _))
+                if options.attribute_stride_16 =>
+            {
+                format!("array<vec{l}<{}>>", sc.wgsl())
+            }
+            _ => input.ty.wgsl(),
+        };
         let _ = writeln!(
             m,
-            "@group(1) @binding({b}) var<storage, read> {}: {};",
+            "@group(1) @binding({b}) var<storage, read> {}: {ty};",
             input_ident(name),
-            c.op.inputs[name].ty.wgsl()
         );
         b += 1;
     }
@@ -830,7 +852,7 @@ pub fn pass(c: &Checked, options: Options) -> String {
         "// {}: written by the core from its checked steps.",
         c.op.id
     );
-    bindings(c, &mut m);
+    bindings(c, options, &mut m);
     m.push_str(&w.globals);
     m.push_str(
         "struct VOut { @builtin(position) pos: vec4<f32> };
@@ -931,7 +953,7 @@ pub fn material(c: &Checked, options: Options, groups: [u32; 2]) -> String {
     }
     w.line("return o;");
     let mut m = String::new();
-    bindings(c, &mut m);
+    bindings(c, options, &mut m);
     m.push_str(&w.globals);
     m.push_str(MAT_GEOM);
     m.push_str(MAT_OUT);
@@ -996,7 +1018,7 @@ pub fn compute(c: &Checked, options: Options) -> String {
         "// {}: written by the core from its checked steps.",
         c.op.id
     );
-    bindings(c, &mut m);
+    bindings(c, options, &mut m);
     m.push_str(&w.globals);
     let _ = writeln!(
         m,

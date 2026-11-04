@@ -629,7 +629,15 @@ impl Ctx<'_> {
                     }
                 }
                 int_of("i")?;
-                Ty::V(sc, 1)
+                // An attribute reads whole elements at its packed stride.
+                let lanes = match s.args.get("buf") {
+                    Some(Arg::Ref(b, None)) => match self.op.inputs.get(b).map(|i| &i.from) {
+                        Some(From::Attribute { lanes, .. }) => *lanes,
+                        _ => 1,
+                    },
+                    _ => 1,
+                };
+                Ty::V(sc, lanes)
             }
             "discard_if" => {
                 match need("cond")? {
@@ -1069,7 +1077,9 @@ fn input_class(from: &From) -> Class {
         | From::Channel(_)
         | From::Seed
         | From::Role(_)
-        | From::Storage { .. } => Class::Exact,
+        | From::Storage { .. }
+        | From::Column { .. }
+        | From::Attribute { .. } => Class::Exact,
     }
 }
 

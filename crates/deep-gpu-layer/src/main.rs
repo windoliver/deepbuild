@@ -13,6 +13,7 @@
 
 #[cfg(feature = "test-meter")]
 mod allocations;
+mod columns;
 mod compare;
 mod compile;
 mod conformance;
@@ -466,6 +467,7 @@ impl App {
             Some("reference") => effects::reference(self, out, call),
             Some("check_operator") => effects::check_operator(self, call),
             Some("op") => effects::op(self, call),
+            Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),
             Some("cross_gpu") => effects::cross_gpu(self, call),
             Some("golden") => golden::golden(self, out, call),
