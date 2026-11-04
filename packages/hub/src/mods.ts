@@ -76,9 +76,13 @@ export function homeOfTranscript(transcript: string): string | undefined {
   return at > 0 ? transcript.slice(0, at) : undefined;
 }
 
+/**
+ * Runs claude with no traffic of its own: plugin list, validate and auth status each reach its API host otherwise, and
+ * DeepBuild sends nothing anywhere by default.
+ */
 function run(claude: string, args: string[], env: NodeJS.ProcessEnv, cwd?: string): Promise<{ code: number | null; out: string; err: string } | null> {
   return new Promise((done) => {
-    execFile(claude, args, { timeout: 10_000, encoding: 'utf8', env, maxBuffer: 16 << 20, ...(cwd ? { cwd } : {}) }, (error, out, err) => {
+    execFile(claude, args, { timeout: 10_000, encoding: 'utf8', env: { ...env, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' }, maxBuffer: 16 << 20, ...(cwd ? { cwd } : {}) }, (error, out, err) => {
       if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') return done(null);
       done({ code: error ? (typeof error.code === 'number' ? error.code : null) : 0, out: String(out), err: String(err) });
     });
