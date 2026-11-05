@@ -277,6 +277,191 @@ pub fn mesh(bytes: &[u8], node: &Value) -> Result<Mesh, Fault> {
     Ok(m)
 }
 
+// ---- #453: each primitive as geometry.shading reads it (Check input: loop kinds: shading defects)
+
+/// One primitive of a node's mesh, as the file holds it, or why the check can't read it: `draco`
+/// or `meshopt` for compressed data no pinned tool decoded, `mode` for one not of triangles, and
+/// `pose` for a skinned or morphed mesh the file holds away from its bind pose.
+pub enum Raw {
+    Triangles {
+        positions: Vec<V3>,
+        normals: Option<Vec<V3>>,
+        indices: Vec<u32>,
+    },
+    Unread(&'static str),
+}
+
+/// A node's mesh as geometry.shading reads it: each primitive in file order, and whether it
+/// deforms (its node has a skin, or a primitive has morph targets).
+pub struct Primitives {
+    pub primitives: Vec<Raw>,
+    pub deforms: bool,
+}
+
+/// Node `n`'s world matrix in the file: its parents' matrices times its own.
+fn world(doc: &Value, n: usize) -> [[f64; 4]; 3] {
+    let nodes = doc.get("nodes").and_then(Value::as_array);
+    let parent = |c: usize| {
+        nodes?.iter().position(|p| {
+            p.get("children")
+                .and_then(Value::as_array)
+                .is_some_and(|ch| ch.iter().any(|x| x.as_u64() == Some(c as u64)))
+        })
+    };
+    let mut m = local(&doc["nodes"][n]);
+    let (mut at, mut steps) = (n, 0);
+    while let Some(p) = parent(at).filter(|_| steps < 1024) {
+        m = mul(&local(&doc["nodes"][p]), &m);
+        (at, steps) = (p, steps + 1);
+    }
+    m
+}
+
+/// Whether node `n`'s skin holds every joint at its bind pose: the joint's world matrix times its
+/// inverse bind matrix is the identity within 1e-6 per entry.
+fn at_bind_pose(doc: &Value, bin: &[u8], skin: &Value) -> Result<bool, Fault> {
+    let joints: Vec<usize> = skin
+        .get("joints")
+        .and_then(Value::as_array)
+        .map(|j| {
+            j.iter()
+                .filter_map(Value::as_u64)
+                .map(|j| j as usize)
+                .collect()
+        })
+        .unwrap_or_default();
+    let inverse = match skin.get("inverseBindMatrices").and_then(Value::as_u64) {
+        Some(i) => accessor(doc, bin, i as usize, 16)?,
+        None => Vec::new(),
+    };
+    for (k, j) in joints.iter().enumerate() {
+        let w = world(doc, *j);
+        let ibm = inverse.get(k).map_or_else(
+            || {
+                [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                ]
+            },
+            |c| [0, 1, 2].map(|r| [c[r], c[4 + r], c[8 + r], c[12 + r]]),
+        );
+        let m = mul(&w, &ibm);
+        let off =
+            (0..3).any(|r| (0..4).any(|c| (m[r][c] - if r == c { 1.0 } else { 0.0 }).abs() > 1e-6));
+        if off {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Node `node`'s mesh, each primitive as the file holds it (positions, the file's own normals and
+/// indices, never welded or made), or why it can't be read.
+pub fn primitives(bytes: &[u8], node: &Value) -> Result<Primitives, Fault> {
+    let (doc, bin) = split(bytes)?;
+    let n = node_of(&doc, node)?;
+    let mesh_i = doc
+        .pointer(&format!("/nodes/{n}/mesh"))
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "params/node".to_string())?;
+    let mesh = &doc["meshes"][mesh_i as usize];
+    let prims = mesh
+        .get("primitives")
+        .and_then(Value::as_array)
+        .ok_or_else(|| bad("a mesh without primitives"))?;
+    let morphed = prims.iter().any(|p| p.get("targets").is_some());
+    let skin = doc
+        .pointer(&format!("/nodes/{n}/skin"))
+        .and_then(Value::as_u64)
+        .map(|s| &doc["skins"][s as usize]);
+    // A morphed mesh is at its bind pose when every weight its node or mesh gives is 0.
+    let weighted = [
+        doc.pointer(&format!("/nodes/{n}/weights")),
+        mesh.get("weights"),
+    ]
+    .into_iter()
+    .flatten()
+    .filter_map(Value::as_array)
+    .any(|w| w.iter().any(|x| x.as_f64().is_some_and(|x| x != 0.0)));
+    let posed = match skin {
+        Some(s) => !at_bind_pose(&doc, &bin, s)?,
+        None => false,
+    } || (morphed && weighted);
+    let meshopt = |accessor: Option<u64>| {
+        accessor
+            .and_then(|a| doc.pointer(&format!("/accessors/{a}/bufferView")))
+            .and_then(Value::as_u64)
+            .and_then(|v| {
+                doc.pointer(&format!(
+                    "/bufferViews/{v}/extensions/EXT_meshopt_compression"
+                ))
+            })
+            .is_some()
+    };
+    let mut out = Vec::new();
+    for prim in prims {
+        let pos_i = prim.pointer("/attributes/POSITION").and_then(Value::as_u64);
+        let nrm_i = prim.pointer("/attributes/NORMAL").and_then(Value::as_u64);
+        let idx_i = prim.get("indices").and_then(Value::as_u64);
+        let why = if prim
+            .pointer("/extensions/KHR_draco_mesh_compression")
+            .is_some()
+        {
+            Some("draco")
+        } else if [pos_i, nrm_i, idx_i].into_iter().any(meshopt) {
+            Some("meshopt")
+        } else if prim.get("mode").and_then(Value::as_u64).unwrap_or(4) != 4 {
+            Some("mode")
+        } else if posed {
+            Some("pose")
+        } else {
+            None
+        };
+        if let Some(why) = why {
+            out.push(Raw::Unread(why));
+            continue;
+        }
+        let pos_i = pos_i.ok_or_else(|| bad("a primitive without positions"))? as usize;
+        let positions: Vec<V3> = accessor(&doc, &bin, pos_i, 3)?
+            .into_iter()
+            .map(|r| [r[0], r[1], r[2]])
+            .collect();
+        let indices: Vec<u32> = match idx_i {
+            Some(i) => accessor(&doc, &bin, i as usize, 1)?
+                .into_iter()
+                .map(|r| r[0] as u32)
+                .collect(),
+            None => (0..positions.len() as u32).collect(),
+        };
+        if indices.iter().any(|i| *i as usize >= positions.len()) {
+            return Err(bad("an index past its positions"));
+        }
+        let normals = match nrm_i {
+            Some(i) => {
+                let n: Vec<V3> = accessor(&doc, &bin, i as usize, 3)?
+                    .into_iter()
+                    .map(|r| [r[0], r[1], r[2]])
+                    .collect();
+                if n.len() != positions.len() {
+                    return Err(bad("normals that don't match its positions"));
+                }
+                Some(n)
+            }
+            None => None,
+        };
+        out.push(Raw::Triangles {
+            positions,
+            normals,
+            indices,
+        });
+    }
+    Ok(Primitives {
+        primitives: out,
+        deforms: skin.is_some() || morphed,
+    })
+}
+
 // ---- #423: a file's whole scene, with its materials and textures (Material: texture maps)
 
 /// A file's scene as the import reads it: each node with a mesh, its world matrix in the file and

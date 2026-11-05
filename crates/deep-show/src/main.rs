@@ -1048,11 +1048,14 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         }),
     };
     let mut placement_planted = placement::Planted::default();
-    // #420's wrong programs live in scene3d's and the building module's operators.
+    // #420's wrong programs live in scene3d's and the building module's operators, #453's in the
+    // loop module's geometry.shading.
     let module_planted = input
         .get("planted")
         .and_then(Value::as_str)
-        .filter(|p| deep_canvas_scene3d::PLANTED.contains(p))
+        .filter(|p| {
+            deep_canvas_scene3d::PLANTED.contains(p) || deep_canvas_loop::PLANTED.contains(p)
+        })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
     let pack_planted = input
@@ -1717,6 +1720,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     if set >= BuildSet::Full {
         // Issue #420: walls, openings, slabs, roofs and stairs as trusted builders.
         out.push(deep_canvas_scene3d::building::module());
+        // Issue #453: the loop's check kinds, geometry.shading first.
+        out.push(deep_canvas_loop::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
