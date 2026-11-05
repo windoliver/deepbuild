@@ -72,6 +72,18 @@
     "tracking": "#65"
   },
   {
+    "method": "device.unpair",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#65"
+  },
+  {
+    "method": "channel.link",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#65"
+  },
+  {
     "method": "confirm.enroll",
     "since": "R1",
     "stability": "preview",

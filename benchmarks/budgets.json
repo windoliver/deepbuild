@@ -1144,6 +1144,16 @@
       "initialReason": "Issue #1017 first measurement: the merge base places no build product. One process clones a product shaped like a small Rust target (20 files of 1 MB and 1,000 of 4 KB) copy-on-write into ten new folders one after another, as a worktree receives it; the issue's 2 s for a 15 GB target and a 500 MB node_modules stays in tests/acceptance/1017/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "channels",
+      "command": [
+        "node",
+        "benchmarks/channels.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #65 first measurement: the merge base has no channels. One run installs the four channel plug-ins against a hub and a stand-in provider, then times an agent's permission request to its card at the provider (reach_ms) and reads each plug-in's resident memory (rss_mb). The issue's 10 s and 50 MB stay in tests/acceptance/65/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "journey-run",
       "command": [
         "node",

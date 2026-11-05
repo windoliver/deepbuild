@@ -10,7 +10,7 @@
 import { canonicalize, sha256Hex } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Asks, PlanStep } from '@deepbuild/asks';
-import { readSince, ulid } from '@deepbuild/record';
+import { asCore, readSince, ulid } from '@deepbuild/record';
 import type { Connection, Event, EventInput, RecordStore } from '@deepbuild/record';
 
 export type ScopeKind = 'issue' | 'resource' | 'project' | 'work';
@@ -436,7 +436,7 @@ class BudgetLedger implements Ledger {
 
   /** The core's connection, appending for the person behind this one. */
   private core(connection: Connection): Connection {
-    return { writer: 'core', actor: connection.actor, scope: connection.scope, ...(connection.session ? { session: connection.session } : {}) };
+    return asCore(connection);
   }
 
   private async append(connection: Connection, event: EventInput): Promise<void> {

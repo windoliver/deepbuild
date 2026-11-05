@@ -97,7 +97,7 @@ pub fn parts(svg: &Svg, item: &Value) -> Vec<(String, [f64; 4], Vec<Verb>)> {
 }
 
 /// Whether a path in `part` sits in part `of`, directly or inside one of its parts.
-fn within(svg: &Svg, mut part: Option<usize>, of: usize) -> bool {
+pub fn within(svg: &Svg, mut part: Option<usize>, of: usize) -> bool {
     while let Some(p) = part {
         if p == of {
             return true;

@@ -1,0 +1,10 @@
+#1297 AC1 on the base: main b7628337 (Merge pull request #1286), 2026-11-04, macOS (Metal).
+Command: npx vitest run tests/acceptance/1297/ --testTimeout=600000
+Result: 1 failed (AC1), 1 passed (the guard: the box's shadow shows), 462 s including the cargo build.
+
+ FAIL  tests/acceptance/1297/convex-sun.test.ts > AC1 #1297.d09869dd a convex smooth-shaded mesh under a casting key sun draws as with the shadow off > AC1 #1297.d09869dd the repro's icosphere, subdivided twice and four times: every pixel of the final frame is within 4 codes of the same frame with shadow: false
+AssertionError: the convex sphere under the casting sun against the same frame with shadow: false:
+  the icosphere subdivided 2 times: 15825 px of the final frame differ from the shadow: false frame by more than 4 codes (21949 by more than 2), 31 codes at most, at (313, 476): the sun's shadow darkens the convex sphere's own sunlit side
+  the icosphere subdivided 4 times: 6059 px of the final frame differ from the shadow: false frame by more than 4 codes (9443 by more than 2), 20 codes at most, at (20, 430): the sun's shadow darkens the convex sphere's own sunlit side
+
+ ✓ AC1 #1297.d09869dd guard: the comparison sees a shadow; a box between the sun and the sphere darkens the pixels it shadows by more than 4 codes
