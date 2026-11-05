@@ -12,9 +12,8 @@
       "default": "./dist/index.js"
     },
     "./ids": {
-      "types": "./src/ids.ts",
-      "development": "./src/ids.ts",
-      "default": "./dist/ids.js"
+      "types": "./src/ids.d.ts",
+      "default": "./src/ids.js"
     }
   },
   "scripts": { "build": "tsc -p tsconfig.json" },

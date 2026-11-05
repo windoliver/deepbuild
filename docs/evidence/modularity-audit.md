@@ -12,9 +12,19 @@ Fresh checks on this integrated tree:
 - The small affected selection below: FAIL, 39 new relative to main's baseline, 16 known, 4 passed. The cold-ID test still fails. The other reports include repository lint/dependency findings; full implementation verification remains unrun.
 - The first affected attempt ran no tests because the old built CLI lacked `deep lease`; after the workspace rebuild the updated wrapper executed the checks. No throttle/lease bypass was used.
 
-### Approval needed to repair an implementation-coupled test
+### Approved cold-ID repair
 
-`tests/record-ids.test.mjs` currently asserts the exact loaded filename `record/src/ids.ts`. The cold-package test copies the package under `node_modules`, where Node rejects TypeScript stripping (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`); pointing the default export at the source `.ts` file is not a fix. The proposed repair is a directly runnable JavaScript IDs implementation with a declaration, plus changing only the filename assertion to the public entry's resolved URL. Keep the one-loaded-module assertion, every exact encoding vector, all 1,000 seeded cases, and the cold-build test unchanged. This is pending approval under the repository's test-change rule; no test has been edited for it.
+The owner approved replacing the implementation-specific `record/src/ids.ts` filename assertion with equality to the public entry's resolved URL. That is the only change to `tests/record-ids.test.mjs`: its one-loaded-module assertion, exact encoding vectors, 1,000 seeded cases and uniqueness checks are unchanged. `tests/record-ids-cold.test.mjs` is unchanged in full.
+
+IDs now have one plain-JavaScript implementation in `src/ids.js`, with `src/ids.d.ts` for TypeScript consumers. The public subpath resolves directly to that source module under both development and default conditions. Record and trust import the same subpath, so their emitted code needs neither a copied implementation nor `dist/ids.js`.
+
+Fresh results for this repair (Node 24.22.0):
+
+- Record package build: PASS.
+- Through `scripts/affected.mjs`, both IDs tests, the replay-hash regression and both package-boundary tests reported PASS: five test results. The cold-package test installs under `node_modules` with no dist or database dependencies, so it also checks Node's installed-package behavior.
+- The aggregate affected run was terminated by the command's 240-second limit while repository lint jobs were unfinished. No overall PASS, WIDE conclusion or completed aggregate result is claimed; the five test results are preserved independently in the runner reports.
+- For a genuinely cold workspace build, all 30 generated package `dist` directories were moved aside. The machine throttle returned `INCONCLUSIVE no grant: no build grant came within 1 min`, exit 3; no build started. All 30 directories were restored without overwriting outputs. Thus the isolated cold-ID behavior is proven, but a full cold workspace build remains unrun.
+- Diff check: PASS. No acceptance tests, baseline entries, timing limits or throttle policies were edited.
 
 ## Original checkpoint scope and base
 
@@ -34,7 +44,7 @@ This draft preserves the TypeScript package audit requested in the conversation.
 | Use the hub's adapter capabilities in asks | Inject the error-turn capability callback while retaining standalone callers' shipped default | Code path exists; a regression test specifically exercising the injected callback is still missing. |
 | Remove wiki → extension-host coupling | Move shared project trust to record; keep extension-host's public re-export | Runtime dependency scan finds no relative import cycle. End-to-end trust/revocation tests need verification on the final branch. |
 | Centralize process reads | Runner and hub consume supervisor's process helpers | **PARTIAL:** supervisor still has its own liveness helper; read failures still collapse to empty results. This is not a complete fail-closed process-observation redesign. |
-| Share IDs without loading SQLite | Add the public `@deepbuild/record/ids` entry; trust imports its implementation instead of record's barrel; hub keeps its clock-normalization wrapper | **PASS:** exact vectors, 1,000 seeded round trips, random-ID uniqueness and an import graph that loads only the IDs module. **FAIL:** default export cannot load before `record/dist/ids.js` has been built. |
+| Share IDs without loading SQLite | Add the public `@deepbuild/record/ids` entry; trust imports its implementation instead of record's barrel; hub keeps its clock-normalization wrapper | **PASS:** exact vectors, 1,000 seeded round trips, random-ID uniqueness, single-module import and the unchanged installed cold-package test. No generated file or database dependency is needed for IDs. Full cold workspace build remains INCONCLUSIVE (no build grant). |
 | Preserve persisted hash formats | Share the identical legacy check/verdict helper; retain the replay encoder | **PASS:** new frozen replay-hash regression. Numeric-looking keys demonstrated that the previous attempted replay consolidation changed persisted bytes. The legacy helper is explicitly not advertised as RFC 8785. |
 | Reduce accidental module surface | Make five file-private values non-exported; share elapsed-time and core-connection helpers | Package dependency/boundary checks pass. Complete behavioral regression selection has not run. |
 | Fix status's repo label | Prefer the working repo's name over its opaque project ID | Existing #668 acceptance coverage was used earlier; not reverified on this isolated PR tree. |

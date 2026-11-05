@@ -3,7 +3,7 @@
 // The `events` table is the source of truth. Every other table is a projection the record rebuilds by
 // replaying it. An event's ID is its identity; its `seq` is its order within its session; its `log_pos`
 // is its position in the log, assigned here at append inside the commit that writes it.
-import { ulid } from './ids.js';
+import { ulid } from '@deepbuild/record/ids';
 import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, renameSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
