@@ -12,9 +12,10 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { closeSync, constants, lstatSync, openSync, readFileSync, readSync, rmSync, writeSync } from 'node:fs';
-import { availableParallelism, loadavg, totalmem } from 'node:os';
+import { availableParallelism, homedir, loadavg, totalmem } from 'node:os';
 import type { Caller, Lease, LeaseTable, Mode, Resource } from '@deepbuild/leases';
 import { call, type Reply } from './client.js';
+import { DISK_FLOOR, freeBytes } from './products.js';
 import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
 
@@ -175,6 +176,8 @@ export interface HeavyOptions {
    */
   plant?: string;
   pressure?: () => Pressure;
+  /** Free bytes on the volume holding a folder; statfs unless a test says. */
+  free?: (path: string) => number;
 }
 
 const alive = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } };
@@ -239,12 +242,19 @@ export class HeavyQueue {
       w.blockedOn = 'memory';
       return { kind: 'memory', line: `deep lease: waiting for memory: the system reports critical memory pressure, so \`${w.command}\` starts once it eases` };
     }
+    // One disk floor per machine (#1017): no leased build starts while the volume it runs on is under it.
+    let free = Infinity;
+    try { free = (this.o.free ?? freeBytes)(w.cwd || homedir()); } catch { /* no reading: nothing to wait for */ }
+    if (free < DISK_FLOOR) {
+      w.blockedOn = 'disk';
+      return { kind: 'disk', line: `deep lease: waiting for disk: the volume has ${(free / 1e9).toFixed(1)} GB free, under the ${(DISK_FLOOR / 1e9).toFixed(1)} GB disk floor, so \`${w.command}\` starts once there is room` };
+    }
     // A freed slot or kind goes to the first in line that waits for it.
-    const ahead = before.find((x) => x.blockedOn === 'memory' || w.needs.some((n) => n.kind === x.blockedOn) || (x.blockedOn === 'jobs' && w.jobs !== 'none'));
+    const ahead = before.find((x) => x.blockedOn === 'memory' || x.blockedOn === 'disk' || w.needs.some((n) => n.kind === x.blockedOn) || (x.blockedOn === 'jobs' && w.jobs !== 'none'));
     if (ahead?.blockedOn) {
       const kind = ahead.blockedOn;
       w.blockedOn = kind;
-      const holders = kind === 'memory' ? [] : kind === 'jobs' ? [...this.held.values()].filter((h) => h.tokens > 0).map((h) => h.holder) : (await this.o.table.leases()).filter((v) => v.lease.resource.kind === kind).map((v) => v.lease.holder);
+      const holders = kind === 'memory' || kind === 'disk' ? [] : kind === 'jobs' ? [...this.held.values()].filter((h) => h.tokens > 0).map((h) => h.holder) : (await this.o.table.leases()).filter((v) => v.lease.resource.kind === kind).map((v) => v.lease.holder);
       const by = [...new Set(holders.map((h) => this.who(h)))].join(', ');
       return { kind: kind === 'cpu.slot' ? 'slot' : kind, line: await this.line(w, kind, `${by ? `held by ${by}; ` : ''}${this.who(ahead.holder)} is ahead of it in the queue`) };
     }
@@ -319,6 +329,10 @@ export class HeavyQueue {
     const start = (await startOf(pid)) ?? new Date(h.started).toUTCString();
     await this.o.append('process.tracked', 1, { run: h.run, pid, start, pgid: h.group, cwd: typeof params.cwd === 'string' && params.cwd ? params.cwd : h.cwd || '/', token: null }, h.run, h.session);
     return { tracked: true };
+  }
+  /** Gives back the leases of a command that never started (#1017: an entry build the supervisor couldn't start). */
+  async release(params: Obj): Promise<void> {
+    await this.end(this.mine(params), true);
   }
   /** `lease.exited`: the command's first process exited; its group may run on, and holds its leases while it does. */
   async exited(params: Obj): Promise<Obj> {
