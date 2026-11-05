@@ -161,12 +161,12 @@ pub fn count(prims: &[&Prim], o: &Opts) -> Counts {
     let mut faces: Vec<Face> = Vec::new();
     let mut c = Counts {
         welded: nwelded,
-        first: vec![usize::MAX; nwelded],
+        first: vec![0; nwelded],
         ..Counts::default()
     };
-    for (i, w) in welded.iter().enumerate() {
-        let f = &mut c.first[*w as usize];
-        *f = (*f).min(i);
+    // Every welded vertex has a member, and the last write, walking down, is its first.
+    for (i, w) in welded.iter().enumerate().rev() {
+        c.first[*w as usize] = i;
     }
     let mut base = 0usize;
     for prim in prims {
