@@ -22,6 +22,8 @@ deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-text = { path = "../deep-text" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+# Issue #419: a fixture world's step hashes.
+sha2 = "0.10"
 # Issue #425: a proxy band's mesh, simplified once per content key (Level of detail: proxies).
 meshopt = "0.7"
 vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline"] }
