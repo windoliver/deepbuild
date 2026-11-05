@@ -106,8 +106,8 @@ pub struct Shipped {
     start: Option<(Option<usize>, Option<usize>)>,
 }
 
-/// The sidebar's open session, drawn in the selected fill, and the one keyboard focus is on, drawn with the focus
-/// ring (#1003). Each is a session, not a row, so a row that moves keeps them.
+/// The sidebar's open session, drawn in the selected fill with a bar at its leading edge, and the one keyboard focus
+/// is on, drawn with the focus ring (#1003). Each is a session, not a row, so a row that moves keeps them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SidebarRows {
     pub selected: Option<String>,
@@ -491,8 +491,18 @@ impl Render for Shipped {
                                 .border_2()
                                 .border_color(ring)
                                 .hover(|style| style.bg(chrome.hover))
+                                // The open session: the selected fill, and a bar of the primary ink at its leading
+                                // edge, since in dark the fill can only be faint while status keeps 3:1 on it.
                                 .when(selected.as_ref() == Some(session), |row| {
-                                    row.bg(chrome.selected)
+                                    row.relative().bg(chrome.selected).child(
+                                        div()
+                                            .absolute()
+                                            .left_0()
+                                            .top(px(3.))
+                                            .bottom(px(3.))
+                                            .w(px(2.))
+                                            .bg(chrome.ink_primary),
+                                    )
                                 })
                                 .on_click(cx.listener({
                                     let session = session.clone();
