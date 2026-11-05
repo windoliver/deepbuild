@@ -2998,7 +2998,8 @@ const MASK_DEPTH: usize = 4;
 /// A mask's scope over the items it applies to: a scissor for a shape mask, coverage from its own
 /// paint for an alpha or luminance one, and for a feathered one its rect's coverage ramped over the
 /// feather (#385); a path ID's shape clips by that path's outline where it draws (#1175: an SVG's
-/// `<clipPath>`). A rounded rect, a soft path, inverted and combined masks wait.
+/// `<clipPath>`). A rounded rect, a soft path, a shape naming no path, inverted and combined
+/// masks wait.
 fn mask_scope(
     id: &str,
     item: &Value,
@@ -3022,7 +3023,7 @@ fn mask_scope(
             }
             let is_path = items.get(shape).and_then(|i| i.get("kind")) == Some(&json!("path@1"));
             let Some(verbs) = item_outline(items, shape).filter(|_| is_path) else {
-                return refuse("ref_unresolved", format!("{path}/shape"));
+                return refuse("mask_r2", format!("{path}/shape"));
             };
             return Ok(Scope::Shape {
                 item: id.to_string(),
