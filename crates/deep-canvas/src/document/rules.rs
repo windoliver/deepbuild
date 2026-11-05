@@ -7,7 +7,12 @@
 //!   (`bound_typed_over`).
 //! - A template's words follow the same rule, and each slot shows a value its path resolves to
 //!   (`ref_unresolved`). A story's own number (a constant whose source is `story`) passes only in a
-//!   document that binds no status and no reading; elsewhere it is unsourced (`number_unsourced`).
+//!   document that binds no status and no reading and isn't shown inside one that does
+//!   ([`shown_inside`]); elsewhere the honest-numbers check finds it unsourced.
+//! - A text marked `{name: true}` is a name, so its digits aren't counted, and a name an
+//!   `honest_numbers` check input lists (`names`) is skipped wherever it shows; that input's
+//!   `number_words: false` stops number words counting; a code item's digits count unless it
+//!   quotes its source, whose digits are quotation (#406).
 //! - A status color comes only through a status binding whose source is a verdict, a run, an ask or
 //!   a session. A paint or a scale that names a status role (`status.<state>`), and a binding fed
 //!   anything else (a reading, which only a threshold could cut into states), are refused
@@ -124,19 +129,16 @@ pub(crate) fn check(
     issues.extend(numbers);
 }
 
-/// True when `text` shows a number: a digit, or a number word on its own.
-fn shows_number(text: &str) -> bool {
-    text.chars().any(|c| c.is_ascii_digit())
-        || text
-            .split(|c: char| !c.is_alphabetic())
-            .any(|word| NUMBER_WORDS.contains(&word.to_lowercase().as_str()))
-}
-
 /// What the number rules read of the document as a whole.
 struct Texts<'d> {
     /// The texts a bound value fills: each shows its reading, with its source and as-of time.
     sourced: BTreeSet<&'d str>,
     binds_status_or_reading: bool,
+    /// The marked names an `honest_numbers` check input lists, which the scan skips.
+    names: Vec<&'d str>,
+    /// Whether number words count as numbers (`number_words`, true unless a check input says
+    /// false).
+    number_words: bool,
 }
 
 impl<'d> Texts<'d> {
@@ -153,23 +155,91 @@ impl<'d> Texts<'d> {
                 .and_then(Value::as_object)
                 .is_some_and(|m| !m.is_empty())
         };
+        // The document's own `honest_numbers` check inputs (Check input; Honest numbers).
+        let inputs: Vec<&Value> = member(doc, "checks")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|c| member(c, "kind").and_then(Value::as_str) == Some("honest_numbers"))
+            .collect();
         Texts {
             sourced,
             binds_status_or_reading: binds("status_bindings") || binds("bound_values"),
+            names: inputs
+                .iter()
+                .filter_map(|c| member(c, "names").and_then(Value::as_array))
+                .flatten()
+                .filter_map(Value::as_str)
+                .filter(|n| !n.is_empty())
+                .collect(),
+            number_words: !inputs
+                .iter()
+                .any(|c| member(c, "number_words") == Some(&Value::Bool(false))),
         }
+    }
+
+    /// True when `text`, with each marked name taken out, shows a number: a digit, or (unless
+    /// turned off) a number word on its own.
+    fn shows_number(&self, text: &str) -> bool {
+        let mut text = text.to_string();
+        for name in &self.names {
+            text = text.replace(name, " ");
+        }
+        text.chars().any(|c| c.is_ascii_digit())
+            || (self.number_words
+                && text
+                    .split(|c: char| !c.is_alphabetic())
+                    .any(|word| NUMBER_WORDS.contains(&word.to_lowercase().as_str())))
     }
 }
 
 /// The number rules over one item.
 fn numbers_of(doc: &Value, texts: &Texts<'_>, id: &String, item: &Value, issues: &mut Vec<Issue>) {
+    // An outline in `outline.source@1`'s text form shows its string as text@1 shows its own, so a
+    // 3D title is displayed text (#443; Builder `extrude`: outlines from text, paths and SVG).
+    let outline = member(item, "params").and_then(|p| member(p, "outline"));
+    if let Some(Value::String(text)) = outline.and_then(|o| member(o, "text")) {
+        if texts.shows_number(text) {
+            issues.push(Issue::error(
+                "number_unsourced",
+                id,
+                format!("items/{id}/params/outline/text"),
+                json!(text),
+                "the title shows a number with no source; mark it a name in the honest_numbers check input, or bind or compute the number",
+            ));
+        }
+        return;
+    }
     if !kind_text(item).is_some_and(|k| k.starts_with("text@")) {
         return;
     }
-    if let Some(Value::String(t)) = member(item, "params").and_then(|p| member(p, "template")) {
-        template_numbers(doc, id, t, texts.binds_status_or_reading, issues);
+    let params = member(item, "params");
+    let param = |key: &str| params.and_then(|p| member(p, key));
+    // A marked name's digits aren't a number; nothing guesses that a string is a name.
+    if param("name") == Some(&Value::Bool(true)) {
         return;
     }
-    let Some(Value::String(text)) = member(item, "params").and_then(|p| member(p, "text")) else {
+    if let Some(Value::String(t)) = param("template") {
+        template_numbers(doc, texts, id, t, issues);
+        return;
+    }
+    // A code item's text is its raw bytes' display form. A quote's digits are quotation, listed
+    // and never counted; an unquoted code item's digits count as numbers (Text `text@1`: code).
+    if param("code").is_some() {
+        if let (None, Some(Value::String(raw))) = (param("quote"), param("raw")) {
+            if texts.shows_number(raw) {
+                issues.push(Issue::error(
+                    "number_unsourced",
+                    id,
+                    format!("items/{id}/params/raw"),
+                    json!(raw),
+                    "unquoted code shows a number with no source; quote it from its source, or bind or compute the number",
+                ));
+            }
+        }
+        return;
+    }
+    let Some(Value::String(text)) = param("text") else {
         return;
     };
     if texts.sourced.contains(id.as_str()) {
@@ -183,7 +253,7 @@ fn numbers_of(doc: &Value, texts: &Texts<'_>, id: &String, item: &Value, issues:
                 "a bound value fills this text; leave it empty, since its reading shows there",
             ));
         }
-    } else if shows_number(text) {
+    } else if texts.shows_number(text) {
         issues.push(Issue::error(
             "number_unsourced",
             id,
@@ -194,9 +264,9 @@ fn numbers_of(doc: &Value, texts: &Texts<'_>, id: &String, item: &Value, issues:
     }
 }
 
-/// A template's words and slots: words that show a number are unsourced, a slot names a value its
-/// path resolves to, and a story's own number shows only where no status or reading is bound.
-fn template_numbers(doc: &Value, id: &str, t: &str, binds: bool, issues: &mut Vec<Issue>) {
+/// A template's words and slots: words that show a number are unsourced, and a slot names a value
+/// its path resolves to.
+fn template_numbers(doc: &Value, texts: &Texts<'_>, id: &str, t: &str, issues: &mut Vec<Issue>) {
     let path = format!("items/{id}/params/template");
     let Ok(parts) = template::parts(t) else {
         issues.push(Issue::error(
@@ -210,7 +280,7 @@ fn template_numbers(doc: &Value, id: &str, t: &str, binds: bool, issues: &mut Ve
     };
     for part in parts {
         match part {
-            Part::Words(words) if shows_number(words) => issues.push(Issue::error(
+            Part::Words(words) if texts.shows_number(words) => issues.push(Issue::error(
                 "number_unsourced",
                 id,
                 path.clone(),
@@ -218,27 +288,59 @@ fn template_numbers(doc: &Value, id: &str, t: &str, binds: bool, issues: &mut Ve
                 "its words show a number with no source; show the number through a `{path}` slot",
             )),
             Part::Words(_) => {}
-            Part::Slot(slot) => match template::value(doc, slot) {
-                None => issues.push(Issue::error(
-                    "ref_unresolved",
-                    id,
-                    path.clone(),
-                    json!(slot),
-                    "the slot's path names no data constant this build shows",
-                )),
-                Some(shown) if binds && shown.number && shown.source.as_deref() == Some("story") => {
-                    issues.push(Issue::error(
-                        "number_unsourced",
-                        id,
-                        path.clone(),
-                        json!(slot),
-                        "shows a story's own number, which only a document that binds no status and no reading may show; bind it to a reading",
-                    ))
-                }
-                Some(_) => {}
-            },
+            Part::Slot(slot) if template::value(doc, slot).is_none() => issues.push(Issue::error(
+                "ref_unresolved",
+                id,
+                path.clone(),
+                json!(slot),
+                "the slot's path names no data constant this build shows",
+            )),
+            Part::Slot(_) => {}
         }
     }
+    // A story number shown where a status or a reading is bound is the honest-numbers check's
+    // finding, as a number from a table an agent wrote is (deep_canvas_marks::check::numbers),
+    // never a refusal of the revision (#1162).
+}
+
+/// Each story number a template shows where it is shown inside a document that binds a status
+/// or a reading: unsourced there.
+pub fn story_issues(doc: &Value, id: &str, t: &str, issues: &mut Vec<Issue>) {
+    for (slot, _) in template::story_numbers(doc, t) {
+        issues.push(Issue::error(
+            "number_unsourced",
+            id,
+            format!("items/{id}/params/template"),
+            json!(slot),
+            "shows a story's own number, which only a document that binds no status and no reading, and isn't shown inside one that does, may show; bind it to a reading",
+        ));
+    }
+}
+
+/// The honest-numbers issues `doc` raises once shown inside a document where status can show, as
+/// on a return card (Honest numbers): each story number it shows. A document that binds a status
+/// or a reading itself raised them in its own check, so they aren't raised twice.
+pub fn shown_inside(doc: &Value) -> Vec<Issue> {
+    let mut issues = Vec::new();
+    let Some(items) = member(doc, "items").and_then(Value::as_object) else {
+        return issues;
+    };
+    if Texts::of(doc).binds_status_or_reading {
+        return issues;
+    }
+    for (id, item) in items {
+        let params = member(item, "params");
+        let template = params.and_then(|p| member(p, "template"));
+        let named = params.and_then(|p| member(p, "name")) == Some(&Value::Bool(true));
+        if let (true, false, Some(Value::String(t))) = (
+            kind_text(item).is_some_and(|k| k.starts_with("text@")),
+            named,
+            template,
+        ) {
+            story_issues(doc, id, t, &mut issues);
+        }
+    }
+    issues
 }
 
 /// The path under `value` to its first status role (a `role`, or an entry of a `range`), each
@@ -466,5 +568,50 @@ mod tests {
             codes(&doc("Open")),
             [("bound_typed_over", vec!["n".to_string()])]
         );
+    }
+
+    #[test]
+    fn a_listed_name_is_skipped_where_it_shows_and_number_words_can_be_turned_off() {
+        let mut d = doc("");
+        d["items"]["m"] = json!({"id": "m", "kind": "text@1", "layer": "main", "name": "M", "order": "a1",
+            "params": {"text": "The T-800, one of a kind", "font": "body", "size": 13}});
+        let unsourced = |d: &serde_json::Value| -> Vec<serde_json::Value> {
+            check(d)
+                .issues
+                .into_iter()
+                .filter(|i| i.code == "number_unsourced")
+                .map(|i| i.actual)
+                .collect()
+        };
+        assert_eq!(unsourced(&d), [json!("The T-800, one of a kind")]);
+        d["checks"] = json!([{"kind": "honest_numbers", "names": ["T-800"]}]);
+        // The listed name is skipped; "one" still counts.
+        assert_eq!(unsourced(&d), [json!("The T-800, one of a kind")]);
+        d["checks"][0]["number_words"] = json!(false);
+        assert_eq!(unsourced(&d), Vec::<serde_json::Value>::new());
+        d["items"]["m"]["params"]["text"] = json!("The T-800 in 3 days");
+        assert_eq!(unsourced(&d), [json!("The T-800 in 3 days")]);
+        d["checks"][0]["names"] = json!([]);
+        d["items"]["m"]["params"]["text"] = json!("The T-800");
+        assert_eq!(unsourced(&d), [json!("The T-800")]);
+    }
+
+    #[test]
+    fn an_unquoted_code_item_s_digits_count_and_a_quote_s_do_not() {
+        let mut d = doc("");
+        d["items"]["c"] = json!({"id": "c", "kind": "text@1", "layer": "main", "name": "C", "order": "a1",
+            "params": {"font": "mono", "size": 13, "code": {"language": "python"}, "raw": "retries = 3\n"}});
+        let unsourced = |d: &serde_json::Value| -> Vec<Vec<String>> {
+            check(d)
+                .issues
+                .into_iter()
+                .filter(|i| i.code == "number_unsourced")
+                .map(|i| i.ids)
+                .collect()
+        };
+        assert_eq!(unsourced(&d), [vec!["c".to_string()]]);
+        d["items"]["c"]["params"]["quote"] =
+            json!({"source": "0".repeat(64), "path": "r.py", "lines": [1, 1]});
+        assert_eq!(unsourced(&d), Vec::<Vec<String>>::new());
     }
 }

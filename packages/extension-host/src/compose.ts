@@ -17,7 +17,7 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 const pointer = (key: string): string => key.replaceAll('~', '~0').replaceAll('/', '~1');
 
 /** The first JSON Pointer at which two schemas differ, the use's keys first in their own order; null when they don't. */
-export function firstDiff(a: unknown, b: unknown, at = ''): string | null {
+function firstDiff(a: unknown, b: unknown, at = ''): string | null {
   if (isObject(a) && isObject(b)) {
     const keys = [...Object.keys(a), ...Object.keys(b).filter((k) => !(k in a))].filter((k) => !ANNOTATIONS.has(k));
     for (const k of keys) {

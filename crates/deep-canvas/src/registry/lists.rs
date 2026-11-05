@@ -19,6 +19,9 @@ pub struct KitRule {
     pub rule: &'static str,
     pub message: &'static str,
     pub test: fn(&Value) -> Result<(), String>,
+    /// What the rule read on the entry, beside its verdict (#443: its fixture, its samples and
+    /// its misses), or nothing.
+    pub report: Option<fn(&Value) -> Value>,
 }
 
 /// A planted wrong entry: one the kit must refuse.
@@ -52,6 +55,13 @@ pub struct RegistryDef {
     /// For a registry whose entries carry a planted twin (`gpu.step@1`): the entry's own fixture
     /// run on its twin, which must fail naming the entry.
     pub twin: Option<fn(&str, &Value) -> KitResult>,
+    /// For a registry of timed entries (cue kinds, shot moves, transitions): an entry's moves at
+    /// its defaults, printed from the same expansion the check runs (#412), never stored.
+    pub moves: Option<fn(&Value) -> Vec<Value>>,
+    /// For a registry whose entries are programs (#238): the role they run in. Each entry names
+    /// its program's asset by sha256 in `program`; its kit reads the program's bytes, in hex, in
+    /// `wasm`, and only a build with the sandbox module, which admits and runs it, takes one.
+    pub program: Option<&'static str>,
 }
 
 impl RegistryDef {
@@ -70,6 +80,8 @@ impl RegistryDef {
             deprecated_since: None,
             replaced_by: None,
             twin: None,
+            moves: None,
+            program: None,
         }
     }
 
@@ -83,7 +95,16 @@ impl RegistryDef {
             rule,
             message,
             test,
+            report: None,
         });
+        self
+    }
+
+    /// The last rule's report: what it read on each entry, shown beside its verdict (#443).
+    pub fn reported(mut self, report: fn(&Value) -> Value) -> RegistryDef {
+        if let Some(k) = self.kit.last_mut() {
+            k.report = Some(report);
+        }
         self
     }
 
@@ -144,6 +165,8 @@ pub struct RuleResult {
     pub pass: bool,
     pub message: &'static str,
     pub why: String,
+    /// What the rule read, merged into its JSON (#443).
+    pub report: Option<Value>,
 }
 
 /// A kit's result on one entry: every rule's.
@@ -171,10 +194,24 @@ impl KitResult {
         json!({
             "verdict": if self.pass() { "PASS" } else { "FAIL" },
             "entry": self.entry,
-            "rules": self.rules.iter().map(|r| if r.pass {
-                json!({"rule": r.rule, "verdict": "PASS"})
-            } else {
-                json!({"rule": r.rule, "verdict": "FAIL", "message": r.message, "why": r.why})
+            "rules": self.rules.iter().map(|r| {
+                let mut out = if r.pass {
+                    json!({"rule": r.rule, "verdict": "PASS"})
+                } else {
+                let mut out = json!({"rule": r.rule, "verdict": "FAIL", "message": r.message, "why": r.why});
+                // A rule that fails at a frame says so first, `frame <n>: …`, and names it.
+                let frame = r.why.strip_prefix("frame ").and_then(|w| w.split(':').next()?.parse::<u64>().ok());
+                if let Some(frame) = frame {
+                    out["frame"] = json!(frame);
+                }
+                out
+                };
+                if let Some(Value::Object(report)) = &r.report {
+                    for (k, v) in report {
+                        out[k.as_str()] = v.clone();
+                    }
+                }
+                out
             }).collect::<Vec<_>>(),
         })
     }
@@ -193,6 +230,7 @@ pub fn run_kit(kit: &[KitRule], name: &str, value: &Value) -> KitResult {
                     pass: outcome.is_ok(),
                     message: k.message,
                     why: outcome.err().unwrap_or_default(),
+                    report: k.report.map(|f| f(value)),
                 }
             })
             .collect(),
@@ -448,6 +486,9 @@ impl Interner {
     }
 }
 
+/// The sealed registries and, per canvas module, what its digest holds of them.
+type Sealing = (Vec<SealedRegistry>, BTreeMap<String, Value>);
+
 /// The seal's registry checks (Registry and seal: registries): every registry the core and the
 /// canvas modules declare is complete (a kit, a planted wrong entry and `since`) and its kit
 /// refuses every planted entry; every entry a canvas module or the core fills is in a registry
@@ -462,7 +503,7 @@ pub(super) fn seal(
     shapes: &[(String, super::Registrar)],
     admits: Option<&str>,
     fault: Option<super::Fault>,
-) -> Result<(Vec<SealedRegistry>, BTreeMap<String, Value>), super::SealError> {
+) -> Result<Sealing, Box<super::SealError>> {
     use super::{Fault, SealError};
     let modules = || shapes.iter().filter(|(n, _)| n != super::CORE);
     let mut declared: Vec<(String, RegistryDef)> = core
@@ -526,7 +567,15 @@ pub(super) fn seal(
             .iter()
             .map(|p| def.run_kit(&p.name, &p.value))
             .collect();
-        if let Some((p, _)) = def.planted.iter().zip(&planted).find(|(_, r)| r.pass()) {
+        // Every planted entry the kit admits is named (#221: a registry with two).
+        let admitted: Vec<&PlantedEntry> = def
+            .planted
+            .iter()
+            .zip(&planted)
+            .filter(|(_, r)| r.pass())
+            .map(|(p, _)| p)
+            .collect();
+        if let Some(p) = admitted.first() {
             let rules: Vec<&str> = def.kit.iter().map(|k| k.rule).collect();
             return Err(SealError::new(
                 "kit_admits_planted",
@@ -539,7 +588,10 @@ pub(super) fn seal(
             )
             .at(
                 &def.name,
-                vec![json!({"name": p.name, "value": p.value})],
+                admitted
+                    .iter()
+                    .map(|p| json!({"name": p.name, "value": p.value}))
+                    .collect(),
                 &rules,
             ));
         }
@@ -751,11 +803,13 @@ mod tests {
                 rule: "small",
                 message: "a size over 64",
                 test: small,
+                report: None,
             },
             KitRule {
                 rule: "even",
                 message: "an odd size",
                 test: even,
+                report: None,
             },
         ];
         let r = run_kit(&kit, "odd", &json!({"size": 65}));

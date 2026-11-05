@@ -156,7 +156,7 @@
     "since": "R1",
     "stability": "preview",
     "tracking": "#366",
-    "digest": "d1:229b6e15fbbc0e66f687dc4b56b394c2e4aa7c35fe0e00e27a42fa32e8df417a",
+    "digest": "d1:f678797e9208a811d87f8c281fcb0a814d57cce7f0073a68471d77d9a85e98f8",
     "params": {
       "type": "object",
       "properties": {
@@ -230,6 +230,13 @@
                   "action"
                 ],
                 "additionalProperties": false
+              }
+            },
+            "binds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^reading:[a-z][a-z0-9_.-]*(#.+)?$"
               }
             }
           },
@@ -312,6 +319,97 @@
       "required": [
         "name",
         "adapter"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.registerChannel",
+    "variants": null,
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#65",
+    "digest": "d1:66787a5f380797186a662ff1c377a2025405af03d301b8e3dd64c66592bb37bb",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "channel": {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "const": "channel@1"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "device",
+                "chat",
+                "email",
+                "text"
+              ]
+            }
+          },
+          "required": [
+            "slot",
+            "revision",
+            "kind"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "name",
+        "channel"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.channel.fetch",
+    "variants": null,
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#65",
+    "digest": "d1:2ee78dc93e151a8ca07d3d5623dddd159f5f0dcdee2c3f22083b582632a6675e",
+    "params": {
+      "type": "object",
+      "properties": {
+        "call": {
+          "type": "string"
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "POST"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^/"
+            }
+          },
+          "required": [
+            "method",
+            "path"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "call",
+        "request"
       ],
       "additionalProperties": false
     }
@@ -1076,6 +1174,27 @@
       "required": [
         "terminal",
         "from"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.terminal.close",
+    "variants": null,
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#989",
+    "digest": "d1:ecde3b67d6d77ef94056c6bc407e13d4801c3b05b0e72b0825cb147397c6e802",
+    "params": {
+      "type": "object",
+      "properties": {
+        "terminal": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "terminal"
       ],
       "additionalProperties": false
     }

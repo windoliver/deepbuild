@@ -57,11 +57,13 @@ impl Canonical for Stack {
 /// The modifier kinds this slice lands.
 pub const KINDS: [&str; 3] = ["mod.subdivide@1", "mod.array@1", "mod.mirror@1"];
 
-/// An item with a modifier stack.
+/// A box with a modifier stack (a builder's stack is the build operator's, #420).
 pub fn has_modifiers(_: &Value, _: &str, item: &Value) -> bool {
-    item.get("modifiers")
-        .and_then(Value::as_array)
-        .is_some_and(|m| !m.is_empty())
+    item.get("kind").and_then(Value::as_str) == Some("mark.box@1")
+        && item
+            .get("modifiers")
+            .and_then(Value::as_array)
+            .is_some_and(|m| !m.is_empty())
 }
 
 /// The box a `mark.box@1`'s size makes, centred on its origin.

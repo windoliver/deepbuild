@@ -10,6 +10,7 @@
 
 pub mod answer;
 pub mod arming;
+pub mod bound;
 pub mod canvas;
 pub mod card;
 pub mod cells;
@@ -30,6 +31,8 @@ pub mod question;
 pub mod record;
 pub mod setup;
 pub mod show;
+pub mod shown;
+pub mod single;
 pub mod states;
 pub mod text;
 pub mod views;
@@ -130,6 +133,14 @@ pub fn stocks() -> Vec<Stock> {
 /// The menu-bar item's title: the count alone.
 pub fn menu_bar_title(sessions: &[Session]) -> String {
     waiting_count(sessions).to_string()
+}
+
+/// What the menu bar shows: while setup hasn't finished, that it didn't, never a number (#1002); then what the app
+/// can't reach (#994); else the count.
+pub fn menu_bar_line(sessions: &[Session]) -> String {
+    setup::count()
+        .or_else(|| notify::reach().short())
+        .map_or_else(|| menu_bar_title(sessions), str::to_owned)
 }
 
 /// The rebuilds this panel host has taken.
@@ -389,6 +400,17 @@ fn welcome(cx: &mut Context<Spike>, said: Option<&str>) -> impl IntoElement {
         .child(div().text_sm().child("Where your agents show, not tell."))
         .children(button)
         .children(said.map(|line| div().text_sm().child(line.to_owned())))
+        .children(said.is_none().then(setup::reason).flatten().map(|line| {
+            div()
+                .id("set-up-reason")
+                .test_support()
+                .aria_label(line.clone())
+                // A long path in the reason wraps inside the window, so its fix stays in view.
+                .max_w(px(560.))
+                .text_center()
+                .text_sm()
+                .child(line)
+        }))
 }
 
 /// The title bar with the mark: the small cut, drawn 24 px with the D at 18 px, in Ink on the
@@ -484,7 +506,7 @@ impl Render for Spike {
         )
         .h_full();
 
-        let count = format!("{} waiting on you", self.waiting());
+        let count = notify::reach().count(format!("{} waiting on you", self.waiting()));
         let content = match &self.panel {
             Some(panel) => div()
                 .flex_1()

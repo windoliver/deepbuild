@@ -14,6 +14,8 @@ pub const UPSCALE_PASS: &str = "surface.upscale";
 pub const SHARPEN_PASS: &str = "surface.sharpen";
 /// The pass that draws thin lines and outlines at full size.
 pub const OUTLINE_PASS: &str = "scene3d.outlines";
+/// Screen-size labels at full size after the upscale (#1174).
+pub const LABEL_PASS: &str = "scene3d.labels";
 
 const SHADER: &str = include_str!("upscale.wgsl");
 /// The upscaled frame's format: the compute upscale at half size writes it as storage.
@@ -67,7 +69,7 @@ impl Default for Surface {
 impl Surface {
     /// The upscale it draws through: `none` at scale 1.
     pub fn upscale_name(&self) -> &'static str {
-        if self.scale < 1.0 {
+        if self.scale != 1.0 {
             self.upscale.name()
         } else {
             "none"

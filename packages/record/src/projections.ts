@@ -5,6 +5,7 @@
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Statement } from 'better-sqlite3';
 import { CHECKED, judge, parseClaimLine, ROLLERS, YOURS, type LearnedChange } from './learned.js';
+import { gate, type Refusal } from './lifecycle.js';
 import type { Db } from './storage.js';
 
 /** One event as the projections read it: the stored row, with its data parsed and migrated. */
@@ -34,14 +35,15 @@ const T = (name: string, pk: string[], columns: string, indexes?: string[]): Tab
 /** Every projection, with the columns the design's data model names (and the ones the record adds). */
 const TABLES: readonly TableDef[] = [
   T('sessions', ['id'], 'id TEXT, thread_id TEXT, parent_id TEXT, agent TEXT, project_id TEXT, worktree TEXT, branch TEXT, pid INTEGER, status TEXT NOT NULL DEFAULT \'running\', last_seen INTEGER, ended_log_pos INTEGER, transcript TEXT, cause TEXT'),
-  T('claims', ['id'], 'id TEXT, session_id TEXT, kind TEXT, subject_ref TEXT, text TEXT, created INTEGER, verdict_id TEXT, attempt INTEGER, commit_sha TEXT, round INTEGER, stalled_rule TEXT'),
+  T('claims', ['id'], 'id TEXT, session_id TEXT, kind TEXT, subject_ref TEXT, text TEXT, created INTEGER, verdict_id TEXT, attempt INTEGER, commit_sha TEXT, round INTEGER, stalled_rule TEXT, state TEXT'),
   T('definitions', ['task_ref'], 'task_ref TEXT, id TEXT, thread_id TEXT, issue_rev TEXT, base_commit TEXT, requirements TEXT, deliverables TEXT, budget TEXT, hash TEXT, locked_at INTEGER, state TEXT, dispute_ask TEXT'),
   T('attempts', ['task_ref', 'attempt'], 'task_ref TEXT, attempt INTEGER, session_id TEXT, child_id TEXT, worktree TEXT, base TEXT'),
   T('checks', ['id'], 'id TEXT, project_id TEXT, name TEXT, type TEXT, spec_hash TEXT, lane TEXT, min_runs INTEGER, owner TEXT, protected INTEGER'),
   T('runs', ['id'], 'id TEXT, check_id TEXT, claim_id TEXT, host TEXT, needs TEXT, commit_sha TEXT, env_fingerprint TEXT, started INTEGER, ended INTEGER, outcome TEXT, tests_run INTEGER, passed INTEGER, evidence TEXT, assertion TEXT, expected TEXT, actual TEXT, step TEXT, points_to TEXT'),
   T('verdicts', ['id'], 'id TEXT, handle TEXT, claim_id TEXT, outcome TEXT, reasons TEXT, requirements TEXT, smallest TEXT, points_to TEXT, commit_sha TEXT, key TEXT, created INTEGER, stale INTEGER NOT NULL DEFAULT 0, because TEXT'),
   T('asks', ['id'], 'id TEXT, kind TEXT, key TEXT, question TEXT, options TEXT, recommended TEXT, default_option TEXT, provisional INTEGER, session_id TEXT, owner TEXT, fallback TEXT, deadline INTEGER, later_until INTEGER, pinned_to TEXT, status TEXT NOT NULL DEFAULT \'open\', outcome TEXT NOT NULL DEFAULT \'unanswered\', batch_id TEXT, created INTEGER, answered INTEGER, answer TEXT, decision TEXT'),
-  T('decisions', ['id'], 'id TEXT, key TEXT, scope TEXT, answer TEXT, by TEXT, ask_id TEXT, state TEXT, created INTEGER, overruled_by TEXT, applied INTEGER NOT NULL DEFAULT 0'),
+  // Indexed by scope: a session starting reads its own decisions back (#824).
+  T('decisions', ['id'], 'id TEXT, key TEXT, scope TEXT, answer TEXT, by TEXT, ask_id TEXT, state TEXT, created INTEGER, overruled_by TEXT, applied INTEGER NOT NULL DEFAULT 0', ['scope']),
   T('leases', ['kind', 'key'], 'kind TEXT, key TEXT, host TEXT, mode TEXT, holder TEXT, expires INTEGER, state TEXT'),
   T('evidence', ['hash'], 'hash TEXT, kind TEXT, type TEXT, size INTEGER, source TEXT, origin TEXT, redaction TEXT, license TEXT, step_times TEXT, derived_from TEXT'),
   T('commits', ['sha'], 'sha TEXT, session_id TEXT, worktree TEXT, created INTEGER'),
@@ -77,6 +79,7 @@ const TABLES: readonly TableDef[] = [
 ];
 /** The record's reading of turns is keyed by event IDs; it serves `session()` and is not a listed projection; the wiki's text is wiki_claims' index. */
 const INTERNAL = new Set(['turns', 'turn_events', 'wiki_text']);
+const TURNS_CACHED = 64;
 export const PROJECTIONS: readonly string[] = TABLES.filter((t) => !INTERNAL.has(t.name)).map((t) => t.name);
 const byName = new Map(TABLES.map((t) => [t.name, t]));
 export const tableDef = (name: string): TableDef | undefined => byName.get(name);
@@ -100,12 +103,14 @@ const TOOL = new Set(['tool.before', 'tool.after']);
 /** The kinds that can change which wiki claim is in force. */
 const WIKI_KINDS = new Set(['learn.applied', 'learn.widened', 'learn.rolled_back', 'learn_check.made']);
 const ENDED = new Set(['finished', 'failed']);
+/** The kinds that do more than move a lifecycle object: a refused move leaves out only the move. */
+const PARTIAL = new Set(['ask.batched', 'decision.applied', 'run.started', 'verdict.made', 'claim.sent_back', 'claim.stalled']);
 
 export class Projector {
   private readonly statements = new Map<string, Statement<unknown[]>>();
   private readonly turns = new Map<string, Turn[]>();
 
-  constructor(private readonly db: Db) {}
+  constructor(private readonly db: Db, private readonly plant?: 'turn-closes-at-child-stop') {}
 
   /**
    * Creates each table that is missing. A table an older version made with other columns is left as it is, and
@@ -198,9 +203,15 @@ export class Projector {
       .run(reading, JSON.stringify(amount), unit, e.ts, e.writer);
   }
 
-  apply(e: Projected): void {
+  /**
+   * Projects one event, and returns the moves its lifecycle tables refuse, which it leaves out (lifecycle.ts). An
+   * event from before the record had its gate isn't gated.
+   */
+  apply(e: Projected, gated = true): Refusal[] {
     const d: Obj = isObj(e.data) ? e.data : {};
-    if (e.session) {
+    // The core's reading of a session's state, and its finding the agent's process gone (#992), are no sign of the
+    // session: they move neither when it was last seen nor its turn.
+    if (e.session && e.kind !== 'session.state' && e.kind !== 'session.gone') {
       // The newest stamp seen: a late or spooled event never moves a session back.
       this.stmt('INSERT INTO sessions (id, last_seen) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET last_seen = MAX(COALESCE(sessions.last_seen, excluded.last_seen), excluded.last_seen)').run(e.session, e.ts);
       // What its own hooks say of a session's attention (#18): a prompt starts work, a permission prompt waits on you,
@@ -211,13 +222,19 @@ export class Projector {
           : e.kind === 'agent.stop' ? (d.outcome !== 'failed' ? 'finished' : d.owner === 'you' || d.owner === 'service' ? 'stuck' : 'failed') : undefined;
         const late = e.kind === 'tool.before' || e.kind === 'tool.after' ? " AND status NOT IN ('finished', 'failed', 'stuck')" : '';
         if (state) this.stmt(`UPDATE sessions SET status = ?, ended_log_pos = ? WHERE id = ?${late}`).run(state, ENDED.has(state) ? e.log_pos : null, e.session);
+        // A session that ends while a prompt of its agent's showed waits on no one (#992).
+        if (e.kind === 'session.end') this.stmt("UPDATE sessions SET status = 'finished', ended_log_pos = ? WHERE id = ? AND status = 'waiting'").run(e.log_pos, e.session);
         // The session's row shows its newest stop's cause, from the closed set (#85); NULL before any stop.
         if (e.kind === 'agent.stop') this.up('sessions', { id: e.session, cause: str(d.cause) });
       }
       // A reading the hub took of a session is about it, never one of its turn's events.
       // Nor is a subagent's stop: it ends no turn of the session's.
-      if (e.kind !== 'session.reading' && !d.child) this.turn(e, d);
+      if (e.kind !== 'session.reading' && (!d.child || this.plant === 'turn-closes-at-child-stop')) this.turn(e, d);
     }
+    const { moves, refused } = gate(e, (sql, ...params) => this.stmt(sql).get(...params) as Row | undefined, gated);
+    // An event that does more than move objects keeps the rest; one that only moves them changes nothing more.
+    if (refused.length && !PARTIAL.has(e.kind)) return refused;
+    const moved = (object: string): string | undefined => moves.find((m) => m.object === object)?.to;
     switch (e.kind) {
       case 'session.reading':
         if (e.session) this.add('session_readings', { session_id: e.session, reading: str(d.reading), since: e.log_pos });
@@ -232,7 +249,9 @@ export class Projector {
         const named = sessionOf(e.subject);
         const id = e.writer === 'hook' || (e.session && named === e.session.replace(/[^0-9A-Za-z]/g, '')) ? e.session : named ?? e.session;
         const state = str(d.state);
-        if (id) this.up('sessions', { id, status: state, ended_log_pos: state && ENDED.has(state) ? e.log_pos : null });
+        // A hook's idle prompt after a stop that failed or got stuck leaves the stop's state (#992).
+        const stopped = e.writer === 'hook' && state === 'finished' && id ? (this.stmt('SELECT status FROM sessions WHERE id = ?').get(id) as { status: string | null } | undefined)?.status : undefined;
+        if (id && stopped !== 'failed' && stopped !== 'stuck') this.up('sessions', { id, status: state, ended_log_pos: state && ENDED.has(state) ? e.log_pos : null });
         // The core's end of its own session ends a turn no stop will: the prompt it answered in the model's place (#83).
         if (id && id === e.session && e.writer === 'core' && state && ENDED.has(state)) {
           const turns = this.turnsOf(id);
@@ -284,21 +303,24 @@ export class Projector {
         const commit = str(d.commit);
         this.up('claims', { id: e.id, session_id: e.session, kind: str(d.scope), subject_ref: str(d.task_ref), created: e.ts, attempt: int(d.attempt), commit_sha: commit });
         const attempt = int(d.attempt);
+        // A verdict can land first; then its claim stays judged.
+        this.fill('claims', { id: e.id, state: 'pending' });
         if (attempt !== null && typeof d.task_ref === 'string') this.up('attempts', { task_ref: d.task_ref, attempt, session_id: e.session, base: commit });
         if (commit) this.up('commits', { sha: commit, session_id: e.session, created: e.ts });
         break;
       }
       case 'claim.sent_back':
-        this.set('claims', { round: int(d.round) }, { id: bare(d.claim) });
+        this.set('claims', { round: int(d.round), ...this.claimState(moved, d) }, { id: bare(d.claim) });
         break;
       case 'claim.stalled':
-        this.set('claims', { stalled_rule: str(d.rule) }, { id: bare(d.claim) });
+        this.set('claims', { stalled_rule: str(d.rule), ...this.claimState(moved, d) }, { id: bare(d.claim) });
         break;
       case 'verdict.made': {
         const claim = bare(d.claim);
         this.up('verdicts', { id: e.id, handle: str(d.verdict), claim_id: claim, outcome: str(d.outcome), reasons: json(d.reasons), requirements: json(d.requirements), smallest: str(d.smallest), points_to: str(d.points_to), commit_sha: str(d.commit), key: json(d.key), created: e.ts });
-        // An upsert: a verdict commits FULL at once and can land before the queued claim it judges.
-        this.up('claims', { id: claim, verdict_id: e.id });
+        // An upsert: a verdict commits FULL at once and can land before the queued claim it judges. A verdict its
+        // claim's table refused judges nothing there.
+        if (moved(`claim:${claim}`)) this.up('claims', { id: claim, verdict_id: e.id, ...this.claimState(moved, d) });
         break;
       }
       case 'verdict.stale':
@@ -359,13 +381,13 @@ export class Projector {
         // Shown again: an ask hidden by Later is back to open.
         // Only the core shows an ask, under the identity it was raised for.
         if (e.writer !== 'core' || !Array.isArray(d.asks)) break;
-        for (const a of d.asks) if (isObj(a)) this.stmt("UPDATE asks SET batch_id = ?, status = CASE status WHEN 'later' THEN 'open' ELSE status END WHERE id = ? AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)").run(str(d.batch), bare(a.ask), e.actor, e.scope);
+        for (const a of d.asks) if (isObj(a) && moved(`ask:${bare(a.ask)}`)) this.stmt("UPDATE asks SET batch_id = ?, status = CASE status WHEN 'later' THEN 'open' ELSE status END WHERE id = ? AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)").run(str(d.batch), bare(a.ask), e.actor, e.scope);
         break;
       case 'decision.created':
         this.up('decisions', { id: e.id, key: str(d.key), scope: json(d.scope), answer: json(d.answer), by: e.actor, ask_id: bare(d.ask), state: 'active', created: e.ts });
         break;
       case 'decision.applied':
-        this.up('asks', { id: bare(d.ask), status: 'decided', outcome: 'decided_for_you', answered: e.ts });
+        if (moved(`ask:${bare(d.ask)}`)) this.up('asks', { id: bare(d.ask), status: 'decided', outcome: 'decided_for_you', answered: e.ts });
         this.stmt('UPDATE decisions SET applied = applied + 1 WHERE id = ?').run(bare(d.decision));
         break;
       case 'decision.revoked':
@@ -394,6 +416,15 @@ export class Projector {
       case 'definition.revised':
         this.up('definitions', { ...this.definition(d, 'revised', e.ts), dispute_ask: str(d.dispute_ask) });
         break;
+      case 'definition.stood_in': {
+        // A stand-in a requirement's check was proven on (#874): kept on the requirement as its `stand_in`.
+        const row = this.stmt('SELECT requirements FROM definitions WHERE task_ref = ?').get(str(d.task_ref)) as { requirements: string } | undefined;
+        if (!row) break;
+        const found = new Map((d.requirements as Obj[]).map((r) => [r.id, r.stand_in]));
+        const requirements = (JSON.parse(row.requirements) as Obj[]).map((r) => (found.has(r.id) ? { ...r, stand_in: found.get(r.id) } : r));
+        this.stmt('UPDATE definitions SET requirements = ? WHERE task_ref = ?').run(JSON.stringify(requirements), str(d.task_ref));
+        break;
+      }
       case 'run.started':
       {
         // A run's claim, check and commit are the core's start, whenever it lands; until then the first start's.
@@ -401,6 +432,7 @@ export class Projector {
         const start = { id: bare(d.run), check_id: str(d.check), claim_id: bare(d.claim), commit_sha: str(d.commit), started: e.ts, ...(d.host !== undefined ? { host: str(d.host), needs: json(d.needs) } : {}) };
         if (e.writer === 'core') this.up('runs', start);
         else this.once('runs', start, 'started');
+        if (moved(`claim:${bare(d.claim)}`)) this.up('claims', { id: bare(d.claim), ...this.claimState(moved, d) });
       }
         this.up('checks', { id: str(d.check), name: str(d.check) });
         break;
@@ -415,10 +447,16 @@ export class Projector {
         this.up('checks', { id: str(d.check), name: str(d.check) });
         break;
       case 'task.created':
-        this.up('tasks', { task_ref: str(d.task_ref), thread: str(d.thread), owner: str(d.owner), title: str(d.title), state: 'queued', created: e.ts });
+        this.up('tasks', { task_ref: str(d.task_ref), thread: str(d.thread), owner: str(d.owner), title: str(d.title), created: e.ts });
+        // A task's state moves only through its table: a second task.created never reopens it.
+        this.fill('tasks', { task_ref: str(d.task_ref), state: 'queued' });
         break;
       case 'task.closed':
         this.set('tasks', { state: 'closed', closed: e.ts, by_verdict: str(d.by_verdict) }, { task_ref: e.subject });
+        break;
+      case 'task.withdrawn':
+        // Its table lets only your trusted path withdraw a task (#341).
+        this.set('tasks', { state: 'withdrawn', closed: e.ts }, { task_ref: e.subject });
         break;
       case 'pr.merged':
         this.up('commits', { sha: str(d.merge_sha), session_id: e.session, created: e.ts });
@@ -563,6 +601,12 @@ export class Projector {
         break;
     }
     if (WIKI_KINDS.has(e.kind)) this.wikiClaims(d);
+    return refused;
+  }
+  /** The state its table moved the event's claim to, as a column to write; none when it moved none. */
+  private claimState(moved: (object: string) => string | undefined, d: Obj): Row {
+    const to = moved(`claim:${bare(d.claim)}`);
+    return to ? { state: to } : {};
   }
 
   /**
@@ -610,6 +654,8 @@ export class Projector {
       const rows = this.stmt('SELECT idx, number, start_seq, start_id, stop_seq, stopped, last_seq, last_id FROM turns WHERE session_id = ? ORDER BY idx').safeIntegers(true).all(session) as
         { idx: bigint; number: bigint | null; start_seq: bigint | null; start_id: string; stop_seq: bigint | null; stopped: bigint; last_seq: bigint | null; last_id: string }[];
       turns = rows.map((r) => ({ idx: Number(r.idx), number: r.number === null ? null : Number(r.number), startSeq: r.start_seq, startId: r.start_id, stopSeq: r.stop_seq, stopped: r.stopped !== 0n, lastSeq: r.last_seq, lastId: r.last_id }));
+      // A cache of the turns table, which each change is saved to at once: the oldest read leaves when it's full.
+      if (this.turns.size >= TURNS_CACHED) this.turns.delete(this.turns.keys().next().value!);
       this.turns.set(session, turns);
     }
     return turns;

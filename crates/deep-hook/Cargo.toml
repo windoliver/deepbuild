@@ -25,3 +25,5 @@ plant-issue-spellings = []
 # read only for the tools deep-hook reads itself (AC5).
 plant-compiled-rule = []
 plant-listed-kinds-only = []
+# The planted wrong program for #1097's AC4: a reader that reads a program the line computes as no program at all.
+plant-computed-misses = []

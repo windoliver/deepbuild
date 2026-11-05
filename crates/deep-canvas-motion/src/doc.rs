@@ -1,23 +1,32 @@
 //! The parts of a document motion reads: the transport, channels, clips and placements, read
 //! from the document's JSON (canvas primitives: Transport, Channel and key, Clip, Placement).
+//! Issue #417 adds the toggle and stages controls, the shots stages name, `camera@1` items, the
+//! transition follow (#489) and the look's time feel they take.
 
-use deep_canvas::grammar::{Seeded, Time, TimeContext};
+use deep_canvas::grammar::{Seeded, Time, TimeContext, FLICKS_PER_SECOND};
 use serde_json::{Map, Value};
 
-use crate::curve::{Curve, Interp, Key};
+use crate::constraint::What;
+use crate::curve::{Bezier, Curve, Ease, Extrapolate, Interp, Key};
+use deep_canvas::ease::{self, Named};
+use crate::follow;
+use crate::modifier::{Kind as ModKind, Modifier, Rate, Shape};
+use crate::spring::Spring;
 
 /// Why a document can't be evaluated, as a refusal code and the path it names.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Refused {
     pub code: &'static str,
     pub path: String,
+    /// What the refusal names past its path, such as a table's offending index or an ease
+    /// table's knot, merged into the answer.
+    pub detail: Option<Box<Value>>,
 }
 
 fn refuse<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused> {
     Err(Refused {
         code,
-        path: path.into(),
-    })
+        path: path.into(), detail: None })
 }
 
 /// What a channel writes: a field path inside an item, after the item's ID.
@@ -36,6 +45,9 @@ pub enum ValueType {
     /// Held only, as 0 or 1 (Channel and key: "enum, bool and string: hold only"); an item's
     /// `adjust.invert` is one (Item and kind: adjust).
     Bool,
+    /// Held only, as the index of its value in [`Motion::labels`]; a vector part's role is one
+    /// (Vector and formula `vector@1`: `items/<id>/parts/<part>/role`).
+    Enum,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,6 +56,12 @@ pub struct Channel {
     pub target: Target,
     pub ty: ValueType,
     pub curve: Curve,
+    /// Added after the keys, in list order (Channel and key: `modifiers`).
+    pub modifiers: Vec<Modifier>,
+    /// `mode: follow`: what it follows and how, in place of keys.
+    pub follow: Option<follow::Spec>,
+    /// The hard range, checked at compile against keys, Bézier extremes and spring peaks.
+    pub range: Option<(f64, f64)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -108,6 +126,8 @@ pub struct Transport {
     /// Under reduced motion the timeline holds at its start: `reduced_motion: hold`, in any
     /// profile but a film, which still plays its timeline (Transport).
     pub holds: bool,
+    /// `reduced_motion: hold` (the default) rather than `slow`.
+    pub reduce_holds: bool,
 }
 
 /// A driver (canvas primitives: Driver): writes its target from an expression over its vars,
@@ -121,6 +141,19 @@ pub struct Driver {
     pub expr: Vec<deep_canvas::document::packs::ExprStep>,
     /// Each var's name and the document path it reads, in name order.
     pub vars: Vec<(String, Target)>,
+    /// Each var that reads no document path, in name order: `time` or a control's value.
+    pub inputs: Vec<(String, DriverInput)>,
+    /// The hard range (Driver: `range`), checked against the driver's bound.
+    pub range: Option<(f64, f64)>,
+}
+
+/// A driver var that reads no document path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DriverInput {
+    /// The time in seconds since the transport's start.
+    Time,
+    /// `controls/<id>/value`: a control's value, swept over its declared range.
+    Control(String),
 }
 
 /// Each axis's `[min, max]`, `None` for an axis a limit leaves free.
@@ -137,13 +170,123 @@ pub struct Limit {
     pub bounds: Bounds,
 }
 
+/// A constraint kind besides `limit` (canvas primitives: Constraint), with the items it reads.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Kind {
+    ChildOf { parent: String },
+    FollowPath { points: Vec<[f64; 2]>, fraction: f64, orient: bool, offset: [f64; 2] },
+    LookAt { target: String },
+    Copy { what: What, target: String },
+    /// Bones `[upper, lower, end]`, each the next one's parent.
+    Reach2 { chain: [String; 3], target: String, bend: f64, cartoon: bool },
+    FollowTip { item: String, offset: [f64; 2], rotate: bool },
+    Distance { target: String, min: f64, max: f64 },
+    SpringChain { bones: Vec<String>, hz: f64, damping_ratio: f64, max_swing: f64 },
+    RestOn { ground: f64, bottom: f64, offset: f64, max_drop: f64 },
+}
+
+/// One constraint on an owner item, applied by its influence after the owner's channels and
+/// drivers, in ID order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Constraint {
+    pub id: String,
+    pub owner: String,
+    pub kind: Kind,
+    pub influence: f64,
+}
+
+impl Kind {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Kind::ChildOf { .. } => "child_of",
+            Kind::FollowPath { .. } => "follow_path",
+            Kind::LookAt { .. } => "look_at",
+            Kind::Copy { .. } => "copy",
+            Kind::Reach2 { .. } => "reach2",
+            Kind::FollowTip { .. } => "follow_tip",
+            Kind::Distance { .. } => "distance",
+            Kind::SpringChain { .. } => "spring_chain",
+            Kind::RestOn { .. } => "rest_on",
+        }
+    }
+}
+
+/// The look's time feel for a change of state (#417: `time.state: {span: time = "0.25s", interp =
+/// ease in_out_cubic}`): what a transition follow naming no span or interp and a stage's glide
+/// naming no ease take, so one piece moves with one ease.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Feel {
+    pub span: i64,
+    pub ease: Ease,
+}
+
+impl Default for Feel {
+    fn default() -> Feel {
+        Feel {
+            span: FLICKS_PER_SECOND / 4,
+            ease: Ease::InOutCubic,
+        }
+    }
+}
+
+/// A control motion reads (canvas primitives: Control): a `toggle`, whose options are `false`
+/// and `true`, or `stages`, whose options are its stages, each with its shot.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Control {
+    pub id: String,
+    pub kind: &'static str,
+    /// Its options as a follow's `values` name them.
+    pub options: Vec<String>,
+    /// The option it holds before any input.
+    pub default: usize,
+    /// A stages control's shot per option, as an index in [`Motion::shots`].
+    pub shots: Vec<usize>,
+}
+
+/// A channel that follows a control by a transition (#489: `model: transition {span, interp}`):
+/// at each change of its source it moves from the value it holds then to the option's value.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Follow {
+    pub id: String,
+    pub target: Target,
+    /// The control, as an index in [`Motion::controls`].
+    pub control: usize,
+    /// The value per option of the control.
+    pub values: Vec<f64>,
+    /// Its own span and interp, or the look's time feel's where it names none.
+    pub span: Option<i64>,
+    pub ease: Option<Ease>,
+}
+
+/// A `hold` shot a stage names (canvas primitives: Control/Shot): its camera's target from the
+/// stage's entry, reached by a glide from the pose shown.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Shot {
+    pub id: String,
+    /// The camera, as an index in [`Motion::cameras`].
+    pub camera: usize,
+    pub target: [f64; 3],
+    /// The glide's span: 0.8 s unless the shot names its own, 0 for `join: cut`.
+    pub glide: i64,
+    pub ease: Option<Ease>,
+}
+
 /// Everything motion reads, with each map in ID order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Motion {
     pub transport: Transport,
     pub channels: Vec<Channel>,
+    pub follows: Vec<Follow>,
+    pub controls: Vec<Control>,
+    /// The shots stages name, in the order stages first name them.
+    pub shots: Vec<Shot>,
+    /// Each `camera@1` item, in document order, with its own target.
+    pub cameras: Vec<(String, [f64; 3])>,
     pub drivers: Vec<Driver>,
     pub limits: Vec<Limit>,
+    pub constraints: Vec<Constraint>,
+    /// Each control a #489 follow channel may read, with its default value.
+    pub control_defaults: Vec<(String, f64)>,
     pub clips: Vec<Clip>,
     pub placements: Vec<Placement>,
     pub markers: Vec<Marker>,
@@ -151,12 +294,42 @@ pub struct Motion {
     pub parents: Vec<(String, String)>,
     pub cuts: Vec<Cut>,
     pub frame_rate: (u32, u32),
+    /// Every enum channel's values, each once; an enum key holds its value's index here.
+    pub labels: Vec<String>,
+    /// Each reversing time remap (Time remap; #429): the recipe instance it targets and the
+    /// span it reverses over, outer targets first.
+    pub remaps: Vec<(String, i64)>,
 }
 
 impl Motion {
     pub fn clip(&self, id: &str) -> Option<&Clip> {
         self.clips.iter().find(|c| c.id == id)
     }
+
+    /// Whether a time remap targets `item`: the instance itself or an item it derives
+    /// (`<instance>.<step>…`).
+    pub fn remapped(&self, item: &str) -> bool {
+        self.remaps.iter().any(|(target, _)| derives(target, item))
+    }
+
+    /// `item`'s own time at timeline position `doc_t`: each remap that targets it, outer to
+    /// inner, maps parent time to child time, `reverse` as span − parent time from the start,
+    /// clamped into the span (Time remap: `clamp: true`).
+    pub fn item_time(&self, item: &str, doc_t: i64) -> i64 {
+        let start = self.transport.start;
+        self.remaps
+            .iter()
+            .filter(|(target, _)| derives(target, item))
+            .fold(doc_t, |t, (_, span)| {
+                start + (span - (t - start)).clamp(0, *span)
+            })
+    }
+}
+
+/// Whether `item` is `target` or an item `target` derives.
+fn derives(target: &str, item: &str) -> bool {
+    item.strip_prefix(target)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
 }
 
 /// A map section's entries: each ID with its object.
@@ -201,8 +374,17 @@ fn number(value: Option<&Value>, path: &str) -> Result<f64, Refused> {
 fn interp_of(value: Option<&Value>, path: &str) -> Result<Interp, Refused> {
     match value {
         None => Ok(Interp::Linear),
-        Some(Value::String(s)) if s == "linear" => Ok(Interp::Linear),
-        Some(Value::String(s)) if s == "hold" => Ok(Interp::Hold),
+        Some(Value::String(s)) => match s.as_str() {
+            "linear" => Ok(Interp::Linear),
+            "hold" => Ok(Interp::Hold),
+            "catmull_rom" => Ok(Interp::CatmullRom),
+            "auto" => Ok(Interp::Auto {
+                clamp: true,
+                smoothness: 0.33,
+            }),
+            // A bare `ease` or `smooth`, and every interpolation motion doesn't land, is refused.
+            _ => refuse("bad_interp", path),
+        },
         Some(Value::Object(o)) if o.len() == 1 => {
             if let Some(Value::Object(h)) = o.get("bezier") {
                 let at = |k: &str| number(h.get(k), &format!("{path}/bezier/{k}"));
@@ -218,24 +400,361 @@ fn interp_of(value: Option<&Value>, path: &str) -> Result<Interp, Refused> {
                 });
             }
             if let Some(Value::Object(s)) = o.get("spring") {
-                let freq_hz = number(s.get("freq_hz"), &format!("{path}/spring/freq_hz"))?;
-                let damping_ratio = number(
-                    s.get("damping_ratio"),
-                    &format!("{path}/spring/damping_ratio"),
-                )?;
-                if freq_hz <= 0.0 || damping_ratio <= 0.0 {
-                    return refuse("out_of_range", format!("{path}/spring"));
+                return Ok(Interp::Spring(spring_of(s, &format!("{path}/spring"))?));
+            }
+            if let Some(e) = o.get("ease") {
+                // `{table: "<pack>.<name>"}` names a pack's ease table, resolved by the program.
+                if let Some(t) = e.get("table") {
+                    return match t {
+                        Value::String(_) if e.as_object().is_some_and(|o| o.len() == 1) => {
+                            Ok(Interp::Table)
+                        }
+                        _ => refuse("bad_interp", format!("{path}/ease/table")),
+                    };
                 }
-                return Ok(Interp::Spring {
-                    freq_hz,
-                    damping_ratio,
-                });
+                let named = named_of(e, &format!("{path}/ease"))?;
+                return Ok(Interp::Ease(ease::Entry::opened(named)));
+            }
+            if let Some(Value::Object(a)) = o.get("auto") {
+                let clamp = match a.get("clamp") {
+                    None => true,
+                    Some(Value::Bool(b)) => *b,
+                    Some(_) => return refuse("bad_doc", format!("{path}/auto/clamp")),
+                };
+                let smoothness = match a.get("smoothness") {
+                    None => 0.33,
+                    v => number(v, &format!("{path}/auto/smoothness"))?,
+                };
+                if !(0.0..=1.0).contains(&smoothness) {
+                    return refuse("out_of_range", format!("{path}/auto/smoothness"));
+                }
+                return Ok(Interp::Auto { clamp, smoothness });
             }
             refuse("bad_interp", path)
         }
-        // A bare `ease` or `smooth`, and every interpolation R1 doesn't land, is refused.
         Some(_) => refuse("bad_interp", path),
     }
+}
+
+/// A spring by any of its forms: `{freq_hz, damping_ratio}`, `{decay, omega}` (ζ·ω0 = decay,
+/// damped frequency omega), `{duration, bounce}` or `{mass, stiffness, damping}`.
+pub fn spring_of(s: &Map<String, Value>, path: &str) -> Result<Spring, Refused> {
+    let at = |k: &str| number(s.get(k), &format!("{path}/{k}"));
+    let has = |k: &str| s.contains_key(k);
+    let spring = if has("decay") || has("omega") {
+        let (decay, omega) = (at("decay")?, at("omega")?);
+        if decay < 0.0 || omega < 0.0 || decay + omega <= 0.0 {
+            return refuse("out_of_range", path);
+        }
+        Spring::from_decay(decay, omega)
+    } else if has("duration") {
+        let (duration, bounce) = (at("duration")?, if has("bounce") { at("bounce")? } else { 0.0 });
+        if duration <= 0.0 || bounce >= 1.0 {
+            return refuse("out_of_range", path);
+        }
+        Spring::from_duration(duration, bounce)
+    } else if has("mass") || has("stiffness") {
+        let (m, k, c) = (at("mass")?, at("stiffness")?, at("damping")?);
+        if m <= 0.0 || k <= 0.0 || c <= 0.0 {
+            return refuse("out_of_range", path);
+        }
+        Spring::from_mass(m, k, c)
+    } else {
+        let freq = if has("freq_hz") { at("freq_hz")? } else { 2.0 };
+        let ratio = if has("damping_ratio") { at("damping_ratio")? } else { 1.0 };
+        if freq <= 0.0 || ratio <= 0.0 {
+            return refuse("out_of_range", path);
+        }
+        Spring::from_freq(freq, ratio)
+    };
+    Ok(spring)
+}
+
+/// An `ease@1` entry: `{name, params}` (params a number for the eases that take one, or an
+/// object of named params: back's `overshoot`, elastic's `amplitude` and `period`, bounce's
+/// `restitution` and `bounces`), or its bare name.
+pub fn named_of(e: &Value, path: &str) -> Result<Named, Refused> {
+    let (name, params) = match e {
+        Value::String(n) => (n.as_str(), None),
+        Value::Object(o) => match o.get("name") {
+            Some(Value::String(n)) => (n.as_str(), o.get("params")),
+            _ => return refuse("bad_interp", path),
+        },
+        _ => return refuse("bad_interp", path),
+    };
+    match ease::parse(name, params) {
+        Ok(Some(named)) => Ok(named),
+        Ok(None) => refuse("bad_interp", path),
+        Err(bad) => refuse("out_of_range", format!("{path}/params/{}", bad.param)),
+    }
+}
+
+/// A change of state's interp: `{"ease": {"name": …}}` naming an `ease@1` ease motion lands, or
+/// a Bézier as a key writes one.
+fn ease_of(value: &Value, path: &str) -> Result<Ease, Refused> {
+    let single = value.as_object().filter(|o| o.len() == 1);
+    if let Some(Value::Object(e)) = single.and_then(|o| o.get("ease")) {
+        let name = e.get("name").and_then(Value::as_str);
+        return match Ease::NAMES.iter().find(|(n, _)| Some(*n) == name) {
+            Some((_, ease)) => Ok(*ease),
+            None => refuse("bad_interp", format!("{path}/ease/name")),
+        };
+    }
+    if single.is_some_and(|o| o.contains_key("bezier")) {
+        if let Interp::Bezier { x1, y1, x2, y2 } = interp_of(Some(value), path)? {
+            return Ok(Ease::Bezier(Bezier::new(x1, y1, x2, y2)));
+        }
+    }
+    refuse("bad_interp", path)
+}
+
+/// The look's time feel for a change of state, `time.state`, each field at its default where the
+/// look names none; paths name the request's `look`.
+pub fn feel_of(look: &Map<String, Value>, frame_rate: (u32, u32)) -> Result<Feel, Refused> {
+    let mut feel = Feel::default();
+    let state = match look.get("time") {
+        None => None,
+        Some(Value::Object(time)) => match time.get("state") {
+            None => None,
+            Some(Value::Object(state)) => Some(state),
+            Some(_) => return refuse("bad_look", "look/time/state"),
+        },
+        Some(_) => return refuse("bad_look", "look/time"),
+    };
+    let ctx = TimeContext {
+        frame_rate,
+        ..TimeContext::default()
+    };
+    if let Some(span) = state.and_then(|s| s.get("span")) {
+        feel.span = time_of(Some(span), &ctx, "look/time/state/span")?;
+    }
+    if let Some(interp) = state.and_then(|s| s.get("interp")) {
+        feel.ease = ease_of(interp, "look/time/state/interp")?;
+    }
+    Ok(feel)
+}
+
+/// The toggle and stages controls, in ID order, and the shots their stages name, each read once,
+/// in the order stages first name them; every other kind of control is read where it lands.
+fn controls_of(
+    doc: &Map<String, Value>,
+    cameras: &[(String, [f64; 3])],
+    ctx: &TimeContext,
+) -> Result<(Vec<Control>, Vec<Shot>), Refused> {
+    let mut controls = Vec::new();
+    let mut read: Vec<Shot> = Vec::new();
+    for (id, c) in section(doc, "controls")? {
+        let path = format!("controls/{id}");
+        let (kind, options, shots, default) = match c.get("kind").and_then(Value::as_str) {
+            Some("toggle") => {
+                let on = match c.get("default") {
+                    None => false,
+                    Some(Value::Bool(b)) => *b,
+                    Some(_) => return refuse("bad_doc", format!("{path}/default")),
+                };
+                let options = vec!["false".to_string(), "true".to_string()];
+                ("toggle", options, Vec::new(), usize::from(on))
+            }
+            Some("stages") => {
+                let stages = match c.get("stages") {
+                    Some(Value::Object(s)) if !s.is_empty() => s,
+                    _ => return refuse("bad_doc", format!("{path}/stages")),
+                };
+                let mut options = Vec::new();
+                let mut shots = Vec::new();
+                for (stage, s) in stages {
+                    let at = format!("{path}/stages/{stage}/shot");
+                    let Some(name) = s.get("shot").and_then(Value::as_str) else {
+                        return refuse("bad_doc", at);
+                    };
+                    let shot = match read.iter().position(|x| x.id == name) {
+                        Some(i) => i,
+                        None => {
+                            let def = doc.get("shots").and_then(|m| m.get(name));
+                            let Some(Value::Object(def)) = def else {
+                                return refuse("ref_unresolved", at);
+                            };
+                            read.push(shot_of(name, def, cameras, ctx)?);
+                            read.len() - 1
+                        }
+                    };
+                    options.push(stage.clone());
+                    shots.push(shot);
+                }
+                let default = match c.get("default") {
+                    None => 0,
+                    Some(Value::String(d)) => match options.iter().position(|o| o == d) {
+                        Some(i) => i,
+                        None => return refuse("ref_unresolved", format!("{path}/default")),
+                    },
+                    Some(_) => return refuse("bad_doc", format!("{path}/default")),
+                };
+                ("stages", options, shots, default)
+            }
+            _ => continue,
+        };
+        controls.push(Control {
+            id: id.clone(),
+            kind,
+            options,
+            default,
+            shots,
+        });
+    }
+    Ok((controls, read))
+}
+
+/// Each `camera@1` item with its target (`params.target`, `[0, 0, 0]` where it names none).
+fn cameras_of(doc: &Map<String, Value>) -> Result<Vec<(String, [f64; 3])>, Refused> {
+    let mut cameras = Vec::new();
+    for (id, item) in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        if item.get("kind").and_then(Value::as_str) != Some("camera@1") {
+            continue;
+        }
+        let path = format!("items/{id}/params/target");
+        let target = match item.get("params").and_then(|p| p.get("target")) {
+            None => [0.0; 3],
+            Some(v) => point_of(v, &path)?,
+        };
+        cameras.push((id.clone(), target));
+    }
+    Ok(cameras)
+}
+
+/// Three numbers.
+fn point_of(value: &Value, path: &str) -> Result<[f64; 3], Refused> {
+    match value.as_array() {
+        Some(list) if list.len() == 3 => {
+            let mut out = [0.0; 3];
+            for (k, v) in list.iter().enumerate() {
+                out[k] = number(Some(v), &format!("{path}/{k}"))?;
+            }
+            Ok(out)
+        }
+        _ => refuse("out_of_range", path),
+    }
+}
+
+/// A `hold` shot: its camera, its target, the glide that joins it (0.8 s unless it names its own
+/// span, 0 for `join: cut`) and its own ease, if any.
+fn shot_of(
+    id: &str,
+    s: &Map<String, Value>,
+    cameras: &[(String, [f64; 3])],
+    ctx: &TimeContext,
+) -> Result<Shot, Refused> {
+    let path = format!("shots/{id}");
+    let camera = s.get("camera").and_then(Value::as_str);
+    let Some(camera) = cameras.iter().position(|(c, _)| Some(c.as_str()) == camera) else {
+        return refuse("ref_unresolved", format!("{path}/camera"));
+    };
+    match s.get("move").and_then(Value::as_str) {
+        None | Some("hold") => {}
+        Some(_) => return refuse("bad_doc", format!("{path}/move")),
+    }
+    let Some(target) = s.get("target") else {
+        return refuse("bad_doc", format!("{path}/target"));
+    };
+    let target = point_of(target, &format!("{path}/target"))?;
+    let default_glide = FLICKS_PER_SECOND * 4 / 5;
+    let glide = match s.get("join") {
+        None => default_glide,
+        Some(Value::String(j)) if j == "cut" => 0,
+        Some(Value::Object(j)) if j.len() == 1 && j.get("glide").is_some_and(Value::is_object) => {
+            match j["glide"].get("span") {
+                None => default_glide,
+                v => time_of(v, ctx, &format!("{path}/join/glide/span"))?,
+            }
+        }
+        Some(_) => return refuse("bad_doc", format!("{path}/join")),
+    };
+    let ease = match s.get("ease") {
+        None => None,
+        Some(v) => Some(ease_of(v, &format!("{path}/ease"))?),
+    };
+    Ok(Shot {
+        id: id.to_string(),
+        camera,
+        target,
+        glide,
+        ease,
+    })
+}
+
+/// A channel with `follow` in place of `keys`: a number channel moving by a transition from the
+/// value it holds to the value its source control's option names.
+fn follow_of(
+    id: &str,
+    c: &Map<String, Value>,
+    doc: &Map<String, Value>,
+    controls: &[Control],
+    ctx: &TimeContext,
+) -> Result<Follow, Refused> {
+    let path = format!("channels/{id}");
+    let Some(Value::String(target)) = c.get("target") else {
+        return refuse("bad_path", format!("{path}/target"));
+    };
+    let target = target_of(target, false, &format!("{path}/target"))?;
+    match c.get("type").and_then(Value::as_str) {
+        Some("f32") | None => {}
+        _ => return refuse("bad_type", format!("{path}/type")),
+    }
+    if c.contains_key("keys") {
+        return refuse("bad_doc", format!("{path}/keys"));
+    }
+    let path = format!("{path}/follow");
+    let Some(Value::Object(source)) = c["follow"].get("source") else {
+        return refuse("bad_doc", format!("{path}/source"));
+    };
+    let name = source.get("control").and_then(Value::as_str);
+    let Some(control) = controls.iter().position(|k| Some(k.id.as_str()) == name) else {
+        let exists = name.is_some_and(|n| doc.get("controls").and_then(|cs| cs.get(n)).is_some());
+        let code = if exists { "bad_doc" } else { "ref_unresolved" };
+        return refuse(code, format!("{path}/source/control"));
+    };
+    let Some(Value::Object(given)) = source.get("values") else {
+        return refuse("bad_doc", format!("{path}/source/values"));
+    };
+    let options = &controls[control].options;
+    if let Some(extra) = given.keys().find(|k| !options.contains(k)) {
+        return refuse("ref_unresolved", format!("{path}/source/values/{extra}"));
+    }
+    let mut values = Vec::with_capacity(options.len());
+    for option in options {
+        let at = format!("{path}/source/values/{option}");
+        match given.get(option) {
+            None => return refuse("bad_doc", at),
+            v => values.push(number(v, &at)?),
+        }
+    }
+    let transition = match c["follow"].get("model") {
+        Some(Value::Object(m)) if m.len() == 1 => m.get("transition").and_then(Value::as_object),
+        _ => None,
+    };
+    let Some(transition) = transition else {
+        return refuse("bad_doc", format!("{path}/model"));
+    };
+    let span = match transition.get("span") {
+        None => None,
+        v => Some(time_of(v, ctx, &format!("{path}/model/transition/span"))?),
+    };
+    let ease = match transition.get("interp") {
+        None => None,
+        Some(v) => Some(ease_of(v, &format!("{path}/model/transition/interp"))?),
+    };
+    Ok(Follow {
+        id: id.to_string(),
+        target,
+        control,
+        values,
+        span,
+        ease,
+    })
 }
 
 fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
@@ -248,6 +767,14 @@ fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
     } else {
         match parts.as_slice() {
             ["items", id, rest @ ..] => (*id, rest),
+            // A keyed data value (Path: "A channel may key `data/<name>`"): its owner is the
+            // data entry, never an item, and what it writes is the entry's value.
+            ["data", name] if !name.is_empty() => {
+                return Ok(Target {
+                    owner: format!("data/{name}"),
+                    field: vec!["value".into()],
+                })
+            }
             _ => return refuse("bad_path", path),
         }
     };
@@ -269,9 +796,11 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
     let Some(Value::String(text)) = d.get("expr") else {
         return refuse("bad_doc", format!("{path}/expr"));
     };
-    let expr = deep_canvas::document::packs::postfix(text)
-        .or_else(|_| refuse("bad_doc", format!("{path}/expr")))?;
+    // The R1 subset compiles to motion's own ops; the rest of the closed function list, through
+    // the core's expressions, at compile (an empty postfix).
+    let expr = deep_canvas::document::packs::postfix(text).unwrap_or_default();
     let mut vars = Vec::new();
+    let mut inputs = Vec::new();
     for (name, v) in d
         .get("vars")
         .and_then(Value::as_object)
@@ -282,23 +811,45 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
         let Value::String(text) = v else {
             return refuse("bad_path", vpath);
         };
+        if text == "time" {
+            inputs.push((name.clone(), DriverInput::Time));
+            continue;
+        }
+        if let Some(c) = text.strip_prefix("controls/").and_then(|r| r.strip_suffix("/value")) {
+            inputs.push((name.clone(), DriverInput::Control(c.to_string())));
+            continue;
+        }
         vars.push((name.clone(), target_of(text, false, &vpath)?));
     }
     vars.sort_by(|a, b| a.0.cmp(&b.0));
+    inputs.sort_by(|a, b| a.0.cmp(&b.0));
     // Every name the expression reads is a var: a driver reads nothing it doesn't declare.
     for step in &expr {
         if let deep_canvas::document::packs::ExprStep::Name(n) = step {
-            if !vars.iter().any(|(v, _)| v == n) {
+            if !vars.iter().any(|(v, _)| v == n) && !inputs.iter().any(|(v, _)| v == n) {
                 return refuse("ref_unresolved", format!("{path}/expr"));
             }
         }
     }
+    let range = match d.get("range") {
+        None => None,
+        Some(Value::Array(r)) if r.len() == 2 => {
+            let (lo, hi) = (number(r.first(), &format!("{path}/range/0"))?, number(r.get(1), &format!("{path}/range/1"))?);
+            if lo > hi {
+                return refuse("out_of_range", format!("{path}/range"));
+            }
+            Some((lo, hi))
+        }
+        Some(_) => return refuse("bad_doc", format!("{path}/range")),
+    };
     Ok(Driver {
         id: id.to_string(),
         target,
         text: text.clone(),
         expr,
         vars,
+        inputs,
+        range,
     })
 }
 
@@ -349,12 +900,334 @@ fn limit_of(id: &str, c: &Map<String, Value>) -> Result<Option<Limit>, Refused> 
     }))
 }
 
+fn id_of(c: &Map<String, Value>, key: &str, path: &str) -> Result<String, Refused> {
+    match c.get(key).and_then(Value::as_str).filter(|s| !s.is_empty()) {
+        Some(s) => Ok(s.to_string()),
+        None => refuse("bad_path", format!("{path}/{key}")),
+    }
+}
+
+fn pair(v: Option<&Value>, path: &str) -> Result<[f64; 2], Refused> {
+    match v {
+        None => Ok([0.0; 2]),
+        Some(Value::Array(a)) if a.len() == 2 => Ok([
+            number(a.first(), &format!("{path}/0"))?,
+            number(a.get(1), &format!("{path}/1"))?,
+        ]),
+        Some(_) => refuse("bad_doc", path),
+    }
+}
+
+/// A constraint of any kind but `limit`. `follow_stream` is the data module's, which this build
+/// may lack; every other kind motion doesn't fill is refused as unknown.
+fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused> {
+    let path = format!("constraints/{id}");
+    let owner = id_of(c, "owner", &path)?;
+    let at = |k: &str| format!("{path}/{k}");
+    let num_or = |k: &str, d: f64| -> Result<f64, Refused> {
+        match c.get(k) {
+            None => Ok(d),
+            v => number(v, &at(k)),
+        }
+    };
+    let flag = |k: &str| c.get(k).and_then(Value::as_bool).unwrap_or(false);
+    let kind = match c.get("kind").and_then(Value::as_str) {
+        Some("child_of") => Kind::ChildOf { parent: id_of(c, "parent", &path)? },
+        Some("follow_path") => {
+            let Some(Value::Array(list)) = c.get("path") else {
+                return refuse("bad_doc", at("path"));
+            };
+            let points = list
+                .iter()
+                .enumerate()
+                .map(|(i, p)| pair(Some(p), &format!("{path}/path/{i}")))
+                .collect::<Result<Vec<_>, _>>()?;
+            if points.len() < 2 {
+                return refuse("bad_doc", at("path"));
+            }
+            Kind::FollowPath {
+                points,
+                fraction: num_or("fraction", 0.0)?,
+                orient: flag("orient"),
+                offset: pair(c.get("offset"), &at("offset"))?,
+            }
+        }
+        Some("look_at") => Kind::LookAt { target: id_of(c, "target", &path)? },
+        Some("copy") => Kind::Copy {
+            what: c
+                .get("what")
+                .and_then(Value::as_str)
+                .and_then(What::parse)
+                .map_or_else(|| refuse("bad_doc", at("what")), Ok)?,
+            target: id_of(c, "target", &path)?,
+        },
+        Some("reach2") => {
+            let chain: Vec<String> = c
+                .get("chain")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                .unwrap_or_default();
+            let Ok(chain) = <[String; 3]>::try_from(chain) else {
+                return refuse("bad_doc", at("chain"));
+            };
+            let bend = num_or("bend", 1.0)?;
+            if bend != 1.0 && bend != -1.0 {
+                return refuse("out_of_range", at("bend"));
+            }
+            let cartoon = match c.get("stretch").and_then(Value::as_str) {
+                None | Some("none") => false,
+                Some("cartoon") => true,
+                Some(_) => return refuse("bad_doc", at("stretch")),
+            };
+            Kind::Reach2 { chain, target: id_of(c, "target", &path)?, bend, cartoon }
+        }
+        Some("follow_tip") => Kind::FollowTip {
+            item: id_of(c, "item", &path)?,
+            offset: pair(c.get("offset"), &at("offset"))?,
+            rotate: flag("rotate"),
+        },
+        Some("distance") => {
+            let (min, max) = (num_or("min", 0.0)?, num_or("max", f64::MAX)?);
+            if min < 0.0 || min > max {
+                return refuse("out_of_range", path);
+            }
+            Kind::Distance { target: id_of(c, "target", &path)?, min, max }
+        }
+        Some("spring_chain") => Kind::SpringChain {
+            bones: c
+                .get("bones")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                .filter(|b: &Vec<String>| !b.is_empty() && b.len() <= 8)
+                .map_or_else(|| refuse("bad_doc", at("bones")), Ok)?,
+            hz: num_or("hz", 2.0)?,
+            damping_ratio: num_or("damping_ratio", 0.5)?,
+            max_swing: num_or("max_swing", 60.0)?,
+        },
+        Some("rest_on") => Kind::RestOn {
+            ground: num_or("ground", 0.0)?,
+            bottom: num_or("bottom", 0.0)?,
+            offset: num_or("offset", 0.0)?,
+            max_drop: num_or("max_drop", 10.0)?,
+        },
+        Some("follow_stream") => return refuse("module_missing", at("kind")),
+        _ => return refuse("unknown_kind", at("kind")),
+    };
+    Ok(Constraint {
+        id: id.to_string(),
+        owner,
+        kind,
+        influence: num_or("influence", 1.0)?,
+    })
+}
+
+/// Seconds as a number, or a time literal, in flicks.
+fn seconds_of(v: Option<&Value>, ctx: &TimeContext, path: &str) -> Result<i64, Refused> {
+    match v {
+        Some(Value::Number(n)) => match n.as_f64() {
+            Some(s) if s.is_finite() && s >= 0.0 => {
+                Ok((s * deep_canvas::grammar::FLICKS_PER_SECOND as f64).round() as i64)
+            }
+            _ => refuse("out_of_range", path),
+        },
+        v => time_of(v, ctx, path),
+    }
+}
+
+/// A follow channel's `follow` on held keys or a control's value (#489): its source, its model
+/// and its outputs. A `follow` naming `source.control` and its option `values` is #417's.
+fn follow_spec_of(f: &Map<String, Value>, ctx: &TimeContext, path: &str) -> Result<follow::Spec, Refused> {
+    let source = match f.get("source") {
+        Some(Value::String(s)) => match s.strip_prefix("controls/").and_then(|r| r.strip_suffix("/value")) {
+            Some(id) if !id.is_empty() => follow::Source::Control(id.to_string()),
+            _ => return refuse("bad_path", format!("{path}/source")),
+        },
+        Some(Value::Object(o)) => {
+            let Some(Value::Object(keys)) = o.get("keys") else {
+                return refuse("bad_doc", format!("{path}/source"));
+            };
+            let mut list = Vec::new();
+            for (kid, k) in keys {
+                let kpath = format!("{path}/source/keys/{kid}");
+                // The source holds between its changes: a key that moves is a varying source.
+                match k.get("interp").and_then(Value::as_str) {
+                    None | Some("hold") => {}
+                    Some(_) => return refuse("varying_source", kpath),
+                }
+                list.push((time_of(k.get("t"), ctx, &format!("{kpath}/t"))?, number(k.get("value"), &format!("{kpath}/value"))?));
+            }
+            list.sort_by_key(|(t, _)| *t);
+            if list.is_empty() {
+                return refuse("bad_doc", format!("{path}/source/keys"));
+            }
+            follow::Source::Keys(list)
+        }
+        _ => return refuse("bad_doc", format!("{path}/source")),
+    };
+    let Some(Value::Object(m)) = f.get("model") else {
+        return refuse("bad_doc", format!("{path}/model"));
+    };
+    let mpath = format!("{path}/model");
+    let positive = |o: &Map<String, Value>, k: &str, d: Option<f64>| -> Result<f64, Refused> {
+        let v = match (o.get(k), d) {
+            (None, Some(d)) => d,
+            (v, _) => number(v, &format!("{mpath}/{k}"))?,
+        };
+        if v > 0.0 { Ok(v) } else { refuse("out_of_range", format!("{mpath}/{k}")) }
+    };
+    let model = if let Some(Value::Object(s)) = m.get("spring") {
+        follow::Model::Spring(spring_of(s, &format!("{mpath}/spring"))?)
+    } else if let Some(Value::Object(o)) = m.get("first_order") {
+        let tau = o.get("tau").and_then(Value::as_f64);
+        follow::Model::FirstOrder {
+            tau_up: positive(o, "tau_up", tau)?,
+            tau_down: positive(o, "tau_down", tau)?,
+        }
+    } else if let Some(Value::Object(o)) = m.get("rate_limit") {
+        follow::Model::RateLimit { max: positive(o, "max", None)? }
+    } else if let Some(Value::Object(o)) = m.get("transition") {
+        let span = seconds_of(o.get("span"), ctx, &format!("{mpath}/transition/span"))?;
+        if span <= 0 {
+            return refuse("out_of_range", format!("{mpath}/transition/span"));
+        }
+        let along = match interp_of(o.get("interp"), &format!("{mpath}/transition/interp"))? {
+            Interp::Ease(e) => follow::Along::Ease(e.ease),
+            Interp::Bezier { x1, y1, x2, y2 } => follow::Along::Bezier(crate::curve::Bezier::new(x1, y1, x2, y2)),
+            Interp::Linear => follow::Along::Linear,
+            _ => return refuse("bad_interp", format!("{mpath}/transition/interp")),
+        };
+        follow::Model::Transition { span, along }
+    } else {
+        return refuse("bad_doc", mpath);
+    };
+    let outputs: Vec<&str> = match f.get("outputs") {
+        None => vec!["value"],
+        Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).collect(),
+        Some(_) => return refuse("bad_doc", format!("{path}/outputs")),
+    };
+    if let Some(bad) = outputs.iter().find(|o| !matches!(**o, "value" | "rate" | "integral")) {
+        return refuse("bad_doc", format!("{path}/outputs/{bad}"));
+    }
+    let (rate, integral) = (outputs.contains(&"rate"), outputs.contains(&"integral"));
+    if matches!(model, follow::Model::Transition { .. }) && (rate || integral) {
+        return refuse("bad_doc", format!("{path}/outputs"));
+    }
+    Ok(follow::Spec { source, model, rate, integral })
+}
+
+/// The code a `per_loop` on a document that doesn't loop is refused with.
+pub const PER_LOOP_NO_LOOP: &str = "per_loop_no_loop";
+
+/// One modifier: `{wave: {...}}`, `{noise: {...}}`, `{pulse: {...}}` or `{limits: {...}}`, or
+/// the same with its kind in `kind`; each takes an `influence` (1).
+fn modifier_of(
+    m: &Value,
+    ctx: &TimeContext,
+    transport: &Transport,
+    path: &str,
+    channel: &str,
+) -> Result<Modifier, Refused> {
+    let Value::Object(m) = m else {
+        return refuse("bad_doc", path);
+    };
+    let (kind, body, at) = match m.get("kind").and_then(Value::as_str) {
+        Some(k) => (k.to_string(), m, path.to_string()),
+        None => match m.iter().find(|(k, v)| v.is_object() && *k != "influence") {
+            Some((k, Value::Object(b))) => (k.clone(), b, format!("{path}/{k}")),
+            _ => return refuse("bad_doc", path),
+        },
+    };
+    let num = |k: &str, d: f64| -> Result<f64, Refused> {
+        match body.get(k) {
+            None => Ok(d),
+            v => number(v, &format!("{at}/{k}")),
+        }
+    };
+    let rate = || -> Result<Rate, Refused> {
+        match body.get("per_loop") {
+            Some(v) => {
+                let n = v.as_u64().filter(|n| (1..=u64::from(u16::MAX)).contains(n));
+                let Some(n) = n else {
+                    return refuse("out_of_range", format!("{at}/per_loop"));
+                };
+                let span = match (transport.wrap, transport.span) {
+                    (true, Some(span)) => span,
+                    _ => return refuse(PER_LOOP_NO_LOOP, channel),
+                };
+                Ok(Rate::PerLoop { n: n as u16, span })
+            }
+            None if body.contains_key("period") => {
+                let p = num("period", 1.0)?;
+                if p <= 0.0 {
+                    return refuse("out_of_range", format!("{at}/period"));
+                }
+                Ok(Rate::Hz(1.0 / p))
+            }
+            None => Ok(Rate::Hz(num("frequency", 1.0)?)),
+        }
+    };
+    let kind = match kind.as_str() {
+        "wave" => ModKind::Wave {
+            amplitude: num("amplitude", 1.0)?,
+            rate: rate()?,
+            phase: num("phase", 0.0)?,
+            offset: num("offset", 0.0)?,
+        },
+        "noise" => ModKind::Noise {
+            amplitude: num("amplitude", 1.0)?,
+            rate: rate()?,
+            seed: match body.get("seed") {
+                None => 0,
+                Some(v) => v.as_u64().map_or_else(|| refuse("out_of_range", format!("{at}/seed")), Ok)?,
+            },
+        },
+        "limits" => ModKind::Limits {
+            min: num("min", f64::MIN)?,
+            max: num("max", f64::MAX)?,
+        },
+        "pulse" => {
+            let shape = match body.get("shape") {
+                None => Shape::ThereAndBack,
+                Some(Value::String(s)) if s == "there_and_back" => Shape::ThereAndBack,
+                Some(Value::String(s)) if s == "pause" => Shape::Pause(1.0 / 3.0),
+                Some(Value::String(s)) if s == "wiggle" => Shape::Wiggle(2.0),
+                Some(Value::Object(o)) if o.contains_key("pause") => Shape::Pause(
+                    o["pause"].get("share").and_then(Value::as_f64).unwrap_or(1.0 / 3.0),
+                ),
+                Some(Value::Object(o)) if o.contains_key("wiggle") => Shape::Wiggle(
+                    o["wiggle"].get("count").and_then(Value::as_f64).unwrap_or(2.0),
+                ),
+                Some(_) => return refuse("bad_doc", format!("{at}/shape")),
+            };
+            let ease = match body.get("ease") {
+                None => ease::named("sigmoid", Some(10.0)).unwrap_or(Named::Smoothstep),
+                Some(e) => named_of(e, &format!("{at}/ease"))?,
+            };
+            ModKind::Pulse {
+                at: time_of(body.get("at"), ctx, &format!("{at}/at"))?,
+                span: time_of(body.get("span"), ctx, &format!("{at}/span"))?,
+                amount: num("amount", 1.0)?,
+                shape,
+                ease,
+            }
+        }
+        _ => return refuse("bad_doc", format!("{path}/kind")),
+    };
+    let influence = match m.get("influence").or_else(|| body.get("influence")) {
+        None => 1.0,
+        v => number(v, &format!("{path}/influence"))?,
+    };
+    Ok(Modifier { kind, influence })
+}
+
 fn channel_of(
     id: &str,
     c: &Map<String, Value>,
     in_clip: bool,
     ctx: &TimeContext,
+    transport: &Transport,
     path: &str,
+    labels: &mut Vec<String>,
 ) -> Result<Channel, Refused> {
     let Some(Value::String(target)) = c.get("target") else {
         return refuse("bad_path", format!("{path}/target"));
@@ -367,8 +1240,37 @@ fn channel_of(
             _ => return refuse("bad_space", format!("{path}/space")),
         },
         Some("bool") => ValueType::Bool,
+        Some("enum") => ValueType::Enum,
         _ => return refuse("bad_type", format!("{path}/type")),
     };
+    let range = match c.get("range") {
+        None => None,
+        Some(Value::Array(r)) if r.len() == 2 => {
+            let (lo, hi) = (number(r.first(), &format!("{path}/range/0"))?, number(r.get(1), &format!("{path}/range/1"))?);
+            if lo > hi {
+                return refuse("out_of_range", format!("{path}/range"));
+            }
+            Some((lo, hi))
+        }
+        Some(_) => return refuse("bad_doc", format!("{path}/range")),
+    };
+    if c.get("mode").and_then(Value::as_str) == Some("follow") {
+        if in_clip || ty != ValueType::F32 {
+            return refuse("bad_doc", format!("{path}/mode"));
+        }
+        let Some(Value::Object(f)) = c.get("follow") else {
+            return refuse("bad_doc", format!("{path}/follow"));
+        };
+        return Ok(Channel {
+            id: id.to_string(),
+            target,
+            ty,
+            curve: Curve::new(Vec::new()),
+            modifiers: Vec::new(),
+            follow: Some(follow_spec_of(f, ctx, &format!("{path}/follow"))?),
+            range,
+        });
+    }
     let mut keys = Vec::new();
     let Some(Value::Object(map)) = c.get("keys") else {
         return refuse("bad_doc", format!("{path}/keys"));
@@ -382,6 +1284,13 @@ fn channel_of(
         let value = match (ty, key.get("value")) {
             (ValueType::F32, v) => vec![number(v, &format!("{kpath}/value"))?],
             (ValueType::Bool, Some(Value::Bool(b))) => vec![if *b { 1.0 } else { 0.0 }],
+            (ValueType::Enum, Some(Value::String(s))) => {
+                let i = labels.iter().position(|l| l == s).unwrap_or_else(|| {
+                    labels.push(s.clone());
+                    labels.len() - 1
+                });
+                vec![i as f64]
+            }
             (ValueType::Color, Some(Value::Array(parts))) if parts.len() == 3 => parts
                 .iter()
                 .enumerate()
@@ -390,28 +1299,84 @@ fn channel_of(
             _ => return refuse("out_of_range", format!("{kpath}/value")),
         };
         let interp = match (ty, key.get("interp")) {
-            (ValueType::Bool, None) => Interp::Hold,
+            (ValueType::Bool | ValueType::Enum, None) => Interp::Hold,
             (_, v) => interp_of(v, &format!("{kpath}/interp"))?,
         };
-        if ty == ValueType::Bool && interp != Interp::Hold {
+        if matches!(ty, ValueType::Bool | ValueType::Enum) && interp != Interp::Hold {
             return refuse("bad_interp", format!("{kpath}/interp"));
         }
-        if matches!(interp, Interp::Spring { .. }) && ty != ValueType::F32 {
-            return refuse("bad_interp", format!("{kpath}/interp"));
-        }
-        keys.push(Key {
-            id: kid.clone(),
-            t,
-            value,
+        if matches!(
             interp,
-        });
+            Interp::Spring(_) | Interp::Auto { .. } | Interp::CatmullRom
+        ) && ty != ValueType::F32
+        {
+            return refuse("bad_interp", format!("{kpath}/interp"));
+        }
+        let mut k = Key::new(kid, t, value, interp);
+        if interp == Interp::Table {
+            let name = key.get("interp").and_then(|i| i.pointer("/ease/table")).and_then(Value::as_str);
+            k.table = name.map(|n| (n.to_string(), None));
+        }
+        // A spring key's starting rate, per component, in value per second.
+        k.velocity = match key.get("velocity") {
+            None => Vec::new(),
+            Some(Value::Array(list)) => list
+                .iter()
+                .enumerate()
+                .map(|(i, v)| number(Some(v), &format!("{kpath}/velocity/{i}")))
+                .collect::<Result<_, _>>()?,
+            v => vec![number(v, &format!("{kpath}/velocity"))?],
+        };
+        keys.push(k);
+    }
+    let (before, after) = extrapolate_of(c.get("extrapolate"), &format!("{path}/extrapolate"))?;
+    let modifiers = match c.get("modifiers") {
+        None => Vec::new(),
+        Some(Value::Array(list)) => list
+            .iter()
+            .enumerate()
+            .map(|(i, m)| modifier_of(m, ctx, transport, &format!("{path}/modifiers/{i}"), path))
+            .collect::<Result<_, _>>()?,
+        Some(_) => return refuse("bad_doc", format!("{path}/modifiers")),
+    };
+    if !modifiers.is_empty() && ty != ValueType::F32 {
+        return refuse("bad_doc", format!("{path}/modifiers"));
     }
     Ok(Channel {
         id: id.to_string(),
         target,
         ty,
-        curve: Curve::new(keys),
+        curve: Curve::extrapolated(keys, before, after),
+        modifiers,
+        follow: None,
+        range,
     })
+}
+
+/// A channel's `extrapolate`: one mode for both sides, or `{before, after}`; hold when absent.
+fn extrapolate_of(
+    value: Option<&Value>,
+    path: &str,
+) -> Result<(Extrapolate, Extrapolate), Refused> {
+    let one = |v: Option<&Value>, path: &str| match v.and_then(Value::as_str) {
+        None | Some("hold") => Ok(Extrapolate::Hold),
+        Some("linear") => Ok(Extrapolate::Linear),
+        Some("cycle") => Ok(Extrapolate::Cycle),
+        Some("ping_pong") => Ok(Extrapolate::PingPong),
+        Some("cycle_offset") => Ok(Extrapolate::CycleOffset),
+        Some(_) => refuse("bad_doc", path),
+    };
+    match value {
+        None => Ok((Extrapolate::Hold, Extrapolate::Hold)),
+        Some(Value::Object(o)) => Ok((
+            one(o.get("before"), &format!("{path}/before"))?,
+            one(o.get("after"), &format!("{path}/after"))?,
+        )),
+        v => {
+            let both = one(v, path)?;
+            Ok((both, both))
+        }
+    }
 }
 
 fn extend_of(value: Option<&Value>, path: &str) -> Result<Extend, Refused> {
@@ -453,6 +1418,10 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
             .map(|m| (m.id.clone(), (m.start, m.end)))
             .collect(),
     };
+    let reduce_holds = transport_map
+        .and_then(|t| t.get("reduced_motion"))
+        .and_then(Value::as_str)
+        != Some("slow");
     let holds = doc.get("profile").and_then(Value::as_str) != Some("film")
         && transport_map
             .and_then(|t| t.get("reduced_motion"))
@@ -464,6 +1433,7 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
             span: None,
             wrap: false,
             holds,
+            reduce_holds,
         },
         Some(t) => {
             let start = match t.get("start") {
@@ -488,12 +1458,28 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
                 span,
                 wrap,
                 holds,
+                reduce_holds,
             }
         }
     };
+    let cameras = cameras_of(doc)?;
+    let (controls, shots) = controls_of(doc, &cameras, &ctx)?;
+    let mut labels = Vec::new();
     let mut channels = Vec::new();
+    let mut follows = Vec::new();
     for (id, c) in section(doc, "channels")? {
-        channels.push(channel_of(id, c, false, &ctx, &format!("channels/{id}"))?);
+        // #417's follow names a toggle or stages control and its options' values; #489's
+        // follows held keys or a control's value path.
+        let names_control = c
+            .get("follow")
+            .and_then(|f| f.get("source"))
+            .is_some_and(|s| s.get("control").is_some());
+        if names_control {
+            follows.push(follow_of(id, c, doc, &controls, &ctx)?);
+            continue;
+        }
+        let path = format!("channels/{id}");
+        channels.push(channel_of(id, c, false, &ctx, &transport, &path, &mut labels)?);
     }
     let mut clips = Vec::new();
     for (id, c) in section(doc, "clips")? {
@@ -505,7 +1491,9 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
                 ch,
                 true,
                 &ctx,
+                &transport,
                 &format!("{path}/channels/{cid}"),
+                &mut labels,
             )?);
         }
         let last = list
@@ -545,24 +1533,70 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
     for (id, d) in section(doc, "drivers")? {
         drivers.push(driver_of(id, d)?);
     }
+    let remaps = remaps_of(doc, &transport)?;
+    let mut control_defaults = Vec::new();
+    for (id, c) in section(doc, "controls")? {
+        let default = match c.get("default") {
+            Some(Value::Number(n)) => n.as_f64().unwrap_or(0.0),
+            Some(Value::Bool(b)) => f64::from(u8::from(*b)),
+            _ => 0.0,
+        };
+        control_defaults.push((id.clone(), default));
+    }
     let mut limits = Vec::new();
+    let mut constraints = Vec::new();
     for (id, c) in section(doc, "constraints")? {
         if let Some(limit) = limit_of(id, c)? {
             limits.push(limit);
+        } else {
+            constraints.push(constraint_of(id, c)?);
         }
     }
     Ok(Motion {
         transport,
         channels,
+        follows,
+        controls,
+        shots,
+        cameras,
         drivers,
         limits,
+        constraints,
+        control_defaults,
         clips,
         placements,
         markers,
         parents,
         cuts,
         frame_rate,
+        labels,
+        remaps,
     })
+}
+
+/// The document's time remaps (Time remap): each `{target, map: reverse}` reverses its recipe
+/// instance over the document's span. The other maps land later and are refused, naming the map.
+fn remaps_of(
+    doc: &Map<String, Value>,
+    transport: &Transport,
+) -> Result<Vec<(String, i64)>, Refused> {
+    let mut out = Vec::new();
+    for (id, r) in section(doc, "time_remaps")? {
+        let path = format!("time_remaps/{id}");
+        let Some(target) = r.get("target").and_then(Value::as_str) else {
+            return refuse("ref_unresolved", format!("{path}/target"));
+        };
+        if r.get("map").and_then(Value::as_str) != Some("reverse") {
+            return refuse("out_of_range", format!("{path}/map"));
+        }
+        let Some(span) = transport.span.filter(|s| *s > 0) else {
+            return refuse("bad_time", "transport/span");
+        };
+        out.push((target.to_string(), span));
+    }
+    // Outer targets first, so nested remaps compose outer to inner.
+    out.sort_by_key(|(target, _)| target.matches('.').count());
+    Ok(out)
 }
 
 /// FNV-1a over a string's bytes: the seed a document without one takes from its ID, and what a
@@ -594,8 +1628,7 @@ fn cuts_of(
             name.and_then(|n| placements.iter().position(|p| p.id == n))
                 .ok_or(Refused {
                     code: "ref_unresolved",
-                    path: format!("{path}/{field}"),
-                })
+                    path: format!("{path}/{field}"), detail: None })
         };
         let (from, to) = (find("from")?, find("to")?);
         let span = |p: &Placement| clips.iter().find(|c| c.id == p.clip).map_or(1, |c| c.span);
@@ -617,8 +1650,9 @@ fn cuts_of(
     Ok(cuts)
 }
 
-/// The marker kinds R1 lands: cue, shot, section and record.
-const MARKER_KINDS: [&str; 4] = ["cue", "shot", "section", "record"];
+/// The marker kinds R1 lands: cue, shot, section and record; and a reading hold (#419), which
+/// motion blur never spans.
+const MARKER_KINDS: [&str; 5] = ["cue", "shot", "section", "record", "hold"];
 
 /// Resolves every marker at check, in dependency order: a marker whose time names another marker
 /// waits for it, so a relative time keeps its offset when its marker moves. One that never

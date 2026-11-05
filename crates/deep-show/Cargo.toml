@@ -43,6 +43,22 @@ test-deprecated = ["dep:deep-canvas-test-modules"]
 # logic module left out of the full set's list.
 test-check-kind = ["dep:deep-canvas-test-modules"]
 test-leave-out-logic = []
+# Issue #489: the full set without the data module, so motion@1's digest is compared without it.
+test-leave-out-data = []
+# Issue #490: the full set without the motion module; the planted layout that declares ease@1 in
+# the motion module; and the planted opening that renumbers ease@1's entries.
+test-leave-out-motion = []
+test-ease-in-motion = []
+test-ease-renumbered = []
+# Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
+# deep-show): the full set without sandbox; test.mesh, whose kind takes a provider's mesh at check;
+# test.prog, whose registry packs fill with programs; a planted sandbox module that requires logic;
+# and the test implementation sandbox.alt, pinning another wasmtime 49.0 patch.
+test-leave-out-sandbox = []
+test-mesh-item = ["dep:deep-canvas-test-modules"]
+test-prog-registry = ["dep:deep-canvas-test-modules"]
+test-sandbox-needs-logic = []
+test-sandbox-alt = []
 # Issue #387: the test canvas modules of the #387 acceptance README. `test-accent`'s planted
 # operator reads the look's accent role from a static, which the canvas lint keeps out of every
 # deep-canvas* crate, so it lives in this binary.
@@ -58,6 +74,15 @@ test-json = []
 test-debug-alt = []
 test-debug-digest = []
 test-peek = ["dep:deep-canvas-test-modules"]
+# Issue #412: the #412 acceptance README's test canvas modules: a preview kind, a registry of cue
+# kinds with the cue list that plays it (pop_in's default span 0.5 s, or 0.8 s), the ring at
+# fixture digests A and B, and a kind whose one-liner overruns the sheet.
+test-preview = ["dep:deep-canvas-test-modules"]
+test-cue = ["dep:deep-canvas-test-modules"]
+test-cue-span = ["dep:deep-canvas-test-modules"]
+test-ring-a = ["dep:deep-canvas-test-modules"]
+test-ring-b = ["dep:deep-canvas-test-modules"]
+test-sheet-wordy = ["dep:deep-canvas-test-modules"]
 test-up-1-0 = ["dep:deep-canvas-test-modules"]
 test-up-1-1 = ["dep:deep-canvas-test-modules"]
 test-nudge = ["dep:deep-canvas-test-modules"]
@@ -119,6 +144,15 @@ test-window = []
 # Issue #185: the test interface test.sim@1's implementations A and B, B's variants (an array's
 # type or name changed, a planted false bit, a planted answer 2% off), test.sim@1's behavior part,
 # test module c that reads B's private array, and a second GPU backend beside the shipped one.
+# Issue #418: the look module's implementation replaced by a planted one whose finish at identity
+# moves a value (tests/acceptance/418/README.md: The look@1 kit).
+test-look-finish-off = []
+# Issue #399: the data, graph and vector modules' implementations each replaced by a planted one
+# (tests/acceptance/399/README.md: The kits: deep-show): an m4 that drops each column's last row,
+# a layered layout that breaks a tie by registration order, and currentColor drawn in ink.
+test-data-m4-drops-last = []
+test-graph-tie-by-registration = []
+test-vector-currentcolor-ink = []
 test-sim = ["dep:deep-canvas-test-modules"]
 test-sim-a = ["test-sim"]
 test-sim-b = ["test-sim"]
@@ -130,9 +164,18 @@ test-sim-b-off = ["test-sim"]
 test-sim-behavior = ["test-sim"]
 test-sim-c = ["test-sim"]
 test-gpu-second-backend = []
+# Issue #421: a planted implementation of scene3d@1, declared bit, whose light policy breaks a tie
+# by registration order instead of by ID; the kit fails it and a release build refuses it.
+test-scene3d-tie-by-order = []
+# Issue #443: the full set without the vector module, and a planted scene3d whose extrude reads
+# vector@1's items itself (an operator reading vector's array), an edge the seal refuses.
+test-leave-out-vector = []
+test-scene3d-reads-vector = []
 # Issue #200: the test canvas modules of the #200 acceptance README, the build without effects,
 # and the planted layout in which the effects module fills the op table's base steps.
 test-mark = ["dep:deep-canvas-test-modules"]
+# Issue #397: `test.columns`, which fills the core's `column.source@1` with `test.column.big`.
+test-column-source = ["dep:deep-canvas-test-modules"]
 test-mark-dot-9 = ["dep:deep-canvas-test-modules"]
 test-mark-no-planted = ["dep:deep-canvas-test-modules"]
 test-mark-no-since = ["dep:deep-canvas-test-modules"]
@@ -165,10 +208,13 @@ deep-canvas-record = { path = "../deep-canvas-record" }
 deep-canvas-sheet = { path = "../deep-canvas-sheet" }
 # Issue #402: the cells canvas module, in the r2 build set and up, and its terminal emulator.
 deep-canvas-cells = { path = "../deep-canvas-cells" }
+deep-canvas-vector = { path = "../deep-canvas-vector" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
+deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
+deep-sandbox-wasmtime = { path = "../deep-sandbox-wasmtime" }
 # Issue #140: the platform seams and their conformance suites.
 deep-canvas-seams = { path = "../deep-canvas-seams" }
 # Issue #498: the decode worker and the encode tool, which this binary's copies run as.

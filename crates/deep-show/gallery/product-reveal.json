@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "A product reveal on a turntable",
+  "description": "A product on a turntable under a soft key light, its name and one line beside it: the product reveal piece at its smallest.",
+  "size": [640, 360],
+  "items": {
+    "stage": {"id": "stage", "kind": "rect@1", "name": "Stage", "order": "a0", "params": {"box": [0, 0, 640, 360], "paint": {"fill": {"role": "muted"}}}},
+    "turntable": {"id": "turntable", "kind": "circle@1", "name": "Turntable", "order": "a1", "params": {"center": [220, 240], "r": 110, "paint": {"fill": {"role": "raised"}}}},
+    "product": {"id": "product", "kind": "rect@1", "name": "Product", "order": "a2", "params": {"box": [170, 110, 100, 140], "radius": 12, "paint": {"fill": {"role": "accent"}}}},
+    "name": {"id": "name", "kind": "text@1", "name": "Name", "order": "a3", "params": {"font": "body", "size": 28, "box": {"w": 240, "h": 36}, "text": "Lumen desk lamp"}, "at": {"pos": [380, 140, 0]}},
+    "line": {"id": "line", "kind": "text@1", "name": "Line", "order": "a4", "params": {"font": "body", "size": 15, "box": {"w": 240, "h": 22}, "text": "Light that follows your hand"}, "at": {"pos": [380, 186, 0]}}
+  }
+}

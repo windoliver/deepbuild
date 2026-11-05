@@ -3,6 +3,7 @@
 // locked command masks its exit one that can't fail. Pure: every input, the time included, is an argument. The gate
 // never imports the extension that made the runs, so the run's shape is stated here by its fields.
 import { createHash } from 'node:crypto';
+import { stableText } from '@deepbuild/contracts';
 import { verdict } from '@deepbuild/verdicts';
 import type { BaseResult, ClaimCheck, ClaimInput, ContractResult, ContractSide, Depth, EvidenceSlot, Failure, NumericContract, Proof, Requirement, Run, RunOutcome, Source, Verdict } from '@deepbuild/verdicts';
 import { maskIn } from './mask.js';
@@ -51,10 +52,8 @@ export interface ClaimedRuns { claim: string; agent: string; repo: string; task:
 /** The planted twin: a gate that judges only the exit code, with no masked-exit rule; tests only. */
 export type VerdictPlant = 'exit-code-only';
 
-const canonical = (value: unknown): string => JSON.stringify(value, (_, v: unknown) =>
-  (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v));
 /** A check's digest, as the record names one (`d1:` and the sha256): the command and the contract, so a run of another counts for nothing. */
-const digestOf = (c: ClaimedCheck): string => `d1:${createHash('sha256').update(canonical({ check: c.check, command: c.command, contract: c.contract ?? null })).digest('hex')}`;
+const digestOf = (c: ClaimedCheck): string => `d1:${createHash('sha256').update(stableText({ check: c.check, command: c.command, contract: c.contract ?? null })).digest('hex')}`;
 
 /** The contract report the engine reads, from the counts the tool's report gave: a count below the size, or none, is INVALID naming the output. */
 function contractOf(contract: NumericContract, r: RecordedRun): ContractResult | undefined {
@@ -106,7 +105,10 @@ export function claimVerdict(claim: ClaimedRuns, options: { plant?: VerdictPlant
   const runs: Run[] = [];
   for (const c of claim.checks) {
     const digest = digestOf(c);
-    const mask = exitOnly ? null : maskIn(c.command);
+    // The locked command's own mask, or one the kind found by the same rule in what it runs (a script, a package.json
+    // script, named `<mask> in <file>`): either can't fail. The kind's other uncounted causes (an untraced program,
+    // altered evidence) name no mask the rule reads.
+    const mask = exitOnly ? null : maskIn(c.command) ?? c.runs.map((r) => r.mask).find((m): m is string => m !== null && maskIn(m) !== null) ?? null;
     checks.push({
       check: c.check, digest, source: c.source, depth: c.depth ?? 'unit', proof: c.proof ?? 'test_run', covers: [...c.covers],
       ...(c.inputs ? { inputs: [...c.inputs] } : {}), ...(c.deadline !== undefined ? { deadline: c.deadline } : {}),

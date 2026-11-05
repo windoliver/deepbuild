@@ -1,0 +1,130 @@
+{
+  "config": {
+    "configFile": "/work/shop/playwright.config.ts",
+    "rootDir": "/work/shop/tests",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "json",
+        null
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/work/shop/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/work/shop/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "shard": null,
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.56.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "cart.spec.ts",
+      "file": "cart.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "cart total",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 5627,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('cart-total')\nExpected: \u001b[32m\"$18.01\"\u001b[39m\nReceived: \u001b[31m\"N/A\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('cart-total')\u001b[22m\n\u001b[2m    9 × locator resolved to <output data-testid=\"cart-total\">N/A</output>\u001b[22m\n\u001b[2m      - unexpected value \"N/A\"\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('cart-total')\nExpected: \u001b[32m\"$18.01\"\u001b[39m\nReceived: \u001b[31m\"N/A\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('cart-total')\u001b[22m\n\u001b[2m    9 × locator resolved to <output data-testid=\"cart-total\">N/A</output>\u001b[22m\n\u001b[2m      - unexpected value \"N/A\"\u001b[22m\n\n    at /work/shop/tests/cart.spec.ts:6:46",
+                    "location": {
+                      "file": "/work/shop/tests/cart.spec.ts",
+                      "column": 46,
+                      "line": 6
+                    },
+                    "snippet": "  4 | test('cart total', async ({ page }) => {\n  5 |   await page.goto('/cart');\n> 6 |   await expect(page.getByTestId('cart-total')).toHaveText('$18.01');\n    |                                              ^\n  7 | });\n  8 |"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/work/shop/tests/cart.spec.ts",
+                        "column": 46,
+                        "line": 6
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('cart-total')\nExpected: \u001b[32m\"$18.01\"\u001b[39m\nReceived: \u001b[31m\"N/A\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('cart-total')\u001b[22m\n\u001b[2m    9 × locator resolved to <output data-testid=\"cart-total\">N/A</output>\u001b[22m\n\u001b[2m      - unexpected value \"N/A\"\u001b[22m\n\n    at /work/shop/tests/cart.spec.ts:6:46\n\n  4 | test('cart total', async ({ page }) => {\n  5 |   await page.goto('/cart');\n> 6 |   await expect(page.getByTestId('cart-total')).toHaveText('$18.01');\n    |                                              ^\n  7 | });\n  8 |"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-04T09:20:41.502Z",
+                  "annotations": [],
+                  "attachments": [],
+                  "errorLocation": {
+                    "file": "/work/shop/tests/cart.spec.ts",
+                    "column": 46,
+                    "line": 6
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "3c1b9a2f0d4e5b6a7c8d-9e0f1a2b3c4d5e6f7a8b",
+          "file": "cart.spec.ts",
+          "line": 4,
+          "column": 5
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-11-04T09:20:41.502Z",
+    "duration": 6412.307,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

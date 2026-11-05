@@ -106,3 +106,22 @@ harness = false
 name = "acceptance_883"
 path = "../../tests/acceptance/883/notifications.rs"
 harness = false
+
+# Issue #992: the sidebar row the app draws for a record, which tests/acceptance/992 compares with `deep status`.
+[[test]]
+name = "acceptance_992_app"
+path = "../../tests/acceptance/992/app.rs"
+harness = false
+
+# Issue #994: app notifications that survive a late hub, written blind in tests/acceptance/994. `acceptance_994_sound` holds
+# AC4 and uses no new surface, so it runs on the merge base; `acceptance_994_window` holds what the window says. The
+# rest of the suite is real processes, in vitest there. No harness, as above.
+[[test]]
+name = "acceptance_994_sound"
+path = "../../tests/acceptance/994/sound.rs"
+harness = false
+
+[[test]]
+name = "acceptance_994_window"
+path = "../../tests/acceptance/994/window.rs"
+harness = false

@@ -37,6 +37,9 @@ import { canonicalize, sha256Hex, validate } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import { ulid } from '@deepbuild/record';
 import type { Connection, Event, RecordStore } from '@deepbuild/record';
+import { KINDS, place, remotesOf, targetsOf, UNCOVERED, type CardTarget, type Target } from './targets.js';
+
+export type { CardTarget, Target, TargetOrigin } from './targets.js';
 
 export type AskKind = 'authority' | 'unblock' | 'taste' | 'exception' | 'choice' | 'definition';
 export type Decision = 'allow' | 'deny' | 'none';
@@ -48,7 +51,11 @@ export interface AskSource {
   fixture: { ask: JsonValue; at_deadline: { decision: Decision } };
 }
 /** A plan's step: what it does, what it changes, its undo (null when it has none) and its cost in USD. */
-export interface PlanStep { does: string; changes: string[]; undo: string | null; public: boolean; cost: number }
+export interface PlanStep {
+  does: string; changes: string[]; undo: string | null; public: boolean; cost: number;
+  /** Every place the step goes to that leaves the machine (#1098): the core places where each came from. */
+  targets?: Target[];
+}
 /** plan.proposed@1's data, less the ask and the digest the core computes. */
 export interface PlanInput { steps: PlanStep[]; diff: string }
 /** What the core marks a step with no undo, in the plan it records and shows (#69). */
@@ -118,8 +125,14 @@ export type ResolverAsk = Omit<Card, 'saves' | 'receipt'> & { session: string; k
 export type Resolver = (ask: ResolverAsk) => ResolverAnswer | undefined | Promise<ResolverAnswer | undefined>;
 /** One refusal the core made of a resolver's answer. */
 export interface Refusal { ask: string; resolver: string; decision: string | null; reason: string }
-/** The planted wrong core the criteria name; tests only: it applies any answer naming a decision that exists. */
-export type AsksPlant = 'decision-exists-only';
+/**
+ * The planted wrong cores the criteria name; tests only. decision-exists-only applies any answer naming a decision
+ * that exists. #1098's: a target's origin from the agent's messages, every target of a step at its first one's
+ * origin, a decision covering whatever its targets' origins, every remote read as the repo's, and a card with a
+ * target only the agent read saving your answer as wide as any other.
+ */
+export type AsksPlant = 'decision-exists-only'
+  | 'origin-from-agent-message' | 'first-recipient-origin' | 'rule-by-recipient-kind' | 'push-target-as-repo' | 'wider-scope-offered';
 /** The scopes a decision is saved at: this session, its repo, or everywhere. */
 export type DecisionScope = 'session' | 'repo' | 'all';
 
@@ -153,6 +166,11 @@ export interface Card {
   saves: { scope: string; also: number } | null;
   /** The answered card's one-line receipt: your answer, and every other ask it closed, those decided for you included. null while open. */
   receipt: { answer: string; also: string[] } | null;
+  /**
+   * Every target of every step of the plan, in step order, with where it came from, placed by the core from the
+   * record (#1098). [] for an ask whose plan names none.
+   */
+  targets: CardTarget[];
 }
 /** What a task's check still finds missing (#85). */
 export interface Missing { check: string; reasons: string[]; link: string | null }
@@ -192,6 +210,12 @@ export interface AsksOptions {
    * since the last call, and null otherwise. Left out, a network task closes only on a verdict.
    */
   network?: { read(): { host: string; reached: boolean; at: number } | null };
+  /**
+   * Whether an agent's adapter has a hook for a turn that ends in an error (its `errorTurnHook` cap): without one no
+   * automatic continue could reach the session, so none starts. The hub passes its own adapter registry's answer;
+   * left out, the shipped adapters' caps answer, and an agent no adapter knows has none.
+   */
+  errorTurnHook?: (agent: string) => boolean;
 }
 /** An ask's place in its life (ask.machine@1's states), as the inbox shows it. */
 export type InboxStatus = 'queued' | 'shown' | 'later' | 'folded' | 'held' | 'closed';
@@ -223,6 +247,11 @@ export interface Asks {
    * `to`. Time the hub was down the core reads from the log when it opens.
    */
   away(from: number, to: number): Promise<void>;
+  /**
+   * Whether macOS will show the app's notifications (#994). While it won't, an ask you haven't seen takes no default,
+   * and the time before you saw it, or before they were back on, moves its deadline later as `away` does.
+   */
+  notifications(off: boolean): Promise<void>;
   card(ask: string): Promise<Card>;
   needsYou(): Promise<Card[]>;
   holds(session: string, step: Step): Promise<string[]>;
@@ -242,6 +271,8 @@ export interface Asks {
   undo(connection: Connection, ask: string): Promise<void>;
   /** Every ask in the record, open or closed, with its status, owner and age. */
   inbox(): Promise<InboxRow[]>;
+  /** A task's check, run again on your "I did it", still fails (#323): each open task it proves says what's missing. */
+  stillFails(check: string, reasons: string[]): Promise<void>;
   /** The core consults each resolver on every ask raised, before the ask reaches you; returns how to drop it. */
   registerResolver(name: string, resolver: Resolver): () => void;
   /** Your answer to a closed ask, saved as a decision at a scope, on the trusted path: its handle. */
@@ -426,6 +457,8 @@ const MOOT_V2 = new Set(['window_reset', 'thread_replied', 'network_reached']);
 /** A session or project ID as a scope names it: letters and digits only, as the hub's handles hold them. */
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 'inbox' };
+/** The kinds a channel's account link may answer (#65): "I did it", a taste call and a choice, each that ask alone. */
+const ANSWER_ALONE = new Set(['unblock', 'taste', 'choice']);
 const ANSWER_FIELDS = new Set(['option', 'words', 'image', 'plan_hash', 'token', 'steps']);
 const SHA256 = /^[0-9a-f]{64}$/;
 const PROVISIONAL_KINDS = new Set(['taste', 'choice']);
@@ -437,6 +470,8 @@ const isAgent = (writer: string): boolean => writer === 'hook' || writer.startsW
 const PAGE = 1000;
 /** Time the hub didn't run, down or with the Mac asleep, moves deadlines once it is longer than this (#908). */
 const AWAY = 10_000;
+/** How many ended sessions' closed asks stay in memory; the record keeps them all. */
+const ENDED_KEPT = 64;
 
 type Obj = { [key: string]: JsonValue };
 type Option = { id: string; label: string; decision: Decision };
@@ -462,6 +497,8 @@ interface Ask {
   /** On a drafted request: who it's for and the block it asks them to clear. */
   request?: { to: string; block: string };
   plan?: { hash: string; steps: PlanStep[] };
+  /** Its plan's targets, placed when it was raised (#1098). */
+  targets?: CardTarget[];
   closed?: { outcome: string; at: number; answer?: string; decision?: string };
   /** Resolvers' answers that covered it and disagreed, when they were last asked. */
   conflict: Card['conflict'];
@@ -530,7 +567,11 @@ class AsksCore implements Asks {
    */
   private logged: number | undefined;
   private opened = false;
+  /** Since when the app has said macOS won't show its notifications (#994). */
+  private notificationsOff: number | undefined;
   private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null; agent: string }>();
+  /** The sessions whose verified end the core read, oldest first: past the newest ENDED_KEPT they leave memory (#824). */
+  private readonly endOrder = new Set<string>();
   /** Each session's stops in log order, and every stop by ID (#85). */
   private readonly stops = new Map<string, Stop[]>();
   private readonly stopIds = new Map<string, Stop>();
@@ -567,6 +608,8 @@ class AsksCore implements Asks {
   private readonly requested = new Map<string, string>();
   /** The decisions the record holds, by handle, and by the key they answer. */
   private readonly decisions = new Map<string, HeldDecision>();
+  /** Whether a session left memory yet: until one has, memory holds all the record does, and nothing is read back. */
+  private forgot = false;
   private readonly byKey = new Map<string, HeldDecision[]>();
   /** The decisions a near match is looked for among, by what must match for one (`nearOf`). */
   private readonly byNear = new Map<string, HeldDecision[]>();
@@ -660,14 +703,19 @@ class AsksCore implements Asks {
         // A step with no undo is marked so by the core, never by its raiser's words.
         const steps = plan.steps.map(markStep) as unknown as JsonValue;
         proposed = { ask: `ask:${id}`, steps, diff: plan.diff, hash: sha256Hex(canonicalize({ steps, diff: plan.diff })) };
-        const planned = validate('plan.proposed@1', { v: 1, id: ulid(now), kind: 'plan.proposed', writer: 'core', actor: connection.actor, scope: connection.scope, ts: now, data: proposed });
-        if (!planned.ok) throw new AskRefused(`plan.proposed@1 refuses the plan at ${planned.issues[0]!.path}`, { field: `plan${planned.issues[0]!.path.replace(/^\/data/, '')}` });
+        // A plan whose steps name targets is @2, placed below; one that names none stays @1.
+        if (plan.steps.some((st) => isObj(st) && 'targets' in st)) proposed.targets = [];
+        const v = 'targets' in proposed ? 2 : 1;
+        const planned = validate(`plan.proposed@${v}`, { v, id: ulid(now), kind: 'plan.proposed', writer: 'core', actor: connection.actor, scope: connection.scope, ts: now, data: proposed });
+        if (!planned.ok) throw new AskRefused(`plan.proposed@${v} refuses the plan at ${planned.issues[0]!.path}`, { field: `plan${planned.issues[0]!.path.replace(/^\/data/, '')}` });
       }
       // The same question asked again in its thread, showing the same thing, is one record.
       const thread = this.threadOf(connection.session);
       const same = this.openIn(thread).find((a) => a.data.kind === data.kind && normalize(a.data.question as string) === normalize(data.question as string)
         && sha256Hex(canonicalize(a.data.pinned_to!)) === sha256Hex(canonicalize(data.pinned_to!)) && (a.plan?.hash ?? null) === ((proposed?.hash as string | undefined) ?? null));
       if (same) return { handle: same.handle, fresh: false };
+      // Where each target came from, read from the record for the ask's session, never from its raiser's words (#1098).
+      if (proposed && 'targets' in proposed) proposed.targets = await this.place({ data, handle: `ask:${id}`, session: connection.session ?? '' } as Ask, plan!.steps) as unknown as JsonValue;
       // Past the threshold drafted at setup, the thread's further asks fold into one exception. It's raised first,
       // so the log alone says which asks it holds: each one created while it's open.
       const foldAt = this.settingsFor(connection.session).fold;
@@ -678,7 +726,7 @@ class AsksCore implements Asks {
         await this.raiseFold(thread, connection.session, { actor: connection.actor, scope: connection.scope }, [`ask:${id}`], data.deadline as number);
       }
       await this.options.record.append(connection, { v, id, kind: 'ask.created', ts: now, data: data });
-      if (proposed) await this.options.record.append(this.core(connection), { v: 1, id: ulid(now), kind: 'plan.proposed', ts: now, data: proposed });
+      if (proposed) await this.options.record.append(this.core(connection), { v: 'targets' in proposed ? 2 : 1, id: ulid(now), kind: 'plan.proposed', ts: now, data: proposed });
       await this.sync();
       const ask = this.asks.get(id)!;
       // A provisional taste call or choice goes on with the recommended option at once.
@@ -690,8 +738,10 @@ class AsksCore implements Asks {
   async answer(connection: Connection, handle: string, input: unknown): Promise<void> {
     const saved = await this.exclusive(async (): Promise<string | null> => {
       await this.sync();
-      const via = TRUSTED[connection.writer];
+      // A channel's answer with an account link you made (#65) answers that ask alone: never with authority, never a decision.
+      const via = TRUSTED[connection.writer] ?? (connection.writer === 'channel' ? 'channel' as const : undefined);
       if (via === undefined) throw new AskRefused(`an answer counts only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
+      const v = via === 'channel' ? 5 : 4;
       if (!isObj(input)) throw new AskRefused('an answer is an object', { field: 'input' });
       // The decision comes from the option you chose, never from the request.
       if ('decision' in input) throw new AskRefused('an answer carries no decision: it comes from the option you chose', { field: 'decision' });
@@ -706,6 +756,13 @@ class AsksCore implements Asks {
       if (token !== undefined && (typeof token !== 'string' || !token)) throw new AskRefused('the click token is text', { field: 'token' });
       if (steps !== undefined && (!Array.isArray(steps) || !steps.every((i) => Number.isInteger(i) && (i as number) >= 0))) throw new AskRefused('steps are the indices of the batch to run', { field: 'steps' });
       const now = this.options.now();
+      if (via === 'channel') {
+        if (ask.closed) throw new AskRefused(`${ask.handle} closed as ${ask.closed.outcome}`, { ask: ask.handle, outcome: ask.closed.outcome });
+        if (ANSWER_ALONE.has(ask.data.kind as string) === false) throw new AskRefused(`${ask.handle} is a ${String(ask.data.kind)} ask, which a channel's account link can't answer: it counts only on the trusted path`, { field: 'writer' });
+        const picked = ask.options.find((o) => o.id === option);
+        if (picked && picked.decision !== 'none') throw new AskRefused(`${ask.handle}'s ${picked.id} decides ${picked.decision}, which counts only on the trusted path`, { field: 'writer' });
+        if (token !== undefined || steps !== undefined || planHash !== undefined) throw new AskRefused('a channel answer approves nothing', { field: 'token' });
+      }
       if (ask.closed) {
         // A later answer to a closed ask is refused, and the refusal is recorded; nothing reaches the agent.
         const { outcome, at } = ask.closed;
@@ -760,7 +817,7 @@ class AsksCore implements Asks {
       // Each one is delivered as soon as it's recorded, so a write that fails partway leaves the rest open, not closed unheard.
       for (const { a, option: o } of together) {
         await this.options.record.append(this.core(connection), {
-          v: 4, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now,
+          v, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now,
           data: { answer: o.id, plan_hash: null, decision: o.decision, via, verified: true, on: a.data.pinned_to!, token: null, words: null, image: null },
         });
         await this.sync();
@@ -770,7 +827,7 @@ class AsksCore implements Asks {
       // The same question from other threads, shown through this card, takes the same option.
       const riders = chosen ? this.open().filter((a) => this.rides(a) === ask) : [];
       await this.options.record.append(this.core(connection), {
-        v: 4, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
+        v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
           answer: option ?? (words as string | undefined) ?? (image as string), plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
           via, verified: true, on: ask.data.pinned_to!, token: token ?? null, words: (words as string | undefined) ?? null, image: (image as string | undefined) ?? null,
@@ -780,7 +837,7 @@ class AsksCore implements Asks {
       this.hand(ask, chosen?.id ?? null, (words as string | undefined) ?? null, false, decision, null, null, null, (image as string | undefined) ?? null);
       for (const rider of riders) {
         await this.options.record.append(this.core({ ...connection, ...rider.who }), {
-          v: 4, id: ulid(now), kind: 'ask.answered', subject: rider.handle, ts: now,
+          v, id: ulid(now), kind: 'ask.answered', subject: rider.handle, ts: now,
           data: { answer: chosen!.id, plan_hash: null, decision, via, verified: true, on: rider.data.pinned_to!, token: null, words: null, image: null },
         });
         await this.sync();
@@ -789,7 +846,7 @@ class AsksCore implements Asks {
       }
       for (const { member, allow } of others) {
         await this.options.record.append(this.core({ ...connection, ...member.who }), {
-          v: 4, id: ulid(now), kind: 'ask.answered', subject: member.handle, ts: now,
+          v, id: ulid(now), kind: 'ask.answered', subject: member.handle, ts: now,
           data: { answer: allow.id, plan_hash: member.plan?.hash ?? null, decision: allow.decision, via, verified: true, on: member.data.pinned_to!, token: token ?? null, words: null, image: null },
         });
         await this.sync();
@@ -798,7 +855,8 @@ class AsksCore implements Asks {
       }
       // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
       // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
-      const scope = chosen && !ask.fold && !ask.block ? this.scopeOf(ask) : null;
+      // A card with a target only the agent read saves your answer for this ask only (#1098).
+      const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
       if (scope !== null) await this.saveAt(connection, ask, scope, chosen!.id);
       await this.settle();
       return scope === null ? null : String(ask.data.key);
@@ -810,6 +868,18 @@ class AsksCore implements Asks {
     return this.exclusive(async () => {
       await this.sync();
       await this.moveAway(from, to);
+      await this.settle();
+    });
+  }
+
+  notifications(off: boolean): Promise<void> {
+    return this.exclusive(async () => {
+      await this.sync();
+      const since = this.notificationsOff;
+      this.notificationsOff = off ? since ?? this.options.now() : undefined;
+      if (off || since === undefined) return;
+      for (const ask of this.open()) if (!this.seenCard(ask)) await this.moveUnseen(ask, since);
+      await this.sync();
       await this.settle();
     });
   }
@@ -904,6 +974,13 @@ class AsksCore implements Asks {
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
         request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null,
       }));
+    });
+  }
+
+  stillFails(check: string, reasons: string[]): Promise<void> {
+    return this.exclusive(async () => {
+      await this.sync();
+      for (const a of this.open()) if (a.data.kind === 'unblock' && a.data.proves === check) a.missing = { check, reasons: [...reasons], link: null };
     });
   }
 
@@ -1008,6 +1085,8 @@ class AsksCore implements Asks {
       if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
       const answer = ask.closed?.outcome === 'answered' ? ask.closed.answer : undefined;
       if (answer === undefined || !ask.options.some((o) => o.id === answer)) throw new AskRefused(`${ask.handle} wasn't answered with an option, so there is no decision to save`, { ask: ask.handle });
+      const unplaced = this.unplaced(ask);
+      if (unplaced.length) throw new AskRefused(`${ask.handle} goes to ${unplaced.map((t) => t.ref).join(', ')}, which nothing you typed or approved names, so your answer holds for this ask only`, { field: 'scope', ask: ask.handle });
       let at: string;
       if (scope === 'all') at = 'all';
       else if (scope === 'session') {
@@ -1067,12 +1146,12 @@ class AsksCore implements Asks {
       if (ask.closed) throw new AskRefused(`${ask.handle} closed as ${ask.closed.outcome}`, { ask: ask.handle, outcome: ask.closed.outcome, closed_at: ask.closed.at });
       // Only an active decision of the ask's own key widens: wider, it then covers the ask. A frozen rule's evidence
       // can't decide yet, and a revoked one answers nothing.
-      const held = this.decisions.get(decision);
+      const held = await this.heldOf(decision);
       if (!held) throw new AskRefused(`${decision} is no decision`, { field: 'decision', ask: ask.handle });
       if (held.state !== 'active') throw new AskRefused(`${decision} is ${held.state}, so it can't widen`, { field: 'decision', ask: ask.handle });
       if (held.key !== ask.data.key) throw new AskRefused(`${decision} answers another question than ${ask.handle}, so a wider scope wouldn't cover it`, { field: 'decision', ask: ask.handle });
       const lines = linesOf(ask.data.subject);
-      if (needsPerson(ask.data).length || (held.bound !== null && lines !== null && lines > held.bound)) throw new AskRefused(`${decision} can't cover ${ask.handle} at any scope`, { field: 'decision', ask: ask.handle });
+      if (needsPerson(ask.data).length || this.unplaced(ask).length || (held.bound !== null && lines !== null && lines > held.bound)) throw new AskRefused(`${decision} can't cover ${ask.handle} at any scope`, { field: 'decision', ask: ask.handle });
       const option = ask.options.find((o) => o.id === held.answer);
       if (!option) throw new AskRefused(`${ask.handle} has no option ${held.answer}`, { option: held.answer });
       const widened = await this.saveAt(connection, ask, 'all', held.answer, false);
@@ -1090,7 +1169,7 @@ class AsksCore implements Asks {
     return this.exclusive(async () => {
       await this.sync();
       if (TRUSTED[connection.writer] === undefined) throw new AskRefused(`a decision is revoked only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
-      const decision = this.decisions.get(handle);
+      const decision = await this.heldOf(handle);
       if (!decision) throw new AskRefused(`${handle} is no decision`, { field: 'decision' });
       if (decision.state === 'revoked') throw new AskRefused(`${handle} is already revoked or overruled`, { field: 'decision' });
       const now = this.options.now();
@@ -1183,7 +1262,7 @@ class AsksCore implements Asks {
       const counted = answers.filter((a) => !a.budget).filter(({ resolver, answer, decision: named }) => {
         const decision = this.decisions.get(named);
         if (!decision) { refuse(resolver, named, `${resolver} named ${named}, which the record holds no decision for`); return false; }
-        const why = this.options.plant === 'decision-exists-only' ? null : this.uncovered(decision, ask);
+        const why = this.options.plant === 'decision-exists-only' ? null : this.uncovered(decision, ask) ?? this.unplacedWhy(ask);
         if (why !== null) { refuse(resolver, named, `${resolver} named ${named}, which ${why}`); return false; }
         if (!ask.options.some((o) => o.id === answer) || answer !== decision.answer) { refuse(resolver, named, `${resolver} answered ${answer}, not what ${named} decided (${decision.answer})`); return false; }
         return true;
@@ -1206,7 +1285,7 @@ class AsksCore implements Asks {
     return this.exclusive(async () => {
       await this.sync();
       if (!JUDGES.has(connection.writer)) throw new AskRefused(`a standing rule is judged by resolver-decisions, not ${connection.writer}`, { field: 'writer' });
-      const decision = this.decisions.get(handle);
+      const decision = await this.heldOf(handle);
       if (!decision) throw new AskRefused(`${handle} is no decision`, { field: 'decision' });
       const { rule, yours, margin, judgment } = judged;
       const next = VERDICT_STATE[judgment?.verdict];
@@ -1435,6 +1514,47 @@ class AsksCore implements Asks {
       && !b.theirs && !b.fold && b.who.actor === ask.who.actor && b.who.scope === ask.who.scope && sha256Hex(canonicalize(b.data.pinned_to!)) === pin);
   }
 
+  /**
+   * The targets of an ask's plan no decision covers and no wider scope is offered for: those only the agent read, or
+   * that nothing names (#1098). The planted wrong cores ignore them.
+   */
+  private unplaced(ask: Ask): CardTarget[] {
+    if (this.options.plant === 'rule-by-recipient-kind' || this.options.plant === 'wider-scope-offered') return [];
+    return (ask.targets ?? []).filter((t) => UNCOVERED.has(t.origin));
+  }
+  private unplacedWhy(ask: Ask): string | null {
+    const t = this.unplaced(ask)[0];
+    return t ? `can't cover ${ask.handle}'s ${t.kind} ${t.ref}, which nothing you typed or approved names (${t.origin}${t.first ? `, first in ${t.first}` : ''})` : null;
+  }
+  /**
+   * Places each target of a plan from the record of the ask's session (#1098): the prompts a person typed in it, the
+   * decisions covering the ask and the plans they were saved from, the remotes its worktree configures, and its
+   * archived transcript.
+   */
+  private async place(ask: Ask, steps: PlanStep[]): Promise<CardTarget[]> {
+    for (const [n, st] of steps.entries()) {
+      for (const t of st.targets ?? []) {
+        if (!isObj(t) || !KINDS.has(t.kind) || typeof t.ref !== 'string' || !t.ref.trim()) throw new AskRefused(`step ${n}'s targets each name a kind (${[...KINDS].join(', ')}) and a ref`, { field: `plan/steps/${n}/targets` });
+      }
+    }
+    const { session } = ask;
+    const record = this.options.record;
+    const prompts = session
+      ? ((await record.raw(`SELECT json_extract(data, '$.text') AS text FROM events WHERE session_id = ? AND kind = 'user.ask' AND json_extract(data, '$.from') IN ('person', 'app')`, [session])) as { text: string }[]).map((r) => String(r.text))
+      : [];
+    const decisions: { handle: string; targets: Set<string> }[] = [];
+    for (const d of this.covering(ask)) {
+      let planned = this.asks.get(bare(d.ask))?.plan?.steps;
+      if (!planned) {
+        const [row] = (await record.raw(`SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' AND json_extract(data, '$.ask') = ? ORDER BY log_pos LIMIT 1`, [d.ask])) as { data: string }[];
+        planned = row ? (JSON.parse(row.data) as { steps: PlanStep[] }).steps : [];
+      }
+      decisions.push({ handle: d.handle, targets: targetsOf(planned) });
+    }
+    const transcript = (session ? await record.transcript(letters(session)) : undefined) ?? [];
+    return place(steps, { session: letters(session), prompts, transcript, remotes: remotesOf(this.sessions.get(session)?.worktree), decisions }, this.options.plant);
+  }
+
   /** The scope your answer to an ask is saved at: its session's project, or its session when it started in none; null with neither. */
   private scopeOf(ask: Ask): string | null {
     const project = letters(this.sessions.get(ask.session)?.project ?? '');
@@ -1506,7 +1626,13 @@ class AsksCore implements Asks {
    * fixes what the card says it saves; a resolver's read never presents it.
    */
   private async cardOf(ask: Ask, presented = false): Promise<Card> {
-    if (presented && ask.saves === undefined && !ask.closed) ask.saves = this.savesOf(ask);
+    if (presented && ask.saves === undefined && !ask.closed) {
+      ask.saves = this.savesOf(ask);
+      if (this.notificationsOff !== undefined) {
+        await this.moveUnseen(ask, this.notificationsOff);
+        await this.sync();
+      }
+    }
     return {
       ask: ask.handle,
       kind: ask.data.kind as AskKind,
@@ -1524,12 +1650,14 @@ class AsksCore implements Asks {
       missing: ask.missing && !ask.closed ? { ...ask.missing, reasons: [...ask.missing.reasons] } : null,
       saves: ask.saves ?? null,
       receipt: ask.closed?.outcome === 'answered' && ask.closed.answer !== undefined ? { answer: ask.closed.answer, also: [...ask.receiptAlso] } : null,
+      targets: (ask.targets ?? []).map((t) => ({ ...t })),
     };
   }
 
   /** What an answer to the ask would be saved as, said in words, and how many other open asks that decision would then answer. */
   private savesOf(ask: Ask): Card['saves'] {
     if (ask.fold || ask.theirs || !ask.options.length) return null;
+    if (this.unplaced(ask).length) return { scope: 'Saved for this ask only', also: 0 };
     const scope = this.scopeOf(ask);
     if (scope === null) return null;
     const project = this.sessions.get(ask.session)?.project;
@@ -1555,17 +1683,105 @@ class AsksCore implements Asks {
     }
   }
 
+  /**
+   * Past the newest ended sessions, each one with no ask open or undoable leaves memory: its asks, its attempts and
+   * cursor, and the decisions only it could use. The record keeps them all: the session starting again reads its
+   * decisions back (`rehydrate`), so it is never asked what it answered (invariant 4). One overruled at a scope stays,
+   * since the record's table doesn't keep the scopes. Its stops and what was said of them (#85) go too.
+   */
+  private forgetEnded(): void {
+    for (const session of [...this.endOrder].slice(0, Math.max(0, this.endOrder.size - ENDED_KEPT))) {
+      // A thread with an ask open reads its sessions' attempts and exceptions, and its session's asks may be among them.
+      if (this.openIn(this.threadOf(session)).length) continue;
+      // A stop not read yet, or one a block task open or closing covers, is still to be acted on: its resume reads them.
+      if (this.fresh.has(session) || [...this.blockTasks.values(), ...this.resumes].some((t) => t.block!.stops.has(session))) continue;
+      const asks = [...this.asks.values()].filter((a) => a.session === session);
+      // A default you can still undo keeps its session: the undo reads the ask.
+      if (asks.some((a) => a.closed?.outcome === 'defaulted')) continue;
+      for (const ask of asks) {
+        this.asks.delete(ask.id);
+        this.refused.delete(ask.handle);
+        this.requested.delete(ask.handle);
+        this.batchOf.delete(ask.handle);
+        for (const [batch, handles] of this.shownIn) {
+          const rest = handles.filter((h) => h !== ask.handle);
+          if (rest.length) this.shownIn.set(batch, rest);
+          else this.shownIn.delete(batch);
+        }
+        without(this.threads, ask.thread, ask);
+      }
+      for (const held of [...this.decisions.values()].filter((h) => h.scope === `session:${letters(session)}` && !h.overruled.size)) {
+        this.decisions.delete(held.handle);
+        without(this.byKey, held.key, held);
+        if (held.subject) without(this.byNear, nearOf(held.kind, held.subject), held);
+      }
+      for (const stop of this.stops.get(session) ?? []) {
+        this.stopIds.delete(stop.id);
+        this.covered.delete(stop.id);
+      }
+      for (const kept of [this.stops, this.typedAt, this.continued, this.ended, this.replaced, this.done]) kept.delete(session);
+      this.attempts.delete(session);
+      this.unread.delete(session);
+      this.sessions.delete(session);
+      this.endOrder.delete(session);
+      this.forgot = true;
+    }
+  }
+
   /** Reads what the log gained since the last read. */
   private async sync(): Promise<void> {
     for (;;) {
       const page = await this.options.record.read({ after: this.cursor, limit: PAGE });
-      for (const event of page) this.apply(event);
+      for (const event of page) await this.apply(event);
       if (page.length) this.cursor = page[page.length - 1]!.log_pos;
       if (page.length < PAGE) return;
     }
   }
 
-  private apply(e: Event): void {
+  /** An ask's data as it was raised, from the record: one that left memory (#824). */
+  private async askData(handle: string): Promise<Obj | undefined> {
+    if (!this.forgot) return undefined;
+    const [row] = (await this.options.record.raw('SELECT data FROM events WHERE id = ? AND kind = ?', [bare(handle), 'ask.created'])) as { data: string }[];
+    const data: unknown = row ? JSON.parse(row.data) : undefined;
+    return isObj(data) ? data : undefined;
+  }
+  /** A decision you saved, held once with what its ask says it covers: its kind, its subject and its change's size. */
+  private hold(base: Pick<HeldDecision, 'handle' | 'key' | 'scope' | 'answer' | 'ask' | 'state'>, from: Obj | undefined): HeldDecision {
+    const known = this.decisions.get(base.handle);
+    if (known) return known;
+    const subject = from && isObj(from.subject) ? from.subject : null;
+    const held: HeldDecision = { ...base, kind: String(from?.kind ?? ''), subject, bound: boundFor(linesOf(subject)), overruled: new Set() };
+    this.decisions.set(held.handle, held);
+    this.byKey.set(held.key, [...(this.byKey.get(held.key) ?? []), held]);
+    if (subject) {
+      const near = nearOf(held.kind, subject);
+      this.byNear.set(near, [...(this.byNear.get(near) ?? []), held]);
+    }
+    return held;
+  }
+  /** A decision as the record's table has it, held from there: one that left memory with its session (#824). */
+  private async readBack(row: { id: string; key: string; scope: string; answer: string; ask_id: string; state: string }): Promise<HeldDecision> {
+    const ask = `ask:${row.ask_id}`;
+    return this.hold({ handle: `decision:${row.id}`, key: row.key, scope: String(JSON.parse(row.scope)), answer: String(JSON.parse(row.answer)), ask, state: STATES.has(row.state) ? row.state as RuleState : 'active' }, await this.askData(ask));
+  }
+  /** A decision by its handle: held, or read back from the record for one that left memory; undefined for none. */
+  private async heldOf(handle: string): Promise<HeldDecision | undefined> {
+    const known = this.decisions.get(handle);
+    if (known || !this.forgot) return known;
+    const [row] = (await this.options.record.raw('SELECT id, key, scope, answer, ask_id, state FROM decisions WHERE id = ?', [handle.replace(/^decision:/, '')])) as { id: string; key: string; scope: string; answer: string; ask_id: string; state: string }[];
+    return row ? this.readBack(row) : undefined;
+  }
+  /**
+   * A session starting: the decisions saved at its scope before that, which left memory with it, come back from the
+   * record (#824). Later ones arrive through the log, so a replay holds each once.
+   */
+  private async rehydrate(session: string, before: number): Promise<void> {
+    if (!this.forgot) return;
+    const rows = (await this.options.record.raw('SELECT d.id, d.key, d.scope, d.answer, d.ask_id, d.state FROM decisions d JOIN events e ON e.id = d.id WHERE d.scope = ? AND e.log_pos < ?', [JSON.stringify(`session:${letters(session)}`), before])) as { id: string; key: string; scope: string; answer: string; ask_id: string; state: string }[];
+    for (const row of rows) if (!this.decisions.has(`decision:${row.id}`)) await this.readBack(row);
+  }
+
+  private async apply(e: Event): Promise<void> {
     const d: Obj = isObj(e.data) ? e.data : {};
     const target = e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
     // Only a running hub appends as the core; a crash's hub.stopped carries the time of the start that found it.
@@ -1575,8 +1791,12 @@ class AsksCore implements Asks {
         // A session started in another's place in the same process (the session tree's lineage) replaced its attempt.
         if (typeof d.parent === 'string') for (const session of [d.parent, ...this.stops.keys()]) if (session === d.parent || letters(session) === letters(d.parent)) this.replaced.set(session, e.ts);
         // A session started again is back: its earlier end no longer says you stopped it.
-        if (e.session) this.ended.delete(e.session);
-        if (e.session) this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree), project: e.project ?? null, agent: String(d.agent ?? e.agent ?? '') });
+        if (e.session) {
+          this.ended.delete(e.session);
+          this.endOrder.delete(e.session);
+          this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree), project: e.project ?? null, agent: String(d.agent ?? e.agent ?? '') });
+          await this.rehydrate(e.session, e.log_pos);
+        }
         return;
       case 'agent.stop': {
         // The hook's record of a stop: its cause from the closed set and, from the adapter's facts, who owns the block
@@ -1604,6 +1824,11 @@ class AsksCore implements Asks {
       case 'session.end':
         // A session you stopped (its SessionEnd) isn't resumed by a task closing: a continue would wake nobody.
         if (e.writer === 'hook' && e.session) this.ended.set(e.session, e.ts);
+        // Only a verified end counts toward forgetting: an unverified one ends nothing, as in the hub.
+        if (e.session && !e.unverified) {
+          this.endOrder.add(e.session);
+          this.forgetEnded();
+        }
         return;
       case 'task.closed': {
         // A task closed by a verdict: the session whose prompt opened it (task_ref session:<id>#<message>), and the
@@ -1655,24 +1880,17 @@ class AsksCore implements Asks {
       case 'plan.proposed': {
         // The plan an ask shows is the first one proposed for it; your yes binds that one.
         const ask = this.asks.get(bare(String(d.ask)));
-        if (ask && !ask.plan && e.writer === 'core') ask.plan = { hash: String(d.hash), steps: d.steps as unknown as PlanStep[] };
+        if (ask && !ask.plan && e.writer === 'core') {
+          ask.plan = { hash: String(d.hash), steps: d.steps as unknown as PlanStep[] };
+          if (Array.isArray(d.targets)) ask.targets = d.targets as unknown as CardTarget[];
+        }
         return;
       }
       case 'decision.created': {
         if (e.writer !== 'core') return;
-        // What it covers comes from the ask it was saved from: its kind, its subject and its change's size.
-        const from = this.asks.get(bare(String(d.ask)));
-        const subject = from && isObj(from.data.subject) ? from.data.subject : null;
-        const held: HeldDecision = {
-          handle: `decision:${e.id}`, key: String(d.key), scope: String(d.scope), answer: String(d.answer), ask: String(d.ask), state: 'active',
-          kind: String(from?.data.kind ?? ''), subject, bound: boundFor(linesOf(subject)), overruled: new Set(),
-        };
-        this.decisions.set(held.handle, held);
-        this.byKey.set(held.key, [...(this.byKey.get(held.key) ?? []), held]);
-        if (subject) {
-          const near = nearOf(held.kind, subject);
-          this.byNear.set(near, [...(this.byNear.get(near) ?? []), held]);
-        }
+        // What it covers comes from the ask it was saved from, read back when the ask left memory before its answer's decision landed.
+        const kept = this.asks.get(bare(String(d.ask)));
+        this.hold({ handle: `decision:${e.id}`, key: String(d.key), scope: String(d.scope), answer: String(d.answer), ask: String(d.ask), state: 'active' }, kept ? kept.data : await this.askData(String(d.ask)));
         return;
       }
       // Revoked or overruled (#667) on the trusted path: it covers nothing from then on; overruled at one scope
@@ -1877,7 +2095,7 @@ class AsksCore implements Asks {
           await this.options.record.append(as, { ...base, kind: 'ask.cancelled', data: { answer: ask.data.default as string, plan_hash: null, decision: 'none' } });
         } else if (await this.reoffer(ask, as, now)) {
           // Offered again on the new commit: the new ask supersedes this one.
-        } else if (now >= (ask.data.deadline as number) && (seen.has(ask.handle) || ask.theirs)) {
+        } else if (now >= (ask.data.deadline as number) && (seen.has(ask.handle) || ask.theirs) && (this.notificationsOff === undefined || this.seenCard(ask))) {
           // Shown before this call: an ask the hub first shows now, after downtime past its deadline, stays in
           // Needs you until a later call, so it can be seen before its default. A block someone else owns never
           // shows to you: at its deadline it stays BLOCKED, by the default its raiser named.
@@ -1909,12 +2127,29 @@ class AsksCore implements Asks {
     if (to - from <= AWAY) return;
     const now = this.options.now();
     for (const ask of this.open()) {
-      const deadline = ask.data.deadline as number;
-      const moved = Math.min(deadline + Math.min(to, deadline) - Math.max(from, ask.created), to + this.waitFor(ask));
-      if (ask.shown || ask.theirs || moved <= deadline) continue;
+      const moved = this.movedPast(ask, from, to);
+      if (ask.shown || ask.theirs || moved <= (ask.data.deadline as number)) continue;
       await this.moveDeadline(ask, moved, 'away', now);
     }
     await this.sync();
+  }
+
+  /** Its deadline with the part of `from` to `to` before it given back, never past its kind's wait counted from `to`. */
+  private movedPast(ask: Ask, from: number, to: number): number {
+    const deadline = ask.data.deadline as number;
+    return Math.min(deadline + Math.min(to, deadline) - Math.max(from, ask.created), to + this.waitFor(ask));
+  }
+
+  /** Whether you've seen the ask's card, or it was never yours to see: notifications off holds nothing back from it. */
+  private seenCard(ask: Ask): boolean {
+    return ask.saves !== undefined || ask.theirs;
+  }
+
+  /** The time since `from`, with notifications off and the ask unseen, didn't count against its deadline (#994). */
+  private async moveUnseen(ask: Ask, from: number): Promise<void> {
+    const now = this.options.now();
+    const moved = this.movedPast(ask, from, now);
+    if (moved > (ask.data.deadline as number)) await this.moveDeadline(ask, moved, 'away', now);
   }
 
   /**
@@ -2005,7 +2240,7 @@ class AsksCore implements Asks {
         if (this.covered.has(stop.id)) continue;
         if (await this.raiseBlock(stop, now)) acted = true;
         else this.fresh.add(session); // BLOCKED on the settings: kept for the next tick the hub owes (a stop or verdict landing, an open ask).
-      } else if ((TRANSIENT.has(stop.cause) || stop.cause === 'context_overflow') && errorTurnHook(this.sessions.get(session)?.agent ?? '')
+      } else if ((TRANSIENT.has(stop.cause) || stop.cause === 'context_overflow') && (this.options.errorTurnHook ?? shippedErrorTurnHook)(this.sessions.get(session)?.agent ?? '')
         && now - stop.ts < CONTINUE_WINDOW && !this.continuedSince(stop)) {
         await this.continueFrom(stop, stop.cause === 'context_overflow' ? 'context_overflow' : 'transient', null, now);
         acted = true;
@@ -2184,6 +2419,11 @@ const VERDICT_STATE: Readonly<Record<Judgment['verdict'], RuleState>> = { widen:
 const JUDGES = new Set(['ext:resolver-decisions', 'core']);
 
 /** The ask kinds that name a subject, and so are keyed from it. */
+const without = <T>(table: Map<string, T[]>, key: string, item: T): void => {
+  const rest = (table.get(key) ?? []).filter((x) => x !== item);
+  if (rest.length) table.set(key, rest);
+  else table.delete(key);
+};
 const SUBJECT_KINDS = new Set(['authority', 'taste', 'choice', 'definition']);
 /** The kinds whose same question from another thread, pinned to the same thing, shows through one card. */
 const JOINED_KINDS = new Set(['taste', 'choice', 'definition']);
@@ -2238,11 +2478,8 @@ const chatThread = (data: Obj): { link: string; expect: string } | undefined => 
   return isObj(thread) && typeof thread.link === 'string' && typeof thread.expect === 'string' ? { link: thread.link, expect: thread.expect } : undefined;
 };
 let adapters: AdapterRegistry | undefined;
-/**
- * Whether an agent's facts give a hook for a turn that ends in an error: without one (Codex) no automatic continue could
- * reach the session, so none starts. An agent no adapter knows gets none either.
- */
-function errorTurnHook(agent: string): boolean {
+/** The shipped adapters' `errorTurnHook` cap, when the caller passes no registry of its own; an agent no adapter knows has none. */
+function shippedErrorTurnHook(agent: string): boolean {
   try {
     return (adapters ??= shipped()).get(ADAPTERS[agent] ?? agent).caps.errorTurnHook === true;
   } catch {
@@ -2270,10 +2507,10 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
   await core.tick();
   // Plain functions, so a caller can wrap one method and keep the rest.
   return {
-    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), card: core.card.bind(core),
+    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
-    later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core),
+    later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),
     registerResolver: core.registerResolver.bind(core), saveDecision: core.saveDecision.bind(core), revokeDecision: core.revokeDecision.bind(core), refusals: core.refusals.bind(core),
     overrule: core.overrule.bind(core), widen: core.widen.bind(core), judged: core.judged.bind(core),
   };

@@ -25,6 +25,7 @@ use deep_text::{Role, Shaped, Shaper};
 use serde_json::{json, Map, Value};
 
 use crate::look::Status;
+use crate::relations;
 use crate::scene::{
     self, object_or_empty, Frame, Mark, Palette, Record, Refused, Rgb, Shown, StatusMark, TextSpec,
 };
@@ -53,7 +54,10 @@ fn manifest(name: &str, deps: &[&str]) -> Manifest {
         feature: name.into(),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
-        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            name,
+            Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 
@@ -119,13 +123,69 @@ fn placed_items(v: &mut View<'_>) -> Result<Map<String, Value>, OpError> {
     Ok(items)
 }
 
-/// An item as the marks read it: its fields, at its world transform.
-fn item_json(fields: &Fields, world: Option<&Transform>) -> Value {
+/// An item as the marks read it: its fields, at its world transform, keeping its relations and
+/// a box-point pivot, which a transform doesn't hold, with what channels write on them (#221).
+pub fn item_json(fields: &Fields, world: Option<&Transform>) -> Value {
     let mut item = fields.to_json();
-    if let (Some(map), Some(at)) = (item.as_object_mut(), world) {
-        map.insert("at".into(), at.to_json());
+    let Some(map) = item.as_object_mut() else {
+        return item;
+    };
+    // `to_json` leaves `at` out but for what an edit wrote on it.
+    let edited = map.remove("at");
+    let Some(at) = world else {
+        if let Some(e) = edited {
+            map.insert("at".into(), e);
+        }
+        return item;
+    };
+    let mut placed = at.to_json();
+    if let (Some(own), Some(out)) = (fields.lowered.get("at"), placed.as_object_mut()) {
+        for k in ["place", "align"] {
+            if let Some(v) = own.get(k) {
+                let mut v = v.clone();
+                if let Some(e) = edited.as_ref().and_then(|e| e.get(k)) {
+                    overlay(&mut v, e);
+                }
+                out.insert(k.into(), v);
+            }
+        }
+        if let Some(p) = own.get("pivot").filter(|p| p.is_string()) {
+            out.insert("pivot".into(), p.clone());
+        }
     }
+    map.insert("at".into(), placed);
     item
+}
+
+/// `edit`'s members written over `base`, object by object and list by list.
+fn overlay(base: &mut Value, edit: &Value) {
+    match (base, edit) {
+        (Value::Object(b), Value::Object(e)) => {
+            for (k, v) in e {
+                match b.get_mut(k) {
+                    Some(slot) => overlay(slot, v),
+                    None => {
+                        b.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        }
+        (Value::Array(b), Value::Array(e)) => {
+            for (slot, v) in b.iter_mut().zip(e) {
+                if !v.is_null() {
+                    overlay(slot, v);
+                }
+            }
+        }
+        (slot, v) => *slot = v.clone(),
+    }
+}
+
+/// Each item's world transform: where its relations placed it (#221), else the core's.
+fn worlds_of<'a>(v: &mut View<'a>) -> Result<BTreeMap<&'a str, Val>, OpError> {
+    let mut worlds: BTreeMap<&str, Val> = v.every("core.world")?.into_iter().collect();
+    worlds.extend(v.every("marks2d.at")?);
+    Ok(worlds)
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -151,9 +211,17 @@ impl Canonical for TextSpec {
     fn encode(&self, out: &mut Vec<u8>) {
         self.text.encode(out);
         self.font.encode(out);
+        self.family.unwrap_or("").encode(out);
+        self.fallback.len().encode(out);
+        for family in &self.fallback {
+            family.encode(out);
+        }
+        self.lang.as_deref().unwrap_or("").encode(out);
         self.size.encode(out);
         self.weight.encode(out);
         self.width.encode(out);
+        self.max_lines.encode(out);
+        self.mask.encode(out);
         (self.align as u8).encode(out);
         self.bound.encode(out);
     }
@@ -198,13 +266,19 @@ fn fonts() -> TableValue {
 
 fn register_text(r: &mut Registrar) {
     r.built_table("text.fonts", fonts);
+    // #443: a shaped run's glyph outlines, text's entry in the core's `outline.source@1`.
+    r.outline_source(
+        "text",
+        json!({"form": "text", "fixture": crate::outline_sources::text_fixture()}),
+        crate::outline_sources::text_fill,
+    );
     r.array("text.counter", "shown", "item", "text", "items");
     r.array("text.run", "run", "item", "text", "items");
     r.array("text.animated", "units", "item", "time", "items");
     r.operator(
         "counter",
         "items",
-        &["core.lowered", "refs", "reading", "view(locale)"],
+        &["core.fields", "refs", "reading", "view(locale)"],
         &["text.counter"],
     )
     .applies(is_bound_text)
@@ -335,7 +409,8 @@ fn is_animated(doc: &Value, id: &str, item: &Value) -> bool {
 
 /// What a bound value or counter shows, its numbers in the view's locale.
 fn counter(v: &mut View<'_>) -> Result<(), OpError> {
-    let item = v.json("core.lowered")?.ok_or_else(|| missing(v))?;
+    // The evaluated item: a keyed data value its template reads rides on it (motion@1).
+    let item = fields_of(v)?;
     let doc = v.document()?;
     let record = record_of(v.outside()?);
     let locale = v.locale()?;
@@ -706,6 +781,21 @@ pub fn look() -> Module {
     }
 }
 
+/// A planted implementation of look@1 (#418's `test-look-finish-off`): declared bit and
+/// canonical, under its own name, whose finish at identity moves one value of one role, so the
+/// kit's bit part fails it and a release build refuses it.
+pub fn look_finish_off() -> Module {
+    let mut m = manifest("look", &[]);
+    m.implementation = deep_canvas::registry::Implementation::reference(
+        "look.finish_off",
+        Semver::parse("1.0.0").expect("a version"),
+    );
+    Module {
+        manifest: m,
+        register: |r| look_with(r, finish_off),
+    }
+}
+
 /// A look as the frame reads it: each role's color and the status map.
 #[derive(Debug)]
 pub struct LookValue {
@@ -727,7 +817,17 @@ impl deep_canvas::schedule::Canonical for LookValue {
 }
 
 fn register_look(r: &mut Registrar) {
+    look_with(r, finish);
+}
+
+fn look_with(r: &mut Registrar, finish: fn(&mut View<'_>) -> Result<(), OpError>) {
     r.array("look.palette", "palette", "document", "shading", "items");
+    // #418: a finish swatch, `look.finish@1`: the look's roles through the look's finish at the
+    // item's settings (its tone map, exposure and grade, and the deband, ao and bloom it names),
+    // each role's swatch as the finish leaves it. An implementation whose finish moves a pixel at
+    // identity differs here from the reference's.
+    r.kind(finish_kind(), &[], "");
+    r.array("look.finish", "palette", "item", "shading", "items");
     // The status map every status mark draws from, into the core's array (The status-color rule).
     r.contribution(
         "look.status",
@@ -745,12 +845,147 @@ fn register_look(r: &mut Registrar) {
     )
     .document()
     .run(palette);
+    r.operator("finish", "items", &["self", "look.palette"], &["look.finish"])
+        .applies(is_finish)
+        .run(finish);
     r.fixture("roles", roles_board(), None).sidecar(json!({
         "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
         "oracles": ["seek_play"],
         "codes": ["unknown_kind"],
         "twin": {"path": "items/ink/params/box", "value": [86, 40, 56, 40]},
     }));
+    // The finish at its identity defaults, and under each tone map with a grade, the deband, ao
+    // and bloom: the analytic fixtures the issue's proof names, evaluated headless.
+    r.fixture("finish", finish_board(), None).sidecar(json!({
+        "codes": [],
+        "covers": {"kinds": ["look.finish@1"], "fields": [
+            "look.finish@1/params/tone_map", "look.finish@1/params/exposure",
+            "look.finish@1/params/grade", "look.finish@1/params/deband",
+            "look.finish@1/params/deband_lsb", "look.finish@1/params/ao",
+            "look.finish@1/params/bloom",
+        ]},
+    }));
+}
+
+fn finish_kind() -> deep_canvas::kinds::Entry {
+    use deep_canvas::kinds::{Entry, Param, ParamType, Version};
+    let param = |name, ty, default: Value| Param {
+        name,
+        ty,
+        unit: "",
+        default,
+        min: None,
+        max: None,
+        minor: 0,
+        module: "",
+        operator: "",
+    };
+    Entry {
+        family: "look",
+        name: "finish",
+        versions: vec![Version {
+            major: 1,
+            minor: 0,
+            params: vec![
+                param("tone_map", ParamType::Json, json!("none")),
+                // EV100; the default's exposure scale is 1.
+                param("exposure", ParamType::Json, Value::Null),
+                param("grade", ParamType::Json, json!({})),
+                param("deband", ParamType::Str, json!("none")),
+                param("deband_lsb", ParamType::Json, json!(1)),
+                param("ao", ParamType::Json, json!("none")),
+                param("bloom", ParamType::Json, json!("none")),
+            ],
+        }],
+        migrations: vec![],
+    }
+}
+
+fn is_finish(_: &Value, _: &str, item: &Value) -> bool {
+    item.get("kind").and_then(Value::as_str) == Some("look.finish@1")
+}
+
+/// Swatches of the look's finish: at its identity defaults, then under filmic, AgX and Neutral, a
+/// grade, the deband, ao and bloom.
+fn finish_board() -> Value {
+    let swatch = |id: &str, order: &str, params: Value| {
+        json!({"id": id, "kind": "look.finish@1", "name": format!("Finish {id}"), "order": order,
+               "params": params})
+    };
+    json!({
+        "format": 1, "profile": "board", "seed": 418, "title": "Finish",
+        "requires": {"modules": {"look": "^1"}},
+        "description": "The look's roles through its finish: at the identity defaults, under each tone map, a grade, the deband, ambient occlusion and bloom: the look module's finish fixture.",
+        "size": [320, 200],
+        "items": {
+            "identity": swatch("identity", "a0", json!({
+                "tone_map": "none", "deband": "none", "ao": "none", "bloom": "none",
+                "grade": {"white_balance": {"temperature": 6500, "tint": 0},
+                          "slope": [1, 1, 1], "offset": [0, 0, 0], "power": [1, 1, 1], "saturation": 1}})),
+            "filmic": swatch("filmic", "a1", json!({"tone_map": "filmic", "exposure": -1.263})),
+            "agx": swatch("agx", "a2", json!({"tone_map": {"agx": {"white": 16.29, "contrast": 1.25}}, "exposure": -1.263})),
+            "neutral": swatch("neutral", "a3", json!({
+                "tone_map": "neutral", "deband": "spatial", "deband_lsb": 1,
+                "ao": {"radius": 0.5, "strength": 1, "samples": 8, "resolution": "half",
+                       "multi_bounce": true, "specular": true},
+                "bloom": {"intensity": 0.04, "radius": 0.85},
+                "grade": {"white_balance": {"temperature": 5600, "tint": 0},
+                          "slope": [1.05, 1, 0.95], "offset": [0, 0, 0], "power": [1, 1, 1], "saturation": 0.9}})),
+        }
+    })
+}
+
+/// Each role's color through the finish at the swatch's settings: decoded, exposed,
+/// white-balanced, tone-mapped, graded and encoded. The deband, ao and bloom are spatial, so a
+/// swatch of one color holds them as named, checked, and unchanged.
+fn finished(v: &mut View<'_>) -> Result<Palette, OpError> {
+    let id = v.id().unwrap_or_default().to_string();
+    let params = v.item()?.get("params").cloned().unwrap_or(Value::Null);
+    let bad = |field: &str| OpError::new("out_of_range", format!("items/{id}/params/{field}"));
+    let map = crate::finish::read_tone_map(params.get("tone_map")).map_err(|_| bad("tone_map"))?;
+    let grade = crate::finish::read_grade(params.get("grade")).map_err(|_| bad("grade"))?;
+    let exposure = match params.get("exposure").filter(|e| !e.is_null()) {
+        None => 1.0,
+        Some(e) => crate::finish::exposure_scale(e.as_f64().ok_or_else(|| bad("exposure"))?),
+    };
+    match params.get("deband").and_then(Value::as_str) {
+        None | Some("none" | "spatial") => {}
+        Some(_) => return Err(bad("deband")),
+    }
+    if params
+        .get("deband_lsb")
+        .and_then(Value::as_f64)
+        .is_some_and(|l| !(0.0..=crate::finish::DEBAND_MAX_LSB).contains(&l))
+    {
+        return Err(bad("deband_lsb"));
+    }
+    let look = v
+        .typed::<LookValue>("look.palette")?
+        .ok_or_else(|| OpError::new("input_missing", "look.palette"))?;
+    Ok(look
+        .palette
+        .iter()
+        .map(|(role, c)| {
+            let linear = c.map(|x| crate::finish::srgb_decode(f64::from(x) / 255.0));
+            let out = crate::finish::finish(map, exposure, &grade, linear);
+            let rgb = out.map(|x| (crate::finish::srgb_encode(x) * 255.0).round() as u8);
+            (role.clone(), rgb)
+        })
+        .collect())
+}
+
+fn finish(v: &mut View<'_>) -> Result<(), OpError> {
+    let out = finished(v)?;
+    v.write("look.finish", Val::typed(out))
+}
+
+/// The planted finish: one value of the first role a code higher.
+fn finish_off(v: &mut View<'_>) -> Result<(), OpError> {
+    let mut out = finished(v)?;
+    if let Some(c) = out.values_mut().next() {
+        c[0] = c[0].wrapping_add(1);
+    }
+    v.write("look.finish", Val::typed(out))
 }
 
 /// The clean look, resolved: its status map and roles, as the session's tokens start.
@@ -822,15 +1057,61 @@ fn roles_board() -> Value {
 pub fn data() -> Module {
     Module {
         manifest: manifest("data", &["marks2d"]),
-        register: register_data,
+        register: |r| register_data(r, decimate),
     }
 }
 
-fn register_data(r: &mut Registrar) {
+/// A planted implementation of data@1 (#399's `test-data-m4-drops-last`): declared bit and
+/// canonical, under its own name, whose m4 decimation drops each pixel column's last row, so the
+/// kit's bit part fails it and a release build refuses it.
+pub fn data_m4_drops_last() -> Module {
+    let mut m = manifest("data", &["marks2d"]);
+    m.implementation = deep_canvas::registry::Implementation::reference(
+        "data.m4_drops_last",
+        Semver::parse("1.0.0").expect("a version"),
+    );
+    Module {
+        manifest: m,
+        register: |r| register_data(r, decimate_drops_last),
+    }
+}
+
+fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), OpError>) {
+    // #397: the data module's columns as the first entries of the core's column view (Array and
+    // table: column view): data, const and table columns, each pure in t, so a seek equals a
+    // clean evaluation and no rows change between steps.
+    let rows = json!([1.5, 2.5]);
+    let fixture = json!({"frames": [rows, rows], "changed": [[], []],
+                         "seeks": [{"from": 1, "to": 0, "rows": rows}]});
+    for (name, form, types) in [
+        (
+            "data.data@1",
+            "{dtype, len, data}",
+            json!(["f64", "f32", "i64", "i32", "u32", "u16", "u8", "bool", "role", "str"]),
+        ),
+        ("data.const@1", "{const}", json!(["f64", "bool", "str"])),
+        (
+            "data.table@1",
+            "{from, column}",
+            json!(["i64", "f64", "str"]),
+        ),
+    ] {
+        r.entry(
+            deep_canvas::columns::REGISTRY,
+            name,
+            json!({"form": form, "types": types, "fixture": fixture}),
+            "R2",
+        );
+    }
     r.array("data.scale", "scale", "item", "geometry", "items");
     r.operator("scale", "items", &["core.fields"], &["data.scale"])
         .applies(is_scale)
         .run(scale);
+    // #399: each line series' decimation, the rows it keeps in its window, column by column.
+    r.array("data.decimated", "rows", "item", "geometry", "items");
+    r.operator("decimate", "items", &["core.fields"], &["data.decimated"])
+        .applies(is_line_series)
+        .run(decimate);
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({
@@ -839,6 +1120,71 @@ fn register_data(r: &mut Registrar) {
         "codes": ["unknown_kind"],
         "twin": {"path": "items/x/params/domain", "value": [0, 20]},
     }));
+    // #399: a line of four rows in each of its three pixel columns, each column's first, min,
+    // max and last rows distinct, so m4 keeps all four.
+    r.fixture("decimated", decimated_board(), None)
+        .sidecar(json!({
+            "checks": [{"kind": "document.validate"}],
+            "oracles": ["analytic"],
+            "codes": [],
+        }));
+}
+
+/// A `series@1` item drawn as a line, not as candles.
+fn is_line_series(_: &Value, _: &str, item: &Value) -> bool {
+    let p = item.get("params");
+    item.get("kind").and_then(Value::as_str) == Some("series@1")
+        && p.and_then(|p| p.get("decimate")).and_then(Value::as_str) != Some("ohlc")
+        && !p
+            .and_then(|p| p.get("marks"))
+            .and_then(Value::as_array)
+            .is_some_and(|m| m.iter().any(|m| m == "candle"))
+}
+
+/// The rows a line series keeps, in draw order (`data.decimated`): m4's per pixel column, or
+/// every row under `decimate: "none"`.
+fn decimated_rows(v: &mut View<'_>, m4: crate::data::Decimate) -> Result<(), OpError> {
+    let fields = fields_of(v)?;
+    let id = v.id().unwrap_or_default();
+    let how = match fields["params"]["decimate"].as_str() {
+        Some("none") => crate::data::Decimate::None,
+        _ => m4,
+    };
+    let d = crate::data::decimated(id, &fields, how).map_err(refused)?;
+    let rows: Vec<u64> = d.rows().into_iter().map(|r| r as u64).collect();
+    v.write("data.decimated", Val::typed(rows))
+}
+
+fn decimate(v: &mut View<'_>) -> Result<(), OpError> {
+    decimated_rows(v, crate::data::Decimate::M4)
+}
+
+/// The planted decimation: m4 without each column's last row.
+fn decimate_drops_last(v: &mut View<'_>) -> Result<(), OpError> {
+    decimated_rows(v, crate::data::Decimate::DropsLast)
+}
+
+fn decimated_board() -> Value {
+    // Twelve rows at t = 1..12 flicks over the window [0, 12], three columns of four; in each,
+    // v runs 0.5, 0, 1, 0.25.
+    let le = |bytes: Vec<u8>| deep_canvas::base64::encode(&bytes);
+    let t: Vec<u8> = (1..=12i64).flat_map(i64::to_le_bytes).collect();
+    let v: Vec<u8> = (0..12)
+        .map(|i| [0.5f32, 0.0, 1.0, 0.25][i % 4])
+        .flat_map(f32::to_le_bytes)
+        .collect();
+    json!({
+        "format": 1, "profile": "board", "seed": 399, "title": "Decimated",
+        "description": "A line of twelve rows in three pixel columns, decimated by m4: the data module's decimation fixture.",
+        "size": [320, 200],
+        "items": {
+            "line": {"id": "line", "kind": "series@1", "name": "Line", "order": "a0",
+                     "params": {"t": {"dtype": "i64", "len": 12, "data": le(t)},
+                                "v": {"dtype": "f32", "len": 12, "data": le(v)},
+                                "window": [0, 12], "decimate": "m4", "bucket": "1px",
+                                "marks": ["line"], "box": [20, 20, 3, 60]}}
+        }
+    })
 }
 
 fn is_scale(_: &Value, _: &str, item: &Value) -> bool {
@@ -910,6 +1256,23 @@ pub fn marks2d() -> Module {
     }
 }
 
+/// The marks2d module with a planted relation solve (#221), whose `constraint@1` entries' fixtures
+/// the constraint kit must refuse at the seal.
+pub fn marks2d_planted(planted: relations::Planted) -> Module {
+    Module {
+        register: match planted {
+            relations::Planted::None => register_marks2d,
+            relations::Planted::Iterates => {
+                |r| register_marks2d_with(r, relations::Planted::Iterates)
+            }
+            relations::Planted::PreviousPlace => {
+                |r| register_marks2d_with(r, relations::Planted::PreviousPlace)
+            }
+        },
+        ..marks2d()
+    }
+}
+
 /// What the frame draws: the draw list, each text's shaped run and each animated text's units as
 /// `[lift, opacity]`. The status marks are the text module's (`text.status`).
 #[derive(Debug)]
@@ -962,6 +1325,55 @@ impl deep_canvas::schedule::Canonical for Drawing {
 }
 
 fn register_marks2d(r: &mut Registrar) {
+    register_marks2d_with(r, relations::Planted::None);
+}
+
+fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
+    // #443: a path@1 item's outline, marks2d's entry in the core's `outline.source@1`.
+    r.outline_source(
+        "path",
+        json!({"form": "path", "fixture": crate::outline_sources::path_fixture()}),
+        crate::outline_sources::path_fill,
+    );
+    // #221: placement by relation, the module's entries in the core's `constraint@1`.
+    for (name, value) in relations::entries(planted) {
+        r.entry("constraint@1", name, value, "R2");
+    }
+    // Each frame, every placed item's world position from its relations, solved in one order
+    // over the evaluated boxes; then each placed item's own transform there.
+    r.array("marks2d.places", "places", "document", "transform", "items");
+    r.operator(
+        "relations",
+        "items",
+        &[
+            "refs",
+            "core.world",
+            "core.transform",
+            "core.fields",
+            "text.run",
+            "text.counter",
+            "table:text.fonts",
+        ],
+        &["marks2d.places"],
+    )
+    .document()
+    .applies(has_relations)
+    .run(relations_op);
+    r.array("marks2d.at", "transform", "item", "transform", "items");
+    r.operator(
+        "place",
+        "items",
+        &["core.world", "marks2d.places"],
+        &["marks2d.at"],
+    )
+    .applies(is_placed)
+    .run(place_op);
+    r.code(
+        relations::CYCLE,
+        "Items placed by relation that read each other back, through relations or parents.",
+        "Place one item of the chain by something outside it, so no relation reads back.",
+        false,
+    );
     r.array(
         "marks2d.frame",
         "draw_list",
@@ -978,6 +1390,7 @@ fn register_marks2d(r: &mut Registrar) {
         &[
             "core.fields",
             "core.world",
+            "marks2d.at",
             "text.counter",
             "look.palette",
             "view(locale)",
@@ -998,6 +1411,7 @@ fn register_marks2d(r: &mut Registrar) {
             "refs",
             "reading",
             "core.world",
+            "marks2d.at",
             "core.fields",
             "text.counter",
             "text.run",
@@ -1125,12 +1539,185 @@ fn register_marks2d(r: &mut Registrar) {
     }));
 }
 
+/// Whether `item` holds a relation.
+fn holds_relation(item: &Value) -> bool {
+    item.get("at")
+        .is_some_and(|a| a.get("place").is_some() || a.get("align").is_some())
+}
+
+fn has_relations(doc: &Value, _: &str, _: &Value) -> bool {
+    doc.get("items")
+        .and_then(Value::as_object)
+        .is_some_and(|items| items.values().any(holds_relation))
+}
+
+/// Whether a relation moves `item`: its own, or an ancestor's, which carries it.
+fn is_placed(doc: &Value, _: &str, item: &Value) -> bool {
+    let items = doc.get("items").and_then(Value::as_object);
+    let mut at = Some(item);
+    for _ in 0..=items.map_or(0, Map::len) {
+        let Some(i) = at else { break };
+        if holds_relation(i) {
+            return true;
+        }
+        at = i
+            .get("parent")
+            .and_then(Value::as_str)
+            .and_then(|p| items?.get(p));
+    }
+    false
+}
+
+/// Every placed item's world position, by ID.
+#[derive(Debug, PartialEq)]
+pub struct Places(pub BTreeMap<String, [f64; 3]>);
+
+impl Canonical for Places {
+    fn encode(&self, out: &mut Vec<u8>) {
+        self.0.len().encode(out);
+        for (id, p) in &self.0 {
+            (id, p[0], p[1], p[2]).encode(out);
+        }
+    }
+}
+
+/// The boxes items take in the frame: marks2d's geometry, and each text's shaped run (a bound
+/// value's at its `widest`).
+struct Runs<'a> {
+    runs: BTreeMap<&'a str, Arc<Run>>,
+    bound: std::collections::BTreeSet<String>,
+    fonts: Arc<Shapers>,
+}
+
+impl Runs<'_> {
+    fn shaped(&self, id: &str, item: &Value) -> Option<Arc<Shaped>> {
+        let run = self.runs.get(id)?;
+        let widest = item
+            .get("params")
+            .and_then(|p| p.get("widest"))
+            .and_then(Value::as_str);
+        match widest {
+            Some(w) if self.bound.contains(id) => {
+                let spec = TextSpec {
+                    text: w.to_string(),
+                    ..run.spec.clone()
+                };
+                Some(self.fonts.lock()?.shape(&spec.shaper_spec()?))
+            }
+            _ => Some(Arc::clone(&run.shaped)),
+        }
+    }
+}
+
+impl relations::Bounds for Runs<'_> {
+    fn own(&mut self, id: &str, item: &Value, part: Option<&str>) -> Option<relations::Box4> {
+        if part.is_some() {
+            return None;
+        }
+        let kind = item.get("kind").and_then(Value::as_str)?;
+        let params = object_or_empty(item.get("params"));
+        if kind == "text@1" {
+            let shaped = self.shaped(id, item)?;
+            let w = params
+                .get("box")
+                .and_then(|b| b.get("w"))
+                .and_then(Value::as_f64)
+                .unwrap_or(f64::from(shaped.width));
+            let local = [0.0, 0.0, w, f64::from(shaped.height)];
+            return Some(relations::placed(local, relations::place_of(item, None)));
+        }
+        let local = relations::own_box(kind, params)?;
+        Some(relations::placed(
+            local,
+            relations::place_of(item, Some(local)),
+        ))
+    }
+
+    fn baseline(&mut self, id: &str, item: &Value) -> Option<f64> {
+        let shaped = self.shaped(id, item)?;
+        let (_, offset) = relations::place_of(item, None);
+        Some(offset[1] + f64::from(shaped.glyphs.first()?.y))
+    }
+}
+
+/// The relations solved over the frame's evaluated items (#221).
+fn relations_op(v: &mut View<'_>) -> Result<(), OpError> {
+    let doc = v.document()?;
+    let frame = relations::Frame::of(object_or_empty(Some(doc)));
+    // A relation reads its target where it draws: frames laid out first (#375), so an item
+    // placed beside a frame's child reads the child's laid-out box (#1162).
+    let mut items = placed_items(v)?;
+    scene::as_written(object_or_empty(Some(doc)), &mut items);
+    let mut items = scene::laid_out(object_or_empty(Some(doc)), &items)
+        .map_err(refused)?
+        .into_owned();
+    // Each item's own `at.pos`, before its parents: what a relation adds after it.
+    let offsets: BTreeMap<String, [f64; 2]> = v
+        .every("core.transform")?
+        .into_iter()
+        .filter_map(|(id, t)| {
+            let t = t.as_typed::<Transform>()?;
+            Some((id.to_string(), [t.pos[0], t.pos[1]]))
+        })
+        .collect();
+    let runs = v
+        .every("text.run")?
+        .into_iter()
+        .filter_map(|(id, r)| r.as_typed::<Run>().map(|r| (id, r)))
+        .collect();
+    let bound = v
+        .every("text.counter")?
+        .into_iter()
+        .filter(|(_, s)| s.as_typed::<Option<Shown>>().is_some_and(|s| s.is_some()))
+        .map(|(id, _)| id.to_string())
+        .collect();
+    let fonts = v.table::<Shapers>("text.fonts")?;
+    let before: BTreeMap<String, Value> = items
+        .iter()
+        .map(|(id, i)| (id.clone(), i["at"]["pos"].clone()))
+        .collect();
+    let mut runs = Runs { runs, bound, fonts };
+    relations::place(
+        &mut items,
+        &offsets,
+        frame,
+        &mut runs,
+        &mut relations::Ops::default(),
+    )
+    .map_err(|r| OpError::new(r.code, r.path))?;
+    let mut places = BTreeMap::new();
+    for (id, item) in &items {
+        let pos = &item["at"]["pos"];
+        if before.get(id) != Some(pos) {
+            let n = |i: usize| pos[i].as_f64().unwrap_or(0.0);
+            places.insert(id.clone(), [n(0), n(1), n(2)]);
+        }
+    }
+    v.write("marks2d.places", Val::typed(Places(places)))
+}
+
+/// A placed item's world transform at its place (#221).
+fn place_op(v: &mut View<'_>) -> Result<(), OpError> {
+    let id = v.id().unwrap_or_default();
+    let world = v.typed::<Transform>("core.world")?;
+    let places = v.typed::<Places>("marks2d.places")?;
+    let placed = match (world, places.as_ref().and_then(|p| p.0.get(id))) {
+        (Some(w), Some(pos)) => Transform { pos: *pos, ..*w },
+        (Some(w), None) => *w,
+        _ => return Ok(()),
+    };
+    v.write("marks2d.at", Val::typed(placed))
+}
+
 /// One item's marks, built from the item alone (#857); `None` for an item the frame builds
 /// itself.
 fn item(v: &mut View<'_>) -> Result<(), OpError> {
     let id = v.id().unwrap_or("");
     let fields = v.typed::<Fields>("core.fields")?;
-    let world = v.typed::<Transform>("core.world")?;
+    let world = match v.typed::<Transform>("marks2d.at")? {
+        Some(placed) => Some(placed),
+        None => v.typed::<Transform>("core.world")?,
+    };
     let shown = v
         .typed::<Option<Shown>>("text.counter")?
         .and_then(|s| (*s).clone());
@@ -1270,13 +1857,8 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     }
     let record = record_of(v.outside()?);
     // Each item's transform, looked up only for the items the frame builds itself.
-    let worlds = v.every("core.world")?;
-    let by_id = std::cell::OnceCell::new();
-    let world = |id: &str| {
-        let by_id: &BTreeMap<&str, &Val> =
-            by_id.get_or_init(|| worlds.iter().map(|(i, w)| (*i, w)).collect());
-        by_id.get(id).and_then(|w| w.as_typed::<Transform>())
-    };
+    let worlds = worlds_of(v)?;
+    let world = |id: &str| worlds.get(id).and_then(|w| w.as_typed::<Transform>());
     let fields: Vec<(&str, Arc<Fields>)> = v
         .every("core.fields")?
         .into_iter()

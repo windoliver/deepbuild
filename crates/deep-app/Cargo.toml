@@ -11,6 +11,12 @@ rust-version = "1.95"
 # which then carries no test support.
 [features]
 panel-check = ["gpui-kit/test-support"]
+# Issue #994: the wrong program AC3 names, in no shipped build: it posts and logs notified without checking the setting.
+plant-posts-unchecked = []
+# Issue #1141's wrong programs, in no shipped build: a fold that drops every ask.moot, and a reader that keeps every
+# event and reads the record by walking them all.
+plant-drops-close = []
+plant-walks-events = []
 
 # Issue #337: the gpui-kit spike. Pinned to one gpui-kit commit, since gpui-shell is at
 # milestone M0 and unpublished. No `webview` feature: the app has no web view.
@@ -43,19 +49,23 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # Issue #339 adds the event monitor (NSEvent, block2), the screen-capture access calls and the
 # one-frame capture (objc2-core-graphics), the cursor window's native move (raw-window-handle,
 # NSWindow) and the frame's pixels as a gpui image (image).
+# Issue #262 adds NSScreen, NSGraphics, CGDisplayConfiguration, CGSession, NSDictionary and NSValue: whether a
+# window's display sleeps and whether the session is locked, for the views it reports shown.
+# The frame's pixels as a gpui image (`show.rs`), on every platform the app builds on.
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 # Issue #79 adds NSData, NSImage, NSImageRep, NSBitmapImageRep and NSCell: the dock icon and the
 # menu-bar template from the kit's bytes.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL", "NSArray", "NSBundle", "NSEnumerator"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL", "NSArray", "NSBundle", "NSEnumerator", "NSDictionary", "NSValue"] }
 # Issue #883: `--notification-center` reads what Notification Center holds from the app (the version gpui uses).
-objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationRequest", "UNNotificationContent"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell"] }
+objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationRequest", "UNNotificationContent", "UNNotificationSettings"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell", "NSScreen", "NSGraphics", "NSSound"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFCGTypes", "CFData", "CFDictionary", "CFString"] }
-objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGError", "CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "CGDirectDisplay", "CGImage", "CGDataProvider", "CGGeometry", "CGRemoteOperation", "libc"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGError", "CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "CGDirectDisplay", "CGImage", "CGDataProvider", "CGGeometry", "CGRemoteOperation", "CGDisplayConfiguration", "CGSession", "libc"] }
 block2 = "0.6"
 raw-window-handle = "0.6"
-image = { version = "0.25", default-features = false, features = ["png"] }
 # Issue #105: the bug capture: ScreenCaptureKit's system picker, its stream and its recording
 # output (one MP4), and the sample buffers its frames arrive in.
 objc2-screen-capture-kit = { version = "0.3", default-features = false, features = ["std", "SCContentSharingPicker", "SCRecordingOutput", "SCShareableContent", "SCStream", "bitflags", "block2", "dispatch2", "objc2-core-foundation", "objc2-core-graphics", "objc2-core-media"] }
@@ -89,3 +99,21 @@ harness = false
 [[test]]
 name = "acceptance_34"
 path = "../../tests/acceptance/34/app/record_reader.rs"
+
+# Issue #1141: the folded record reader's acceptance tests, written blind in tests/acceptance/1141. The memory test is
+# a binary of its own, so its process holds the record reader and nothing another test allocated.
+[[test]]
+name = "acceptance_1141"
+path = "../../tests/acceptance/1141/app/folded.rs"
+
+[[test]]
+name = "acceptance_1141_memory"
+path = "../../tests/acceptance/1141/app/memory.rs"
+
+# Issue #995: the canvas panel's acceptance test, written blind in tests/acceptance/995. A binary of its own, so its
+# process holds the one panel and nothing another test allocated; it draws the panel in a headless window, and AppKit
+# needs the main thread, so no libtest harness.
+[[test]]
+name = "acceptance_995"
+path = "../../tests/acceptance/995/app/panel.rs"
+harness = false

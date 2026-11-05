@@ -15,9 +15,10 @@ use deep_app::{
     arming,
     card::{self, Card},
     events::{Fixture, Inbox},
-    notify::{self, Notification, Notifier, Sound, NOTIFY_AFTER},
+    notify::{self, Notification, NotificationSetting, Notifier, Sound, NOTIFY_AFTER},
     question::{Controller, Did, Faults, Target},
-    record, states,
+    record::{self, HubWatch, LocalHub},
+    states,
     views::{set_state, AppState, Layout},
 };
 use gpui_kit::test::TestWindowExt as _;
@@ -198,6 +199,10 @@ struct Device {
     notifier: Notifier,
     /// What Notification Center holds from the app, oldest first.
     center: Vec<Posted>,
+    /// What the OS answers when the app reads its notification setting.
+    os_setting: NotificationSetting,
+    /// When the app reads the hub.
+    watch: HubWatch,
     /// The session whose page is open in this device's focused window.
     looking_at: Option<String>,
     /// Whether the window is hidden: then nothing is being looked at.
@@ -270,6 +275,7 @@ impl Replica {
     ) -> Replica {
         let faults = planted.map(Planted::faults).unwrap_or_default();
         record::install_local(events.clone());
+        notify::publish(notify::Reach::default());
         let mut replica = Replica {
             devices: Vec::new(),
             now,
@@ -297,13 +303,16 @@ impl Replica {
                     notifier.saw(ask, now);
                 }
             } else {
-                notifier.start(&events, center.iter().map(notification).collect());
+                let delivered = center.iter().map(notification).collect();
+                record::with_view(|view| notifier.start(view, delivered));
             }
             replica.devices.push(Device {
                 cx,
                 window,
                 notifier,
                 center,
+                os_setting: NotificationSetting::Allowed,
+                watch: HubWatch::default(),
                 looking_at: None,
                 hidden: false,
                 card: None,
@@ -324,7 +333,12 @@ impl Replica {
     }
 
     fn events() -> Vec<Value> {
-        record::with_view(|view| view.events.clone()).unwrap_or_default()
+        record::history()
+    }
+
+    /// The record folded, as the app's views read it.
+    fn table() -> states::Table {
+        record::with_view(|view| view.table().into_owned()).unwrap_or_default()
     }
 
     /// Delivers one event to every device through the one reader, at the clock's now, at the next `log_pos`.
@@ -399,16 +413,17 @@ impl Replica {
     }
 
     fn run_due(&mut self) {
-        let events = Replica::events();
         for (index, device) in self.devices.iter_mut().enumerate() {
+            device.watch.tick(self.now, || record::read(Duration::ZERO));
             let looking_at = if device.hidden {
                 None
             } else {
                 device.looking_at.as_deref()
             };
-            let due = device
-                .notifier
-                .due(&events, self.now, looking_at, index == self.last_used);
+            let last_used = index == self.last_used;
+            let notifier = &mut device.notifier;
+            let due = record::with_view(|view| notifier.due(view, self.now, looking_at, last_used))
+                .unwrap_or_default();
             let posts: Vec<Posted> = due
                 .into_iter()
                 .map(|notification| Posted {
@@ -444,6 +459,63 @@ impl Replica {
             }
             self.posted.extend(posts);
         }
+        self.publish_reach();
+    }
+
+    /// The window draws what device 0's app knows.
+    fn publish_reach(&self) {
+        let device = &self.devices[0];
+        notify::publish(device.notifier.reach(device.watch.down()));
+    }
+
+    /// Issue #994: what the OS answers from now on when `device`'s app reads the setting; it hasn't read it yet.
+    pub fn set_notification_setting(&mut self, device: usize, setting: NotificationSetting) {
+        self.devices[device].os_setting = setting;
+    }
+
+    /// `device`'s app becomes active, so it reads the setting.
+    pub fn activate(&mut self, device: usize) {
+        let device = &mut self.devices[device];
+        device.notifier.set_setting(device.os_setting, self.now);
+        self.publish_reach();
+    }
+
+    /// `device`'s window shows `view` in its center: "home", "needs-you" or "session".
+    pub fn show_view(&mut self, device: usize, view: &str) {
+        let device = &mut self.devices[device];
+        let layout = Layout::shipped(view);
+        let (window, _) = device.cx.update(|cx| open_shell(&layout, cx, |_, _| {}));
+        let old = std::mem::replace(&mut device.window, window);
+        device
+            .cx
+            .update_window(old, |_, window, _| window.remove_window())
+            .expect("the old window closes");
+    }
+
+    /// Every read of the hub fails from now on, as with no socket answering.
+    pub fn hub_stops(&mut self) {
+        record::set_local_hub(LocalHub::Stops);
+    }
+
+    /// Every poll of the hub comes back refused from now on.
+    pub fn hub_refuses(&mut self) {
+        record::set_local_hub(LocalHub::Refuses);
+    }
+
+    /// The hub answers again.
+    pub fn hub_answers(&mut self) {
+        record::set_local_hub(LocalHub::Answers);
+    }
+
+    /// Writes `device`'s window to `path` as a PNG, at the reference window.
+    pub fn screenshot(&mut self, device: usize, path: &Path) {
+        let device = &mut self.devices[device];
+        device
+            .cx
+            .capture_screenshot(device.window)
+            .expect("offscreen rendering is available")
+            .save(path)
+            .expect("the screenshot is written");
     }
 
     /// What Notification Center on a device holds now, oldest first.
@@ -514,7 +586,7 @@ impl Replica {
     /// The menu-bar item's title on a device: the count alone.
     pub fn menu_bar(&mut self, device: usize) -> String {
         let _ = &self.devices[device];
-        states::count(&Replica::events()).to_string()
+        states::count(&Replica::table()).to_string()
     }
 
     // ---- Issue #327: the question card.
@@ -781,10 +853,7 @@ impl Replica {
 
     /// The asks open in the record now.
     pub fn open_asks(&self) -> Vec<String> {
-        states::open_asks(&Replica::events(), None)
-            .into_iter()
-            .map(states::handle)
-            .collect()
+        record::with_view(|view| view.open_asks(None)).unwrap_or_default()
     }
 
     /// Kills the app: every device leaves with its card up. The record and the clock survive; nothing of the
@@ -826,11 +895,8 @@ impl Replica {
     /// the return card as device 0's window drew them; the verdict line as sent to the chat; the menu bar's title
     /// and menu; and the notification the app posts in that state.
     pub fn surfaces(&mut self) -> Vec<Seen> {
-        let events = Replica::events();
-        let session = states::sessions(&events)
-            .first()
-            .cloned()
-            .unwrap_or_default();
+        let table = Replica::table();
+        let session = table.sessions().first().cloned().unwrap_or_default();
         let device = &mut self.devices[0];
         let drawn = device
             .cx
@@ -852,20 +918,20 @@ impl Replica {
             .expect("the window draws");
         let menu = format!(
             "{}\n{}",
-            states::count(&events),
-            states::menu(&events, self.now).join("\n")
+            states::count(&table),
+            states::menu(&table, self.now).join("\n")
         );
         drawn
             .into_iter()
             .chain([
                 (
                     "verdict-line",
-                    states::verdict_line(&events, &session, self.now),
+                    states::verdict_line(&table, &session, self.now),
                 ),
                 ("menu-bar", menu),
                 (
                     "notification",
-                    notify::notification_text(&events, &session, self.now),
+                    notify::notification_text(&table, &session, self.now),
                 ),
             ])
             .map(|(surface, text)| seen(surface, text))

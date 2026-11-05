@@ -12,6 +12,8 @@ use serde_json::{json, Map, Value};
 pub struct Issue {
     pub code: &'static str,
     pub step: Option<String>,
+    /// The operator item an issue is about, by its ID.
+    pub item: Option<String>,
     /// A field's path in the operator, `/`-separated (`wgsl`, `inputs/n`).
     pub path: Option<String>,
     /// A WGSL-subset source's line and column (1-based) and the construct there.
@@ -50,6 +52,7 @@ impl Issue {
         o.insert("severity".into(), json!("error"));
         for (k, v) in [
             ("step", &self.step),
+            ("item", &self.item),
             ("path", &self.path),
             ("construct", &self.construct),
         ] {
@@ -139,6 +142,8 @@ pub enum Ty {
     /// `mat3x3<f32>` or `mat4x4<f32>`.
     Mat(u8),
     Tex(Tex),
+    /// A 3D texture a compute operator wrote earlier in the frame (#483).
+    Tex3(Tex),
     /// `array<T, n ≤ 16>`.
     Arr(Sc, u8, u32),
     /// A storage buffer of `count` scalars, read with `read` and written with `write`.
@@ -160,6 +165,8 @@ impl Ty {
             Ty::Tex(Tex::Float) => "texture_2d<f32>".into(),
             Ty::Tex(Tex::Uint) => "texture_2d<u32>".into(),
             Ty::Tex(Tex::Depth) => "texture_depth_2d".into(),
+            Ty::Tex3(Tex::Uint) => "texture_3d<u32>".into(),
+            Ty::Tex3(_) => "texture_3d<f32>".into(),
             Ty::Arr(sc, 1, n) => format!("array<{}, {n}>", sc.wgsl()),
             Ty::Arr(sc, l, n) => format!("array<vec{l}<{}>, {n}>", sc.wgsl()),
             // Bools are stored as u32 words.
@@ -188,6 +195,8 @@ impl Ty {
             "texture" | "texture<f32>" => return Some(Ty::Tex(Tex::Float)),
             "texture<u32>" => return Some(Ty::Tex(Tex::Uint)),
             "depth" => return Some(Ty::Tex(Tex::Depth)),
+            "texture3d" | "texture3d<f32>" => return Some(Ty::Tex3(Tex::Float)),
+            "texture3d<u32>" => return Some(Ty::Tex3(Tex::Uint)),
             _ => {}
         }
         if let Some(rest) = t.strip_prefix("vec") {
@@ -221,6 +230,13 @@ pub enum From {
         op: String,
         output: String,
     },
+    /// A 3D texture a compute operator wrote earlier in the frame; `previous` marks a read of
+    /// an earlier frame's, which the check refuses (#483).
+    Texture3d {
+        op: String,
+        output: String,
+        previous: bool,
+    },
     /// Storage an operator wrote earlier in the frame.
     Storage {
         op: String,
@@ -231,6 +247,18 @@ pub enum From {
     Phase(u64),
     Seed,
     Role(String),
+    /// A mark-set or instance column, per element: storage of its scalars.
+    Column {
+        item: String,
+        name: String,
+    },
+    /// A builder attribute, per element: storage of its `lanes`-wide elements, packed (a vec3 at
+    /// 12 bytes).
+    Attribute {
+        name: String,
+        domain: String,
+        lanes: u8,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -283,6 +311,21 @@ pub struct Step {
     /// (convert and bitcast), `pick` (split), `of` (camera).
     pub fields: Map<String, Value>,
     pub body: Option<Box<Body>>,
+    /// An `iterate@1`'s count, ping-pong targets and body pass (#483).
+    pub iterate: Option<Box<Iterate>>,
+}
+
+/// `iterate {count ≤ 16, body: pass graph, ping_pong: {format, resolution}}` (Step and the closed
+/// step list: structural steps): `body` runs `count` times over two targets, each run reading the
+/// last run's output as the input `prev` and its run as the u32 `index`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Iterate {
+    pub count: u64,
+    pub index: String,
+    pub format: String,
+    pub resolution: Size,
+    pub steps: BTreeMap<String, Step>,
+    pub outputs: BTreeMap<String, Arg>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -311,6 +354,14 @@ pub enum Blend {
     Screen,
 }
 
+/// What draws while an operator compiles, after it's switched off, and in place of a live-only
+/// operator in every canonical render.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fallback {
+    None,
+    Look,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Origin {
     Shipped,
@@ -328,11 +379,56 @@ pub enum Size {
     Of { input: String, scale: f64 },
 }
 
+/// The formats a compute texture output may take (Operator output).
+pub const TEXTURE_FORMATS: &[&str] = &["r32uint", "r32float", "rgba16float", "rgba8unorm"];
+
+/// A compute operator's texture output: `texture {format, size, mips}` (2D) or `texture3d
+/// {format, size}` (#483).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TexOut {
+    pub format: String,
+    /// Width, height and depth (1 for 2D).
+    pub size: [u32; 3],
+    pub dim3: bool,
+    pub mips: bool,
+}
+
+impl TexOut {
+    /// Bytes a texel takes.
+    pub fn texel_bytes(&self) -> u64 {
+        match self.format.as_str() {
+            "rgba16float" => 8,
+            _ => 4,
+        }
+    }
+
+    /// Bytes it takes in the class's operator storage: its texels, and a third more with mips.
+    pub fn bytes(&self) -> u64 {
+        let base = self.texel_bytes() * self.size.iter().map(|&n| u64::from(n)).product::<u64>();
+        if self.mips {
+            base + base / 3
+        } else {
+            base
+        }
+    }
+
+    /// The value one of its texels holds.
+    pub fn value(&self) -> Ty {
+        match self.format.as_str() {
+            "r32uint" => Ty::U32,
+            "r32float" => Ty::F32,
+            _ => Ty::V(Sc::F32, 4),
+        }
+    }
+}
+
 /// A compute operator's output: storage of `count` scalars.
 #[derive(Clone, Debug, PartialEq)]
 pub struct StorageOut {
     pub sc: Sc,
     pub count: u32,
+    /// The multi-dispatch step whose result it takes (`from: step[.port]`, #483).
+    pub from: Option<Arg>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -346,8 +442,11 @@ pub struct Operator {
     pub outputs: BTreeMap<String, Arg>,
     /// A compute operator's storage outputs.
     pub storage: BTreeMap<String, StorageOut>,
+    /// A compute operator's texture outputs (#483).
+    pub textures: BTreeMap<String, TexOut>,
     pub blend: Blend,
     pub declared: Option<Class>,
+    pub fallback: Fallback,
     /// ns per pixel (material, pass) or per element (compute).
     pub cost: Option<f64>,
     pub size: Size,
@@ -391,7 +490,48 @@ const CODE_FIELDS: &[&str] = &[
     "wgsl", "glsl", "hlsl", "msl", "shader", "code", "spirv", "program", "fragment", "vertex",
 ];
 /// An op's own literal fields, which its args may hold beside its ports.
-const LITERAL_FIELDS: &[&str] = &["value", "type", "to", "pick", "of"];
+const LITERAL_FIELDS: &[&str] = &[
+    "value",
+    "type",
+    "to",
+    "pick",
+    "of",
+    "name",
+    "space",
+    "period",
+    "octaves",
+    "lacunarity",
+    "gain",
+    // scan's operator (#483).
+    "op",
+];
+/// The look's status roles: no operator reads or writes one (Status guard).
+pub const STATUS_ROLES: &[&str] = &[
+    "pass",
+    "fail",
+    "invalid",
+    "blocked",
+    "inconclusive",
+    "running",
+    "needs_you",
+    "stale",
+    "idle",
+];
+
+/// The input a `role@1 {name}` step reads its color from.
+pub fn role_input(name: &str) -> String {
+    let safe: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("role__{safe}")
+}
 
 fn ident(s: &str) -> bool {
     !s.is_empty()
@@ -450,6 +590,14 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
         ));
         return None;
     };
+    if let Some(k) = o.keys().find(|k| CODE_FIELDS.contains(&k.as_str())) {
+        issues.push(Issue::at_step(
+            "operator_source",
+            id,
+            format!("a step carries no shader text ({k}): every step is an op from the closed list"),
+        ));
+        return None;
+    }
     let empty = Map::new();
     let given = match o.get("args") {
         None => &empty,
@@ -460,6 +608,10 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
         }
     };
     let repeat = op.starts_with("repeat@");
+    let iterating = op == "iterate@1";
+    let role = (op == "role@1")
+        .then(|| given.get("name").and_then(Value::as_str))
+        .flatten();
     let mut args = BTreeMap::new();
     let mut fields = Map::new();
     for (port, v) in given {
@@ -467,18 +619,81 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
             fields.insert(port.clone(), v.clone());
         } else if !(repeat
             && ["count", "accumulate", "body", "stop_if", "index"].contains(&port.as_str()))
+            && !(iterating && ["count", "body", "index", "ping_pong"].contains(&port.as_str()))
         {
             args.insert(port.clone(), arg(v));
         }
     }
     let body = repeat.then(|| Box::new(body(given, issues)));
+    let iterate = iterating.then(|| Box::new(iterate(id, given, issues)));
+    if let Some(name) = role {
+        args.insert("x".into(), Arg::Ref(role_input(name), None));
+    }
     Some(Step {
         op: op.into(),
         args,
         when: o.get("when").and_then(Value::as_str).map(String::from),
         fields,
         body,
+        iterate,
     })
+}
+
+fn size_of(v: Option<&Value>, path: &str, issues: &mut Vec<Issue>) -> Size {
+    match v.and_then(Value::as_str) {
+        None | Some("half") => Size::Half,
+        Some("full") => Size::Full,
+        Some("quarter") => Size::Quarter,
+        Some(_) => {
+            issues.push(Issue::at_path(
+                "operator_type",
+                path,
+                "resolution is full, half or quarter",
+            ));
+            Size::Half
+        }
+    }
+}
+
+fn iterate(id: &str, a: &Map<String, Value>, issues: &mut Vec<Issue>) -> Iterate {
+    let pp = a.get("ping_pong");
+    let body = a.get("body");
+    let mut outputs = BTreeMap::new();
+    if let Some(o) = body.and_then(|b| b.get("outputs")).and_then(Value::as_object) {
+        for (name, v) in o {
+            outputs.insert(name.clone(), arg(v));
+        }
+    }
+    let count = match a.get("count").and_then(Value::as_u64) {
+        Some(c) => c,
+        None => {
+            issues.push(Issue::at_step(
+                "operator_unbounded",
+                id,
+                "an iterate's count is a literal, fixed at check",
+            ));
+            0
+        }
+    };
+    Iterate {
+        count,
+        index: a
+            .get("index")
+            .and_then(Value::as_str)
+            .unwrap_or("index")
+            .to_string(),
+        format: pp
+            .and_then(|p| p.get("format"))
+            .and_then(Value::as_str)
+            .unwrap_or("rgba16float")
+            .to_string(),
+        resolution: size_of(pp.and_then(|p| p.get("resolution")), "steps", issues),
+        steps: steps(
+            body.and_then(|b| b.get("steps")).unwrap_or(&Value::Null),
+            issues,
+        ),
+        outputs,
+    }
 }
 
 fn body(a: &Map<String, Value>, issues: &mut Vec<Issue>) -> Body {
@@ -558,6 +773,15 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                         return None;
                     }
                 }
+            } else if let Some(t) = f.get("texture3d") {
+                From::Texture3d {
+                    op: t.get("op").and_then(Value::as_str).unwrap_or("").into(),
+                    output: t.get("output").and_then(Value::as_str).unwrap_or("").into(),
+                    previous: t
+                        .get("frame")
+                        .and_then(Value::as_str)
+                        .is_some_and(|f| f != "current"),
+                }
             } else if let Some(s) = f.get("storage") {
                 From::Storage {
                     op: s.get("op").and_then(Value::as_str).unwrap_or("").into(),
@@ -567,6 +791,20 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                 From::Phase(p.get("period").and_then(Value::as_u64).unwrap_or(0))
             } else if let Some(r) = f.get("role").and_then(Value::as_str) {
                 From::Role(r.into())
+            } else if let Some(c) = f.get("column") {
+                From::Column {
+                    item: c.get("item").and_then(Value::as_str).unwrap_or("").into(),
+                    name: c.get("name").and_then(Value::as_str).unwrap_or("").into(),
+                }
+            } else if let Some(a) = f.get("attribute") {
+                From::Attribute {
+                    name: a.get("name").and_then(Value::as_str).unwrap_or("").into(),
+                    domain: a.get("domain").and_then(Value::as_str).unwrap_or("").into(),
+                    lanes: match ty {
+                        Some(Ty::V(_, n)) => n,
+                        _ => 1,
+                    },
+                }
             } else if f.contains_key("time") || f.contains_key("t") {
                 From::Time
             } else if f.contains_key("seed") {
@@ -582,16 +820,20 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
         }
     };
     let ty = match (&from, ty, v.get("type").and_then(Value::as_str)) {
-        (From::Storage { .. }, _, Some(t)) => match Ty::parse(t) {
-            Some(Ty::V(sc, 1)) => Ty::Storage(
-                sc,
-                v.get("count").and_then(Value::as_u64).unwrap_or(0) as u32,
-            ),
-            _ => {
-                bad(issues, "a storage input holds scalars");
-                return None;
+        (From::Storage { .. } | From::Column { .. } | From::Attribute { .. }, _, Some(t)) => {
+            match Ty::parse(t) {
+                Some(Ty::V(sc, n)) if n == 1 || matches!(from, From::Attribute { .. }) => {
+                    Ty::Storage(
+                        sc,
+                        v.get("count").and_then(Value::as_u64).unwrap_or(0) as u32,
+                    )
+                }
+                _ => {
+                    bad(issues, "a storage input holds scalars");
+                    return None;
+                }
             }
-        },
+        }
         (_, Some(t), _) => t,
         (From::Time | From::Phase(_), None, _) => Ty::F32,
         (From::Seed, None, _) => Ty::U32,
@@ -711,8 +953,36 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
             BTreeMap::new()
         }
     };
+    // Each role a `role@1` step names is an input of the operator, theme-resolved like `from:
+    // {role}`; a status role is refused by the check, naming the step.
+    let mut roles = Vec::new();
+    let mut stack: Vec<&BTreeMap<String, Step>> = vec![&steps];
+    while let Some(st) = stack.pop() {
+        for s in st.values() {
+            if s.op == "role@1" {
+                if let Some(n) = s.fields.get("name").and_then(Value::as_str) {
+                    roles.push(n.to_string());
+                }
+            }
+            if let Some(b) = &s.body {
+                stack.push(&b.steps);
+            }
+            if let Some(it) = &s.iterate {
+                stack.push(&it.steps);
+            }
+        }
+    }
+    for name in roles {
+        inputs.entry(role_input(&name)).or_insert(Input {
+            ty: Ty::V(Sc::F32, 3),
+            from: From::Role(name),
+            range: None,
+            default: None,
+        });
+    }
     let mut outputs = BTreeMap::new();
     let mut storage = BTreeMap::new();
+    let mut textures = BTreeMap::new();
     let mut blend = Blend::Replace;
     if let Some(out) = o.get("outputs").and_then(Value::as_object) {
         for (name, v) in out {
@@ -734,7 +1004,50 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 };
                 continue;
             }
-            if let Some(s) = v.get("storage") {
+            if let Some((t, dim3)) = v
+                .get("texture")
+                .map(|t| (t, false))
+                .or_else(|| v.get("texture3d").map(|t| (t, true)))
+            {
+                let path = format!("outputs/{name}");
+                let format = t.get("format").and_then(Value::as_str).unwrap_or("");
+                let size: Vec<u32> = t
+                    .get("size")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_u64).map(|n| n as u32).collect())
+                    .unwrap_or_default();
+                let mips = t.get("mips").and_then(Value::as_bool).unwrap_or(false);
+                let dims = if dim3 { 3 } else { 2 };
+                if !TEXTURE_FORMATS.contains(&format) || size.len() != dims {
+                    issues.push(Issue::at_path(
+                        "operator_type",
+                        &path,
+                        format!("a texture output is {{format: {}, size: [{dims} sizes]}}", TEXTURE_FORMATS.join(" | ")),
+                    ));
+                    continue;
+                }
+                textures.insert(
+                    name.clone(),
+                    TexOut {
+                        format: format.into(),
+                        size: [size[0], size[1], if dim3 { size[2] } else { 1 }],
+                        dim3,
+                        mips,
+                    },
+                );
+                continue;
+            }
+            // A readback (exact only, ≤ 64 KiB) is storage the CPU reads back a frame late.
+            if let Some(s) = v.get("storage").or_else(|| v.get("readback")) {
+                if v.get("readback").is_some()
+                    && s.get("bytes").and_then(Value::as_u64).unwrap_or(0) > 65_536
+                {
+                    issues.push(Issue::at_path(
+                        "operator_limit",
+                        &format!("outputs/{name}"),
+                        "a readback holds at most 64 KiB",
+                    ));
+                }
                 let sc = s.get("type").and_then(Value::as_str).and_then(Ty::parse);
                 match (sc, s.get("count").and_then(Value::as_u64)) {
                     (Some(Ty::V(sc, 1)), Some(count)) => {
@@ -743,6 +1056,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                             StorageOut {
                                 sc,
                                 count: count as u32,
+                                from: v.get("from").map(arg),
                             },
                         );
                     }
@@ -775,6 +1089,18 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 format!("{other} is not a class"),
             ));
             None
+        }
+    };
+    let fallback = match o.get("fallback").and_then(Value::as_str) {
+        None | Some("look") => Fallback::Look,
+        Some("none") => Fallback::None,
+        Some(other) => {
+            issues.push(Issue::at_path(
+                "operator_type",
+                "fallback",
+                format!("fallback is none or look, not {other}"),
+            ));
+            Fallback::Look
         }
     };
     let cost = o
@@ -835,8 +1161,10 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
         steps,
         outputs,
         storage,
+        textures,
         blend,
         declared,
+        fallback,
         cost,
         size,
         elements: o.get("elements").and_then(Value::as_u64).unwrap_or(0) as u32,

@@ -521,3 +521,24 @@ pub fn load() -> Module {
         },
     }
 }
+
+/// `test-column-source` (#397's acceptance README: The column view): `test.columns`, which fills
+/// the core's `column.source@1` with `test.column@1` (`test.column.<name>`, i32) and one source,
+/// `test.column.big`: 5 in every row but row 3, which holds 70,000, the same at every t.
+pub fn columns() -> Module {
+    Module {
+        manifest: manifest("test.columns", &[]),
+        register: |r| {
+            let rows = json!([5, 5, 5, 70_000, 5, 5]);
+            r.entry(
+                deep_canvas::columns::REGISTRY,
+                "test.column@1",
+                json!({"form": "test.column.<name>", "types": ["i32"],
+                       "sources": {"big": {"dtype": "i32", "rows": rows}},
+                       "fixture": {"frames": [rows, rows], "changed": [[], []],
+                                   "seeks": [{"from": 1, "to": 0, "rows": rows}]}}),
+                SINCE,
+            );
+        },
+    }
+}

@@ -1,0 +1,13 @@
+// #65 AC4's planted channel: a third-party channel plug-in that says every item was delivered without ever reaching
+// its provider, so no acknowledgement stands behind its word. channel@1's kit must fail it at install, naming the item
+// it reported delivered and recording that delivery as stalled. Its manifest's digest is a placeholder the test's
+// copy replaces (helpers.ts, plantedPackage).
+export default function (deep: any): void {
+  void deep.registerChannel('planted', {
+    slot: 'channel@1',
+    revision: 1,
+    kind: 'chat',
+    deliver: async (_item: unknown, _ctx: unknown) => ({ outcome: 'delivered' }),
+    receive: async (_ctx: unknown) => ({ answers: [], seen: [], conflict: null }),
+  });
+}

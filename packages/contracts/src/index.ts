@@ -3,7 +3,7 @@ export { ContractError, ERROR_CODES, type ContractIssue } from './errors.js';
 export { registry, type Registry, type Validation } from './validate.js';
 export { decode, encode, fixtures, frozenDigests, getSchema, isUntouched, listSchemas, validate } from './schemas.js';
 export type { HookAck, HookRequest } from './generated/types.js';
-export { canonicalize, sha256Hex } from './canonical.js';
+export { canonicalize, sha256Hex, stableText } from './canonical.js';
 export { d1Digest, frozenDrift, parseDigest, recordHash } from './digest.js';
 export { lintSchemas, type LintProblem } from './lint.js';
 export { compilePattern, type Inst } from './pattern.js';
@@ -14,3 +14,4 @@ export { HANDLE_SCHEMES, parseHandle, printHandle, type Handle } from './handles
 export { contextBoundFor, joinHookReplies, negotiateFeatures, type HookContribution, type JoinedHookReply } from './hook.js';
 export { checkManifest } from './manifest.js';
 export { extensionApi, hubSlots, type ApiEntry, type HubSlot } from './slots.js';
+export { LIFECYCLE_OBJECTS, lifecycleGaps, machineProblems, machines, type Machine, type MachineMove } from './lifecycle.js';

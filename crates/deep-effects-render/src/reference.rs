@@ -388,6 +388,7 @@ impl Camera {
             eye: f.eye.map(f64::from),
             inputs,
             textures,
+            normals: [[0.0; 3]; 3],
         }
     }
 }
@@ -550,10 +551,16 @@ pub fn glow(
         .collect();
     let mut levels: BTreeMap<usize, wgpu::Texture> = BTreeMap::new();
     let mut last = None;
+    // No lens dirt here: one black texel.
+    let (dirt_tex, dirt) = upload(device, Tex::Float, &Image::new(1, 1));
     for r in &runs {
         let stage = &runners[r.stage];
         let mut textures: BTreeMap<String, &wgpu::Texture> = BTreeMap::new();
         for name in &stage.compiled.checked.textures {
+            if name == "dirt" {
+                textures.insert(name.clone(), &dirt_tex);
+                continue;
+            }
             let t = level_of(name, r).map_or(&scene_tex, |k| &levels[&k]);
             textures.insert(name.clone(), t);
         }
@@ -575,6 +582,10 @@ pub fn glow(
         let stage = &stages[r.stage];
         let mut textures: BTreeMap<String, &Image> = BTreeMap::new();
         for name in &stage.checked.textures {
+            if name == "dirt" {
+                textures.insert(name.clone(), &dirt);
+                continue;
+            }
             let img = level_of(name, r).map_or(&held, |k| &images[&k]);
             textures.insert(name.clone(), img);
         }

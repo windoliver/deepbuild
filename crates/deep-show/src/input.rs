@@ -200,7 +200,7 @@ impl Hub<'_> {
     }
 
     /// A popped-out panel's rect in its own window's px, and that window's display size.
-    fn placed(&self, panel: &str) -> Option<([f64; 4], [f64; 2])> {
+    pub(crate) fn placed(&self, panel: &str) -> Option<([f64; 4], [f64; 2])> {
         let w = self.placement.window_of(panel)?;
         if w.view.as_deref() != Some(panel) {
             return None;
@@ -607,7 +607,8 @@ impl Hub<'_> {
                     p.evaluate(shows, Validity::Full, &mut state);
                     state.valid_until
                 });
-            let mut frame = json!({"vsync": vsync, "rev": rev, "camera": view.camera});
+            // `t`: the document's time the frame shows (#1162: a readout reads its values there).
+            let mut frame = json!({"vsync": vsync, "rev": rev, "t": shows, "camera": view.camera});
             if let Some(before) = view.compare {
                 frame["before"] = json!(before);
             }

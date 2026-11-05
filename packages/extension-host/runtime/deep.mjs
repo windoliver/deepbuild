@@ -19,6 +19,10 @@ export const API = Object.freeze([
   { method: 'deep.registerEnvironment', needs: null },
   { method: 'deep.registerView', needs: null },
   { method: 'deep.registerAdapter', needs: null },
+  // #65: a way to reach you, which only transports; its provider calls go through the hub (`deep.channel.fetch`, its
+  // context's fetch), which adds the channel's token and holds the call to its settings.
+  { method: 'deep.registerChannel', needs: null },
+  { method: 'deep.channel.fetch', needs: null },
   { method: 'deep.registerRoute', needs: null },
   // #355: the wiki's index, in place of the shipped one.
   { method: 'deep.registerIndex', needs: null },
@@ -51,11 +55,15 @@ export const API = Object.freeze([
   { method: 'deep.send', needs: 'hosts' },
   // #366: a model job on your own agent through the runner, its inputs by handle, its answer a reading.
   { method: 'deep.runner.run', needs: 'agent' },
+  // #262: re-read every source a view of the package binds, each through its quota.
+  { method: 'deep.readNow', needs: null },
   // #104: terminals the hub hosts for a piece you approved run-as-you for. None writes a terminal's input: that comes
   // only from the panel you focused, through the app.
   { method: 'deep.terminal.open', needs: 'run_as_you' },
   { method: 'deep.terminal.list', needs: 'run_as_you' },
   { method: 'deep.terminal.read', needs: 'run_as_you' },
+  // #989: closes a terminal: its host and program stop, and its log and checkpoint go.
+  { method: 'deep.terminal.close', needs: 'run_as_you' },
   // #411: a canvas revision's evaluated values by stable ID, for a check runner, under its grant's documents.
   { method: 'deep.canvas.read', needs: 'canvas' },
 ].map((m) => Object.freeze(m)));
@@ -83,6 +91,8 @@ export function extensionSide(call, load, imports = (file) => import(file)) {
   // The package's resolvers in order, and its adapters by name: their functions stay here (#349).
   let resolvers = [];
   const adapters = new Map();
+  // Its channels by name (#65): deliver and receive stay here, asked by the host with the context it gives.
+  const channels = new Map();
   // Its index's methods stay here too (#355); the host asks for each call by name.
   const indexes = new Map();
   // Its sources by name (#364): a polled one's parse and a stream one's read stay here; the host sends the rest.
@@ -100,6 +110,7 @@ export function extensionSide(call, load, imports = (file) => import(file)) {
     'deep.registerIndex': keeper(indexes),
     'deep.registerAdapter': (name, adapter) => { adapters.set(name, adapter); return () => { if (adapters.get(name) === adapter) adapters.delete(name); }; },
     'deep.registerEnvironment': keeper(environments),
+    'deep.registerChannel': keeper(channels),
     'deep.registerSource': keeper(sources),
     'deep.schedule': (name, _declared, job) => keeper(schedules)(name, job),
     'deep.on': (kind, handler) => {
@@ -162,6 +173,13 @@ export function extensionSide(call, load, imports = (file) => import(file)) {
           if (answer !== undefined && answer !== null) return answer;
         }
         return undefined;
+      }
+      // A channel's send or read: its context's fetch is the hub's call for this one, named by `call`.
+      if (method === 'channel.deliver' || method === 'channel.receive') {
+        const channel = channels.get(params?.name);
+        if (!channel) throw Error(`no channel ${params?.name} is registered here`);
+        const ctx = { settings: params.settings ?? {}, fetch: (request) => call('deep.channel.fetch', [params.call, request]) };
+        return (method === 'channel.deliver' ? await channel.deliver(params.item, ctx) : await channel.receive(ctx)) ?? null;
       }
       if (method === 'adapter.mapHook' || method === 'adapter.deliver') {
         const adapter = adapters.get(params?.name);

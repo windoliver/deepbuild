@@ -12,14 +12,14 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { homedir, tmpdir, userInfo } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHECK_RUNTIME, type CheckResult, type CheckRunnerFill, type CheckSpec, type RunOutcome } from '@deepbuild/conformance';
+import type { CheckResult, CheckRunnerFill, CheckSpec, RunOutcome } from '@deepbuild/conformance';
 import { scrubValues } from '@deepbuild/evidence';
 import { after, badDeadline, type Exit, type Host } from '@deepbuild/supervisor';
 import { segmentsOf } from '@deepbuild/gate';
 import { listSource, unrun, type Listed } from './listing.js';
 import { evidence, goTest, nodeTest, under, vitest, type Listing, type Ran, type Reported } from './report.js';
 import { seededBy, type Seeded } from './seeded.js';
-import { absent, filtersIn, GO_TEST, hiddenChild, maskOf, programsIn, scriptOf, untraced, type Spawned } from './shell.js';
+import { absent, DOES_NOTHING, filtersIn, GO_TEST, hiddenChild, maskOf, programsIn, scriptOf, untraced, type Spawned } from './shell.js';
 
 export type { Seeded } from './seeded.js';
 
@@ -40,6 +40,8 @@ export interface CommandCheck {
   secrets?: Record<string, string>;
   /** Hosts the run's grant names, "127.0.0.1:<port>". */
   hosts?: string[];
+  /** Commands a base has no entry for (#874): each is on the run's PATH as a program that does nothing, exits 0 and prints nothing. */
+  standIns?: string[];
   /** A numeric contract (#28, the verdict engine's NumericContract): the outputs whose counts the report gives. */
   contract?: { tolerances: { output: string; size: number }[] };
   /** A timing check (#87): how many timed repeats it runs, numbered 1 to `repeats`; each says in the report whether its caches were flushed. */
@@ -73,6 +75,12 @@ export interface CommandRun extends CheckResult {
 }
 
 const RUNTIME = fileURLToPath(new URL('../runtime/', import.meta.url));
+/**
+ * The conformance package's check runtime, the tracer and node:test reporter its check.kind@1 kit loads too, found
+ * beside its public entry (src/index.ts or dist/index.js) without loading the kits, which a hub that runs checks never
+ * otherwise needs.
+ */
+const CHECK_RUNTIME = fileURLToPath(new URL('../runtime/check-kind/', import.meta.resolve('@deepbuild/conformance')));
 /**
  * The locale and zone every run gets, whatever the host's: a pass can't lean on your machine's. CI, so a tool never
  * writes an expected value it lacks (a missing snapshot) from what the program gives and passes on it.
@@ -246,6 +254,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     const bin = join(temp, 'bin');
     mkdirSync(bin);
     for (const [tool, real] of tools()) symlinkSync(real, join(bin, tool));
+    for (const name of check.standIns ?? []) if (/^[\w.+@-]+$/.test(name) && !existsSync(join(bin, name))) symlinkSync(DOES_NOTHING, join(bin, name));
     const { roots, refused } = linkPrograms(spec.runner, checkout, bin);
     const PATH = pathOf(bin);
     const go = GO_TEST.test(spec.runner);

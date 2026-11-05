@@ -72,7 +72,7 @@ const MACHINES: &[&str] = &["any", "same"];
 const TOOLS: &[&str] = &["deep_show", "deep_query", "deep_kinds", "deep_patch"];
 
 /// The core kinds the core draws a module's kind as, until modules draw their own.
-const DRAWS_AS: &[&str] = &["rect@1"];
+const DRAWS_AS: &[&str] = &["rect@1", "path@1"];
 
 /// An array's domain (Array and table).
 const DOMAINS: &[&str] = &["item", "row", "element", "document"];
@@ -137,9 +137,32 @@ impl BuildSet {
     }
 }
 
-/// The module kinds the design names without a family, each its module's own name: the cell
-/// grid `cells@1` (#402). Any other bare name is the core's.
-const BARE_MODULE_KINDS: &[&str] = &["cells"];
+/// The module kinds the design names without a family, with the module each is: the cell grid
+/// `cells@1` (#402), scene3d's builders and curve (Builder; Curve `curve@1`; #420; Builder
+/// `hull`, #440) and its material (Material `material@1`; #421). Any other bare name is the core's.
+const BARE_MODULE_KINDS: &[(&str, &str)] = &[
+    ("cells", "cells"),
+    ("slab", "scene3d"),
+    ("lathe", "scene3d"),
+    ("extrude", "scene3d"),
+    ("tube", "scene3d"),
+    ("ball", "scene3d"),
+    ("coil", "scene3d"),
+    ("plate", "scene3d"),
+    ("display", "scene3d"),
+    ("hull", "scene3d"),
+    ("curve", "scene3d"),
+    ("material", "scene3d"),
+    ("sky", "scene3d"),
+    ("vector", "vector"),
+    // R1's mark sets, scales and axes are the data module's, which marks2d draws.
+    ("marks", "data"),
+    ("axis", "data"),
+    ("scale", "data"),
+    ("puff", "scene3d"),
+    ("cutaway", "scene3d"),
+    ("instance", "scene3d"),
+];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
 /// map (Registry and seal: `build_set`), so a build that leaves one out is refused at startup.
@@ -356,6 +379,10 @@ pub struct Kind {
     /// `(deprecated_since, replaced_by)` once the kind is replaced: it still loads, with a
     /// `deprecated` notice (Item and kind).
     pub deprecated: Option<(String, String)>,
+    /// A preview kind's tracking issue: its stability is `preview` until the issue lands (#412).
+    pub preview: Option<String>,
+    /// Its one-line description, as the sheet `deep_kinds` serves prints it (#412).
+    pub description: Option<String>,
 }
 
 /// An array, with one writer: its owner (canvas primitives: Array and table).
@@ -400,6 +427,12 @@ pub type Run = fn(&mut crate::schedule::View<'_>) -> Result<(), crate::schedule:
 /// Which items an operator per item has a node on: `(document, item ID, item)`; per document,
 /// whether the document has its node (`(document, "", null)`).
 pub type Applies = fn(&Value, &str, &Value) -> bool;
+
+/// What a per-item node's key holds of its item and document in place of the whole item and
+/// document (Content key: "each declared read"): `(document, item ID, item, planted)` to the
+/// canonical value of exactly what it reads, such as a kind's paths of one dirty class and the
+/// items it references (#420).
+pub type Keyed = fn(&Value, &str, &Value, Option<&str>) -> Value;
 
 /// What an operator runs per (Operator and read set: `per`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -504,6 +537,9 @@ pub struct Operator {
     /// Its determinism class (Determinism class): `exact` for CPU work and GPU work of integer
     /// steps only, `same_machine` for any GPU float work, as its steps compute it (#411).
     pub determinism: &'static str,
+    /// What its per-item nodes key on of `self` and `refs`, when narrower than the whole item
+    /// and document (#420).
+    pub keyed: Option<Keyed>,
 }
 
 impl Operator {
@@ -541,6 +577,12 @@ impl Operator {
     /// Its determinism class, as its steps compute it: one of [`CLASSES`].
     pub fn determinism(&mut self, class: &'static str) -> &mut Self {
         self.determinism = class;
+        self
+    }
+
+    /// Keys its per-item nodes on `keyed`'s value in place of their item and document.
+    pub fn keyed(&mut self, keyed: Keyed) -> &mut Self {
+        self.keyed = Some(keyed);
         self
     }
 }
@@ -655,6 +697,8 @@ pub struct Registrar {
     pub registries: Vec<lists::RegistryDef>,
     /// The entries it fills at the seal, into its own registries or the core's (#200).
     pub entries: Vec<lists::EntryDef>,
+    /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
+    pub outline_fills: Vec<(String, crate::outline::Fill)>,
 }
 
 impl Registrar {
@@ -666,7 +710,25 @@ impl Registrar {
             needs: needs.iter().map(|s| s.to_string()).collect(),
             draws_as: draws_as.into(),
             deprecated: None,
+            preview: None,
+            description: None,
         });
+        self
+    }
+
+    /// The last kind registered is a preview, tracked by the issue `tracking` (#412).
+    pub fn preview(&mut self, tracking: &str) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.preview = Some(tracking.into());
+        }
+        self
+    }
+
+    /// The last kind registered's one-line description (#412).
+    pub fn described(&mut self, text: &str) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.description = Some(text.into());
+        }
         self
     }
 
@@ -820,6 +882,7 @@ impl Registrar {
             step: None,
             serial: false,
             determinism: "exact",
+            keyed: None,
         });
         self.operators.last_mut().expect("just pushed")
     }
@@ -907,6 +970,19 @@ impl Registrar {
         self
     }
 
+    /// Fills an entry of the core's `outline.source@1` (#443): its value, which the registry's kit
+    /// holds to its item's 2D fill, and its own Rust, which `extrude` reads outlines through.
+    pub fn outline_source(
+        &mut self,
+        name: &str,
+        value: Value,
+        fill: crate::outline::Fill,
+    ) -> &mut Self {
+        self.entry(crate::outline::REGISTRY, name, value, "R6");
+        self.outline_fills.push((name.into(), fill));
+        self
+    }
+
     /// A GPU pass that fills the items of `kind` with its WGSL fragment shader.
     pub fn gpu_pass(
         &mut self,
@@ -982,7 +1058,23 @@ pub enum Fault {
     TakesForeignEntry,
     /// Leaves the op table's base steps to a canvas module to fill (#200).
     BaseStepsElsewhere,
+    /// The document check names no close name on `unknown_kind` or `unknown_field` (#412).
+    NoCloseNames,
+    /// The document check ranks close names by spelling alone, reading no rename record (#412).
+    CloseBySpelling,
+    /// Hashes each implementation's pins into its interface's digest, so another patch of a
+    /// pinned crate changes it (#238).
+    DigestCoversPins,
+    /// Opens `ease@1` with its entries renumbered, so a key's content key changes (#490).
+    EaseRenumbered,
+    /// Declares `ease@1` in the motion module instead of the core (#490): the core declares
+    /// none, so a build without motion has no eases.
+    EaseInMotion,
 }
+
+/// The module that declares `ease@1` in the planted layout that moves it out of the core, which
+/// a build that lacks it names as missing (#490).
+pub const EASES_OUTSIDE_CORE: &str = "motion";
 
 /// The type an array declares when it holds JSON, which only a check phase writes (#855).
 pub const JSON: &str = "json";
@@ -1001,6 +1093,8 @@ pub struct SealError {
     pub implementations: Vec<String>,
     /// The registry, entries, kit rules and passes involved (#200).
     pub registry: Option<Box<RegistryRefusal>>,
+    /// The bytes the build's sheet runs past its cap (#412).
+    pub overrun_bytes: Option<usize>,
     pub what: String,
 }
 
@@ -1015,20 +1109,21 @@ pub struct RegistryRefusal {
     pub passes: Vec<String>,
 }
 
+// Each refusal is boxed as it is made: a `SealError` is large, and a `Result` carries only its pointer.
 impl SealError {
     /// A refusal naming one module and no array.
-    fn of(code: &'static str, module: &str, what: String) -> SealError {
+    fn of(code: &'static str, module: &str, what: String) -> Box<SealError> {
         SealError::new(code, &[module], &[], what)
     }
 
-    fn new(code: &'static str, modules: &[&str], arrays: &[&str], what: String) -> SealError {
+    fn new(code: &'static str, modules: &[&str], arrays: &[&str], what: String) -> Box<SealError> {
         let mut modules: Vec<String> = modules.iter().map(|s| s.to_string()).collect();
         modules.sort();
         modules.dedup();
         let mut arrays: Vec<String> = arrays.iter().map(|s| s.to_string()).collect();
         arrays.sort();
         arrays.dedup();
-        SealError {
+        Box::new(SealError {
             code,
             modules,
             arrays,
@@ -1037,11 +1132,16 @@ impl SealError {
             implementations: Vec::new(),
             what,
             ..SealError::default()
-        }
+        })
     }
 
     /// The same refusal, naming the registry, its entries and the kit rules involved.
-    fn at(mut self, registry: &str, entries: Vec<Value>, rules: &[&str]) -> SealError {
+    fn at(
+        mut self: Box<Self>,
+        registry: &str,
+        entries: Vec<Value>,
+        rules: &[&str],
+    ) -> Box<SealError> {
         self.registry = Some(Box::new(RegistryRefusal {
             name: registry.to_string(),
             entries,
@@ -1052,7 +1152,7 @@ impl SealError {
     }
 
     /// The same refusal, naming the interface and the implementations involved.
-    fn on(mut self, interface: &str, implementations: &[&str]) -> SealError {
+    fn on(mut self: Box<Self>, interface: &str, implementations: &[&str]) -> Box<SealError> {
         self.interface = Some(interface.to_string());
         self.implementations = implementations.iter().map(|s| s.to_string()).collect();
         self.implementations.sort();
@@ -1136,6 +1236,21 @@ pub struct Sealed {
     pub registries: Vec<lists::SealedRegistry>,
     /// The time the seal's registry checks took, in nanoseconds of the registry's clock.
     pub registry_ns: u64,
+    /// How the document check names close names: `NoCloseNames` and `CloseBySpelling` are the
+    /// planted checks (#412); `None` is the right one.
+    pub close_fault: Option<Fault>,
+    /// Each entry of `outline.source@1` the build's modules fill, with the module and its Rust
+    /// (#443), sorted by module then entry.
+    pub outlines: Vec<SealedOutline>,
+}
+
+/// One outline source the seal admitted: its entry, module, form and Rust (#443).
+#[derive(Clone, Debug)]
+pub struct SealedOutline {
+    pub entry: String,
+    pub module: String,
+    pub form: String,
+    pub fill: crate::outline::Fill,
 }
 
 impl Sealed {
@@ -1363,8 +1478,10 @@ impl Sealed {
         // the cells module's.
         let family = match full.split_once('.') {
             Some((f, _)) => f,
-            None if BARE_MODULE_KINDS.contains(&full) => full,
-            None => return None,
+            None => match BARE_MODULE_KINDS.iter().find(|(k, _)| *k == full) {
+                Some((_, module)) => module,
+                None => return None,
+            },
         };
         KNOWN_MODULES
             .iter()
@@ -1467,6 +1584,9 @@ pub struct Registry {
     declared: Vec<lists::RegistryDef>,
     /// The registry whose kit the planted wrong kit replaces with one admitting every entry.
     admits_all: Option<String>,
+    /// `(module, kind)`: a bare kind name a test build lets that module keep (#412's fixture
+    /// `ring`), beside the one the design names.
+    bare: Vec<(String, String)>,
 }
 
 impl Registry {
@@ -1481,10 +1601,17 @@ impl Registry {
             costs: None,
             declared: Vec::new(),
             admits_all: None,
+            bare: Vec::new(),
         }
     }
 
     /// A registry the core declares in this build beside its own (#200).
+    /// Lets `module` keep the bare kind name `kind`: a test build's fixture only (#412).
+    pub fn allows_bare(mut self, module: &str, kind: &str) -> Registry {
+        self.bare.push((module.into(), kind.into()));
+        self
+    }
+
     pub fn declares(mut self, def: lists::RegistryDef) -> Registry {
         self.declared.push(def);
         self
@@ -1533,7 +1660,7 @@ impl Registry {
     }
 
     /// Registers every module in sorted name order, then checks the whole set.
-    pub fn seal(mut self) -> Result<Sealed, SealError> {
+    pub fn seal(mut self) -> Result<Sealed, Box<SealError>> {
         self.modules
             .sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
         let core = Semver::parse(CORE_VERSION).expect("CORE_VERSION is major.minor.patch");
@@ -1962,7 +2089,13 @@ impl Registry {
                 // A bare name is the core's (a core kind has no family); a module's kind
                 // carries its family, so no module takes `rect` or `text` from the compositor.
                 // The one module kind the design names bare, `cells@1`, is the cells module's.
-                let bare = BARE_MODULE_KINDS.contains(&k.entry.name) && k.entry.name == name;
+                let bare = BARE_MODULE_KINDS
+                    .iter()
+                    .any(|(kind, module)| *kind == k.entry.name && *module == name)
+                    || self
+                        .bare
+                        .iter()
+                        .any(|(m, kind)| m == name && kind == k.entry.name);
                 if k.entry.family.is_empty() && !bare {
                     return Err(SealError::of(
                         "bad_shape",
@@ -2675,11 +2808,20 @@ impl Registry {
         // Registries (#200): every one the core and the modules declare, every entry a module
         // or the core fills, and every step a pass compiles from.
         let started = self.clock.map(|c| c());
-        let mut core_registries = core_lists::registries();
+        let eases = self.fault != Some(Fault::EaseInMotion);
+        let mut core_registries = core_lists::registries_with(eases);
         core_registries.extend(self.declared.iter().cloned());
+        let mut core_entries: Vec<lists::EntryDef> =
+            core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere))
+                .into_iter()
+                .filter(|e| e.registry != "ease@1")
+                .collect();
+        if eases {
+            core_entries.extend(core_lists::ease_entries(self.fault == Some(Fault::EaseRenumbered)));
+        }
         let (registries, parts) = lists::seal(
             core_registries,
-            core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere)),
+            core_entries,
             &shapes,
             self.admits_all.as_deref(),
             self.fault,
@@ -2689,6 +2831,28 @@ impl Registry {
             _ => 0,
         };
 
+        // Outline sources (#443): each module's Rust beside the entry it filled, which the
+        // registries' seal has held to the kit.
+        let mut outlines: Vec<SealedOutline> = shapes
+            .iter()
+            .skip(1)
+            .flat_map(|(name, r)| {
+                r.outline_fills.iter().filter_map(move |(entry, fill)| {
+                    let value = &r
+                        .entries
+                        .iter()
+                        .find(|e| e.registry == crate::outline::REGISTRY && e.name == *entry)?
+                        .value;
+                    Some(SealedOutline {
+                        entry: entry.clone(),
+                        module: name.clone(),
+                        form: value.get("form")?.as_str()?.to_string(),
+                        fill: *fill,
+                    })
+                })
+            })
+            .collect();
+        outlines.sort_by(|a, b| (&a.module, &a.entry).cmp(&(&b.module, &b.entry)));
         // Digests: each module's own; the core's shapes are no module's. Each module's shapes
         // hash to its interface's digest: its reference's, registered beside it when the module
         // isn't that reference (Canvas module: interface and implementation).
@@ -2746,6 +2910,10 @@ impl Registry {
             interface_ns,
             registries,
             registry_ns,
+            close_fault: self
+                .fault
+                .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
+            outlines,
             costs: self
                 .costs
                 .take()
@@ -2767,9 +2935,21 @@ impl Registry {
         lists: Option<&Value>,
         private: bool,
         ns: &mut u64,
-    ) -> Result<(String, Option<SealedInterface>), SealError> {
+    ) -> Result<(String, Option<SealedInterface>), Box<SealError>> {
         let bad = |e: CanonError| SealError::new("bad_shape", &[name], &[], e.to_string());
-        let (digest, listed) = module_shapes(shapes, lists, private).map_err(bad)?;
+        // The planted digest that also covers the implementation's pins (#238).
+        let pinned = |digest: String, m: &Manifest| -> Result<String, CanonError> {
+            if self.fault != Some(Fault::DigestCoversPins) {
+                return Ok(digest);
+            }
+            d1(&json!({"shapes": digest, "pins": m.implementation.to_json()["pins"]}))
+        };
+        let (digest, mut listed) = module_shapes(shapes, lists, private).map_err(bad)?;
+        let digest = pinned(digest, m).map_err(bad)?;
+        let covers = self.fault == Some(Fault::DigestCoversPins);
+        if covers {
+            listed.insert("pins".into(), d1(&m.implementation.to_json()["pins"]).map_err(bad)?);
+        }
         let started = self.clock.map(|c| c());
         let declared = self.interfaces.get(&m.implements);
         let reference = declared.map_or(&m.implementation.name, |i| {
@@ -2779,7 +2959,12 @@ impl Registry {
             let mut r = Registrar::default();
             (i.reference.register)(&mut r);
             let own = own_lists(&r);
-            let (want, want_listed) = module_shapes(&r, own.as_ref(), private).map_err(bad)?;
+            let (want, mut want_listed) = module_shapes(&r, own.as_ref(), private).map_err(bad)?;
+            let want = pinned(want, &i.reference.manifest).map_err(bad)?;
+            if covers {
+                let pins = d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
+                want_listed.insert("pins".into(), pins);
+            }
             if want != digest {
                 let differs = want_listed
                     .iter()
@@ -2852,7 +3037,7 @@ fn may_read(
     read: &str,
     owner: &str,
     private: bool,
-) -> Result<(), SealError> {
+) -> Result<(), Box<SealError>> {
     if private && owner != name {
         let implementation = |n: &str| {
             modules
@@ -2885,7 +3070,7 @@ fn may_depend(
     what: &str,
     read: &str,
     owner: &str,
-) -> Result<(), SealError> {
+) -> Result<(), Box<SealError>> {
     if owner != name && !declares(modules, name, owner) {
         return Err(SealError::new(
             "undeclared_dependency",
@@ -3065,11 +3250,18 @@ fn module_shapes(
         .map(|k| {
             json!({
                 "draws_as": k.draws_as,
-                "migrations": k.entry.migrations.iter().map(|m| json!({
-                    "from": m.from,
-                    "renames": m.renames.iter().map(|r| json!({"from": r.from, "to": r.to})).collect::<Vec<_>>(),
-                    "to": m.to,
-                })).collect::<Vec<_>>(),
+                "migrations": k.entry.migrations.iter().map(|m| {
+                    let mut step = json!({
+                        "from": m.from,
+                        "renames": m.renames.iter().map(|r| json!({"from": r.from, "to": r.to})).collect::<Vec<_>>(),
+                        "to": m.to,
+                    });
+                    // A retirement record is a shape too; a migration without one hashes as before.
+                    if !m.retires.is_empty() {
+                        step["retires"] = json!(m.retires);
+                    }
+                    step
+                }).collect::<Vec<_>>(),
                 "name": k.entry.full_name(),
                 "needs": public(&k.needs),
                 "versions": k.entry.versions.iter().map(|v| {
@@ -3276,7 +3468,7 @@ mod tests {
         }
     }
 
-    fn seal_core<const N: usize>(modules: [Module; N]) -> Result<Sealed, SealError> {
+    fn seal_core<const N: usize>(modules: [Module; N]) -> Result<Sealed, Box<SealError>> {
         modules
             .into_iter()
             .fold(Registry::new(BuildSet::Core), Registry::with)
@@ -3971,6 +4163,7 @@ mod tests {
                     from: w[0],
                     to: w[1],
                     renames: vec![],
+                    retires: vec![],
                     map: None,
                 })
                 .collect();
@@ -4085,6 +4278,7 @@ mod tests {
                     .iter()
                     .map(|(from, to)| crate::kinds::Rename { from, to })
                     .collect(),
+                retires: vec![],
                 map: None,
             }
         }

@@ -1,11 +1,14 @@
-// Fails before, and the mutation lane (#569): each tagged test runs on the change, on the merge base
-// in a temporary checkout, on the planted wrong programs its criterion names, and against mutants of
-// the lines the change adds. Results come from the runner's report, never from its output.
+// Fails before, and the mutation lane (#569): each tagged test runs on the change, on the merge base,
+// on the planted wrong programs its criterion names, and against mutants of the lines the change adds.
+// Results come from the runner's report, never from its output. The copies are a bay pair's (#1118)
+// when the proof gets one, else temporary.
 import { spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { claimPair, isBay } from './bays.mjs';
+import { acquire, release } from './throttle.mjs';
 import { addedLines, git, isTestFile, listFiles, named, outsideTests, RUNNER_CONFIG, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
 
 const REPORTER = pathToFileURL(fileURLToPath(new URL('./proof-reporter.mjs', import.meta.url))).href;
@@ -23,20 +26,46 @@ export function temporary(prefix) {
   }
   return mkdtempSync(join(runFolder, prefix));
 }
+// The proof's bay pair, claimed at its first copy and given back with its temporary folder: null when the
+// proof gets none, as a scene a test starts or a proof under another's pair, which keep temporary copies.
+let pair;
+function bayPair(root) {
+  if (pair === undefined) {
+    const claimed = claimPair(root, (line) => console.log(line));
+    pair = claimed.refused ? null : claimed;
+  }
+  return pair;
+}
+
+/** spawnSync, through the pair in one of its bays, so what a dead proof left running there is stopped at the next claim. */
+export function spawnIn(directory, command, args, options) {
+  return pair?.run && within(pair.folder, directory) ? pair.run(command, args, options) : spawnSync(command, args, options);
+}
+
 /**
- * Removes the run's folder. It never throws: a folder that can't be removed (a child still writing in it, a file
- * the run can't delete) is left to the watcher, and what was left is returned for the lane to print, so a cleanup
- * failure never replaces the lane's own result.
+ * Seals and gives back the proof's bay pair, and removes the run's folder. It never throws: a folder that can't be
+ * removed (a child still writing in it, a file the run can't delete) is left to the watcher, and what was left is
+ * returned for the lane to print, so a cleanup failure never replaces the lane's own result.
  */
 export function removeTemporaries() {
+  const held = pair;
+  pair = undefined;
+  let unsealed = null;
+  if (held?.close) {
+    try {
+      held.close();
+    } catch (error) {
+      unsealed = `the bay pair could not be sealed (${error?.message ?? error}); the next claim builds cold`;
+    }
+  }
   const folder = runFolder;
   runFolder = null;
-  if (!folder) return null;
+  if (!folder) return unsealed;
   try {
     rmSync(folder, { recursive: true, force: true });
-    return null;
+    return unsealed;
   } catch (error) {
-    return `${folder} could not be removed (${error?.code ?? error?.message ?? error}); the run's watcher removes it once this process exits`;
+    return [unsealed, `${folder} could not be removed (${error?.code ?? error?.message ?? error}); the run's watcher removes it once this process exits`].filter(Boolean).join('; ');
   }
 }
 
@@ -76,7 +105,18 @@ export function place(directory, to) {
 }
 
 function copy(root, path, directory, to = path) {
-  const source = join(root, path), target = place(directory, to);
+  put(join(root, path), directory, to);
+}
+
+/** Lays `overlay`, path to source file, over the checkout. */
+export function lay(directory, overlay) {
+  for (const [to, from] of overlay) put(from, directory, to);
+}
+
+/** Copies the file `source` to `to` in the checkout; in a bay, one already holding its bytes keeps its mtime. */
+function put(source, directory, to) {
+  if (isBay(directory) && same(source, join(directory, to)) && within(directory, realpathSync(dirname(join(directory, to))))) return;
+  const target = place(directory, to);
   if (lstatSync(source).isSymbolicLink()) symlinkSync(readlinkSync(source), target);
   else copyFileSync(source, target);
 }
@@ -131,7 +171,8 @@ const workspaces = (directory) => existsSync(join(directory, 'package.json')) &&
  * run there, or null. Its packages are what its own lock installs, as the merge base's are, not the
  * worktree's, which an install from inputs the lock doesn't hold may have re-pointed.
  */
-export function changeCopy(root, change) {
+export function changeCopy(root, change, use = 'change', overlay = new Map()) {
+  if (bayPair(root)) return inBay(root, 'change', use, overlay);
   // The install has a folder of its own, which the copy links as it would the repository's, so what
   // the change's build does to the copy's packages can be undone from it. With no lock there is no
   // install to hold the worktree's to, and the copy links the worktree's.
@@ -154,6 +195,9 @@ export function changeCopy(root, change) {
  */
 export function undoBuild(root, directory, keep = [], modules = root) {
   const held = listFiles(root).filter((path) => !keep.includes(path));
+  // A bay keeps its own builds and packages, and a file that already holds the change's bytes keeps its mtime, so
+  // nothing is rebuilt for it.
+  const bay = isBay(directory);
   // Names compare in lower case, as a disk that ignores case resolves Support.json for support.json.
   const tracked = new Set(listFiles(root).map((path) => path.toLowerCase()));
   const heldName = (path) => tracked.has(path.toLowerCase());
@@ -163,7 +207,7 @@ export function undoBuild(root, directory, keep = [], modules = root) {
   const walk = (folder) => {
     for (const entry of readdirSync(join(directory, folder), { withFileTypes: true })) {
       const path = folder ? `${folder}/${entry.name}` : entry.name;
-      if (path === '.git') continue;
+      if (path === '.git' || (bay && (path === 'target' || path === 'node_modules'))) continue;
       // The copy's node_modules links to the repository's packages, scope by scope, as copyChange laid it.
       // An entry the build replaced, as with a folder of its own, is linked anew.
       if (folder === 'node_modules' || /^node_modules\/@[^/]+$/.test(folder)) {
@@ -183,13 +227,57 @@ export function undoBuild(root, directory, keep = [], modules = root) {
     }
   };
   walk('');
-  for (const path of held) copy(root, path, directory);
+  for (const path of held) {
+    if (bay && same(join(root, path), join(directory, path))) continue;
+    copy(root, path, directory);
+  }
 }
 
-/** The merge base installed and prepared in a temporary checkout: its directory, and why it can't run there, or null. */
-export function baseCheckout(root, change) {
+/** Whether two files hold the same bytes, or two links the same target, not following either. */
+function same(a, b) {
+  try {
+    const [one, two] = [lstatSync(a), lstatSync(b)];
+    if (one.isSymbolicLink() || two.isSymbolicLink()) return one.isSymbolicLink() && two.isSymbolicLink() && readlinkSync(a) === readlinkSync(b);
+    return one.isFile() && two.isFile() && one.mode === two.mode && readFileSync(a).equals(readFileSync(b));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The merge base installed and prepared, in the base bay or a temporary checkout: its directory, and why it can't run
+ * there, or null. `use` and `overlay` are as changeCopy's.
+ */
+export function baseCheckout(root, change, use = 'base', overlay = new Map()) {
+  if (bayPair(root)) return inBay(root, 'base', use, overlay);
   const directory = checkout(root, change.base, 'deep-proof-checkout-');
   return { directory, blocked: install(directory) ?? prepare(root, change, directory) };
+}
+
+/**
+ * A copy in the proof's bay of `role`, replaced to the use's recipe (`use` names it in the record), installed as its
+ * lock asks and built: the base's as the merge base holds it, the change's with what the build did undone. `overlay`,
+ * path to source, is what the caller lays over the copy, laid here before the build when `early`, as a twin is.
+ */
+function inBay(root, role, use, overlay, early = false) {
+  if (pair.blocked) return { directory: null, modules: null, blocked: pair.blocked };
+  let bay, failed;
+  try {
+    ({ bay, failed } = pair.use(role, use, overlay));
+  } catch (error) {
+    return { directory: null, modules: null, blocked: `the ${role} bay could not be replaced: ${firstLine(error.message)}` };
+  }
+  if (early) {
+    try {
+      lay(bay, overlay);
+    } catch (error) {
+      return { directory: null, modules: null, refused: `cannot be laid over the change: ${firstLine(error.message)}` };
+    }
+  }
+  const blocked = failed ?? build(bay);
+  if (role === 'change') undoBuild(root, bay, early ? [...overlay.keys()] : [], bay);
+  if (early) lay(bay, overlay);
+  return { directory: bay, modules: bay, blocked };
 }
 
 /** Installs a checkout's packages from its lock, as npm ci does; returns why it failed, or null. */
@@ -205,7 +293,7 @@ function install(directory) {
 function build(directory) {
   if (!workspaces(directory)) return null;
   const args = ['run', 'build', '--workspaces', '--if-present'];
-  const result = spawnSync('npm', args, { cwd: directory, env: childEnv(), encoding: 'utf8', maxBuffer: 1 << 28, timeout: TIMEOUT });
+  const result = spawnIn(directory, 'npm', args, { cwd: directory, env: childEnv(), encoding: 'utf8', maxBuffer: 1 << 28, timeout: TIMEOUT });
   return result.status === 0 ? null : `npm ${args.join(' ')} failed: ${firstLine(result.stderr || result.error?.message || result.stdout)}`;
 }
 
@@ -259,7 +347,7 @@ const keep = (results, key, result) => {
 
 function runNode(directory, files, env) {
   const report = join(temporary('deep-proof-report-'), 'report.jsonl');
-  const result = spawnSync(process.execPath, ['--test', `--test-reporter=${REPORTER}`, `--test-reporter-destination=${report}`, ...files],
+  const result = spawnIn(directory, process.execPath, ['--test', `--test-reporter=${REPORTER}`, `--test-reporter-destination=${report}`, ...files],
     { cwd: directory, env: childEnv(env), encoding: 'utf8', maxBuffer: 1 << 28, timeout: TIMEOUT });
   const results = new Map(), fileErrors = new Map(), stacks = new Map(), stderr = new Map(), suites = new Map();
   if (timedOut(result)) return { results, fileErrors, unrunnable: stopped(files) };
@@ -290,7 +378,7 @@ function runVitest(directory, files, env) {
   const reports = temporary('deep-proof-report-'), report = join(reports, 'report.json'), errors = join(reports, 'errors.jsonl');
   // vitest's JSON report for what ran, and ours for how each failure failed. Files run one at a time: an acceptance
   // file starts its own hub, and hubs side by side lease the same ports, so one file's stack answers for another's.
-  const result = spawnSync(process.execPath, [vitest, 'run', '--no-file-parallelism', '--reporter=json', `--outputFile.json=${report}`, `--reporter=${VITEST_REPORTER}`, ...files], { cwd: directory, env: { ...childEnv(env), DEEP_PROOF_VITEST_REPORT: errors }, encoding: 'utf8', maxBuffer: 1 << 28, timeout: TIMEOUT });
+  const result = spawnIn(directory, process.execPath, [vitest, 'run', '--no-file-parallelism', '--reporter=json', `--outputFile.json=${report}`, `--reporter=${VITEST_REPORTER}`, ...files], { cwd: directory, env: { ...childEnv(env), DEEP_PROOF_VITEST_REPORT: errors }, encoding: 'utf8', maxBuffer: 1 << 28, timeout: TIMEOUT });
   if (timedOut(result)) return { results, fileErrors, unrunnable: stopped(files) };
   if (!existsSync(report)) return { results, fileErrors, unrunnable: new Map(files.map((file) => [file, `vitest wrote no report: ${firstLine(result.stderr)}`])) };
   const failures = new Map();
@@ -321,12 +409,47 @@ function runVitest(directory, files, env) {
  * Runs test files in `directory`: .mjs and .js with node --test, .ts with the checkout's vitest.
  * fileErrors holds files that failed outside every test, unrunnable those whose runner couldn't run.
  */
-function runTests(directory, files, { env = {} } = {}) {
+function runTests(directory, files, { env = {}, timed = [] } = {}) {
   // A runner given no file runs every test it finds, so each starts only with files of its own.
-  const node = files.filter((file) => !file.endsWith('.ts')), vitest = files.filter((file) => file.endsWith('.ts'));
-  const parts = [node.length && runNode(directory, node, env), vitest.length && runVitest(directory, vitest, env)].filter(Boolean);
+  const run = (some) => [some.filter((file) => !file.endsWith('.ts')), some.filter((file) => file.endsWith('.ts'))]
+    .map((group, at) => group.length && (at ? runVitest : runNode)(directory, group, env)).filter(Boolean);
+  const parts = run(files.filter((file) => !timed.includes(file)));
+  // The timed set spawns only once it holds timed, so a wait for the grant never eats into its runner's TIMEOUT.
+  const timedFiles = files.filter((file) => timed.includes(file));
+  if (timedFiles.length) {
+    const grant = acquire('timed', { wait: 15 });
+    if (!grant) parts.push({ results: new Map(), fileErrors: new Map(), unrunnable: new Map(timedFiles.map((file) => [file, 'INCONCLUSIVE no grant: no timed grant came within 15 minutes'])) });
+    else {
+      const previous = process.env.DEEP_THROTTLE;
+      process.env.DEEP_THROTTLE = grant.token;
+      try {
+        parts.push(...run(timedFiles));
+      } finally {
+        if (previous === undefined) delete process.env.DEEP_THROTTLE;
+        else process.env.DEEP_THROTTLE = previous;
+        release(grant);
+      }
+    }
+  }
   const merged = (key) => new Map(parts.flatMap((part) => [...part[key]]));
   return { results: merged('results'), fileErrors: merged('fileErrors'), unrunnable: merged('unrunnable') };
+}
+
+/**
+ * The files of `files` in the timed list the checkout's lanes.mjs exports (`timed`: files, or folders ending in /),
+ * which run only under a timed grant. A checkout with no lanes.mjs has no list; when one can't be read, every file
+ * is timed, so none runs ungranted.
+ */
+function timedSet(root, files) {
+  if (!existsSync(join(root, 'scripts/lanes.mjs'))) return [];
+  const code = `const { timed = [] } = await import(${JSON.stringify(pathToFileURL(join(root, 'scripts/lanes.mjs')).href)}); console.log(JSON.stringify(timed));`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: root, env: childEnv(), encoding: 'utf8' });
+  try {
+    const list = JSON.parse(result.stdout.trim().split('\n').at(-1));
+    return files.filter((file) => list.some((entry) => (entry.endsWith('/') ? file.startsWith(entry) : file === entry)));
+  } catch {
+    return files;
+  }
 }
 
 const failedAtAssertion = (result) => result?.status === 'fail' && result.failure.atAssertion;
@@ -358,24 +481,29 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   const empty = () => ({ results: new Map(), fileErrors: new Map(), unrunnable: new Map() });
   const runs = { files, tests: [], twins: new Map(), head: empty(), base: empty() };
   if (!files.length) return runs;
+  const timed = runs.timed = timedSet(root, files);
   runs.coverage = coverage ? temporary('deep-proof-coverage-') : null;
   // The merge base, with the change's test code: every file under the test paths (tests, helpers
   // wherever they are and however they're imported, fixtures, goldens, twins and setup files), never
   // code beside a colocated test, so a hollow helper the change brings in runs on both. The runner
   // config stays the merge base's, as the guard keeps it once main holds the lanes. It runs before
   // any of the change's code, as its build, can reach it.
-  const { directory: base, blocked } = baseCheckout(root, change);
   // A fixture project's committed packages are its own too, as a test that runs it reads them.
-  for (const path of listFiles(root)) if (underTestPaths(path) || underTestPaths(`${path.split('/node_modules/')[0]}/package.json`)) copy(root, path, base);
+  const overlay = new Map(listFiles(root).filter((path) => underTestPaths(path) || underTestPaths(`${path.split('/node_modules/')[0]}/package.json`)).map((path) => [path, join(root, path)]));
+  const { directory: base, blocked } = baseCheckout(root, change, 'before', overlay);
   if (blocked) runs.base.blocked = blocked;
-  else runs.base = runTests(base, files);
+  else {
+    lay(base, overlay);
+    runs.base = runTests(base, files, { timed });
+  }
 
   // The change runs in a copy prepared as the merge base's checkout is, so a test can't pass on the
   // change and fail on the base by telling the two places apart.
-  const head = changeCopy(root, change);
+  const head = changeCopy(root, change, 'before');
   runs.directory = head.directory;
   runs.modules = head.modules;
-  runs.head = head.blocked ? { ...empty(), unrunnable: new Map(files.map((file) => [file, head.blocked])) } : runTests(runs.directory, files, { env: runs.coverage ? { NODE_V8_COVERAGE: runs.coverage } : {} });
+  runs.bay = Boolean(pair);
+  runs.head = head.blocked ? { ...empty(), unrunnable: new Map(files.map((file) => [file, head.blocked])) } : runTests(runs.directory, files, { env: runs.coverage ? { NODE_V8_COVERAGE: runs.coverage } : {}, timed });
   // A test the change adds or edits: its file is new, or a line the change adds or removes is in it.
   const edited = new Map(change.whole.map((file) => [file.path, file.status === 'A' ? true : [...addedLines(file), ...file.hunks.filter(({ added }) => !added.length).map(({ newStart }) => newStart)]]));
   const sourceSpans = new Map(files.map((path) => [path, spans(show(root, null, path) ?? '')]));
@@ -445,17 +573,27 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
       runs.twins.set(folder, { refused: own.length ? `replaces files under the test paths or node_modules (${tests.join(', ')})` : 'has no files', ...empty() });
       continue;
     }
-    const directory = copyChange(root, 'deep-proof-checkout-', runs.modules);
-    try {
-      for (const path of own) copy(root, path, directory, path.slice(folder.length + 1));
-    } catch (error) {
-      runs.twins.set(folder, { refused: `cannot be laid over the change: ${firstLine(error.message)}`, ...empty() });
+    // In the change bay, the twin is a use of its own, laid before the build as in a temporary copy.
+    let directory, failed, refused;
+    if (runs.bay) ({ directory, blocked: failed, refused } = inBay(root, 'change', `twin ${folder}`, new Map(own.map((path) => [path.slice(folder.length + 1), join(root, path)])), true));
+    else {
+      directory = copyChange(root, 'deep-proof-checkout-', runs.modules);
+      try {
+        for (const path of own) copy(root, path, directory, path.slice(folder.length + 1));
+      } catch (error) {
+        refused = `cannot be laid over the change: ${firstLine(error.message)}`;
+      }
+      if (!refused) {
+        failed = prepare(root, change, directory);
+        undoBuild(root, directory, [], runs.modules);
+        for (const path of own) copy(root, path, directory, path.slice(folder.length + 1));
+      }
+    }
+    if (refused) {
+      runs.twins.set(folder, { refused, ...empty() });
       continue;
     }
-    const failed = prepare(root, change, directory);
-    undoBuild(root, directory, [], runs.modules);
-    for (const path of own) copy(root, path, directory, path.slice(folder.length + 1));
-    runs.twins.set(folder, failed ? { ...empty(), unrunnable: new Map(twinFiles.map((file) => [file, failed])) } : runTests(directory, twinFiles));
+    runs.twins.set(folder, failed ? { ...empty(), unrunnable: new Map(twinFiles.map((file) => [file, failed])) } : runTests(directory, twinFiles, { timed }));
   }
   return runs;
 }
@@ -470,6 +608,7 @@ function wrongProgram(runs, test) {
 /** The before lane's lines; returns the tests that failed on a wrong program. */
 export function before(runs, kills, say, print) {
   const proven = new Set();
+  if (runs.timed?.length) print(`before: the timed set, from the timed list in scripts/lanes.mjs, run only under a timed grant (${runs.timed.length}): ${runs.timed.join(' ')}`);
   for (const [path, cause] of runs.head.fileErrors) say('FAIL', 'before', `${path}: fails on the change outside its tests (${cause})`, BEFORE_FIX);
   for (const [path, cause] of runs.head.unrunnable) say('BLOCKED', 'before', `${path}: cannot run on the change: ${cause}`, BEFORE_FIX);
   for (const key of runs.unrun ?? []) say('FAIL', 'before', `${key}: declared and not skipped, but the runner never reported it on the change`, BEFORE_FIX);
@@ -568,7 +707,7 @@ function strykerRun(root, copyDirectory, mutate, command) {
     concurrency: Math.max(1, Math.floor(availableParallelism() / 2)), timeoutMS: 60_000,
   }));
   const started = Date.now();
-  const result = spawnSync(process.execPath, [join(root, 'node_modules/.bin/stryker'), 'run', config], { cwd: copyDirectory, env: childEnv(), encoding: 'utf8', maxBuffer: 1 << 28, timeout: 4 * TIMEOUT });
+  const result = spawnIn(copyDirectory, process.execPath, [join(root, 'node_modules/.bin/stryker'), 'run', config], { cwd: copyDirectory, env: childEnv(), encoding: 'utf8', maxBuffer: 1 << 28, timeout: 4 * TIMEOUT });
   if (!existsSync(report)) {
     // No report is always an error, named even when StrykerJS said nothing: killed by a signal, with the reason when
     // spawnSync stopped it itself (ETIMEDOUT is the lane's own cap, `timeout` above; ENOBUFS its maxBuffer), never
@@ -619,9 +758,16 @@ export function mutation({ root, change }, runs, say, print) {
       else ranges.push([line, line]);
       return ranges;
     }, []).map(([from, to]) => `${path}:${from}-${to}`));
-    const directory = copyChange(root, 'deep-proof-mutants-', runs.modules ?? root);
-    build(directory); // a failed build shows as StrykerJS's failed initial run
-    undoBuild(root, directory, [], runs.modules ?? root);
+    // In a bay, the change bay is the mutants' copy, and undoBuild leaves its packages be.
+    const { directory, blocked: unready } = runs.bay ? changeCopy(root, change, 'mutation') : { directory: copyChange(root, 'deep-proof-mutants-', runs.modules ?? root) };
+    if (!directory) {
+      say('BLOCKED', 'mutation', `cannot prepare the change bay, so the lines added to ${typescript.map(({ path }) => path).join(', ')} were not mutated: ${unready}`, MUTATION_FIX);
+      return kills;
+    }
+    if (!runs.bay) {
+      build(directory); // a failed build shows as StrykerJS's failed initial run
+      undoBuild(root, directory, [], runs.modules ?? root);
+    }
     // StrykerJS writes each mutated file in place, so a file that is a link out of the copy is refused.
     const outside = typescript.filter(({ path }) => {
       try {

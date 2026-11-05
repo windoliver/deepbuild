@@ -15,13 +15,16 @@ import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type
 import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
+import { isPrCreate, isPrEdit } from './forge.js';
 import { registry } from './hookmap.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
 import { installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
+import { heavyDenial } from './heavy.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
-import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type VfsSettings } from './wire.js';
+import { plantedStart } from './plant.js';
+import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
@@ -41,13 +44,15 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['hub.health', ['app', 'cli']], ['health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
   ['inbox.read', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
-  ['numbers.read', ['app', 'cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['confirm.enroll', ['app']],
+  ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
   // A run of a destructive command undone from the copy staged before it ran (#347).
   ['staged.undo', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
-  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
+  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']],
+  // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
+  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
   // Setup reads your history into the wiki (#356).
   ['wiki.build', ['cli']],
@@ -56,6 +61,10 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
+  // The app API's views/shown and views/hidden (#262): the views the app shows, repeated every 5 s while shown.
+  ['views.shown', ['app']], ['views.hidden', ['app']],
+  // What macOS says of the app's notifications (#994), when the app connects and when it changes.
+  ['notifications.report', ['app']],
   // The canvas side (#806): `deep show` from the CLI; revisions and messages read; the app's input and what it draws.
   ['canvas.show', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
@@ -65,6 +74,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['session.note', ['app']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
+  // The hub's clock stepped forward, served only to a hub a test started with DEEP_HUB_TEST_CLOCK_STEPS=1 (#965).
+  ['test.clock', ['cli']],
 ]);
 
 /** How long before an acknowledged hold the extensions' reply must be on the socket, so it reaches deep-hook in time. */
@@ -75,10 +86,17 @@ const CONTEXT_HOLD_MS = 2000;
 const STOP_HOLD = Math.min(STOP_HOLD_MS, Number(process.env.DEEP_HUB_TEST_STOP_HOLD_MS) || STOP_HOLD_MS);
 /** How long a call that may need your authority is held for the core's gate (#321); one not decided by then is denied. */
 const GATE_HOLD_MS = 10_000;
+/** A permission request paseo's plugin gates waits for your answer, up to a day (#55). */
+const PASEO_PERMISSION_HOLD_MS = 24 * 3600_000;
+/** Claude Code's own timeout for a PermissionRequest entry that sets none. */
+const PERMISSION_TIMEOUT_MS = 60_000;
 /** The guard entries a standing rule decides with the hub up (#23): dependencies and cloud resources the plan doesn't name. */
 const DECIDED_MATCH = /^effect:(dependency|cloud-resource)$/;
-/** The guard entry whose delete the hub stages before it runs with the hub up, or asks about (#347). */
+/** The guard entries whose calls the hub stages before they run with the hub up, or asks about (#347, #1294). */
 const STAGED_MATCH = 'effect:unknown-reach-delete';
+const DISCARD_MATCH = 'effect:discard-edits';
+const STASH_MATCH = 'effect:drop-stash';
+const STAGED_MATCHES: unknown[] = [STAGED_MATCH, DISCARD_MATCH, STASH_MATCH];
 /** The permission modes in which Claude Code denies what isn't allowed already: a standing rule never allows past them. */
 const DENYING_MODES = new Set(['dontAsk', 'plan']);
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
@@ -151,7 +169,7 @@ const versionRefusal = (value: Obj): Refusal =>
 
 
 interface CoreLink {
-  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' }): void;
+  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'notifier-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' }): void;
   request(request: CoreRequest): Promise<unknown>;
   /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
   started: Promise<{ hooks: string[] }>;
@@ -163,15 +181,15 @@ interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; sc
 /** A frame from the core: its event's JSON text. */
 type OnFrame = (sub: string, event: string) => void;
 
-function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): CoreLink {
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options }, resourceLimits: YOUNG });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
   let started!: (v: { hooks: string[] }) => void;
   const ready = new Promise<{ hooks: string[] }>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; resend?: string[]; session?: string; values?: string[] }) => {
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[]; judged?: string[]; resend?: string[]; cantRun?: string[]; session?: string; values?: string[] }) => {
     if (m.op === 'frame') return onFrame(m.sub!, m.event!);
-    if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? [], m.resend ?? []);
+    if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? [], m.resend ?? [], m.cantRun ?? []);
     if (m.op === 'acking') return onAcking(m.session!);
     if (m.op === 'scrub') return onScrub(m.values ?? []);
     if (m.op === 'started') return started({ hooks: m.hooks ?? [] });
@@ -193,7 +211,7 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
   };
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
-async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): Promise<CoreLink> {
+async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): Promise<CoreLink> {
   const { Core } = await import('./core.js');
   const { answer, asRefusal } = await import('./core-worker.js');
   const core = new Core(options, onFrame, onAsking, onAcking, onScrub);
@@ -204,10 +222,12 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
     post: (message) => {
       if (message.op === 'hook') void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined);
       else if (message.op === 'waiter-gone') core.waiterGone(message.key);
+      else if (message.op === 'notifier-gone') void core.notifierGone();
       else if (message.op === 'hook-gone') core.hookGone(message.id, message.session);
       else if (message.op === 'overrun') void core.overrun(message).catch(() => undefined);
       else if (message.op === 'later') core.later(message.session, message.cwd, message.text);
       else if (message.op === 'line') void core.line(message.session, message.agent, message.text).catch(() => undefined);
+      else if (message.op === 'denied') core.denied(message.session, message.call, { guard: message.guard, label: message.label });
       else core.unsubscribe(message.sub);
     },
     request: (request) => answer(core, request).catch((error: unknown) => { throw new Refused(asRefusal(error)); }),
@@ -298,6 +318,8 @@ interface Guard { match?: unknown; scope?: unknown; mode?: unknown; reason?: unk
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
   private readonly conns = new Set<Conn>();
+  /** The connection that last reported the app's notification setting. */
+  private notifier: Conn | undefined;
   private readonly subs = new Map<string, Sub>();
   private core!: CoreLink;
   private parsers!: Parsers;
@@ -316,6 +338,8 @@ class Hub {
   private readonly acking = new Set<string>();
   /** `deep off` in effect (#19): every gate watch-only, while the floor (the fail_closed entries) holds. */
   private off = false;
+  /** The agents whose hook entries run a program that can't run, as the core's last check found (#993): their gates are watch-only. */
+  private cantRun = new Set<string>();
   /** The published JSON-RPC methods: a deprecated one is served through its replacement, with a notice (#139). */
   private readonly adapter = contractAdapter(rpcTable());
   readonly start = ulid(Date.now());
@@ -343,7 +367,10 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_FORGE ? { forge: process.env.DEEP_HUB_TEST_FORGE } : {}),
       ...(process.env.DEEP_HUB_TEST_SORTER ? { sorter: process.env.DEEP_HUB_TEST_SORTER } : {}),
       ...(process.env.DEEP_HUB_TEST_DRAFTS ? { drafts: process.env.DEEP_HUB_TEST_DRAFTS } : {}),
+      ...(process.env.DEEP_HUB_TEST_ACCEPTED ? { accepted: process.env.DEEP_HUB_TEST_ACCEPTED } : {}),
       ...(process.env.DEEP_HUB_TEST_WORK ? { work: process.env.DEEP_HUB_TEST_WORK } : {}),
+      ...(process.env.DEEP_HUB_TEST_PRICES ? { prices: process.env.DEEP_HUB_TEST_PRICES } : {}),
+      ...(process.env.DEEP_HUB_TEST_GITHUB ? { github: process.env.DEEP_HUB_TEST_GITHUB } : {}),
       ...(process.env.DEEP_HUB_TEST_FAIL_JOB ? { failJob: process.env.DEEP_HUB_TEST_FAIL_JOB } : {}) };
     const frame = (sub: string, event: string) => {
       const s = this.subs.get(sub);
@@ -359,7 +386,7 @@ class Hub {
       process.stderr.write(`deep hub: the core stopped: ${why}\n`);
       this.exit(1);
     };
-    const asking = (sessions: string[], judged: string[], resend: string[]) => { this.asking = new Set(sessions); this.worked = new Set(judged); this.resend = new Set(resend); };
+    const asking = (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => { this.asking = new Set(sessions); this.worked = new Set(judged); this.resend = new Set(resend); this.cantRun = new Set(cantRun); };
     const acking = (session: string) => { this.acking.add(session); };
     const scrub = (values: string[]) => { this.parsers.scrub(values); };
     // The record's writer generation (#572), read before the core opens the ledger so every hello carries it from the
@@ -408,6 +435,31 @@ class Hub {
   }
 
   // ---- Long waits (#120): the lines at each hook, the in-call route, and the timer for what is due.
+
+  /**
+   * A heavy command (#1015), which deep-hook matched against the heavy.command@1 entries, runs under `deep lease`:
+   * rewritten where the agent's adapter can rewrite a call, otherwise denied once with the leased command to run
+   * instead, which deep-hook matches no more. A reply that already denies the call stands, and `deep off` leaves it.
+   */
+  private leased(meta: HookMeta, ruled: string): string {
+    if (meta.event !== 'PreToolUse' || this.off) return ruled;
+    const command = typeof meta.call?.input.command === 'string' ? meta.call.input.command : undefined;
+    const rewrites = this.rewrites(meta.agent);
+    // The planted wrong program for AC2 denies the leased form too, so the agent's retry is denied again.
+    const retried = this.plant === 'denies-every-retry' && !rewrites && command !== undefined && /^\s*deep lease\b/.test(command);
+    if ((!meta.heavy && !retried) || command === undefined || this.plant === 'runs-matched-as-written') return ruled;
+    const reply = ruled === EMPTY_REPLY ? { exit: 0, stdout: '', stderr: '' } : JSON.parse(ruled) as { exit: number; stdout: string; stderr: string };
+    if (reply.exit !== 0) return ruled;
+    const form = retried ? command : meta.heavy!.form;
+    if (!rewrites) {
+      return line({ exit: 2, stdout: '', stderr: `${heavyDenial(command, form, meta.heavy?.name ?? 'deep lease')}\n` });
+    }
+    const out = reply.stdout ? JSON.parse(reply.stdout) as Record<string, unknown> : {};
+    const specific = isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : { hookEventName: 'PreToolUse' };
+    specific.updatedInput = { ...meta.call!.input, ...(isObj(specific.updatedInput) ? specific.updatedInput : {}), command: form };
+    out.hookSpecificOutput = specific;
+    return line({ exit: 0, stdout: JSON.stringify(out), stderr: reply.stderr });
+  }
 
   /** Whether an agent's adapter can rewrite a call's input, so a deadline can be attached to a command that never ends. */
   private rewrites(agent: string): boolean {
@@ -476,6 +528,10 @@ class Hub {
       this.conns.delete(conn);
       for (const sub of conn.subs) this.unsubscribe(conn, sub);
       if (conn.waiter) this.core.post({ op: 'waiter-gone', key: conn.id });
+      if (conn === this.notifier) {
+        this.notifier = undefined;
+        this.core.post({ op: 'notifier-gone' });
+      }
     });
     sock.on('data', (chunk: Buffer) => this.read(conn, chunk));
     sock.write(this.helloLine);
@@ -548,7 +604,7 @@ class Hub {
       // The planted wrong program: the command as the hook sent it, unscrubbed, in the hub's log.
       try { process.stderr.write(`deep hub: call ${String((JSON.parse(Buffer.concat(chunks).toString('utf8')) as { payload?: { tool_input?: { command?: unknown } } }).payload?.tool_input?.command)}\n`); } catch { /* not JSON */ }
     }
-    if (parsed.kind === 'hook') return this.hook(conn, parsed);
+    if (parsed.kind === 'hook') return parsed.meta.agent === 'paseo' ? this.paseoHook(conn, parsed) : this.hook(conn, parsed);
     if (parsed.kind === 'refused') {
       conn.write({ id: parsed.id, error: parsed.error });
       if (first) conn.end();
@@ -570,6 +626,30 @@ class Hub {
     return this.method(conn, value);
   }
 
+  /**
+   * A line from paseo's plugin (#55). A session deep-hook or the pi package bound first is theirs: the line is only
+   * relayed, recorded nowhere, and its reply names the owner, so the plugin raises, answers and sends nothing for it.
+   * An answer someone gave in paseo's own app is no answer to DeepBuild's ask. Anything else is a hook as any other.
+   */
+  private async paseoHook(conn: Conn, parsed: Extract<Parsed, { kind: 'hook' }>): Promise<void> {
+    const meta = parsed.meta;
+    const owner = (await this.core.request({ op: 'paseo-owner', meta }).catch(() => null)) as string | null;
+    const reply = (value: Obj) => {
+      conn.role = 'hook';
+      conn.name = 'hook';
+      conn.done = true;
+      if (conn.sock.writable) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + line({ exit: 0, stdout: JSON.stringify(value), stderr: '' }));
+    };
+    if (owner) {
+      this.inPaseo.add(meta.session);
+      return reply({ owner });
+    }
+    if (meta.event === 'agent.permission.after') return reply((await this.core.request({ op: 'paseo-app-answer', meta }).catch(() => ({}))) as Obj);
+    this.hook(conn, parsed);
+  }
+  /** The sessions paseo runs that another adapter gates: a permission prompt there shows in paseo, not in a terminal (#55). */
+  private inPaseo = new Set<string>();
+
   private hook(conn: Conn, parsed: Extract<Parsed, { kind: 'hook' }>): void {
     conn.role = 'hook';
     conn.name = 'hook';
@@ -585,6 +665,7 @@ class Hub {
     // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
     // the acknowledgement and the reply in one write, which also ends the connection.
     const meta = parsed.meta;
+    if (this.cantRun.has(meta.agent)) Object.assign(meta, { watchOnly: true, cantRun: true });
     // The planted wrong program consults your standing rules before the guards: their blocks wait for the gate.
     let ruled = this.plant === 'decision-before-guard' && this.gated(meta, parsed.drafts)?.decided ? EMPTY_REPLY : this.reply(meta);
     // The long waits (#120): each hook shows the waits its call's start or end, and takes the lines waiting for it.
@@ -604,6 +685,7 @@ class Hub {
       if (wait.message) this.core.post({ op: 'line', session: meta.session, agent: meta.agent, text: wait.message });
       ruled = withWaits(ruled, meta.event, wait);
       this.arm();
+      ruled = this.leased(meta, ruled);
     }
     // A call that may need your authority, or that a standing rule decides, and no guard entry blocks, is held for
     // the core's gate first (#321, #23); a warn entry's words go out with the gate's reply.
@@ -620,7 +702,9 @@ class Hub {
     // A blocked call's reply is its block: no acknowledgement takes its place, and the next call carries the acknowledgement.
     const held = !blocked && !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
     if (meta.event === 'Stop' || meta.event === 'SessionEnd') this.sawWork.delete(meta.session);
-    const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
+    // A resumed session's calls go to the gate until the core says whether its cut-off turn left a send to match (#85, #1033).
+    if (meta.event === 'SessionStart' && meta.fields?.source === 'resume') this.resend.add(meta.session);
+    const hold = prompted ? Date.now() + this.permissionHold(meta) : gated ? Date.now() + (gated.stage !== undefined ? STAGE_HOLD_MS : GATE_HOLD_MS) + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
     else conn.sock.write(line({ ack: meta.id, hold_until_ms: hold }));
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
@@ -648,25 +732,41 @@ class Hub {
     const authority = [...new Set(classes.filter((c) => AUTHORITY.has(c)))];
     const decided = [...new Set(meta.matched.filter((n) => DECIDED_MATCH.test(String(entries[n]?.match ?? ''))).map((n) => String(entries[n]!.match).slice('effect:'.length)))];
     const mcp = data.kind === 'mcp' && typeof data.server === 'string' && typeof data.tool === 'string' ? { server: data.server, tool: data.tool } : undefined;
-    // A delete whose reach can't be worked out is staged first (#347): the folders deep-hook read, or null when it
-    // couldn't name them. The planted stager stages the working folder of every shell call.
-    const staged = meta.matched.find((n) => entries[n]?.match === STAGED_MATCH);
-    const stage = staged !== undefined ? meta.stage?.[staged] ?? null
-      : this.plant === 'stages-unpredicted-writes' && data.kind === 'shell' && typeof data.command === 'string' ? [meta.cwd] : undefined;
+    // A destructive call is staged first (#347, #1294): what deep-hook read of its reach, or null when it couldn't
+    // name it. The planted stager stages the working folder of every shell call.
+    const reach = (match: string) => {
+      const n = meta.matched.find((m) => entries[m]?.match === match);
+      return n === undefined ? undefined : meta.stage?.[n] ?? null;
+    };
+    const [folders, edits, stash] = [reach(STAGED_MATCH), this.plant === 'stages-untracked-only' ? undefined : reach(DISCARD_MATCH), reach(STASH_MATCH)];
+    const stage: StageReach | undefined = folders !== undefined || edits !== undefined || stash !== undefined
+      ? { ...(folders !== undefined ? { folders } : {}), ...(edits !== undefined ? { edits } : {}), ...(stash !== undefined ? { stash } : {}) }
+      : this.plant === 'stages-unpredicted-writes' && data.kind === 'shell' && typeof data.command === 'string' ? { folders: [meta.cwd] } : undefined;
     // A computer-use or Chrome step is checked against the screens and windows its session leases (#332).
     const screen = SCREEN_TOOLS.some((prefix) => meta.call?.tool.startsWith(prefix));
     // A shell or MCP call in a session whose cut-off turn started a send with no recorded end is checked against it (#85).
     const resend = this.resend.has(meta.session) && (data.kind === 'shell' || data.kind === 'mcp');
-    if (!authority.length && !mcp && !decided.length && stage === undefined && !screen && !resend) return undefined;
+    // A `gh pr create`, or a `gh pr edit` of its body (#87), is checked for its body's Closes against the issue's task
+    // (#322), whatever else it needs.
+    const pr = data.kind === 'shell' && typeof data.command === 'string' && (isPrCreate(data.command) || isPrEdit(data.command));
+    if (!authority.length && !mcp && !decided.length && stage === undefined && !screen && !resend && !pr) return undefined;
     const label = mcp ? `${mcp.server} ${mcp.tool}` : screen ? meta.call!.tool : typeof data.command === 'string' ? data.command : String(data.kind);
     const command = typeof data.command === 'string' ? { command: data.command } : {};
     return {
-      label, classes: authority, ...(mcp ? { mcp } : {}), ...(decided.length ? { decided, ...command } : {}), ...(stage !== undefined ? { stage, ...command } : {}), ...(screen ? { screen } : {}), ...(resend ? { resend } : {}),
+      label, classes: authority, ...(mcp ? { mcp } : {}), ...(decided.length ? { decided, ...command } : {}), ...(stage !== undefined ? { stage, ...command } : {}), ...(screen ? { screen } : {}), ...(resend ? { resend } : {}), ...(pr ? { pr, ...command } : {}),
     };
   }
   /** Whether a hook is a permission prompt the hub holds for its ask: Claude Code's, in a session its facts cover, gates on. */
   private prompted(meta: HookMeta): boolean {
-    return meta.event === 'PermissionRequest' && (meta.agent === 'claude-code' || meta.agent === 'claude' || meta.agent === 'codex') && !meta.watchOnly && !this.off && meta.call !== undefined;
+    return meta.event === 'PermissionRequest' && (meta.agent === 'claude-code' || meta.agent === 'claude' || meta.agent === 'codex' || meta.agent === 'paseo') && !meta.watchOnly && !this.off && meta.call !== undefined;
+  }
+  /**
+   * How long a permission prompt is held: one paseo's plugin gates waits for your answer, since paseo doesn't wait on
+   * it; one inside paseo that deep-hook gates waits for its ask's answer up to 5 s before its entry's timeout (#55).
+   */
+  private permissionHold(meta: HookMeta): number {
+    if (meta.agent === 'paseo') return PASEO_PERMISSION_HOLD_MS;
+    return this.inPaseo.has(meta.session) ? PERMISSION_TIMEOUT_MS - HOLD_MARGIN_MS : GATE_HOLD_MS;
   }
   /**
    * The prompt's reply, written by its hold: the adapter's reply to the answer a saved decision gave; with none, no
@@ -675,11 +775,13 @@ class Hub {
   private async permissionReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<{ decision: 'none'; because?: string }>((resolve) => { timer = setTimeout(() => resolve({ decision: 'none' }), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
-    const asked = this.core.request({ op: 'permission', meta }).catch(() => ({ decision: 'none' as const })) as Promise<{ decision: 'allow' | 'deny' | 'none'; because?: string }>;
+    const asked = this.core.request({ op: 'permission', meta, until: hold - HOLD_MARGIN, inPaseo: this.inPaseo.has(meta.session) }).catch(() => ({ decision: 'none' as const })) as Promise<{ decision: 'allow' | 'deny' | 'none'; because?: string }>;
     const { decision, because } = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
     if (!conn.sock.writable) return;
     if (decision === 'none') return void conn.sock.end(EMPTY_REPLY);
+    // paseo's plugin answers the request in paseo with the hub's decision, and says when a saved one gave it.
+    if (meta.agent === 'paseo') return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ decision, ...(because ? { because } : {}), ...(decision === 'deny' ? { message: `DeepBuild denied this${because ? ` by your saved decision ${because}` : ''}.` } : {}) }), stderr: '' }));
     if (decision === 'deny') this.waits.drop(meta.session, meta.toolUse);
     const request = { payload: { permission_suggestions: meta.call?.suggestions ?? [] } } as unknown as HookRequestLine;
     // A Codex deny carries its reason, or Codex treats the reply as a failed hook.
@@ -698,7 +800,7 @@ class Hub {
   private async gateReply(conn: Conn, meta: HookMeta, call: Gated, hold: number, before: unknown, ruled: string): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<{ late: true }>((resolve) => { timer = setTimeout(() => resolve({ late: true }), Math.max(0, hold - Date.now() - HOLD_MARGIN - (before === undefined ? 0 : EXTENSION_HOLD_MS))); });
-    const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; allow?: string; deny?: string; failed?: string }>;
+    const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; allow?: string; deny?: string; rule?: string; failed?: string }>;
     const gate = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
     if (!conn.sock.writable) return;
@@ -706,6 +808,8 @@ class Hub {
       : gate.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${gate.failed}). Run it again.` : gate.held ?? gate.deny;
     if (why) {
       this.waits.drop(meta.session, meta.toolUse);
+      // The deny that reached the agent, late and failed checks included, is kept for a PostToolUse that shows it ran anyway (#1033).
+      if (meta.toolUse) this.core.post({ op: 'denied', session: meta.session, call: meta.toolUse, guard: 'rule' in gate && gate.rule ? gate.rule : "the gate's authority hold (#321)", label: call.label });
       return void conn.sock.end(line({ exit: 2, stdout: '', stderr: `${why}\n` }));
     }
     if (before !== undefined) return this.extensionReply(conn, meta, before, hold, ruled);
@@ -734,6 +838,8 @@ class Hub {
     // A message typed while the agent works is acknowledged at the session's next tool call, the queue beside it (#340).
     if ((meta.event === 'PreToolUse' || meta.event === 'PostToolUse') && this.acking.delete(meta.session)) return now + CONTEXT_HOLD_MS;
     if (meta.event !== 'Stop') return null;
+    // A stop of a session paseo's plugin gates is held for its line and a send-back; paseo doesn't wait on it (#55).
+    if (meta.agent === 'paseo') return !meta.watchOnly && !this.off ? now + STOP_HOLD_MS : null;
     // A pi stop that did work is held for its line and a send-back; an open ask never holds it, since pi takes the answer as a turn of its own (#40).
     if (meta.agent === 'pi') return !meta.watchOnly && !this.off && (this.worked.has(meta.session) || this.sawWork.has(meta.session)) ? now + STOP_HOLD_MS : null;
     // A Codex stop that did work is held for its line (#83): the core reads it from the record at once.
@@ -830,16 +936,21 @@ class Hub {
     const matched = this.plant === 'matches-text'
       ? Object.keys(entries).filter((n) => { const m = String(entries[n]?.match ?? ''); return m.startsWith('run:') && (meta.command ?? '').includes(m.slice(4)); })
       : meta.matched.filter((n) => reaches(n, entries[n]?.scope, repoOf(meta.cwd), meta.session));
-    const mode = (n: string): unknown => (this.plant === 'warn-as-block' && entries[n]?.mode === 'warn' ? 'block' : entries[n]?.mode);
+    // The planted wrong program for #1097's AC3 blocks a warn entry the call met only through what couldn't be read.
+    const unread = (n: string) => this.plant === 'unknown-as-block' && /couldn't be read/.test(meta.notes?.[n] ?? '');
+    const mode = (n: string): unknown => ((this.plant === 'warn-as-block' || unread(n)) && entries[n]?.mode === 'warn' ? 'block' : entries[n]?.mode);
     const words = (n: string): string => `${String(entries[n]!.reason)} ${String(entries[n]!.next_step)}${meta.notes?.[n] ? ` ${meta.notes[n]}` : ''} (guard ${n})`;
     // With `deep off` only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
     const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
     // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
     // standing rule or asked at the gate (#23), after every other guard.
-    // A delete whose reach can't be worked out is staged or asked about at the gate (#347), never blocked outright.
-    const decided = (n: string) => !this.off && (DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (entries[n]?.match === STAGED_MATCH && !meta.stamp));
+    // A destructive command is staged or asked about at the gate (#347, #1294), never blocked outright.
+    const decided = (n: string) => !this.off && (DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
     const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!this.off || floor(n)));
-    if (blocks.length) return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
+    if (blocks.length) {
+      meta.blockedBy = blocks;
+      return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
+    }
     if (this.off) return EMPTY_REPLY;
     const warns = matched.filter((n) => mode(n) === 'warn');
     if (!warns.length || (meta.agent !== 'claude-code' && meta.agent !== 'claude')) return EMPTY_REPLY;
@@ -890,7 +1001,9 @@ class Hub {
     if (value.hello === 'mcp') {
       const parent = value.parent;
       const proved = isObj(parent) && Number.isSafeInteger(parent.pid) && typeof parent.start === 'string' ? { pid: parent.pid as number, start: parent.start } : undefined;
-      const session = proved ? ((await this.core.request({ op: 'mcp-hello', parent: proved }).catch(() => null)) as string | null) : null;
+      // A DeepBuild MCP server paseo's plugin added binds by the token it was opened with (#55).
+      const paseo = typeof value.paseo === 'string' && value.paseo ? value.paseo : undefined;
+      const session = proved || paseo ? ((await this.core.request({ op: 'mcp-hello', parent: proved, ...(paseo ? { paseo } : {}) }).catch(() => null)) as string | null) : null;
       conn.role = 'mcp';
       conn.session = session;
       conn.parent = proved;
@@ -917,7 +1030,7 @@ class Hub {
     const notice: DeprecatedNotice | undefined = replaced && this.plant !== 'silent-deprecated' ? this.adapter.serve(called, null, () => null).deprecated : undefined;
     if (notice) conn = noticed(conn, id, notice);
     const allowed = ALLOWED.get(method);
-    if (!allowed || (method === 'test.load' && !this.vfs) || (method === 'test.send_back' && process.env.DEEP_HUB_TEST_SEND_BACK !== '1') || (method === 'test.verdict' && process.env.DEEP_HUB_TEST_VERDICT !== '1')) return conn.write({ id, error: refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method) });
+    if (!allowed || (method === 'test.load' && !this.vfs) || (method === 'test.send_back' && process.env.DEEP_HUB_TEST_SEND_BACK !== '1') || (method === 'test.verdict' && process.env.DEEP_HUB_TEST_VERDICT !== '1') || (method === 'test.clock' && process.env.DEEP_HUB_TEST_CLOCK_STEPS !== '1')) return conn.write({ id, error: refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method) });
     if (!allowed.includes(conn.role!)) {
       return conn.write({ id, error: refusal('role', '/method', `A ${conn.name} connection can't call ${method}: its credential allows ${allowed.join(' or ')} connections only.`, method) });
     }
@@ -942,6 +1055,9 @@ class Hub {
           return { off };
         }));
       }
+      case 'notifications.report':
+        this.notifier = conn;
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }));
       case 'hub.health':
       case 'health':
         return void reply(this.core.request({ op: 'health' }).then((health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj) })));
@@ -1040,6 +1156,7 @@ function writeToken(root: Root): string {
  */
 export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   const plant = plantOf(process.env.DEEP_HUB_PLANT);
+  plantedStart(plant);
   const vfs = process.env.DEEP_HUB_TEST_VFS ? (JSON.parse(process.env.DEEP_HUB_TEST_VFS) as VfsSettings) : undefined;
   // Both read at one moment, so with no test clock the hub's is the wall clock exactly.
   const real = Date.now();

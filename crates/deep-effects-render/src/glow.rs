@@ -62,6 +62,31 @@ pub(crate) fn chain(
         "bloom.levels".into(),
         Value::from(levels(size, radius).len() as u64),
     );
+    // #418: the threshold in EV100 as the scene-linear luminance that exposure saturates at
+    // (1.2 × 2^EV100), 0 for none; with none the mix conserves energy.
+    let intensity = bloom
+        .get("bloom.intensity")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.04);
+    let cut = bloom
+        .get("bloom.threshold")
+        .and_then(Value::as_f64)
+        .map_or(0.0, |ev| 1.2 * 2f64.powf(ev));
+    params.insert("bloom.cut".into(), Value::from(cut));
+    params.insert(
+        "bloom.conserve".into(),
+        Value::from(if cut > 0.0 { 0.0 } else { intensity }),
+    );
+    let dirt = bloom
+        .get("bloom.dirt")
+        .and_then(|d| d.get("intensity"))
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0);
+    params.insert("bloom.dirt_intensity".into(), Value::from(dirt));
+    if let Some(t) = bloom.get("bloom.tint").and_then(Value::as_array) {
+        // A color: linear RGB numbers.
+        params.insert("bloom.tint".into(), Value::Array(t.clone()));
+    }
     (plan(size, radius), params)
 }
 
