@@ -7,7 +7,13 @@
 //! Issue #883: what Notification Center holds from the app is one notification per session, withdrawn once its ask
 //! closes, wherever the record says it closed. The default's time is a clock time in your time zone. Only a change
 //! you could have seen notifies: re-reading the record, after a restart or a reconnect, posts nothing.
+//!
+//! Issue #994: asks that come due within [`SOUND_WINDOW`] of each other play one sound, and a tick posts one
+//! notification per session, its newest. The app reads whether macOS will show it ([`NotificationSetting`]): off, an
+//! ask due posts nothing and logs nothing as notified, and it posts once the setting allows. What the window says of
+//! this and of the hub is one [`Reach`].
 
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -19,6 +25,9 @@ use crate::states::{self, Table};
 
 /// How long an ask must stay open after it shows before it notifies.
 pub const NOTIFY_AFTER: Duration = Duration::from_secs(1);
+
+/// Asks that come due this close together play one sound.
+pub const SOUND_WINDOW: Duration = Duration::from_secs(2);
 
 /// The sounds a notification can play. Finished work has none.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,6 +48,94 @@ pub struct Notification {
     pub sound: Option<Sound>,
 }
 
+/// What macOS says of the app's notifications. "Not asked yet" reads allowed: the first post asks.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum NotificationSetting {
+    #[default]
+    Allowed,
+    Denied,
+    AlertsNone,
+}
+
+impl NotificationSetting {
+    /// Its word on the app's log and to the hub (`notifications.report`).
+    pub fn name(self) -> &'static str {
+        match self {
+            NotificationSetting::Allowed => "allowed",
+            NotificationSetting::Denied => "denied",
+            NotificationSetting::AlertsNone => "alerts_none",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<NotificationSetting> {
+        match name {
+            "allowed" => Some(NotificationSetting::Allowed),
+            "denied" => Some(NotificationSetting::Denied),
+            "alerts_none" => Some(NotificationSetting::AlertsNone),
+            _ => None,
+        }
+    }
+
+    fn off(self) -> bool {
+        self != NotificationSetting::Allowed
+    }
+}
+
+/// What the app can't reach: the hub, and you, through macOS. The window's count and an ask's row read it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Reach {
+    pub hub_down: bool,
+    pub setting: NotificationSetting,
+    /// The asks Notification Center holds.
+    pub delivered: Vec<String>,
+}
+
+const HUB_DOWN: &str = "The hub isn't answering";
+
+impl Reach {
+    /// The count: `count` with what you should know beside it. With the hub down a number may be old, so it reads none.
+    pub fn count(&self, count: String) -> String {
+        if self.hub_down {
+            return HUB_DOWN.to_owned();
+        }
+        match self.setting {
+            NotificationSetting::Allowed => count,
+            NotificationSetting::Denied => format!(
+                "{count} · Notifications are off: turn on Allow notifications for DeepBuild in System Settings"
+            ),
+            NotificationSetting::AlertsNone => format!(
+                "{count} · Alerts are set to None: pick an Alert style for DeepBuild in System Settings"
+            ),
+        }
+    }
+
+    /// The menu bar's room for the same: `None` when there's nothing to say.
+    pub fn short(&self) -> Option<&'static str> {
+        if self.hub_down {
+            return Some(HUB_DOWN);
+        }
+        self.setting.off().then_some("Notifications off")
+    }
+
+    /// Whether `ask`'s row says it wasn't notified.
+    pub fn not_notified(&self, ask: &str) -> bool {
+        self.setting.off() && !self.delivered.iter().any(|held| held == ask)
+    }
+}
+
+thread_local! {
+    static REACH: RefCell<Reach> = RefCell::default();
+}
+
+/// What the window draws from now on.
+pub fn publish(reach: Reach) {
+    REACH.with(|cell| *cell.borrow_mut() = reach);
+}
+
+pub fn reach() -> Reach {
+    REACH.with(|cell| cell.borrow().clone())
+}
+
 pub struct Notifier {
     after: Duration,
     /// Asks that opened, each with when it may notify, in the order they opened.
@@ -49,6 +146,13 @@ pub struct Notifier {
     read: HashSet<String>,
     /// What Notification Center holds from the app: one notification per session.
     delivered: Vec<Notification>,
+    /// When an ask last came due and posted: the next one sounds only after a gap of [`SOUND_WINDOW`].
+    last_due: Option<u64>,
+    /// What macOS says, as last read.
+    setting: NotificationSetting,
+    /// Asks that came due with notifications off, `(handle, session)`, and how many of them the log has.
+    missed: Vec<(String, String)>,
+    logged: usize,
 }
 
 impl Notifier {
@@ -60,6 +164,40 @@ impl Notifier {
             notices: Vec::new(),
             read: HashSet::new(),
             delivered: Vec::new(),
+            last_due: None,
+            setting: NotificationSetting::Allowed,
+            missed: Vec::new(),
+            logged: 0,
+        }
+    }
+
+    /// The app read `setting` at `now`: asks missed while it was off and still open post once it allows.
+    pub fn set_setting(&mut self, setting: NotificationSetting, now: u64) {
+        self.setting = setting;
+        if !setting.off() {
+            self.waiting
+                .extend(self.missed.drain(..).map(|(ask, _)| (ask, now)));
+            self.logged = 0;
+        }
+    }
+
+    /// The asks that came due with notifications off since this was last asked, `(handle, session)`.
+    pub fn newly_missed(&mut self) -> Vec<(String, String)> {
+        let new = self.missed[self.logged..].to_vec();
+        self.logged = self.missed.len();
+        new
+    }
+
+    /// The setting as last read, and the asks Notification Center holds.
+    pub fn reach(&self, hub_down: bool) -> Reach {
+        Reach {
+            hub_down,
+            setting: self.setting,
+            delivered: self
+                .delivered
+                .iter()
+                .filter_map(|notification| notification.ask.clone())
+                .collect(),
         }
     }
 
@@ -78,8 +216,10 @@ impl Notifier {
                     Some("ask.created") => states::handle(event),
                     _ => event["subject"].as_str().unwrap_or_default().to_owned(),
                 };
-                self.waiting
-                    .push((handle, now + self.after.as_millis() as u64));
+                if !self.waiting.iter().any(|(waiting, _)| *waiting == handle) {
+                    self.waiting
+                        .push((handle, now + self.after.as_millis() as u64));
+                }
             }
         } else if event["kind"] == "notice.sent" {
             self.notices
@@ -140,6 +280,9 @@ impl Notifier {
         });
         let mut out = Vec::new();
         for session in self.notices.drain(..) {
+            if self.setting.off() {
+                continue;
+            }
             out.push(Notification {
                 ask: None,
                 title: title(table, &session),
@@ -162,13 +305,37 @@ impl Notifier {
             if looking_at == Some(session) {
                 continue;
             }
+            if self.setting.off() {
+                if !self.missed.iter().any(|(ask, _)| *ask == handle) {
+                    self.missed.push((handle, session.to_owned()));
+                }
+                continue;
+            }
             out.push(Notification {
                 ask: Some(handle),
                 session: session.to_owned(),
                 title: title(table, session),
                 text: ask_text(table, ask, now),
-                sound: sounds.then_some(Sound::Question),
+                sound: None,
             });
+        }
+        // Each session keeps its newest; the one sound goes on what is left.
+        let mut kept: Vec<Notification> = Vec::new();
+        for notification in out.into_iter().rev() {
+            if !kept
+                .iter()
+                .any(|newer| newer.session == notification.session)
+            {
+                kept.insert(0, notification);
+            }
+        }
+        let mut out = kept;
+        if let Some(first) = out.iter_mut().find(|n| n.ask.is_some()) {
+            let quiet = self
+                .last_due
+                .is_none_or(|at| now.saturating_sub(at) >= SOUND_WINDOW.as_millis() as u64);
+            first.sound = (sounds && quiet).then_some(Sound::Question);
+            self.last_due = Some(now);
         }
         for notification in &out {
             match self
