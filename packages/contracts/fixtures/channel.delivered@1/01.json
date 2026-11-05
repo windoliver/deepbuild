@@ -1,0 +1,35 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8H1",
+  "kind": "channel.delivered",
+  "subject": "ask:01K74G4B6D8F0H2K4M6P8R0T2V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017111123,
+  "data": {
+    "channel": "chat",
+    "thread_key": "ask:01K74G4B6D8F0H2K4M6P8R0T2V",
+    "item": {
+      "thread_key": "ask:01K74G4B6D8F0H2K4M6P8R0T2V",
+      "summary": "Keep the cache in SQLite or in plain files?",
+      "link": "deepbuild://ask/01K74G4B6D8F0H2K4M6P8R0T2V",
+      "answerable": "answer",
+      "options": [
+        {
+          "id": "sqlite",
+          "label": "SQLite"
+        },
+        {
+          "id": "files",
+          "label": "Plain files"
+        }
+      ],
+      "revision": 1,
+      "hub": "hub:01K74G4B6D8F0H2K4M6P8R0T2V",
+      "refused": null
+    },
+    "outcome": "delivered",
+    "ack": "chat-1"
+  }
+}

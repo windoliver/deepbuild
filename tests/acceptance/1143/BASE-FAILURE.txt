@@ -1,0 +1,310 @@
+#1143: the run at the base commit 69803b94 (origin/main), November 3, 2026, on Linux arm64, Node 24.22.0, cargo/clippy 1.99.1,
+with: npx vitest run tests/acceptance/1143 --testTimeout=6000000 (exit 1). Home folders are shown as ~.
+Every criterion test fails for the issue's reasons; the AC1 plant passes, since the base already detects home paths;
+the four AC2 plants fail on the hand-kept count of 158, which names no schema.
+
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1143-c2246c
+
+ ❯ tests/acceptance/1143/plants.test.ts (5 tests | 4 failed) 14579ms
+   ❯ AC2 the planted event schemas (4)
+     × AC2 #1143.f4bcaafd a planted event schema with an extra envelope field fails events.test.ts, naming the schema 2279ms
+     × AC2 #1143.f4bcaafd a planted event schema whose envelope allows other fields fails events.test.ts, naming the schema 1450ms
+     × AC2 #1143.f4bcaafd (scope) a planted event schema that differs only in x-since, as the R2 kinds do, passes events.test.ts 1318ms
+     × AC2 #1143.f4bcaafd (scope) a planted event schema that differs in all five history fields passes events.test.ts 1196ms
+ ❯ tests/acceptance/1143/criteria.test.ts (3 tests | 3 failed) 16343ms
+   × AC1 #1143.daea5590 node scripts/repo-rules.mjs on the checkout prints no FAIL line for secrets, deps or cards, and passes each of them 6318ms
+   × AC2 #1143.f4bcaafd vitest run packages/contracts/test/events.test.ts passes on the checkout 1477ms
+   × AC3 #1143.fb243546 cargo clippy --workspace --all-targets --locked -- -D warnings reports no result_large_err in crates/deep-canvas 8545ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1143/criteria.test.ts > AC1 #1143.daea5590 node scripts/repo-rules.mjs on the checkout prints no FAIL line for secrets, deps or cards, and passes each of them
+AssertionError: the FAIL lines repo-rules prints for secrets, deps and cards: expected [ …(71) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:2:14: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:46:100: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:51:24: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:52:23: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:53:27: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:54:15: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:88:100: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:93:24: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:94:23: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:95:27: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:96:15: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:135:100: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:140:24: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:141:23: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:142:27: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:143:15: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:183:100: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:188:24: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:189:23: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:190:27: home path",
++   "FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt:191:15: home path",
++   "FAIL secrets: tests/acceptance/386/BASE-FAILURE.txt:8:14: home path",
++   "FAIL secrets: tests/acceptance/386/BASE-FAILURE.txt:59:68: home path",
++   "FAIL secrets: tests/acceptance/386/BASE-FAILURE.txt:64:15: home path",
++   "FAIL secrets: tests/acceptance/39-redraft-ac26/BASE-FAILURE.txt:2:14: home path",
++   "FAIL secrets: tests/acceptance/39-redraft/BASE-FAILURE.txt:2:14: home path",
++   "FAIL secrets: tests/acceptance/39/fixtures/fake-codex.pl:25:36: API key",
++   "FAIL secrets: tests/acceptance/39/helpers.ts:31:30: API key",
++   "FAIL secrets: tests/acceptance/398/BASE-FAILURE-redraft.txt:16:14: home path",
++   "FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt:7:14: home path",
++   "FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt:66:80: home path",
++   "FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt:71:15: home path",
++   "FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt:98:107: home path",
++   "FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt:103:15: home path",
++   "FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt:130:80: home path",
++   "FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt:135:15: home path",
++   "FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt:162:80: home path",
++   "FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt:167:15: home path",
++   "FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt:194:80: home path",
++   "FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt:199:15: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:31:14: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:76:102: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:81:24: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:82:23: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:83:27: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:84:15: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:101:97: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:106:24: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:107:23: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:108:27: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:109:15: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:152:98: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:157:24: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:158:23: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:159:27: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:160:15: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:177:102: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:182:24: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:183:23: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:184:27: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:185:15: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:202:93: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:207:24: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:208:23: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:209:27: home path",
++   "FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt:210:15: home path",
++   "FAIL deps: packages/gate/package.json dependencies @deepbuild/conformance 0.0.0 is not in scripts/repo-rules.json",
++   "FAIL deps: packages/gate/package.json dependencies @deepbuild/supervisor 0.0.0 is not in scripts/repo-rules.json",
++   "FAIL deps: crates/deep-canvas-seams/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json",
++   "FAIL deps: crates/deep-scene3d-render/Cargo.toml dev-dependencies serde_json ^1 is not in scripts/repo-rules.json",
++   "FAIL cards: crates/deep-panel-host has no README.md card",
++ ]
+
+ ❯ tests/acceptance/1143/criteria.test.ts:11:81
+      9|   const { lines, output } = repoRules(repoRoot);
+     10|   const fails = lines.filter((line) => /^FAIL (secrets|deps|cards):/.t…
+     11|   expect(fails, 'the FAIL lines repo-rules prints for secrets, deps an…
+       |                                                                                 ^
+     12|   // No FAIL line is not enough: a check that couldn't run reads INVAL…
+     13|   for (const check of ['secrets', 'deps', 'cards']) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  tests/acceptance/1143/criteria.test.ts > AC2 #1143.f4bcaafd vitest run packages/contracts/test/events.test.ts passes on the checkout
+AssertionError: the tests in events.test.ts that did not pass: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the design says every kind shares one envelope; only its kind, subject, writer and data differ (failed): AssertionError: composition.reopened@1: expected { …(3) } to deeply equal { …(3) }",
++ ]
+
+ ❯ tests/acceptance/1143/criteria.test.ts:23:156
+     21|   const { status, assertions, output } = eventsTest(repoRoot);
+     22|   const failed = assertions.filter((a) => a.status !== 'passed');
+     23|   expect(failed.map((a) => `${a.fullName} (${a.status}): ${a.failureMe…
+       |                                                                                                                                                            ^
+     24|   expect(assertions.length, 'events.test.ts ran no tests').toBeGreater…
+     25|   expect(status, `vitest exited ${status}:\n${tail(output)}`).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  tests/acceptance/1143/criteria.test.ts > AC3 #1143.fb243546 cargo clippy --workspace --all-targets --locked -- -D warnings reports no result_large_err in crates/deep-canvas
+AssertionError: the result_large_err clippy reports in crates/deep-canvas: expected [ …(15) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "crates/deep-canvas/src/registry/lists.rs:480: the `Err`-variant returned from this function is very large",
++   "crates/deep-canvas/src/registry/mod.rs:1610: the `Err`-variant returned from this function is very large",
++   "crates/deep-canvas/src/registry/mod.rs:2853: the `Err`-variant returned from this function is very large",
++   "crates/deep-canvas/src/registry/mod.rs:2955: the `Err`-variant returned from this function is very large",
++   "crates/deep-canvas/src/registry/mod.rs:2988: the `Err`-variant returned from this function is very large",
++   "crates/deep-canvas/src/registry/lists.rs:480: the `Err`-variant returned from this function is very large",
++   "crates/deep-canvas/src/registry/mod.rs:1610: the `Err`-variant returned from this function is very large",
++   "crates/deep-canvas/src/registry/mod.rs:2853: the `Err`-variant returned from this function is very large",
++   "crates/deep-canvas/src/registry/mod.rs:2955: the `Err`-variant returned from this function is very large",
++   "crates/deep-canvas/src/registry/mod.rs:2988: the `Err`-variant returned from this function is very large",
++   "crates/deep-canvas/src/registry/mod.rs:3386: the `Err`-variant returned from this function is very large",
++   "crates/deep-canvas/src/registry/mod.rs:3793: the `Err`-variant returned from this closure is very large",
++   "crates/deep-canvas/src/registry/mod.rs:4099: the `Err`-variant returned from this closure is very large",
++   "crates/deep-canvas/src/registry/mod.rs:4149: the `Err`-variant returned from this closure is very large",
++   "crates/deep-canvas/src/registry/mod.rs:4261: the `Err`-variant returned from this closure is very large",
++ ]
+
+ ❯ tests/acceptance/1143/criteria.test.ts:37:81
+     35|   if (result.error) throw blocked(`cargo clippy could not run: ${resul…
+     36|   const { largeErr, unchecked } = judgeClippy(result.stdout, manifest,…
+     37|   expect(largeErr, 'the result_large_err clippy reports in crates/deep…
+       |                                                                                 ^
+     38|   if (unchecked.length) throw inconclusive(`clippy didn't lint every d…
+     39| }, 100 * MINUTE);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  tests/acceptance/1143/plants.test.ts > AC2 the planted event schemas > AC2 #1143.f4bcaafd a planted event schema with an extra envelope field fails events.test.ts, naming the schema
+AssertionError: no failing test in events.test.ts names plant.envelope@1; the failures were: ["the design says every kind shares one envelope; only its kind, subject, writer and data differ: AssertionError: expected [ 'action.entered@1', …(158) ] to have a length of 158 but got 159"]
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 41 passed (42)
+   Start at  02:12:44
+   Duration  1.15s (tests 57%, transform 31%, import 11%, worker 1%)
+
+JSON report written to /tmp/da1143-report-QQDDC7/report.json
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/contracts/test/events.test.ts > the design says > every kind shares one envelope; only its kind, subject, writer and data differ
+AssertionError: expected [ 'action.entered@1', …(158) ] to have a length of 158 but got 159
+
+- Expected
++ Received
+
+- 158
++ 159
+
+ ❯ packages/contracts/test/events.test.ts:306:19
+    304|     };
+    305|     const kinds = catalogue().map((e) => e.schema);
+    306|     expect(kinds).toHaveLength(158);
+       |                   ^
+    307|     for (const name of kinds) expect(envelope(name), name).toEqual(env…
+    308|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ failsNaming tests/acceptance/1143/plants.test.ts:62:161
+     60|     const naming = assertions.filter((a) => a.status === 'failed' && a…
+     61|     const failed = assertions.filter((a) => a.status === 'failed').map…
+     62|     expect(naming.map((a) => a.fullName), `no failing test in events.t…
+       |                                                                                                                                                                 ^
+     63|     expect(status).not.toBe(0);
+     64|   };
+ ❯ tests/acceptance/1143/plants.test.ts:78:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  tests/acceptance/1143/plants.test.ts > AC2 the planted event schemas > AC2 #1143.f4bcaafd a planted event schema whose envelope allows other fields fails events.test.ts, naming the schema
+AssertionError: no failing test in events.test.ts names plant.open@1; the failures were: ["the design says every kind shares one envelope; only its kind, subject, writer and data differ: AssertionError: expected [ 'action.entered@1', …(158) ] to have a length of 158 but got 159"]
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 41 passed (42)
+   Start at  02:12:46
+   Duration  560ms (tests 53%, import 28%, transform 16%, worker 2%)
+
+JSON report written to /tmp/da1143-report-MOFV2h/report.json
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/contracts/test/events.test.ts > the design says > every kind shares one envelope; only its kind, subject, writer and data differ
+AssertionError: expected [ 'action.entered@1', …(158) ] to have a length of 158 but got 159
+
+- Expected
++ Received
+
+- 158
++ 159
+
+ ❯ packages/contracts/test/events.test.ts:306:19
+    304|     };
+    305|     const kinds = catalogue().map((e) => e.schema);
+    306|     expect(kinds).toHaveLength(158);
+       |                   ^
+    307|     for (const name of kinds) expect(envelope(name), name).toEqual(env…
+    308|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ failsNaming tests/acceptance/1143/plants.test.ts:62:161
+     60|     const naming = assertions.filter((a) => a.status === 'failed' && a…
+     61|     const failed = assertions.filter((a) => a.status === 'failed').map…
+     62|     expect(naming.map((a) => a.fullName), `no failing test in events.t…
+       |                                                                                                                                                                 ^
+     63|     expect(status).not.toBe(0);
+     64|   };
+ ❯ tests/acceptance/1143/plants.test.ts:89:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  tests/acceptance/1143/plants.test.ts > AC2 the planted event schemas > AC2 #1143.f4bcaafd (scope) a planted event schema that differs only in x-since, as the R2 kinds do, passes events.test.ts
+AssertionError: with plant.since@1 planted, which differs from the others only in its history, events.test.ts fails: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the design says every kind shares one envelope; only its kind, subject, writer and data differ: AssertionError: expected [ 'action.entered@1', …(158) ] to have a length of 158 but got 159",
++ ]
+
+ ❯ passes tests/acceptance/1143/plants.test.ts:68:117
+     66|     const { status, assertions, output } = eventsTest(copy);
+     67|     const failed = assertions.filter((a) => a.status !== 'passed').map…
+     68|     expect(failed, `with ${name} planted, which differs from the other…
+       |                                                                                                                     ^
+     69|     expect(assertions.length).toBeGreaterThan(0);
+     70|     expect(status, tail(output)).toBe(0);
+ ❯ tests/acceptance/1143/plants.test.ts:100:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/acceptance/1143/plants.test.ts > AC2 the planted event schemas > AC2 #1143.f4bcaafd (scope) a planted event schema that differs in all five history fields passes events.test.ts
+AssertionError: with plant.history@1 planted, which differs from the others only in its history, events.test.ts fails: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the design says every kind shares one envelope; only its kind, subject, writer and data differ: AssertionError: expected [ 'action.entered@1', …(158) ] to have a length of 158 but got 159",
++ ]
+
+ ❯ passes tests/acceptance/1143/plants.test.ts:68:117
+     66|     const { status, assertions, output } = eventsTest(copy);
+     67|     const failed = assertions.filter((a) => a.status !== 'passed').map…
+     68|     expect(failed, `with ${name} planted, which differs from the other…
+       |                                                                                                                     ^
+     69|     expect(assertions.length).toBeGreaterThan(0);
+     70|     expect(status, tail(output)).toBe(0);
+ ❯ tests/acceptance/1143/plants.test.ts:111:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  7 failed | 1 passed (8)
+   Start at  02:12:35
+   Duration  16.76s (tests 100%)
+

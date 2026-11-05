@@ -3,11 +3,15 @@
 
 use deep_canvas::schedule::Canonical;
 
-use crate::curve::{Curve, Interp, Key};
+use crate::curve::{Curve, Ease, Interp, Key};
 use crate::doc::{
-    Binding, Channel, Clip, Cut, Extend, Marker, Motion, Placement, Target, Transport, ValueType,
+    Binding, Channel, Clip, Constraint, Control, Cut, Driver, DriverInput, Extend, Follow, Kind, Limit, Marker,
+    Motion, Placement, Shot, Target, Transport, ValueType,
 };
-use crate::program::{Field, Program, Write};
+use crate::follow;
+use crate::modifier::{Kind as ModKind, Modifier, Rate, Shape};
+use crate::input::{Change, Inputs, Moves};
+use crate::program::{Field, Op, Program, Write};
 
 impl Canonical for Interp {
     fn encode(&self, out: &mut Vec<u8>) {
@@ -18,14 +22,132 @@ impl Canonical for Interp {
                 out.push(2);
                 [x1, y1, x2, y2].encode(out);
             }
-            Interp::Spring {
-                freq_hz,
-                damping_ratio,
-            } => {
+            Interp::Spring(s) => {
                 out.push(3);
-                (freq_hz, damping_ratio).encode(out);
+                (s.w0, s.zeta).encode(out);
+            }
+            Interp::Ease(e) => {
+                out.push(4);
+                e.encode(out);
+            }
+            Interp::Auto { clamp, smoothness } => {
+                out.push(5);
+                (clamp, smoothness).encode(out);
+            }
+            Interp::CatmullRom => out.push(6),
+            Interp::Table => out.push(7),
+        }
+    }
+}
+
+impl Canonical for Modifier {
+    fn encode(&self, out: &mut Vec<u8>) {
+        let rate = |r: &Rate, out: &mut Vec<u8>| match *r {
+            Rate::Hz(hz) => (0u8, hz).encode(out),
+            Rate::PerLoop { n, span } => (1u8, u64::from(n), span).encode(out),
+            Rate::Period(p) => (2u8, 0u64, p).encode(out),
+        };
+        self.influence.encode(out);
+        match &self.kind {
+            ModKind::Wave { amplitude, rate: r, phase, offset } => {
+                (0u8, *amplitude, *phase, *offset).encode(out);
+                rate(r, out);
+            }
+            ModKind::Noise { amplitude, rate: r, seed } => {
+                (1u8, *amplitude, *seed).encode(out);
+                rate(r, out);
+            }
+            ModKind::Pulse { at, span, amount, shape, ease } => {
+                (2u8, *at, *span, *amount).encode(out);
+                match *shape {
+                    Shape::ThereAndBack => (0u8, 0.0).encode(out),
+                    Shape::Pause(v) => (1u8, v).encode(out),
+                    // #490: the wiggle turned at twice Manim's frequency under tag 2; at its
+                    // frequency now, it keys apart, so no cache serves the old frames.
+                    Shape::Wiggle(v) => (3u8, v).encode(out),
+                }
+                ease.encode(out);
+            }
+            ModKind::Limits { min, max } => (3u8, *min, *max).encode(out),
+        }
+    }
+}
+
+impl Canonical for follow::Spec {
+    fn encode(&self, out: &mut Vec<u8>) {
+        match &self.source {
+            follow::Source::Keys(k) => (0u8, k).encode(out),
+            follow::Source::Control(c) => (1u8, c).encode(out),
+        }
+        match self.model {
+            follow::Model::FirstOrder { tau_up, tau_down } => (0u8, tau_up, tau_down).encode(out),
+            follow::Model::Spring(s) => (1u8, s.w0, s.zeta).encode(out),
+            follow::Model::RateLimit { max } => (2u8, max, 0.0).encode(out),
+            follow::Model::Transition { span, along } => {
+                (3u8, span, 0.0).encode(out);
+                match along {
+                    follow::Along::Linear => out.push(0),
+                    follow::Along::Ease(e) => {
+                        out.push(1);
+                        e.encode(out);
+                    }
+                    follow::Along::Bezier(b) => {
+                        out.push(2);
+                        [b.x1, b.y1, b.x2, b.y2].encode(out);
+                    }
+                }
             }
         }
+        (self.rate, self.integral).encode(out);
+    }
+}
+
+impl Canonical for Ease {
+    fn encode(&self, out: &mut Vec<u8>) {
+        match *self {
+            Ease::Linear => out.push(0),
+            Ease::InCubic => out.push(1),
+            Ease::OutCubic => out.push(2),
+            Ease::InOutCubic => out.push(3),
+            Ease::Bezier(b) => {
+                out.push(4);
+                [b.x1, b.y1, b.x2, b.y2].encode(out);
+            }
+        }
+    }
+}
+impl Canonical for Control {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.id, self.kind, &self.options, &self.default).encode(out);
+        self.shots.encode(out);
+    }
+}
+impl Canonical for Follow {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.id, &self.target, &self.control, &self.values).encode(out);
+        (&self.span, &self.ease).encode(out);
+    }
+}
+impl Canonical for Shot {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.id, &self.camera, &self.target, &self.glide).encode(out);
+        self.ease.encode(out);
+    }
+}
+impl Canonical for Change {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.t, &self.from, &self.to, &self.span).encode(out);
+        self.ease.encode(out);
+    }
+}
+impl Canonical for Moves {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.start, &self.changes).encode(out);
+    }
+}
+impl Canonical for Inputs {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.follows, &self.cameras).encode(out);
     }
 }
 
@@ -44,14 +166,31 @@ impl Canonical for Extend {
 impl deep_canvas::schedule::Canonical for Key {
     fn encode(&self, out: &mut Vec<u8>) {
         deep_canvas::schedule::Canonical::encode(
-            &(&self.id, &self.t, &self.value, &self.interp),
+            &(
+                &self.id,
+                &self.t,
+                &self.value,
+                &self.interp,
+                &self.velocity,
+                &self.slopes,
+            ),
             out,
         );
+        // A pack's ease table: its name and its knots, so another table keys another program.
+        if let Some((name, table)) = &self.table {
+            name.encode(out);
+            if let Some(t) = table {
+                (&t.table.x, &t.table.y).encode(out);
+            }
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Curve {
     fn encode(&self, out: &mut Vec<u8>) {
-        deep_canvas::schedule::Canonical::encode(&self.keys, out);
+        deep_canvas::schedule::Canonical::encode(
+            &(&self.keys, self.before as u8, self.after as u8),
+            out,
+        );
     }
 }
 impl deep_canvas::schedule::Canonical for Target {
@@ -62,7 +201,10 @@ impl deep_canvas::schedule::Canonical for Target {
 impl deep_canvas::schedule::Canonical for Channel {
     fn encode(&self, out: &mut Vec<u8>) {
         deep_canvas::schedule::Canonical::encode(
-            &(&self.id, &self.target, &self.ty, &self.curve),
+            &(&self.id, &self.target, &self.ty, &self.curve, &self.modifiers),
+            out,
+        );
+        deep_canvas::schedule::Canonical::encode(&(&self.follow, &self.range),
             out,
         );
     }
@@ -109,9 +251,61 @@ impl deep_canvas::schedule::Canonical for Marker {
 impl deep_canvas::schedule::Canonical for Transport {
     fn encode(&self, out: &mut Vec<u8>) {
         deep_canvas::schedule::Canonical::encode(
-            &(&self.start, &self.span, &self.wrap, &self.holds),
+            &(&self.start, &self.span, &self.wrap, &self.holds, &self.reduce_holds),
             out,
         );
+    }
+}
+impl deep_canvas::schedule::Canonical for Driver {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(
+            &(&self.id, &self.target, &self.text, &self.vars),
+            out,
+        );
+        // #490's driver inputs and hard range, only where a driver has them, so every earlier
+        // driver keys as it did.
+        if !self.inputs.is_empty() || self.range.is_some() {
+            for (name, input) in &self.inputs {
+                name.encode(out);
+                match input {
+                    DriverInput::Time => out.push(0),
+                    DriverInput::Control(c) => (1u8, c).encode(out),
+                }
+            }
+            self.range.encode(out);
+        }
+    }
+}
+impl deep_canvas::schedule::Canonical for Limit {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(
+            &(&self.id, &self.owner, self.group, &self.bounds),
+            out,
+        );
+    }
+}
+impl Canonical for Constraint {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.id, &self.owner, self.influence).encode(out);
+        match &self.kind {
+            Kind::ChildOf { parent } => (0u8, parent).encode(out),
+            Kind::FollowPath { points, fraction, orient, offset } => {
+                (1u8, points, *fraction, *orient, offset).encode(out)
+            }
+            Kind::LookAt { target } => (2u8, target).encode(out),
+            Kind::Copy { what, target } => (3u8, *what as u8, target).encode(out),
+            Kind::Reach2 { chain, target, bend, cartoon } => {
+                (4u8, chain, target, *bend, *cartoon).encode(out)
+            }
+            Kind::FollowTip { item, offset, rotate } => (5u8, item, offset, *rotate).encode(out),
+            Kind::Distance { target, min, max } => (6u8, target, *min, *max).encode(out),
+            Kind::SpringChain { bones, hz, damping_ratio, max_swing } => {
+                (7u8, bones, (*hz, *damping_ratio, *max_swing)).encode(out)
+            }
+            Kind::RestOn { ground, bottom, offset, max_drop } => {
+                (8u8, (*ground, *bottom), (*offset, *max_drop)).encode(out)
+            }
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Motion {
@@ -127,7 +321,25 @@ impl deep_canvas::schedule::Canonical for Motion {
             ),
             out,
         );
-        deep_canvas::schedule::Canonical::encode(&(&self.cuts, &self.frame_rate), out);
+        deep_canvas::schedule::Canonical::encode(
+            &(
+                &self.cuts,
+                &self.frame_rate,
+                &self.drivers,
+                &self.limits,
+                &self.labels,
+                (&self.constraints, &self.control_defaults),
+            ),
+            out,
+        );
+        deep_canvas::schedule::Canonical::encode(
+            &(&self.follows, &self.controls, &self.shots, &self.cameras),
+            out,
+        );
+        // A document without time remaps keeps the key it had before they landed (#429).
+        if !self.remaps.is_empty() {
+            deep_canvas::schedule::Canonical::encode(&self.remaps, out);
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Field {
@@ -142,6 +354,40 @@ impl deep_canvas::schedule::Canonical for Field {
             ),
             out,
         );
+        self.written.encode(out);
+        self.enumerated.encode(out);
+    }
+}
+impl Canonical for Op {
+    fn encode(&self, out: &mut Vec<u8>) {
+        match self {
+            Op::Num(n) => {
+                out.push(0);
+                n.encode(out);
+            }
+            Op::Var(slot) => {
+                out.push(1);
+                slot.encode(out);
+            }
+            Op::Neg => out.push(2),
+            Op::Bin(op) => {
+                out.push(3);
+                op.encode(out);
+            }
+            Op::Call(f, n) => {
+                out.push(4);
+                f.encode(out);
+                n.encode(out);
+            }
+            Op::World(i, k) => {
+                out.push(5);
+                (i, k).encode(out);
+            }
+            Op::Core(c) => {
+                out.push(6);
+                c.encode(out);
+            }
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Write {
@@ -169,5 +415,7 @@ impl deep_canvas::schedule::Canonical for Program {
             &(&self.values_len, &self.placements, &self.parents),
             out,
         );
+        deep_canvas::schedule::Canonical::encode(&(&self.drivers, &self.limits), out);
+        deep_canvas::schedule::Canonical::encode(&(&self.follows, &self.inputs), out);
     }
 }

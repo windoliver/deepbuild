@@ -775,11 +775,16 @@ mod tests {
         })
     }
 
+    /// Runs `inputs` over `d` in a 100 px square viewport, motion not reduced.
+    fn play(d: &Value, inputs: &[Value]) -> Result<Value, Refused> {
+        run(d, [100.0, 100.0], inputs, false)
+    }
+
     #[test]
     fn a_pointer_with_a_third_coordinate_is_refused() {
         let d = doc(json!({"orbit": {"distance": 8}}), json!({}));
         let inputs = vec![json!({"op": "hover", "at": [10, 20, 30]})];
-        let err = run(&d, [100.0, 100.0], &inputs, false).unwrap_err();
+        let err = play(&d, &inputs).unwrap_err();
         assert_eq!(err.path, "inputs/0/at");
     }
 
@@ -791,7 +796,7 @@ mod tests {
             json!({}),
         );
         let drag = json!({"op": "drag", "at": [0, 0], "delta": [-1e308, 0]});
-        let err = run(&d, [100.0, 100.0], &[drag.clone(), drag], false).unwrap_err();
+        let err = play(&d, &[drag.clone(), drag]).unwrap_err();
         assert_eq!(err.path, "inputs/1");
     }
 
@@ -809,7 +814,7 @@ mod tests {
             json!({"op": "hover", "at": [50, 50]}),
             json!({"op": "hover", "at": [10, 10]}),
         ];
-        let out = run(&d, [100.0, 100.0], &inputs, false).unwrap();
+        let out = play(&d, &inputs).unwrap();
         assert_eq!(out["trace"][0]["hover"], json!("d"));
         assert_eq!(out["trace"][1]["hover"], json!("r"));
     }
@@ -823,14 +828,12 @@ mod tests {
             json!({"r": {"id": "r", "kind": "test.rect@1", "layer": "main", "name": "R", "order": "a1", "params": {"w": 2, "h": 2}, "at": {"pos": [-1, -1, 0]}}}),
         );
         // Focal 50 px at 90°: the square spans 10 px about the centre, [45, 55).
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "hover", "at": [54, 50]}),
                 json!({"op": "hover", "at": [56, 50]}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(out["trace"][0]["hover"], json!("r"));
@@ -854,14 +857,12 @@ mod tests {
         let view = Projector::new(&pose, [100.0, 100.0], [100.0, 100.0]);
         let over_b = view.project([8.0, 5.0, 0.0]).unwrap();
         let over_a = view.project([3.0, 5.0, 0.0]).unwrap();
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "hover", "at": [over_b.x, over_b.y]}),
                 json!({"op": "hover", "at": [over_a.x, over_a.y]}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(out["trace"][0]["hover"], json!("b"));
@@ -874,13 +875,7 @@ mod tests {
             json!({"position": [0, 5, 3], "target": [10, 5, 0], "fov": 60}),
             json!({"r": {"id": "r", "kind": "test.rect@1", "layer": "main", "name": "R", "order": "a1", "params": {"w": 20, "h": 10}, "at": {"pos": [-5, 0, 0]}}}),
         );
-        let out = run(
-            &d,
-            [100.0, 100.0],
-            &[json!({"op": "hover", "at": [50, 50]})],
-            false,
-        )
-        .unwrap();
+        let out = play(&d, &[json!({"op": "hover", "at": [50, 50]})]).unwrap();
         assert_eq!(out["trace"][0]["hover"], json!("r"));
     }
 
@@ -949,13 +944,7 @@ mod tests {
                 "l": {"id": "l", "kind": "test.dot@1", "layer": "main", "name": "L", "order": "a2", "params": {"radius": 1}, "at": {"pos": [0.1, 0, 0]}}
             }),
         );
-        let out = run(
-            &d,
-            [100.0, 100.0],
-            &[json!({"op": "hover", "at": [50, 50]})],
-            false,
-        )
-        .unwrap();
+        let out = play(&d, &[json!({"op": "hover", "at": [50, 50]})]).unwrap();
         assert_eq!(out["trace"][0]["hover"], json!("l"));
     }
 
@@ -975,12 +964,7 @@ mod tests {
     }
 
     fn target(state: &Value) -> [f64; 3] {
-        let t = state["camera"]["target"].as_array().unwrap();
-        [
-            t[0].as_f64().unwrap(),
-            t[1].as_f64().unwrap(),
-            t[2].as_f64().unwrap(),
-        ]
+        [0, 1, 2].map(|k| state["camera"]["target"][k].as_f64().unwrap())
     }
 
     #[test]
@@ -990,14 +974,12 @@ mod tests {
             json!({"zoom": [0.5, 4], "zoom_rate": 0.01}),
             json!({}),
         );
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "scroll", "at": [25, 25], "delta": -50}),
                 json!({"op": "scroll", "at": [25, 25], "delta": 1e6}),
             ],
-            false,
         )
         .unwrap();
         let zoom = out["trace"][0]["camera"]["zoom"].as_f64().unwrap();
@@ -1020,15 +1002,13 @@ mod tests {
             json!({}),
             json!({"keys": {"class": "viewer", "role": "button", "verb": "camera.pan", "increment": 5}}),
         );
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "control", "control": "keys", "value": [1, 0]}),
                 json!({"op": "control", "control": "keys", "value": [0, 1]}),
                 json!({"op": "control", "control": "keys", "value": [100, 0]}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(target(&out["trace"][0]), [55.0, 50.0, 0.0]);
@@ -1057,7 +1037,7 @@ mod tests {
             json!({"op": "hover", "at": [1, 1], "t": SECOND * 2 / 5}),
             json!({"op": "hover", "at": [1, 1], "t": SECOND}),
         ];
-        let out = run(&d, [100.0, 100.0], &inputs, false).unwrap();
+        let out = play(&d, &inputs).unwrap();
         assert_eq!(target(&out["trace"][0]), [50.0, 50.0, 0.0]);
         // in_out_cubic is a half at the half.
         assert_eq!(target(&out["trace"][1]), [65.0, 65.0, 0.0]);
@@ -1073,16 +1053,14 @@ mod tests {
             json!({}),
             controls(json!({"origin": [0, 0], "cell": 10})),
         );
-        let out = run(
+        let out = play(
             &mapped,
-            [100.0, 100.0],
             &[
                 json!({"op": "control", "control": "spot", "value": [7, 7], "t": 0}),
                 json!({"op": "hover", "at": [1, 1], "t": SECOND}),
                 json!({"op": "control", "control": "spot", "value": [50, 50], "t": SECOND}),
                 json!({"op": "hover", "at": [1, 1], "t": 2 * SECOND}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(target(&out["trace"][1]), [75.0, 75.0, 0.0]);
@@ -1093,14 +1071,12 @@ mod tests {
             json!({}),
         );
         d3["controls"] = controls(Value::Null);
-        let out = run(
+        let out = play(
             &d3,
-            [100.0, 100.0],
             &[
                 json!({"op": "control", "control": "spot", "value": [1, 2, 3], "t": 0}),
                 json!({"op": "hover", "at": [1, 1], "t": SECOND}),
             ],
-            false,
         )
         .unwrap();
         let end = &out["trace"][1]["camera"];
@@ -1125,16 +1101,14 @@ mod tests {
                 "jump": {"class": "viewer", "role": "button", "verb": "camera.goto", "goto": {"to": "spot", "ease": 0}}
             }),
         );
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "control", "control": "jump"}),
                 json!({"op": "control", "control": "spot", "value": [80, 80]}),
                 json!({"op": "drag", "at": [50, 50], "delta": [10, 0]}),
                 json!({"op": "control", "control": "jump"}),
             ],
-            false,
         )
         .unwrap();
         // Nothing held yet: nothing moves; then the drag leaves and the key returns.
@@ -1145,13 +1119,7 @@ mod tests {
         // A point control's declared default is what it holds before any entry.
         let mut d = d;
         d["controls"]["spot"]["default"] = json!([20, 30]);
-        let out = run(
-            &d,
-            [100.0, 100.0],
-            &[json!({"op": "control", "control": "jump"})],
-            false,
-        )
-        .unwrap();
+        let out = play(&d, &[json!({"op": "control", "control": "jump"})]).unwrap();
         assert_eq!(target(&out["trace"][0]), [20.0, 30.0, 0.0]);
     }
 
@@ -1163,15 +1131,13 @@ mod tests {
         );
         d["controls"] =
             json!({"home": {"class": "viewer", "role": "button", "verb": "camera.reset"}});
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "drag", "at": [10, 10], "delta": [-10, 0], "t": 0}),
                 json!({"op": "control", "control": "home", "t": 0}),
                 json!({"op": "hover", "at": [1, 1], "t": SECOND}),
             ],
-            false,
         )
         .unwrap();
         let az = |i: usize| out["trace"][i]["camera"]["azimuth"].as_f64().unwrap();
@@ -1198,7 +1164,7 @@ mod tests {
                     .iter()
                     .map(|t| json!({"op": "hover", "at": [50, 50], "t": t})),
             );
-            let out = run(&d, [100.0, 100.0], &inputs, false).unwrap();
+            let out = play(&d, &inputs).unwrap();
             let last = out["trace"].as_array().unwrap().len() - 1;
             (target(&out["trace"][1]), target(&out["trace"][last]))
         };
@@ -1217,9 +1183,8 @@ mod tests {
         );
         d["controls"] =
             json!({"home": {"class": "viewer", "role": "button", "verb": "camera.reset"}});
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "drag", "at": [10, 10], "delta": [40, 0], "t": 0}),
                 json!({"op": "pinch", "at": [50, 50], "scale": 4, "t": 0}),
@@ -1227,7 +1192,6 @@ mod tests {
                 json!({"op": "control", "control": "home", "t": 0}),
                 json!({"op": "hover", "at": [2, 50], "t": SECOND}),
             ],
-            false,
         )
         .unwrap();
         let end = &out["trace"][4]["camera"];
@@ -1243,9 +1207,8 @@ mod tests {
             "the edge pan moved the target"
         );
         // Sampled every quarter second, the pan lands where the one sample did.
-        let dense = run(
+        let dense = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "drag", "at": [10, 10], "delta": [40, 0], "t": 0}),
                 json!({"op": "pinch", "at": [50, 50], "scale": 4, "t": 0}),
@@ -1256,7 +1219,6 @@ mod tests {
                 json!({"op": "hover", "at": [2, 50], "t": 3 * SECOND / 4}),
                 json!({"op": "hover", "at": [2, 50], "t": SECOND}),
             ],
-            false,
         )
         .unwrap();
         let (a, b) = (target(&dense["trace"][7]), target(&out["trace"][4]));
@@ -1273,14 +1235,12 @@ mod tests {
         );
         d["controls"] =
             json!({"home": {"class": "viewer", "role": "button", "verb": "camera.reset"}});
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "drag", "at": [10, 10], "delta": [40, 0]}),
                 json!({"op": "control", "control": "home"}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(out["trace"][1]["camera"], out["start"]["camera"]);
@@ -1293,15 +1253,13 @@ mod tests {
                 "b": {"class": "viewer", "role": "button", "verb": "camera.goto", "goto": {"to": "spot", "ease": 0, "map": {"origin": [50, 50], "cell": 2}}}
             }),
         );
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "control", "control": "spot", "value": [1, 1]}),
                 json!({"op": "control", "control": "b"}),
                 json!({"op": "control", "control": "a"}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(target(&out["trace"][1]), [53.0, 53.0, 0.0]);
@@ -1318,16 +1276,14 @@ mod tests {
                 "jump": {"class": "viewer", "role": "button", "verb": "camera.goto", "goto": {"to": "spot", "ease": 1}}
             }),
         );
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "hover", "at": [2, 50], "t": 0}),
                 json!({"op": "control", "control": "spot", "value": [80, 80], "t": 0}),
                 json!({"op": "hover", "at": [2, 50], "t": SECOND / 2}),
                 json!({"op": "hover", "at": [2, 50], "t": SECOND}),
             ],
-            false,
         )
         .unwrap();
         // The pointer already rests at the edge when the jump starts: the edge pan is your
@@ -1335,28 +1291,24 @@ mod tests {
         assert_eq!(target(&out["trace"][2]), [25.0, 50.0, 0.0]);
         assert_eq!(target(&out["trace"][3]), [0.0, 50.0, 0.0]);
         // The same timeline sampled once lands at the same place.
-        let sparse = run(
+        let sparse = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "hover", "at": [2, 50], "t": 0}),
                 json!({"op": "control", "control": "spot", "value": [80, 80], "t": 0}),
                 json!({"op": "hover", "at": [2, 50], "t": SECOND}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(target(&sparse["trace"][2]), [0.0, 50.0, 0.0]);
         // A jump that starts before the pointer reaches the edge runs until it does.
-        let later = run(
+        let later = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "control", "control": "spot", "value": [80, 80], "t": 0}),
                 json!({"op": "hover", "at": [2, 50], "t": SECOND / 2}),
                 json!({"op": "hover", "at": [2, 50], "t": SECOND}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(target(&later["trace"][1]), [65.0, 65.0, 0.0]);
@@ -1369,14 +1321,12 @@ mod tests {
             json!({"position": [0, 0, 10], "target": [0, 0, 0], "fov": 40, "user": {"zoom": [0.5, 4], "pan": {"margin": 0}}}),
             json!({"m": {"id": "m", "kind": "test.dot@1", "layer": "main", "name": "M", "order": "a1", "params": {"radius": 0.5, "fill": [1, 2, 3]}, "at": {"pos": [0, 0, 0]}}}),
         );
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "pinch", "at": [99, 99], "scale": 4}),
                 json!({"op": "scroll", "at": [1, 1], "delta": -1000}),
             ],
-            false,
         )
         .unwrap();
         for state in out["trace"].as_array().unwrap() {
@@ -1393,9 +1343,8 @@ mod tests {
         );
         d["controls"] =
             json!({"home": {"class": "viewer", "role": "button", "verb": "camera.reset"}});
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "drag", "at": [10, 10], "delta": [40, 0], "t": 0}),
                 json!({"op": "pinch", "at": [50, 50], "scale": 4, "t": 0}),
@@ -1403,7 +1352,6 @@ mod tests {
                 json!({"op": "hover", "at": [1, 1], "t": 2 * SECOND}),
                 json!({"op": "hover", "at": [1, 1], "t": 3 * SECOND}),
             ],
-            false,
         )
         .unwrap();
         let az = |i: usize| out["trace"][i]["camera"]["azimuth"].as_f64().unwrap();
@@ -1427,9 +1375,8 @@ mod tests {
             json!({"pan": {"edge": {"margin": 8, "rate": 0.5}}}),
             json!({}),
         );
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "hover", "at": [2, 50], "t": 0}),
                 json!({"op": "hover", "at": [2, 50], "t": SECOND}),
@@ -1442,7 +1389,6 @@ mod tests {
                 json!({"op": "hover", "at": [50, 50], "t": 4 * SECOND}),
                 json!({"op": "hover", "at": [50, 50], "t": 5 * SECOND}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(target(&out["trace"][0]), [50.0, 50.0, 0.0]);
@@ -1456,9 +1402,8 @@ mod tests {
         assert_eq!(target(&out["trace"][9]), [50.0, 100.0, 0.0]);
         assert_eq!(out["track"], json!([]));
         // A pointer outside the view, or a refocus with no new hover, pans nothing.
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "hover", "at": [-500, -500], "t": 0}),
                 json!({"op": "hover", "at": [-500, -500], "t": SECOND}),
@@ -1467,7 +1412,6 @@ mod tests {
                 json!({"op": "focus", "value": true, "t": SECOND}),
                 json!({"op": "hover", "at": [-500, -500], "t": 2 * SECOND}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(target(&out["trace"][1]), [50.0, 50.0, 0.0]);
@@ -1478,30 +1422,26 @@ mod tests {
             json!({"pan": {"edge": {"margin": 60, "rate": 0.5}}}),
             json!({}),
         );
-        let out = run(
+        let out = play(
             &wide,
-            [100.0, 100.0],
             &[
                 json!({"op": "hover", "at": [97, 50], "t": 0}),
                 json!({"op": "hover", "at": [97, 50], "t": SECOND}),
                 json!({"op": "hover", "at": [50, 50], "t": SECOND}),
                 json!({"op": "hover", "at": [50, 50], "t": 2 * SECOND}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(target(&out["trace"][1]), [100.0, 50.0, 0.0]);
         assert_eq!(target(&out["trace"][3]), [100.0, 50.0, 0.0]);
         // A scroll moves the resting pointer too: away from the edge, the pan stops.
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "hover", "at": [2, 50], "t": 0}),
                 json!({"op": "scroll", "at": [50, 50], "delta": 0, "t": 0}),
                 json!({"op": "hover", "at": [50, 50], "t": SECOND}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(target(&out["trace"][2]), [50.0, 50.0, 0.0]);
@@ -1513,15 +1453,13 @@ mod tests {
             json!({"projection": "orthographic", "target": [1000, 50, 0], "view_width": 100}),
             json!({"r": rect("r", 0.0, 0.0, 100.0, 100.0)}),
         );
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "drag", "at": [50, 50], "delta": [-10, 0]}),
                 json!({"op": "drag", "at": [50, 50], "delta": [10, 0]}),
                 json!({"op": "drag", "at": [50, 50], "delta": [5000, 0]}),
             ],
-            false,
         )
         .unwrap();
         // Dragging the content right would move the target further out: it stays.
@@ -1574,16 +1512,14 @@ mod tests {
                 "jump": {"class": "viewer", "role": "button", "verb": "camera.goto", "goto": {"to": "spot", "ease": 1}}
             }),
         );
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "control", "control": "spot", "value": [850, 50], "t": 0}),
                 json!({"op": "hover", "at": [50, 50], "t": SECOND / 2}),
                 json!({"op": "control", "control": "show", "value": false, "t": SECOND / 2}),
                 json!({"op": "hover", "at": [50, 50], "t": SECOND}),
             ],
-            false,
         )
         .unwrap();
         assert_eq!(target(&out["trace"][1]), [450.0, 50.0, 0.0]);
@@ -1597,11 +1533,9 @@ mod tests {
             json!({"projection": "orthographic", "fit": {"keep": ["r"], "place": [0.1, 0.5], "fill": 0.2}}),
             json!({"r": rect("r", 0.0, 0.0, 10.0, 10.0)}),
         );
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[json!({"op": "drag", "at": [50, 50], "delta": [0, 0]})],
-            false,
         )
         .unwrap();
         assert_eq!(target(&out["trace"][0]), target(&out["start"]));
@@ -1615,15 +1549,13 @@ mod tests {
             json!({"keys": {"class": "viewer", "role": "button", "verb": "camera.pan", "increment": 5}}),
         );
         d["items"]["cam"]["params"]["roll"] = json!(90);
-        let out = run(
+        let out = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "hover", "at": [2, 50], "t": 0}),
                 json!({"op": "hover", "at": [2, 50], "t": SECOND}),
                 json!({"op": "control", "control": "keys", "value": [1, 0], "t": SECOND}),
             ],
-            false,
         )
         .unwrap();
         // Turned a quarter, screen left is the page's +y: the target goes there, and a step
@@ -1635,14 +1567,12 @@ mod tests {
     #[test]
     fn the_sessions_clock_runs_forward_only() {
         let d = flat(json!({}), json!({}), json!({}));
-        let err = run(
+        let err = play(
             &d,
-            [100.0, 100.0],
             &[
                 json!({"op": "hover", "at": [1, 1], "t": SECOND}),
                 json!({"op": "hover", "at": [1, 1], "t": 0}),
             ],
-            false,
         )
         .unwrap_err();
         assert_eq!(err.path, "inputs/1/t");

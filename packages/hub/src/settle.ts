@@ -7,3 +7,9 @@ export function shedStartup(): void {
   setFlagsFromString('--expose-gc');
   (runInNewContext('gc') as () => void)();
 }
+
+/**
+ * Each worker's young generation held at 2 MB: V8 lets it grow to about 17 MB a thread while hooks arrive and gives
+ * it back only after the hub has idled a while.
+ */
+export const YOUNG = { maxYoungGenerationSizeMb: 2 };

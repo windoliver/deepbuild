@@ -12,32 +12,51 @@ use crate::{keep, layered, read_graph, read_layout, read_memory, Refused};
 /// The graph module: its manifest and its one register call.
 pub fn module() -> Module {
     Module {
-        manifest: Manifest {
-            name: "graph".into(),
-            version: Semver {
-                major: 1,
-                minor: 0,
-                patch: 0,
-            },
-            core: Range::parse("*").expect("a range"),
-            depends_on: [(
-                "marks2d".to_string(),
-                Dependency {
-                    range: Range::parse("^1").expect("a range"),
-                    optional: false,
-                },
-            )]
-            .into_iter()
-            .collect(),
-            feature: "graph".into(),
-            license: "Apache-2.0".into(),
-            implements: "graph@1".into(),
-        },
-        register,
+        manifest: manifest("graph"),
+        register: |r| register(r, layout),
     }
 }
 
-fn register(r: &mut Registrar) {
+/// A planted implementation of graph@1 (#399's `test-graph-tie-by-registration`): declared bit
+/// and canonical, under its own name, whose layered layout breaks a tie by the order the item
+/// lists its nodes in instead of by ID, so the kit's bit part fails it and a release build
+/// refuses it.
+pub fn tie_by_registration() -> Module {
+    Module {
+        manifest: manifest("graph.tie_by_registration"),
+        register: |r| register(r, layout_as_listed),
+    }
+}
+
+fn manifest(implementation: &str) -> Manifest {
+    Manifest {
+        name: "graph".into(),
+        version: Semver {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        },
+        core: Range::parse("*").expect("a range"),
+        depends_on: [(
+            "marks2d".to_string(),
+            Dependency {
+                range: Range::parse("^1").expect("a range"),
+                optional: false,
+            },
+        )]
+        .into_iter()
+        .collect(),
+        feature: "graph".into(),
+        license: "Apache-2.0".into(),
+        implements: "graph@1".into(),
+        implementation: deep_canvas::registry::Implementation::reference(
+            implementation,
+            deep_canvas::registry::Semver::parse("1.0.0").expect("a version"),
+        ),
+    }
+}
+
+fn register(r: &mut Registrar, layout: fn(&mut View<'_>) -> Result<(), OpError>) {
     r.array("graph.layout", "memory", "item", "geometry", "items");
     r.operator("layout", "items", &["core.fields"], &["graph.layout"])
         .applies(is_graph)
@@ -50,6 +69,13 @@ fn register(r: &mut Registrar) {
     );
     r.fixture("layered", board(), None).sidecar(json!({
         // It draws nothing yet, so its fixture is checked, not compared as pixels.
+        "checks": [{"kind": "document.validate"}],
+        "oracles": ["analytic"],
+        "codes": ["unknown_kind"],
+    }));
+    // #399: a parent's two children tie in their rank, listed out of ID order, so only a layout
+    // that breaks the tie by ID places them as the reference does.
+    r.fixture("tie", tie_board(), None).sidecar(json!({
         "checks": [{"kind": "document.validate"}],
         "oracles": ["analytic"],
         "codes": ["unknown_kind"],
@@ -69,15 +95,35 @@ fn refused(id: &str, r: Refused) -> OpError {
     OpError::new(code, format!("items/{id}/params"))
 }
 
-/// The item's layout memory: laid out afresh, or kept as its memory says.
 fn layout(v: &mut View<'_>) -> Result<(), OpError> {
+    layout_with(v, false)
+}
+
+/// The planted layout: a fresh layout reads the nodes in the order the item lists them.
+fn layout_as_listed(v: &mut View<'_>) -> Result<(), OpError> {
+    layout_with(v, true)
+}
+
+/// The item's layout memory: laid out afresh, or kept as its memory says.
+fn layout_with(v: &mut View<'_>, as_listed: bool) -> Result<(), OpError> {
     let fields = v
         .typed::<Fields>("core.fields")?
         .ok_or_else(|| OpError::new("input_missing", v.path()))?
         .to_json();
     let id = v.id().unwrap_or_default().to_string();
     let params = &fields["params"];
-    let graph = read_graph(&params["graph"]).map_err(|r| refused(&id, r))?;
+    let mut graph = read_graph(&params["graph"]).map_err(|r| refused(&id, r))?;
+    if as_listed && params.get("memory").is_none_or(Value::is_null) {
+        let listed: Vec<&str> = params["graph"]["nodes"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|n| n["id"].as_str())
+            .collect();
+        graph
+            .nodes
+            .sort_by_key(|n| listed.iter().position(|l| *l == n.id));
+    }
     let laid = read_layout(&params["layout"]).map_err(|r| refused(&id, r))?;
     let memory = match params.get("memory") {
         None | Some(Value::Null) => layered(&graph, &laid).map_err(|r| refused(&id, r))?,
@@ -85,6 +131,7 @@ fn layout(v: &mut View<'_>) -> Result<(), OpError> {
             let memory = read_memory(m).map_err(|r| refused(&id, r))?;
             keep(&graph, &laid, &memory)
                 .map_err(|r| refused(&id, r))?
+                .map(|(kept, _)| kept)
                 .map_err(|_| {
                     OpError::new(
                         "layout.relayout_needed",
@@ -114,6 +161,23 @@ fn board() -> Value {
             "cap": {"id": "cap", "kind": "text@1", "name": "Caption", "order": "a1",
                     "params": {"text": "Flow", "font": "body", "size": 13, "box": {"w": 160, "h": 20}},
                     "at": {"pos": [16, 200, 0]}}
+        }
+    })
+}
+
+fn tie_board() -> Value {
+    let node = |id: &str| json!({"id": id, "w": 64, "h": 32});
+    json!({
+        "format": 1, "profile": "board", "seed": 399, "title": "Tie",
+        "description": "A root and its two children, listed right before left: the graph module's tie fixture.",
+        "size": [320, 240],
+        "items": {
+            "tree": {"id": "tree", "kind": "graph@1", "name": "Tree", "order": "a0",
+                     "params": {
+                         "graph": {"nodes": [node("root"), node("right"), node("left")],
+                                   "edges": [{"id": "e1", "a": "root", "b": "right"},
+                                             {"id": "e2", "a": "root", "b": "left"}]},
+                         "layout": {"algo": "layered", "seed": 399, "spacing": {"rank": 48}}}}
         }
     })
 }

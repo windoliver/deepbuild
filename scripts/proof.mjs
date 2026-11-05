@@ -3,11 +3,12 @@
 // tests and of your decisions; before runs each tagged test on the merge base and its planted wrong
 // programs; trace refuses `Closes #n` until every criterion has a test that ran and failed on a wrong
 // program; mutation (release and on demand) mutates the lines the change adds. Lifecycle, crash and
-// replay run when the change touches their paths, and lifecycle and crash in full at release.
+// replay run when the change touches their paths (the replay: the verdict engine's or the review
+// check's, #87), and lifecycle and crash in full at release.
 import { Blocked, listFiles, readApprovals, readChange, readIssue } from './proof-change.mjs';
 import { guard } from './proof-guard.mjs';
 import { before, mutation, prepareRuns, removeTemporaries } from './proof-runs.mjs';
-import { ENGINE, STORAGE, TABLES, crash, lifecycle, replay } from './proof-suites.mjs';
+import { ENGINE, REVIEW, STORAGE, TABLES, crash, lifecycle, replay, reviewReplay } from './proof-suites.mjs';
 
 const LANES = ['guard', 'before', 'trace', 'mutation', 'lifecycle', 'crash', 'replay'];
 const args = process.argv.slice(2);
@@ -33,6 +34,7 @@ function say(state, lane, detail, fix) {
 }
 
 const root = process.cwd();
+const started = Date.now();
 try {
   const change = readChange(root);
   const issue = readIssue(root, change);
@@ -58,7 +60,8 @@ try {
   }
   if (lanes.has('replay')) {
     if (touched.some(ENGINE)) replay({ root, change }, approvals, say);
-    else print('replay: not run, the change touches no verdict engine code under packages/verdicts/src');
+    if (touched.some(REVIEW)) reviewReplay({ root, change }, approvals, say);
+    if (!touched.some(ENGINE) && !touched.some(REVIEW)) print('replay: not run, the change touches neither the verdict engine under packages/verdicts/src nor the review check under packages/checks-review/src');
   }
 } catch (error) {
   if (!(error instanceof Blocked)) throw error;
@@ -67,6 +70,8 @@ try {
   // A cleanup failure is printed, never thrown: it would replace the lanes' own result.
   const left = removeTemporaries();
   if (left) print(`cleanup: ${left}`);
+  // A reading, never a criterion (parallel-proof, section 10).
+  print(`proof: wall time ${((Date.now() - started) / 1000).toFixed(1)} s`);
 }
 process.exitCode = failed ? 1 : 0;
 

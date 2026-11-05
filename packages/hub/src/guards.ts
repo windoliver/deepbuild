@@ -4,14 +4,15 @@
 // over both; an entry whose planted call goes through, or whose twin is matched, is refused, naming it and the call.
 // Then it rewrites rules.json with every installed entry, its mode included, and what each tool counts as, so
 // deep-hook matches a call the same way with the hub up or down. The hub never reads an entry's `match` itself.
+// A fail_closed entry that names a program or an effect class must also deny its planted call with the program
+// computed by the line (#1097).
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { validate } from '@deepbuild/contracts';
-import { call, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { callAsYou } from './client.js';
 import { writeSynced } from './vfs.js';
-import { startOf, type Plant } from './wire.js';
+import type { Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -20,6 +21,14 @@ interface Call { tool_name: string; tool_input: Obj; cwd?: string }
 const isCall = (v: unknown): v is Call => isObj(v) && typeof v.tool_name === 'string' && isObj(v.tool_input);
 /** A call as a person reads it: a shell call's command, or the tool and its input. */
 const shown = (c: Call): string => (c.tool_name === 'Bash' && typeof c.tool_input.command === 'string' ? c.tool_input.command : `${c.tool_name} ${JSON.stringify(c.tool_input)}`);
+
+/** A shell call with its program computed by the line, `"$(printf git)" push`; none for a call that runs no program. */
+function computed(c: Call): Call | undefined {
+  const command = c.tool_name === 'Bash' && typeof c.tool_input.command === 'string' ? c.tool_input.command : '';
+  const found = /^((?:\s*\w+=\S*\s+)*)\s*([\w.+-]+)(?=\s|$)/.exec(command);
+  if (!found) return undefined;
+  return { ...c, tool_input: { ...c.tool_input, command: `${found[1]}"$(printf ${found[2]})"${command.slice(found[0].length)}` } };
+}
 
 /** Whether deep-hook's matcher reads `c` under `entry`, through its check mode. */
 function matches(deepHook: string, entry: unknown, c: Call, classes: Obj): Promise<boolean> {
@@ -42,6 +51,8 @@ export type Added = { status: 'installed'; names: string[] } | { status: 'refuse
  * and installs none of them.
  */
 export async function addGuards(dir: string, given: unknown, o: { deepHook: string; classes: Obj; plant?: Plant | undefined }): Promise<Added> {
+  // Only tests set it: the deep-hook whose check mode the install runs, such as a planted twin (#1097's AC4).
+  o = { ...o, deepHook: process.env.DEEP_HUB_TEST_DEEP_HOOK || o.deepHook };
   const refused = (reason: string): Added => ({ status: 'refused', reason });
   if (!isObj(given) || !isObj(given.entries) || !Object.keys(given.entries).length) {
     return refused('Give a file of {"v": 1, "entries": {<name>: guard@1}, "proofs": {<name>: {"planted": <call>, "twin": <call>}}}.');
@@ -59,6 +70,8 @@ export async function addGuards(dir: string, given: unknown, o: { deepHook: stri
     try {
       if (!(await matches(o.deepHook, entry, proof.planted, o.classes))) return refused(`${name}: its planted call \`${shown(proof.planted)}\` goes through its match ${match}, so it guards nothing.`);
       if (await matches(o.deepHook, entry, proof.twin, o.classes)) return refused(`${name}: its twin \`${shown(proof.twin)}\` is matched by ${match}, so it would deny a call it must allow.`);
+      const form = (entry as Obj).fail_closed === true && /^(run|effect):/.test(match) ? computed(proof.planted) : undefined;
+      if (form && !(await matches(o.deepHook, entry, form, o.classes))) return refused(`${name}: its planted call with the program computed, \`${shown(form)}\`, goes through its match ${match}, so a line that computes the program gets past it.`);
     } catch (error) {
       return refused(`${name}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -83,54 +96,43 @@ export async function addGuards(dir: string, given: unknown, o: { deepHook: stri
 }
 
 /**
+ * Rewrites `<dir>/rules.json` with the members `change` returns, keeping every other, and only when it returns some. No
+ * rules.json, or one deep-hook can't read either, has nothing to change.
+ */
+function rewriteRules(dir: string, change: (current: Obj & { entries: Obj }) => Obj | undefined): void {
+  const file = join(dir, 'rules.json');
+  let current: Obj;
+  try {
+    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
+  } catch {
+    return;
+  }
+  const changed = isObj(current.entries) ? change(current as Obj & { entries: Obj }) : undefined;
+  if (changed) writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, ...changed }, null, 2)}\n`));
+}
+
+/**
  * Copies your standing rules for cloud resources into `<dir>/rules.json` (#23), keeping every other member, so
  * deep-hook lets a call one covers through with the hub down. Written only when they changed.
  */
 export function writeStanding(dir: string, standing: readonly unknown[]): void {
-  const file = join(dir, 'rules.json');
-  let current: Obj;
-  try {
-    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
-  } catch {
-    // No rules.json, or one deep-hook can't read either: nothing to add a rule to.
-    return;
-  }
-  if (!isObj(current.entries) || JSON.stringify(current.standing ?? []) === JSON.stringify(standing)) return;
-  writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, standing }, null, 2)}\n`));
+  rewriteRules(dir, (current) => (JSON.stringify(current.standing ?? []) === JSON.stringify(standing) ? undefined : { standing }));
 }
 
 /** Takes the entries `drops` names out of `<dir>/rules.json` (#111), keeping every other. */
 export function dropEntries(dir: string, drops: (name: string) => boolean): void {
-  const file = join(dir, 'rules.json');
-  let current: Obj;
-  try {
-    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
-  } catch {
-    return;
-  }
-  if (!isObj(current.entries) || !Object.keys(current.entries).some(drops)) return;
-  writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, entries: Object.fromEntries(Object.entries(current.entries).filter(([name]) => !drops(name))) }, null, 2)}\n`));
+  rewriteRules(dir, ({ entries }) => (Object.keys(entries).some(drops) ? { entries: Object.fromEntries(Object.entries(entries).filter(([name]) => !drops(name))) } : undefined));
 }
 
 /** Copies the directions you rejected into `<dir>/rules.json` as `rejected-*` entries (#111), keeping every other. */
 export function writeRejected(dir: string, rejected: Obj): void {
-  const file = join(dir, 'rules.json');
-  let current: Obj;
-  try {
-    current = JSON.parse(readFileSync(file, 'utf8')) as Obj;
-  } catch {
-    return;
-  }
-  if (!isObj(current.entries)) return;
-  const others = Object.fromEntries(Object.entries(current.entries).filter(([name]) => !name.startsWith('rejected-')));
-  const entries = { ...others, ...rejected };
-  if (JSON.stringify(Object.entries(entries).sort()) === JSON.stringify(Object.entries(current.entries).sort())) return;
-  writeSynced(file, Buffer.from(`${JSON.stringify({ ...current, entries }, null, 2)}\n`));
+  rewriteRules(dir, (current) => {
+    const entries = { ...Object.fromEntries(Object.entries(current.entries).filter(([name]) => !name.startsWith('rejected-'))), ...rejected };
+    return JSON.stringify(Object.entries(entries).sort()) === JSON.stringify(Object.entries(current.entries).sort()) ? undefined : { entries };
+  });
 }
 
 const USAGE = 'Usage: deep guard add <file>';
-/** Refusals that leave nothing added and nothing decided: not confirmed, an agent's command, or a hub that couldn't. */
-const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);
 
 /** `deep guard add <file>`: exit 0 added, 1 refused, 2 a usage error, 3 not decided. */
 export async function guardCommand(args: readonly string[]): Promise<number> {
@@ -146,22 +148,8 @@ export async function guardCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`deep guard add: ${from} isn't readable JSON (${error instanceof Error ? error.message : String(error)})\n`);
     return 2;
   }
-  let reply: Reply;
-  try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-    reply = await call(hubAddress().path, token, 'guard.add', { guards }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
-  } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}; nothing was added\n`);
-    return 3;
-  }
-  if ('error' in reply) {
-    process.stderr.write(`${reply.error.remediation}\n`);
-    return UNDECIDED_CODES.has(reply.error.code) ? 3 : 2;
-  }
-  if (reply.result.status === 'refused') {
-    process.stderr.write(`REFUSED: ${String(reply.result.reason)}\n`);
-    return 1;
-  }
-  process.stdout.write(`Added ${(reply.result.names as string[]).join(', ')} to your rules\n`);
+  const result = await callAsYou('guard.add', { guards }, 'nothing was added');
+  if (typeof result === 'number') return result;
+  process.stdout.write(`Added ${(result.names as string[]).join(', ')} to your rules\n`);
   return 0;
 }

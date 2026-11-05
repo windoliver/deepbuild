@@ -1,0 +1,120 @@
+{
+  "title": "waiver.granted@1",
+  "description": "A waiver was granted: it accepts one check's failure by its exact error text, approved by someone other than the claimant, until its date passes or its condition is met. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "waiver.granted"
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "check": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The check whose failure it accepts."
+        },
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The error text it matches, normalized as a waiver matches it."
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Who owns the waiver."
+        },
+        "approved_by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Who approved it."
+        },
+        "until": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "When it ends, in milliseconds since the Unix epoch, for a waiver that ends on a date."
+        },
+        "condition": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The condition that ends it, for a waiver that ends on one."
+        }
+      },
+      "required": [
+        "check",
+        "error",
+        "owner",
+        "approved_by"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

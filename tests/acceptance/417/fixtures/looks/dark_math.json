@@ -1,0 +1,9 @@
+{
+  "look": "dark_math",
+  "scene": "scene.json",
+  "film": "film.json",
+  "themes": [
+    "light",
+    "dark"
+  ]
+}

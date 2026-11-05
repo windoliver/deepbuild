@@ -1,0 +1,293 @@
+Base commit: a7e140b2a969bf7dd5a47d97d6ef4e050c2c579c ("Merge pull request #1007 …")
+Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/398 --no-file-parallelism
+Run in the worktree at the base commit with only tests/acceptance/398/ added (untracked) and the repo's node_modules. deep-canvas-render builds there.
+All 55 tests fail (the redraft replaced AC6's skipped Oracle-lane placeholder with 21 resvg pairs and a planted twin). Each failure is a missing
+surface, not a test typo:
+- the base registers no vector@1 kind: with a look, the check's marks2d pass refuses every vector item with module_missing ("marks2d refuses it"),
+  so a clean SVG fails expectClean, a malformed, scripted or text SVG is refused with module_missing instead of svg_malformed / svg_script / svg_text,
+  every resvg pair (AC5 and AC6) is refused with module_missing, raster refuses with module_missing, and geometry answers
+  {"ok": false, "code": "module_missing"} with no parts (AC1, AC2, AC4, AC5, AC6);
+- part channel targets items/eq/parts/<part>/role|opacity reach nothing at the base: ref_unresolved per channel (AC3);
+- raster answers bad_input to the unknown planted value import_skips_clip_path (AC6, elements.svg); on the resvg clipPath pairs the planted run
+  is refused with module_missing, so its problems don't name clipPath; write_fades_fills_from_start (AC4) is never reached, since the honest
+  frame is refused first.
+Date: 2026-11-02T08:52:10Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1  (machine shared with other worktrees' builds, so the durations are long)
+Exit code: 1
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/398
+
+ ❯ write.test.ts (4 tests | 4 failed) 98292ms
+   ❯ AC4 write_on draws each term outline first, then its fill, the terms lagged by min(4 ÷ n, 0.2) (4)
+     × AC4 at 0.15 s term 1's outline is 0.35 drawn within 0.01, from its start along its path, in its stroke paint, with no fill; terms 2 and 3 draw nothing 5135ms
+     × AC4 the 0.15 s frame passes the perceptual oracle against the analytic frame, and the planted write_fades_fills_from_start fails it 582ms
+     × AC4 each term starts on time and draws at its own pace: terms 2 and 3 start at 6/35 and 12/35 s, and the drawn shares at 0.3, 0.42 and 0.6 s follow the 6/7 s span 1345ms
+     × AC4 term 1's fill comes in from 3/7 s while its outline is whole, and at 6/7 s it is filled with its own stroke 336ms
+ ❯ elements.test.ts (25 tests | 25 failed) 94964ms
+   ❯ AC6 the import reads a closed list: each element outside it is drawn as listed or named in an issue, never dropped (3)
+     × AC6 elements.svg imports, and its clipPath, mask, pattern, marker and style block are each drawn as listed or named in an issue 5512ms
+     × AC6 the rect with rx 4 imports with rounded corners within 0.01 u: its outline and the rounded rect (120, 120, 80, 50, r 4) lie within 0.01 u of each other 2075ms
+     × AC6 the planted importer import_skips_clip_path, which drops <clipPath> with no issue, fails, naming clipPath 2453ms
+   ❯ AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import (22)
+     × AC6 resvg masking/clipPath/simple-case: imports, and is drawn to its reviewed PNG through the perceptual oracle or names clipPath in an issue 512ms
+     × AC6 resvg masking/clipPath/clip-rule=evenodd: imports, and is drawn to its reviewed PNG through the perceptual oracle or names clipPath or clip-rule in an issue 709ms
+     × AC6 resvg masking/clipPath/clipPathUnits=objectBoundingBox: imports, and is drawn to its reviewed PNG through the perceptual oracle or names clipPath or clipPathUnits in an issue 840ms
+     × AC6 resvg masking/clipPath/multiple-children: imports, and is drawn to its reviewed PNG through the perceptual oracle or names clipPath or clip-rule in an issue 879ms
+     × AC6 resvg masking/mask/on-group-with-transform: imports, and is drawn to its reviewed PNG through the perceptual oracle or names mask in an issue 229ms
+     × AC6 resvg masking/mask/half-width-region-with-rotation: imports, and is drawn to its reviewed PNG through the perceptual oracle or names mask in an issue 287ms
+     × AC6 resvg paint-servers/pattern/simple-case: imports, and is drawn to its reviewed PNG through the perceptual oracle or names pattern in an issue 247ms
+     × AC6 resvg paint-servers/pattern/with-x-and-y: imports, and is drawn to its reviewed PNG through the perceptual oracle or names pattern in an issue 949ms
+     × AC6 resvg paint-servers/pattern/patternUnits=objectBoundingBox: imports, and is drawn to its reviewed PNG through the perceptual oracle or names pattern or patternUnits in an issue 231ms
+     × AC6 resvg painting/marker/marker-on-line: imports, and is drawn to its reviewed PNG through the perceptual oracle or names marker in an issue 410ms
+     × AC6 resvg painting/marker/only-marker-end: imports, and is drawn to its reviewed PNG through the perceptual oracle or names marker in an issue 765ms
+     × AC6 resvg painting/marker/with-markerUnits=userSpaceOnUse: imports, and is drawn to its reviewed PNG through the perceptual oracle or names marker or markerUnits in an issue 891ms
+     × AC6 resvg painting/marker/orient=auto-on-M-L-L: imports, and is drawn to its reviewed PNG through the perceptual oracle or names marker or orient in an issue 458ms
+     × AC6 resvg structure/style/class-selector: imports, and is drawn to its reviewed PNG through the perceptual oracle or names style in an issue 339ms
+     × AC6 resvg structure/style/type-selector: imports, and is drawn to its reviewed PNG through the perceptual oracle or names style in an issue 427ms
+     × AC6 resvg structure/style/iD-selector: imports, and is drawn to its reviewed PNG through the perceptual oracle or names style in an issue 603ms
+     × AC6 resvg structure/style/universal-selector: imports, and is drawn to its reviewed PNG through the perceptual oracle or names style in an issue 392ms
+     × AC6 resvg shapes/rect/rounded-rect: imports, and is drawn to its reviewed PNG through the perceptual oracle 316ms
+     × AC6 resvg shapes/rect/rx-attribute-resolving: imports, and is drawn to its reviewed PNG through the perceptual oracle 320ms
+     × AC6 resvg shapes/rect/rx-attribute-clamping: imports, and is drawn to its reviewed PNG through the perceptual oracle 892ms
+     × AC6 resvg shapes/rect/simple-case: imports, and is drawn to its reviewed PNG through the perceptual oracle 300ms
+     × AC6 the planted importer import_skips_clip_path fails resvg's clipPath pairs, naming clipPath: unclipped, and named in no issue 349ms
+ ❯ defs.test.ts (13 tests | 13 failed) 80737ms
+   ❯ AC5 <use> into <defs> resolves at import, each glyph its own path; currentColor maps through colors (2)
+     × AC5 each MathJax glyph imports as its own path at its drawn box: the two uses of one glyph are two paths, each where its use places it, within 0.01 u 4355ms
+     × AC5 a currentColor fill draws in the role colors maps it to, as any other color does, and the glyph outlines in <defs> draw nowhere themselves 1649ms
+   ❯ AC5 (Oracle lane) resvg's <use>, <defs> and currentColor tests, run on our import (11)
+     × AC5 resvg structure/use/from-defs: imports and draws its reviewed PNG through the perceptual oracle 764ms
+     × AC5 resvg structure/use/with-currentColor: imports and draws its reviewed PNG through the perceptual oracle 434ms
+     × AC5 resvg structure/use/simple-case: imports and draws its reviewed PNG through the perceptual oracle 1402ms
+     × AC5 resvg structure/use/transform-attribute-1: imports and draws its reviewed PNG through the perceptual oracle 893ms
+     × AC5 resvg structure/use/indirect: imports and draws its reviewed PNG through the perceptual oracle 405ms
+     × AC5 resvg structure/use/non-linear-order: imports and draws its reviewed PNG through the perceptual oracle 279ms
+     × AC5 resvg structure/defs/ignore-shapes-inside-defs: imports and draws its reviewed PNG through the perceptual oracle 284ms
+     × AC5 resvg painting/color/simple-case: imports and draws its reviewed PNG through the perceptual oracle 214ms
+     × AC5 resvg painting/color/inherit: imports and draws its reviewed PNG through the perceptual oracle 428ms
+     × AC5 the comparison can fail: from-defs drawn by us is held to ignore-shapes-inside-defs.png (its planted mismatch) and fails on its pixels 553ms
+     × AC5 resvg's uses keep their ids as parts at their boxes: from-defs's use1 at (20, 20, 160, 160) and simple-case's use1 at (20, 110, 160, 70), × 1.5 433ms
+ ❯ parts.test.ts (4 tests | 4 failed) 119964ms
+   ❯ AC2 glyph groups with ids become parts at their drawn boxes; a text element is refused naming it (4)
+     × AC2 glyphs.svg imports with exactly the parts x and eq, each at its box in document u within 0.01 u, its outline inside that box 3848ms
+     × AC2 the raster draws x in ink and eq in its mapped role exactly over those boxes (within one pixel each side) 141ms
+     × AC2 glyphs-text.svg, glyphs.svg with a <text> element, is refused naming the element with a fix, and never drawn 132ms
+     × AC2 usvg's parser tests, ported: a use's and a nested path's boxes after their parents' transforms (resvg 77b12f4951, crates/usvg/tests/parser.rs) 135ms
+ ❯ channels.test.ts (2 tests | 2 failed) 116826ms
+   ❯ AC3 a vector part is a channel target: its role and its opacity (2)
+     × AC3 keying items/eq/parts/t-b_5e2/role from ink to accent at 1 s recolors both of that part's paths and no other pixel 4133ms
+     × AC3 opacity from 1 to 0.3 on the other four parts dims each to 0.3 within one code value, leaving t-b_5e2 and the ground exact 256ms
+ ❯ refusals.test.ts (7 tests | 7 failed) 154231ms
+   ❯ AC1 a malformed or scripted SVG is refused with the reason (7)
+     × AC1 the clean twin of every refused fixture imports: the check passes and the raster draws its bar in ink 3496ms
+     × AC1 malformed-unclosed.svg (an element left open (a <g> never closed)) is refused with svg_malformed, naming the item, and is never drawn 153ms
+     × AC1 malformed-not-xml.svg (bytes that are not XML at all) is refused with svg_malformed, naming the item, and is never drawn 173ms
+     × AC1 malformed-root.svg (an XML document whose root is not <svg>) is refused with svg_malformed, naming the item, and is never drawn 131ms
+     × AC1 scripted-script.svg (a <script> element) is refused with svg_script, naming the item, and is never drawn 152ms
+     × AC1 scripted-onload.svg (an onload event attribute) is refused with svg_script, naming the item, and is never drawn 320ms
+     × AC1 scripted-href.svg (a javascript: link) is refused with svg_script, naming the item, and is never drawn 137ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 55: each test's first assertion (the full diffs trimmed) ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  channels.test.ts > AC3 a vector part is a channel target: its role and its opacity > AC3 keying items/eq/parts/t-b_5e2/role from ink to accent at 1 s recolors both of that part's paths and no other pixel
+  AssertionError: eq5.svg with no channel: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  channels.test.ts > AC3 a vector part is a channel target: its role and its opacity > AC3 opacity from 1 to 0.3 on the other four parts dims each to 0.3 within one code value, leaving t-b_5e2 and the ground exact
+  AssertionError: eq5.svg with four opacity channels: the check raises no error: expected [ …(4) ] to deeply equal []
+
+ FAIL  defs.test.ts > AC5 <use> into <defs> resolves at import, each glyph its own path; currentColor maps through colors > AC5 each MathJax glyph imports as its own path at its drawn box: the two uses of one glyph are two paths, each where its use places it, within 0.01 u
+  AssertionError: mathjax.svg: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  defs.test.ts > AC5 <use> into <defs> resolves at import, each glyph its own path; currentColor maps through colors > AC5 a currentColor fill draws in the role colors maps it to, as any other color does, and the glyph outlines in <defs> draw nowhere themselves
+  AssertionError: raster mathjax.svg, currentColor → accent refused: {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["fx"],"path":"items/fx/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+
+ FAIL  defs.test.ts > AC5 (Oracle lane) resvg's <use>, <defs> and currentColor tests, run on our import > AC5 resvg structure/use/from-defs: imports and draws its reviewed PNG through the perceptual oracle
+  AssertionError: resvg structure/use/from-defs: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  defs.test.ts > AC5 (Oracle lane) resvg's <use>, <defs> and currentColor tests, run on our import > AC5 resvg structure/use/with-currentColor: imports and draws its reviewed PNG through the perceptual oracle
+  AssertionError: resvg structure/use/with-currentColor: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  defs.test.ts > AC5 (Oracle lane) resvg's <use>, <defs> and currentColor tests, run on our import > AC5 resvg structure/use/simple-case: imports and draws its reviewed PNG through the perceptual oracle
+  AssertionError: resvg structure/use/simple-case: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  defs.test.ts > AC5 (Oracle lane) resvg's <use>, <defs> and currentColor tests, run on our import > AC5 resvg structure/use/transform-attribute-1: imports and draws its reviewed PNG through the perceptual oracle
+  AssertionError: resvg structure/use/transform-attribute-1: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  defs.test.ts > AC5 (Oracle lane) resvg's <use>, <defs> and currentColor tests, run on our import > AC5 resvg structure/use/indirect: imports and draws its reviewed PNG through the perceptual oracle
+  AssertionError: resvg structure/use/indirect: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  defs.test.ts > AC5 (Oracle lane) resvg's <use>, <defs> and currentColor tests, run on our import > AC5 resvg structure/use/non-linear-order: imports and draws its reviewed PNG through the perceptual oracle
+  AssertionError: resvg structure/use/non-linear-order: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  defs.test.ts > AC5 (Oracle lane) resvg's <use>, <defs> and currentColor tests, run on our import > AC5 resvg structure/defs/ignore-shapes-inside-defs: imports and draws its reviewed PNG through the perceptual oracle
+  AssertionError: resvg structure/defs/ignore-shapes-inside-defs: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  defs.test.ts > AC5 (Oracle lane) resvg's <use>, <defs> and currentColor tests, run on our import > AC5 resvg painting/color/simple-case: imports and draws its reviewed PNG through the perceptual oracle
+  AssertionError: resvg painting/color/simple-case: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  defs.test.ts > AC5 (Oracle lane) resvg's <use>, <defs> and currentColor tests, run on our import > AC5 resvg painting/color/inherit: imports and draws its reviewed PNG through the perceptual oracle
+  AssertionError: resvg painting/color/inherit: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  defs.test.ts > AC5 (Oracle lane) resvg's <use>, <defs> and currentColor tests, run on our import > AC5 the comparison can fail: from-defs drawn by us is held to ignore-shapes-inside-defs.png (its planted mismatch) and fails on its pixels
+  AssertionError: raster resvg from-defs refused: {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["svg"],"path":"items/svg/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+
+ FAIL  defs.test.ts > AC5 (Oracle lane) resvg's <use>, <defs> and currentColor tests, run on our import > AC5 resvg's uses keep their ids as parts at their boxes: from-defs's use1 at (20, 20, 160, 160) and simple-case's use1 at (20, 110, 160, 70), × 1.5
+  AssertionError: geometry of svg refused: {"ok":false,"code":"module_missing","path":"items/svg/kind: vector@1"}: expected false to be true // Object.is equality
+
+ FAIL  elements.test.ts > AC6 the import reads a closed list: each element outside it is drawn as listed or named in an issue, never dropped > AC6 elements.svg imports, and its clipPath, mask, pattern, marker and style block are each drawn as listed or named in an issue
+  AssertionError: the SVG imports: no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 the import reads a closed list: each element outside it is drawn as listed or named in an issue, never dropped > AC6 the rect with rx 4 imports with rounded corners within 0.01 u: its outline and the rounded rect (120, 120, 80, 50, r 4) lie within 0.01 u of each other
+  AssertionError: geometry of art refused: {"ok":false,"code":"module_missing","path":"items/art/kind: vector@1"}: expected false to be true // Object.is equality
+
+ FAIL  elements.test.ts > AC6 the import reads a closed list: each element outside it is drawn as listed or named in an issue, never dropped > AC6 the planted importer import_skips_clip_path, which drops <clipPath> with no issue, fails, naming clipPath
+  AssertionError: raster elements.svg, planted importer refused: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg masking/clipPath/simple-case: imports, and is drawn to its reviewed PNG through the perceptual oracle or names clipPath in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg masking/clipPath/clip-rule=evenodd: imports, and is drawn to its reviewed PNG through the perceptual oracle or names clipPath or clip-rule in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg masking/clipPath/clipPathUnits=objectBoundingBox: imports, and is drawn to its reviewed PNG through the perceptual oracle or names clipPath or clipPathUnits in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg masking/clipPath/multiple-children: imports, and is drawn to its reviewed PNG through the perceptual oracle or names clipPath or clip-rule in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg masking/mask/on-group-with-transform: imports, and is drawn to its reviewed PNG through the perceptual oracle or names mask in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg masking/mask/half-width-region-with-rotation: imports, and is drawn to its reviewed PNG through the perceptual oracle or names mask in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg paint-servers/pattern/simple-case: imports, and is drawn to its reviewed PNG through the perceptual oracle or names pattern in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg paint-servers/pattern/with-x-and-y: imports, and is drawn to its reviewed PNG through the perceptual oracle or names pattern in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg paint-servers/pattern/patternUnits=objectBoundingBox: imports, and is drawn to its reviewed PNG through the perceptual oracle or names pattern or patternUnits in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg painting/marker/marker-on-line: imports, and is drawn to its reviewed PNG through the perceptual oracle or names marker in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg painting/marker/only-marker-end: imports, and is drawn to its reviewed PNG through the perceptual oracle or names marker in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg painting/marker/with-markerUnits=userSpaceOnUse: imports, and is drawn to its reviewed PNG through the perceptual oracle or names marker or markerUnits in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg painting/marker/orient=auto-on-M-L-L: imports, and is drawn to its reviewed PNG through the perceptual oracle or names marker or orient in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg structure/style/class-selector: imports, and is drawn to its reviewed PNG through the perceptual oracle or names style in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg structure/style/type-selector: imports, and is drawn to its reviewed PNG through the perceptual oracle or names style in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg structure/style/iD-selector: imports, and is drawn to its reviewed PNG through the perceptual oracle or names style in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg structure/style/universal-selector: imports, and is drawn to its reviewed PNG through the perceptual oracle or names style in an issue
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg shapes/rect/rounded-rect: imports, and is drawn to its reviewed PNG through the perceptual oracle
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg shapes/rect/rx-attribute-resolving: imports, and is drawn to its reviewed PNG through the perceptual oracle
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg shapes/rect/rx-attribute-clamping: imports, and is drawn to its reviewed PNG through the perceptual oracle
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg shapes/rect/simple-case: imports, and is drawn to its reviewed PNG through the perceptual oracle
+  AssertionError: expected [ Array(1) ] to deeply equal []
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 the planted importer import_skips_clip_path fails resvg's clipPath pairs, naming clipPath: unclipped, and named in no issue
+  AssertionError: masking/clipPath/simple-case: each problem names clipPath and is on its pixels: masking/clipPath/simple-case: refused, error module_missing [svg] items/svg/kind: vector@1: expected false to be true // Object.is equality
+
+ FAIL  parts.test.ts > AC2 glyph groups with ids become parts at their drawn boxes; a text element is refused naming it > AC2 glyphs.svg imports with exactly the parts x and eq, each at its box in document u within 0.01 u, its outline inside that box
+  AssertionError: glyphs.svg: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  parts.test.ts > AC2 glyph groups with ids become parts at their drawn boxes; a text element is refused naming it > AC2 the raster draws x in ink and eq in its mapped role exactly over those boxes (within one pixel each side)
+  AssertionError: raster glyphs.svg refused: {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["formula"],"path":"items/formula/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+
+ FAIL  parts.test.ts > AC2 glyph groups with ids become parts at their drawn boxes; a text element is refused naming it > AC2 glyphs-text.svg, glyphs.svg with a <text> element, is refused naming the element with a fix, and never drawn
+  AssertionError: every error is svg_text: expected [ 'module_missing' ] to deeply equal [ 'svg_text' ]
+
+ FAIL  parts.test.ts > AC2 glyph groups with ids become parts at their drawn boxes; a text element is refused naming it > AC2 usvg's parser tests, ported: a use's and a nested path's boxes after their parents' transforms (resvg 77b12f4951, crates/usvg/tests/parser.rs)
+  AssertionError: use_node_abs_transform: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  refusals.test.ts > AC1 a malformed or scripted SVG is refused with the reason > AC1 the clean twin of every refused fixture imports: the check passes and the raster draws its bar in ink
+  AssertionError: clean.svg: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  refusals.test.ts > AC1 a malformed or scripted SVG is refused with the reason > AC1 malformed-unclosed.svg (an element left open (a <g> never closed)) is refused with svg_malformed, naming the item, and is never drawn
+  AssertionError: malformed-unclosed.svg: every error carries the reason svg_malformed: expected [ 'module_missing' ] to deeply equal [ 'svg_malformed' ]
+
+ FAIL  refusals.test.ts > AC1 a malformed or scripted SVG is refused with the reason > AC1 malformed-not-xml.svg (bytes that are not XML at all) is refused with svg_malformed, naming the item, and is never drawn
+  AssertionError: malformed-not-xml.svg: every error carries the reason svg_malformed: expected [ 'module_missing' ] to deeply equal [ 'svg_malformed' ]
+
+ FAIL  refusals.test.ts > AC1 a malformed or scripted SVG is refused with the reason > AC1 malformed-root.svg (an XML document whose root is not <svg>) is refused with svg_malformed, naming the item, and is never drawn
+  AssertionError: malformed-root.svg: every error carries the reason svg_malformed: expected [ 'module_missing' ] to deeply equal [ 'svg_malformed' ]
+
+ FAIL  refusals.test.ts > AC1 a malformed or scripted SVG is refused with the reason > AC1 scripted-script.svg (a <script> element) is refused with svg_script, naming the item, and is never drawn
+  AssertionError: scripted-script.svg: every error carries the reason svg_script: expected [ 'module_missing' ] to deeply equal [ 'svg_script' ]
+
+ FAIL  refusals.test.ts > AC1 a malformed or scripted SVG is refused with the reason > AC1 scripted-onload.svg (an onload event attribute) is refused with svg_script, naming the item, and is never drawn
+  AssertionError: scripted-onload.svg: every error carries the reason svg_script: expected [ 'module_missing' ] to deeply equal [ 'svg_script' ]
+
+ FAIL  refusals.test.ts > AC1 a malformed or scripted SVG is refused with the reason > AC1 scripted-href.svg (a javascript: link) is refused with svg_script, naming the item, and is never drawn
+  AssertionError: scripted-href.svg: every error carries the reason svg_script: expected [ 'module_missing' ] to deeply equal [ 'svg_script' ]
+
+ FAIL  write.test.ts > AC4 write_on draws each term outline first, then its fill, the terms lagged by min(4 ÷ n, 0.2) > AC4 at 0.15 s term 1's outline is 0.35 drawn within 0.01, from its start along its path, in its stroke paint, with no fill; terms 2 and 3 draw nothing
+  AssertionError: formula3.svg written on: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+ FAIL  write.test.ts > AC4 write_on draws each term outline first, then its fill, the terms lagged by min(4 ÷ n, 0.2) > AC4 the 0.15 s frame passes the perceptual oracle against the analytic frame, and the planted write_fades_fills_from_start fails it
+  AssertionError: raster the write at 0.15 s refused: {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["f"],"path":"items/f/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+
+ FAIL  write.test.ts > AC4 write_on draws each term outline first, then its fill, the terms lagged by min(4 ÷ n, 0.2) > AC4 each term starts on time and draws at its own pace: terms 2 and 3 start at 6/35 and 12/35 s, and the drawn shares at 0.3, 0.42 and 0.6 s follow the 6/7 s span
+  AssertionError: raster the write at 0.165 s refused: {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["f"],"path":"items/f/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+
+ FAIL  write.test.ts > AC4 write_on draws each term outline first, then its fill, the terms lagged by min(4 ÷ n, 0.2) > AC4 term 1's fill comes in from 3/7 s while its outline is whole, and at 6/7 s it is filled with its own stroke
+  AssertionError: raster the write at 0.42 s refused: {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["f"],"path":"items/f/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+
+Three expanded diffs, as the run printed them (an AC6 resvg pair, AC3's channels, AC1's clean twin):
+
+
+ FAIL  elements.test.ts > AC6 (Oracle lane) resvg's clipPath, mask, pattern, marker, style and rect tests, run on our import > AC6 resvg masking/clipPath/simple-case: imports, and is drawn to its reviewed PNG through the perceptual oracle or names clipPath in an issue
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "masking/clipPath/simple-case: refused, error module_missing [svg] items/svg/kind: vector@1",
++ ]
+
+AssertionError: eq5.svg with four opacity channels: the check raises no error: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error ref_unresolved [dim-t-a_1] channels/dim-t-a_1/target",
++   "error ref_unresolved [dim-t-c_7] channels/dim-t-c_7/target",
++   "error ref_unresolved [dim-t-d_3f] channels/dim-t-d_3f/target",
++   "error ref_unresolved [dim-t-e_9] channels/dim-t-e_9/target",
++ ]
+
+AssertionError: clean.svg: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error module_missing [art] items/art/kind: vector@1",
++ ]
+
+ Test Files  6 failed (6)

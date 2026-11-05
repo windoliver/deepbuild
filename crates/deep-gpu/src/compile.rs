@@ -28,6 +28,11 @@ impl<T> Compiling<T> {
         }
         self.done.as_ref()
     }
+
+    /// The result, waited for off the UI thread; `None` if the compile thread dropped it.
+    pub fn wait(self) -> Option<T> {
+        self.done.or_else(|| self.rx.recv().ok())
+    }
 }
 
 impl CompileThread {

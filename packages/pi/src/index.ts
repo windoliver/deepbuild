@@ -1,11 +1,11 @@
 // DeepBuild's pi package, in-process: pi's session and tool events go to the hub as hook requests, in order and off
 // pi's path; the deep_* tools are native tools over the hub's socket; and an answer the hub hands over reaches the
 // session through pi.sendUserMessage. It never decides anything, and nothing it reports is evidence but the events pi
-// itself fired. Rules don't reach a pi session yet: deep-hook is the one matcher and it doesn't run here, so `matched`
-// is empty and no guard blocks a pi call.
-import { execFile } from 'node:child_process';
+// itself fired. deep-hook stays the one matcher: one long-lived `deep-hook match` reads each call against your rules, as
+// a process per call would cost more than a pi event may add.
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -27,6 +27,10 @@ const HANDLED_MS = 200;
 const ANSWER_MS = 55_000;
 const UNREACHABLE_MS = 1000;
 const line = (value: Obj): string => `${JSON.stringify({ v: 1, ...value })}\n`;
+/** A line of the hub's protocol, or nothing for one that isn't: a throw inside a socket's handler would end pi. */
+function parse(text: string): Obj | undefined {
+  try { const value = JSON.parse(text) as unknown; return typeof value === 'object' && value !== null ? value as Obj : undefined; } catch { return undefined; }
+}
 
 /** The hub's socket: `hub.address` in ~/.deepbuild/config.json, or the installed hub's; a worktree a dev hub serves reads that one. */
 function hubSocket(cwd: string): string {
@@ -37,6 +41,63 @@ function hubSocket(cwd: string): string {
   const uses = typeof hub?.use === 'object' && hub.use !== null ? Object.entries(hub.use as Obj).filter(([dir]) => cwd === dir || cwd.startsWith(`${dir}/`)).sort((a, b) => b[0].length - a[0].length) : [];
   const address = uses[0]?.[1] ?? hub?.address;
   return typeof address === 'string' && address.startsWith('unix:') ? address.slice(5) : join(root, 'hub.sock');
+}
+
+/** The deep-hook setup recorded in ~/.deepbuild/config.json; none before setup. */
+function hookBinary(): string | undefined {
+  try {
+    const hook = (JSON.parse(readFileSync(join(process.env.HOME ?? homedir(), '.deepbuild', 'config.json'), 'utf8')) as { hook?: { binary?: unknown } }).hook;
+    return typeof hook?.binary === 'string' ? hook.binary : undefined;
+  } catch { return undefined; }
+}
+
+/** What deep-hook read of a call: the fields of its hook request, and what holds the call with the hub away. */
+interface Ruling { matched: string[]; notes?: Obj; stage?: Obj; denials: string[]; unread?: boolean }
+const MATCH_MS = 1000;
+/** One `deep-hook match` for the session, off pi's exit: it ends when its stdin closes. */
+class Matcher {
+  private child: ChildProcess | undefined;
+  private readonly waiting: ((ruling?: Ruling) => void)[] = [];
+  /** `build` tells one build at the path from the next, so a rebuilt deep-hook isn't left running as the old one. */
+  constructor(readonly binary: string, readonly build: number) {}
+  private start(): ChildProcess {
+    const child = spawn(this.binary, ['match'], { stdio: ['pipe', 'pipe', 'ignore'] });
+    let buffer = '';
+    child.on('error', () => this.stop(child));
+    child.on('exit', () => this.stop(child));
+    child.stdin!.on('error', () => this.stop(child));
+    child.stdout!.setEncoding('utf8').on('data', (chunk: string) => {
+      if (child !== this.child) return;
+      buffer += chunk;
+      for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
+        const text = buffer.slice(0, i);
+        buffer = buffer.slice(i + 1);
+        let ruling: Ruling | undefined;
+        try { ruling = JSON.parse(text) as Ruling; } catch { /* not an answer */ }
+        if (!Array.isArray(ruling?.matched) || !Array.isArray(ruling.denials)) { this.stop(child); return; }
+        this.waiting.shift()?.(ruling);
+      }
+    });
+    child.unref();
+    (child.stdin as unknown as net.Socket).unref();
+    (child.stdout as unknown as net.Socket).unref();
+    return child;
+  }
+  /** `undefined` when the matcher didn't answer: the call couldn't be read against your rules. */
+  ask(call: Obj): Promise<Ruling | undefined> {
+    const child = this.child ??= this.start();
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => this.stop(child), MATCH_MS);
+      this.waiting.push((ruling) => { clearTimeout(timer); resolve(ruling); });
+      child.stdin!.write(`${JSON.stringify(call)}\n`);
+    });
+  }
+  stop(child = this.child): void {
+    if (!child || child !== this.child) return;
+    this.child = undefined;
+    child.kill();
+    for (const answer of this.waiting.splice(0)) answer();
+  }
 }
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -59,7 +120,7 @@ const HELD_MS = 70_000;
 /** A stop sends a run back at most this many times in a row, from its last tool call: Claude Code's own cap, which pi lacks. */
 const CONTINUE_CAP = 8;
 const ANNOUNCE_MS = 30_000;
-function sendHook(socket: string, event: string, payload: Obj, acked: () => void): Promise<{ exit: number; stdout: string; stderr: string } | undefined> {
+function sendHook(socket: string, event: string, payload: Obj, acked: () => void, ruling?: Ruling): Promise<{ exit: number; stdout: string; stderr: string } | undefined> {
   return new Promise((resolve) => {
     const sock = net.connect(socket);
     let buffer = '';
@@ -72,12 +133,13 @@ function sendHook(socket: string, event: string, payload: Obj, acked: () => void
     sock.setEncoding('utf8').on('data', (chunk: string) => {
       buffer += chunk;
       for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
-        const message = JSON.parse(buffer.slice(0, i)) as Obj;
+        const message = parse(buffer.slice(0, i));
         buffer = buffer.slice(i + 1);
+        if (!message) continue;
         if (!greeted) {
           greeted = true;
           const seq = (BigInt(Date.now()) * 1_000_000n).toString();
-          sock.write(line({ agent: 'pi', event, seq, id: ulid(), pid: process.pid, ppid: process.pid, matched: [], payload }));
+          sock.write(line({ agent: 'pi', event, seq, id: ulid(), pid: process.pid, ppid: process.pid, matched: ruling?.matched ?? [], ...(ruling?.notes ? { notes: ruling.notes } : {}), ...(ruling?.stage ? { stage: ruling.stage } : {}), payload }));
         } else if ('ack' in message) {
           ack = true;
           acked();
@@ -119,8 +181,9 @@ class Tools {
       sock.setEncoding('utf8').on('data', (chunk: string) => {
         buffer += chunk;
         for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
-          const message = JSON.parse(buffer.slice(0, i)) as Obj;
+          const message = parse(buffer.slice(0, i));
           buffer = buffer.slice(i + 1);
+          if (!message) continue;
           if (!greeted) {
             greeted = true;
             void startOf(process.pid).then((start) => sock.write(line({ hello: 'mcp', parent: { pid: process.pid, start }, cwd: this.cwd })));
@@ -173,14 +236,26 @@ export default function deepbuild(pi: Pi): void {
   /** Answers the hub handed over that wait for a place in the session. */
   const held: { asks: string[]; text: string }[] = [];
   const delivered = new Set<string>();
+  let matcher: Matcher | undefined;
+  /** A call read against your rules: 'no setup' in a home with no rules to read it against, 'unread' when there are and nothing could. */
+  async function read(call: Obj): Promise<Ruling | 'unread' | 'unparsed' | 'no setup'> {
+    const binary = hookBinary();
+    if (!binary) return existsSync(join(process.env.HOME ?? homedir(), '.deepbuild', 'rules.json')) ? 'unread' : 'no setup';
+    let build: number;
+    try { build = statSync(binary).mtimeMs; } catch { return 'unread'; }
+    if (binary !== matcher?.binary || build !== matcher.build) { matcher?.stop(); matcher = new Matcher(binary, build); }
+    // Once more on a fresh process: one that died between calls is no reason to hold this one.
+    const ruling = await matcher.ask(call) ?? await matcher.ask(call);
+    return !ruling ? 'unread' : ruling.unread ? 'unparsed' : ruling;
+  }
 
   /** In the order pi fired them: each goes once the one before is acknowledged, so the handler that sent it doesn't wait. */
-  function hook(event: string, fields: Obj): Promise<{ exit: number; stdout: string; stderr: string } | undefined> {
+  function hook(event: string, fields: Obj, ruling?: Ruling): Promise<{ exit: number; stdout: string; stderr: string } | undefined> {
     const file = ctx?.sessionManager.getSessionFile();
     const payload = { hook_event_name: event, session_id: session, cwd: ctx?.cwd ?? process.cwd(), ...(file ? { transcript_path: file } : {}), ...(version ? { agent_version: version } : {}), ...fields };
     let acked!: () => void;
     const ack = new Promise<void>((done) => { acked = done; });
-    const reply = sending.then(() => sendHook(socket, event, payload, acked));
+    const reply = sending.then(() => sendHook(socket, event, payload, acked, ruling));
     sending = ack;
     return reply;
   }
@@ -233,6 +308,10 @@ export default function deepbuild(pi: Pi): void {
   }
   const afterStart: (() => void)[] = [];
   let gone = false;
+  /** The person's last prompts, as pi showed them: a user message holding one of them is theirs. */
+  const personInputs: string[] = [];
+  /** User messages that started in this run and matched no answer sent nor the person's prompts: an answer an extension rewrote. */
+  let unmatchedStarts = 0;
   /**
    * What the session can take now. A tool call running takes a steer, which reaches the model after the calls' results.
    * While only a model request runs nothing goes in: it may end in an error pi retries on its own, so the answer waits
@@ -333,6 +412,7 @@ export default function deepbuild(pi: Pi): void {
     const mine = client;
     client = undefined;
     // A reload is the same session in a new runtime; only a session that goes ends.
+    matcher?.stop();
     if (reason !== 'reload') await hook('session_shutdown', { reason });
     else await sending;
     mine?.close();
@@ -341,6 +421,7 @@ export default function deepbuild(pi: Pi): void {
     flushInput();
     // Whether a run follows shows only afterwards: an extension after this one may take the input without one.
     const payload = { prompt: String(event.text), source: String(event.source) };
+    if (payload.source !== 'extension' && payload.prompt) { personInputs.push(payload.prompt); if (personInputs.length > 8) personInputs.shift(); }
     pendingInput = { payload, timer: setTimeout(() => flushInput(ctx?.isIdle() === true ? { disposition: 'handled' } : {}), HANDLED_MS) };
     return undefined;
   });
@@ -349,7 +430,11 @@ export default function deepbuild(pi: Pi): void {
     const message = event.message as { role?: string; content?: unknown } | undefined;
     if (message?.role !== 'user') return undefined;
     const text = typeof message.content === 'string' ? message.content : JSON.stringify(message.content ?? '');
-    for (const entry of [...sent]) if (text.includes(JSON.stringify(entry.text).slice(1, -1))) reached(entry);
+    const holds = (said: string): boolean => text.includes(JSON.stringify(said).slice(1, -1));
+    let matched = false;
+    for (const entry of [...sent]) if (holds(entry.text)) { reached(entry); matched = true; }
+    // Not an answer as sent, not the person's words: an extension's input transform rewrote what went in.
+    if (!matched && sent.length && !personInputs.some(holds)) unmatchedStarts++;
     return undefined;
   });
   on('agent_start', () => {
@@ -367,13 +452,23 @@ export default function deepbuild(pi: Pi): void {
   });
   on('tool_call', async (event) => {
     const name = String(event.toolName);
+    // Our own native tools read as `deep mcp`'s do, so nothing downstream counts them as change.
+    const call = { tool_name: own.has(name) ? `mcp__deep__${name}` : name, tool_input: (event.input ?? {}) as Obj };
+    const ruling = await read({ ...call, cwd: ctx?.cwd ?? process.cwd() });
     const reply = await hook('tool_call', {
-      // Our own native tools read as `deep mcp`'s do, so nothing downstream counts them as change.
-      tool_name: own.has(name) ? `mcp__deep__${name}` : name, tool_input: (event.input ?? {}) as Obj, tool_use_id: String(event.toolCallId),
+      ...call, tool_use_id: String(event.toolCallId),
       ...(event.parentToolCallId ? { parent_tool_use_id: String(event.parentToolCallId) } : {}),
-    });
-    if (reply && reply.exit !== 0) return { block: true, reason: reply.stderr.trim() || 'DeepBuild blocked this call.' };
-    return undefined;
+    }, typeof ruling === 'string' ? undefined : ruling);
+    // A call deep-hook didn't read never passes for one that matched nothing, whatever the hub says. pi fires no result
+    // for a call it blocks here, so this one's end is said, or the hub keeps it as running.
+    if (ruling === 'unread' || ruling === 'unparsed') {
+      const reason = ruling === 'unread' ? 'DeepBuild blocked this: deep-hook didn\'t answer, so this call wasn\'t read against your guards. Retry; if it repeats, run `deep setup`.' : 'DeepBuild blocked this: deep-hook can\'t parse this call, so it wasn\'t read against your guards. Send it again without what can\'t be encoded.';
+      void hook('tool_result', { ...call, tool_use_id: String(event.toolCallId), outcome: 'failed', error: reason });
+      return { block: true, reason };
+    }
+    if (reply) return reply.exit !== 0 ? { block: true, reason: reply.stderr.trim() || 'DeepBuild blocked this call.' } : undefined;
+    // The hub didn't answer: a fail-closed entry still holds the call, as deep-hook holds Claude Code's.
+    return ruling !== 'no setup' && ruling.denials.length ? { block: true, reason: ruling.denials.join('\n') } : undefined;
   });
   on('tool_execution_start', (event) => { sentBack = 0; if (!event.parentToolCallId) { toolCalls++; place(true); } });
   on('tool_execution_end', (event) => { if (!event.parentToolCallId) toolCalls = Math.max(0, toolCalls - 1); });
@@ -441,9 +536,12 @@ export default function deepbuild(pi: Pi): void {
     // What pi cleared unread, as an abort clears its queue, goes again as a turn of its own.
     // An abort leaves pi's queue as it is: what's still in it goes in with its next run.
     if (ctx?.hasPendingMessages() !== true) for (const entry of sent.splice(0)) {
+      // A user message started this run that was no answer as sent and none of the person's: this one, rewritten.
+      if (unmatchedStarts > 0) { unmatchedStarts--; void report(entry.asks, entry.via, 'delivered'); continue; }
       for (const ask of entry.asks) delivered.delete(ask);
       held.push({ asks: entry.asks, text: entry.text });
     }
+    unmatchedStarts = 0;
     // pi goes idle only after its handlers for this event return, and no later event says so.
     const settle = (tries: number): void => {
       place(false);

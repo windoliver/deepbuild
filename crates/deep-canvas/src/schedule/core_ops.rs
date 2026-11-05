@@ -163,6 +163,8 @@ pub enum Datum {
     Nums(Vec<f64>),
     Bool(bool),
     Typed(Val),
+    /// An enum channel's value: a vector part's role (#398).
+    Text(String),
 }
 
 impl PartialEq for Datum {
@@ -171,6 +173,7 @@ impl PartialEq for Datum {
             (Datum::Num(a), Datum::Num(b)) => a == b,
             (Datum::Nums(a), Datum::Nums(b)) => a == b,
             (Datum::Bool(a), Datum::Bool(b)) => a == b,
+            (Datum::Text(a), Datum::Text(b)) => a == b,
             (Datum::Typed(a), Datum::Typed(b)) => a.bytes() == b.bytes(),
             _ => false,
         }
@@ -192,6 +195,10 @@ impl Canonical for Datum {
                 out.push(2);
                 b.encode(out);
             }
+            Datum::Text(t) => {
+                out.push(4);
+                t.encode(out);
+            }
             Datum::Typed(v) => {
                 out.push(3);
                 v.bytes().encode(out);
@@ -208,6 +215,7 @@ impl Datum {
             Datum::Num(x) => json!(x),
             Datum::Nums(xs) => json!(xs),
             Datum::Bool(b) => json!(b),
+            Datum::Text(t) => json!(t),
             Datum::Typed(_) => Value::Null,
         }
     }
@@ -222,6 +230,24 @@ impl crate::schedule::Canonical for Edit {
 /// What a contribution writes: its edits, in order.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Edits(pub Vec<Edit>);
+
+impl Edits {
+    /// `item` with every edit applied, as a reader that builds from the item's own fields at t
+    /// takes it (#420: a builder's params a channel drives).
+    pub fn applied(&self, item: &Value) -> Value {
+        let mut out = item.clone();
+        for e in &self.0 {
+            let slot = super::view::slot_at(&mut out, &e.path);
+            let value = e.value.to_json();
+            if e.add {
+                super::view::add_into(slot, &value);
+            } else {
+                *slot = value;
+            }
+        }
+        out
+    }
+}
 
 impl crate::schedule::Canonical for Edits {
     fn encode(&self, out: &mut Vec<u8>) {

@@ -12,8 +12,12 @@ use deep_canvas::schedule::core_ops::{Datum, Edit, Edits};
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
+pub mod kinds;
 mod time;
 pub use time::{cache, tick};
+pub mod registries;
+pub mod sandbox;
+pub mod sim;
 
 fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
     let one = Semver {
@@ -40,6 +44,7 @@ fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
         feature: name.replace('.', "-"),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
+        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
     }
 }
 

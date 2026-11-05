@@ -1,0 +1,172 @@
+{
+  "title": "schedule.run@1",
+  "description": "A plug-in schedule's run (#365), one event per step of its life: queued behind a run still going, dispatched to the plug-in (again, once, after a restart), and ended with its verdict on the schedule's claim. Never the job's own words beyond what the hub decided.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "schedule.run"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Z]{26}$",
+          "maxLength": 8192,
+          "description": "The run's handle, which its job is given."
+        },
+        "schedule": {
+          "type": "string",
+          "pattern": "^ext\\.[a-z0-9][a-z0-9_-]*\\.[a-z][a-z0-9_]*$",
+          "maxLength": 8192,
+          "description": "The schedule, ext.<plugin>.<name>."
+        },
+        "plugin": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$",
+          "maxLength": 8192,
+          "description": "The plug-in whose job it runs."
+        },
+        "phase": {
+          "type": "string",
+          "enum": [
+            "queued",
+            "dispatched",
+            "ended"
+          ],
+          "description": "The step this event records.",
+          "x-closure": {
+            "closed": "a run is queued, dispatched or ended, and nothing else happens to one",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "due": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "The time the run was for: its slot, or when you asked for it."
+        },
+        "resumed": {
+          "type": "boolean",
+          "description": "On a dispatch: the run was given to the plug-in again after the hub restarted, its turn accepted before the stop."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "BLOCKED",
+            "INCONCLUSIVE",
+            "INVALID",
+            "uncounted"
+          ],
+          "description": "On an end: the verdict on the schedule's claim; left out for a run stopped before dispatch.",
+          "x-closure": {
+            "closed": "each value is a verdict the claim defines and every reader acts on",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "cause": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "On an end: why, in the hub's words, such as the secret a BLOCKED run is missing."
+        },
+        "stopped": {
+          "type": "boolean",
+          "description": "On an end: the run was queued when the hub stopped, and never dispatched."
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "A handle of what the hub recorded for the run."
+          },
+          "description": "On an end: what the hub recorded for the run: readings, store items, notices and sends."
+        }
+      },
+      "required": [
+        "run",
+        "schedule",
+        "plugin",
+        "phase",
+        "due"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

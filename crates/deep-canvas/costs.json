@@ -77,9 +77,15 @@
       "ns_per_vertex": 15.04,
       "bytes_per_px": 16
     },
+    "scene3d.object_id": {
+      "ns_per_px": 0.0001
+    },
     "scene3d.output": {
       "ns_per_px": 0.0001,
       "bytes_per_px": 12
+    },
+    "scene3d.shadow": {
+      "ns_per_px": 0.05
     },
     "effects.grid": {
       "ns_per_px": 0.1172,

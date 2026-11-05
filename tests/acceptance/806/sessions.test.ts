@@ -18,6 +18,14 @@ describe('AC2 a scripted Claude Code session and a scripted Codex session each c
     expect((await t26.listTools(f.stands.get(CODEX.label)!)).map((t) => t.name), 'the Codex session\'s deep mcp lists it too').toContain('deep_show');
   }, 300_000);
 
+  it('AC2 the Codex stand-in\'s deep_claim stamped with other arguments than it sends is refused unbound', async () => {
+    const f = await openFigures({ app: false });
+    const stand = f.stands.get(CODEX.label)!;
+    await stand.stamp(f.hub, 'deep_claim', t26.claimArgs());
+    const refused = t26.errorOf(await t26.callTool(stand, 'deep_claim', t26.claimArgs()), 'deep_claim of the Codex session under a stamp for other arguments');
+    expect(refused['code'], `deep_claim of the Codex session under a stamp for other arguments binds to no session: ${JSON.stringify(refused).slice(0, 400)}`).toBe('unbound');
+  }, 300_000);
+
   for (const who of [CLAUDE, CODEX]) {
     it(`AC2 the ${who.kind === 'codex' ? 'Codex' : 'Claude Code'} session's deep_show of the six-item figure is presented at revision 1 with a snapshot hash, drawn by the app in that agent's layer outlined with the session's name, and held by the record by hash`, async () => {
       requireMacos();

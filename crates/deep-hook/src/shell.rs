@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 /// How deep shells, substitutions and evals nest before the reader reads no further in.
-const DEPTH: usize = 12;
+pub const DEPTH: usize = 12;
 
 /// The largest script file the reader reads.
 const SCRIPT: u64 = 256 * 1024;
@@ -37,6 +37,18 @@ pub struct Run {
     pub scripted: bool,
     /// Whether what it reads on stdin, or one of its arguments, comes from a lookup by name or port.
     pub looked_up: bool,
+    /// What the reader couldn't know of it, when it couldn't read it whole.
+    pub unread: Option<Unread>,
+}
+
+/// Why the reader couldn't read a run whole.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unread {
+    /// The line computes its program, as with `"$(printf git)"` or a variable the line doesn't set.
+    Program,
+    /// It nests deeper than DEPTH shells, substitutions and evals: the reader read no further in, so it may run
+    /// anything.
+    Depth,
 }
 
 #[derive(Debug, Clone)]
@@ -929,10 +941,20 @@ struct Reader {
 impl Reader {
     fn script(&mut self, text: &str, ctx: &mut Ctx) {
         if ctx.depth > DEPTH {
-            return;
+            return self.too_deep(ctx);
         }
         let toks = Lexer::new(text).tokens(false);
         self.walk(&toks, ctx);
+    }
+
+    /// Records that what runs here nests past DEPTH, so it is unread.
+    fn too_deep(&mut self, ctx: &Ctx) {
+        self.runs.push(Run {
+            cwd: ctx.cwd.clone(),
+            scripted: ctx.scripted,
+            unread: Some(Unread::Depth),
+            ..Run::default()
+        });
     }
 
     fn walk(&mut self, toks: &[Tok], ctx: &mut Ctx) {
@@ -1316,6 +1338,8 @@ impl Reader {
                     inner.stdin = Stdin::default();
                     if inner.depth <= DEPTH {
                         self.walk(toks, &mut inner);
+                    } else {
+                        self.too_deep(&inner);
                     }
                     looked_up |= self.runs[from..].iter().any(Run::looks_up);
                     known = false;
@@ -1775,6 +1799,8 @@ impl Reader {
             .collect();
         let looked_up = looked_up || first.looked_up || args.iter().any(|a| a.looked_up);
         self.runs.push(Run {
+            unread: (first.text.is_none() && !cfg!(feature = "plant-computed-misses"))
+                .then_some(Unread::Program),
             program,
             glob,
             args,

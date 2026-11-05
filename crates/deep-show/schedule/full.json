@@ -2,7 +2,426 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "31b37d0ecfd14e46b494bc5481218d579d90bb124d5e944508a02a0373378e40",
+  "set_digest": "938e2ae3879e8118afa11bce18564adb1a901e7e8784349c3e15618b06e1468c",
+  "interfaces": {
+    "building@1": {
+      "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
+      "reference": "building",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "building",
+      "implementation": {
+        "name": "building",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "cells@1": {
+      "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
+      "reference": "cells",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "cells",
+      "implementation": {
+        "name": "cells",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "data@1": {
+      "digest": "a743bfa040d3d697e65bb0de3eb2c4a6065d7ee983c1eb51dcd25cee5161cf49",
+      "reference": "data",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "data",
+      "implementation": {
+        "name": "data",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "effects@1": {
+      "digest": "b86db5643ceb584359f99eef0ecfbf3755f647fc6e8a6e88e2d53b9b698451ff",
+      "reference": "effects",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "effects",
+      "implementation": {
+        "name": "effects",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "graph@1": {
+      "digest": "840570cf1f3a314adfeb0cb2d42b736e0590426d107bf6e231ab3c0535256415",
+      "reference": "graph",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "graph",
+      "implementation": {
+        "name": "graph",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "look@1": {
+      "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",
+      "reference": "look",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "look",
+      "implementation": {
+        "name": "look",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "marks2d@1": {
+      "digest": "27ecdd230bbf0b037234c96bf88d8c3e6e2c92aeeaa34df2bc5c6c12a091daea",
+      "reference": "marks2d",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "marks2d",
+      "implementation": {
+        "name": "marks2d",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "motion@1": {
+      "digest": "def0784a75255943cbe31d9b104fc00297447171a92b0b229cb139b5949d3663",
+      "reference": "motion",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "motion",
+      "implementation": {
+        "name": "motion",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "record@1": {
+      "digest": "65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021",
+      "reference": "record",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "record",
+      "implementation": {
+        "name": "record",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "sandbox@1": {
+      "digest": "d1233de9867cda6436ef3387c2b172be6fc73120a3d17b58406e7dcaeee6452a",
+      "reference": "sandbox",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit",
+        "sandbox"
+      ],
+      "behavior": "none",
+      "module": "sandbox",
+      "implementation": {
+        "name": "sandbox",
+        "version": "1.0.0",
+        "pins": {
+          "wasmtime": {
+            "version": "=49.0.2",
+            "features": [
+              "addr2line",
+              "cranelift",
+              "runtime",
+              "std"
+            ]
+          }
+        },
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "scene3d@1": {
+      "digest": "be973bccd272ede9b3c2718cfb0895a390b29d653d811c0c17ea9ee111a9e1b1",
+      "reference": "scene3d",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "scene3d",
+      "implementation": {
+        "name": "scene3d",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "sheet@1": {
+      "digest": "d24e60e7c85d9663922617ca0d3c22f8d53e23caf3564cbc6ea1480cb4b57f18",
+      "reference": "sheet",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "sheet",
+      "implementation": {
+        "name": "sheet",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "text@1": {
+      "digest": "9fcb8911f7ca77eeed73bb877c0d12a266135d4e332f406e7ec0e5cea552bd61",
+      "reference": "text",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "text",
+      "implementation": {
+        "name": "text",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "vector@1": {
+      "digest": "69f3afc6fddede15eca7dc55b08b4f9e635da29e3510bb3dcd7b3f26c6162f0d",
+      "reference": "vector",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "vector",
+      "implementation": {
+        "name": "vector",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    }
+  },
   "phases": {
     "validate": [
       {
@@ -96,17 +515,58 @@
         "per": "document"
       },
       {
+        "operator": "look.finish",
+        "module": "look",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "look.palette"
+        ],
+        "writes": [
+          "look.finish"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "motion.channels",
         "module": "motion",
         "version": "1.0.0",
         "reads": [
           "motion.program",
           "t",
-          "view(reduced_motion)"
+          "view(reduced_motion)",
+          "self"
         ],
         "writes": [
           "motion.at",
           "motion.fields"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "building.build",
+        "module": "building",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "motion.fields"
+        ],
+        "writes": [
+          "building.built"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "building.shade",
+        "module": "building",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "building.shaded"
         ],
         "per": "item"
       },
@@ -120,6 +580,18 @@
         ],
         "writes": [
           "core.world"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.decimate",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.decimated"
         ],
         "per": "item"
       },
@@ -173,6 +645,87 @@
         "per": "item"
       },
       {
+        "operator": "scene3d.build",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.built"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.lights",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t",
+          "look"
+        ],
+        "writes": [
+          "scene3d.lights"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "scene3d.mark",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.marked"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.rebuild",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "motion.fields",
+          "t"
+        ],
+        "writes": [
+          "scene3d.livebuilt"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.shade",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.shaded"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.stack",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "scene3d.stack"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "sheet.place",
         "module": "sheet",
         "version": "1.0.0",
@@ -189,7 +742,7 @@
         "module": "text",
         "version": "1.0.0",
         "reads": [
-          "core.lowered",
+          "core.fields",
           "refs",
           "reading",
           "view(locale)"
@@ -215,6 +768,37 @@
         "per": "item"
       },
       {
+        "operator": "marks2d.relations",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "core.world",
+          "core.transform",
+          "core.fields",
+          "text.run",
+          "text.counter",
+          "table:text.fonts"
+        ],
+        "writes": [
+          "marks2d.places"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "marks2d.place",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "core.world",
+          "marks2d.places"
+        ],
+        "writes": [
+          "marks2d.at"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "text.animate",
         "module": "text",
         "version": "1.0.0",
@@ -227,6 +811,18 @@
           "text.animated"
         ],
         "per": "item"
+      },
+      {
+        "operator": "vector.paint",
+        "module": "vector",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "vector.paint"
+        ],
+        "per": "item"
       }
     ],
     "extract": [
@@ -237,6 +833,7 @@
         "reads": [
           "core.fields",
           "core.world",
+          "marks2d.at",
           "text.counter",
           "look.palette",
           "view(locale)"
@@ -254,6 +851,7 @@
           "refs",
           "reading",
           "core.world",
+          "marks2d.at",
           "core.fields",
           "text.counter",
           "text.run",

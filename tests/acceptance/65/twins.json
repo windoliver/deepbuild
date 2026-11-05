@@ -1,0 +1,9 @@
+{
+  "#65.bd21c26c": ["trusts-channel-proof"],
+  "#65.05709fd8": ["last-writer-wins"],
+  "#65.af4419b9": ["live-buttons-after-answer", "closes-on-failed-send"],
+  "#65.b9ca998f": ["takes-turns-at-token"],
+  "#65.fbb68832": ["reconnects-every-channel"],
+  "#65.08d3ff31": ["buttons-for-authority"],
+  "#65.fdfea15b": ["keeps-unpaired-key"]
+}

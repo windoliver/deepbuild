@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="300" height="120" viewBox="0 -100 300 120" role="img" focusable="false">
+  <!-- "x = x" as MathJax writes it: glyph outlines once in defs, each glyph a use of one, fill currentColor. -->
+  <defs>
+    <path id="MJX-1-TEX-I-1D465" d="M 0 0 L 12 0 L 30 24 L 48 0 L 60 0 L 36 32 L 60 64 L 48 64 L 30 40 L 12 64 L 0 64 L 24 32 Z"></path>
+    <path id="MJX-1-TEX-N-3D" d="M 0 0 L 50 0 L 50 8 L 0 8 Z M 0 20 L 50 20 L 50 28 L 0 28 Z"></path>
+  </defs>
+  <g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)">
+    <g data-mml-node="math">
+      <g data-mml-node="mi" id="term-x1"><use data-c="1D465" xlink:href="#MJX-1-TEX-I-1D465" transform="translate(20,10)"></use></g>
+      <g data-mml-node="mo" id="term-eq" transform="translate(100,0)"><use data-c="3D" xlink:href="#MJX-1-TEX-N-3D" transform="translate(0,28)"></use></g>
+      <use id="term-x2" data-c="1D465" xlink:href="#MJX-1-TEX-I-1D465" transform="translate(190,10)"></use>
+    </g>
+  </g>
+</svg>

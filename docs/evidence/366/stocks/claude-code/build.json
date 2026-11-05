@@ -1,0 +1,23 @@
+{
+  "format": "deep.build@1",
+  "sentence": "Add a stocks view: my watchlist with live prices, a chart per stock, and alerts when a price crosses a target",
+  "agent": {
+    "name": "claude-code",
+    "version": "2.1.314"
+  },
+  "clock": 1793629800000,
+  "grant": {
+    "hosts": [
+      {
+        "host": "api.market.example",
+        "quota": {
+          "calls": 1000000,
+          "per_ms": 3600000
+        }
+      }
+    ]
+  },
+  "first_try": false,
+  "repair_rounds": 1,
+  "built": "2026-11-01T05:18:56.922Z"
+}

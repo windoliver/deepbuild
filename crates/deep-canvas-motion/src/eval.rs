@@ -3,6 +3,8 @@
 //! channels and placements write their items' fields; the frame's `valid_until` is the earliest
 //! time anything it shows changes next.
 
+use std::collections::BTreeSet;
+
 use serde_json::{json, Map, Value};
 
 use crate::curve::Sample;
@@ -130,6 +132,8 @@ pub struct Frame {
     /// Channel ID → its value at the timeline position.
     pub channels: Vec<(String, Sample)>,
     pub placements: Vec<(String, Option<Local>)>,
+    /// Camera ID → its target at `t` (#417).
+    pub cameras: Vec<(String, [f64; 3])>,
     /// The earliest `t` at which anything this frame shows changes next, or never.
     pub valid_until: Option<i64>,
 }
@@ -153,14 +157,19 @@ fn at_object(item: &mut Map<String, Value>) -> &mut Map<String, Value> {
     at.as_object_mut().expect("an object")
 }
 
-/// Writes `value` at `field` inside `item`, making objects and growing arrays on the way.
+/// Writes `value` at `field` inside `item`, making objects and growing arrays on the way. A
+/// step under `params/ops/<i>` reaches through the op's one key, its kind (Path `path@1`: ops),
+/// so `ops/0/angle` writes the twist's angle.
 fn write(item: &mut Value, field: &[String], value: Value) {
     let Some((last, rest)) = field.split_last() else {
         *item = value;
         return;
     };
     let mut at = item;
-    for name in rest {
+    for (depth, name) in rest.iter().enumerate() {
+        if depth == 3 && rest[0] == "params" && rest[1] == "ops" {
+            at = through_op(at);
+        }
         at = match at {
             Value::Array(list) => match name.parse::<usize>() {
                 Ok(i) => {
@@ -182,6 +191,9 @@ fn write(item: &mut Value, field: &[String], value: Value) {
             }
         };
     }
+    if rest.len() == 3 && rest[0] == "params" && rest[1] == "ops" {
+        at = through_op(at);
+    }
     match at {
         Value::Array(list) => {
             if let Ok(i) = last.parse::<usize>() {
@@ -202,12 +214,33 @@ fn write(item: &mut Value, field: &[String], value: Value) {
     }
 }
 
+/// A path op's params: the value under its one key, made an object when it isn't one.
+fn through_op(op: &mut Value) -> &mut Value {
+    let one = matches!(op, Value::Object(map) if map.len() == 1);
+    if !one {
+        return op;
+    }
+    let Value::Object(map) = op else {
+        unreachable!("checked above")
+    };
+    let inner = map.values_mut().next().expect("one key");
+    if !inner.is_object() {
+        *inner = Value::Object(Map::new());
+    }
+    inner
+}
+
 /// The frame's `valid_until`: the earliest `t` at which anything it shows changes next.
 pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validity) -> Option<i64> {
-    let channels = motion
-        .channels
-        .iter()
-        .filter_map(|c| c.curve.next_change(doc_t));
+    let channels = motion.channels.iter().filter_map(|c| {
+        // A modified channel may change at every flick, and so may a remapped one, whose
+        // child time runs other than the timeline.
+        if c.modifiers.is_empty() && !motion.remapped(&c.target.owner) {
+            c.curve.next_change(doc_t)
+        } else {
+            Some(doc_t + 1)
+        }
+    });
     let placements = motion
         .placements
         .iter()
@@ -235,10 +268,40 @@ pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validit
 /// The evaluated items of `doc` from a program's state: each item as authored, with `at.pos`,
 /// `at.rot` and `at.scale` as three numbers from its slots, and each field a channel writes.
 pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<String, Value> {
-    let mut items = match doc.get("items") {
+    let items = match doc.get("items") {
         Some(Value::Object(items)) => items.clone(),
         _ => Map::new(),
     };
+    evaluated(items, program, state)
+}
+
+/// [`items`] of only the items a field names, each as [`items`] gives it: every other evaluated
+/// item is the document's own with `at` from its slots, which a reader can take from the state
+/// without copying the item.
+pub fn written(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<String, Value> {
+    let named: BTreeSet<&str> = program
+        .fields
+        .iter()
+        .filter_map(|f| program.items.get(f.item?))
+        .map(String::as_str)
+        .collect();
+    let items = match doc.get("items") {
+        Some(Value::Object(items)) => items
+            .iter()
+            .filter(|(id, _)| named.contains(id.as_str()))
+            .map(|(id, item)| (id.clone(), item.clone()))
+            .collect(),
+        _ => Map::new(),
+    };
+    evaluated(items, program, state)
+}
+
+/// `items` with each one's slots and fields written, as [`items`] evaluates them.
+fn evaluated(
+    mut items: Map<String, Value>,
+    program: &Program,
+    state: &State,
+) -> Map<String, Value> {
     for (i, id) in program.items.iter().enumerate() {
         let Some(item) = items.get_mut(id).and_then(Value::as_object_mut) else {
             continue;
@@ -260,6 +323,7 @@ pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<
         let run = &state.slots[field.slot..field.slot + field.width];
         let value = match run {
             [one] if field.boolean => json!(*one >= 0.5),
+            [one] if field.enumerated => json!(program.label(*one)),
             [one] => json!(one),
             many => json!(many),
         };
@@ -270,11 +334,23 @@ pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<
 
 /// Evaluates `doc`, compiled as `program`, at `t`.
 pub fn frame(doc: &Map<String, Value>, program: &Program, t: i64, validity: Validity) -> Frame {
-    let mut state = program.state();
-    program.evaluate(t, validity, &mut state);
+    frame_with(doc, program, t, validity, &mut program.state())
+}
+
+/// [`frame`] into a state kept across a line's frames, which only the planted follow stepper
+/// reads from; every real evaluation overwrites what it reads.
+pub fn frame_with(
+    doc: &Map<String, Value>,
+    program: &Program,
+    t: i64,
+    validity: Validity,
+    state: &mut State,
+) -> Frame {
+    program.evaluate(t, validity, state);
+    let state = &*state;
     let motion = &program.motion;
     let mut at = 0;
-    let channels = motion
+    let mut channels: Vec<(String, Sample)> = motion
         .channels
         .iter()
         .zip(&state.iterations)
@@ -284,6 +360,27 @@ pub fn frame(doc: &Map<String, Value>, program: &Program, t: i64, validity: Vali
             at += width;
             (c.id.clone(), Sample { value, iterations })
         })
+        .collect();
+    // Follow channels report as keyed ones do, every channel in ID order.
+    if !motion.follows.is_empty() {
+        let follows = motion.follows.iter().enumerate().map(|(f, follow)| {
+            let value = vec![state.values[program.values_len + f]];
+            (
+                follow.id.clone(),
+                Sample {
+                    value,
+                    iterations: 0,
+                },
+            )
+        });
+        channels.extend(follows);
+        channels.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+    let cameras = motion
+        .cameras
+        .iter()
+        .zip(&state.cameras)
+        .map(|((id, _), target)| (id.clone(), *target))
         .collect();
     let placements = motion
         .placements
@@ -295,9 +392,10 @@ pub fn frame(doc: &Map<String, Value>, program: &Program, t: i64, validity: Vali
         t,
         doc_t: state.doc_t,
         pass: state.pass,
-        items: items(doc, program, &state),
+        items: items(doc, program, state),
         channels,
         placements,
+        cameras,
         valid_until: state.valid_until,
     }
 }

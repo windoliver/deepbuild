@@ -179,7 +179,8 @@ export function deepEntries(settings: Line): Entry[] {
 
 /**
  * `deep setup` with HOME the test's home, a hub already answering and launchctl and systemctl stubbed. Fails with the
- * command's output unless it exits 0 with one asyncRewake waiter entry of DeepBuild's; builds the deep-hook its
+ * command's output unless it exits 0 with DeepBuild's asyncRewake waiter entry once under Stop and once under
+ * StopFailure, with the same command and timeout (issue #25 and design, amended Oct 29); builds the deep-hook its
  * entries name.
  */
 export async function setup(home: string): Promise<void> {
@@ -187,7 +188,11 @@ export async function setup(home: string): Promise<void> {
   if (r.code !== 0) throw Error(`BLOCKED: deep setup must exit 0 and install DeepBuild into Claude Code's user settings: ${shown(r)}`);
   const settings = readSettings(home);
   const waiters = deepEntries(settings).filter((e) => e.hook.asyncRewake === true);
-  if (waiters.length !== 1) throw Error(`BLOCKED: setup must write one asyncRewake waiter entry of DeepBuild's; found ${waiters.length}: ${JSON.stringify(deepEntries(settings).map((e) => ({ event: e.event, ...e.hook })))}`);
+  const stop = waiters.filter((e) => e.event === 'Stop');
+  const failure = waiters.filter((e) => e.event === 'StopFailure');
+  const paired = stop.length === 1 && failure.length === 1 && waiters.length === 2
+    && stop[0]!.hook.command === failure[0]!.hook.command && stop[0]!.hook.timeout === failure[0]!.hook.timeout;
+  if (!paired) throw Error(`BLOCKED: setup must write DeepBuild's asyncRewake waiter entry once under Stop and once under StopFailure, with the same command and timeout, and nowhere else${stop.length === 1 && waiters.length === 1 ? ' (it wrote it under Stop only)' : ''}; found ${stop.length} under Stop, ${failure.length} under StopFailure, ${waiters.length} in all: ${JSON.stringify(deepEntries(settings).map((e) => ({ event: e.event, ...e.hook })))}`);
   for (const { hook } of deepEntries(settings)) {
     for (const path of String(hook.command).match(/\/[^\s'"]*deep-hook\b/g) ?? []) {
       if (existsSync(path)) continue;
@@ -201,6 +206,14 @@ export async function setup(home: string): Promise<void> {
 // ---- The hub as a process: `deep hub run`, HOME the test's home (#16).
 export interface Hub { pid: number; home: string; socket: string; root: string; child: ChildProcess; output(): string }
 /** The hub, with the test-only send-back surface on (README: Additions). */
+/**
+ * Hub settings for two waits a test sits through only when it answers inside neither (#964): NO_ASK_WAIT gives the hub
+ * a 30 s MCP tool timeout, so the deep_ask relation reads broken and deep_ask says "still waiting" at once, not after
+ * 40 s; SHORT_HOLD ends a stop's hold with nothing answered after SHORT_HOLD_MS, not 60 s.
+ */
+export const SHORT_HOLD_MS = 5000;
+export const NO_ASK_WAIT = { MCP_TOOL_TIMEOUT: '30000' };
+export const SHORT_HOLD = { DEEP_HUB_TEST_STOP_HOLD_MS: String(SHORT_HOLD_MS) };
 export async function startHub(home: string, env: Record<string, string | undefined> = {}): Promise<Hub> {
   const child = spawn(NODE, [CLI, 'hub', 'run'], { cwd: REPO, env: childEnv(home, { DEEP_HUB_TEST_SEND_BACK: '1', ...env }), stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   own(child.pid);
@@ -511,13 +524,13 @@ export async function stopsRecorded(hub: Hub, s: Session, n: number): Promise<vo
   await waitFor(async () => (await allEvents(hub)).filter((e) => e.kind === 'agent.stop' && e.session === s.id).length >= n || undefined, 60_000, `the hub to record stop ${n} of session ${s.id}`);
 }
 /**
- * Waits until the hub's hold on a Stop is surely over: 61 s from the hook's start, past the longest hold (60 s). On a
- * loaded machine deep-hook can miss the hub's acknowledgement and let the stop through at once while the hub still
- * holds it; an answer given inside that window would go to the stop, not to the idle session.
+ * Waits until the hub's hold on a Stop is surely over: 1 s past the longest hold (60 s, or the hub's `holdMs`) from the
+ * hook's start. On a loaded machine deep-hook can miss the hub's acknowledgement and let the stop through at once while
+ * the hub still holds it; an answer given inside that window would go to the stop, not to the idle session.
  */
-export async function pastHold(stop: Fired): Promise<void> {
+export async function pastHold(stop: Fired, holdMs = 60_000): Promise<void> {
   const started = Math.min(...stop.ran.map((r) => r.started));
-  const wait = started + 61_000 - Date.now();
+  const wait = started + holdMs + 1000 - Date.now();
   if (wait > 0) await sleep(wait);
 }
 export const stopCount = async (hub: Hub, s: Session) => (await allEvents(hub)).filter((e) => e.kind === 'agent.stop' && e.session === s.id).length;

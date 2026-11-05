@@ -2,10 +2,9 @@
 // no extension at all; and the rule behind AC5 the acceptance tests reach only with changed bytes: what an agent
 // built runs sandboxed even when its bytes are the release's. Each runs a real package through a real host, record
 // and supervisor.
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, request } from 'node:http';
 import { PassThrough } from 'node:stream';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CheckSpec } from '@deepbuild/conformance';
@@ -15,36 +14,10 @@ import { openRecord, ulid, type RecordStore } from '@deepbuild/record';
 import { openSupervisor, type Supervisor } from '@deepbuild/supervisor';
 import { peer } from '../runtime/deep.mjs';
 import { openExtensionHost, openTrust, packageDigest, type ExtensionHost, type ProjectTrust, type ReleaseEntry } from '../src/index.js';
+import { cleanup, closing, pkgOf, temp } from './package.js';
 
-/** The preview methods a package's code calls, which its manifest lists by name since #139 (requires.preview). */
-const PREVIEW = /\bdeep\.(on|registerResolver|registerSource|registerEnvironment|lease|registerView|readNow|registerAdapter|registerRoute|registerIndex|record\.append|record\.query|evidence\.put|asks\.create|config\.get|notices\.send|store|schedule|secret|send|provide|use|read|fetch|registerAction)\(/g;
-const previewOf = (code: string): { requires?: { preview: string[] } } => {
-  const used = [...new Set([...code.matchAll(PREVIEW)].map((m) => `deep.${m[1]}`))].sort();
-  return used.length ? { requires: { preview: used } } : {};
-};
+afterAll(cleanup);
 
-const dirs: string[] = [];
-const closing: { close(): Promise<void> }[] = [];
-afterAll(async () => {
-  for (const c of closing.reverse()) await c.close();
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
-});
-const temp = (): string => {
-  const d = realpathSync(mkdtempSync(join(tmpdir(), 'deep-ext-test-')));
-  dirs.push(d);
-  return d;
-};
-
-/** A package of `code`, its manifest's id and fields given, its digest stamped. */
-function pkgOf(id: string, code: string, fields: Record<string, unknown> = {}, file = 'index.ts'): string {
-  const folder = temp();
-  writeFileSync(join(folder, file), code, { mode: file === 'main' ? 0o755 : 0o644 });
-  const manifest = { id, version: '1.0.0', digest: '', ...previewOf(code), ...fields };
-  writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
-  manifest.digest = packageDigest(folder);
-  writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
-  return folder;
-}
 /** A package whose check kind ext.stuck.run answers `body`'s value, and which runs `also` as it loads. */
 const stuck = (body: string, also = '', fields: Record<string, unknown> = {}): string =>
   pkgOf('test/stuck', `export default function (deep: any): void {\n  deep.registerCheck('ext.stuck.run', () => ${body});\n  ${also}\n}\n`, { checks: ['ext.stuck.run'], ...fields });
@@ -229,6 +202,19 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
       await h.ready();
       expect((await h.runCheck('ext.stuck.run', SPEC, { checkout: temp(), deadline: 10_000 })).outcome, place).toBe('passed');
     }
+  }, 60_000);
+
+  it('a check kind in the hub gets host@1 with each run as ctx.host, the supervisor\'s, beside the checkout and deadline (#30 AC5)', async () => {
+    // The kind reports what its context held: passed only with a host whose start, signal and wait are functions.
+    const body = "(spec, ctx) => { const h = ctx && ctx.host; const ok = h && ['start', 'signal', 'wait'].every((m) => typeof h[m] === 'function') && typeof ctx.checkout === 'string' && ctx.deadline === 10_000; return { outcome: ok ? 'passed' : 'failed', testsRun: 1, failures: ok ? [] : [{ test: 'ctx', file: 'index.ts', line: 1, stack: null, assertion: false, message: `ctx keys ${Object.keys(ctx ?? {}).join(',')}` }], evidence: [], read: [], mask: null }; }";
+    const folder = pkgOf('test/hosted', `export default function (deep: any): void {\n  deep.registerCheck('ext.hosted.run', ${body});\n}\n`, { checks: ['ext.hosted.run'] });
+    const { h } = await world({ release: [{ id: 'test/hosted', version: '1.0.0', digest: packageDigest(folder) }] });
+    const p = await h.install({ from: folder, builtBy: null });
+    expect((await h.check(p)).passed).toBe(true);
+    const load = await h.load(p);
+    expect(load.status === 'loaded' && load.place).toBe('hub');
+    const r = await h.runCheck('ext.hosted.run', { ...SPEC, kind: 'ext.hosted.run' }, { checkout: temp(), deadline: 10_000 });
+    expect(r.outcome, r.failures[0]?.message).toBe('passed');
   }, 60_000);
 
   it('closing the host while a load is starting its process stops that process, and the load is refused', async () => {
@@ -641,7 +627,7 @@ describe('#350 review regressions', () => {
     const reading = read(h);
     await sleep(500);
     await enable(h, provider('return { n: 2 };'));
-    expect(await reading).toEqual({ status: 'done', output: { value: { n: 1 } } });
+    expect(await reading).toEqual({ status: 'done', output: { value: { n: 1 }, handle: expect.stringMatching(/^reading:/) } });
   }, 60_000);
 
   it('a hook handler from outside the release that throws or names an undeclared template puts none of its text in the reply', async () => {
@@ -809,8 +795,10 @@ describe('#350 review regressions', () => {
 
   it('a notice an action sends acts for that action\'s caller', async () => {
     const { h, record } = await world();
-    const send = "deep.registerAction('ext.acts.tell', { declares: 'send', input: { type: 'object' } }, async () => deep.notices.send({ readings: [] }));";
+    const send = "deep.registerAction('ext.acts.tell', { declares: 'send', input: { type: 'object' } }, async () => deep.notices.send({ kind: 'ext.acts.alert', subscription: 'all', key: 'k1', readings: [] }));";
     await enable(h, pkgOf('test/acts', `export default function (deep: any): void {\n  ${send}\n}\n`, { actions: ['ext.acts.tell'], notices: ['ext.acts.alert'] }));
+    // A notice goes out only for a cause you subscribed to (#365).
+    await h.subscribeNotice(YOU, 'ext.acts.alert', 'all');
     // A session claim the hub couldn't check: the write keeps that mark, and the package is still its writer.
     const result = await h.callAction({ action: 'ext.acts.tell', target: { handle: 'ext:test/acts', version: '1.0.0' }, input: {}, caller: { ...AGENT, verified: false } });
     expect(result.status).toBe('done');
@@ -931,8 +919,10 @@ describe('#363 record grants and action calls', () => {
 
   it('the notices a send action sends are in its changed, read from the record', async () => {
     const { h, record } = await world();
-    const send = "deep.registerAction('ext.acts.tell', { declares: 'send', input: { type: 'object' } }, async () => ({ output: { sent: await deep.notices.send({ readings: [] }) }, report: { verified: true, checked: 'sent' } }));";
+    const send = "deep.registerAction('ext.acts.tell', { declares: 'send', input: { type: 'object' } }, async () => ({ output: { sent: await deep.notices.send({ kind: 'ext.acts.alert', subscription: 'all', key: 'k1', readings: [] }) }, report: { verified: true, checked: 'sent' } }));";
     await enable(h, pkgOf('test/acts', `export default function (deep: any): void {\n  ${send}\n}\n`, { actions: ['ext.acts.tell'], notices: ['ext.acts.alert'] }));
+    // A notice goes out only for a cause you subscribed to (#365).
+    await h.subscribeNotice(YOU, 'ext.acts.alert', 'all');
     const r = await h.callAction({ action: 'ext.acts.tell', target: { handle: 'ext:test/acts', version: '1.0.0' }, input: {}, caller: YOU, request: 'r1' });
     expect(r.status, JSON.stringify(r)).toBe('done');
     const notice = (r as { output: { sent: string } }).output.sent;

@@ -1,0 +1,145 @@
+# Base run of tests/acceptance/908/ac2-redraft-2 at a7e140b2 (nothing of #908 implemented), 2026-11-02T18:53Z, Node v24.22.0, macOS 26.7.1
+# From the base checkout's root:
+#   PATH=~/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH node node_modules/vitest/vitest.mjs run tests/acceptance/908/ac2-redraft-2
+#
+# Note: the base checkout's node_modules is a link into another checkout, so there @deepbuild/record and
+# @deepbuild/contracts resolve (through vitest's development condition, to src/) outside the base. The asks core
+# under test is the base's own (imported by relative path). The second run below is the same suite in an isolated
+# copy of the base whose node_modules/@deepbuild/* link to the base's own packages; it fails the same way.
+
+
+ RUN  v5.0.5 <base checkout>
+
+ ❯ tests/acceptance/908/ac2-redraft-2/rebuild.test.ts (2 tests | 2 failed) 703ms
+   × #908.22f5f214 rebuilding the record from the log gives each ask the same moved deadline, recorded on the ask with its span 224ms
+   × #908.22f5f214 a hub started on the rebuilt record takes each default when the hub that moved the deadline would 479ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/908/ac2-redraft-2/rebuild.test.ts > #908.22f5f214 rebuilding the record from the log gives each ask the same moved deadline, recorded on the ask with its span
+AssertionError: ask ask:01M5DRP1C073YKK5SEMXMHGAZT: the core records a deadline move on the ask, carrying the span that moved it 210 min, from 2026-10-21T03:00:00.000Z to 2026-10-21T06:30:00.000Z (the asks core has no away(from, to), so the hub could not tell it about the time away): expected 0 to be greater than 0
+ ❯ tests/acceptance/908/ac2-redraft-2/rebuild.test.ts:23:211
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/908/ac2-redraft-2/rebuild.test.ts > #908.22f5f214 a hub started on the rebuilt record takes each default when the hub that moved the deadline would
+AssertionError: ask ask:01M5DRP1C0K6YSCG8AS17CBDG0: on the rebuilt record it has not taken its default at 08:00:01, a second after it first showed (the asks core has no away(from, to), so the hub could not tell it about the time away): expected [ [ 'ask.defaulted', …(2) ] ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   [
++     "ask.defaulted",
++     1792569600000,
++     "drop",
++   ],
++ ]
+
+ ❯ tests/acceptance/908/ac2-redraft-2/rebuild.test.ts:52:186
+     50|     }
+     51|     if (t === AWAKE + 1000) {
+     52|       expect(await closings(rebuilt, definition), `ask ${definition}: …
+       |                                                                                                                                                                                          ^
+     53|     }
+     54|     if (t === AUTHORITY.moved - 1) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  10:51:35
+   Duration  2.44s (import 37%, tests 36%, transform 27%)
+
+exit 1
+
+# ---- Isolated base copy (every @deepbuild package from a7e140b2)
+
+
+ RUN  v5.0.5 <isolated base copy>
+
+ ❯ tests/acceptance/908/ac2-redraft-2/rebuild.test.ts (2 tests | 2 failed) 746ms
+   × #908.22f5f214 rebuilding the record from the log gives each ask the same moved deadline, recorded on the ask with its span 298ms
+   × #908.22f5f214 a hub started on the rebuilt record takes each default when the hub that moved the deadline would 447ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/908/ac2-redraft-2/rebuild.test.ts > #908.22f5f214 rebuilding the record from the log gives each ask the same moved deadline, recorded on the ask with its span
+AssertionError: ask ask:01M5DRP1C08RCX343KCR9EQP38: the core records a deadline move on the ask, carrying the span that moved it 210 min, from 2026-10-21T03:00:00.000Z to 2026-10-21T06:30:00.000Z (the asks core has no away(from, to), so the hub could not tell it about the time away): expected 0 to be greater than 0
+ ❯ tests/acceptance/908/ac2-redraft-2/rebuild.test.ts:23:211
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/908/ac2-redraft-2/rebuild.test.ts > #908.22f5f214 a hub started on the rebuilt record takes each default when the hub that moved the deadline would
+AssertionError: ask ask:01M5DRP1C0C4NPWY0QNXY9P5RX: on the rebuilt record it has not taken its default at 08:00:01, a second after it first showed (the asks core has no away(from, to), so the hub could not tell it about the time away): expected [ [ 'ask.defaulted', …(2) ] ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   [
++     "ask.defaulted",
++     1792569600000,
++     "drop",
++   ],
++ ]
+
+ ❯ tests/acceptance/908/ac2-redraft-2/rebuild.test.ts:52:186
+     50|     }
+     51|     if (t === AWAKE + 1000) {
+     52|       expect(await closings(rebuilt, definition), `ask ${definition}: …
+       |                                                                                                                                                                                          ^
+     53|     }
+     54|     if (t === AUTHORITY.moved - 1) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  10:51:38
+   Duration  4.93s (import 59%, transform 25%, tests 16%)
+
+exit 1
+
+# ---- Sample fix and its mutants (in a copy outside the checkout; MUTANT selects one wrong part)
+# Sample fix: Asks.away(from, to) appends wait.extended {from, to, deadline} (subject ask:<id>, writer core) for each
+# open, unshown ask, from max(from, raised) to min(to, deadline); the asks projection sets deadline from it; the core
+# applies it to its own state and defaults no sooner than an hour after the first ask.batched when that came less
+# than an hour before the deadline.
+
+## MUTANT=none (the sample fix)
+      Tests  2 passed (2)
+
+## MUTANT=memory-only
+   × #908.22f5f214 rebuilding the record from the log gives each ask the same moved deadline, recorded on the ask with its span 1617ms
+   × #908.22f5f214 a hub started on the rebuilt record takes each default when the hub that moved the deadline would 2755ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: ask ask:01M5DRP1C0VXPQN586XS8XKJ0D: the core records a deadline move on the ask, carrying the span that moved it 210 min, from 2026-10-21T03:00:00.000Z to 2026-10-21T06:30:00.000Z: expected 0 to be greater than 0
+AssertionError: ask ask:01M5DRP1C005AFE779A0Z6EPSC: on the rebuilt record it is still open past its raised deadline, 2026-10-21T23:00:00.000Z, until its moved one, 2026-10-22T07:30:00.000Z: expected [ [ 'ask.defaulted', …(2) ] ] to deeply equal []
+      Tests  2 failed (2)
+
+## MUTANT=projection-ignores
+   × #908.22f5f214 rebuilding the record from the log gives each ask the same moved deadline, recorded on the ask with its span 1054ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: ask ask:01M5DRP1C0RYJH1P91R5YSP3CC: the asks table reads the moved deadline, 2026-10-21T06:30:00.000Z, not 2026-10-21T03:00:00.000Z: expected 1792551600000 to be 1792564200000 // Object.is equality
+      Tests  1 failed | 1 passed (2)
+
+## MUTANT=full-span
+   × #908.22f5f214 rebuilding the record from the log gives each ask the same moved deadline, recorded on the ask with its span 629ms
+   × #908.22f5f214 a hub started on the rebuilt record takes each default when the hub that moved the deadline would 1627ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: ask ask:01M5DRP1C09Q7XK42AFBBMRT4R: the asks table reads the moved deadline, 2026-10-21T06:30:00.000Z, not 2026-10-21T03:00:00.000Z: expected 1792582200000 to be 1792564200000 // Object.is equality
+AssertionError: ask ask:01M5DRP1C0JY7F2PZG6SM5Z0EV: on the rebuilt record it takes its default at 09:00, an hour after it first showed: expected [ [ 'ask.defaulted', …(2) ] ] to deeply equal [ [ 'ask.defaulted', …(2) ] ]
+      Tests  2 failed (2)
+
+## MUTANT=notice-in-memory
+   × #908.22f5f214 a hub started on the rebuilt record takes each default when the hub that moved the deadline would 1173ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: ask ask:01M5DRP1C0N00P0YGYJREN00ZV: on the rebuilt record it has not taken its default at 08:00:01, a second after it first showed: expected [ [ 'ask.defaulted', …(2) ] ] to deeply equal []
+      Tests  1 failed | 1 passed (2)

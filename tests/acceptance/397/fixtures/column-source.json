@@ -1,0 +1,16 @@
+{
+  "about": "Criterion 6's test canvas module and planted sources, which the implementer builds behind deep-show's cargo feature test-column-source (README: The column view). The tests read the expected values from this file.",
+  "feature": "test-column-source",
+  "module": "test.columns",
+  "registry": "column.source@1",
+  "entry": { "name": "test.column@1", "form": "test.column.<name>", "types": ["i32"] },
+  "source": { "form": "test.column.big", "dtype": "i32", "rows": [5, 5, 5, 70000, 5, 5] },
+  "planted": {
+    "keeps_previous_rows": "a source whose rows change with t that, after a seek, hands the view the rows of the frame before the seek instead of a clean evaluation at the new t",
+    "reports_no_changes": "a source whose values change with t that reports no changed index ranges after any step"
+  },
+  "rules": {
+    "keeps_previous_rows": "seek_equals_clean",
+    "reports_no_changes": "clean_rebuild_equality"
+  }
+}

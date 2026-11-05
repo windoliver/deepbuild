@@ -69,7 +69,19 @@ impl Drawn {
                     spec.width.unwrap_or(spec.size),
                     1.3 * spec.size,
                 ],
-                Mark::Path { .. } | Mark::Shape { .. } => continue,
+                // An outline's box is its tight box where it draws (#1162: a vector's path).
+                Mark::Path { d, offset, .. } => {
+                    let Some(b) = deep_canvas_marks::path::parse(d)
+                        .and_then(|v| deep_canvas_marks::relations::tight(&v))
+                    else {
+                        continue;
+                    };
+                    [b[0] + offset[0], b[1] + offset[1], b[2], b[3]]
+                }
+                Mark::Shape { verbs, .. } => match deep_canvas_marks::relations::tight(verbs) {
+                    Some(b) => b,
+                    None => continue,
+                },
             };
             let id = drawn
                 .mark
@@ -105,6 +117,20 @@ pub const VISIBLE_ROWS: usize = 200;
 
 /// A snapshot's table of visible items: each item whose box, scaled into the snapshot's pixels,
 /// covers some of it, as `{id, box: [x, y, w, h]}`, sorted by ID, at most [`VISIBLE_ROWS`].
+/// `top` (straight-alpha RGBA) drawn over `base` (RGBA) in place, source over.
+pub fn over(base: &mut [u8], top: &[u8]) {
+    for (b, t) in base.chunks_exact_mut(4).zip(top.chunks_exact(4)) {
+        let a = u32::from(t[3]);
+        if a == 0 {
+            continue;
+        }
+        for c in 0..3 {
+            b[c] = ((u32::from(t[c]) * a + u32::from(b[c]) * (255 - a) + 127) / 255) as u8;
+        }
+        b[3] = (a + u32::from(b[3]) * (255 - a) / 255) as u8;
+    }
+}
+
 pub fn visible(boxes: Vec<(String, [f64; 4])>, scale: f64, size: [u16; 2]) -> Value {
     let (w, h) = (f64::from(size[0]), f64::from(size[1]));
     let mut rows: Vec<(String, [f64; 4])> = boxes
@@ -232,6 +258,22 @@ fn decode(evidence: &Path, asset: &str, item: &str) -> Result<Arc<Pixmap>, Unfit
     Ok(Arc::new(Pixmap::from_parts(rgba.into_raw(), w, h, meta)))
 }
 
+/// Every image `frame` draws, decoded once each.
+fn decode_all(
+    frame: &scene::Frame,
+    evidence: &Path,
+) -> Result<BTreeMap<String, Arc<Pixmap>>, Unfit> {
+    let mut images = BTreeMap::new();
+    for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
+        if let Mark::Image { item, asset, .. } = &drawn.mark {
+            if !images.contains_key(asset) {
+                images.insert(asset.clone(), decode(evidence, asset, item)?);
+            }
+        }
+    }
+    Ok(images)
+}
+
 impl Renderer {
     pub fn new() -> Self {
         Renderer {
@@ -265,14 +307,7 @@ impl Renderer {
             frame.size[1],
             &mut self.shaper,
         ));
-        let mut images = BTreeMap::new();
-        for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
-            if let Mark::Image { item, asset, .. } = &drawn.mark {
-                if !images.contains_key(asset) {
-                    images.insert(asset.clone(), decode(evidence, asset, item)?);
-                }
-            }
-        }
+        let images = decode_all(&frame, evidence)?;
         // Each text mark's font names a role the shaper bundles.
         for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
             if let Mark::Text { item, spec, .. } = &drawn.mark {
@@ -298,7 +333,6 @@ impl Renderer {
         painted: &crate::frames::Painted,
         evidence: &Path,
     ) -> Result<Drawn, Unfit> {
-        let mut images = BTreeMap::new();
         let status = painted.status.clone().unwrap_or_default();
         let Some(drawing) = &painted.drawing else {
             return Ok(Drawn {
@@ -309,23 +343,16 @@ impl Renderer {
                 },
                 boxes: painted.boxes.iter().map(|b| (b.rect, b.color)).collect(),
                 status,
-                images,
+                images: BTreeMap::new(),
                 runs: BTreeMap::new(),
                 animated: BTreeMap::new(),
             });
         };
-        for drawn in drawing.frame.layers.iter().flat_map(|l| &l.marks) {
-            if let Mark::Image { item, asset, .. } = &drawn.mark {
-                if !images.contains_key(asset) {
-                    images.insert(asset.clone(), decode(evidence, asset, item)?);
-                }
-            }
-        }
         Ok(Drawn {
             frame: drawing.frame.clone(),
             boxes: Vec::new(),
             status,
-            images,
+            images: decode_all(&drawing.frame, evidence)?,
             runs: drawing.runs.clone(),
             animated: drawing.animated.clone(),
         })
@@ -426,7 +453,13 @@ impl Renderer {
         }
         ctx.flush();
         let mut pixmap = Pixmap::new(size[0], size[1]);
-        ctx.render(&mut pixmap, &mut self.resources);
+        // The f32 pipeline, as deep-marks-vello pins it: a build that also enables vello_cpu's
+        // u8 pipeline would otherwise draw on that one, a code or two off (#674).
+        ctx.render_with(
+            &mut pixmap,
+            &mut self.resources,
+            deep_marks_vello::rasterizer(),
+        );
         (
             pixmap.take_rgba8(vello_cpu::peniko::ImageAlphaType::Alpha),
             batches,
@@ -580,7 +613,9 @@ impl Renderer {
                 };
                 let shaped = self.shaper.shape(&Spec {
                     text: &spec.text,
-                    role,
+                    family: role.family(),
+                    fallback: &[],
+                    lang: None,
                     size: spec.size as f32,
                     weight: spec.weight,
                     line_height: None,
@@ -829,6 +864,27 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// `doc` at 0 on a ground and ink palette, prepared by a fresh renderer, or `failed`.
+    fn drawn(doc: &Value, failed: &str) -> (Renderer, Drawn) {
+        let palette: Palette = [
+            ("ground".to_string(), [255, 255, 255]),
+            ("ink".to_string(), [0, 0, 0]),
+        ]
+        .into();
+        let mut r = Renderer::new();
+        let drawn = r
+            .prepare(
+                doc.as_object().unwrap(),
+                0,
+                &palette,
+                None,
+                &Record::default(),
+                Path::new("."),
+            )
+            .expect(failed);
+        (r, drawn)
+    }
+
     /// Render-back draws #373's R2 marks: a star, and a group at half opacity whose overlapping
     /// children draw through one pass, so their overlap reads as either alone.
     #[test]
@@ -845,22 +901,7 @@ mod tests {
                     "params": {"box": [110, 20, 50, 40], "paint": {"fill": {"role": "ink"}}}},
                 "b": {"id": "b", "kind": "rect@1", "layer": "main", "name": "B", "order": "a3", "parent": "veil",
                     "params": {"box": [130, 40, 50, 40], "paint": {"fill": {"role": "ink"}}}}}});
-        let palette: Palette = [
-            ("ground".to_string(), [255, 255, 255]),
-            ("ink".to_string(), [0, 0, 0]),
-        ]
-        .into();
-        let mut r = Renderer::new();
-        let drawn = r
-            .prepare(
-                doc.as_object().unwrap(),
-                0,
-                &palette,
-                None,
-                &Record::default(),
-                Path::new("."),
-            )
-            .expect("render-back draws R2's marks");
+        let (mut r, drawn) = drawn(&doc, "render-back draws R2's marks");
         let rgba = r.raster(&drawn, [200, 100], Some([255, 255, 255]));
         let at = |x: usize, y: usize| rgba[(y * 200 + x) * 4];
         assert_eq!(at(50, 50), 0, "the star's center is ink");
@@ -911,22 +952,7 @@ mod tests {
             "name": "Panel", "order": "a", "params": {"box": [200, 0, 200, 150], "paint": {"fill": {"role": "ground"}}}}));
         let doc = json!({"format": 1, "id": "bars", "size": [400, 150],
             "layers": {"main": {"writer": "agent-a", "order": "a0"}}, "items": items});
-        let palette: Palette = [
-            ("ground".to_string(), [255, 255, 255]),
-            ("ink".to_string(), [0, 0, 0]),
-        ]
-        .into();
-        let mut r = Renderer::new();
-        let drawn = r
-            .prepare(
-                doc.as_object().unwrap(),
-                0,
-                &palette,
-                None,
-                &Record::default(),
-                Path::new("."),
-            )
-            .expect("the bars draw");
+        let (mut r, drawn) = drawn(&doc, "the bars draw");
         let white = Some([255, 255, 255]);
         let (batched, drew) = r.raster_batched(&drawn, [400, 150], white, &instanced);
         assert!(

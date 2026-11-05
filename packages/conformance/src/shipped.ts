@@ -4,7 +4,7 @@
 // late PostToolUse that opens a new turn, and a permission reply that takes allow from the option's label or from
 // "yes" in your words.
 import { shipped } from '@deepbuild/adapters';
-import type { Adapter, PermissionAnswer } from '@deepbuild/adapters';
+import type { Adapter, HookRequestLine, PermissionAnswer } from '@deepbuild/adapters';
 import { isObject } from './types.js';
 import type { Delivery, Driven, Fill, JsonObject, Operation } from './types.js';
 
@@ -13,7 +13,11 @@ type ShippedPlant = 'duplicate-event-id' | 'event-after-stop' | 'allow-from-labe
 /** The kit revision a shipped adapter declares. */
 const REVISION = 1;
 
-export function shippedFill(agent: string, options: { planted?: ShippedPlant } = {}): Fill {
+/** A Codex thread ID's form, for the session the kit answers: one daemon serves many, each answer naming its own. */
+const CODEX_THREAD = '019a0000-0000-7000-8000-00000000000a';
+const CODEX_TURN = '019a0000-0000-7000-8000-0000000000aa';
+
+export function shippedFill(agent: string, options: { planted?: ShippedPlant; permissionFixture?: JsonObject } = {}): Fill {
   // readUsage stays out until the kit has a case that drives it, as the runner asks of a method with no case.
   const { readUsage: _noCase, ...adapter }: Adapter = shipped().get(agent);
   const versions = ((adapter.facts as JsonObject).events as JsonObject).versions as JsonObject;
@@ -49,6 +53,20 @@ export function shippedFill(agent: string, options: { planted?: ShippedPlant } =
   }
   const drive = (operation: Operation): Driven => ({ outcome: 'unsupported', operation, surface });
   // The answer goes back as the hook's reply; no transcript is read here, so there is no sign of its delivery.
-  const deliver = (_answer: unknown, session: string): Delivery => ({ session, sign: null });
-  return { adapter, version: Object.keys(versions).at(-1)!, revision: REVISION, surface, drive, deliver };
+  const signless = (_answer: unknown, session: string): Delivery => ({ session, sign: null });
+  const fill: Fill = { adapter, version: Object.keys(versions).at(-1)!, revision: REVISION, surface, drive, deliver: signless };
+  if (options.permissionFixture) fill.permissionFixture = options.permissionFixture;
+  if (agent !== 'codex') return fill;
+  // Codex's answer is the adapter's real reply to a PermissionRequest on the answer's thread: its sign is that reply's
+  // behavior and the thread the request named.
+  fill.session = CODEX_THREAD;
+  fill.deliver = (answer, session) => {
+    const decision = isObject(answer) && typeof answer.decision === 'string' ? answer.decision : 'none';
+    const payload = options.permissionFixture ?? { hook_event_name: 'PermissionRequest', session_id: session, turn_id: CODEX_TURN, tool_name: 'Bash', tool_input: { command: 'npm test' } };
+    const request = { v: 1, agent, event: 'PermissionRequest', seq: '0', id: '01K74FKZVK8Q2X5R7M3N9P4T00', pid: 1, ppid: 1, matched: [], payload } as HookRequestLine;
+    const reply = adapter.permissionReply!({ ask: 'ask_01', session, option: null, label: null, decision: decision as PermissionAnswer['decision'], words: null, provisional: false, undoes: null }, request) as { hookSpecificOutput?: { decision?: { behavior?: string } } };
+    const behavior = reply.hookSpecificOutput?.decision?.behavior;
+    return { session, sign: behavior ? `delivered:${behavior}:${String(payload.session_id)}` : null };
+  };
+  return fill;
 }

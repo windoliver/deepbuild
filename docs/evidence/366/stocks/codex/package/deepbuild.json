@@ -1,0 +1,55 @@
+{
+  "id": "local/stocks",
+  "version": "1.0.0",
+  "digest": "d1:b58f22c14f3c39a183b489d7542e2cd49c8f2b955cb6295fe75f0dcc1fc00f3d",
+  "access": {
+    "words": [
+      "hosts"
+    ]
+  },
+  "stores": [
+    "ext.stocks.alert"
+  ],
+  "actions": [
+    "ext.stocks.watchlist",
+    "ext.stocks.set_alert",
+    "ext.stocks.alerts"
+  ],
+  "notices": [
+    "ext.stocks.price_crossed"
+  ],
+  "secrets": [
+    {
+      "name": "market_key",
+      "for": "the market API key"
+    }
+  ],
+  "sources": [
+    {
+      "name": "ext.stocks.quote_nvda",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.quote_aapl",
+      "variant": "polled"
+    },
+    {
+      "name": "ext.stocks.quote_msft",
+      "variant": "polled"
+    }
+  ],
+  "requires": {
+    "preview": [
+      "deep.secret",
+      "deep.registerSource",
+      "deep.store",
+      "deep.store.put",
+      "deep.store.list",
+      "deep.registerAction",
+      "deep.schedule",
+      "deep.schedule.read",
+      "deep.notices.send",
+      "deep.registerView"
+    ]
+  }
+}

@@ -17,7 +17,7 @@ describe(`${AC1} The idle session wakes and uses the answer`, () => {
   it(`${AC1} an answer typed in the CLI wakes the idle session with a turn that carries it; the agent's reply uses it, it is delivered once and the next stop isn't sent back with it again`, async () => {
     const { home } = makeHome();
     const repo = makeRepo(home);
-    const hub = await startHub(home);
+    const hub = await startHub(home, { noAskWait: true, shortHold: true });
     await setup(home);
     const [a] = await idleSessions(hub, home, 1, { cwd: repo.dir });
     const { claude, s } = a!;

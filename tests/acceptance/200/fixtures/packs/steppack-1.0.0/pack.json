@@ -1,0 +1,21 @@
+{
+  "name": "steppack",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #200 acceptance suite that declares a gpu.step@1 entry, which only canvas modules fill.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {}
+  },
+  "entries": {
+    "gpu.step@1": [
+      {
+        "name": "steppack.mul3",
+        "signature": { "ports": ["x"], "in": "i32", "out": "i32" },
+        "weight": 1,
+        "exact": true,
+        "body": "x * 3"
+      }
+    ]
+  }
+}

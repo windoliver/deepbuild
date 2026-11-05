@@ -12,8 +12,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
-import { openTrust } from '@deepbuild/extension-host';
-import { parseClaimLine, ulid, type ClaimLine, type Connection, type RecordStore } from '@deepbuild/record';
+import { openTrust, parseClaimLine, ulid, type ClaimLine, type Connection, type RecordStore } from '@deepbuild/record';
 
 /** How a claim was known, strongest first. */
 export type Known = 'you' | 'decision' | 'repo' | 'inferred' | 'outside';

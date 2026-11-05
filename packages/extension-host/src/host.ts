@@ -17,27 +17,43 @@
 //
 // Sources and secrets (#364): the hub makes every call a polled source needs, adding a secret by its handle only on
 // the source's host (./sources.ts), and a stream source is held to source@1's kit at install, wherever it runs.
+//
+// Schedules, notices and sends (#365): a plug-in's jobs run on the hub's timer, one run of a schedule at a time, each
+// judged by what the hub recorded for it (./schedules.ts); a notice goes out only for a subscription you made and only
+// on fresh readings; and a send leaves only under your standing rule or your yes, its key claimed before it goes out
+// (./sends.ts).
+//
+// Live readings (#262): Read now re-reads what a view binds, each source through its quota; a while-shown cadence runs
+// once a period while a view that binds its source is shown, as the app reports it; and a series call lands as one
+// batch file named by one reading.batch event, its windows' rollups as files named by reading.rollup events
+// (./series.ts), so a bound value resolves at a frame's pinned log position.
 import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
+import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
-import { runKit, slotKits } from '@deepbuild/conformance';
-import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
+import type { EvidenceStore } from '@deepbuild/evidence';
+import type { ChannelCtx, ChannelDelivered, ChannelFill, ChannelItem, ChannelReceived, CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
-import { after, badDeadline, type Cleanup, type Supervisor } from '@deepbuild/supervisor';
+import type { Runner } from '@deepbuild/runner';
+import { after, badDeadline, type Cleanup, type Host as RunHost, type Supervisor } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
+import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type ProvideRow, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
+import { answered, jobPrompt, jobRequest, type Answer } from './jobs.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
+import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings, type Verdict } from './schedules.js';
+import { missing, SeriesStore, shownValue, type BoundValue, type Rollup, type Span } from './series.js';
+import { Sends, type SendRow, type SendRule } from './sends.js';
 import { declareSource, handleOf, nodeHttp, openBrowser, osSecrets, Sources, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
-import { Terminals, type OpenSpec } from './terminals.js';
+import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
 
 /** A package inside DeepBuild's signed release, as the release's signed manifest lists it. */
@@ -54,7 +70,15 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   | 'stable-may-call-preview' | 'rewires-to-newest'
   // #363's: a record read filtered by the grant's words alone, and an action.reported that takes `changed` or a
   // malformed `verified` from the handler's report.
-  | 'record-by-grant-words' | 'copies-report-changed' | 'keeps-malformed-verified';
+  | 'record-by-grant-words' | 'copies-report-changed' | 'keeps-malformed-verified'
+  // #103's: a hub that wires a use by its interface's name alone, serves a use the provider's newest shape, keeps a use
+  // wired to the piece it prefers once that piece is gone, removes a required use's provider with no ask, reads an
+  // optional use with no provider as empty, and runs a call through an edge under the provider's own grant.
+  | 'compares-names-alone' | 'serves-newest-minor' | 'wires-by-name' | 'detaches-silently' | 'optional-reads-empty' | 'call-under-provider-grant'
+  // #989's hosted terminals: hosts that keep the start size, drop the bottom rows, keep every byte, read a FIFO or
+  // block their output on input; hubs that leave a closed terminal's files, throw once input is full, or stop or
+  // read as ended a host of another protocol version.
+  | TerminalPlant;
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -125,6 +149,8 @@ export interface ExtensionHostOptions {
   /** Methods this host answers `unsupported` to, as a shim that dropped them would: the contract step's planted twin (#139). */
   unsupported?: readonly string[];
   plant?: Plant;
+  /** The hosted-terminal host protocol this hub speaks, and the hosts it starts state (#989). Default: TERMINAL_PROTOCOL. */
+  terminalProtocol?: number;
   /** The OS secret store a source's secret is read from (#364). Default: the Keychain on macOS, and none elsewhere. */
   secrets?: SecretStore;
   /** Opens your browser at a sign-in page. Default: macOS's open. */
@@ -133,6 +159,22 @@ export interface ExtensionHostOptions {
   http?: HttpClient;
   /** Replay: each source call is answered from this recording, never through the client, and no secret is read. */
   replay?: Recording;
+  /** The evidence store a series' batch and rollup files go to and are read back from, through their hash (#262). Without one, a series call makes no reading. */
+  evidence?: EvidenceStore;
+  /** The runner R1 built (#366): every plug-in's model job goes through it, on your own agent. Without one, deep.runner.run refuses. */
+  runner?: Runner;
+  /**
+   * The canvas core `deep.canvas.read` reads through (#411): the hub's own, which takes a deep_query call and answers
+   * its reply. Without one, a read is refused.
+   */
+  canvas?: (call: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  /**
+   * The first-party pieces the hub runs itself, env-local among them (#103): each a provider in the composition graph,
+   * whose users are the pieces whose runs used what it provides. A version the host last saw otherwise is a new one.
+   */
+  firstParty?: { id: string; version: string; provides: string[] }[];
+  /** Marks each write of the hosted terminals index as a durable write point, as the hub's test disk numbers them (#996). */
+  point?: () => void;
 }
 export interface InstallFrom {
   from: string;
@@ -143,24 +185,47 @@ export interface InstallFrom {
   /**
    * What you approved: the event kinds of the record it may read, from the core's and its own (`*` for every one of
    * those), whether it may read their text fields too, the repos or workspaces whose events it may read, by project
-   * ID (every one when it names none), and the hosts its outside calls may reach.
+   * ID (every one when it names none), the hosts its outside calls may reach, and the canvas documents its check
+   * runner may read through `deep.canvas.read`, by doc ID (none when it names none, #411).
    */
-  grant?: { record?: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[] };
+  grant?: { record?: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[]; docs?: string[] };
 }
 /** A kit the install ran on what the package registers: the slot, the fill (a check kind's name), its verdict. */
 export interface KitRun { slot: string; fill: string; verdict: 'PASS' | 'FAIL' | 'BLOCKED' | 'INVALID' | 'INCONCLUSIVE' }
 export interface Installed { id: string; version: string; folder: string; digest: string; builtBy: string | null; project: string | null; kits: KitRun[] }
+export interface PackageTests { passed: boolean; testsRun: number; failures: { test: string; message: string }[] }
 /** How an answer reaches a session: into the running turn, in the stop hold, waking an idle session, or at its next prompt. */
 export type Route = 'steer' | 'hold' | 'wake' | 'prompt';
 export type Delivered =
   | { status: 'delivered'; session: string; adapter: string; route: Route }
   | { status: 'held'; session: string; adapter: string };
 export interface Conformance { id: string; version: string; digest: string; passed: boolean; reasons: string[] }
+/** A views/shown report, as the app sends it on the app API for each view it shows, at once and every 5 s (#262). */
+export interface ViewShown { view: string; window: string; visible: boolean; minimized: boolean; display_awake: boolean; session_locked: boolean; replica: boolean }
+/** A notice you created, with its sentence, which names the schedule a source that runs only while shown gave it (#262). */
+export interface NoticeRow { id: string; kind: string; key: string; source: string | null; sentence: string; every: number | null }
 export interface Loaded { status: 'loaded'; id: string; version: string; place: 'hub' | 'sandbox'; run: string | null }
 export interface Refused { status: 'refused'; id: string; version: string; reason: string }
 export type Load = Loaded | Refused;
+/** One acquired environment handle belongs to the load that created it, never its replacement. */
+export interface RunningEnvironment {
+  readonly handle: Readonly<EnvironmentHandle>;
+  down(): Promise<void>;
+}
+/** A runtime environment selected from a live, kit-checked package. */
+export interface RuntimeEnvironment {
+  readonly extension: string;
+  readonly version: string;
+  up(spec: EnvironmentSpec, lease: EnvironmentLease, checkout: string, deadline: number): Promise<RunningEnvironment>;
+}
+
 export interface ExtensionHost {
   install(from: InstallFrom): Promise<Installed>;
+  /** The channels of the packages loaded and started (#65), each by name with what it reaches. */
+  channels(): { name: string; kind: 'device' | 'chat' | 'email' | 'text'; extension: string }[];
+  /** One send or read of a loaded channel (#65), its provider calls made by `ctx.fetch`, the caller's. */
+  channel(name: string, op: 'deliver', item: ChannelItem, ctx: ChannelCtx): Promise<ChannelDelivered>;
+  channel(name: string, op: 'receive', item: null, ctx: ChannelCtx): Promise<ChannelReceived>;
   /** Kept across a restart: a new host on the same home. */
   installed(): Promise<Installed[]>;
   /**
@@ -180,6 +245,10 @@ export interface ExtensionHost {
   revoke(connection: Connection, id: string, word: 'run_as_you'): Promise<void>;
   /** Raw input for a hosted terminal, written to its program: only from the app, which sends the panel you focused. */
   rawInput(connection: Connection, terminal: string, text: string): Promise<void>;
+  /** What the app's tab for a hosted terminal shows now (#989), for every terminal the hub knows, loaded or not: only for the app. */
+  tab(connection: Connection, terminal: string): Promise<TerminalTab>;
+  /** The focused tab's size in cells, from the app: the program's terminal and the tab's screen take it (#989). */
+  resize(connection: Connection, terminal: string, cols: number, rows: number): Promise<void>;
   /** Runs its conformance on its files now; the result is kept for that digest. */
   check(pkg: Installed): Promise<Conformance>;
   /** Whether a conformance result is kept for this id and version, passed or failed; a load with none is refused. */
@@ -187,7 +256,10 @@ export interface ExtensionHost {
   load(pkg: Installed): Promise<Load>;
   loaded(): Promise<Loaded[]>;
   checks(): Promise<{ kind: string; extension: string }[]>;
-  runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number }): Promise<CheckResult>;
+  /** Select a live environment by its registered name; absence and revoked trust refuse, never fall back. */
+  environment(name: string): Promise<RuntimeEnvironment>;
+  /** `ctx.environment`: the first-party interface the run used, such as environment@1, whose provider it makes the check's piece a user of (#103). */
+  runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number; environment?: string }): Promise<CheckResult>;
   /** Hands each event to the loaded packages subscribed to its kind, once they have all taken it; rejects naming each that didn't. */
   deliver(events: Event[]): Promise<void>;
   /** The hub is ready: its socket listens and its replay is done. Packages loaded before it start now; it rejects naming each that failed to, unloaded. */
@@ -209,7 +281,10 @@ export interface ExtensionHost {
   callAction(call: ActionCall): Promise<ActionResult>;
   /** Every action the loaded pieces registered: offered to agents, or left out at install with the reason (#363). */
   actions(): Promise<ActionListing[]>;
-  /** Removes a loaded piece: new calls stop first, its users' uses detach, then it stops. `load` enables it again. */
+  /**
+   * Removes a loaded piece: new calls stop first, its users' uses detach, then it stops. `load` enables it again. The
+   * provider of a required use is removed only on your yes to one ask naming its users (#103): your no rejects.
+   */
   disable(id: string): Promise<void>;
   /** The adapters loaded extensions registered. */
   adapters(): Promise<{ name: string; extension: string; caps: AdapterCaps }[]>;
@@ -221,7 +296,10 @@ export interface ExtensionHost {
   deliverAnswer(answer: Delivery): Promise<Delivered>;
   /** What each loaded package's code returned at its load, by package: a release's fixture returns its calls' results (#139). */
   loadResult(id: string): Record<string, unknown> | undefined;
-  /** Each use of a loaded package: the interface its manifest names, the one it is wired to and the provider (#139). */
+  /**
+   * Each use of a loaded package: the interface its manifest names, the one it is wired to and the provider (#139); and
+   * each first-party output with the pieces whose runs used it, as the record keeps them (#103).
+   */
   edges(): Promise<{ user: string; uses: string; interface: string; provider: string }[]>;
   /**
    * Your value for a secret a package's manifest names, on the trusted path (#364). A loaded source of it naming the
@@ -247,6 +325,46 @@ export interface ExtensionHost {
    * the reading type its manifest names, and a page with one that isn't refused with the cursor where it was.
    */
   readStream(name: string, limit: number): Promise<StreamRead>;
+  /** The hub's timer at now() (#365): every run due starts, or queues behind its schedule's running run; resolves once each is dispatched. */
+  tick(): Promise<void>;
+  /** Resolves once nothing the schedules started is still going and nothing due can start. */
+  idle(): Promise<void>;
+  /** The schedules list: each row's state in words, its next run from the hub's own schedule and its last result from its last run. */
+  schedules(): Promise<ScheduleRow[]>;
+  /** A schedule's runs, as the hub recorded them. */
+  runs(schedule: string): Promise<ScheduleRun[]>;
+  /** Every send, as the hub recorded it. */
+  sends(): Promise<SendRow[]>;
+  /** Your edit of a schedule's cadence, on the trusted path. */
+  editSchedule(connection: Connection, name: string, cadence: { every: number } | { cron: string }): Promise<void>;
+  /** Run now, on the trusted path: a run at once, or queued behind the one running. */
+  runNow(connection: Connection, name: string): Promise<void>;
+  /** Your resume of a paused schedule, on the trusted path. */
+  resumeSchedule(connection: Connection, name: string): Promise<void>;
+  /** You asked to be told of a notice kind's cause, on the trusted path: recorded as notice.subscribed. Its event's ID. */
+  /**
+   * A notice you created on the trusted path; `on` names the source it is about, in your words, and a slower cadence
+   * it may name. On a source that runs only while shown, the plug-in's job that checks it gets a schedule of its own.
+   */
+  subscribeNotice(connection: Connection, kind: string, key: string, on?: { source: string; words: string; every?: number }): Promise<string>;
+  /** Your standing rule for sends, on the trusted path. Its handle. */
+  setSendRule(connection: Connection, rule: SendRule): Promise<string>;
+  /** The app API's views/shown and views/hidden (#262): what decides which while-shown cadences run. */
+  viewsShown(connection: Connection, report: ViewShown): Promise<void>;
+  viewsHidden(connection: Connection, report: { view: string; window: string }): Promise<void>;
+  /** Bound values, live or as of a frame's pinned log position, in the order asked (#262). */
+  boundValues(handles: string[], at?: { log_pos: number }): Promise<BoundValue[]>;
+  /** One window's rollups of a series source by series, from the file its reading.rollup names; null when none is kept. */
+  rollup(source: string, span: Span, start: number): Promise<Record<string, Rollup> | null>;
+  /** The notices you created, each with its sentence. */
+  listNotices(): Promise<NoticeRow[]>;
+  /** One run of a check kind, judged: a result citing evidence or a batch whose file is gone or fails its hash is INVALID, naming it. */
+  judgeCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number }): Promise<{ verdict: Verdict; cause: string | null; result: CheckResult }>;
+  /**
+   * Runs a loaded package's own tests (#366), each file under its tests/ in turn, in the package's own process, on this
+   * host's recording and clock: what ran, and each failure in the test's own words. None ran is no pass.
+   */
+  testPackage(pkg: Installed): Promise<PackageTests>;
   /** Stops every process it started, but the terminals of a piece whose manifest's host lives past the app. */
   close(): Promise<void>;
 }
@@ -258,6 +376,11 @@ const NODE_HOME = dirname(dirname(realpathSync(process.execPath)));
 const LOAD_MS = 10_000;
 /** How long a package gets to take a batch of events, or to answer a request on a route. */
 const CALL_MS = 10_000;
+/** How long a channel's send or read may take (#65): its provider calls are the hub's, each bounded by the hub. */
+const CHANNEL_MS = 30_000;
+const CHANNEL = 'channel@1';
+const CHANNEL_KINDS = ['device', 'chat', 'email', 'text'] as const;
+type ChannelKind = typeof CHANNEL_KINDS[number];
 /**
  * How long past a hook's deadline the host waits for a package's replies to arrive: the package marks each handler
  * late at the deadline itself, so its other handlers' replies (a deny among them) still make the trip back.
@@ -268,6 +391,8 @@ const BODY = 1024 * 1024;
 /** The largest answer an outside call the host makes for a package takes. */
 const ANSWER = 1024 * 1024;
 const PAGE = 1000;
+/** How many readings through its edges a piece keeps by handle, for its model jobs (#103). */
+const EDGE_READS = 256;
 /** Folder-safe, as extension.manifest@1 writes them. */
 const ID = /^[a-z0-9][a-z0-9_-]*\/[a-z0-9][a-z0-9_-]*$/;
 const VERSION = /^\d+\.\d+\.\d+([-+][0-9A-Za-z.+-]+)?$/;
@@ -283,6 +408,8 @@ const ENDS_SESSION = 'SessionEnd';
 /** How long a kit's case may run past the deadline it gave the runner before the install counts it stuck. */
 const KIT_GRACE_MS = 5_000;
 const CHECK_KIND = 'check.kind@1';
+/** The context a check kind in the hub gets with each run: the run's, and host@1 (the supervisor's) to start its process through (#30 AC5). */
+export interface HubCheckContext { checkout: string; deadline: number; host: RunHost }
 /** The trusted ring's pieces beyond the kernel, which no package replaces. */
 const RING = ['app-shell', 'canvas-core', 'supervisor', 'installer'];
 /** The done gate's interface, which no package provides until a second gate exists and it has a slot and a kit. */
@@ -295,6 +422,25 @@ const INDEX = 'index@1';
 const SOURCE = 'source@1';
 /** The hub's own connection, for what only the core appends. */
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
+/** A notice you created on a source, as the host keeps it beside its notice.subscribed (#262). */
+interface SavedNotice { kind: string; key: string; source: string; words: string; sentence: string; every: number | null; job?: string }
+const refuseNotice = (why: string): never => { throw Error(`subscribeNotice: ${why}`); };
+/** A bound value's handle: a number source's reading, or one series of a series source (#262). */
+const BOUND = /^reading:([a-z][a-z0-9_.-]*)(?:#(.+))?$/;
+/** Read now keeps an answer this recent (#262). */
+const KEPT_MS = 2_000;
+/** A view not reported shown again within this long counts as hidden (#262). */
+const SHOWN_MS = 10_000;
+/** Who a package's own test calls its actions as (#366): you, in the app. */
+const TESTER: Connection = { writer: 'app', actor: 'you', scope: 'you' };
+/** How long one test file of a package may run. */
+const TEST_MS = 60_000;
+/** What a panel would reach the network with itself (#366). */
+const NETWORK = /\b(fetch|XMLHttpRequest|WebSocket|EventSource)\s*\(|\bnew\s+(XMLHttpRequest|WebSocket|EventSource)\b/;
+/** How often the hub's timer looks for a schedule's run that is due (#365). */
+const TIMER_MS = 250;
+/** The notices one plug-in may send in a minute (#365). */
+const NOTICES_PER_MINUTE = 10;
 /** A source's name, as the manifest contract holds it. */
 const SOURCE_NAME = /^ext\.[a-z0-9][a-z0-9_-]*\.[a-z][a-z0-9_]*$/;
 const INDEX_NAME = /^[a-z][a-z0-9_.-]*$/;
@@ -311,7 +457,7 @@ export interface IndexFill extends SlotFill {
 interface Manifest {
   id: string; version: string; digest?: string; access?: { words: string[] }; checks?: string[]; replaces?: string[]; notices?: string[]; actions?: string[]; environments?: string[];
   stores?: string[]; events?: string[];
-  provides?: { interface: string; kind: string; adapter?: { from: string } }[]; uses?: { interface: string }[]; templates?: Template[];
+  provides?: ProvideRow[]; uses?: UseRow[]; templates?: Template[];
   conflicts?: string[]; kernel?: string[]; publisher_key?: string; signature?: string; leases?: LeaseKind[];
   /** extension.contract@1's (#139): whether it declares itself stable, and the preview entries it uses by name. */
   stability?: 'stable' | 'preview'; requires?: { preview?: string[] };
@@ -320,7 +466,7 @@ interface Manifest {
   sources?: { name: string; variant: string; reading?: string }[];
 }
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
-interface Entry extends Installed { grant: { record: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[] }; holds: string[] }
+interface Entry extends Installed { grant: { record: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[]; docs?: string[] }; holds: string[] }
 /** A session adapters bound: who bound it in order, who gates it, whether a turn runs, and the answers waiting for a route. */
 interface Bound { bound: string[]; gater: string | null; inTurn: boolean; waiting: Delivery[] }
 type Ask = (method: string, params: unknown) => Promise<unknown>;
@@ -338,10 +484,14 @@ interface Action {
   /** Why agents aren't offered it, or null: its input schema uses a keyword a model API's strict tool schemas reject. */
   leftOut: string | null;
 }
-/** A store a piece declared (#363): the generation its items are held to, and their check against its schema. */
-interface Store { generation: number; check: (value: unknown) => string | undefined }
+/** A store a piece declared (#363): the generation its items are held to, their check against its schema, and its quota in bytes (#365). */
+interface Store { generation: number; check: (value: unknown) => string | undefined; quota: number | null }
+/** A scheduled run under way (#365): what its job may do, and what the hub saw and recorded for it. */
+interface RunCtx { run: string; decl: ScheduleDecl; changes: string[]; blocked: string | null; held: string | null; ended: boolean }
 interface Ext {
   entry: Entry;
+  /** Its project folder's real path, resolved when it loads, which the hook path asks trust about (#881). */
+  project: string | null;
   /** The copy of its install folder it runs from, which only the host writes. */
   folder: string;
   manifest: Manifest;
@@ -357,12 +507,18 @@ interface Ext {
   routes: Set<string>;
   /** The adapter names it registered. */
   adapters: Set<string>;
+  /** The channels it registered (#65), by name, with what each reaches; their deliver and receive stay with the package. */
+  channels: Map<string, ChannelKind>;
   /** The index it registered, by name, with the kit revision it declares, and how the host reaches it once loaded. */
   index?: { name: string; revision: number; fill?: IndexFill };
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts. */
   hubBound: boolean;
   /** The sources it registered, by name, as declared (#364); their functions stay with the package. */
   sources: Map<string, Declared>;
+  /** Its views, each with the reading handles it binds (#262). */
+  views: Map<string, string[]>;
+  /** The sources each check kind it registered reads, as declared (#365). */
+  checkReads: Map<string, string[]>;
   /** How many times its code started in this copy: a restart imports a hub package's code afresh. */
   starts: number;
   /** How to take its resolver back from the asks core, once it registered one. */
@@ -377,18 +533,29 @@ interface Ext {
   actions: Map<string, Action>;
   /** The outputs it provides, by interface. */
   provides: Set<string>;
-  /** The output interfaces it uses. */
-  uses: Set<string>;
+  /** The output interfaces it uses, each with whether its `deep.use` marked it optional. */
+  uses: Map<string, boolean>;
   /** Removing it detached its users' uses: their reads through it read missing. */
   detached: boolean;
   /** Its users' reads through it under way, which its removal waits for before it stops. */
   reads: Set<Promise<unknown>>;
+  /** How to refuse each of those reads at once, when a new version replaces it rather than waiting for them (#103). */
+  refuseReads: Set<(e: Error) => void>;
   /** The callers of the action calls it is serving, by the scope token each call was given. */
   scopes: Map<string, Connection>;
   /** The recorded change or send call each scope token serves, by its call ID: the store items written for it name it. */
   callOf: Map<string, string>;
   /** Its stores, by kind (#363). */
   stores: Map<string, Store>;
+  /**
+   * A new version's start before it replaces the one in use (#103): it registers as at conformance, and may read its
+   * stores and its uses, so its outputs can be recorded for its users' contract tests; it writes nothing.
+   */
+  staged?: boolean;
+  /** While a contract test replays its tests (#103): what `t.read` of an interface it uses answers, the provider's new outputs. */
+  replay?: Map<string, unknown>;
+  /** The readings it read through its edges, by handle, which its model jobs may take as inputs (#103). */
+  edgeReads: Map<string, { edge: string; value: unknown; at: number }>;
   /** How the host asks the running package: its in-process side, or its socket. Unset until it runs. */
   ask?: Ask;
   stop?: () => Promise<void>;
@@ -401,6 +568,10 @@ interface Ext {
   /** Set once its unload ends its leases: one granted after, to a call already under way, ends at its grant. */
   leasesEnded?: boolean;
   server?: HttpServer;
+  /** While its own tests run (#366): only then does the host answer their calls. */
+  testing?: boolean;
+  /** How to push an action call's deadline later, by its scope: to a runner job's own while that job runs (#366). */
+  deadlines: Map<string, (ms: number) => void>;
 }
 
 class Overran extends Error {}
@@ -545,13 +716,42 @@ function actionRules(actions: Map<string, Action>): string[] {
 const message = (e: unknown): string => String((e as Error)?.message ?? e);
 /** A package's manifest, as its folder holds it. */
 const manifestOf = (folder: string): Manifest => JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
-async function within<T>(ms: number, what: string, work: Promise<T>): Promise<T> {
-  let disarm = (): void => undefined;
+/** A piece as composition reads it (#103): its id and its manifest's rows. */
+const pieceOf = (id: string, m: Manifest): Piece => ({ id, provides: m.provides ?? [], uses: m.uses ?? [] });
+/** A use is optional when its manifest row or its `deep.use` says so. */
+const optional = (ext: Ext, use: UseRow): boolean => use.optional === true || ext.uses.get(use.interface) === true;
+/** Where a value first breaks a JSON Schema, or undefined when it holds (#103); a schema the host can't read breaks at its root. */
+function schemaBreak(name: string, schema: unknown, value: unknown): string | undefined {
   try {
-    return await Promise.race([work, new Promise<never>((_, reject) => { disarm = after(ms, () => reject(new Overran(`${what} took longer than ${ms} ms`))); })]);
-  } finally {
-    disarm();
+    const held = registry([{ name, schema: schema as Schema }]).validate(name, value);
+    return held.ok ? undefined : `${held.issues[0]!.path || '/'} (${held.issues[0]!.code})`;
+  } catch (e) {
+    return `/ (its schema can't be read: ${message(e)})`;
   }
+}
+async function within<T>(ms: number, what: string, work: Promise<T>): Promise<T> {
+  return stretchable(ms, what, work).done;
+}
+/** As within, but `until(ms)` gives the work at least `ms` more from now: an action call while a runner job it started runs (#366). */
+function stretchable<T>(ms: number, what: string, work: Promise<T>): { done: Promise<T>; until: (ms: number) => void } {
+  let disarm = (): void => undefined;
+  let overran = (_: Error): void => undefined;
+  const start = Date.now();
+  let end = start + ms;
+  const arm = (): void => {
+    disarm();
+    disarm = after(end - Date.now(), () => overran(new Overran(`${what} took longer than ${end - start} ms`)));
+  };
+  const late = new Promise<never>((_, reject) => { overran = reject; });
+  arm();
+  return {
+    done: Promise.race([work, late]).finally(() => disarm()),
+    until: (more) => {
+      if (Date.now() + more <= end) return;
+      end = Date.now() + more;
+      arm();
+    },
+  };
 }
 const nothing = (outcome: CheckResult['outcome'], failure?: string): CheckResult => ({
   outcome, testsRun: 0, evidence: [], read: [], mask: null,
@@ -600,6 +800,8 @@ class Host implements ExtensionHost {
   /** The publisher key trusted for each package ID: its first signed install's, or one you trusted since. */
   private keys: Record<string, string>;
   private readonly exts = new Map<string, Ext>();
+  /** The content keys each running check's `deep.canvas.read` calls returned, by the package running it (#411). */
+  private readonly canvasKeys = new Map<Ext, string[]>();
   /** The packages you approved run-as-you for, by ID. */
   private runAsYou: Record<string, boolean>;
   private readonly terminals: Terminals;
@@ -621,10 +823,34 @@ class Host implements ExtensionHost {
   private readonly published: ReadonlyMap<string, ApiEntry>;
   /** The edges wired at load: user → (the interface its manifest uses → the interface it reads from its provider). */
   private readonly wired = new Map<string, Map<string, string>>();
+  /** The provider each use reads from, by user and interface, until a piece loads, stops or installs (#103). */
+  private readonly routes = new Map<string, Ext | undefined>();
+  /** The channel sends and reads under way (#65), by the call ID their context's fetch names. */
+  private readonly channelCalls = new Map<string, { ext: Ext; ctx: ChannelCtx }>();
+  private channelCount = 0;
+  /** Install folders' manifests, read once each. */
+  private readonly manifests = new Map<string, Manifest>();
   /** The starts of the packages loaded before ready, once ready runs. */
   private starting: Promise<void> = Promise.resolve();
   private closed = false;
   private readonly sources: Sources;
+  private readonly scheduler: Schedules;
+  private readonly sending: Sends;
+  /** The runs under way, by the scope token their job's calls carry (#365). */
+  private readonly runCtx = new Map<string, RunCtx>();
+  /** The times of each plug-in's notices in the last minute, which its limit counts (#365). */
+  private readonly noticeTimes = new Map<string, number[]>();
+  /** Each store's items as the record holds them, and their bytes in all, kept as they are put (#365): only this host writes them. */
+  private readonly storeItems = new Map<string, { items: Map<string, { value: unknown; generation: number; bytes: number }>; bytes: number }>();
+  private timer: NodeJS.Timeout | undefined;
+  /** The hub's series, once it has an evidence store (#262). */
+  private readonly series: SeriesStore | undefined;
+  /** The app's last views/shown report for each view and window (#262). */
+  private readonly shown = new Map<string, { report: ViewShown; at: number }>();
+  /** When each while-shown source is next called (#262). */
+  private readonly shownNext = new Map<string, number>();
+  /** Each source whose last call the quota refused, with when it can run (#262). */
+  private readonly quotaUntil = new Map<string, number>();
 
   constructor(private readonly options: ExtensionHostOptions) {
     this.entries = this.read('installed.json');
@@ -634,11 +860,39 @@ class Host implements ExtensionHost {
     this.keys = this.read('keys.json');
     this.published = new Map((options.api ?? extensionApi()).map((e) => [e.method, e]));
     this.runAsYou = this.read('run-as-you.json');
-    this.terminals = new Terminals(options.home, options.supervisor);
+    const plant = options.plant;
+    this.terminals = new Terminals(options.home, options.supervisor, {
+      protocol: options.terminalProtocol ?? TERMINAL_PROTOCOL,
+      // A writer the host refused, by its process: recorded, never delivered.
+      refused: (terminal, pid) => {
+        const now = options.now();
+        void options.record.append(CORE, { v: 1, id: ulid(now), kind: 'terminal.refused', ts: now, data: { terminal, pid } }).catch(() => undefined);
+      },
+      ...((TERMINAL_PLANTS as readonly string[]).includes(plant as string) ? { plant: plant as TerminalPlant } : {}),
+      ...(options.point ? { point: options.point } : {}), now: options.now,
+    });
+    const series = this.series = options.evidence ? new SeriesStore({
+      record: options.record, evidence: options.evidence, now: options.now, connection: CORE,
+      timeoutOf: (name) => [...this.exts.values()].map((e) => e.live ? e.sources.get(name) : undefined).find((s): s is Polled => s?.variant === 'polled')?.timeout,
+    }) : undefined;
     this.sources = new Sources({
       now: options.now, http: options.http ?? nodeHttp, secrets: options.secrets ?? osSecrets(), ...(options.replay ? { replay: options.replay } : {}),
+      ...(series ? { land: (source: Polled, asOf: number, values: Map<string, number>) => series.land(source, asOf, values) } : {}),
       // Each call's cost and each new reading, as the core: the hub makes every source call.
       append: async (kind, data) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind, ts: options.now(), data } as EventInput); },
+    });
+    this.sending = new Sends({
+      record: options.record, now: options.now, http: options.http ?? nodeHttp, asks: options.asks,
+      rules: () => this.read<SendRule>('send-rules.json'), saveRules: (rules) => this.save('send-rules.json', rules),
+    });
+    this.scheduler = new Schedules({
+      now: options.now,
+      newRun: () => `run:${ulid(options.now())}`,
+      append: async (data: RunEvent) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind: 'schedule.run', ts: options.now(), data: data as unknown as JsonValue }); },
+      ready: (decl) => this.exts.get(decl.plugin)?.live === true,
+      blocked: (decl) => this.blockedRun(decl),
+      dispatch: (decl, run) => this.dispatchRun(decl, run),
+      saved: (name, settings) => this.save('schedules.json', { ...this.read('schedules.json'), [name]: settings }),
     });
   }
 
@@ -669,6 +923,11 @@ class Host implements ExtensionHost {
     this.admit(manifest as Manifest, packageDigest(from.from), project);
     // An update that drops an interface an installed piece uses, with no adapter for it, asks you first (#139).
     await this.updateHeld(manifest as Manifest);
+    // Its edges, typed (#103): every use it and the pieces it serves have matches a provider, with no cycle among them.
+    const replacing = (manifest.replaces ?? []).filter((r) => r.includes('/') && r !== id && this.entries[r]);
+    const after = [...this.pieces().filter((p) => p.id !== id && !replacing.includes(p.id)), pieceOf(id, manifest as Manifest)];
+    this.wireCheck(manifest as Manifest, after);
+    const users = after.flatMap((p) => p.uses.filter((u) => resolve(p.id, u, after, this.namesAlone)?.id === id).map((use) => ({ user: p.id, use })));
     // A quota that counts nothing would never refuse: each is a whole number of calls per a whole number of ms.
     for (const h of from.grant?.hosts ?? []) {
       const whole = (n: unknown): boolean => Number.isSafeInteger(n) && (n as number) > 0;
@@ -689,11 +948,14 @@ class Host implements ExtensionHost {
         grant: {
           record: [...(from.grant?.record ?? [])], ...(from.grant?.text === true ? { text: true } : {}),
           ...(from.grant?.projects ? { projects: [...from.grant.projects] } : {}), ...(hosts ? { hosts } : {}),
+          ...(from.grant?.docs ? { docs: [...from.grant.docs] } : {}),
         },
         holds: [...(manifest.checks ?? [])],
       };
       // Each slot's kit runs on what it registers first: a FAIL refuses the install, and what was installed stays (#349).
       entry.kits = await this.installKits(entry, manifest as Manifest);
+      // A new version, or a replacement, passes its users' contract tests before the version in use stops (#103).
+      if ((before || replacing.length) && users.length) await this.contract(entry, manifest as Manifest, users);
       // A kind it replaces is its own from now on, no longer the package's that held it (#351).
       const replaced = Object.values(this.entries).filter((e) => e.id !== id && e.holds.some((k) => manifest.replaces?.includes(k)))
         .map((e) => ({ ...e, holds: e.holds.filter((k) => !manifest.replaces!.includes(k)) }));
@@ -721,12 +983,158 @@ class Host implements ExtensionHost {
       this.save('keys.json', this.keys);
     }
     if (before) rmSync(before.folder, { recursive: true, force: true });
-    // The copy running is the install before: it stops, after any load of it under way.
+    // The copy running is the install before: it stops, after any load of it under way. A read it still serves is
+    // waited for when the copy is of the same version, and refused at its edge when the version changed (#103).
     await this.serial(id, async () => {
       const running = this.exts.get(id);
-      if (running && running.entry !== entry) await this.unload(running);
+      if (running && running.entry !== entry) await this.unload(running, running.entry.version === entry.version);
     });
+    // The packages it replaces are removed, and their users rewire to it by type (#103).
+    for (const gone of replacing) {
+      await this.serial(gone, async () => {
+        const running = this.exts.get(gone);
+        if (running) await this.unload(running, false);
+      });
+      const removed = this.entries[gone];
+      delete this.entries[gone];
+      this.save('installed.json', this.entries);
+      if (removed) rmSync(removed.folder, { recursive: true, force: true });
+    }
+    this.routes.clear();
+    await this.reopen(id, entry.version, dependents(graph(this.pieces(), this.namesAlone), id));
     return this.installedOf(entry);
+  }
+  /** Whether the planted hub that wires by names alone runs (#103). */
+  private get namesAlone(): boolean {
+    return this.options.plant === 'compares-names-alone';
+  }
+  /** Each installed piece as composition reads it, its manifest read once per install folder. */
+  private pieces(): Piece[] {
+    return Object.values(this.entries).map((e) => pieceOf(e.id, this.manifestAt(e.folder)));
+  }
+  private manifestAt(folder: string): Manifest {
+    let m = this.manifests.get(folder);
+    if (!m) {
+      // Only installed folders' are kept: an install in a new folder takes its old one's place (#824).
+      const installed = new Set(Object.values(this.entries).map((e) => e.folder));
+      for (const old of this.manifests.keys()) if (!installed.has(old)) this.manifests.delete(old);
+      this.manifests.set(folder, m = manifestOf(folder));
+    }
+    return m;
+  }
+  /**
+   * The install's type check (#103), on the pieces as they would be once it installs: each of its uses matches a
+   * provider of its interface, each use of the interfaces it provides still matches one, and no use closes a cycle.
+   * The first refusal throws, naming the edge and the first schema path that differs, or the cycle; nothing is wired.
+   */
+  private wireCheck(m: Manifest, after: Piece[]): void {
+    const { id } = m;
+    for (const use of m.uses ?? []) {
+      const why = refusal(id, use, after, this.namesAlone);
+      if (why) throw Error(`${why}, so ${id} isn't installed`);
+    }
+    const provided = new Set((m.provides ?? []).map((p) => p.interface));
+    for (const p of after) {
+      for (const use of p.id === id ? [] : p.uses.filter((u) => provided.has(u.interface))) {
+        const why = refusal(p.id, use, after, this.namesAlone);
+        if (why) throw Error(`${why}, so ${id}@${m.version} isn't installed`);
+      }
+    }
+    const cycle = cycleThrough(graph(after, this.namesAlone), id);
+    if (cycle) throw Error(`installing ${id} would close a cycle of uses, ${cycle.join(' → ')}, so it isn't installed and nothing is wired`);
+  }
+  /**
+   * The contract tests between a new version and the pieces that will use it (#103), before the version in use stops:
+   * the new version starts staged, the outputs those pieces use are recorded and held to their schemas, and each
+   * user's own tests replay against them, read at the user's minor. Each run is recorded; one that fails, or a start
+   * that fails, refuses the install, naming the edge.
+   */
+  private async contract(entry: Entry, manifest: Manifest, users: { user: string; use: UseRow }[]): Promise<void> {
+    const { folder, digest } = this.snapshot(entry);
+    const staged = this.ext(entry, folder, manifest, digest, 'sandbox', 'conformance');
+    staged.staged = true;
+    const outputs = new Map<string, { value: unknown } | { broke: string }>();
+    try {
+      try {
+        await this.start(staged);
+      } catch (e) {
+        throw Error(`${entry.id}@${entry.version} didn't start, so it isn't installed and the version in use stays: ${message(e)}`);
+      }
+      for (const iface of new Set(users.map((u) => u.use.interface))) {
+        try {
+          const value = await within(CALL_MS, `${entry.id}'s ${iface}`, staged.ask!('output', { name: iface }));
+          const schema = (manifest.provides ?? []).find((r) => r.interface === iface)?.schema;
+          const broke = schema === undefined ? undefined : schemaBreak(iface, schema, value);
+          outputs.set(iface, broke === undefined ? { value } : { broke: `its output breaks its schema at ${broke}` });
+        } catch (e) {
+          outputs.set(iface, { broke: `its output failed: ${message(e)}` });
+        }
+      }
+    } finally {
+      await staged.stop?.();
+      rmSync(folder, { recursive: true, force: true });
+    }
+    const replay = new Map([...outputs].flatMap(([iface, out]) => ('value' in out ? [[iface, out.value] as const] : [])));
+    const failed: string[] = [];
+    for (const { user, use } of users) {
+      const out = outputs.get(use.interface)!;
+      let why = 'broke' in out ? out.broke : undefined;
+      const ext = this.exts.get(user);
+      if (why === undefined && ext?.live && ext.ask) {
+        ext.replay = replay;
+        try {
+          const ran = await this.runTests(ext);
+          if (ran.failures.length) why = ran.failures.map((f) => `${f.test}: ${f.message}`).join('; ');
+        } finally {
+          delete ext.replay;
+        }
+      }
+      const now = this.options.now();
+      await this.options.record.append(CORE, {
+        v: 1, id: ulid(now), kind: 'composition.tested', ts: now,
+        data: { user, interface: use.interface, provider: entry.id, version: entry.version, passed: why === undefined },
+      });
+      if (why !== undefined) failed.push(`the edge ${user} uses ${use.interface} from ${entry.id}: its contract test against ${entry.version} failed: ${why}`);
+    }
+    if (failed.length) throw Error(`${failed.join('; ')}; so ${entry.id}@${entry.version} isn't installed, and the version in use stays`);
+  }
+  /** Each first-party output's users, as the record keeps them (#103): one row per user, interface and provider. */
+  private async firstPartyUses(): Promise<{ user: string; interface: string; provider: string }[]> {
+    const ids = new Set((this.options.firstParty ?? []).map((f) => f.id));
+    if (!ids.size) return [];
+    const rows = (await this.options.record.raw("SELECT data FROM events WHERE kind = 'composition.used' ORDER BY log_pos")) as { data: string }[];
+    return rows.map((r) => JSON.parse(r.data) as { user: string; interface: string; provider: string }).filter((u) => ids.has(u.provider));
+  }
+  /** A run of `user`'s used a first-party output: recorded once, as an edge of the composition graph (#103). */
+  private async usedFirstParty(user: string, iface: string): Promise<void> {
+    const provider = (this.options.firstParty ?? []).find((f) => f.provides.includes(iface));
+    if (!provider) throw Error(`a check run names the output ${iface}, which no first-party piece provides`);
+    if ((await this.firstPartyUses()).some((u) => u.user === user && u.interface === iface && u.provider === provider.id)) return;
+    const now = this.options.now();
+    await this.options.record.append(CORE, { v: 1, id: ulid(now), kind: 'composition.used', ts: now, data: { user, interface: iface, provider: provider.id } });
+  }
+  /**
+   * A first-party piece at a version this host last saw otherwise is a new version (#103): the claims of the pieces
+   * whose runs used it, and of everything that uses those, reopen once.
+   */
+  private async firstPartyVersions(): Promise<void> {
+    const seen = this.read<string>('first-party.json');
+    const now = { ...seen };
+    for (const piece of this.options.firstParty ?? []) {
+      now[piece.id] = piece.version;
+      if (seen[piece.id] === undefined || seen[piece.id] === piece.version) continue;
+      const users = [...new Set((await this.firstPartyUses()).filter((u) => u.provider === piece.id && this.entries[u.user]).map((u) => u.user))];
+      const edges = graph(this.pieces(), this.namesAlone);
+      await this.reopen(piece.id, piece.version, [...new Set([...users, ...users.flatMap((u) => dependents(edges, u))])].sort());
+    }
+    this.save('first-party.json', now);
+  }
+  /** Reopens the claims of each piece, once, for a provider's version now active (#103). */
+  private async reopen(provider: string, version: string, pieces: string[]): Promise<void> {
+    for (const piece of pieces) {
+      const now = this.options.now();
+      await this.options.record.append(CORE, { v: 1, id: ulid(now), kind: 'composition.reopened', ts: now, data: { piece, provider, version } });
+    }
   }
   /**
    * What the installer checks in the manifest and the files before any of the package is copied (#351); the first
@@ -845,13 +1253,22 @@ class Host implements ExtensionHost {
       }
       return;
     }
-    await Promise.all(owned.map((t) => this.terminals.stop(t)));
+    // A lost one stays listed as lost: what it runs can't be proven from damaged bytes.
+    await Promise.all(owned.filter((t) => !t.lost).map((t) => this.terminals.stop(t)));
   }
   async rawInput(connection: Connection, terminal: string, text: string): Promise<void> {
     if (connection.writer !== 'app' && this.options.plant !== 'input-from-any-writer') {
       throw Error(`raw input for ${terminal} comes only from the panel you focused in the app, not from ${connection.writer}${connection.session ? ` in session ${connection.session}` : ''}`);
     }
-    this.terminals.input(terminal, text);
+    await this.terminals.input(terminal, text);
+  }
+  async tab(connection: Connection, terminal: string): Promise<TerminalTab> {
+    if (connection.writer !== 'app') throw Error(`${terminal}'s tab is the app's, not ${connection.writer}'s`);
+    return this.terminals.tab(terminal);
+  }
+  async resize(connection: Connection, terminal: string, cols: number, rows: number): Promise<void> {
+    if (connection.writer !== 'app') throw Error(`${terminal}'s size comes only from the tab you focused in the app, not from ${connection.writer}`);
+    await this.terminals.resize(terminal, cols, rows);
   }
   /** Whether a loaded package holds the grant a call needs: run-as-you only once its manifest asks for it and you approved it. */
   private holds(ext: Ext, needs: string): boolean {
@@ -885,34 +1302,36 @@ class Host implements ExtensionHost {
     // An index that replaces the shipped one is held to index@1's kit wherever it will run (#355).
     const indexed = replaces.includes(INDEX);
     const streams = (manifest.sources ?? []).filter((s) => s.variant === 'stream').map((s) => s.name);
-    if (hub && streams.length && !this.isReady) {
+    const blocked = (why: string): never => {
       rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} registers the stream source ${streams.join(', ')}, whose ${SOURCE} kit runs its code in the hub, and the hub isn't ready; install it once it is`);
-    }
+      throw Error(`BLOCKED: ${entry.id} ${why}`);
+    };
     // No package code runs in the hub before it is ready (#348): a kit that needs to is BLOCKED, so the install is.
-    if (hub && indexed && !this.isReady) {
-      rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} replaces ${INDEX}, whose kit runs its code in the hub, and the hub isn't ready; install it once it is`);
-    }
-    if (hub && (kitted.length || environments.length) && !this.isReady) {
-      rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} ${what}, whose ${kits} run${kitted.length && environments.length ? '' : 's'} its code in the hub, and the hub isn't ready; install it once it is`);
-    }
-    if (!hub && (kitted.length || environments.length)) {
-      // The kits' suites and stacks run where the sandbox can't reach: unrun, the package doesn't install.
-      rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} ${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
-    }
+    const later = 'and the hub isn\'t ready; install it once it is';
+    if (hub && streams.length && !this.isReady) blocked(`registers the stream source ${streams.join(', ')}, whose ${SOURCE} kit runs its code in the hub, ${later}`);
+    if (hub && indexed && !this.isReady) blocked(`replaces ${INDEX}, whose kit runs its code in the hub, ${later}`);
+    if (hub && (kitted.length || environments.length) && !this.isReady) blocked(`${what}, whose ${kits} run${kitted.length && environments.length ? '' : 's'} its code in the hub, ${later}`);
+    // The kits' suites and stacks run where the sandbox can't reach: unrun, the package doesn't install.
+    if (!hub && (kitted.length || environments.length)) blocked(`${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
     if (!kitted.length && !environments.length && !indexed && !streams.length) {
       rmSync(folder, { recursive: true, force: true });
       return declared.map((kind) => ({ slot: CHECK_KIND, fill: kind, verdict: 'BLOCKED' as const }));
     }
     const ext = this.ext(entry, folder, manifest, digest, hub ? 'hub' : 'sandbox', 'conformance');
     const runs: KitRun[] = [];
+    // One fill held to its slot's kit: the run is kept, and anything but PASS refuses the install, naming the case.
+    const judge = async <F extends SlotFill>(slot: string, name: string, what: string, fill: (revision: number) => F): Promise<void> => {
+      // The kits load with the first install that runs one: a hub that installs nothing never holds them.
+      const { runKit, slotKits } = await import('@deepbuild/conformance');
+      const kit = slotKits().find((k) => k.slot === slot) as SlotKit<F> | undefined;
+      if (!kit) throw Error(`the conformance package ships no ${slot} kit`);
+      const report = await runKit(kit, fill(kit.revision), { parts: ['fixed'] });
+      runs.push({ slot, fill: name, verdict: report.verdict });
+      const failed = report.cases.find((c) => c.outcome !== 'PASS');
+      if (report.verdict !== 'PASS') throw Error(`${entry.id}'s ${what} reads ${report.verdict} on ${slot}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+    };
     try {
       await this.start(ext);
-      const kit = slotKits().find((k) => k.slot === CHECK_KIND) as SlotKit<CheckRunnerFill> | undefined;
-      if (!kit) throw Error(`the conformance package ships no ${CHECK_KIND} kit`);
       for (const kind of [...ext.kinds, ...declared.filter((k) => !ext.kinds.includes(k))]) {
         if (!replaces.includes(kind) || !ext.kinds.includes(kind)) { runs.push({ slot: CHECK_KIND, fill: kind, verdict: 'BLOCKED' }); continue; }
         // A runner that never answers can't hang the install: past a case's deadline and a grace its run is refused,
@@ -921,61 +1340,40 @@ class Host implements ExtensionHost {
         const run = async (spec: CheckSpec, ctx: { deadline: number }): Promise<CheckResult> => {
           if (stuck) throw Error(stuck);
           try {
-            return await within(ctx.deadline + KIT_GRACE_MS, `${entry.id}'s ${kind} at install`, ext.ask!('run', { type: kind, spec, ctx }) as Promise<CheckResult>);
+            return await within(ctx.deadline + KIT_GRACE_MS, `${entry.id}'s ${kind} at install`, ext.ask!('run', { type: kind, spec, ctx: this.checkContext(ext, ctx) }) as Promise<CheckResult>);
           } catch (e) {
             if (e instanceof Overran) stuck = message(e);
             throw e;
           }
         };
-        const fill: CheckRunnerFill = { slot: CHECK_KIND, revision: kit.revision, kind, run };
-        const report = await runKit(kit, fill, { parts: ['fixed'] });
-        runs.push({ slot: CHECK_KIND, fill: kind, verdict: report.verdict });
-        const failed = report.cases.find((c) => c.outcome !== 'PASS');
-        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s ${kind} reads ${report.verdict} on ${CHECK_KIND}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+        await judge<CheckRunnerFill>(CHECK_KIND, kind, kind, (revision) => ({ slot: CHECK_KIND, revision, kind, run }));
       }
       // Each environment the manifest declares: the kit brings it up on a lease and a checkout of the kit's own and
       // takes it down, through the package's up and down. One the package didn't register by the time its load
       // returned is BLOCKED, unrun, and refuses the install: a registration that came later would fill the slot unkitted.
-      const envKit = environments.length ? slotKits().find((k) => k.slot === ENVIRONMENT) as SlotKit<EnvironmentFill> | undefined : undefined;
-      if (environments.length && !envKit) throw Error(`the conformance package ships no ${ENVIRONMENT} kit`);
       for (const name of environments) {
         if (!ext.environments.includes(name)) throw Error(`BLOCKED: ${entry.id} declares the environment ${name} and didn't register it at install, so ${ENVIRONMENT}'s kit couldn't run; it isn't installed`);
         // The kit takes a promise from either step and bounds it; a handle is what the package's up answered with.
         const up = (spec: EnvironmentSpec, lease: EnvironmentLease, checkout: string): Promise<unknown> => ext.ask!('env.up', { name, spec, lease, checkout });
         const down = (handle: EnvironmentHandle): Promise<unknown> => ext.ask!('env.down', { name, handle });
-        const fill = { slot: ENVIRONMENT, revision: envKit!.revision, up, down } as unknown as EnvironmentFill;
-        const report = await runKit(envKit!, fill, { parts: ['fixed'] });
-        runs.push({ slot: ENVIRONMENT, fill: name, verdict: report.verdict });
-        const failed = report.cases.find((c) => c.outcome !== 'PASS');
-        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s environment ${name} reads ${report.verdict} on ${ENVIRONMENT}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+        await judge(ENVIRONMENT, name, `environment ${name}`, (revision) => ({ slot: ENVIRONMENT, revision, up, down }) as unknown as EnvironmentFill);
       }
       if (indexed) {
-        const kit = slotKits().find((k) => k.slot === INDEX) as SlotKit<IndexFill> | undefined;
-        if (!kit) throw Error(`the conformance package ships no ${INDEX} kit`);
         if (!ext.index) throw Error(`${entry.id} replaces ${INDEX}, but its code registered no index; it isn't installed`);
-        const report = await runKit(kit, this.indexFill(ext), { parts: ['fixed'] });
-        runs.push({ slot: INDEX, fill: ext.index.name, verdict: report.verdict });
-        const failed = report.cases.find((c) => c.outcome !== 'PASS');
-        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s index ${ext.index.name} reads ${report.verdict} on ${INDEX}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+        await judge(INDEX, ext.index.name, `index ${ext.index.name}`, () => this.indexFill(ext));
       }
-      const sourceKit = streams.length ? slotKits().find((k) => k.slot === SOURCE) as SlotKit<SlotFill> | undefined : undefined;
-      if (streams.length && !sourceKit) throw Error(`the conformance package ships no ${SOURCE} kit`);
       for (const name of streams) {
         if (ext.sources.get(name)?.variant !== 'stream') throw Error(`BLOCKED: ${entry.id} lists the stream source ${name} and didn't register it at install, so ${SOURCE}'s kit couldn't run; it isn't installed`);
         // The kit's restart is the hub's: the package's code stops and starts again, keeping nothing it held.
-        const fill = {
-          slot: SOURCE, revision: sourceKit!.revision, variant: 'stream',
+        await judge(SOURCE, name, `source ${name}`, (revision) => ({
+          slot: SOURCE, revision, variant: 'stream',
           read: (stream: unknown, cursor: unknown, limit: unknown) => within(CALL_MS, `${entry.id}'s ${name}`, ext.ask!('source.read', { name, stream, cursor, limit })),
           restart: async () => {
             await ext.stop?.();
             if (ext.run) ext.run = `run:${ulid(this.options.now())}`;
             await this.start(ext);
           },
-        } as unknown as SlotFill;
-        const report = await runKit(sourceKit!, fill, { parts: ['fixed'] });
-        runs.push({ slot: SOURCE, fill: name, verdict: report.verdict });
-        const failed = report.cases.find((c) => c.outcome !== 'PASS');
-        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s source ${name} reads ${report.verdict} on ${SOURCE}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+        }));
       }
     } finally {
       await ext.stop?.();
@@ -983,18 +1381,57 @@ class Host implements ExtensionHost {
     }
     return runs;
   }
+  /** The channels of the packages loaded and started (#65): each by name, with what it reaches. */
+  channels(): { name: string; kind: ChannelKind; extension: string }[] {
+    return [...this.exts.values()].filter((e) => e.live && e.ask).flatMap((e) => [...e.channels].map(([name, kind]) => ({ name, kind, extension: e.entry.id })));
+  }
+  /** One send or read of a loaded channel, its context's fetch the caller's; bounded, and never unloading it. */
+  async channel(name: string, op: 'deliver', item: ChannelItem, ctx: ChannelCtx): Promise<ChannelDelivered>;
+  async channel(name: string, op: 'receive', item: null, ctx: ChannelCtx): Promise<ChannelReceived>;
+  async channel(name: string, op: 'deliver' | 'receive', item: ChannelItem | null, ctx: ChannelCtx): Promise<unknown> {
+    const ext = [...this.exts.values()].find((e) => e.live && e.ask && e.channels.has(name));
+    if (!ext) throw Error(`no loaded package registers the channel ${name}`);
+    return this.channelAsk(ext, name, op, item, ctx);
+  }
+  private async channelAsk(ext: Ext, name: string, op: 'deliver' | 'receive', item: ChannelItem | null, ctx: ChannelCtx): Promise<unknown> {
+    const call = `channel:${++this.channelCount}`;
+    this.channelCalls.set(call, { ext, ctx });
+    try {
+      return await within(CHANNEL_MS, `${ext.entry.id}'s channel ${name}`, ext.ask!(`channel.${op}`, { name, call, settings: ctx.settings, ...(item ? { item } : {}) }));
+    } finally {
+      this.channelCalls.delete(call);
+    }
+  }
+  /** A registered channel as a channel@1 fill the kit judges, its calls going to the package. */
+  private channelFill(ext: Ext, name: string, kind: ChannelKind, revision: number): ChannelFill {
+    return {
+      slot: CHANNEL, revision, kind,
+      deliver: (item, ctx) => this.channelAsk(ext, name, 'deliver', item, ctx) as Promise<ChannelDelivered>,
+      receive: (ctx) => this.channelAsk(ext, name, 'receive', null, ctx) as Promise<ChannelReceived>,
+    };
+  }
   async enterSecret(connection: Connection, extension: string, name: string, value: string): Promise<{ test: KeyTest; saved: boolean }> {
     this.trustedPath(connection, 'a secret is entered');
     this.secretOf(extension, name);
     if (typeof value !== 'string' || !value) throw Error(`a value for ${name} is a string`);
     const ext = this.exts.get(extension);
     const tested = [...(ext?.live ? ext.sources.values() : [])].find((s): s is Polled => s.variant === 'polled' && s.secret === name && s.keyTest !== null);
-    return this.sources.enter(extension, name, value, tested);
+    const entered = await this.sources.enter(extension, name, value, tested);
+    // A schedule BLOCKED on it runs at the next tick (#365).
+    if (entered.saved) this.scheduler.supplied();
+    return entered;
   }
   async readSource(name: string): Promise<SourceRead> {
     const ext = [...this.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'polled');
     if (!ext) return { status: 'BLOCKED', source: name, cause: `no loaded package registers the polled source ${name}` };
-    return this.sources.read(ext.entry.id, ext.sources.get(name) as Polled, (answer) => this.ask(ext, CALL_MS, `${name}'s parser`, 'source.parse', { name, answer }));
+    return (await this.readPolled(ext, name)).read;
+  }
+  /** One read of a loaded plug-in's polled source, through the hub, keeping when the quota refused it (#262). */
+  private async readPolled(owner: Ext, name: string): Promise<{ read: SourceRead; handle: string | null; held: boolean }> {
+    const got = await this.sources.readOne(owner.entry.id, owner.sources.get(name) as Polled, (answer) => this.ask(owner, CALL_MS, `${name}'s parser`, 'source.parse', { name, answer }));
+    if (got.read.status === 'reading' || got.read.status === 'batch') this.quotaUntil.delete(name);
+    else if (got.read.until !== undefined) this.quotaUntil.set(name, got.read.until);
+    return got;
   }
   recording(): Recording {
     return this.sources.recording();
@@ -1007,8 +1444,14 @@ class Host implements ExtensionHost {
   async removeSecret(connection: Connection, extension: string, name: string, answer?: { yes: string[] }): Promise<{ removed: boolean; blocked: string[] }> {
     this.trustedPath(connection, 'a secret is removed');
     this.secretOf(extension, name);
-    // What its packages registered needing it; schedules and checks name sources, so they go BLOCKED through them.
-    const blocked = [...(this.exts.get(extension)?.sources.values() ?? [])].filter((s) => s.variant === 'polled' && s.secret === name).map((s) => s.name).sort();
+    // What plug-ins declared needing it: its sources, and the schedules and checks that read them (#365).
+    const sources = [...(this.exts.get(extension)?.sources.values() ?? [])].filter((s) => s.variant === 'polled' && s.secret === name).map((s) => s.name);
+    const reads = (r: string[]): boolean => r.some((x) => sources.includes(x));
+    const blocked = [
+      ...sources,
+      ...this.scheduler.decls().filter((d) => reads(d.declares.readings)).map((d) => d.name),
+      ...[...this.exts.values()].flatMap((e) => [...e.checkReads].filter(([, r]) => reads(r)).map(([kind]) => kind)),
+    ].sort();
     const yes = [...(answer?.yes ?? [])].sort();
     if (!answer || yes.length !== blocked.length || yes.some((s, i) => s !== blocked[i])) return { removed: false, blocked };
     await this.sources.remove(extension, name, blocked);
@@ -1020,7 +1463,41 @@ class Host implements ExtensionHost {
     const ext = this.exts.get(extension);
     const source = [...(ext?.live ? ext.sources.values() : [])].find((s): s is Polled => s.variant === 'polled' && s.secret === name && s.oauth !== null);
     if (!source) throw Error(`no loaded source of ${extension} signs in for ${name}`);
-    return this.sources.signIn(extension, name, source, this.options.browse ?? openBrowser);
+    const signed = await this.sources.signIn(extension, name, source, this.options.browse ?? openBrowser);
+    this.scheduler.supplied();
+    return signed;
+  }
+  async testPackage(pkg: Installed): Promise<PackageTests> {
+    const ext = this.exts.get(pkg.id);
+    if (!ext?.live || !ext.ask || ext.entry.version !== pkg.version) throw Error(`${pkg.id}@${pkg.version} isn't loaded and started, so its tests can't run`);
+    return this.runTests(ext);
+  }
+  /** A loaded package's own tests, each file under its tests/ in turn, in its own process. */
+  private async runTests(ext: Ext): Promise<PackageTests> {
+    const tests = join(ext.folder, 'tests');
+    const files = existsSync(tests) ? readdirSync(tests, { recursive: true, encoding: 'utf8' }).filter((f) => /\.test\.(ts|mjs|js)$/.test(f)).sort().map((f) => join('tests', f)) : [];
+    const failures: PackageTests['failures'] = [];
+    let testsRun = 0;
+    ext.testing = true;
+    try {
+      for (const file of files) {
+        const source = ext.place === 'sandbox' && file.endsWith('.ts') ? stripTypeScriptTypes(readFileSync(join(ext.folder, file), 'utf8')) : undefined;
+        let ran: { test: string; error: string | null }[];
+        try {
+          ran = (await this.ask(ext, TEST_MS, `tests in ${file}`, 'test', { file, now: this.options.now(), ...(source === undefined ? {} : { source }) })) as typeof ran;
+        } catch (e) {
+          failures.push({ test: file, message: message(e) });
+          continue;
+        }
+        for (const r of ran) {
+          testsRun++;
+          if (r.error !== null) failures.push({ test: `${file} › ${r.test}`, message: r.error });
+        }
+      }
+    } finally {
+      ext.testing = false;
+    }
+    return { passed: testsRun > 0 && !failures.length, testsRun, failures };
   }
   async readStream(name: string, limit: number): Promise<StreamRead> {
     const ext = [...this.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'stream');
@@ -1046,6 +1523,211 @@ class Host implements ExtensionHost {
     }
     this.save('cursors.json', { ...cursors, [name]: p!.cursor });
     return { status: 'events', source: name, events };
+  }
+  async tick(): Promise<void> {
+    if (this.closed) return;
+    await this.shownTick();
+    await this.scheduler.tick();
+    await this.series?.tick();
+  }
+  /**
+   * Each while-shown cadence that is due (#262): one call a period for the source, however many views bind it, while
+   * one of them is shown; none once none is, or while the schedule a notice gave its checking job stands in for it.
+   */
+  private async shownTick(): Promise<void> {
+    const now = this.options.now();
+    const standIn = new Map<string, number>();
+    for (const n of Object.values(this.read<SavedNotice>('notices.json'))) if (n.every !== null) standIn.set(n.source, Math.min(standIn.get(n.source) ?? Infinity, n.every));
+    for (const ext of [...this.exts.values()].filter((e) => e.live)) {
+      for (const source of ext.sources.values()) {
+        if (source.variant !== 'polled' || !source.whileShown) continue;
+        const every = source.whileShown.every;
+        if (!this.sourceShown(source.name, now) || (standIn.get(source.name) ?? Infinity) <= every) {
+          this.shownNext.delete(source.name);
+          continue;
+        }
+        const due = this.shownNext.get(source.name) ?? now;
+        if (now < due) continue;
+        this.shownNext.set(source.name, due + every > now ? due + every : now + every);
+        await this.readPolled(ext, source.name);
+      }
+    }
+  }
+  /** Whether a view that binds the source is shown: the app reported it in the last 10 s, visible, not minimized, on an awake display, unlocked, and not a replica's. */
+  private sourceShown(source: string, now: number): boolean {
+    const bound = new Set([...this.exts.values()].filter((e) => e.live).flatMap((e) => [...e.views].filter(([, binds]) => binds.some((b) => BOUND.exec(b)?.[1] === source)).map(([view]) => view)));
+    for (const { report, at } of this.shown.values()) {
+      if (bound.has(report.view) && now - at < SHOWN_MS && report.visible && !report.minimized && report.display_awake && !report.session_locked && !report.replica) return true;
+    }
+    return false;
+  }
+  /**
+   * `deep.readNow(view)` (#262): every source the plug-in's view binds, read at once, each through its quota. One
+   * answered in the last 2 s keeps that answer; one the quota refuses reads `quota` until it can run.
+   */
+  private async readNow(ext: Ext, view: unknown): Promise<{ view: string; sources: { source: string; status: 'kept' | 'read' | 'quota' | 'failed'; until?: number; cause?: string }[] }> {
+    const binds = typeof view === 'string' ? ext.views.get(view) : undefined;
+    if (!binds) throw Error(`deep.readNow: ${String(view)} isn't a view ${ext.entry.id} registered`);
+    const names = [...new Set(binds.map((b) => BOUND.exec(b)![1]!))];
+    const now = this.options.now();
+    return {
+      view: view as string,
+      sources: await Promise.all(names.map(async (source) => {
+        const owner = [...this.exts.values()].find((e) => e.live && e.sources.get(source)?.variant === 'polled');
+        if (!owner) return { source, status: 'failed' as const, cause: `no loaded plug-in registers the polled source ${source}` };
+        const last = this.sources.last(source);
+        if (last && now - last.as_of <= KEPT_MS) return { source, status: 'kept' as const };
+        const { read } = await this.readPolled(owner, source);
+        if (read.status === 'reading' || read.status === 'batch') return { source, status: 'read' as const };
+        return read.until === undefined ? { source, status: 'failed' as const, cause: read.cause } : { source, status: 'quota' as const, until: read.until };
+      })),
+    };
+  }
+  async idle(): Promise<void> {
+    await this.scheduler.idle();
+  }
+  async schedules(): Promise<ScheduleRow[]> {
+    const last = new Map<string, ScheduleRow['last']>();
+    for (const d of this.scheduler.decls()) {
+      const ended = (await this.runs(d.name)).filter((r) => r.verdict !== null).sort((a, b) => a.ended! - b.ended!).at(-1);
+      last.set(d.name, ended ? { run: ended.run, at: ended.dispatched ?? ended.due, verdict: ended.verdict } : null);
+    }
+    return this.scheduler.rows((name) => last.get(name) ?? null);
+  }
+  async runs(schedule: string): Promise<ScheduleRun[]> {
+    const rows = (await this.options.record.raw("SELECT ts, data FROM events WHERE kind = 'schedule.run' AND json_extract(data, '$.schedule') = ? ORDER BY log_pos", [schedule])) as { ts: number; data: string }[];
+    const runs = new Map<string, ScheduleRun>();
+    for (const row of rows) {
+      const d = JSON.parse(row.data) as RunEvent;
+      const r = runs.get(d.run) ?? { run: d.run, schedule, due: d.due, dispatched: null, ended: null, verdict: null, cause: null, stopped: null, sends: [], changes: [] };
+      if (d.phase === 'dispatched') r.dispatched ??= row.ts;
+      if (d.phase === 'ended') Object.assign(r, { ended: row.ts, verdict: d.verdict ?? null, cause: d.cause ?? null, stopped: d.stopped ? 'before dispatch' : null, changes: d.changes ?? [] });
+      runs.set(d.run, r);
+    }
+    // Whether each send a run started went out: one still waiting on your answer has not.
+    for (const send of await this.sending.rows()) if (send.run) runs.get(send.run)?.sends.push({ key: send.key, outcome: send.outcome === 'waiting' ? 'not sent' : send.outcome });
+    return [...runs.values()];
+  }
+  async sends(): Promise<SendRow[]> {
+    return this.sending.rows();
+  }
+  async editSchedule(connection: Connection, name: string, cadence: { every: number } | { cron: string }): Promise<void> {
+    this.trustedPath(connection, 'a schedule is edited');
+    await this.scheduler.edit(name, cadenceOf(cadence));
+  }
+  async runNow(connection: Connection, name: string): Promise<void> {
+    this.trustedPath(connection, 'a schedule is run now');
+    await this.scheduler.runNow(name);
+  }
+  async resumeSchedule(connection: Connection, name: string): Promise<void> {
+    this.trustedPath(connection, 'a schedule is resumed');
+    await this.scheduler.resume(name);
+  }
+  async subscribeNotice(connection: Connection, kind: string, key: string, on?: { source: string; words: string; every?: number }): Promise<string> {
+    this.trustedPath(connection, 'a notice is subscribed to');
+    const plugin = Object.values(this.entries).find((e) => (manifestOf(e.folder).notices ?? []).includes(kind))?.id;
+    if (!plugin) throw Error(`no installed plug-in declares the notice kind ${kind}`);
+    if (typeof key !== 'string' || !key) throw Error(`a subscription to ${kind} names what it is for`);
+    const saved = on === undefined ? undefined : await this.noticeOn(plugin, kind, key, on);
+    const now = this.options.now();
+    const id = ulid(now);
+    await this.options.record.append(connection, { v: 1, id, kind: 'notice.subscribed', ts: now, data: { notice_kind: kind, key, by: connection.actor } });
+    if (saved) this.save('notices.json', { ...this.read('notices.json'), [id]: saved });
+    // Its checking job runs at once, then on the schedule the notice gave it.
+    if (saved?.job) await this.scheduler.runNow(saved.job);
+    return id;
+  }
+  /**
+   * A notice you create on a source (#262). On one that runs only while shown, the plug-in's job that checks the notice
+   * gets a schedule of its own, reading the source each run, at its while-shown cadence or the slower one the notice
+   * names, and the sentence says so; a plug-in with no such job has the notice refused, naming it.
+   */
+  private async noticeOn(plugin: string, kind: string, key: string, on: { source: string; words: string; every?: number }): Promise<SavedNotice> {
+    const words = typeof on?.words === 'string' && on.words ? on.words : refuseNotice('a notice you create says what it is in your words');
+    const named = `the notice "${words}" (${kind}, for ${key})`;
+    const source = [...this.exts.values()].filter((e) => e.live).map((e) => e.sources.get(on.source)).find((x): x is Polled => x?.variant === 'polled');
+    if (!source) refuseNotice(`${named} is on ${String(on.source)}, which no loaded plug-in registers as a polled source`);
+    if (on.every !== undefined && (!Number.isSafeInteger(on.every) || on.every < 1000)) refuseNotice(`${named} names a cadence of ${String(on.every)} ms; a cadence is at least 1000 ms`);
+    if (!source!.whileShown) return { kind, key, source: on.source, words, sentence: `${words}: checked when ${plugin}'s jobs read ${on.source}`, every: null };
+    const job = this.scheduler.decls().find((d) => d.plugin === plugin && d.declares.notices.includes(kind) && d.declares.readings.includes(on.source));
+    if (!job) refuseNotice(`${named} is refused: ${on.source} runs only while a view is shown, and ${plugin} declares no job that checks ${kind} by reading it`);
+    const every = Math.max(on.every ?? 0, source!.whileShown.every);
+    const current = job!.cadence;
+    const given = Math.min(every, ...Object.values(this.read<SavedNotice>('notices.json')).filter((n) => n.job === job!.name && n.every !== null).map((n) => n.every!));
+    if (!current || !('every' in current) || current.every > given) await this.scheduler.edit(job!.name, { every: given });
+    const seconds = every % 1000 ? `${every} ms` : `${every / 1000} s`;
+    return { kind, key, source: on.source, words, job: job!.name, every, sentence: `${words}: ${job!.name} checks it every ${seconds}, reading ${on.source} each run, since ${on.source} runs only while a view is shown` };
+  }
+  async setSendRule(connection: Connection, rule: SendRule): Promise<string> {
+    this.trustedPath(connection, 'a standing rule for sends is set');
+    if (!this.entries[rule?.piece]) throw Error(`${String(rule?.piece)} isn't installed`);
+    return this.sending.setRule(rule);
+  }
+  async viewsShown(connection: Connection, report: ViewShown): Promise<void> {
+    this.trustedPath(connection, 'a view is reported shown');
+    const r = (isPlain(report) ? report : {}) as Record<string, unknown>;
+    const flags = ['visible', 'minimized', 'display_awake', 'session_locked', 'replica'] as const;
+    if (typeof r.view !== 'string' || typeof r.window !== 'string' || flags.some((f) => typeof r[f] !== 'boolean')) {
+      throw Error(`views/shown names its view and window and says whether it is ${flags.join(', ')}`);
+    }
+    this.shown.set(`${r.view}\n${r.window}`, { report: { ...(r as unknown as ViewShown) }, at: this.options.now() });
+  }
+  async viewsHidden(connection: Connection, report: { view: string; window: string }): Promise<void> {
+    this.trustedPath(connection, 'a view is reported hidden');
+    this.shown.delete(`${report?.view}\n${report?.window}`);
+  }
+  async boundValues(handles: string[], at?: { log_pos: number }): Promise<BoundValue[]> {
+    if (at !== undefined && !Number.isSafeInteger(at?.log_pos)) throw Error('a bound value is pinned to a log position');
+    const now = this.options.now();
+    return Promise.all(handles.map(async (handle): Promise<BoundValue> => {
+      const m = typeof handle === 'string' ? BOUND.exec(handle) : null;
+      if (!m) return missing(String(handle), `${String(handle)} isn't reading:<source> or reading:<source>#<series>`);
+      const [, source, series] = m as unknown as [string, string, string | undefined];
+      if (at) {
+        if (series !== undefined) return this.series ? this.series.at(handle, source, series, at.log_pos) : missing(handle, 'this hub keeps no series');
+        const [row] = (await this.options.record.raw("SELECT data FROM events WHERE kind = 'reading.recorded' AND log_pos <= ? AND json_extract(data, '$.source') = ? ORDER BY log_pos DESC LIMIT 1", [at.log_pos, source])) as { data: string }[];
+        const d = row ? JSON.parse(row.data) as { value: number; as_of: number } : undefined;
+        return d ? shownValue(handle, d.value, d.as_of) : missing(handle, `no reading of ${source} at or before log position ${at.log_pos}`);
+      }
+      const until = this.quotaUntil.get(source);
+      if (until !== undefined && now < until) return { handle, status: 'quota', value: null, as_of: null, shown: `quota until ${new Date(until).toISOString()}`, until };
+      if (series !== undefined) {
+        const v = this.series?.live(source, series);
+        return v ? shownValue(handle, v.value, v.as_of) : missing(handle, `no batch of ${source} holds ${series}`);
+      }
+      const last = this.sources.last(source)?.read;
+      return last?.status === 'reading' ? shownValue(handle, last.reading.value, last.reading.as_of) : missing(handle, `no reading of ${source}`);
+    }));
+  }
+  async rollup(source: string, span: Span, start: number): Promise<Record<string, Rollup> | null> {
+    const r = this.series ? await this.series.rollup(source, span, start) : null;
+    if (typeof r === 'string') throw Error(`the ${span} rollup of ${source} from ${new Date(start).toISOString()} ${r}`);
+    return r;
+  }
+  async listNotices(): Promise<NoticeRow[]> {
+    const saved = this.read<SavedNotice>('notices.json');
+    const rows = (await this.options.record.raw("SELECT id, data FROM events WHERE kind = 'notice.subscribed' ORDER BY log_pos")) as { id: string; data: string }[];
+    return rows.map((r) => {
+      const d = JSON.parse(r.data) as { notice_kind: string; key: string };
+      const n = saved[r.id];
+      return { id: r.id, kind: d.notice_kind, key: d.key, source: n?.source ?? null, sentence: n?.sentence ?? `${d.notice_kind} for ${d.key}`, every: n?.every ?? null };
+    });
+  }
+  async judgeCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number }): Promise<{ verdict: Verdict; cause: string | null; result: CheckResult }> {
+    const result = await this.runCheck(kind, spec, ctx);
+    // What it cites must still be what it was: a file gone or failing its hash makes the run INVALID, naming it.
+    const files = new Map<string, string>(result.evidence.map((sha) => [sha, `evidence ${sha}`]));
+    for (const handle of result.read ?? []) {
+      const b = await this.series?.batch(handle);
+      if (b) files.set(b.file, `the batch ${handle}, file ${b.file}`);
+    }
+    for (const [sha, what] of files) {
+      const why = !this.options.evidence || !(await this.options.evidence.get(sha)) ? 'is gone'
+        : await this.options.evidence.read(sha).then(() => null, (e: Error) => (e.message.includes('match') ? 'fails its hash: its bytes no longer match' : e.message));
+      if (why) return { verdict: 'INVALID', cause: `it cites ${what}, which ${why}`, result };
+    }
+    const verdict: Verdict = result.outcome === 'passed' ? 'PASS' : result.outcome === 'failed' ? 'FAIL' : result.outcome === 'missing' ? 'BLOCKED' : result.outcome === 'ran_nothing' ? 'INVALID' : 'INCONCLUSIVE';
+    return { verdict, cause: verdict === 'PASS' ? null : `its run ended ${result.outcome}`, result };
   }
   /** The secret a package's manifest names, or a refusal naming it. */
   private secretOf(extension: string, name: string): void {
@@ -1106,7 +1788,20 @@ class Host implements ExtensionHost {
       // The calls it made and didn't wait for are answered too before its run is read.
       await Promise.all(this.calls);
     } catch (e) {
+      await ext.stop?.();
       return [`its code didn't register in the platform sandbox: ${message(e)}`];
+    }
+    // Each channel it registers is held to channel@1's kit (#65), its code running where conformance runs it.
+    const kitted: string[] = [];
+    try {
+      for (const [name, kind] of ext.channels) {
+        const { runKit, slotKits } = await import('@deepbuild/conformance');
+        const kit = slotKits().find((k) => k.slot === CHANNEL) as SlotKit<ChannelFill> | undefined;
+        if (!kit) { kitted.push(`the conformance package ships no ${CHANNEL} kit, so its channel ${name} is unkitted`); continue; }
+        const report = await runKit(kit, this.channelFill(ext, name, kind, kit.revision), { parts: ['fixed'] });
+        const failed = report.cases.find((c) => c.outcome !== 'PASS');
+        if (report.verdict !== 'PASS') kitted.push(`its channel ${name} reads ${report.verdict} on ${CHANNEL}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}`);
+      }
     } finally {
       await ext.stop?.();
     }
@@ -1114,6 +1809,7 @@ class Host implements ExtensionHost {
     const environments = manifest.environments ?? [];
     return [
       ...ext.refusals,
+      ...kitted,
       ...actionRules(ext.actions),
       ...ext.kinds.filter((k) => !declared.includes(k)).map((k) => `it registers the check kind ${k}, which its manifest doesn't declare`),
       ...ext.environments.filter((e) => !environments.includes(e)).map((e) => `it registers the environment ${e}, which its manifest doesn't declare`),
@@ -1122,9 +1818,9 @@ class Host implements ExtensionHost {
   private ext(entry: Entry, folder: string, manifest: Manifest, digest: string, place: Ext['place'], mode: Ext['mode']): Ext {
     const released = this.options.release.some((r) => r.id === entry.id && r.version === entry.version && r.digest === digest);
     return {
-      entry, folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
-      released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Set(), detached: false, reads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(),
-      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), starts: 0,
+      entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
+      released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
+      adapters: new Set(), channels: new Map(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -1279,14 +1975,19 @@ class Host implements ExtensionHost {
       ext.ask = extensionSide((method, params, scope) => this.dispatch(ext, method, params, scope), async (deep) => {
         const code = (await import(url)) as { default: (deep: unknown) => unknown };
         return await code.default(deep);
-      }).serve;
+      }, (file: string) => import(pathToFileURL(join(ext.folder, file)).href)).serve;
     } else {
       await this.sandboxed(ext);
     }
     const returned = await within(LOAD_MS, `${ext.entry.id}'s registering`, ext.ask!('load', params));
     if (ext.mode === 'loaded' && isPlain(returned)) this.loadResults.set(ext.entry.id, structuredClone(returned));
     // Its handlers, actions and outputs publish only now that it started, and only while it's still the one loaded.
-    if (ext.mode === 'loaded' && this.exts.get(ext.entry.id) === ext && ext.ask) ext.live = true;
+    if (ext.mode === 'loaded' && this.exts.get(ext.entry.id) === ext && ext.ask) {
+      ext.live = true;
+      this.routes.clear();
+      // A schedule BLOCKED on a source it registers checks again (#365).
+      this.scheduler.supplied();
+    }
   }
   private async sandboxed(ext: Ext): Promise<void> {
     const { supervisor } = this.options;
@@ -1341,20 +2042,28 @@ class Host implements ExtensionHost {
       throw e;
     }
   }
-  /** Whether its project's trust was revoked since it loaded: then it is unloaded, its routes and process gone. */
+  /**
+   * Whether its project's trust was revoked since it loaded: then it is unloaded, its routes and process gone. It
+   * asks by the real path resolved at load, which trust answers from memory: a hook reads no record and no file (#881).
+   */
   private async revoked(ext: Ext): Promise<boolean> {
-    if (!ext.entry.project || (await this.options.trust.trusted(ext.entry.project))) return false;
+    if (!ext.project || (await this.options.trust.trusted(ext.project))) return false;
     await this.unload(ext);
     return true;
   }
   /**
    * Every removal, a disable, a new install, a revoke, close or its connection gone: new calls stop, its users' uses
-   * detach and their reads under way finish, then its handlers stop.
+   * detach and their reads under way finish, then its handlers stop. A version replaced by a new install doesn't wait
+   * for its reads (`drain` false): each is refused at its edge (#103).
    */
-  private async unload(ext: Ext): Promise<void> {
+  private async unload(ext: Ext, drain = true): Promise<void> {
     ext.live = false;
     ext.detached = true;
-    if (this.exts.get(ext.entry.id) === ext) this.exts.delete(ext.entry.id);
+    this.routes.clear();
+    if (this.exts.get(ext.entry.id) === ext) {
+      this.exts.delete(ext.entry.id);
+      this.scheduler.drop(ext.entry.id);
+    }
     ext.resolverDrop?.();
     delete ext.resolverDrop;
     for (const name of ext.adapters) {
@@ -1368,7 +2077,8 @@ class Host implements ExtensionHost {
     }
     // Its routes close with the other ways in, before the drain.
     await this.turnOff(ext.entry.id, ext);
-    await Promise.all([...ext.reads].map((r) => r.catch(() => undefined)));
+    if (drain) await Promise.all([...ext.reads].map((r) => r.catch(() => undefined)));
+    else for (const refuse of ext.refuseReads) refuse(Error(`${ext.entry.version} was replaced while the read ran, so its answer isn't delivered`));
     await this.stopHandlers(ext);
     await this.releaseLeases(ext).catch(() => undefined);
     rmSync(ext.folder, { recursive: true, force: true });
@@ -1398,7 +2108,50 @@ class Host implements ExtensionHost {
     await ext.stop?.();
   }
 
+  /**
+   * Removing the provider of a required use that no other piece would serve asks you once, naming its users, and
+   * detaches nothing until you answer (#103): your yes goes on, anything else rejects. An optional use's provider is
+   * removed with no ask; that use then reads missing.
+   */
+  private async removalHeld(ext: Ext): Promise<void> {
+    const id = ext.entry.id;
+    const others = [...this.exts.values()].filter((p) => p !== ext && !p.detached);
+    const rest = others.map((p) => pieceOf(p.entry.id, p.manifest));
+    const users = others.flatMap((u) => (u.manifest.uses ?? []).filter((use) => !optional(u, use) && this.providerOf(u, use, false) === ext && !resolve(u.entry.id, use, rest.filter((p) => p.id !== u.entry.id)))
+      .map((use) => ({ user: u.entry.id, uses: use.interface })));
+    // AC10's wrong program detaches them with no ask.
+    if (!users.length || this.options.plant === 'detaches-silently') return;
+    const named = users.map((u) => `${u.user} uses ${u.uses}`).join('; ');
+    const yes = await this.yours('extension.remove', `Remove ${id}? ${named.replaceAll(' uses ', ' needs its ')}, and no other piece provides it.`,
+      { remove: id, users } as unknown as JsonValue, `Remove ${id}`, 'Keep it',
+      users.map((u) => ({ does: `Remove ${id}, leaving ${u.user}'s required use of ${u.uses} with no provider`, changes: [`${u.user} uses ${u.uses}`], undo: `Load ${id} again` })));
+    if (!yes) throw Error(`${id} isn't removed: you kept it, so ${named} keep${users.length > 1 ? '' : 's'} their provider`);
+  }
+  /**
+   * One authority ask of yours, raised once, waiting for your answer: true on your yes on record, false on anything
+   * else; a host with no asks core can't ask, so it refuses.
+   */
+  private async yours(source: string, question: string, about: JsonValue, allow: string, deny: string, steps: { does: string; changes: string[]; undo: string | null }[]): Promise<boolean> {
+    const asks = this.options.asks;
+    if (!asks) throw Error(`${question} needs your yes, and this host has no asks core to ask you`);
+    const key = sha256Hex(canonicalize(about));
+    const ask = await asks.raise({ writer: 'core', actor: 'you', scope: 'you' }, source, {
+      kind: 'authority', question,
+      options: [{ id: 'approve', label: allow, decision: 'allow' }, { id: 'decline', label: deny, decision: 'deny' }],
+      recommended: null, deadline: this.options.now() + 86_400_000, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key,
+      pinned_to: { kind: 'evidence', ref: key },
+    }, { steps: steps.map((s) => ({ ...s, public: false, cost: 0 })), diff: key });
+    for (;;) {
+      const [row] = (await this.options.record.raw('SELECT status, decision FROM asks WHERE id = ?', [ask.slice(4)])) as { status: string; decision: string | null }[];
+      if (row?.decision === 'allow') return true;
+      if (row?.decision === 'deny' || (row && row.status !== 'open' && row.status !== 'later')) return false;
+      if (this.closed) return false;
+      await sleep(50);
+    }
+  }
   async disable(id: string): Promise<void> {
+    const ext = this.exts.get(id);
+    if (ext) await this.removalHeld(ext);
     await this.serial(id, async () => {
       const ext = this.exts.get(id);
       if (!ext) return;
@@ -1413,7 +2166,7 @@ class Host implements ExtensionHost {
 
   /** A package's call, checked here against its grant before anything else of it. */
   private dispatch(ext: Ext, method: string, params: unknown, scope?: string): Promise<unknown> {
-    const call = this.dispatchNow(ext, method, params, scope);
+    const call = method.startsWith('test.') ? this.testCall(ext, method, params) : this.dispatchNow(ext, method, params, scope);
     const settled = call.then(() => undefined, () => undefined);
     this.calls.add(settled);
     void settled.then(() => this.calls.delete(settled));
@@ -1463,15 +2216,34 @@ class Host implements ExtensionHost {
       if (ext.mode === 'loaded') await this.refused(connection, method, 'grant', `access: ${schema.needs}`, args).catch(() => undefined);
       throw Error(`${method} needs the grant "${schema.needs}", which ${ext.entry.id} wasn't given`);
     }
-    if (ext.mode === 'loaded' && (await this.revoked(ext))) throw Error(`${method}: ${id}'s project is no longer trusted, so it was stopped`);
+    if (ext.mode === 'loaded' && (await this.revoked(ext))) throw Error(`${method}: ${id}'s project ${ext.entry.project} is no longer trusted, so it was stopped`);
     // Unloaded while trust answered, by a new install, a revoke or close: the call does nothing.
     if (ext.mode === 'loaded' && this.exts.get(id) !== ext) throw Error(`${method}: ${id} was unloaded`);
     const conformance = ext.mode === 'conformance';
     const quiet = (): void => { if (conformance) throw Error(`${method}: nothing reaches the record while conformance runs`); };
+    // A staged new version may read its stores and its uses to answer its outputs for its users' contract tests (#103).
+    const quietRead = (): void => { if (!ext.staged) quiet(); };
     this.previewHeld(ext, method);
     // A shim that dropped a method answers it unsupported, naming it (the contract step's planted twin, #139).
     if (this.options.unsupported?.includes(method)) return { outcome: 'unsupported', operation: method, surface: 'extension-api' };
     switch (method) {
+      case 'deep.canvas.read': {
+        // A revision's evaluated values by stable ID, read only, under the grant's documents (#411): the core answers
+        // every path of a document the grant doesn't cover ref_unresolved.
+        const [target, query] = args;
+        const at = typeof target === 'string' ? target.lastIndexOf('@') : -1;
+        const rev = at > 0 ? Number((target as string).slice(at + 1)) : NaN;
+        if (typeof target !== 'string' || !Number.isSafeInteger(rev) || rev < 0) throw Error('deep.canvas.read takes "<doc>@<rev>" first');
+        const q = (typeof query === 'object' && query !== null ? query : {}) as Record<string, unknown>;
+        if (!this.options.canvas) throw Error('deep.canvas.read: this hub has no canvas core');
+        const reply = await this.options.canvas({
+          call: 'deep_query', plugin: { id, docs: [...(ext.entry.grant.docs ?? [])] }, doc: target.slice(0, at), rev,
+          ...(q.paths !== undefined ? { paths: q.paths } : {}), ...(q.at !== undefined ? { at: q.at } : {}),
+        });
+        const keys = Object.values((reply.keys ?? {}) as Record<string, unknown>).flatMap((list) => (Array.isArray(list) ? list.filter((k): k is string => typeof k === 'string') : []));
+        this.canvasKeys.get(ext)?.push(...keys);
+        return reply;
+      }
       case 'deep.registerCheck': {
         const [type] = args;
         if (typeof type !== 'string') throw Error('deep.registerCheck takes the check kind first');
@@ -1484,6 +2256,12 @@ class Host implements ExtensionHost {
           if (owner && owner !== ext) owner.kinds = owner.kinds.filter((k) => k !== type);
         }
         if (!ext.kinds.includes(type)) ext.kinds.push(type);
+        // The sources it reads (#365), from what its plug-in declares: removing a secret they need lists it.
+        const reads = (args[1] as { readings?: unknown } | undefined)?.readings;
+        if (reads !== undefined) {
+          if (!texts(reads) || (reads as string[]).some((r) => !(ext.manifest.sources ?? []).some((x) => x.name === r))) throw Error(`deep.registerCheck: ${type} declares the readings it reads as sources its manifest lists`);
+          ext.checkReads.set(type, [...(reads as string[])]);
+        }
         return null;
       }
       case 'deep.registerEnvironment': {
@@ -1537,6 +2315,23 @@ class Host implements ExtensionHost {
         }
         ext.adapters.add(name);
         return null;
+      }
+      case 'deep.registerChannel': {
+        const [name, channel] = args as [unknown, { slot?: unknown; revision?: unknown; kind?: unknown } | null | undefined];
+        if (typeof name !== 'string' || !ADAPTER_NAME.test(name)) throw Error(`deep.registerChannel takes the channel's name first, one lower-case word, not ${JSON.stringify(name)}`);
+        if (channel?.slot !== CHANNEL || !Number.isSafeInteger(channel.revision) || (channel.revision as number) < 1) throw Error(`deep.registerChannel: ${name} declares itself a ${CHANNEL} fill, with the kit revision it was built against`);
+        if (!CHANNEL_KINDS.includes(channel.kind as ChannelKind)) throw Error(`deep.registerChannel: ${name}'s kind is one of ${CHANNEL_KINDS.join(', ')}`);
+        const owner = conformance ? undefined : [...this.exts.values()].find((e) => e !== ext && e.channels.has(name));
+        if (owner) throw Error(`the channel ${name} is already registered by ${owner.entry.id}`);
+        ext.channels.set(name, channel.kind as ChannelKind);
+        return null;
+      }
+      case 'deep.channel.fetch': {
+        // Only a send or read of its own under way: the hub's call, with the channel's settings and token.
+        const [call, request] = args;
+        const live = typeof call === 'string' ? this.channelCalls.get(call) : undefined;
+        if (!live || live.ext !== ext) throw Error(`deep.channel.fetch: ${id} has no channel send or read under way as ${String(call)}`);
+        return live.ctx.fetch(request as Parameters<ChannelCtx['fetch']>[0]);
       }
       case 'deep.registerIndex': {
         const [name, fill] = args as [unknown, { slot?: unknown; revision?: unknown } | null | undefined];
@@ -1620,7 +2415,7 @@ class Host implements ExtensionHost {
       }
       // A piece's store (#363): its items are events of a kind its manifest declares, written by the piece alone.
       case 'deep.store': {
-        const [kind, declared] = args as [unknown, { generation?: unknown; schema?: unknown; migrates?: unknown } | undefined];
+        const [kind, declared] = args as [unknown, { generation?: unknown; schema?: unknown; migrates?: unknown; quota?: unknown } | undefined];
         if (typeof kind !== 'string' || !(ext.manifest.stores ?? []).includes(kind)) throw Error(`deep.store: ${String(kind)} isn't a store kind ${id}'s manifest declares`);
         const generation = declared?.generation;
         if (!Number.isSafeInteger(generation) || (generation as number) < 1) throw Error(`deep.store: ${kind} gives the generation of its schema, a whole number from 1`);
@@ -1633,7 +2428,10 @@ class Host implements ExtensionHost {
         if (skipped) throw Error(`deep.store: ${kind}'s schema has a rule the host can't check: ${skipped}`);
         const items = registry([{ name: kind, schema: schema as Schema }]);
         items.validate(kind, {});
-        const store: Store = { generation: generation as number, check: (value) => { const held = items.validate(kind, value); return held.ok ? undefined : `${held.issues[0]!.path || '/'}: ${held.issues[0]!.code}`; } };
+        // Its quota in bytes (#365): what its items hold, each as JSON, never grows past it.
+        const quota = (declared!.quota as { bytes?: unknown } | undefined)?.bytes;
+        if (declared!.quota !== undefined && (!Number.isSafeInteger(quota) || (quota as number) < 1)) throw Error(`deep.store: ${kind}'s quota is a number of bytes, a whole number from 1`);
+        const store: Store = { generation: generation as number, quota: (quota as number | undefined) ?? null, check: (value) => { const held = items.validate(kind, value); return held.ok ? undefined : `${held.issues[0]!.path || '/'}: ${held.issues[0]!.code}`; } };
         if (!conformance) await this.migrate(ext, kind, store, migrates as number[]);
         ext.stores.set(kind, store);
         return null;
@@ -1645,22 +2443,31 @@ class Host implements ExtensionHost {
         if (typeof key !== 'string' || !key) throw Error(`${method}: ${String(kind)}'s items each have a key, a non-empty string`);
         const broke = store.check(value);
         if (broke) throw Error(`${method}: the item for ${key} fails ${String(kind)}'s schema at ${broke}`);
+        const run = scope === undefined ? undefined : this.runCtx.get(scope);
+        if (run && !run.decl.declares.stores.includes(kind as string)) throw Error(`${method}: ${run.decl.name} doesn't declare ${String(kind)} among the stores it writes`);
+        const held = await this.store(kind as string);
+        const bytes = Buffer.byteLength(JSON.stringify(value) ?? 'null');
+        const total = held.bytes - (held.items.get(key)?.bytes ?? 0) + bytes;
+        if (store.quota !== null && total > store.quota) throw Error(`${method}: ${String(kind)} would hold ${total} bytes with the item for ${key}, past its quota of ${store.quota}`);
         const now = this.options.now();
         const call = scope === undefined ? null : ext.callOf.get(scope) ?? null;
         await this.options.record.append(connection, { v: 1, id: ulid(now), kind: kind as string, ts: now, data: { key, generation: store.generation, value: value as JsonValue, call } });
+        held.items.set(key, { value: structuredClone(value), generation: store.generation, bytes });
+        held.bytes = total;
+        run?.changes.push(`${String(kind)}:${key}`);
         return null;
       }
       case 'deep.store.get': {
-        quiet();
+        quietRead();
         const [kind, key] = args;
         this.storeOf(ext, kind, method);
-        return (await this.items(kind as string)).get(String(key))?.value ?? null;
+        return structuredClone((await this.items(kind as string)).get(String(key))?.value ?? null);
       }
       case 'deep.store.list': {
-        quiet();
+        quietRead();
         const [kind] = args;
         this.storeOf(ext, kind, method);
-        return [...(await this.items(kind as string))].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([key, item]) => ({ key, value: item.value }));
+        return [...(await this.items(kind as string))].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([key, item]) => ({ key, value: structuredClone(item.value) }));
       }
       case 'deep.provide': {
         const [name, kind] = args;
@@ -1669,14 +2476,17 @@ class Host implements ExtensionHost {
         return null;
       }
       case 'deep.use': {
-        const [name] = args;
+        const [name, options] = args as [unknown, { optional?: unknown } | undefined];
         if (!(ext.manifest.uses ?? []).some((u) => u.interface === name)) throw Error(`deep.use: ${String(name)} isn't an interface ${id}'s manifest uses`);
-        ext.uses.add(name as string);
+        ext.uses.set(name as string, options?.optional === true);
         return null;
       }
       case 'deep.read':
-        quiet();
+        quietRead();
         return this.readUse(ext, args[0]);
+      case 'deep.call':
+        quiet();
+        return this.callThrough(ext, args[0], args[1], scope);
       case 'deep.fetch':
         quiet();
         return this.fetch(ext, args[0], connection);
@@ -1702,27 +2512,247 @@ class Host implements ExtensionHost {
         return { terminal: t.terminal, run: t.run, pid: t.pid };
       }
       case 'deep.terminal.list':
-        return this.terminals.of(id).map((t) => ({ terminal: t.terminal, run: t.run, pid: t.pid, title: t.title }));
+        return this.terminals.of(id).map((t) => ({ terminal: t.terminal, run: t.run, pid: t.pid, title: t.title, ...(t.lost ? { lost: true } : {}) }));
       case 'deep.terminal.read':
         return this.terminals.read(id, args[0] as string, args[1] as number);
+      case 'deep.terminal.close': {
+        const t = this.terminals.of(id).find((x) => x.terminal === args[0]);
+        if (!t) throw Error(`${id} has no terminal ${String(args[0])}`);
+        return void (await this.terminals.stop(t));
+      }
       case 'deep.terminal.write':
-        return void this.terminals.input(args[0] as string, args[1] as string);
+        return void (await this.terminals.input(args[0] as string, args[1] as string));
       case 'deep.notices.send': {
         quiet();
-        const readings = (args[0] as { readings?: unknown } | undefined)?.readings;
+        // #348's wrong program checks nothing here, as it checks no grant but deep.record.query's.
+        const planted = this.options.plant === 'grants-only-in-record-query';
+        const given = (isPlain(args[0]) ? args[0] : {}) as { readings?: unknown; key?: unknown };
+        const subject = planted ? undefined : await this.noticeAllowed(ext, args[0], scope);
+        if (subject?.sent) return subject.sent;
         const notice = `notice:${ulid(this.options.now())}`;
         const now = this.options.now();
         await this.options.record.append(connection, {
-          v: 1, id: ulid(now), kind: 'notice.sent', ts: now, data: { notice, cites: Array.isArray(readings) ? readings : [] },
+          v: 1, id: ulid(now), kind: 'notice.sent', ...(subject ? { subject: subject.subject } : {}), ts: now, data: { notice, cites: Array.isArray(given.readings) ? given.readings : [] },
         });
-        // Sent for an action call, it is part of what that call changed (#363).
+        // Sent for an action call, it is part of what that call changed (#363); in a run, of what the run changed (#365).
         const call = scope === undefined ? undefined : ext.callOf.get(scope);
         if (call !== undefined) this.notices.get(call)?.push(notice);
+        if (scope !== undefined) this.runCtx.get(scope)?.changes.push(notice);
         return notice;
       }
+      // Schedules and sends (#365).
+      case 'deep.schedule': {
+        const [name, declared] = args;
+        const decl = declareSchedule(name, declared, { plugin: id, sources: (ext.manifest.sources ?? []).map((x) => x.name), notices: ext.manifest.notices ?? [], stores: ext.manifest.stores ?? [] });
+        if (conformance) return null;
+        const owner = this.scheduler.has(decl.name);
+        if (owner && owner.plugin !== id) throw Error(`deep.schedule: ${decl.name} is already registered by ${owner.plugin}`);
+        await this.scheduler.register(decl, { runs: await this.runs(decl.name), settings: this.read<Settings>('schedules.json')[decl.name] ?? {} });
+        return null;
+      }
+      case 'deep.schedule.read': {
+        quiet();
+        const run = scope === undefined ? undefined : this.runCtx.get(scope);
+        if (!run) throw Error(`${method}: only a scheduled job reads through its run`);
+        const [source] = args;
+        if (typeof source !== 'string' || !run.decl.declares.readings.includes(source)) throw Error(`${method}: ${run.decl.name} doesn't declare ${String(source)} among the readings it reads`);
+        const owner = [...this.exts.values()].find((e) => e.live && e.sources.get(source)?.variant === 'polled');
+        if (!owner) {
+          run.blocked ??= `missing source ${source}`;
+          return { status: 'BLOCKED', source, cause: run.blocked };
+        }
+        const got = await this.readPolled(owner, source);
+        if (got.read.status === 'reading') {
+          if (got.handle) run.changes.push(got.handle);
+          return { status: 'reading', reading: { ...got.read.reading, handle: got.handle } };
+        }
+        if (got.read.status === 'batch') {
+          run.changes.push(got.read.batch.handle);
+          return got.read;
+        }
+        if (got.read.status === 'BLOCKED') run.blocked ??= got.read.cause;
+        else if (got.held) run.held ??= got.read.cause;
+        return got.read;
+      }
+      case 'deep.send': {
+        quiet();
+        const run = scope === undefined ? undefined : this.runCtx.get(scope);
+        const kind = (args[0] as { kind?: unknown } | undefined)?.kind;
+        if (run && !run.decl.declares.sends.includes(kind as string)) throw Error(`${method}: ${run.decl.name} doesn't declare ${String(kind)} among the sends it makes`);
+        const now = this.options.now();
+        const sent = await this.sending.send(args[0], {
+          piece: id, hosts: (ext.entry.grant.hosts ?? []).map((h) => h.host), schedule: run?.decl.name ?? null, run: run?.run ?? null,
+          call: run || scope === undefined ? null : ext.callOf.get(scope) ?? null,
+          until: now + (run ? run.decl.deadline : CALL_MS), ended: () => (run ? run.ended : scope !== undefined && !ext.scopes.has(scope)),
+        });
+        run?.changes.push(`send:${sent.key}`);
+        return sent;
+      }
+      // A view, its pages and its ⌘K commands (#366): its panel reads only what its sources read.
+      case 'deep.registerView': {
+        const refusal = this.viewRefusal(ext, args);
+        if (refusal === null) {
+          ext.views.set(args[0] as string, ((args[3] as { binds?: string[] } | undefined)?.binds ?? []).slice());
+          return null;
+        }
+        if (conformance) ext.refusals.push(refusal);
+        throw Error(`deep.registerView: ${refusal}`);
+      }
+      case 'deep.runner.run':
+        quiet();
+        return this.runJob(ext, args[0], scope);
+      case 'deep.readNow':
+        quiet();
+        return this.readNow(ext, args[0]);
       default:
         throw Error(`${method} isn't wired into this host yet`);
     }
+  }
+  /**
+   * Why a view can't register, or null (#366): its panel is a folder of the package with a main.js, whose scripts
+   * never call the network themselves, and each ⌘K command runs an action its manifest declares.
+   */
+  private viewRefusal(ext: Ext, args: unknown[]): string | null {
+    const [name, panel, area, view] = args;
+    if (typeof name !== 'string' || !/^[a-z][a-z0-9_.-]*$/.test(name)) return `${String(name)} isn't a view name`;
+    if (typeof area !== 'string' || !['sidebar', 'home', 'tab', 'line'].includes(area)) return `${name}'s area is the sidebar, home, tab or line, not ${String(area)}`;
+    const dir = typeof panel === 'string' ? join(ext.folder, panel) : '';
+    if (!dir.startsWith(`${ext.folder}/`) || !existsSync(join(dir, 'main.js'))) return `${name}'s panel ${String(panel)} is no folder of ${ext.entry.id} with a main.js`;
+    for (const file of readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((f) => /\.(m?js|ts)$/.test(f)).sort()) {
+      const lines = readFileSync(join(dir, file), 'utf8').split('\n');
+      const at = lines.findIndex((line) => NETWORK.test(line));
+      if (at >= 0) return `${name}'s panel calls the network itself, at ${panel}/${file}:${at + 1}: ${lines[at]!.trim().slice(0, 200)}; a panel shows what its sources read, which the hub fetches`;
+    }
+    const v = (isPlain(view) ? view : {}) as { pages?: unknown; commands?: unknown; binds?: unknown };
+    // What it binds, each a reading of a source its manifest declares (#262).
+    if (v.binds !== undefined && !Array.isArray(v.binds)) return `${name}'s binds is a list of reading handles`;
+    const own = (ext.manifest.sources ?? []).map((x) => x.name);
+    for (const b of (v.binds as unknown[] | undefined) ?? []) {
+      const m = typeof b === 'string' ? BOUND.exec(b) : null;
+      if (!m || !own.includes(m[1]!)) return `${name} binds ${JSON.stringify(b)}, which isn't reading:<source> or reading:<source>#<series> of a source ${ext.entry.id}'s manifest declares`;
+    }
+    const pages = Array.isArray(v.pages) ? v.pages : [];
+    const commands = Array.isArray(v.commands) ? v.commands : [];
+    for (const page of pages) {
+      if (!isPlain(page) || typeof page.name !== 'string' || !page.name || typeof page.param !== 'string' || !/^[a-z][a-z0-9_]*$/.test(page.param)) return `${name}'s page ${JSON.stringify(page)} isn't { name, param, values }`;
+    }
+    for (const command of commands) {
+      if (!isPlain(command) || typeof command.name !== 'string' || !command.name) return `${name}'s command ${JSON.stringify(command)} isn't { name, action }`;
+      if (!(ext.manifest.actions ?? []).includes(command.action as string)) return `${name}'s command ${command.name} runs ${String(command.action)}, which isn't an action ${ext.entry.id}'s manifest declares`;
+    }
+    return null;
+  }
+  /**
+   * A model job for a plug-in, through the runner (#366). Every handle it names is checked against its grant before
+   * any job is recorded; the agent gets each one's content, filtered as the plug-in would read it; the answer cites
+   * only handles the grant reaches, is recorded as a reading and is as old as the oldest reading it cites.
+   */
+  private async runJob(ext: Ext, given: unknown, scope: string | undefined): Promise<Answer> {
+    const id = ext.entry.id;
+    const job = jobRequest(given);
+    const runner = this.options.runner;
+    if (!runner) throw Error('deep.runner.run: this hub has no runner, so no model job runs');
+    const inputs: { handle: string; content: unknown }[] = [];
+    for (const handle of job.inputs) {
+      const reached = await this.reach(ext, handle);
+      if ('why' in reached) {
+        await this.refused(this.connection(ext, scope), 'deep.runner.run', 'grant', `inputs: ${handle.slice(0, handle.indexOf(':'))}`, [given]).catch(() => undefined);
+        throw Error(`deep.runner.run: ${reached.why}; no job started`);
+      }
+      inputs.push({ handle, content: reached.content });
+    }
+    // An action call waits for its job, to the job's own deadline and a minute for the runner to end it.
+    if (scope !== undefined) ext.deadlines.get(scope)?.(job.deadline + 60_000);
+    const rec = await runner.run({ kind: 'read', agent: 'claude-code', prompt: jobPrompt(id, inputs, job.prompt), deadline_ms: job.deadline });
+    const said = answered(rec, job.budget);
+    const cites: string[] = [];
+    let asOf: number | null = null;
+    let staleAt: number | null = null;
+    for (const handle of said.cites) {
+      const reached = await this.reach(ext, handle);
+      if ('why' in reached) continue;
+      cites.push(handle);
+      if (reached.as_of !== null) asOf = Math.min(asOf ?? reached.as_of, reached.as_of);
+      if (reached.stale_at !== null) staleAt = Math.min(staleAt ?? reached.stale_at, reached.stale_at);
+    }
+    const now = this.options.now();
+    const answer: Answer = { handle: `reading:${ulid(now)}`, value: said.value, cites, as_of: asOf ?? now, stale_at: staleAt };
+    await this.options.record.append(CORE, {
+      v: 1, id: ulid(now), kind: 'runner.answered', subject: answer.handle, ts: now,
+      data: { reading: answer.handle, piece: id, job: rec.job, value: answer.value as JsonValue, cites, as_of: answer.as_of, stale_at: staleAt },
+    });
+    return answer;
+  }
+  /**
+   * A handle as the plug-in's grant reaches it (#366): one of its own sources' readings or its own jobs' answers, with
+   * its as-of time and when it goes stale; a session's events, filtered as deep.record.query gives them, only when the
+   * grant names text, since a session handle is its transcript; nothing else.
+   */
+  private async reach(ext: Ext, handle: string): Promise<{ content: unknown; as_of: number | null; stale_at: number | null } | { why: string }> {
+    const id = ext.entry.id;
+    const [type] = handle.split(':', 1);
+    if (type === 'reading') {
+      // A reading it read through one of its edges (#103): what crossed the edge, never the provider's store or grant.
+      const crossed = ext.edgeReads.get(handle);
+      if (crossed) return { content: { edge: crossed.edge, value: crossed.value, as_of: crossed.at }, as_of: crossed.at, stale_at: null };
+      const [r] = (await this.options.record.raw('SELECT value, unit, as_of, source FROM readings WHERE reading = ?', [handle])) as { value: string; unit: string; as_of: number; source: string }[];
+      const source = r ? ext.sources.get(r.source) : undefined;
+      if (r && (source || ext.released)) {
+        return { content: { source: r.source, value: Number(r.value), unit: r.unit, as_of: r.as_of }, as_of: r.as_of, stale_at: source?.variant === 'polled' ? r.as_of + source.freshFor : null };
+      }
+      const a = await this.answerOf(handle);
+      if (a && (a.piece === id || ext.released)) return { content: { value: a.value, cites: a.cites, as_of: a.as_of }, as_of: a.as_of, stale_at: a.stale_at };
+      return { why: `${handle} is outside ${id}'s grant: it is no reading of ${id}'s own sources or jobs` };
+    }
+    if (type === 'session') {
+      const { text, projects } = ext.entry.grant;
+      if (!text && !ext.released) return { why: `${handle} is outside ${id}'s grant: it was granted content-free fields only, no text, and a session handle is its transcript` };
+      const session = handle.slice('session:'.length);
+      const rows = (await this.options.record.raw('SELECT log_pos, kind FROM events WHERE session_id = ? ORDER BY log_pos', [session])) as { log_pos: number; kind: string }[];
+      if (!rows.length) return { why: `${handle} is no session in your record` };
+      // Only its own stretch of the log, and only the kinds the grant reaches, are read.
+      const kinds = [...new Set(rows.map((r) => r.kind))].filter((k) => this.reaches(ext, k));
+      const last = rows[rows.length - 1]!.log_pos;
+      const events: unknown[] = [];
+      for (let after = rows[0]!.log_pos - 1; kinds.length && after < last;) {
+        const page = await this.options.record.read({ after, limit: PAGE, kinds });
+        for (const e of page) {
+          const seen = e.session === session && e.log_pos <= last ? this.visible(ext, e) : undefined;
+          if (seen !== undefined) events.push(seen);
+        }
+        if (page.length < PAGE) break;
+        after = page[page.length - 1]!.log_pos;
+      }
+      if (!events.length) return { why: `${handle} is outside ${id}'s grant: none of its events is of a kind${projects ? ' or project' : ''} the grant names` };
+      return { content: events, as_of: null, stale_at: null };
+    }
+    return { why: `${handle} is outside ${id}'s grant: a job reads only the plug-in's own readings and answers, and, with text in its grant, a session` };
+  }
+  /** A job's answer the record holds, by its reading handle. */
+  private async answerOf(handle: string): Promise<{ piece: string; value: unknown; cites: string[]; as_of: number; stale_at: number | null } | undefined> {
+    const [row] = (await this.options.record.raw("SELECT data FROM events WHERE kind = 'runner.answered' AND subject = ? LIMIT 1", [handle])) as { data: string }[];
+    return row ? JSON.parse(row.data) : undefined;
+  }
+  /** What a package's own test asks of the host while its tests run (#366): one of its actions, called as the app would, or one of its sources read. */
+  private async testCall(ext: Ext, method: string, params: unknown): Promise<unknown> {
+    const id = ext.entry.id;
+    if (!ext.testing) throw Error(`${method} answers only while ${id}'s own tests run`);
+    const [name, input] = Array.isArray(params) ? params : [];
+    if (method === 'test.read') {
+      // An interface it uses reads through its edge, or, in a contract test, the provider's new outputs at its minor (#103).
+      if (typeof name === 'string' && ext.uses.has(name)) {
+        if (!ext.replay) return this.readUse(ext, name);
+        const use = (ext.manifest.uses ?? []).find((u) => u.interface === name);
+        if (!ext.replay.has(name)) return { missing: true };
+        return { value: use?.schema === undefined || this.options.plant === 'serves-newest-minor' ? ext.replay.get(name) : servedAt(ext.replay.get(name), use.schema) };
+      }
+      if (typeof name !== 'string' || !ext.sources.has(name)) throw Error(`t.read: ${String(name)} isn't a source ${id} registers or an interface it uses`);
+      return this.readSource(name);
+    }
+    if (method !== 'test.call') throw Error(`${method} isn't in a package test's t`);
+    const result = await this.callAction({ action: name as string, target: { handle: `ext:${id}`, version: ext.entry.version }, input, caller: TESTER });
+    if (result.status !== 'done') throw Error(`t.call: ${String(name)} was refused: ${result.reason}`);
+    return result.output;
   }
   /**
    * A preview method is used only by name (#139): a package lists each one it calls in its manifest's requires.preview,
@@ -1746,18 +2776,29 @@ class Host implements ExtensionHost {
     if (!store) throw Error(`${method}: ${String(kind)} isn't a store ${ext.entry.id} declared with deep.store`);
     return store;
   }
-  /** A store's items as the record holds them now: the newest item for each key. */
-  private async items(kind: string): Promise<Map<string, { value: unknown; generation: number }>> {
-    const items = new Map<string, { value: unknown; generation: number }>();
+  /**
+   * A store's items as the record holds them now: the newest item for each key, read from the record once and then
+   * kept as this host puts them, since only this host writes a store's kind (#365: a lookup reads no log).
+   */
+  private async items(kind: string): Promise<Map<string, { value: unknown; generation: number; bytes: number }>> {
+    return (await this.store(kind)).items;
+  }
+  private async store(kind: string): Promise<{ items: Map<string, { value: unknown; generation: number; bytes: number }>; bytes: number }> {
+    const kept = this.storeItems.get(kind);
+    if (kept) return kept;
+    const items = new Map<string, { value: unknown; generation: number; bytes: number }>();
     for (let after = 0; ;) {
       const page = await this.options.record.read({ after, limit: PAGE, kinds: [kind] });
       for (const e of page) {
         const { key, value, generation } = e.data as { key: string; value: unknown; generation: number };
-        items.set(key, { value, generation });
+        items.set(key, { value, generation, bytes: Buffer.byteLength(JSON.stringify(value) ?? 'null') });
       }
-      if (page.length < PAGE) return items;
+      if (page.length < PAGE) break;
       after = page[page.length - 1]!.log_pos;
     }
+    // Read while another call read it too: the first map read stays the one kept.
+    if (!this.storeItems.has(kind)) this.storeItems.set(kind, { items, bytes: [...items.values()].reduce((sum, i) => sum + i.bytes, 0) });
+    return this.storeItems.get(kind)!;
   }
   /**
    * A store's items moved forward to the generation a load declares (#363): each item at a generation it migrates
@@ -1774,6 +2815,10 @@ class Host implements ExtensionHost {
       if (broke) throw Error(`deep.store: ${id}'s migration of ${kind}'s item ${key} from generation ${item.generation} fails generation ${store.generation}'s schema at ${broke}`);
       const now = this.options.now();
       await this.options.record.append(this.connection(ext, undefined), { v: 1, id: ulid(now), kind, ts: now, data: { key, generation: store.generation, value: value as JsonValue, call: null } });
+      const held = await this.store(kind);
+      const bytes = Buffer.byteLength(JSON.stringify(value) ?? 'null');
+      held.bytes += bytes - item.bytes;
+      held.items.set(key, { value: structuredClone(value), generation: store.generation, bytes });
     }
   }
   /** Whether a kind is another plug-in's: an `ext.<plugin>.` kind of a plug-in other than this one. */
@@ -1808,8 +2853,9 @@ class Host implements ExtensionHost {
     const other = Array.isArray(asked) && !ext.released && this.options.plant !== 'record-by-grant-words' ? asked.find((k): k is string => typeof k === 'string' && this.foreign(ext, k)) : undefined;
     if (other !== undefined) {
       const owner = this.ownerOf(other);
+      const outputs = owner ? (this.manifestAt(this.entries[owner]!.folder).provides ?? []).map((p) => p.interface) : [];
       await this.refused(connection, 'deep.record.query', 'grant', 'record: another plug-in\'s kind, which no grant reaches', [filter]).catch(() => undefined);
-      throw Error(`deep.record.query: ${other} is ${owner ?? 'another plug-in'}'s kind, which no record grant reaches; declare a use of what ${owner ?? 'it'} provides in your manifest's uses, and read it with deep.read`);
+      throw Error(`deep.record.query: ${other} is ${owner ?? 'another plug-in'}'s kind, which no record grant reaches; declare a use of what ${owner ?? 'it'} provides${outputs.length ? ` (${outputs.join(', ')})` : ''} in your manifest's uses, and read it with deep.read`);
     }
     const grant = ext.entry.grant.record;
     const kinds = Array.isArray(asked) ? asked.filter((k): k is string => typeof k === 'string' && this.reaches(ext, k))
@@ -1846,24 +2892,96 @@ class Host implements ExtensionHost {
     return undefined;
   }
 
-  /** A read through a use: the installed provider's value, or missing once none provides it or its removal detached it. */
+  /**
+   * The loaded piece a use reads from (#103), by type: a live provider of the interface it is wired to whose row
+   * matches the use, the one it prefers when several do. Kept until a piece loads, stops or installs.
+   */
+  private providerOf(ext: Ext, use: UseRow, live = true): Ext | undefined {
+    const id = ext.entry.id;
+    // The use reads the interface it is wired to (#139): the one its manifest names, unless the planted installer rewired it.
+    const to = this.wired.get(id)?.get(use.interface) ?? use.interface;
+    const key = `${live}\n${id}\n${use.interface}`;
+    if (this.routes.has(key)) return this.routes.get(key);
+    const pool = [...this.exts.values()].filter((p) => p !== ext && !p.detached && (!live || (p.live && p.provides.has(to))));
+    // AC9's wrong program: a use stays wired to the piece it prefers, by name, whether or not that piece is still there.
+    const chosen = this.options.plant === 'wires-by-name' && use.from ? use.from
+      : resolve(id, { ...use, interface: to }, pool.map((p) => pieceOf(p.entry.id, p.manifest)), this.namesAlone || to !== use.interface)?.id;
+    const found = pool.find((p) => p.entry.id === chosen);
+    this.routes.set(key, found);
+    return found;
+  }
+  /**
+   * A read through a use: the provider's value, served at the minor the use was built against, with a handle its
+   * model jobs may take; missing once none provides it or its removal detached it. An answer a version gives after a
+   * new version of it is active is refused at the edge (#103).
+   */
   private async readUse(ext: Ext, name: unknown): Promise<unknown> {
     const id = ext.entry.id;
     if (typeof name !== 'string' || !ext.uses.has(name)) throw Error(`deep.read: ${String(name)} isn't an interface ${id} uses`);
+    const use = (ext.manifest.uses ?? []).find((u) => u.interface === name) ?? { interface: name };
     // Only a provider that started: an output publishes once its piece is ready, like its handlers and actions.
-    // The use reads the interface it is wired to (#139): the one its manifest names, unless the planted installer rewired it.
+    const provider = this.providerOf(ext, use);
+    // AC10's wrong program reads an optional use with no provider as empty.
+    if (!provider) return optional(ext, use) && this.options.plant === 'optional-reads-empty' ? { value: [] } : { missing: true };
     const to = this.wired.get(id)?.get(name) ?? name;
-    const provider = [...this.exts.values()].find((p) => p !== ext && p.live && p.provides.has(to) && !p.detached);
-    if (!provider) return { missing: true };
     const edge = `${id} uses ${name} from ${provider.entry.id}`;
     if (!provider.ask) throw Error(`the edge ${edge}: ${provider.entry.id} stopped while ${id} still used it`);
     const reading = within(CALL_MS, `the edge ${edge}`, provider.ask('output', { name: to }));
     provider.reads.add(reading);
+    let refuse: (e: Error) => void = () => undefined;
+    const replaced = new Promise<never>((_, reject) => { refuse = reject; });
+    provider.refuseReads.add(refuse);
+    let value: unknown;
     try {
-      return { value: await reading };
+      value = await Promise.race([reading, replaced]);
+    } catch (e) {
+      throw Error(`the edge ${edge}: ${message(e)}`);
     } finally {
       provider.reads.delete(reading);
+      provider.refuseReads.delete(refuse);
     }
+    const active = this.exts.get(provider.entry.id);
+    if (active && active !== provider) throw Error(`the edge ${edge}: ${provider.entry.version} answered after ${active.entry.version} replaced it, so its answer isn't delivered`);
+    // AC15's wrong program hands the user the provider's newest shape.
+    const served = use.schema === undefined || this.options.plant === 'serves-newest-minor' ? value : servedAt(value, use.schema);
+    const now = this.options.now();
+    const handle = `reading:${ulid(now)}`;
+    ext.edgeReads.set(handle, { edge, value: served, at: now });
+    // The newest readings only: a job takes what its piece just read.
+    if (ext.edgeReads.size > EDGE_READS) ext.edgeReads.delete(ext.edgeReads.keys().next().value!);
+    return { value: served, handle };
+  }
+  /**
+   * `deep.call`: the action output a piece uses, run through its edge for the calling piece (#103). A read runs; a
+   * change or a send runs only on your yes to one ask naming the caller, as an agent's call would, and then under the
+   * provider's own grant, its caller the calling piece. Composition never lends the caller the provider's access.
+   */
+  private async callThrough(ext: Ext, name: unknown, input: unknown, scope: string | undefined): Promise<unknown> {
+    const id = ext.entry.id;
+    if (typeof name !== 'string' || !ext.uses.has(name)) throw Error(`deep.call: ${String(name)} isn't an interface ${id} uses`);
+    const use = (ext.manifest.uses ?? []).find((u) => u.interface === name) ?? { interface: name };
+    const provider = this.providerOf(ext, use);
+    if (!provider) throw Error(`deep.call: no piece provides ${name} to ${id} now`);
+    const action = name.slice(0, name.lastIndexOf('@'));
+    const declared = provider.actions.get(action);
+    if (!declared || !(provider.manifest.provides ?? []).some((r) => r.interface === name && r.kind === 'action')) throw Error(`deep.call: ${provider.entry.id} provides ${name}, but no action ${action} serves it`);
+    const caller = this.connection(ext, scope);
+    // AC11's wrong program runs the call as the provider itself, under its own grant and rules, with no ask.
+    if (declared.declares !== 'read' && this.options.plant !== 'call-under-provider-grant') {
+      const what = declared.declares === 'send' ? 'send through' : 'change your data with';
+      const shown = JSON.stringify(input) ?? 'null';
+      const yes = await this.yours(`action.${declared.declares}`, `Let ${id} ${what} ${provider.entry.id}'s ${action}, given ${shown.slice(0, 500)}? ${id} calls it through its use of ${name}.`,
+        { call: ulid(this.options.now()), caller: id, action, provider: provider.entry.id }, declared.declares === 'send' ? 'Send it' : 'Change it', 'Don\'t',
+        [{ does: `${id} calls ${provider.entry.id}'s ${action} with ${shown.slice(0, 500)}`, changes: [`${provider.entry.id}'s ${action}`], undo: null }]);
+      if (!yes) throw Error(`deep.call: ${id}'s call of ${action} wasn't run: you didn't say yes`);
+    }
+    const planted: Connection = { writer: `ext:${provider.entry.id}`, actor: 'you', scope: 'you' };
+    const result = await this.callAction({
+      action, target: { handle: `ext:${provider.entry.id}`, version: provider.entry.version }, input,
+      caller: this.options.plant === 'call-under-provider-grant' ? planted : caller,
+    });
+    if (result.status !== 'done') throw Error(`deep.call: ${result.reason}`);
+    return result.output;
   }
 
   /** Outside calls made for a package, per package and host: the times of the calls its quota counts. */
@@ -1909,6 +3027,89 @@ class Host implements ExtensionHost {
     return { status: answer.status, body: Buffer.concat(chunks).toString('utf8') };
   }
 
+  /**
+   * Whether a notice may go out (#365), refused naming why: a notice kind its manifest declares (and, in a run, its job
+   * declares), for a cause you subscribed to, each reading it cites one the hub recorded that is still fresh, within the
+   * plug-in's limit a minute. Its subject keys its cause, so the notice already sent for one is answered again.
+   */
+  private async noticeAllowed(ext: Ext, given: unknown, scope: string | undefined): Promise<{ subject: string; sent?: string }> {
+    const id = ext.entry.id;
+    const n = (isPlain(given) ? given : {}) as { kind?: unknown; subscription?: unknown; key?: unknown; readings?: unknown };
+    const refuse = (why: string): never => { throw Error(`deep.notices.send: ${why}`); };
+    const run = scope === undefined ? undefined : this.runCtx.get(scope);
+    const kind = typeof n.kind === 'string' && (ext.manifest.notices ?? []).includes(n.kind) ? n.kind : refuse(`${String(n.kind)} isn't a notice kind ${id}'s manifest declares`);
+    if (run && !run.decl.declares.notices.includes(kind)) refuse(`${run.decl.name} doesn't declare ${kind} among the notices it may send`);
+    if (typeof n.key !== 'string' || !n.key) refuse('a notice has a key, its one cause');
+    const [sub] = (await this.options.record.raw(`SELECT id FROM events WHERE kind = 'notice.subscribed' AND json_extract(data, '$.notice_kind') = ? AND json_extract(data, '$.key') = ?
+      ORDER BY log_pos DESC LIMIT 1`, [kind, String(n.subscription)])) as { id: string }[];
+    if (!sub) refuse(`nobody subscribed to ${kind} for ${String(n.subscription)}; a notice goes out only because you asked for it`);
+    if (!texts(n.readings)) refuse('a notice cites the readings behind it, as a list of their handles');
+    const now = this.options.now();
+    for (const handle of n.readings as string[]) {
+      // A series' batch is a reading too, by its reading.batch's handle (#262).
+      let [r] = (await this.options.record.raw('SELECT source, as_of FROM readings WHERE reading = ?', [handle])) as ({ source: string; as_of: number } | undefined)[];
+      r ??= await this.series?.batch(handle);
+      // A runner answer is a reading too (#366): stale once the first reading it cites is.
+      const answer = r ? undefined : await this.answerOf(handle);
+      if (answer?.piece === id) {
+        if (answer.stale_at !== null && now >= answer.stale_at) refuse(`${handle} went stale at ${new Date(answer.stale_at).toISOString()}, when the first reading it cites did, so the notice would cite a stale answer`);
+        continue;
+      }
+      const source = r && [...this.exts.values()].map((e) => e.sources.get(r.source)).find((x): x is Polled => x?.variant === 'polled');
+      if (!r || !source) return refuse(`${handle} is no reading of a loaded source the hub recorded`);
+      if (now - r.as_of >= source.freshFor) refuse(`${handle} is past its freshness of ${source.freshFor} ms, so the notice would cite a stale reading`);
+    }
+    const subject = `notice:${sub!.id}#${sha256Hex(new TextEncoder().encode(n.key as string)).slice(0, 40)}`;
+    const [sent] = (await this.options.record.raw("SELECT json_extract(data, '$.notice') AS notice FROM events WHERE kind = 'notice.sent' AND subject = ? LIMIT 1", [subject])) as { notice: string }[];
+    if (sent) return { subject, sent: sent.notice };
+    const times = (this.noticeTimes.get(id) ?? []).filter((t) => now - t < 60_000);
+    if (times.length >= NOTICES_PER_MINUTE) refuse(`${id} sent ${NOTICES_PER_MINUTE} notices in the last minute, its limit`);
+    this.noticeTimes.set(id, [...times, now]);
+    return { subject };
+  }
+  /** What keeps a schedule's run from starting (#365): a source it reads that no loaded plug-in registers, or a secret one needs that isn't held. */
+  private async blockedRun(decl: ScheduleDecl): Promise<string | null> {
+    for (const name of decl.declares.readings) {
+      const owner = [...this.exts.values()].find((e) => e.live && e.sources.has(name));
+      const source = owner?.sources.get(name);
+      if (!owner || !source) return `missing source ${name}: no loaded plug-in registers it`;
+      if (source.variant === 'polled' && source.secret && !(await this.sources.holds(owner.entry.id, source.secret))) return `missing secret ${source.secret}, which ${name} needs`;
+    }
+    return null;
+  }
+  /** Hands a run to its plug-in's job (#365), its calls carrying the run's scope; resolves with the run's verdict. */
+  private dispatchRun(decl: ScheduleDecl, run: { run: string; due: number }): Promise<Ended> | undefined {
+    const ext = this.exts.get(decl.plugin);
+    if (!ext?.live || !ext.ask) return undefined;
+    const scope = randomUUID();
+    const ctx: RunCtx = { run: run.run, decl, changes: [], blocked: null, held: null, ended: false };
+    ext.scopes.set(scope, CORE);
+    ext.callOf.set(scope, run.run);
+    this.runCtx.set(scope, ctx);
+    return ext.ask('schedule.run', { name: decl.name, run: run.run, at: run.due, scope }).then((returned) => this.judged(ext, ctx, returned, undefined), (e) => this.judged(ext, ctx, undefined, e ?? 'failed'))
+      .finally(() => {
+        ctx.ended = true;
+        ext.scopes.delete(scope);
+        ext.callOf.delete(scope);
+        this.runCtx.delete(scope);
+      });
+  }
+  /**
+   * A run's verdict, from what the hub saw and recorded for it, never the job's word (#365): its process gone is
+   * INVALID; a declared no-op uncounted; a declared change PASS; else a source missing or its secret is BLOCKED, a
+   * rate limit, a 5xx or the quota INCONCLUSIVE, and anything else FAIL. A run the hub's stop cut short is interrupted.
+   */
+  private judged(ext: Ext, ctx: RunCtx, returned: unknown, error: unknown): Ended {
+    if (this.closed) return 'interrupted';
+    const changes = [...new Set(ctx.changes)];
+    if (error !== undefined && (!ext.live || this.exts.get(ext.entry.id) !== ext)) return { verdict: 'INVALID', cause: `${ext.entry.id}'s process ended while the run was under way`, changes };
+    if (error === undefined && ctx.decl.declares.noop && isPlain(returned) && 'noop' in returned) return { verdict: 'uncounted', cause: 'a no-op its job declares', changes };
+    if (error === undefined && changes.length) return { verdict: 'PASS', cause: null, changes };
+    if (ctx.blocked) return { verdict: 'BLOCKED', cause: ctx.blocked, changes };
+    if (ctx.held) return { verdict: 'INCONCLUSIVE', cause: ctx.held, changes };
+    return { verdict: 'FAIL', cause: error === undefined ? 'it ended with no change its job declares' : `its job failed${ext.released ? `: ${message(error)}` : ''}`, changes };
+  }
+
   async hook(request: HookRequest): Promise<HookReply>;
   async hook(line: HookRequestLine): Promise<{ adapter: string; events: { kind: string }[] }>;
   async hook(arg: HookRequest | HookRequestLine): Promise<HookReply | { adapter: string; events: { kind: string }[] }> {
@@ -1931,7 +3132,7 @@ class Host implements ExtensionHost {
       const due = performance.now() + deadline + HOOK_GRACE_MS;
       const left = (): number => Math.max(0, due - performance.now());
       try {
-        if (await within(left(), `${id}'s trust check`, this.revoked(ext))) return fail(`${id}'s project is no longer trusted, so it was stopped`);
+        if (await within(left(), `${id}'s trust check`, this.revoked(ext))) return fail(`${id}'s project ${ext.entry.project} is no longer trusted, so it was stopped`);
       } catch (e) {
         if (e instanceof Overran) return fail(`${id}'s trust check didn't answer within the hook's deadline of ${deadline} ms`);
         throw e;
@@ -2022,7 +3223,7 @@ class Host implements ExtensionHost {
     if (!ext || !ext.live || !ext.ask) return refuse(`${target?.handle} names no piece that is loaded and started`);
     // The target names its version: a call meant for another one, a removed or never-active version, runs nothing.
     if (ext.entry.version !== target.version) return refuse(`${target.handle}@${target.version} is a stale target: the version active is ${ext.entry.version}`);
-    if (await this.revoked(ext)) return refuse(`${id}'s project is no longer trusted, so it was stopped`);
+    if (await this.revoked(ext)) return refuse(`${id}'s project ${ext.entry.project} is no longer trusted, so it was stopped`);
     // Removed while trust answered: new calls stopped first, so this one runs nothing.
     if (this.exts.get(ext.entry.id) !== ext || !ext.live || !ext.ask) return refuse(`${target.handle} was removed before ${action} could run`);
     const declared = ext.actions.get(action);
@@ -2053,13 +3254,17 @@ class Host implements ExtensionHost {
         ext.callOf.set(scope, callId);
         this.notices.set(callId, []);
       }
-      returned = await within(CALL_MS, `${id}'s ${action}`, ext.ask('action', { name: action, input: call.input, ctx: { target: { handle: target.handle, version: target.version } }, scope }));
+      const running = stretchable(CALL_MS, `${id}'s ${action}`, ext.ask('action', { name: action, input: call.input, ctx: { target: { handle: target.handle, version: target.version } }, scope }));
+      ext.deadlines.set(scope, running.until);
+      returned = await running.done;
     } catch (e) {
-      // An error's text is the package's own words: only a release package's reaches its caller.
-      failure = `${id}'s ${action} failed${ext.released ? `: ${message(e)}` : ''}`;
+      // An error's text is the package's own words: only a release package's reaches its caller, and the package's own
+      // tests, which hand it back to the package (#366).
+      failure = `${id}'s ${action} failed${ext.released || caller === TESTER ? `: ${message(e)}` : ''}`;
     } finally {
       ext.scopes.delete(scope);
       ext.callOf.delete(scope);
+      ext.deadlines.delete(scope);
     }
     if (entered) await this.reported(ext, entered, core, returned, failure);
     const ran = { started: true as const, ...(entered ? { call: entered.call } : {}) };
@@ -2082,13 +3287,16 @@ class Host implements ExtensionHost {
     const changed: string[] = [];
     const notices = this.notices.get(entered.call) ?? [];
     this.notices.delete(entered.call);
-    const kinds = [...(ext.manifest.stores ?? []), ...(notices.length ? ['notice.sent'] : [])];
+    const kinds = [...(ext.manifest.stores ?? []), ...(notices.length ? ['notice.sent'] : []), 'send.made'];
     for (let after = entered.at; kinds.length;) {
       const page = await this.options.record.read({ after, limit: PAGE, kinds });
       for (const e of page) {
-        const item = e.data as { key: string; call: string | null; notice: string };
+        const item = e.data as { key: string; call: string | null; notice: string; phase?: string };
         if (e.kind === 'notice.sent') {
           if (notices.includes(item.notice)) changed.push(item.notice);
+        } else if (e.kind === 'send.made') {
+          // A send the hub made for the call (#365): claimed, so it went out or may have.
+          if (item.call === entered.call && item.phase === 'claimed') changed.push(`send:${item.key}`);
         } else if (item.call === entered.call) changed.push(`${e.kind}:${item.key}`);
       }
       if (page.length < PAGE) break;
@@ -2113,24 +3321,83 @@ class Host implements ExtensionHost {
   async checks(): Promise<{ kind: string; extension: string }[]> {
     return [...this.exts.values()].flatMap((ext) => ext.kinds.map((kind) => ({ kind, extension: ext.entry.id })));
   }
+  async environment(name: string): Promise<RuntimeEnvironment> {
+    const ext = this.environmentOwner(name);
+    const current = async (): Promise<void> => {
+      if (!ext?.live || !ext.ask || this.exts.get(ext.entry.id) !== ext || await this.revoked(ext)) {
+        throw Error(`no loaded extension registered the environment ${name}; it is absent, replaced or no longer trusted`);
+      }
+    };
+    await current();
+    // Only the release's hub-bound environment passed the install kit; never widen its execution boundary here.
+    if (!ext!.hubBound || !ext!.entry.kits?.some(k => k.slot === ENVIRONMENT && k.fill === name && k.verdict === 'PASS')) {
+      throw Error(`BLOCKED: environment ${name} has no passing install kit for this release package`);
+    }
+    return {
+      extension: ext!.entry.id, version: ext!.entry.version,
+      up: async (spec, lease, checkout, deadline) => {
+        const bad = badDeadline('deadline', deadline);
+        if (bad) throw Error(`an environment start's ${bad}`);
+        await current();
+        const value = await this.ask(ext!, deadline, `environment ${name}`, 'env.up', { name, spec, lease, checkout });
+        // An old load's late start is never presented as its replacement's handle.
+        await current();
+        if (!isPlain(value) || typeof value.id !== 'string' || !value.id || value.port !== lease.port || !Number.isSafeInteger(value.pid) || Number(value.pid) <= 0) {
+          throw Error(`environment ${name} returned an invalid handle or a port outside its lease`);
+        }
+        const handle = Object.freeze({ id: value.id, port: lease.port, pid: Number(value.pid) });
+        let down: Promise<void> | undefined;
+        return {
+          handle,
+          down: () => down ??= (async () => {
+            await current();
+            await this.ask(ext!, CALL_MS, `environment ${name} down`, 'env.down', { name, handle });
+          })(),
+        };
+      },
+    };
+  }
   hooks(): string[] {
     return [...new Set([...this.exts.values()].flatMap((ext) => [...ext.subscribed]))].sort();
   }
-  async runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number }): Promise<CheckResult> {
+  /**
+   * What a check kind gets with each run (#30 AC5): the run's checkout and deadline, and for a kind in the hub, host@1,
+   * the supervisor's, so its process starts only through it and the supervisor sandboxes it. A kind the sandbox runs
+   * gets no host: its context crosses a wire, and it never starts a process of its own.
+   */
+  private checkContext<C extends { deadline: number }>(ext: Ext, ctx: C): C | (C & { host: RunHost }) {
+    return ext.place === 'hub' ? { ...ctx, host: this.runHost() } : ctx;
+  }
+  /** host@1 and nothing more of the supervisor: its name, start, signal, wait and facts, bound to it. */
+  private runHost(): RunHost {
+    const s = this.options.supervisor;
+    return (this.hostOne ??= { name: s.name, start: (spec) => s.start(spec), signal: (run, signal) => s.signal(run, signal), wait: (run) => s.wait(run), facts: () => s.facts() });
+  }
+  private hostOne: RunHost | undefined;
+  async runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number; environment?: string }): Promise<CheckResult> {
     // Refused before any package is asked.
     const bad = badDeadline('deadline', ctx.deadline);
     if (bad) throw Error(`a check run's ${bad}`);
     const ext = this.kindOwner(kind);
     if (!ext?.ask || (await this.revoked(ext))) return nothing('missing', `no loaded extension registered the check kind ${kind}`);
+    // A run in a first-party piece's output, such as env-local's environment, makes the check's piece its user (#103).
+    if (ctx.environment !== undefined) await this.usedFirstParty(ext.entry.id, ctx.environment);
     try {
-      const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx });
+      this.canvasKeys.set(ext, []);
+      const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: this.checkContext(ext, ctx) });
+      const read = this.canvasKeys.get(ext) ?? [];
       if (!isResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
       // A passed run rests on the tests it counted: passed with none counted ran nothing it can vouch for.
       if (result.outcome === 'passed' && result.testsRun === 0) return nothing('ran_nothing', `${ext.entry.id}'s ${kind} reported passed without its results: it counted no test`);
+      // A pass built on canvas reads holds only with their content keys as its evidence (Check input: plug-in reads).
+      const missing = read.filter((k) => !result.evidence.includes(k));
+      if (result.outcome === 'passed' && missing.length) return nothing('failed', `${ext.entry.id}'s ${kind} reported passed without the content keys its deep.canvas.read calls returned as evidence (${missing.length} missing, first ${missing[0]})`);
       return result;
     } catch (e) {
       if (e instanceof Overran) return nothing('overran', `${ext.entry.id}'s ${kind} ran past its deadline of ${ctx.deadline} ms${ext.place === 'sandbox' ? ', and was stopped' : ''}`);
       throw e;
+    } finally {
+      this.canvasKeys.delete(ext);
     }
   }
   async deliver(events: Event[]): Promise<void> {
@@ -2268,7 +3535,12 @@ class Host implements ExtensionHost {
   async ready(): Promise<void> {
     if (this.isReady) return this.starting;
     this.isReady = true;
+    this.terminals.attach();
+    // The hub's own timer: schedules fire from it, never from the app's clock (#365).
+    this.timer = setInterval(() => void this.tick().catch(() => undefined), TIMER_MS);
+    this.timer.unref();
     this.starting = (async () => {
+      await this.firstPartyVersions();
       const failed: string[] = [];
       for (const ext of [...this.exts.values()]) {
         if (this.closed) return;
@@ -2292,6 +3564,8 @@ class Host implements ExtensionHost {
     if (ext.server) throw Error(`${id} is already turned on`);
     for (const route of routes) if (!ext.routes.has(route)) throw Error(`${id} registered no route ${route}`);
     const chosen = new Set(routes);
+    // node:http loads only for a package turned on: about 2.7 MB of heap the hub's core otherwise never holds.
+    const { createServer: createHttpServer } = await import('node:http');
     // A request has the call deadline to arrive whole; one that fails is that request's alone.
     const server = createHttpServer({ requestTimeout: CALL_MS, connectionsCheckingInterval: 1000 }, (req, res) => void this.serve(ext, chosen, req, res).catch(() => res.destroy()));
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -2355,18 +3629,37 @@ class Host implements ExtensionHost {
   async edges(): Promise<{ user: string; uses: string; interface: string; provider: string }[]> {
     const out: { user: string; uses: string; interface: string; provider: string }[] = [];
     for (const ext of this.exts.values()) {
-      for (const uses of (ext.manifest.uses ?? []).map((u) => u.interface)) {
-        const to = this.wired.get(ext.entry.id)?.get(uses) ?? uses;
-        const provider = [...this.exts.values()].find((p) => p !== ext && (p.manifest.provides ?? []).some((row) => row.interface === to));
-        if (provider) out.push({ user: ext.entry.id, uses, interface: to, provider: provider.entry.id });
+      for (const use of ext.manifest.uses ?? []) {
+        const provider = this.providerOf(ext, use, false);
+        if (provider) out.push({ user: ext.entry.id, uses: use.interface, interface: this.wired.get(ext.entry.id)?.get(use.interface) ?? use.interface, provider: provider.entry.id });
       }
     }
+    // A first-party output's users (#103): the installed pieces whose runs used it, as the record keeps them.
+    for (const u of await this.firstPartyUses()) if (this.entries[u.user]) out.push({ user: u.user, uses: u.interface, interface: u.interface, provider: u.provider });
     return out.sort((a, b) => (a.user + a.uses).localeCompare(b.user + b.uses));
+  }
+
+  /** One reading names a terminals index this start couldn't read whole, and the terminals it lost (#996). */
+  async opened(): Promise<void> {
+    const damaged = this.terminals.damaged;
+    if (!damaged) return;
+    // The reading first, then the index written again: a cut in between finds the index damaged and reads it again.
+    const now = this.options.now();
+    await this.options.record.append(CORE, {
+      v: 1, id: ulid(now), kind: 'reading.recorded', ts: now,
+      data: {
+        reading: `reading:${ulid(now)}`, value: damaged.lost.length, unit: 'terminals lost', as_of: now, n: 1, outside: false,
+        source: `terminals.json couldn't be read whole, so it was kept aside as ${basename(damaged.aside)}; lost: ${damaged.lost.slice(0, 50).join(', ') || 'none'}${damaged.lost.length > 50 ? ` and ${damaged.lost.length - 50} more` : ''}`,
+      },
+    });
+    this.terminals.settle();
   }
 
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    clearInterval(this.timer);
+    this.sending.close();
     // Starts, loads and conformance runs under way finish first, each then unloaded here, so none leaves a process behind.
     await this.starting.catch(() => undefined);
     await Promise.all([...this.loading.values(), ...[...this.checking].map((c) => c.catch(() => undefined))]);
@@ -2376,6 +3669,7 @@ class Host implements ExtensionHost {
     // A terminal that lives past the app runs on, its run kept by the supervisor; AC1's wrong program stops them all.
     const stopping = this.terminals.all().filter((t) => !t.kept || this.options.plant === 'close-stops-every-host');
     await Promise.all(stopping.map((t) => this.terminals.stop(t).catch(() => undefined)));
+    this.terminals.close();
   }
 }
 
@@ -2396,5 +3690,7 @@ function copyPackage(from: string, to: string): void {
 }
 
 export async function openExtensionHost(options: ExtensionHostOptions): Promise<ExtensionHost> {
-  return new Host(options);
+  const host = new Host(options);
+  await host.opened();
+  return host;
 }

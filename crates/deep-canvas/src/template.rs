@@ -55,6 +55,21 @@ fn number(n: f64) -> String {
     format!("{n}")
 }
 
+/// Each slot of `template` that shows a story's own number (a number whose constant's source is
+/// `story`, Honest numbers): its path and what it shows. Empty for a template that doesn't parse.
+pub fn story_numbers<'t>(doc: &Value, template: &'t str) -> Vec<(&'t str, String)> {
+    parts(template)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|part| match part {
+            Part::Slot(slot) => value(doc, slot)
+                .filter(|s| s.number && s.source.as_deref() == Some("story"))
+                .map(|s| (slot, s.text)),
+            Part::Words(_) => None,
+        })
+        .collect()
+}
+
 /// The value at `path` in `doc`: a data constant `data/<name>`, a number or a string, bare or as
 /// `{value, source}` (Document envelope). `None` when the path names nothing this build shows.
 pub fn value(doc: &Value, path: &str) -> Option<Shown> {

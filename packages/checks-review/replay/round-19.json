@@ -1,0 +1,29 @@
+{
+  "claim": "format-money",
+  "diff": "diff --git a/src/format.ts b/src/format.ts\nindex a4f325b..db9dfe7 100644\n--- a/src/format.ts\n+++ b/src/format.ts\n@@ -1 +1 @@\n-export const money = (cents: number) => `$${cents / 100}`;\n+export const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [
+      {
+        "title": "[P3] Floating point formatting",
+        "body": "toFixed rounds half-even on some engines; consider integer math.",
+        "priority": 3,
+        "confidence_score": 0.3,
+        "file": "src/format.ts",
+        "rule": "off-by-one",
+        "quote": "(cents / 100).toFixed(2)"
+      }
+    ],
+    "overall_correctness": "patch is correct",
+    "overall_explanation": "Formatting change only.",
+    "overall_confidence_score": 0.6
+  },
+  "since": []
+}

@@ -17,6 +17,7 @@ use deep_scene3d_render::LINEAR;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::frames::hex;
 use crate::liveview::{full_pass, Kit, Timer};
 
 const SHADER: &str = include_str!("testgpu.wgsl");
@@ -127,13 +128,6 @@ pub fn items(doc: &Value) -> Result<(Vec<Placed>, Option<u32>), String> {
     Ok((out, burn))
 }
 
-fn hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
-}
-
 /// A splitmix64 stream from a text seed.
 fn stream(seed: &str, salt: u64) -> impl FnMut() -> u64 {
     let digest = Sha256::digest(seed.as_bytes());
@@ -149,7 +143,8 @@ fn stream(seed: &str, salt: u64) -> impl FnMut() -> u64 {
 
 /// A result on the device.
 pub enum Made {
-    Texture(wgpu::BindGroup),
+    /// A texture's bind group, and the texture, which a planted cache destroys early (#420).
+    Texture(wgpu::BindGroup, wgpu::Texture),
     Mesh(wgpu::Buffer, u32),
 }
 
@@ -302,12 +297,14 @@ impl Pipes {
         device: &Device,
         need: &Need,
         assets: &BTreeMap<String, PathBuf>,
+        key: &str,
     ) -> Result<(Made, Option<u64>), String> {
         match need {
             Need::Texture { size, pattern } => {
                 let levels = 32 - size[0].max(size[1]).leading_zeros();
+                // Labelled by its result's key, so a device error about it names it.
                 let texture = device.device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("test.texture"),
+                    label: Some(key),
                     size: wgpu::Extent3d {
                         width: size[0],
                         height: size[1],
@@ -351,7 +348,7 @@ impl Pipes {
                 let bytes = memory::texture(device, &texture);
                 let view = texture.create_view(&Default::default());
                 let bind = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("test.texture"),
+                    label: Some(key),
                     layout: &self.texture,
                     entries: &[
                         wgpu::BindGroupEntry {
@@ -364,7 +361,7 @@ impl Pipes {
                         },
                     ],
                 });
-                Ok((Made::Texture(bind), bytes))
+                Ok((Made::Texture(bind, texture), bytes))
             }
             Need::Mesh {
                 vertices,
@@ -433,6 +430,8 @@ struct Effect {
 #[derive(Default)]
 pub struct Items {
     draws: Vec<(Made, u32)>,
+    /// The result keys the draws bind (#420's `binds`).
+    pub bound: Vec<String>,
     loops: Option<u32>,
     gpu: Option<(
         wgpu::Buffer,
@@ -457,16 +456,20 @@ impl Items {
     ) {
         let pipes = &kit.test;
         self.draws.clear();
+        self.bound.clear();
         let mut at = Vec::new();
         for (i, p) in placed.iter().enumerate() {
             let Some(made) = results.get(&p.key) else {
                 continue;
             };
             let made = match made {
-                Made::Texture(b) => Made::Texture(b.clone()),
+                Made::Texture(b, t) => Made::Texture(b.clone(), t.clone()),
                 Made::Mesh(b, n) => Made::Mesh(b.clone(), *n),
             };
             self.draws.push((made, i as u32));
+            if !self.bound.contains(&p.key) {
+                self.bound.push(p.key.clone());
+            }
             at.extend_from_slice(bytemuck::cast_slice(&[p.at[0], p.at[1], p.at[2], 1.0]));
         }
         self.loops = loops;
@@ -578,7 +581,7 @@ impl Items {
                 pass.set_vertex_buffer(1, places.slice(..));
                 for (made, k) in &self.draws {
                     match made {
-                        Made::Texture(bind) => {
+                        Made::Texture(bind, _) => {
                             pass.set_pipeline(&pipes.quad);
                             pass.set_bind_group(1, bind, &[]);
                             pass.draw(0..6, *k..k + 1);

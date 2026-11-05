@@ -4,19 +4,24 @@
 // With the hub down or restarting it keeps its tool list and answers each call within a second that the hub is
 // unreachable, never with a success, and reconnects at the next call. Every error is a tool result holding error@2.
 // The pages of the codes those errors carry read at deep://codes/<code>, with no tool call and no hub.
-// `deep mcp actions` is the second server entry, deep-actions (#363): the same process and hub connection, serving
-// the plug-in actions' two tools in place of the deep_* tools.
+// `deep mcp actions` serves the second server entry, deep-actions (#363): the plug-in actions' two tools in place of
+// the deep_* tools. `deep setup` writes deep-hook's `mcp actions` for it, which answers the same (#824).
+import { readdirSync } from 'node:fs';
 import net from 'node:net';
 import { createInterface } from 'node:readline';
 import { CODES, codePage } from './codes.js';
+import { toolTimeoutS } from './codex-settings.js';
 import { hubAddress } from './paths.js';
 import { actionToolList, toolList } from './tools.js';
-import { line, refusal, startOf, type Refusal } from './wire.js';
+import { activePlant, line, refusal, startOf, type Refusal } from './wire.js';
 
 type Obj = Record<string, unknown>;
 const UNREACHABLE_MS = 1000;
 /** Longer than any call the hub holds open: deep_ask and deep_wait answer "still waiting" after 40 s. */
+// A held deep_ask answers just before the tool timeout Codex gives this server (#39), which this outlasts.
 const ANSWER_MS = 55_000;
+/** How long a call waits for the hub: Codex gives its MCP server's tool calls `tool_timeout_sec`, which is Codex's setting alone; any other client keeps ANSWER_MS. */
+export const answerWaitMs = (client: unknown, toolS: () => number = toolTimeoutS): number => (typeof client === 'string' && /codex/i.test(client) ? Math.max(ANSWER_MS, toolS() * 1000) : ANSWER_MS);
 const unreachable = (why: string): Refusal => refusal('unavailable', '', `The DeepBuild hub is unreachable (${why}); nothing was recorded. Call again once it is back.`, '', true);
 
 /** One connection to the hub as this process's deep mcp; undefined when the hub can't be reached in time. */
@@ -57,7 +62,7 @@ class Hub {
           buffer = buffer.slice(i + 1);
           if (!greeted) {
             greeted = true;
-            sock.write(line({ hello: 'mcp', parent: { pid: process.ppid, start: (await startOf(process.ppid)) ?? '' }, cwd: process.cwd() }));
+            sock.write(line({ hello: 'mcp', parent: { pid: process.ppid, start: (await startOf(process.ppid)) ?? '' }, cwd: process.cwd(), ...(process.env.DEEP_PASEO_BIND ? { paseo: process.env.DEEP_PASEO_BIND } : {}) }));
             continue;
           }
           if ('role' in message) {
@@ -75,12 +80,14 @@ class Hub {
     return this.connecting;
   }
 
+  /** The client's own name, from its initialize. */
+  client: unknown;
   /** One deep_* call through the hub: its result, or the refusal or unreachability as error@2. */
   async call(tool: string, args: unknown): Promise<{ ok: boolean; value: unknown }> {
     if (!(await this.connect()) || !this.sock) return { ok: false, value: unreachable('no answer on its socket') };
     const id = `mcp#${++this.ids}`;
     const reply = await new Promise<Obj>((resolve) => {
-      const timer = setTimeout(() => { this.waiting.delete(id); resolve({ error: unreachable('it did not answer in time') }); }, ANSWER_MS);
+      const timer = setTimeout(() => { this.waiting.delete(id); resolve({ error: unreachable('it did not answer in time') }); }, answerWaitMs(this.client));
       this.waiting.set(id, (message) => { clearTimeout(timer); resolve(message); });
       this.sock!.write(line({ id, method: 'mcp.call', params: { tool, arguments: args ?? {} } }));
     });
@@ -90,6 +97,12 @@ class Hub {
 
 /** `deep mcp`, or `deep mcp actions` for deep-actions: serves the agent on stdin and stdout until stdin closes. */
 export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<number> {
+  // #824's planted wrong program: deep mcp loads the hub's whole package and holds it while it serves. A worker's
+  // entry throws outside its worker, and is passed over.
+  if (server === 'deep' && activePlant() === 'mcp-loads-hub') {
+    const dir = new URL('.', import.meta.url);
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.js'))) await import(new URL(file, dir).href).catch(() => undefined);
+  }
   const hub = new Hub();
   const tools = server === 'deep' ? toolList() : actionToolList();
   const send = (message: Obj) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
@@ -108,6 +121,7 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
     if (id === undefined) continue; // a notification
     switch (method) {
       case 'initialize':
+        hub.client = (params.clientInfo as Obj | undefined)?.name;
         send({ id, result: { protocolVersion: typeof params.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18', capabilities: { tools: {}, resources: {} }, serverInfo: { name: server, version: '0.0.0' } } });
         break;
       case 'ping':

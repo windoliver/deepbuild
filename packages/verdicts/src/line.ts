@@ -1,7 +1,7 @@
 // The verdict in the chat (#83; design: The verdict in the chat). One line a stop reply carries, no wider than the
 // narrowest chat it goes to, in this order: what wasn't verified, if anything; the outcome and its count; the one
-// cause, with file and line; the next step's owner; the receipt. A line that would pass the width shortens the cause
-// first; "not verified" and the outcome with its count are never dropped.
+// cause, with file and line; the tests its checks ran (#669); the next step's owner; the receipt. A line that would
+// pass the width shortens the cause first; "not verified", the outcome with its count and the tests run are never dropped.
 import type { Outcome, Result } from './types.js';
 
 /** The narrowest chat: 80 columns in a terminal. */
@@ -28,6 +28,10 @@ export interface LineState {
   round?: number;
   /** Checks still running, each with the time it is expected to take, in seconds, where known. */
   running: { check: string; about_s: number | null }[];
+  /** Checks held in their places for a loop, each with what it waits for (#965). */
+  held?: { check: string; reason: string }[];
+  /** The tests the claim's checks ran on its commit, as their reports counted them (#669); none shown when none were counted. */
+  tests?: number;
 }
 /** Who takes the next step: the agent (a send-back), you (a PASS or something only you can clear) or DeepBuild (checks still to run). */
 type Owner = 'agent' | 'you' | 'DeepBuild';
@@ -46,7 +50,7 @@ function about(seconds: number): string {
 }
 
 /** The parts of the line, in order, before any shortening. */
-interface Parts { unverified: string; outcome: string; cause: string; points: string; running: string[]; owner: string; receipt: string }
+interface Parts { unverified: string; outcome: string; cause: string; points: string; tests: string; running: string[]; owner: string; receipt: string }
 function parts(s: LineState): Parts {
   const unverified = s.requirements.filter((r) => UNVERIFIED.has(r.outcome)).map((r) => name(r.req));
   const passed = s.requirements.filter((r) => r.outcome === 'PASS').length;
@@ -63,6 +67,7 @@ function parts(s: LineState): Parts {
     }
   } else if (s.outcome === 'FAIL') outcome = `sent back ${Math.max(1, s.round ?? 1)}/${ROUNDS}`;
   else outcome = `${s.outcome} ${count}`;
+  if (s.held?.length) running.push(`${s.held.length} check${s.held.length === 1 ? ' waits' : 's wait'} for the loop`, [...new Set(s.held.map((h) => h.reason))].join(', '));
   let cause = '';
   let points = '';
   if (s.outcome === 'FAIL' || s.outcome === 'BLOCKED') {
@@ -70,7 +75,8 @@ function parts(s: LineState): Parts {
     cause = failing?.smallest ?? '';
     points = failing?.points_to ?? '';
   }
-  return { unverified: unverified.length ? `not verified: ${unverified.join(', ')}` : '', outcome, cause, points, running, owner: `next: ${ownerOf(s.outcome)}`, receipt: 'receipt' };
+  const tests = s.tests ? `${s.tests} test${s.tests === 1 ? '' : 's'}` : '';
+  return { unverified: unverified.length ? `not verified: ${unverified.join(', ')}` : '', outcome, cause, points, tests, running, owner: `next: ${ownerOf(s.outcome)}`, receipt: 'receipt' };
 }
 
 /**
@@ -81,7 +87,7 @@ function parts(s: LineState): Parts {
 export function verdictLine(s: LineState, width = LINE_WIDTH): string {
   const p = parts(s);
   const join = (cause: string, keep: { points: boolean; owner: boolean; receipt: boolean }): string =>
-    [p.unverified, `${p.outcome}${cause ? `${CAUSE_SEP}${cause}` : ''}`, keep.points ? p.points : '', ...p.running, keep.owner ? p.owner : '', keep.receipt ? p.receipt : ''].filter(Boolean).join(DOT);
+    [p.unverified, `${p.outcome}${cause ? `${CAUSE_SEP}${cause}` : ''}`, keep.points ? p.points : '', p.tests, ...p.running, keep.owner ? p.owner : '', keep.receipt ? p.receipt : ''].filter(Boolean).join(DOT);
   const all = { points: true, owner: true, receipt: true };
   let line = join(p.cause, all);
   if (columns(line) <= width) return line;

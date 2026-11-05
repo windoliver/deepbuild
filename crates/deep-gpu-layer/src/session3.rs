@@ -9,12 +9,14 @@ use deep_canvas_scene3d::scene::Scene;
 use deep_effects_render::frame::{self as fx, Effects};
 use deep_gpu::device::Backend;
 use deep_gpu::encode::Pool;
+use deep_gpu::surface::Path;
 use deep_gpu::view::{Config, Ui, View};
 use deep_scene3d_render::status::{self, SharedStage, Stage};
+use deep_scene3d_render::surface::{Surface, Upscale};
 use deep_scene3d_render::{Counts, Module3, Planted as Planted3, Profiler};
 use serde_json::Value;
 
-use crate::worker::{Scene3Session, SLOTS, WORKERS};
+use crate::worker::{Scene3Session, Worker, SLOTS, WORKERS};
 use crate::{effects, refused, App, Planted};
 
 pub use deep_scene3d_render::status::lock;
@@ -27,6 +29,54 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         encodes_every_frame: p == Some(Planted::EncodesEveryFrame),
         replays_after_add: p == Some(Planted::ReplaysAfterAdd),
         slow_gpu_frame: p == Some(Planted::SlowGpuFrame),
+        builds_on_first_frame: p == Some(Planted::CompilesOnFirstFrame),
+        upscale: upscale_planted(p),
+        outlines_before_upscale: p == Some(Planted::OutlinesBeforeUpscale),
+        status_before_upscale: p == Some(Planted::StatusBeforeUpscale),
+        status_without_depth: p == Some(Planted::StatusWithoutDepth),
+        winding_ignores_determinant: p == Some(Planted::WindingIgnoresDeterminant),
+        ties_by_submission: p == Some(Planted::TiesBySubmission),
+        spot_counts_cone: p == Some(Planted::SpotCountsCone),
+        status_before_tone_map: p == Some(Planted::StatusBeforeToneMap),
+        labels_before_upscale: p == Some(Planted::LabelsBeforeUpscale),
+        band_masks_independent: p == Some(Planted::BandMasksIndependent),
+        anisotropy_one: p == Some(Planted::AnisotropyOne),
+        premixed_metallic: p == Some(Planted::PremixedMetallic),
+        uncompensated_lobe: p == Some(Planted::UncompensatedLobe),
+        compensates_environment_only: p == Some(Planted::CompensatesEnvironmentOnly),
+        draws_black: p == Some(Planted::DrawsBlack),
+        drops_clouds: p == Some(Planted::DropsClouds),
+        cascade_cache_keeps_stale: p == Some(Planted::CascadeCacheKeepsStale),
+        prefilter_over_frames: p == Some(Planted::PrefilterOverFrames),
+        add_writes_depth: p == Some(Planted::AddWritesDepth),
+        add_without_depth_test: p == Some(Planted::AddWithoutDepthTest),
+        ids_by_draw_position: p == Some(Planted::IdsByDrawPosition),
+        ids_ignore_mask: p == Some(Planted::IdsIgnoreMask),
+        cuts_color_only: p == Some(Planted::CutsColorOnly),
+        // #428's shading plants, a bit each in scene3d.wgsl's order.
+        lobes: [
+            Planted::AbsorptionIgnoresThickness,
+            Planted::TransmissionIgnoresRoughness,
+            Planted::DispersionSamplesOnce,
+            Planted::SpecularColorIgnored,
+            Planted::IridescenceIgnoresThickness,
+            Planted::DiffuseLambert,
+            Planted::OrenNayarUncompensated,
+            Planted::RetroreflectionIgnored,
+            Planted::FlakesByPixel,
+        ]
+        .iter()
+        .position(|q| p == Some(*q))
+        .map_or(0, |i| 16 << i),
+    }
+}
+
+/// The upscale's wrong programs (#386).
+pub fn upscale_planted(p: Option<Planted>) -> deep_scene3d_render::surface::Planted {
+    deep_scene3d_render::surface::Planted {
+        bilinear_only: p == Some(Planted::BilinearOnly),
+        reads_previous_frame: p == Some(Planted::UpscaleReadsPreviousFrame),
+        slow: p == Some(Planted::SlowUpscale),
     }
 }
 
@@ -47,15 +97,71 @@ pub fn open(
     timings: bool,
     with_stage: bool,
 ) -> Result<Opened, Value> {
-    let planted = planted3(app.planted);
-    let path = app.decision.path;
-    let fx_planted = effects::planted_fx(app.planted);
-    let timings = timings && app.backend != Backend::Noop;
-    app.worker
+    open_on(&On::of(app), size, timings, with_stage)
+}
+
+/// [`open`] for a document whose composed operators (#429) the effects chain runs: their passes
+/// are the view's from its first frame.
+pub fn open_doc(
+    app: &mut App,
+    size: [u32; 2],
+    timings: bool,
+    with_stage: bool,
+    doc: &Value,
+) -> Result<Opened, Value> {
+    let (options, planted) = effects::operator_plants(app.planted);
+    let hooks = effects::operator_hooks(app.planted);
+    let doc = doc.clone();
+    let on = On::of(app);
+    open_with(&on, size, timings, with_stage, move |fx| {
+        fx.op_doc = Some((doc, options, planted));
+        fx.op_hooks = hooks;
+    })
+}
+
+/// What a session runs on: the render thread, the handoff its slots take, the backend and the
+/// planted program. The headless canvas worker has these and no app (#140).
+pub struct On<'a> {
+    pub worker: &'a Worker,
+    pub path: Path,
+    pub backend: Backend,
+    pub planted: Option<Planted>,
+}
+
+impl On<'_> {
+    pub fn of(app: &App) -> On<'_> {
+        On {
+            worker: &app.worker,
+            path: app.decision.path,
+            backend: app.backend,
+            planted: app.planted,
+        }
+    }
+}
+
+/// [`open`] on `on`.
+pub fn open_on(on: &On, size: [u32; 2], timings: bool, with_stage: bool) -> Result<Opened, Value> {
+    open_with(on, size, timings, with_stage, |_| {})
+}
+
+fn open_with(
+    on: &On,
+    size: [u32; 2],
+    timings: bool,
+    with_stage: bool,
+    setup: impl FnOnce(&mut Effects) + Send + 'static,
+) -> Result<Opened, Value> {
+    let planted = planted3(on.planted);
+    let path = on.path;
+    let fx_planted = effects::planted_fx(on.planted);
+    let timings = timings && on.backend != Backend::Noop;
+    on.worker
         .call(move |state| -> Result<Opened, String> {
             let (module, shared) = Module3::new(planted);
             // The shipped effects run between scene3d's geometry and its output (#380).
-            let fx = Arc::new(Mutex::new(Effects::new(Default::default(), fx_planted)));
+            let mut effects = Effects::new(Default::default(), fx_planted);
+            setup(&mut effects);
+            let fx = Arc::new(Mutex::new(effects));
             lock(&shared).post = Some(Box::new(fx::Shared(fx.clone())));
             let stage = if with_stage {
                 let device = state.gpu.recover()?;
@@ -97,24 +203,97 @@ pub fn open(
         .map_err(|e| refused("no_session", e))
 }
 
+/// Sets the GPU surface the session's view draws through, compiling the upscale's pipelines
+/// before its first frame below scale 1 (#386).
+pub fn surface(app: &mut App, surface: Surface) -> Result<(), Value> {
+    app.worker
+        .call(move |state| -> Result<(), String> {
+            let s = state.scene3d.as_mut().ok_or("no session")?;
+            let device = s.view.device().clone();
+            let mut shared = lock(&s.shared);
+            let planted = shared.planted;
+            let renderer = shared
+                .renderer
+                .get_or_insert_with(|| deep_scene3d_render::Renderer::new(&device, planted));
+            renderer.surface = surface;
+            if surface.scale < 1.0 && renderer.upscale.is_none() {
+                renderer.upscale = Some(Arc::new(Upscale::new(&device)));
+            }
+            Ok(())
+        })
+        .map_err(|e| refused("no_session", e))
+}
+
+/// Each pass's band masks of the item picked as `key` at blend `level`, as the last frame's
+/// draws evaluate them (#425): `(pass, size, one byte a pixel)`.
+pub fn masks(app: &mut App, key: u32, level: u32) -> Vec<(&'static str, [u32; 2], Vec<u8>)> {
+    use deep_scene3d_render::MaskPass;
+    app.worker.call(move |state| {
+        let Some(s) = state.scene3d.as_ref() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        let Some(r) = shared.renderer.as_ref() else {
+            return Vec::new();
+        };
+        [
+            ("color", MaskPass::Color),
+            ("depth", MaskPass::Depth),
+            ("shadow", MaskPass::Shadow),
+            ("ids", MaskPass::Ids),
+        ]
+        .into_iter()
+        .filter_map(|(name, pass)| {
+            let (size, bytes) = r.mask_dump(&device, pass, key, level)?;
+            Some((name, size, bytes))
+        })
+        .collect()
+    })
+}
+
+/// The pipelines the session's renderer compiled so far, by name (#854).
+pub fn pipelines(app: &mut App) -> Vec<&'static str> {
+    app.worker.call(|state| {
+        state.scene3d.as_ref().map_or_else(Vec::new, |s| {
+            lock(&s.shared)
+                .renderer
+                .as_ref()
+                .map_or_else(Vec::new, |r| r.compiled_names().to_vec())
+        })
+    })
+}
+
 pub fn close(app: &mut App) {
-    app.worker.call(|state| state.scene3d = None);
+    close_on(&app.worker);
+}
+
+/// [`close`] on the render thread `worker`.
+pub fn close_on(worker: &Worker) {
+    worker.call(|state| state.scene3d = None);
 }
 
 /// What the render thread answers for one frame.
 pub struct Drawn {
     pub slot: usize,
+    /// The frame reports settling: uploads were still pending when it drew (#140).
+    pub settling: bool,
     pub counts: Counts,
     pub picks: Vec<(String, u32)>,
     /// The slot's BGRA bytes.
     pub bytes: Option<Vec<u8>>,
     pub targets: Option<(Vec<u8>, Vec<u8>)>,
+    /// The linear image the output pass read, f32 RGBA, read with the targets (#418).
+    pub pre_tone: Option<Vec<u8>>,
     /// The frame's GPU time and each pass's share, ms.
     pub timing: Option<(f64, std::collections::BTreeMap<String, f64>)>,
     /// How many pixels the status guard moved, when the stage ran and the frame asked.
     pub moved: Option<u32>,
     /// With timings: the GPU memory the device holds as the frame draws (#383).
     pub gpu_bytes: Option<u64>,
+    /// The depth target, f32 per pixel, read with the targets, and whether it grows nearer: what
+    /// a 3D pick's ties read (#424).
+    pub depth: Option<(Vec<u8>, bool)>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -131,15 +310,40 @@ pub fn draw(
     read_targets: bool,
     read_moved: bool,
 ) -> Result<Drawn, Value> {
-    let noop = app.backend == Backend::Noop;
+    draw_on(
+        &On::of(app),
+        opened,
+        scene,
+        look,
+        n,
+        delay,
+        read_targets,
+        read_moved,
+    )
+}
+
+/// [`draw`] on `on`.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_on(
+    on: &On,
+    opened: &Opened,
+    scene: Arc<Scene>,
+    look: Look3,
+    n: u64,
+    delay: u64,
+    read_targets: bool,
+    read_moved: bool,
+) -> Result<Drawn, Value> {
+    let noop = on.backend == Backend::Noop;
     let (fx2, profiler2, stage) = (
         opened.fx.clone(),
         opened.profiler.clone(),
         opened.stage.clone(),
     );
-    app.worker
+    on.worker
         .call(move |state| -> Result<Drawn, String> {
             let s = state.scene3d.as_mut().ok_or("no session")?;
+            let again = (scene.clone(), look.clone());
             {
                 let mut shared = lock(&s.shared);
                 shared.next = Some((scene, look));
@@ -154,7 +358,7 @@ pub fn draw(
             if delay > 0 {
                 s.view.hold_next();
             }
-            let drawn = loop {
+            let mut drawn = loop {
                 if let Some(d) = s.view.render(n)? {
                     break d;
                 }
@@ -162,6 +366,23 @@ pub fn draw(
             };
             s.view.wait_done(drawn.slot);
             let device = s.view.device().clone();
+            // #424: per-pixel items that ran out of room below the class's cap draw the frame
+            // again with more room; at the cap they drew sorted and the frame says so.
+            while !noop
+                && lock(&s.shared)
+                    .renderer
+                    .as_mut()
+                    .is_some_and(|r| r.check_fragments(&device))
+            {
+                lock(&s.shared).next = Some(again.clone());
+                drawn = loop {
+                    if let Some(d) = s.view.render(n)? {
+                        break d;
+                    }
+                    s.view.wait_free();
+                };
+                s.view.wait_done(drawn.slot);
+            }
             // The frame's GPU time, as its passes' timestamp queries measured it.
             let timing = profiler2.as_ref().map(|p| {
                 let mut p = lock(p);
@@ -183,11 +404,22 @@ pub fn draw(
             let r = shared.renderer.as_ref().ok_or("no renderer")?;
             Ok(Drawn {
                 slot: drawn.slot,
+                settling: drawn.settling,
                 counts: r.counts().clone(),
                 picks: r.picks().iter().map(|(k, v)| (k.clone(), *v)).collect(),
                 bytes,
                 targets: if read_targets && !noop {
                     r.read_targets(&device)
+                } else {
+                    None
+                },
+                pre_tone: if read_targets && !noop {
+                    r.read_pre_tone(&device)
+                } else {
+                    None
+                },
+                depth: if read_targets && !noop {
+                    r.read_depth(&device).map(|d| (d, r.depth_grows_nearer()))
                 } else {
                     None
                 },
