@@ -1,0 +1,14 @@
+{
+  "issue": 425,
+  "criterion": "#425.e26677a1",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation (Tao Feng asked in session: \"can you judge for me\")",
+  "when": "2026-11-05T02:16:12Z",
+  "screenshots": {
+    "mesh-levels.png": "685596966d656712f365fa4b88cf978df19a7ec2d6edd30c2ed5b4cce139b6a1",
+    "band-blend.png": "b00eccfb00a773eb37d4c101b646ec9394aa470588fd2ea3426ab09de76c8494",
+    "ladder-climb.png": "6fba2461e57a5777cdc4d918127b8d4de1f758b91a7f333703cad83dec828423",
+    "orbit-zoom.apng": "230a111f2a07a4b4e0b99805c8c136b69b609b8e807f068f5dfccb4fceb413fa"
+  },
+  "note": "The rock gets coarser with distance without visible popping between levels. The ball reads as itself at full band and as its box below 48 px; inside the margin both draw through the per-pixel dither the design specifies (speckled at 320x240, the design's own revisit trigger). The climb's second frame is sharper than the first (scale 0.5 to 1). The orbit and zoom shows the ball, the blend and the box in turn. Recorded on the pictures after main's #424 merge: the rock's shaded underside, mostly in the close-up panel, shows hatched shadow-edge aliasing from #424's light-direction shadow bias (the old normal-offset bias draws the same frame smoothly). That is #424's shadow quality, not this issue's level of detail, and is tracked as its own follow-up."
+}
