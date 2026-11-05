@@ -1,0 +1,10 @@
+{
+  "criterion": "#483.06a48810",
+  "by": "you",
+  "delegated": "On 2026-11-05 the owner asked Claude, in session, to close the gaps it could, after asking whether Claude had validated the screenshots. Claude checked each against its fixture: the jump-flood outline draws a white band just outside every mask shape (disc, ring, rectangle outline, diagonal stroke and the 24 single pixels) with the mask at 0.35 gray; the median of nine removes the 8% salt and pepper and keeps the ramp and the disc's edge, leaving specks only where two noise pixels touch.",
+  "screenshots": [
+    "5b2ace2c99fcb2edfea152785325213a186c2ba79b3bceb4339d58f61eae6ea2",
+    "29d3f676552b3931c127afb6fe7a92b3301ec0b6c53d74491dee8261e1a27251"
+  ],
+  "call": "looks_right"
+}

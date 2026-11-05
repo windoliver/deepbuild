@@ -8,6 +8,7 @@
 pub mod atlas;
 pub mod cache;
 pub mod fonts;
+pub mod outlines;
 pub mod shape;
 pub mod unicode;
 

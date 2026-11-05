@@ -324,6 +324,97 @@
     }
   },
   {
+    "method": "deep.registerChannel",
+    "variants": null,
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#65",
+    "digest": "d1:66787a5f380797186a662ff1c377a2025405af03d301b8e3dd64c66592bb37bb",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "channel": {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "const": "channel@1"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "device",
+                "chat",
+                "email",
+                "text"
+              ]
+            }
+          },
+          "required": [
+            "slot",
+            "revision",
+            "kind"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "name",
+        "channel"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.channel.fetch",
+    "variants": null,
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#65",
+    "digest": "d1:2ee78dc93e151a8ca07d3d5623dddd159f5f0dcdee2c3f22083b582632a6675e",
+    "params": {
+      "type": "object",
+      "properties": {
+        "call": {
+          "type": "string"
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "POST"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^/"
+            }
+          },
+          "required": [
+            "method",
+            "path"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "call",
+        "request"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "method": "deep.registerRoute",
     "variants": null,
     "since": "R1",

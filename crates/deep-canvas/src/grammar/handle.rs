@@ -11,6 +11,8 @@ const HEX: &[u8] = b"0123456789abcdef";
 const FRAGMENT: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-";
 /// The longest fragment accepted.
 const MAX_FRAGMENT_LEN: usize = 128;
+/// The longest assertion name a run handle takes.
+const MAX_ASSERTION_LEN: usize = 1024;
 
 /// The closed list of record schemes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -159,6 +161,32 @@ impl Handle {
             id,
             fragment,
         })
+    }
+
+    /// Parses a bound value's or status binding's source: a handle, or a run handle naming one
+    /// assertion its check names, `run:<id>#<assertion>` (Bound value). The assertion is the
+    /// test's name as the tool's report gives it, so it may hold any character but a control
+    /// character, up to [`MAX_ASSERTION_LEN`] bytes; refuses with `bad_handle`.
+    pub fn parse_source(text: &str) -> Result<Handle, Refusal> {
+        let Some((run, assertion)) = text
+            .strip_prefix("run:")
+            .and_then(|rest| rest.split_once('#'))
+        else {
+            return Handle::parse(text);
+        };
+        let ok = !assertion.is_empty()
+            && assertion.len() <= MAX_ASSERTION_LEN
+            && assertion.trim() == assertion
+            && !assertion.chars().any(char::is_control);
+        if !ok {
+            return Err(refuse(
+                CODE,
+                format!("`{text}`: a run's assertion is its test's name, 1 to {MAX_ASSERTION_LEN} bytes with no control character or space at either end"),
+            ));
+        }
+        let mut handle = Handle::parse(&format!("run:{run}"))?;
+        handle.fragment = Some(assertion.to_string());
+        Ok(handle)
     }
 
     /// The scheme.

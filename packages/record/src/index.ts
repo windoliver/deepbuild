@@ -3,7 +3,7 @@
 // The `events` table is the source of truth. Every other table is a projection the record rebuilds by
 // replaying it. An event's ID is its identity; its `seq` is its order within its session; its `log_pos`
 // is its position in the log, assigned here at append inside the commit that writes it.
-import { randomBytes } from 'node:crypto';
+import { ulid } from '@deepbuild/record/ids';
 import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, renameSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
@@ -18,7 +18,8 @@ import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.
 import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, openReadOnly, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
 
-export { compareReplay, parseClaimLine, planHash, PROJECTIONS, testStorage };
+export { compareReplay, parseClaimLine, planHash, PROJECTIONS, testStorage, ulid };
+export { openTrust, type ProjectTrust } from './trust.js';
 export type { Comparison, Measure, MeasureResult, ReplayPlan, ReplayResult, ReplayRun, TaskPair, Variant } from './replay.js';
 export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Message, Resolved, SliceEntry, Storage, SyncCall, TestStorage };
 
@@ -96,6 +97,8 @@ export interface RecordOptions {
   commitEach?: boolean;
   schemas?: readonly SchemaEntry[];
   migrations?: readonly Migration[];
+  /** A planted wrong program; only tests set it. #1014's: the turn walk takes a subagent's stop as a turn end. */
+  plant?: 'turn-closes-at-child-stop';
 }
 export interface Row { [column: string]: unknown }
 export interface Table { name: string; primaryKey: string[]; rows: Row[] }
@@ -162,6 +165,8 @@ export async function readSince(record: RecordStore, cursor: number, kinds: read
   }
 }
 
+/** The core's connection, appending for the person (and session) behind `connection`. */
+export const asCore = (connection: Connection): Connection => ({ writer: 'core', actor: connection.actor, scope: connection.scope, ...(connection.session ? { session: connection.session } : {}) });
 /** The record's JSON for one event: seq as its decimal string. */
 export const toJson = (event: Event): string => JSON.stringify(event, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v));
 
@@ -237,17 +242,6 @@ function versionsOf(entries: readonly SchemaEntry[], into: Map<string, number[]>
 }
 /** The published schemas' versions, read once: they never change in a process, so a record opened again reads none. */
 let published: ReadonlyMap<string, number[]> | undefined;
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-/** A ULID minted at `ms`: 48 bits of time, 80 of randomness. */
-export function ulid(ms: number): string {
-  let out = '';
-  let time = BigInt(ms);
-  for (let i = 0; i < 10; i++) { out = CROCKFORD[Number(time & 31n)] + out; time >>= 5n; }
-  let random = BigInt(`0x${randomBytes(10).toString('hex')}`);
-  let tail = '';
-  for (let i = 0; i < 16; i++) { tail = CROCKFORD[Number(random & 31n)] + tail; random >>= 5n; }
-  return out + tail;
-}
 /** A string cut to at most `max` UTF-16 units without splitting a surrogate pair. */
 function cut(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -320,7 +314,7 @@ class SqliteRecord implements RecordStore {
     const columns = this.db.prepare("SELECT name FROM pragma_table_info('events')").all() as { name: string }[];
     if (columns.length && !columns.some((c) => c.name === 'unverified')) this.db.exec('ALTER TABLE events ADD COLUMN unverified INTEGER NOT NULL DEFAULT 0');
     this.db.exec(DDL);
-    this.projector = new Projector(this.db);
+    this.projector = new Projector(this.db, options.plant);
     this.stale = this.projector.ensure();
     const extra = options.schemas ?? [];
     this.registry = registry([...listSchemas(), ...extra]);
@@ -553,7 +547,7 @@ class SqliteRecord implements RecordStore {
           const ev = put.evidence;
           const ts = this.options.now();
           // Straight to appendNow: this append is already counted in flight, so a close waits for both.
-          await this.appendNow({ writer: 'core', actor: connection.actor, scope: connection.scope, ...(connection.session ? { session: connection.session } : {}) }, {
+          await this.appendNow(asCore(connection), {
             v: 1, id: ulid(ts), kind: 'evidence.stored', ts,
             data: { sha256: ev.sha256, kind: ev.kind, type: ev.type, size: ev.size, origin: ev.origin, redaction: ev.redaction, license: ev.license.name, derived_from: [...ev.derivedFrom], step_times: [] },
           });

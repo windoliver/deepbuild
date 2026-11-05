@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { call, UNDECIDED_CODES, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { elapsed } from './promises.js';
 import { startOf } from './wire.js';
 
 const USAGE = 'Usage: deep inbox\n       deep inbox answer <ask> <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>';
@@ -19,12 +20,6 @@ interface Row { ask: string; kind: string; session: string; status: string; outc
 interface Step { does: string; changes: string[]; undo: string; cost: number }
 /** A permission you said yes to in the terminal, offered back as a decision to save (#23). */
 interface Offer { offer: string; session: string; command: string; scope: string }
-
-/** How long ago, in the largest whole unit that is at least 1: 2d, 3h, 5m, 30s. */
-function age(ms: number): string {
-  for (const [unit, size] of [['d', 86_400_000], ['h', 3_600_000], ['m', 60_000]] as const) if (ms >= size) return `${Math.floor(ms / size)}${unit}`;
-  return `${Math.max(0, Math.floor(ms / 1000))}s`;
-}
 
 /** `deep inbox [answer <ask> <option> | undo <ask> | save <offer>]`: exit 0 listed or counted, 2 a usage error, 3 not decided, 1 refused otherwise. */
 export async function inboxCommand(args: readonly string[]): Promise<number> {
@@ -72,7 +67,7 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
   const rows = (reply.result.asks as Row[]).filter((r) => r.status !== 'closed');
   if (!rows.length) process.stdout.write('No open asks.\n');
   for (const r of rows) {
-    process.stdout.write(`${r.ask}  ${r.kind}  ${r.session}  ${age(r.age)}  ${r.status}  ${r.question}  [${r.options.join(' | ')}]\n`);
+    process.stdout.write(`${r.ask}  ${r.kind}  ${r.session}  ${elapsed(r.age)}  ${r.status}  ${r.question}  [${r.options.join(' | ')}]\n`);
     // Before a yes with authority, what will happen: each step, what it changes, its undo and its cost (#69).
     if (!r.plan) continue;
     process.stdout.write(`    plan ${r.plan.hash.slice(0, 12)}: ${r.plan.steps.length} step${r.plan.steps.length === 1 ? '' : 's'}, ${r.plan.steps.filter((s) => s.undo === "can't undo").length} can't be undone\n`);
@@ -80,7 +75,7 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
   }
   // What was decided for you in the last day (#27), each line led by its label so no reader takes it for an open ask.
   for (const r of (reply.result.asks as Row[]).filter((r) => r.outcome === 'decided_for_you' && r.age < DAY_MS)) {
-    process.stdout.write(`decided for you  ${r.ask}  ${r.decision ?? ''}  ${r.session}  ${age(r.age)}  ${r.question}  → ${r.answer ?? ''}\n`);
+    process.stdout.write(`decided for you  ${r.ask}  ${r.decision ?? ''}  ${r.session}  ${elapsed(r.age)}  ${r.question}  → ${r.answer ?? ''}\n`);
   }
   // What you said yes to in the terminal, offered back: one click saves it as a decision.
   for (const o of (reply.result.offers ?? []) as Offer[]) process.stdout.write(`${o.offer}  offered  ${o.session}  save \`${o.command}\` as a decision for ${o.scope}  (deep inbox save ${o.offer})\n`);

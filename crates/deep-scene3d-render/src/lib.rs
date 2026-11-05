@@ -9,8 +9,10 @@
 
 pub mod ao;
 pub mod env;
+mod glass;
 pub mod maps;
 mod mesh;
+mod motion;
 mod oit;
 mod op;
 pub mod shadow;
@@ -144,6 +146,8 @@ pub struct Planted {
     pub ids_ignore_mask: bool,
     /// #424: a cutaway clips the color pass alone, never the shadow passes.
     pub cuts_color_only: bool,
+    /// #428's shading plants as the shader's bits (scene3d.wgsl: `P_*`), 0 for none.
+    pub lobes: u32,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -394,6 +398,48 @@ impl AdjustEntry {
     }
 }
 
+/// The most distinct lobe sets a frame shades with (#428): its lobe table's entries.
+const LOBE_ENTRIES: usize = 512;
+
+/// scene3d.wgsl's `LobeEntry` (#428): a material's extra lobes, as [`lobe_entry`] packs them.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct LobeEntry {
+    v: [[f32; 4]; 8],
+}
+
+/// A material's lobes as the shader reads them; `seed` its flake seed, the pattern seed's hash.
+fn lobe_entry(l: &light::Lobes, seed: u32, scale: f64) -> LobeEntry {
+    let c = |v: [f64; 3], w: f64| [v[0] as f32, v[1] as f32, v[2] as f32, w as f32];
+    LobeEntry {
+        v: [
+            c(l.sheen, l.sheen_roughness),
+            [
+                l.anisotropy as f32,
+                l.anisotropy_rotation as f32,
+                l.diffuse_roughness as f32,
+                l.retroreflection as f32,
+            ],
+            c(l.translucency, l.wrap.unwrap_or(-1.0)),
+            [
+                l.transmission as f32,
+                l.ior as f32,
+                l.dispersion as f32,
+                (l.thickness * scale) as f32,
+            ],
+            c(l.attenuation, l.iridescence),
+            [
+                l.film_ior as f32,
+                l.film_nm as f32,
+                l.flake_weight as f32,
+                l.flake_size as f32,
+            ],
+            c(l.flakes, l.flake_cos_tilt),
+            [f32::from_bits(seed), l.amount as f32, 0.0, 0.0],
+        ],
+    }
+}
+
 /// scene3d.wgsl's `Lights`: the view, the light count and the lights the policy shades (#421).
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -472,7 +518,61 @@ fn dfg_table() -> Vec<[f32; 4]> {
             at[1] = (sb / f64::from(N)) as f32;
         }
     }
+    // The sheen table's entries, written the first time a scene shades sheen (#428).
+    out.resize(1024, [0.0; 4]);
     out
+}
+
+/// The sheen lobe's directional albedo (#428): ∫ D V (n·l) dω of Charlie's distribution and
+/// Estevez and Kulla's visibility (KHR_materials_sheen) at α = max(roughness, 10⁻³)², on the
+/// grid of 64 cos views by 32 sheen roughnesses, packed four to an entry after the DFG table.
+fn sheen_table() -> Vec<[f32; 4]> {
+    use std::f64::consts::PI;
+    let l = |x: f64, a: f64| {
+        let t = (1.0 - a) * (1.0 - a);
+        let m = |p: f64, q: f64| p + (q - p) * t;
+        m(21.5473, 25.3245) / (1.0 + m(3.82987, 3.32435) * x.powf(m(0.19823, 0.16801)))
+            + m(-1.97760, -1.27393) * x
+            + m(-4.32054, -4.85967)
+    };
+    let lambda = |c: f64, a: f64| {
+        if c < 0.5 {
+            l(c, a).exp()
+        } else {
+            (2.0 * l(0.5, a) - l(1.0 - c, a)).exp()
+        }
+    };
+    const T: u32 = 128;
+    const P: u32 = 64;
+    let mut flat = vec![0f32; 2048];
+    for j in 0..32u32 {
+        let r = f64::from(j) / 31.0;
+        let a = r.max(1e-3).powi(2);
+        for i in 0..64u32 {
+            let nv = (f64::from(i) / 63.0).max(1.0 / 128.0);
+            let v = [(1.0 - nv * nv).sqrt(), 0.0, nv];
+            let mut e = 0.0;
+            for ti in 0..T {
+                let th = (f64::from(ti) + 0.5) * PI / 2.0 / f64::from(T);
+                let (st, ct) = th.sin_cos();
+                for pi in 0..P {
+                    let ph = (f64::from(pi) + 0.5) * 2.0 * PI / f64::from(P);
+                    let lv = [st * ph.cos(), st * ph.sin(), ct];
+                    let h = [v[0] + lv[0], v[1] + lv[1], v[2] + lv[2]];
+                    let hl = (h[0] * h[0] + h[1] * h[1] + h[2] * h[2]).sqrt();
+                    let nh = h[2] / hl;
+                    let sin2 = (1.0 - nh * nh).max(1e-7);
+                    let d = (2.0 + 1.0 / a) * sin2.powf(0.5 / a) / (2.0 * PI);
+                    let vis = (1.0 / ((1.0 + lambda(nv, a) + lambda(ct, a)) * 4.0 * nv * ct))
+                        .clamp(0.0, 1.0);
+                    e += d * vis * ct * st;
+                }
+            }
+            let dw = (PI / 2.0 / f64::from(T)) * (2.0 * PI / f64::from(P));
+            flat[(j * 64 + i) as usize] = (e * dw).min(1.0) as f32;
+        }
+    }
+    flat.chunks(4).map(|c| [c[0], c[1], c[2], c[3]]).collect()
 }
 
 /// A text record's flag: the label pass draws its color after the upscale (scene3d.wgsl).
@@ -657,6 +757,77 @@ fn solid_record(
     }
 }
 
+/// Each solid's tie rank (#421, #428): only solids whose bounds overlap can share a face, so
+/// each takes, in ID order, the least rank no overlapping solid of an earlier ID holds. Two
+/// solids that could tie always differ and keep their order every frame, while the depth push
+/// stays a few ranks deep, so a thin part just in front of another is never pushed behind it.
+fn tie_ranks<'a>(solids: impl Iterator<Item = &'a Solid>) -> BTreeMap<String, u32> {
+    const TOUCH: f64 = 1e-5;
+    let mut list: Vec<(&str, [f64; 3], [f64; 3])> = solids
+        .map(|s| {
+            let corners = match &s.mesh {
+                Some(m) => {
+                    let [lo, hi] = m.bounds();
+                    (0..8)
+                        .map(|c| {
+                            let p = [0, 1, 2].map(|k| if c >> k & 1 == 0 { lo[k] } else { hi[k] });
+                            [0, 1, 2].map(|r| {
+                                let m = &s.model[r];
+                                m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3]
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                }
+                None => deep_canvas_scene3d::scene::corners(&s.model),
+            };
+            let mut lo = [f64::INFINITY; 3];
+            let mut hi = [f64::NEG_INFINITY; 3];
+            for c in corners {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(c[k] - TOUCH);
+                    hi[k] = hi[k].max(c[k] + TOUCH);
+                }
+            }
+            (s.id.as_str(), lo, hi)
+        })
+        .collect();
+    list.sort_unstable_by(|a, b| a.0.cmp(b.0));
+    let n = list.len();
+    let mut by_x: Vec<usize> = (0..n).collect();
+    by_x.sort_unstable_by(|a, b| list[*a].1[0].total_cmp(&list[*b].1[0]));
+    let mut earlier: Vec<Vec<usize>> = vec![Vec::new(); n];
+    let mut active: Vec<usize> = Vec::new();
+    for &i in &by_x {
+        active.retain(|&j| list[j].2[0] >= list[i].1[0]);
+        for &j in &active {
+            if (1..3).all(|k| list[i].1[k] <= list[j].2[k] && list[j].1[k] <= list[i].2[k]) {
+                earlier[i.max(j)].push(i.min(j));
+            }
+        }
+        active.push(i);
+    }
+    let mut ranks = vec![0u32; n];
+    let mut used = Vec::new();
+    for i in 0..n {
+        used.clear();
+        used.extend(earlier[i].iter().map(|&j| ranks[j]));
+        used.sort_unstable();
+        let mut r = 0;
+        for &u in &used {
+            if u == r {
+                r += 1;
+            } else if u > r {
+                break;
+            }
+        }
+        ranks[i] = r;
+    }
+    list.iter()
+        .zip(ranks)
+        .map(|((id, ..), r)| (id.to_string(), r))
+        .collect()
+}
+
 /// A record's flag: a cast-only level drawn inside its surface by its inset (#425).
 const INSET: u32 = 1 << 15;
 
@@ -716,6 +887,28 @@ const ADD: u8 = 1;
 const FADE: u8 = 2;
 /// A per-pixel item's fragments into the lists (#424); index 4, after the fade's two.
 const PER_PIXEL: u8 = 4;
+/// A blend or add part drawn after the glass, with its pipeline (#428).
+type LateDraw = (
+    wgpu::RenderPipeline,
+    (
+        wgpu::Buffer,
+        wgpu::Buffer,
+        u32,
+        wgpu::Buffer,
+        u32,
+        wgpu::BindGroup,
+    ),
+);
+
+/// A transmissive part (#428): drawn after the geometry pass over the opaque scene's copy.
+const GLASS: u8 = 5;
+
+/// Whether a solid transmits light (#428; Material: transmission).
+fn transmits(s: &Solid) -> bool {
+    s.material.is_some_and(|m| {
+        m.lobes.transmission > 0.0 && !m.alpha_mode.see_through() && m.catch.is_none()
+    })
+}
 
 fn pack(c: [u8; 3]) -> u32 {
     u32::from_le_bytes([c[0], c[1], c[2], 255])
@@ -729,7 +922,7 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-fn extent([width, height]: [u32; 2]) -> wgpu::Extent3d {
+pub(crate) fn extent([width, height]: [u32; 2]) -> wgpu::Extent3d {
     wgpu::Extent3d {
         width,
         height,
@@ -1145,6 +1338,9 @@ pub type Camera = ([f64; 16], [f64; 3], f64);
 
 pub struct Renderer {
     planted: Planted,
+    /// Motion blur by velocity (#419): its pipelines, and this frame's pass when it blurs.
+    motion: motion::MotionPass,
+    motion_frame: Option<motion::Frame>,
     epoch: u64,
     /// The material maps' textures and bind groups (#423), and the look's default taps.
     maps: maps::Store,
@@ -1178,10 +1374,19 @@ pub struct Renderer {
     /// The see-through solids' pipelines, blend and add, each compiled the first time a batch
     /// draws one.
     solid_layout: wgpu::PipelineLayout,
-    clear_pipelines: [Option<wgpu::RenderPipeline>; 5],
+    clear_pipelines: [Option<wgpu::RenderPipeline>; 6],
     /// This frame's adjust table (#424), each distinct adjust once, entry k + 1 at k.
     adjust_buffer: wgpu::Buffer,
     adjusts: Vec<AdjustEntry>,
+    /// This frame's lobe table (#428), each distinct lobe set once, entry k + 1 at k.
+    lobe_buffer: wgpu::Buffer,
+    lobe_table: Vec<LobeEntry>,
+    /// The opaque scene's copy with mips while a scene holds a transmissive part (#428), and the
+    /// texel that stands in for it.
+    glass: Option<glass::Glass>,
+    glass_stub: wgpu::TextureView,
+    /// Whether the DFG buffer holds the sheen table yet (#428).
+    sheen_written: bool,
     /// The per-pixel resolve's lists (#424), and its resolve and sorted-fallback pipelines once
     /// a frame draws a per-pixel item.
     oit: oit::Oit,
@@ -1495,10 +1700,11 @@ fn instance(
 fn lights_bind(
     d: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
-    [lights, dfg, adjusts]: [&wgpu::Buffer; 3],
+    [lights, dfg, adjusts, lobes]: [&wgpu::Buffer; 4],
     oit: &oit::Oit,
     cascades: &wgpu::TextureView,
     env: &EnvState,
+    glass: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     let cube = env.cube.as_ref().map_or(&env.stub, |c| &c.view);
     let to = env.to.as_ref().map_or(&env.stub, |c| &c.view);
@@ -1519,6 +1725,8 @@ fn lights_bind(
             oit.heads.as_entire_binding(),
             oit.nodes.as_entire_binding(),
             oit.info.as_entire_binding(),
+            lobes.as_entire_binding(),
+            wgpu::BindingResource::TextureView(glass),
         ],
     )
 }
@@ -1567,6 +1775,9 @@ fn clear_pipeline(
     let depth_pass = kind == usize::from(FADE) || kind == usize::from(PER_PIXEL);
     let fade_color = kind == usize::from(FADE) + 1;
     let per_pixel = kind == usize::from(PER_PIXEL);
+    // A transmissive part writes its depth and ID and replaces what's behind it: its shading
+    // holds the light it lets through (#428).
+    let glass = kind == usize::from(GLASS);
     let compare = if fade_color {
         wgpu::CompareFunction::Equal
     } else if add && planted.add_without_depth_test {
@@ -1578,7 +1789,9 @@ fn clear_pipeline(
     };
     let depth = wgpu::DepthStencilState {
         format: DEPTH,
-        depth_write_enabled: Some((depth_pass && !per_pixel) || (add && planted.add_writes_depth)),
+        depth_write_enabled: Some(
+            (depth_pass && !per_pixel) || (add && planted.add_writes_depth) || glass,
+        ),
         depth_compare: Some(compare),
         stencil: Default::default(),
         bias: Default::default(),
@@ -1602,7 +1815,7 @@ fn clear_pipeline(
     let targets = [
         Some(wgpu::ColorTargetState {
             format: LINEAR,
-            blend: Some(blend),
+            blend: (!glass).then_some(blend),
             write_mask: if depth_pass {
                 wgpu::ColorWrites::empty()
             } else {
@@ -1612,7 +1825,11 @@ fn clear_pipeline(
         Some(wgpu::ColorTargetState {
             format: IDS,
             blend: None,
-            write_mask: wgpu::ColorWrites::empty(),
+            write_mask: if glass {
+                wgpu::ColorWrites::ALL
+            } else {
+                wgpu::ColorWrites::empty()
+            },
         }),
     ];
     let buffers = mesh_buffers();
@@ -1678,12 +1895,13 @@ fn oit_pipelines(
 }
 
 /// The see-through pipelines' names, by kind: blend, add, a fade's depth pass and its color.
-const CLEAR_NAMES: [&str; 5] = [
+const CLEAR_NAMES: [&str; 6] = [
     "scene3d.blend",
     "scene3d.add",
     "scene3d.fade_depth",
     "scene3d.fade",
     "scene3d.per_pixel",
+    "scene3d.transmission",
 ];
 
 #[allow(clippy::too_many_arguments)]
@@ -1972,12 +2190,37 @@ impl Renderer {
                     wgpu::ShaderStages::FRAGMENT,
                     wgpu::BufferBindingType::Storage { read_only: false },
                 ),
+                // The frame's lobe table (#428).
+                uniform(12, wgpu::ShaderStages::FRAGMENT),
+                // The opaque scene's copy with mips, which transmission samples (#428).
+                wgpu::BindGroupLayoutEntry {
+                    binding: 13,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
             ],
         });
         let oit = oit::Oit::new(d);
+        let glass_stub = texture2d(
+            d,
+            glass::PASS,
+            [1, 1],
+            LINEAR,
+            wgpu::TextureUsages::TEXTURE_BINDING,
+        )
+        .create_view(&Default::default());
         let adjust_buffer = uniform_buffer(
             "scene3d adjusts",
             ADJUSTS * std::mem::size_of::<AdjustEntry>(),
+        );
+        let lobe_buffer = uniform_buffer(
+            "scene3d lobes",
+            LOBE_ENTRIES * std::mem::size_of::<LobeEntry>(),
         );
         let lights_buffer = uniform_buffer("scene3d lights", std::mem::size_of::<LightsUniform>());
         let dfg_buffer = wgpu::util::DeviceExt::create_buffer_init(
@@ -1985,7 +2228,7 @@ impl Renderer {
             &wgpu::util::BufferInitDescriptor {
                 label: Some("scene3d dfg"),
                 contents: bytemuck::cast_slice(&dfg_table()),
-                usage: wgpu::BufferUsages::UNIFORM,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             },
         );
         let env = EnvState {
@@ -2012,10 +2255,11 @@ impl Renderer {
         let lights_bind = lights_bind(
             d,
             &lights_layout,
-            [&lights_buffer, &dfg_buffer, &adjust_buffer],
+            [&lights_buffer, &dfg_buffer, &adjust_buffer, &lobe_buffer],
             &oit,
             &cascade_stub(d),
             &env,
+            &glass_stub,
         );
         let ao = ao::Passes::new(device);
         let maps = maps::Store::new(d, &device.queue);
@@ -2258,9 +2502,14 @@ impl Renderer {
             solid_layout: mesh_layout.clone(),
             maps,
             filter_taps: 8,
-            clear_pipelines: [None, None, None, None, None],
+            clear_pipelines: [None, None, None, None, None, None],
             adjust_buffer,
             adjusts: Vec::new(),
+            lobe_buffer,
+            lobe_table: Vec::new(),
+            glass: None,
+            glass_stub,
+            sheen_written: false,
             oit,
             oit_pipelines: None,
             ties: BTreeMap::new(),
@@ -2296,6 +2545,8 @@ impl Renderer {
                 LABEL_PASS,
             ],
             meshes: BTreeMap::new(),
+            motion: motion::MotionPass::default(),
+            motion_frame: None,
             batches: BTreeMap::new(),
             atlas,
             picks: BTreeMap::new(),
@@ -2353,7 +2604,8 @@ impl Renderer {
         let linear = texture(
             "scene3d linear",
             LINEAR,
-            attach | wgpu::TextureUsages::TEXTURE_BINDING,
+            // Motion blur's resolve copies the frame back in (#419).
+            attach | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         );
         // Effects read the object-ID and depth targets after geometry.
         let ids = texture(
@@ -2664,10 +2916,16 @@ impl Renderer {
         self.lights_bind = lights_bind(
             &device.device,
             &self.lights_layout,
-            [&self.lights_buffer, &self.dfg_buffer, &self.adjust_buffer],
+            [
+                &self.lights_buffer,
+                &self.dfg_buffer,
+                &self.adjust_buffer,
+                &self.lobe_buffer,
+            ],
             &self.oit,
             cascades,
             &self.env,
+            self.glass.as_ref().map_or(&self.glass_stub, |g| &g.view),
         );
         self.lights_generation += 1;
     }
@@ -2791,7 +3049,8 @@ impl Renderer {
         let planted = if self.planted.premixed_metallic { 1 } else { 0 }
             | if self.planted.uncompensated_lobe { 2 } else { 0 }
             | if self.planted.compensates_environment_only { 4 } else { 0 }
-            | if self.planted.ids_ignore_mask { 8 } else { 0 };
+            | if self.planted.ids_ignore_mask { 8 } else { 0 }
+            | self.planted.lobes;
         let mut u = LightsUniform {
             view: view.map(|v| v as f32),
             count: [policy.shaded.len() as u32, 0, planted, 0],
@@ -3030,15 +3289,11 @@ impl Renderer {
         let same = solids.clone().count() == self.ties.len()
             && solids.clone().all(|s| self.ties.contains_key(&s.id));
         if !same && !self.planted.ties_by_submission {
-            let mut ids: Vec<&str> = solids.map(|s| s.id.as_str()).collect();
-            ids.sort_unstable();
-            self.ties.clear();
-            for (rank, id) in ids.into_iter().enumerate() {
-                self.ties.insert(id.to_string(), rank as u32);
-            }
+            self.ties = tie_ranks(solids);
         }
         self.flip = !self.flip;
         self.adjusts.clear();
+        self.lobe_table.clear();
         // A capped cutaway draws the solids through the pipeline that writes a cap's depth.
         self.capped = scene
             .cutaway
@@ -3071,6 +3326,15 @@ impl Renderer {
                 )
             });
         }
+        if !self.lobe_table.is_empty() {
+            deep_gpu::alloc::outside(|| {
+                device.queue.write_buffer(
+                    &self.lobe_buffer,
+                    0,
+                    bytemuck::cast_slice(&self.lobe_table),
+                )
+            });
+        }
         let same = self.order.len() == scene.layers.len()
             && self
                 .order
@@ -3082,6 +3346,38 @@ impl Renderer {
             let order = &self.order;
             self.batches.retain(|id, _| order.contains(id));
         }
+        // Motion blur by velocity (#419), once every solid's mesh is built.
+        self.motion_frame = match (&scene.motion, self.targets.as_ref()) {
+            (Some(m), Some(t)) => self.motion.prepare(
+                device,
+                scene,
+                m,
+                &self.meshes,
+                &t.linear_view,
+                t.size,
+            ),
+            _ => None,
+        };
+    }
+
+    /// A solid's lobe table index above the adjust's, 0 without lobes, or `None` when its lobes
+    /// aren't in this frame's table (#428).
+    fn lobe_slot(&self, s: &Solid) -> Option<u32> {
+        let Some(m) = s.material.as_ref().filter(|m| m.lobes.on()) else {
+            return Some(0);
+        };
+        let scale = if s.mesh.is_some() {
+            det(&s.model).abs().cbrt()
+        } else {
+            1.0
+        };
+        let e = lobe_entry(&m.lobes, m.pattern_seed, scale);
+        let bytes = bytemuck::bytes_of(&e);
+        let k = self
+            .lobe_table
+            .iter()
+            .position(|x| bytemuck::bytes_of(x) == bytes)?;
+        Some((k as u32 + 1) << 16)
     }
 
     /// [`Renderer::prepare`] for a scene that differs from the last one it prepared only in its
@@ -3104,6 +3400,19 @@ impl Renderer {
         {
             return self.prepare(device, scene, look);
         }
+        // A moved part keeps its lobes' entry in the frame's lobe table (#428); one whose lobes
+        // aren't there prepares whole.
+        let mut lobes = Vec::with_capacity(moved.len());
+        for &(l, i) in moved {
+            let index = match scene.layers.get(l).and_then(|layer| layer.solids.get(i)) {
+                Some(s) => self.lobe_slot(s),
+                None => Some(0),
+            };
+            match index {
+                Some(k) => lobes.push(k),
+                None => return self.prepare(device, scene, look),
+            }
+        }
         let generation = self.ao.generation;
         self.prepare_frame(device, scene, look);
         if self.ao.generation != generation {
@@ -3114,7 +3423,7 @@ impl Renderer {
             return;
         }
         let mut written = 0;
-        for &(l, i) in moved {
+        for (&(l, i), &lobe) in moved.iter().zip(&lobes) {
             let layer = &scene.layers[l];
             let Some(batch) = self.batches.get_mut(&layer.id) else {
                 continue;
@@ -3131,7 +3440,7 @@ impl Renderer {
                     tie,
                     !self.planted.winding_ignores_determinant,
                     set_key.1 & MAPS_INDEX != 0,
-                    0,
+                    lobe,
                 );
                 set.write(
                     device,
@@ -3153,6 +3462,25 @@ impl Renderer {
         self.size = scene.size;
         let internal = self.internal();
         self.ensure_targets(device, internal);
+        let sheen = |s: &Solid| {
+            s.material
+                .is_some_and(|m| m.lobes.sheen.iter().any(|c| *c > 0.0))
+        };
+        if !self.sheen_written && scene.layers.iter().flat_map(|l| &l.solids).any(sheen) {
+            let table = sheen_table();
+            deep_gpu::alloc::outside(|| {
+                device
+                    .queue
+                    .write_buffer(&self.dfg_buffer, 512 * 16, bytemuck::cast_slice(&table))
+            });
+            self.sheen_written = true;
+        }
+        // The opaque scene's copy, made while the scene holds a transmissive part (#428).
+        let glass = scene.layers.iter().flat_map(|l| &l.solids).any(transmits);
+        if glass != self.glass.as_ref().is_some_and(|g| g.size == internal) {
+            self.glass = glass.then(|| glass::Glass::new(&device.device, internal));
+            self.rebind_lights(device);
+        }
         let k = f64::from(internal[0]) / f64::from(scene.size[0].max(1));
         self.upload_pages(device, &scene.pages);
         let cam = &scene.camera;
@@ -3362,6 +3690,7 @@ impl Renderer {
         let clear = |s: &Solid| {
             s.per_pixel
                 || faded(s)
+                || transmits(s)
                 || s.material
                     .is_some_and(|m| m.alpha_mode.see_through() || m.catch.is_some())
         };
@@ -3370,13 +3699,15 @@ impl Renderer {
                 PER_PIXEL
             } else if faded(s) {
                 FADE
+            } else if transmits(s) {
+                GLASS
             } else if s.material.is_some_and(|m| m.alpha_mode == AlphaMode::Add) {
                 ADD
             } else {
                 BLEND
             }
         };
-        for k in 0..5 {
+        for k in 0..6 {
             let wanted = layer.solids.iter().any(|s| {
                 clear(s) && usize::from(kind_of(s)) == if k == 3 { usize::from(FADE) } else { k }
             });
@@ -3490,6 +3821,35 @@ impl Renderer {
             };
             k as u32 + 1
         };
+        // Its lobes' entry in the frame's lobe table, 0 for none (#428), above the adjust's.
+        let lobe_table = &mut self.lobe_table;
+        let mut lobes_of = |s: &Solid| -> u32 {
+            let Some(m) = s.material.as_ref().filter(|m| m.lobes.on()) else {
+                return 0;
+            };
+            // The flakes hash the material's pattern seed with the cell.
+            // Thickness scales with the part as glTF's does: a mesh's model, never a primitive
+            // mark's size.
+            let scale = if s.mesh.is_some() {
+                det(&s.model).abs().cbrt()
+            } else {
+                1.0
+            };
+            let e = lobe_entry(&m.lobes, m.pattern_seed, scale);
+            let bytes = bytemuck::bytes_of(&e);
+            let k = match lobe_table
+                .iter()
+                .position(|x| bytemuck::bytes_of(x) == bytes)
+            {
+                Some(k) => k,
+                None if lobe_table.len() < LOBE_ENTRIES => {
+                    lobe_table.push(e);
+                    lobe_table.len() - 1
+                }
+                None => return 0,
+            };
+            (k as u32 + 1) << 16
+        };
         let mut order: Vec<(&Solid, &mut Slot)> = layer.solids.iter().zip(&mut slots).collect();
         // The planted ties_by_submission: the opaque draws' order turns over each frame.
         if self.planted.ties_by_submission && self.flip {
@@ -3499,7 +3859,7 @@ impl Renderer {
         // view depth plus their sort_bias, ties by ID.
         let mut see_through = Vec::new();
         for (s, slot) in order {
-            let adjust = adjust_of(s);
+            let adjust = adjust_of(s) | lobes_of(s);
             let mut record =
                 solid_record(s, slot.2, slot.3, winding, slot.0 .1 & MAPS_INDEX != 0, adjust);
             if clear(s) {
@@ -3686,6 +4046,12 @@ impl Renderer {
         u32,
         wgpu::BindGroup,
     )> {
+        self.clear_kind_draws(PER_PIXEL)
+    }
+
+    /// With glass in the frame, its blend and add parts' draws with their pipelines, in layer
+    /// order then back to front (#428).
+    fn late_draws(&self) -> Vec<LateDraw> {
         let mut draws = Vec::new();
         for id in &self.order {
             let batch = &self.batches[id];
@@ -3693,7 +4059,52 @@ impl Renderer {
                 continue;
             };
             for (k, ((shape, maps), kind)) in batch.clear_draws.iter().enumerate() {
-                if let (PER_PIXEL, Some(mesh)) = (*kind, self.meshes.get(shape)) {
+                if *kind != BLEND && *kind != ADD {
+                    continue;
+                }
+                let (Some(mesh), Some(pipeline)) = (
+                    self.meshes.get(shape),
+                    &self.clear_pipelines[usize::from(*kind)],
+                ) else {
+                    continue;
+                };
+                draws.push((
+                    pipeline.clone(),
+                    (
+                        mesh.vertices.clone(),
+                        mesh.indices.clone(),
+                        mesh.count,
+                        buffer.clone(),
+                        k as u32,
+                        self.maps.by_index(*maps).clone(),
+                    ),
+                ));
+            }
+        }
+        draws
+    }
+
+    /// Every see-through draw of `kind` across the batches, in layer order then back to front.
+    #[allow(clippy::type_complexity)]
+    fn clear_kind_draws(
+        &self,
+        of: u8,
+    ) -> Vec<(
+        wgpu::Buffer,
+        wgpu::Buffer,
+        u32,
+        wgpu::Buffer,
+        u32,
+        wgpu::BindGroup,
+    )> {
+        let mut draws = Vec::new();
+        for id in &self.order {
+            let batch = &self.batches[id];
+            let Some(buffer) = &batch.clear.buffer else {
+                continue;
+            };
+            for (k, ((shape, maps), kind)) in batch.clear_draws.iter().enumerate() {
+                if let (true, Some(mesh)) = (*kind == of, self.meshes.get(shape)) {
                     draws.push((
                         mesh.vertices.clone(),
                         mesh.indices.clone(),
@@ -3764,6 +4175,12 @@ impl Renderer {
                 let Some(mesh) = self.meshes.get(shape) else {
                     continue;
                 };
+                // Transmissive parts draw after the opaque scene's copy, and with them in the
+                // frame, blend and add parts after them, so the copy holds the opaque scene alone
+                // and a see-through part in front of glass shows over it (#428).
+                if *kind == GLASS || (self.glass.is_some() && (*kind == BLEND || *kind == ADD)) {
+                    continue;
+                }
                 let k = k as u32;
                 // A fade draws its depth pass, then its color where that depth holds (#424).
                 let kinds = if *kind == FADE {
@@ -4001,6 +4418,24 @@ impl Renderer {
             _ => None,
         };
         let staging = resolve.as_ref().map(|_| self.oit.staging.clone());
+        // Transmissive parts over the opaque scene's copy (#428).
+        let glass_draws = self.clear_kind_draws(GLASS);
+        let glass = match (&self.glass, &self.clear_pipelines[usize::from(GLASS)]) {
+            (Some(_), Some(pipeline)) if !glass_draws.is_empty() => Some((
+                self.late_draws(),
+                pipeline.clone(),
+                [
+                    self.frame_bind.clone(),
+                    self.lights_bind.clone(),
+                    self.ao.shade().clone(),
+                ],
+                glass_draws,
+            )),
+            _ => None,
+        };
+        let glass_copy = glass.as_ref().and(self.glass.clone());
+        let linear_texture = t.linear.clone();
+        let motion = self.motion_frame.take().map(|m| (m, t.linear.clone()));
         let geometry: Job = Box::new(move |encoder| {
             if let Some((heads, ..)) = &resolve {
                 encoder.clear_buffer(heads, 0, None);
@@ -4017,9 +4452,7 @@ impl Renderer {
                     timestamps,
                 )
             });
-            let Some((_, info, pipeline, fallback, binds, draws)) = &resolve else {
-                return;
-            };
+            if let Some((_, info, pipeline, fallback, binds, draws)) = &resolve {
             timed(
                 &profiler,
                 "scene3d.resolve",
@@ -4074,6 +4507,26 @@ impl Renderer {
             // The frame's count, which `check_fragments` reads once the frame is done.
             if let Some(staging) = &staging {
                 encoder.copy_buffer_to_buffer(info, 0, staging, 0, 16);
+            }
+            }
+            if let (Some((late, pipeline, binds, draws)), Some(copy)) = (&glass, &glass_copy) {
+            timed(&profiler, glass::PASS, encoder, |encoder, timestamps| {
+                copy.record(encoder, &linear_texture);
+                glass_pass(
+                    encoder,
+                    [&linear, &ids, &depth],
+                    pipeline,
+                    binds,
+                    draws,
+                    late,
+                    timestamps,
+                );
+            });
+            }
+            // Motion blur by velocity resolves the finished geometry, glass included, before the
+            // effects (#419).
+            if let Some((m, linear)) = &motion {
+                m.record(encoder, linear, &profiler);
             }
         });
         let mut jobs: Vec<(String, Job)> = Vec::new();
@@ -4976,6 +5429,73 @@ fn geometry_pass<'a>(
             pass.draw(0..6, 0..*count);
         }
     });
+}
+
+/// The transmissive parts' pass (#428): each drawn over the targets the geometry pass wrote,
+/// reading the opaque scene's copy.
+#[allow(clippy::type_complexity)]
+fn glass_pass(
+    encoder: &mut wgpu::CommandEncoder,
+    [linear, ids, depth]: [&wgpu::TextureView; 3],
+    pipeline: &wgpu::RenderPipeline,
+    binds: &[wgpu::BindGroup; 3],
+    draws: &[(
+        wgpu::Buffer,
+        wgpu::Buffer,
+        u32,
+        wgpu::Buffer,
+        u32,
+        wgpu::BindGroup,
+    )],
+    late: &[LateDraw],
+    timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+) {
+    let load = wgpu::Operations {
+        load: wgpu::LoadOp::Load,
+        store: wgpu::StoreOp::Store,
+    };
+    let color = |view| {
+        Some(wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            depth_slice: None,
+            ops: load,
+        })
+    };
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some(glass::PASS),
+        color_attachments: &[color(linear), color(ids)],
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: depth,
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Load,
+                store: wgpu::StoreOp::Store,
+            }),
+            stencil_ops: None,
+        }),
+        timestamp_writes: timestamps,
+        ..Default::default()
+    });
+    for (i, b) in binds.iter().enumerate() {
+        pass.set_bind_group(i as u32, b, &[]);
+    }
+    pass.set_pipeline(pipeline);
+    for (vertices, indices, count, instances, k, maps) in draws {
+        pass.set_bind_group(3, maps, &[]);
+        pass.set_vertex_buffer(0, vertices.slice(..));
+        pass.set_vertex_buffer(1, instances.slice(..));
+        pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+        pass.draw_indexed(0..*count, 0, *k..*k + 1);
+    }
+    // Blend and add parts, back to front, over the glass (#428).
+    for (pipeline, (vertices, indices, count, instances, k, maps)) in late {
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(3, maps, &[]);
+        pass.set_vertex_buffer(0, vertices.slice(..));
+        pass.set_vertex_buffer(1, instances.slice(..));
+        pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+        pass.draw_indexed(0..*count, 0, *k..*k + 1);
+    }
 }
 
 /// One full-screen triangle into `target` with `pipeline` and its bind group.

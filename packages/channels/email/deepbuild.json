@@ -1,0 +1,11 @@
+{
+  "id": "deepbuild/channel-email",
+  "version": "1.0.0",
+  "digest": "d1:82322075143286df9b75d2262bceaa1008f572e5ba6f257bc26cbc5f87555c24",
+  "requires": {
+    "preview": [
+      "deep.registerChannel",
+      "deep.channel.fetch"
+    ]
+  }
+}
