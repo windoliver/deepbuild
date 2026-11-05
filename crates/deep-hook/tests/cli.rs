@@ -608,3 +608,44 @@ fn a_hook_the_agent_runs_through_sh_names_the_agent_as_its_parent() {
         "the spooled request names this process as the agent: {spooled}"
     );
 }
+
+#[test]
+fn a_print_runs_waiter_under_its_entrys_shell_exits_at_once() {
+    // `claude -p` → `/bin/sh -c '<waiter>'` → the waiter: the print run is the shell's parent, not the waiter's, where
+    // the shell stays as dash does (#668, #992). `exit $?` keeps the inner shell from exec'ing the waiter on any sh.
+    use std::os::unix::process::CommandExt;
+    let home = short_home("printsh");
+    let bin = env!("CARGO_BIN_EXE_deep-hook");
+    let mut agent = Command::new("/bin/sh")
+        .args([
+            "-c",
+            &format!("/bin/sh -c ''\\''{bin}'\\'' claude-code waiter; exit $?'; exit $?"),
+            "claude",
+            "-p",
+        ])
+        .env_clear()
+        .env("HOME", &home)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    feed(
+        &mut agent,
+        br#"{"session_id":"s668","cwd":"/tmp","hook_event_name":"Stop"}"#,
+    );
+    let started = std::time::Instant::now();
+    let exited = exit_within(&mut agent, started, std::time::Duration::from_secs(3));
+    // A waiter still waiting outlives the agent killed above, under its shell: its group goes with it.
+    let _ = Command::new("kill")
+        .args(["-KILL", "--", &format!("-{}", agent.id())])
+        .stderr(std::process::Stdio::null())
+        .status();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(
+        exited.and_then(|s| s.code()),
+        Some(0),
+        "under `claude -p` and its entry's shell the waiter must exit 0 at once; it was still waiting after 3 s"
+    );
+}
