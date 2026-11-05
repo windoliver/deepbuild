@@ -101,6 +101,11 @@ struct Args {
     hidden: BTreeSet<String>,
     /// Each frame reports the key sun's cascade splits (#422).
     cascades: bool,
+    /// Each frame reports its level-of-detail rows and its light cut, and each captured frame
+    /// its band masks (#425).
+    lod: bool,
+    light_cut: bool,
+    masks: bool,
 }
 
 /// Milliseconds from this process's spawn, as the kernel records its start, to now.
@@ -390,6 +395,9 @@ fn parse(call: &Value) -> Result<Args, Value> {
             .map(str::to_string)
             .collect(),
         cascades: call["cascades"].as_bool().unwrap_or(false),
+        lod: call["lod"].as_bool().unwrap_or(false),
+        light_cut: call["light_cut"].as_bool().unwrap_or(false),
+        masks: call["masks"].as_bool().unwrap_or(false),
     })
 }
 
@@ -872,6 +880,13 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         &mut map_paths,
     )?;
     let mut receipt = Value::Null;
+    // Level of detail and the light cut, chosen from each frame's view (#425).
+    let mut selection = crate::lod::Selection::new(app.planted);
+    let drawn_scale = if args.surface.scale < 1.0 && !noop {
+        args.surface.scale
+    } else {
+        1.0
+    };
     // Whether the key sun drew its cascades in any frame: the shadow pass the reply lists (#424).
     let mut casts = false;
     let result = (|| -> Result<(), Value> {
@@ -955,6 +970,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 app.planted == Some(Planted::EdgesUnwelded),
                 app.planted == Some(Planted::EdgesSkipDepth),
             );
+            let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
             // Each mesh-edge line's segments, in world metres, as `counts` reports them.
             let edge_segments: Map<String, Value> = scene
                 .layers
@@ -1255,6 +1271,29 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
                 frame.insert("compiled".into(), json!(compiled));
                 frame.insert("segments".into(), Value::Object(edge_segments));
+            }
+            if args.lod {
+                frame.insert("lod".into(), crate::lod::rows(&choices));
+            }
+            if args.light_cut {
+                frame.insert("light_cut".into(), crate::lod::cut_json(&evaluated, &cut));
+            }
+            if args.masks && capture && !noop {
+                let mut rows = Vec::new();
+                for c in choices.iter().filter(|c| c.bands.len() == 2) {
+                    let (Some(level), Some(&(_, key))) =
+                        (c.blend, drawn.picks.iter().find(|(id, _)| *id == c.item))
+                    else {
+                        continue;
+                    };
+                    for (pass, size, bytes) in session3::masks(app, key, level) {
+                        let file = write_named(out, &bytes, "u8")?;
+                        rows.push(
+                            json!({"item": c.item, "pass": pass, "size": size, "file": file}),
+                        );
+                    }
+                }
+                frame.insert("masks".into(), json!(rows));
             }
             if args.cascades {
                 // Each shadow map the key sun draws: its key, which holds the planes that cut its

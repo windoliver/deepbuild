@@ -244,6 +244,28 @@ pub fn mesh(bytes: &[u8], node: &Value) -> Result<Mesh, Fault> {
         }
         let base = m.positions.len() as u32;
         let from = m.triangles();
+        // The simplify job's index-only levels over these vertices (#425), coarser after.
+        if let Some(lod) = prim.pointer("/extras/lod") {
+            m.lod_extent = lod["extent"].as_f64().unwrap_or(0.0);
+            for (k, level) in lod["levels"].as_array().into_iter().flatten().enumerate() {
+                let (Some(acc), Some(error)) = (level["indices"].as_u64(), level["error"].as_f64())
+                else {
+                    return Err(bad("a level without indices or error"));
+                };
+                let idx: Vec<u32> = accessor(&doc, &bin, acc as usize, 1)?
+                    .into_iter()
+                    .map(|r| base + r[0] as u32)
+                    .collect();
+                if idx.len() % 3 != 0 || idx.iter().any(|i| (*i - base) as usize >= positions.len())
+                {
+                    return Err(bad("a level's index past its positions"));
+                }
+                match m.lods.get_mut(k) {
+                    Some(l) => l.0.extend(idx),
+                    None => m.lods.push((idx, error)),
+                }
+            }
+        }
         for (p, n) in positions.iter().zip(&normals) {
             m.vertex(*p, *n);
         }
