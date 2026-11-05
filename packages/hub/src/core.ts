@@ -1615,7 +1615,7 @@ export class Core {
     const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
     const rules = readJson(join(this.root.dir, 'rules.json'));
     const entries = isObj(rules) && isObj(rules.entries) ? rules.entries : {};
-    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete)$/.test(String(e.match)); });
+    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete|discard-edits|drop-stash)$/.test(String(e.match)); });
     return blocks.length ? { guard: blocks.join(', ').slice(0, 2000), label: callOf(d, effectEntries(this.root.dir)).label.slice(0, 2000) } : undefined;
   }
 
@@ -3070,15 +3070,15 @@ export class Core {
       if (deny) return { deny, rule: "the gate's repeated-send rule (#85)" };
       if (!call.classes.length && !call.mcp && !call.decided?.length && call.stage === undefined) return {};
     }
-    // A cloud resource nobody can be asked about from here stays denied, as with the hub down; a delete whose reach
-    // can't be worked out runs only staged.
+    // A cloud resource nobody can be asked about from here stays denied, as with the hub down; a destructive command
+    // runs only staged.
     if (FOREIGN.has(meta.agent) || !meta.session) {
       if (call.decided?.includes('cloud-resource')) return { deny: 'DeepBuild blocked this: creating a cloud resource the plan doesn\'t name needs your standing rule or your answer, and this session can\'t be asked.' };
       return call.stage !== undefined ? this.staging.gate(meta, call, false) : {};
     }
     const held = await this.holds.gate(meta, call);
     if (held) return { held };
-    // A delete whose reach can't be worked out runs only once what it names is staged, or you said yes (#347).
+    // A destructive command runs only once what it reaches is staged, or you said yes (#347, #1294).
     if (call.stage !== undefined) {
       const staged = await this.staging.gate(meta, call, true);
       if (staged.held) return staged;
