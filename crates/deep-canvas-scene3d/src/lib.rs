@@ -5,6 +5,7 @@ pub mod build;
 pub mod builders;
 pub mod building;
 pub mod curve;
+pub mod cut;
 pub mod frames;
 /// The look's finish in f64, which the look module owns (#418).
 pub use deep_canvas_marks::finish;
