@@ -1,0 +1,26 @@
+deepbuild #990 PR #1276 commit 897777a4976ca4002e7313826a51a0c793c6bcab
+hw.model Mac15,12
+commit 897777a4976ca4002e7313826a51a0c793c6bcab
+14.7.7
+22:40  up 37 days,  3:05, 2 users, load averages: 7.11 13.39 11.27
+v24.22.0
+
+990 (vitest --root tests/acceptance/990 --no-file-parallelism, no DEEP_990_LIVE): Test Files 8 failed (8); Tests 21 failed | 1 passed (22)
+Live VoiceOver run: SKIPPED (owner approved the automated part only)
+PNGs: none written (AC8 failed before its screenshots: program never showed on screen)
+
+Failure causes (count):
+   7 AssertionError: the program is up: the screen shows it within 30000 ms; the screen: []: expected false to be true // Object.is equality
+   2 AssertionError: the shell's prompt: the screen shows it within 30000 ms; the screen: []: expected false to be true // Object.is equality
+   2 AssertionError: the program in normal mode is up: the screen shows it within 30000 ms; the screen: []: expected false to be true // Object.is equality
+   2 AssertionError: INCONCLUSIVE: no bash 5.1 or newer (readline with bracketed paste) at /bin, /usr/bin, /opt/homebrew/bin or /usr/local/bin; this is not a pass
+   1 AssertionError: three readings in order, nothing else moved: expected [ …(2) ] to deeply equal []
+   1 AssertionError: the restarted program is up: the screen shows it within 30000 ms; the screen: []: expected false to be true // Object.is equality
+   1 AssertionError: the program printed "timeout" on its screen: expected false to be true // Object.is equality
+   1 AssertionError: the planted status_sets_state fails, naming the reading: ["the program-status query (OSC 7501 ; ?) got no answer in 2 s","the session's row shows the readings [], not working, blocked 
+   1 AssertionError: every answer, in order, and nothing for the clipboard read: expected [ Array(1) ] to deeply equal []
+   1 AssertionError: every answer came before the key k, the first missing being named: the program read "k\x1b[?62;22c\x1b[5;10R\x1b[?2004;1$y\x1b[?1u\x1b]10;rgb:e8e8/e8e8/e8e8\x07\x1b]11;rgb:1010/1010/10
+   1 AssertionError: each click reaches its program as column 15, row 6 (SGR, press and release): expected { A: '', B: '' } to deeply equal { …(2) }
+   1 AssertionError: INCONCLUSIVE: the VoiceOver test needs a person at the reference Mac with VoiceOver on; run with DEEP_990_LIVE=1 (README: The live runs); this is not a pass
+
+Rerun with caffeinate -d -i (display held awake): identical result, Test Files 8 failed (8); Tests 21 failed | 1 passed (22); same failure causes. Display sleep is not the cause.
