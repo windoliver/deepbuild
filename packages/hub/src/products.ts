@@ -172,6 +172,10 @@ export class Products {
   /** The repo's git common folder, by repo, for the builds. */
   private readonly repos = new Map<string, string>();
   private readonly values = new Map<string, { at: number; key: Promise<string> }>();
+  private readonly starts = new Map<string, Promise<string | undefined>>();
+  private opened!: () => void;
+  /** Once the index is read and the guard installed: a session that starts before then waits for it. */
+  private readonly ready = new Promise<void>((done) => { this.opened = done; });
 
   constructor(private readonly o: ProductsOptions) {
     this.store = join(o.root, 'products');
@@ -184,6 +188,10 @@ export class Products {
     mkdirSync(join(this.store, '.building'), { recursive: true });
     try { this.index = JSON.parse(readFileSync(this.indexFile, 'utf8')) as Index; } catch { /* a new store */ }
     this.index.entries = this.index.entries.filter((e) => existsSync(this.entryDir(e)));
+    try { await this.secure(); } finally { this.opened(); }
+  }
+  /** The guard entry that keeps the store read-only to sessions, and the watch that finds a change made anyway. */
+  private async secure(): Promise<void> {
     if (this.o.plant === 'store-writable') return;
     const real = realpathSync(this.store);
     const globs = [...new Set([this.store, real])].flatMap((p) => [p, `${p}/*`]).join(' ');
@@ -245,8 +253,19 @@ export class Products {
   // ---- A session's start: the worktree receives what its keys match.
 
   /** At a session's start in `cwd`: places each product whose kept key the worktree's files make, then sees to the default branch's entries. The lines its session start shows. */
-  async sessionStart(session: string, cwd: string): Promise<string | undefined> {
+  sessionStart(session: string, cwd: string, hook: string): Promise<string | undefined> {
+    // One start, whether its reply asked first or its hook's record did (a spooled start has no reply).
+    let started = this.starts.get(hook);
+    if (!started) {
+      started = this.start(session, cwd);
+      this.starts.set(hook, started);
+      if (this.starts.size > 1000) this.starts.delete(this.starts.keys().next().value!);
+    }
+    return started;
+  }
+  private async start(session: string, cwd: string): Promise<string | undefined> {
     if (!cwd) return undefined;
+    await this.ready;
     const repo = await this.repoAt(cwd);
     if (!repo || !(await this.o.trusted(cwd))) return undefined;
     let products: Product[];
@@ -488,18 +507,18 @@ export class Products {
       s.open.delete(meta.toolUse);
       if (this.o.plant === 'store-writable') return;
       // The watch hears a write a moment after it lands.
-      setTimeout(() => void this.claim(meta.session, meta.toolUse!, from).catch(() => undefined), 1500);
+      setTimeout(() => void this.claim(meta.session, meta.toolUse!, from, now).catch(() => undefined), 1500);
     }
   }
 
   /** The kept files that changed while the call ran: recorded on it, and each entry they're in built again. */
-  private async claim(session: string, call: string, from: number): Promise<void> {
-    // A file the watch named counts once its own change is as late as the call: its status time, or its going. The
-    // rename that keeps a new entry is the hub's own, and changes no file's status time.
+  private async claim(session: string, call: string, from: number, to: number): Promise<void> {
+    // A file the watch named is the call's when its own change falls while the call ran: its status time, or, for a
+    // file gone, when the watch heard of it. The rename that keeps a new entry is the hub's own, and changes no file's
+    // status time.
     const files = [...this.changed].filter(([f, at]) => {
-      if (at < from) return false;
       const e = this.entryOf(f);
-      try { const t = lstatSync(f).ctimeMs; return t >= from - 20 && t > (e?.finished ?? 0); } catch { return true; }
+      try { const t = lstatSync(f).ctimeMs; return t >= from - 20 && t <= to + 50 && t > (e?.finished ?? 0); } catch { return at >= from && at <= to + 1500; }
     }).map(([f]) => f);
     for (const [f, at] of this.changed) if (at < this.o.now() - 60_000) this.changed.delete(f);
     if (!files.length) return;

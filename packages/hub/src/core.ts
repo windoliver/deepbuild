@@ -484,7 +484,7 @@ export class Core {
   /** The queue `deep lease` waits in, and the heavy commands it holds leases for (#1015). */
   private heavy!: HeavyQueue;
   private pool?: JobPool;
-  private products!: Products;
+  private readonly products: Products;
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   private index!: Promise<IndexFill | undefined>;
   /** A package's index, once rebuilt from the pages. */
@@ -689,6 +689,20 @@ export class Core {
       raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
       pin: (cwd, question) => this.pinOf(cwd, question),
+    });
+    // Shared build products (#1017): made first, so a session that starts while the hub opens finds them; their builds
+    // take the host and the lease queue only once a session's start asks.
+    this.products = new Products({
+      root: this.root.dir, now: this.now, plant: this.options.plant,
+      trusted: (cwd) => this.projectTrusted(cwd),
+      append: async (kind, data, session) => {
+        const ts = this.now();
+        const agent = session ? this.sessions.get(session)?.agent : undefined;
+        await this.append(this.connection('core', session ? { session, ...(agent ? { agent } : {}) } : {}), { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue });
+      },
+      build: (b) => this.buildProduct(b),
+      openUnder,
+      guard: (given) => addGuards(this.root.dir, given, { deepHook: deepHook(), classes: toolClasses(), plant: this.options.plant }),
     });
     this.staging = new Staging({
       root: this.root.dir, raw: (query, params) => this.record.raw(query, params), now: this.now, plant: options.plant, holds: this.holds,
@@ -935,19 +949,7 @@ export class Core {
       ? ((await import(pathToFileURL(this.options.host).href)) as { default: (local: Host) => Host }).default(this.supervisor)
       : this.supervisor;
     this.every('supervisor', 1000, () => this.supervisor.tick());
-    // Shared build products (#1017): the store, its guard entry, and its watch.
-    this.products = new Products({
-      root: this.root.dir, now: this.now, plant: this.options.plant,
-      trusted: (cwd) => this.projectTrusted(cwd),
-      append: async (kind, data, session) => {
-        const ts = this.now();
-        const agent = session ? this.sessions.get(session)?.agent : undefined;
-        await this.append(this.connection('core', session ? { session, ...(agent ? { agent } : {}) } : {}), { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue });
-      },
-      build: (b) => this.buildProduct(b),
-      openUnder,
-      guard: (given) => addGuards(this.root.dir, given, { deepHook: deepHook(), classes: toolClasses(), plant: this.options.plant }),
-    });
+    // Shared build products (#1017): the store's index, its guard entry and its watch; session starts wait for it.
     await this.products.open();
     const config = this.config();
     // A paid check's price comes from its kind's lookup; none is wired in version 0 but the tests' file, so a paid run with none is BLOCKED (#325).
@@ -1500,6 +1502,7 @@ export class Core {
     }
     if (verified && meta.session) this.watchCalls(drafts, meta, settled);
     if (meta.session) this.products.hook(meta);
+    if (meta.event === 'SessionStart') void this.products.sessionStart(meta.session, meta.cwd, meta.id).catch(() => undefined);
     return { settled };
   }
 
@@ -3600,7 +3603,7 @@ export class Core {
       // What Codex says of our entries' trust, off this reply's path.
       if (meta.agent === 'codex') void this.readCodexTrust(meta.cwd);
       // The worktree receives its build products first, beside the rest of the reply (#1017).
-      const placed = this.products.sessionStart(meta.session, meta.cwd).catch((error: unknown) => { process.stderr.write(`deep hub: products weren't placed in ${meta.cwd}: ${error instanceof Error ? error.message : String(error)}\n`); return undefined; });
+      const placed = this.products.sessionStart(meta.session, meta.cwd, meta.id).catch((error: unknown) => { process.stderr.write(`deep hub: products weren't placed in ${meta.cwd}: ${error instanceof Error ? error.message : String(error)}\n`); return undefined; });
       const brief = await briefing(meta.cwd);
       const answers = own && this.options.plant !== 'ended-answer-at-next-prompt'
         // The planted wrong program gives a new session the answers of every session that worked in its folder.
@@ -6030,9 +6033,9 @@ export class Core {
     let tail = '';
     const keep = (chunk: Buffer): void => { tail = `${tail}${chunk.toString('utf8')}`.slice(-8000); };
     try {
-      // As `deep lease` runs a build: at a lower priority, joined to the host's job pool (#1016).
+      // Joined to the host's job pool (#1016), as a build `deep lease` runs is.
       const env = typeof r.makeflags === 'string' ? { MAKEFLAGS: r.makeflags, CARGO_MAKEFLAGS: r.makeflags } : {};
-      const started = await this.host.start({ run, argv: ['/usr/bin/nice', '-n', '10', '/bin/sh', '-c', b.command], cwd: b.cwd, env, grant: RUN_AS_YOU, output: { stdout: keep, stderr: keep } });
+      const started = await this.host.start({ run, argv: ['/bin/sh', '-c', b.command], cwd: b.cwd, env, grant: RUN_AS_YOU, output: { stdout: keep, stderr: keep } });
       if (started.status !== 'started') { await this.heavy.release(own); return { code: null, tail: `BLOCKED: no ${started.kind} free` }; }
       await this.heavy.started({ ...own, pid: started.pid, pgid: started.pgid, cwd: b.cwd });
       const exit = await this.host.wait(run);
