@@ -428,5 +428,35 @@
         "class"
       ]
     }
+  },
+  {
+    "registry": "outline.source@1",
+    "owner": "core",
+    "fill": [
+      "module"
+    ],
+    "resolve": "seal",
+    "since": "R6",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "form": {
+          "type": "string",
+          "enum": [
+            "text",
+            "path",
+            "vector"
+          ]
+        },
+        "fixture": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "form",
+        "fixture"
+      ]
+    }
   }
 ]

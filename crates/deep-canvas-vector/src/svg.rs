@@ -10,6 +10,7 @@
 use std::collections::BTreeMap;
 
 use deep_canvas::ops;
+use deep_canvas::outline::FillRule;
 use deep_canvas_marks::path::{self, Verb};
 use roxmltree::{Document, Node, ParsingOptions};
 
@@ -125,6 +126,8 @@ pub struct Painted {
     pub stroke: Option<Stroke>,
     pub part: Option<usize>,
     pub clip: Option<usize>,
+    /// Its `fill-rule` (#443): how its contours resolve to the area its fill covers.
+    pub fill_rule: FillRule,
 }
 
 /// A region what draws in it is clipped to, in the SVG's viewBox space, and the opacity it draws
@@ -317,6 +320,7 @@ struct Style {
     opacity: f64,
     /// `marker-start`, `marker-mid` and `marker-end`, by the id each names.
     markers: [Option<String>; 3],
+    fill_rule: FillRule,
 }
 
 impl Default for Style {
@@ -330,6 +334,7 @@ impl Default for Style {
             stroke_opacity: 1.0,
             opacity: 1.0,
             markers: [None, None, None],
+            fill_rule: FillRule::NonZero,
         }
     }
 }
@@ -366,7 +371,9 @@ impl Style {
                 "marker-start" => s.markers[0] = local_url(v),
                 "marker-mid" => s.markers[1] = local_url(v),
                 "marker-end" => s.markers[2] = local_url(v),
-                "fill-rule" | "clip-rule" if v == "evenodd" => unread_once(unread, k),
+                "fill-rule" if v == "evenodd" => s.fill_rule = FillRule::EvenOdd,
+                "fill-rule" if v == "nonzero" => s.fill_rule = FillRule::NonZero,
+                "clip-rule" if v == "evenodd" => unread_once(unread, k),
                 "stroke-linecap" if v != "butt" => unread_once(unread, k),
                 "stroke-linejoin" if v != "miter" => unread_once(unread, k),
                 "stroke-dasharray" if v != "none" => unread_once(unread, k),
@@ -724,6 +731,7 @@ impl<'a, 'i> Import<'a, 'i, '_> {
                 stroke,
                 part,
                 clip,
+                fill_rule: style.fill_rule,
             });
         }
         if matches!(

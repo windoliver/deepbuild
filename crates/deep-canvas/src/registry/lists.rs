@@ -19,6 +19,9 @@ pub struct KitRule {
     pub rule: &'static str,
     pub message: &'static str,
     pub test: fn(&Value) -> Result<(), String>,
+    /// What the rule read on the entry, beside its verdict (#443: its fixture, its samples and
+    /// its misses), or nothing.
+    pub report: Option<fn(&Value) -> Value>,
 }
 
 /// A planted wrong entry: one the kit must refuse.
@@ -92,7 +95,16 @@ impl RegistryDef {
             rule,
             message,
             test,
+            report: None,
         });
+        self
+    }
+
+    /// The last rule's report: what it read on each entry, shown beside its verdict (#443).
+    pub fn reported(mut self, report: fn(&Value) -> Value) -> RegistryDef {
+        if let Some(k) = self.kit.last_mut() {
+            k.report = Some(report);
+        }
         self
     }
 
@@ -153,6 +165,8 @@ pub struct RuleResult {
     pub pass: bool,
     pub message: &'static str,
     pub why: String,
+    /// What the rule read, merged into its JSON (#443).
+    pub report: Option<Value>,
 }
 
 /// A kit's result on one entry: every rule's.
@@ -180,14 +194,22 @@ impl KitResult {
         json!({
             "verdict": if self.pass() { "PASS" } else { "FAIL" },
             "entry": self.entry,
-            "rules": self.rules.iter().map(|r| if r.pass {
-                json!({"rule": r.rule, "verdict": "PASS"})
-            } else {
+            "rules": self.rules.iter().map(|r| {
+                let mut out = if r.pass {
+                    json!({"rule": r.rule, "verdict": "PASS"})
+                } else {
                 let mut out = json!({"rule": r.rule, "verdict": "FAIL", "message": r.message, "why": r.why});
                 // A rule that fails at a frame says so first, `frame <n>: …`, and names it.
                 let frame = r.why.strip_prefix("frame ").and_then(|w| w.split(':').next()?.parse::<u64>().ok());
                 if let Some(frame) = frame {
                     out["frame"] = json!(frame);
+                }
+                out
+                };
+                if let Some(Value::Object(report)) = &r.report {
+                    for (k, v) in report {
+                        out[k.as_str()] = v.clone();
+                    }
                 }
                 out
             }).collect::<Vec<_>>(),
@@ -208,6 +230,7 @@ pub fn run_kit(kit: &[KitRule], name: &str, value: &Value) -> KitResult {
                     pass: outcome.is_ok(),
                     message: k.message,
                     why: outcome.err().unwrap_or_default(),
+                    report: k.report.map(|f| f(value)),
                 }
             })
             .collect(),
@@ -780,11 +803,13 @@ mod tests {
                 rule: "small",
                 message: "a size over 64",
                 test: small,
+                report: None,
             },
             KitRule {
                 rule: "even",
                 message: "an odd size",
                 test: even,
+                report: None,
             },
         ];
         let r = run_kit(&kit, "odd", &json!({"size": 65}));

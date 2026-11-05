@@ -14,7 +14,7 @@ use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate_with, placed_at, Labels, Scene};
+use deep_canvas_scene3d::scene::{evaluate_sourced, placed_at, Labels, Scene};
 use deep_gpu::device::Backend;
 use deep_scene3d_render::status::{Mode, COLORS_PASS, GUARD_PASS};
 use deep_scene3d_render::SHADOW_PASS;
@@ -209,7 +209,11 @@ fn pack_sealed() -> Result<&'static deep_canvas::registry::Sealed, Value> {
         .get_or_init(|| {
             crate::plugin::shipped_modules()
                 .into_iter()
-                .chain([deep_canvas_scene3d::building::module()])
+                .chain([
+                    deep_canvas_scene3d::building::module(),
+                    // #443: vector, whose outline source an `extrude` of a vector item reads.
+                    deep_canvas_vector::module::module(),
+                ])
                 .fold(
                     deep_canvas::registry::Registry::new(deep_canvas::registry::BuildSet::Full),
                     deep_canvas::registry::Registry::with,
@@ -236,6 +240,28 @@ fn parse(call: &Value) -> Result<Args, Value> {
         .ok_or_else(|| bad("size is [w, h]"))?;
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
+    }
+    // #443: each vector item's SVG from the store, inlined as deep_show's hub inlines it
+    // (`params.outline.svg`), which vector's outline source reads.
+    if let (Some(store), Some(items)) = (
+        call["store"].as_str().map(std::path::Path::new),
+        doc.get_mut("items").and_then(Value::as_object_mut),
+    ) {
+        for item in items.values_mut() {
+            let src = match (item["kind"].as_str(), item.pointer("/params/src")) {
+                (Some("vector@1"), Some(Value::String(src))) if src.len() == 64 => src.clone(),
+                _ => continue,
+            };
+            let Ok(bytes) = std::fs::read(store.join(&src[..2]).join(&src[2..])) else {
+                continue;
+            };
+            if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
+                params.insert(
+                    "outline".into(),
+                    json!({"svg": String::from_utf8_lossy(&bytes)}),
+                );
+            }
+        }
     }
     let frames = call["frames"].as_u64().unwrap_or(1).max(1);
     let fps = call["fps"].as_u64().unwrap_or(60).max(1);
@@ -924,8 +950,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if !args.hidden.is_empty() {
                 composed = without_layers(&composed, &args.hidden);
             }
-            let mut scene = evaluate_with(&composed, t, &args.look, &mut labels, &read)
-                .map_err(|r| refused(r.code, r.path))?;
+            let outlines = &pack_sealed()?.outlines;
+            let mut scene =
+                evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
+                    .map_err(|r| refused(r.code, r.path))?;
             let values = if args.evaluate.is_empty() {
                 None
             } else {
