@@ -9,7 +9,7 @@ export default class {
   // in the next write: a record finishes where it stopped, and the next never runs on from part of it.
   unwritten = Buffer.alloc(0);
 
-  write(text = '') {
+  write(text) {
     this.unwritten = Buffer.concat([this.unwritten, Buffer.from(text)]);
     let fd;
     try {
@@ -31,10 +31,11 @@ export default class {
     })}\n`);
   }
 
-  // An error no test caught, such as an unhandled rejection, fails the run outside every test.
+  // An error no test caught, such as an unhandled rejection, fails the run outside every test. The end record lands
+  // only after everything before it, so a report without one may be missing a result.
   onTestRunEnd(modules, unhandled) {
     for (const error of unhandled ?? []) this.write(`${JSON.stringify({ type: 'unhandled', message: `${error?.name ?? 'Error'}: ${error?.message ?? error}` })}\n`);
-    this.write();
+    this.write(`${JSON.stringify({ type: 'end' })}\n`);
     if (this.unwritten.length) throw new Error(`${process.env.DEEP_PROOF_VITEST_REPORT} lost ${this.unwritten.length} bytes of results it couldn't write`);
   }
 }
