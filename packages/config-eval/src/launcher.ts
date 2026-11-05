@@ -5,9 +5,9 @@
 // only its model sign-in, and its outside calls are answered from the task's recording. The judge reads only what it
 // is shown, in an empty folder.
 import { spawn } from 'node:child_process';
-import { accessSync, constants, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 import type { ReplayPlan } from '@deepbuild/record';
 import { bubblewrap, seatbelt, type Grant, type SandboxBackend } from '@deepbuild/supervisor';
 import type { AgentResult, AgentRun, Grade, JudgeRequest, Launcher, Made } from './index.js';
@@ -108,6 +108,12 @@ function onPath(name: string, path: string): string | undefined {
   }
   return undefined;
 }
+/** What a replayed run reads of this machine's installs: the CLI's folder and where it really lives, and the node install the hook runs on. */
+function installReads(cli: string): string[] {
+  return [...new Set([dirname(cli), dirname(realpathSync(cli)), dirname(dirname(realpathSync(process.execPath)))])];
+}
+/** Whether `path` is `folder` or inside it. */
+const within = (path: string, folder: string): boolean => { const r = relative(folder, path); return r === '' || (!r.startsWith('..') && !isAbsolute(r)); };
 /** Variables a CLI reads that carry nothing of yours: its locale and terminal. */
 const PLAIN = ['LANG', 'LC_ALL', 'LC_CTYPE', 'TERM'];
 /** The model sign-in, when the environment carries it rather than a file in the config home. */
@@ -161,8 +167,7 @@ async function replayRun(run: AgentRun, deadline: number): Promise<{ lines: unkn
     const cli = onPath('claude', env.PATH!);
     if (!cli) throw Error('no claude on the agent\'s PATH');
     const grant: Grant = {
-      // The CLI's folder and where it really lives, the node install the hook runs on, and the replay's own files.
-      read: [...new Set([dirname(cli), dirname(realpathSync(cli)), dirname(dirname(realpathSync(process.execPath))), box])],
+      read: [...installReads(cli), box],
       write: [run.cwd, home, tmp],
       hosts: [`127.0.0.1:${answering.port}`, ...(model.local ? [model.target] : [])],
     };
@@ -193,6 +198,13 @@ export function defaultLauncher(plan: ReplayPlan, env: Record<string, string>, d
   // A replay copies only your sign-in's access token, never its refresh token, so it must last the runs.
   const expires = SIGN_IN.some((k) => env[k]) ? undefined : oauthOf(env)?.expiresAt;
   if (typeof expires === 'number' && expires < deadlines.work) throw Error(`your Claude sign-in expires at ${new Date(expires).toISOString()}, before the replay's runs end at ${new Date(deadlines.work).toISOString()}, and a replay can't refresh it; sign in to Claude Code again, or pass CLAUDE_CODE_OAUTH_TOKEN, then rerun`);
+  // A replay reads its installs, and none may hold your home or Claude config home, with your credentials in them.
+  const cli = onPath('claude', env.PATH ?? '/usr/bin:/bin');
+  const yours = ([['home', env.HOME], ['Claude config home', env.CLAUDE_CONFIG_DIR]] as const).flatMap(([name, d]) => (d && existsSync(d) ? [{ name, at: realpathSync(d) }] : []));
+  for (const folder of cli ? installReads(cli) : []) {
+    const held = yours.find((d) => within(d.at, folder));
+    if (held) throw Error(`a replay's sandbox reads ${folder}, where Claude Code or the node it runs on is installed, and that holds your ${held.name} ${held.at} with its credentials; install them in a folder of their own, then rerun`);
+  }
   // The judge only reads.
   const read: Record<Cli, (model: string) => string[]> = {
     claude: (model) => ['-p', '--output-format', 'stream-json', '--verbose', '--model', model, '--strict-mcp-config', '--setting-sources', 'user', '--permission-mode', 'dontAsk'],

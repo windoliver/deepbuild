@@ -27,6 +27,15 @@ it('reads the program a wrapper runs, as it reads past sudo and env', () => {
     expect(reachesNetwork(c), c).toBe(false);
 });
 
+it("keeps a command that only looks a program up, or prints its help or version, in the sandbox", () => {
+  // Failed on a classifier that took `command -v` for a wrapper and read no further than the program, so a probe for gh
+  // was refused as not in the recording and the pair counted as diverged, though it reaches no host.
+  for (const c of ['command -v gh', 'command -V curl', 'gh --version', 'curl --help', 'git push --help', 'gh pr create --help'])
+    expect(reachesNetwork(c), c).toBe(false);
+  for (const c of ['command gh pr create --fill', 'command -p curl https://x.test'])
+    expect(reachesNetwork(c), c).toBe(true);
+});
+
 /** A PreToolUse call, as the replay's hook hands it to the answering server. */
 const hookCall = async (hookScript: string, tool_name: string, tool_input: unknown) => {
   const url = /fetch\('([^']+)'/.exec(hookScript)![1]!;
@@ -70,6 +79,17 @@ it('answers web fetches and searches from the recording and makes none', async (
     { tool: 'WebFetch', input: { url: 'https://docs.test/cart', prompt: 'the cart API' }, answered: true },
     { tool: 'WebSearch', input: { query: 'cart api' }, answered: false },
   ]);
+});
+
+it('answers a web fetch of a recorded page whatever the agent asks of it', async () => {
+  // Failed on a key that held the fetch's prompt, the model's own wording, so a replay that fetched the same page with
+  // other words got "not in the recording" and the pair counted as diverged.
+  const answering = await openAnswering([{ tool: 'WebFetch', input: { url: 'https://docs.test/cart', prompt: 'the cart API' }, result: 'POST /cart adds an item.' }], '127.0.0.1:9');
+  closers.push(() => answering.close());
+  const fetched = await hookCall(answering.hookScript, 'WebFetch', { url: 'https://docs.test/cart', prompt: 'cart endpoints' });
+  const other = await hookCall(answering.hookScript, 'WebFetch', { url: 'https://docs.test/orders', prompt: 'the cart API' });
+  expect(fetched.permissionDecisionReason).toContain('POST /cart adds an item.');
+  expect(other.permissionDecisionReason).toMatch(/WebFetch: this call is not in the recording/);
 });
 
 it("tunnels only to the agent's model endpoint", async () => {

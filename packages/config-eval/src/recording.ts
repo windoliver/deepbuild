@@ -18,9 +18,12 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 const NETWORK = /^(?:gh|curl|wget|ssh|scp|sftp|rsync|nc|ncat|telnet|ftp|http|https|xh)$/;
 const GIT_NETWORK = /^(?:push|pull|fetch|clone|ls-remote|send-email)$/;
 const PUBLISH = /^(?:npm|pnpm|yarn|bun|cargo|twine|gem)$/;
-/** Programs that run the program after them, with their options that take a value; `timeout` takes its duration too. */
-const WRAPPERS = new Map<string, { values: string[]; then?: number }>([
-  ['sudo', { values: ['-u', '-g', '-h', '-p', '-U'] }], ['env', { values: ['-u', '-C', '-S'] }], ['exec', { values: ['-a'] }], ['command', { values: [] }],
+/**
+ * Programs that run the program after them, with their options that take a value; `timeout` takes its duration too,
+ * and `command -v` only looks the program up.
+ */
+const WRAPPERS = new Map<string, { values: string[]; then?: number; runsNone?: string[] }>([
+  ['sudo', { values: ['-u', '-g', '-h', '-p', '-U'] }], ['env', { values: ['-u', '-C', '-S'] }], ['exec', { values: ['-a'] }], ['command', { values: [], runsNone: ['-v', '-V'] }],
   ['nohup', { values: [] }], ['time', { values: ['-f', '-o'] }], ['nice', { values: ['-n'] }], ['stdbuf', { values: ['-i', '-o', '-e'] }],
   ['timeout', { values: ['-s', '-k', '--signal', '--kill-after'], then: 1 }], ['xargs', { values: ['-I', '-n', '-P', '-L', '-s', '-d', '-E', '-a'] }],
 ]);
@@ -33,7 +36,10 @@ function fromProgram(piece: string): string[] {
     const wrapper = WRAPPERS.get((words[0] ?? '').replace(/^.*\//, ''));
     if (!wrapper) return words;
     let i = 1;
-    while (i < words.length && words[i]!.startsWith('-')) i += wrapper.values.includes(words[i]!) ? 2 : 1;
+    while (i < words.length && words[i]!.startsWith('-')) {
+      if (wrapper.runsNone?.includes(words[i]!)) return [];
+      i += wrapper.values.includes(words[i]!) ? 2 : 1;
+    }
     words = words.slice(i + (wrapper.then ?? 0));
   }
 }
@@ -46,6 +52,8 @@ function fromProgram(piece: string): string[] {
 export function reachesNetwork(command: string): boolean {
   return command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''").split(/&&|\|\||[;|&\n()`]|\$\(/).some((piece) => {
     const words = fromProgram(piece);
+    // A program asked for its help or version prints it and reaches no host.
+    if (words.includes('--help') || words.includes('--version')) return false;
     const program = (words[0] ?? '').replace(/^.*\//, '');
     if (NETWORK.test(program)) return true;
     if (program === 'git') return GIT_NETWORK.test(words.find((w, i) => i > 0 && !w.startsWith('-') && words[i - 1] !== '-C' && words[i - 1] !== '-c') ?? '');
@@ -65,13 +73,14 @@ export function isOutside(tool: string, input: unknown): boolean {
 /**
  * The part of a call's input that names the call, each string normalized as open items normalize error text
  * (temporary paths, process IDs and timestamps as placeholders), keys in order. A shell call is named by its command
- * alone: its description and timeout are the agent's wording, not the call.
+ * alone, and a web fetch by its URL: a shell call's description and timeout, and what a fetch asks of its page, are the
+ * agent's wording, not the call.
  */
 function callKey(tool: string, input: unknown): string {
   const norm = (v: unknown): unknown => typeof v === 'string' ? errorShape(v)
     : Array.isArray(v) ? v.map(norm)
     : isObj(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, norm(v[k])])) : v;
-  const named = tool === 'Bash' && isObj(input) ? { command: input.command } : input;
+  const named = !isObj(input) ? input : tool === 'Bash' ? { command: input.command } : tool === 'WebFetch' ? { url: input.url } : input;
   return JSON.stringify([tool, norm(named)]);
 }
 
