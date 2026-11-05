@@ -1,0 +1,35 @@
+{
+  "title": "channel@1",
+  "description": "A way to reach you (#65): it only transports. deliver(item, ctx) hands the provider what the hub rendered and says delivered with the provider's acknowledgement, stalled, timed out or conflict; receive(ctx) returns the answers, the threads seen and any conflict the provider reports, each answer's proof passed on unchanged for the hub to check.",
+  "x-since": "R2",
+  "x-stability": "preview",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "channel@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "device",
+        "chat",
+        "email",
+        "text"
+      ],
+      "description": "What the channel reaches: a device that signs, a chat app, email or a text message."
+    }
+  },
+  "required": [
+    "slot",
+    "revision",
+    "kind"
+  ],
+  "additionalProperties": false
+}

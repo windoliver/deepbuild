@@ -1,0 +1,11 @@
+{
+  "id": "deepbuild/channel-text",
+  "version": "1.0.0",
+  "digest": "d1:62064cfada63bfa9ebd03aa8d258d6b287bd53df7a3cc6068f1829b57dfbc9c3",
+  "requires": {
+    "preview": [
+      "deep.registerChannel",
+      "deep.channel.fetch"
+    ]
+  }
+}
