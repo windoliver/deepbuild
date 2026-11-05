@@ -24,6 +24,7 @@ export async function undoCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`${reply.error.remediation}\n`);
     return reply.error.code === 'handle_syntax' ? 2 : 1;
   }
-  process.stdout.write(`${String(reply.result.staged)} undone: ${(reply.result.folders as string[]).join(', ')} hold again what they held before the run\n`);
+  const put = [...reply.result.folders as string[], ...reply.result.files as string[]];
+  process.stdout.write(`${String(reply.result.staged)} undone: ${put.join(', ')} hold again what they held before the run\n`);
   return 0;
 }
