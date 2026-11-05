@@ -343,14 +343,17 @@ interface Stamp { session: string; tool: string; digest: string }
 
 /** A prompt Codex's subagent got, which its hook names with the root's session ID and an agent_id. */
 const childPrompt = (meta: HookMeta): boolean => meta.agent === 'codex' && Boolean(meta.fields?.agent_id);
-/** One events row as the record stores it, its seq read as text so no digit is lost. */
-interface Row { v: number; id: string; kind: string; writer: string; actor: string; scope: string; ts: number; log_pos: number; data: string; evidence: string | null;
-  subject: string | null; seq: string | null; session_id: string | null; project_id: string | null; agent: string | null; unverified: number }
-const q = JSON.stringify;
-/** An event's JSON text: the record's toJson fields, seq as its decimal string, and `verified` for the unverified mark. */
-const eventText = (r: Row): string => `{"v":${r.v},"id":${q(r.id)},"kind":${q(r.kind)},"writer":${q(r.writer)},"actor":${q(r.actor)},"scope":${q(r.scope)},"ts":${r.ts},"log_pos":${r.log_pos},`
-  + `"data":${r.data},"evidence":${r.evidence ?? '[]'}${r.subject === null ? '' : `,"subject":${q(r.subject)}`}${r.seq === null ? '' : `,"seq":${q(r.seq)}`}`
-  + `${r.session_id === null ? '' : `,"session":${q(r.session_id)}`}${r.project_id === null ? '' : `,"project":${q(r.project_id)}`}${r.agent === null ? '' : `,"agent":${q(r.agent)}`},"verified":${r.unverified ? 'false' : 'true'}}`;
+/**
+ * An event's JSON text, built by SQLite from the stored row: the record's toJson fields, seq as its decimal string, and
+ * `verified` for the unverified mark. `data` and `evidence` are stored as JSON text already, and json_quote writes a
+ * string as JSON.stringify does.
+ */
+const EVENT_TEXT = `'{"v":' || v || ',"id":' || json_quote(id) || ',"kind":' || json_quote(kind) || ',"writer":' || json_quote(writer)
+  || ',"actor":' || json_quote(actor) || ',"scope":' || json_quote(scope) || ',"ts":' || ts || ',"log_pos":' || log_pos
+  || ',"data":' || data || ',"evidence":' || coalesce(evidence, '[]') || iif(subject IS NULL, '', ',"subject":' || json_quote(subject))
+  || iif(seq IS NULL, '', ',"seq":"' || CAST(seq AS TEXT) || '"') || iif(session_id IS NULL, '', ',"session":' || json_quote(session_id))
+  || iif(project_id IS NULL, '', ',"project":' || json_quote(project_id)) || iif(agent IS NULL, '', ',"agent":' || json_quote(agent))
+  || ',"verified":' || iif(unverified, 'false', 'true') || '}'`;
 
 
 export class Core {
@@ -4774,12 +4777,11 @@ export class Core {
 
   /**
    * A page of the log as each event's JSON text, the record's own JSON with `verified` for its unverified mark,
-   * built from the stored text without parsing it again: the reads and the stream page through many events.
+   * built by SQLite from the stored text without parsing it again: the reads and the stream page through many events.
    */
   private async page(after: number, limit: number, kinds?: string[]): Promise<{ log_pos: number; json: string }[]> {
     const only = kinds ? ` AND kind IN (${kinds.map((k) => `'${k.replace(/'/g, "''")}'`).join(',')})` : '';
-    const rows = (await this.record.raw(`SELECT v, id, kind, writer, actor, scope, ts, log_pos, data, evidence, subject, CAST(seq AS TEXT) AS seq, session_id, project_id, agent, unverified FROM events WHERE log_pos > ${after}${only} ORDER BY log_pos LIMIT ${limit}`)) as Row[];
-    return rows.map((r) => ({ log_pos: r.log_pos, json: eventText(r) }));
+    return (await this.record.raw(`SELECT log_pos, ${EVENT_TEXT} AS json FROM events WHERE log_pos > ${after}${only} ORDER BY log_pos LIMIT ${limit}`)) as { log_pos: number; json: string }[];
   }
   /**
    * The log's committed end, read in the same step as `read` starts, before anything else can append: a read
