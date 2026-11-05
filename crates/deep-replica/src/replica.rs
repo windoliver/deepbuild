@@ -15,9 +15,10 @@ use deep_app::{
     arming,
     card::{self, Card},
     events::{Fixture, Inbox},
-    notify::{self, Notification, Notifier, Sound, NOTIFY_AFTER},
+    notify::{self, Notification, NotificationSetting, Notifier, Sound, NOTIFY_AFTER},
     question::{Controller, Did, Faults, Target},
-    record, states,
+    record::{self, HubWatch, LocalHub},
+    states,
     views::{set_state, AppState, Layout},
 };
 use gpui_kit::test::TestWindowExt as _;
@@ -198,6 +199,10 @@ struct Device {
     notifier: Notifier,
     /// What Notification Center holds from the app, oldest first.
     center: Vec<Posted>,
+    /// What the OS answers when the app reads its notification setting.
+    os_setting: NotificationSetting,
+    /// When the app reads the hub.
+    watch: HubWatch,
     /// The session whose page is open in this device's focused window.
     looking_at: Option<String>,
     /// Whether the window is hidden: then nothing is being looked at.
@@ -270,6 +275,7 @@ impl Replica {
     ) -> Replica {
         let faults = planted.map(Planted::faults).unwrap_or_default();
         record::install_local(events.clone());
+        notify::publish(notify::Reach::default());
         let mut replica = Replica {
             devices: Vec::new(),
             now,
@@ -305,6 +311,8 @@ impl Replica {
                 window,
                 notifier,
                 center,
+                os_setting: NotificationSetting::Allowed,
+                watch: HubWatch::default(),
                 looking_at: None,
                 hidden: false,
                 card: None,
@@ -406,6 +414,7 @@ impl Replica {
 
     fn run_due(&mut self) {
         for (index, device) in self.devices.iter_mut().enumerate() {
+            device.watch.tick(self.now, || record::read(Duration::ZERO));
             let looking_at = if device.hidden {
                 None
             } else {
@@ -450,6 +459,63 @@ impl Replica {
             }
             self.posted.extend(posts);
         }
+        self.publish_reach();
+    }
+
+    /// The window draws what device 0's app knows.
+    fn publish_reach(&self) {
+        let device = &self.devices[0];
+        notify::publish(device.notifier.reach(device.watch.down()));
+    }
+
+    /// Issue #994: what the OS answers from now on when `device`'s app reads the setting; it hasn't read it yet.
+    pub fn set_notification_setting(&mut self, device: usize, setting: NotificationSetting) {
+        self.devices[device].os_setting = setting;
+    }
+
+    /// `device`'s app becomes active, so it reads the setting.
+    pub fn activate(&mut self, device: usize) {
+        let device = &mut self.devices[device];
+        device.notifier.set_setting(device.os_setting, self.now);
+        self.publish_reach();
+    }
+
+    /// `device`'s window shows `view` in its center: "home", "needs-you" or "session".
+    pub fn show_view(&mut self, device: usize, view: &str) {
+        let device = &mut self.devices[device];
+        let layout = Layout::shipped(view);
+        let (window, _) = device.cx.update(|cx| open_shell(&layout, cx, |_, _| {}));
+        let old = std::mem::replace(&mut device.window, window);
+        device
+            .cx
+            .update_window(old, |_, window, _| window.remove_window())
+            .expect("the old window closes");
+    }
+
+    /// Every read of the hub fails from now on, as with no socket answering.
+    pub fn hub_stops(&mut self) {
+        record::set_local_hub(LocalHub::Stops);
+    }
+
+    /// Every poll of the hub comes back refused from now on.
+    pub fn hub_refuses(&mut self) {
+        record::set_local_hub(LocalHub::Refuses);
+    }
+
+    /// The hub answers again.
+    pub fn hub_answers(&mut self) {
+        record::set_local_hub(LocalHub::Answers);
+    }
+
+    /// Writes `device`'s window to `path` as a PNG, at the reference window.
+    pub fn screenshot(&mut self, device: usize, path: &Path) {
+        let device = &mut self.devices[device];
+        device
+            .cx
+            .capture_screenshot(device.window)
+            .expect("offscreen rendering is available")
+            .save(path)
+            .expect("the screenshot is written");
     }
 
     /// What Notification Center on a device holds now, oldest first.
