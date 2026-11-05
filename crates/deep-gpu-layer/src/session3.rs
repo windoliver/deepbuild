@@ -47,6 +47,11 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         drops_clouds: p == Some(Planted::DropsClouds),
         cascade_cache_keeps_stale: p == Some(Planted::CascadeCacheKeepsStale),
         prefilter_over_frames: p == Some(Planted::PrefilterOverFrames),
+        add_writes_depth: p == Some(Planted::AddWritesDepth),
+        add_without_depth_test: p == Some(Planted::AddWithoutDepthTest),
+        ids_by_draw_position: p == Some(Planted::IdsByDrawPosition),
+        ids_ignore_mask: p == Some(Planted::IdsIgnoreMask),
+        cuts_color_only: p == Some(Planted::CutsColorOnly),
     }
 }
 
@@ -240,6 +245,9 @@ pub struct Drawn {
     pub moved: Option<u32>,
     /// With timings: the GPU memory the device holds as the frame draws (#383).
     pub gpu_bytes: Option<u64>,
+    /// The depth target, f32 per pixel, read with the targets, and whether it grows nearer: what
+    /// a 3D pick's ties read (#424).
+    pub depth: Option<(Vec<u8>, bool)>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -289,6 +297,7 @@ pub fn draw_on(
     on.worker
         .call(move |state| -> Result<Drawn, String> {
             let s = state.scene3d.as_mut().ok_or("no session")?;
+            let again = (scene.clone(), look.clone());
             {
                 let mut shared = lock(&s.shared);
                 shared.next = Some((scene, look));
@@ -303,7 +312,7 @@ pub fn draw_on(
             if delay > 0 {
                 s.view.hold_next();
             }
-            let drawn = loop {
+            let mut drawn = loop {
                 if let Some(d) = s.view.render(n)? {
                     break d;
                 }
@@ -311,6 +320,23 @@ pub fn draw_on(
             };
             s.view.wait_done(drawn.slot);
             let device = s.view.device().clone();
+            // #424: per-pixel items that ran out of room below the class's cap draw the frame
+            // again with more room; at the cap they drew sorted and the frame says so.
+            while !noop
+                && lock(&s.shared)
+                    .renderer
+                    .as_mut()
+                    .is_some_and(|r| r.check_fragments(&device))
+            {
+                lock(&s.shared).next = Some(again.clone());
+                drawn = loop {
+                    if let Some(d) = s.view.render(n)? {
+                        break d;
+                    }
+                    s.view.wait_free();
+                };
+                s.view.wait_done(drawn.slot);
+            }
             // The frame's GPU time, as its passes' timestamp queries measured it.
             let timing = profiler2.as_ref().map(|p| {
                 let mut p = lock(p);
@@ -343,6 +369,11 @@ pub fn draw_on(
                 },
                 pre_tone: if read_targets && !noop {
                     r.read_pre_tone(&device)
+                } else {
+                    None
+                },
+                depth: if read_targets && !noop {
+                    r.read_depth(&device).map(|d| (d, r.depth_grows_nearer()))
                 } else {
                     None
                 },

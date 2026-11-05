@@ -312,6 +312,12 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             }
         }
     }
+    // #424: the cutaway and the instancer, read by the scene as data.
+    for (kind, name) in [("cutaway@1", "cutaway"), ("instance@1", "instance")] {
+        if let Some(spec) = crate::spec::of(kind) {
+            r.kind(crate::spec::entry(&spec, "", name), &[], "");
+        }
+    }
     crate::build::register_scene3d(r);
     // A solid's modifier stack, every prefix kept by its content key (Modifier; #411).
     r.array("scene3d.stack", "stack", "item", "geometry", "items");
