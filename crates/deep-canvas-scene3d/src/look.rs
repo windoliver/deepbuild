@@ -67,6 +67,10 @@ pub struct Look3 {
     pub filter_taps: u8,
     /// Look: samples, `live`: the sub-samples a live frame is the mean of (#423), 1 by default.
     pub live_samples: u32,
+    /// Look: samples in full (#419): live, export, settling, the filter and what samples vary.
+    pub samples: crate::samples::Samples,
+    /// Motion blur (#419), `None` with it off.
+    pub blur: Option<crate::samples::Blur>,
 }
 
 /// The EV100 whose exposure scale is 1, a look's default.
@@ -99,6 +103,8 @@ impl Look3 {
             deband: None,
             filter_taps: 8,
             live_samples: 1,
+            samples: crate::samples::Samples::default(),
+            blur: None,
         }
     }
 
@@ -141,11 +147,9 @@ impl Look3 {
             Some(Some(n @ (1 | 2 | 4 | 8))) => n as u8,
             Some(_) => return Err("filter_taps is 1, 2, 4 or 8".into()),
         };
-        out.live_samples = match look.pointer("/samples/live").map(Value::as_u64) {
-            None => 1,
-            Some(Some(n @ 1..=64)) => n as u32,
-            Some(_) => return Err("samples.live is 1 to 64".into()),
-        };
+        out.samples = crate::samples::read_samples(look)?;
+        out.live_samples = out.samples.live;
+        out.blur = crate::samples::read_blur(look)?;
         out.ao = match look.get("ao") {
             None | Some(Value::Null) => None,
             Some(Value::String(s)) if s == "none" => None,

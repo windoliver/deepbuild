@@ -83,6 +83,8 @@ function isPrCommand(command: string, verb: 'create' | 'edit'): boolean {
 const closes = (body: string): number | undefined => { const m = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)/i.exec(body); return m ? Number(m[1]) : undefined; };
 /** The issue a `gh pr create` or `gh pr edit` command's body says it closes, by `Closes #n` in the command's text (#322); undefined when it says none. */
 export const closesIssue = (command: string): number | undefined => closes(command);
+/** The issue a `gh pr create` or `gh pr edit` command's body says it is part of, by `Part of #n` (#82); undefined when it says none. */
+export const partOfIssue = (command: string): number | undefined => { const m = /\bpart of:?\s+#(\d+)/i.exec(command); return m ? Number(m[1]) : undefined; };
 /** An issue's epic, `**Epic:** #n` in its body. */
 const epicOf = (body: string): number | undefined => { const m = /\*\*Epic:\*\*\s*#(\d+)/.exec(body); return m ? Number(m[1]) : undefined; };
 /** The issues an issue depends on: the `#n` items under its `### Depends on` heading. */

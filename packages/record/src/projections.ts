@@ -110,7 +110,7 @@ export class Projector {
   private readonly statements = new Map<string, Statement<unknown[]>>();
   private readonly turns = new Map<string, Turn[]>();
 
-  constructor(private readonly db: Db) {}
+  constructor(private readonly db: Db, private readonly plant?: 'turn-closes-at-child-stop') {}
 
   /**
    * Creates each table that is missing. A table an older version made with other columns is left as it is, and
@@ -229,7 +229,7 @@ export class Projector {
       }
       // A reading the hub took of a session is about it, never one of its turn's events.
       // Nor is a subagent's stop: it ends no turn of the session's.
-      if (e.kind !== 'session.reading' && !d.child) this.turn(e, d);
+      if (e.kind !== 'session.reading' && (!d.child || this.plant === 'turn-closes-at-child-stop')) this.turn(e, d);
     }
     const { moves, refused } = gate(e, (sql, ...params) => this.stmt(sql).get(...params) as Row | undefined, gated);
     // An event that does more than move objects keeps the rest; one that only moves them changes nothing more.
