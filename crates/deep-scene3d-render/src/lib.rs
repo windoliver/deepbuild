@@ -2162,10 +2162,12 @@ impl Renderer {
         };
         let output_pipeline = output_into(FORMAT);
         let output_f32 = output_into(status::FINISHED);
-        // The object IDs and depth from their first sample, which reads its targets as plain
-        // textures at one sample (#1173).
+        // The object IDs and depth from their first covered sample, which reads its targets as
+        // plain textures at one sample (#1173).
         let resolve_source = if samples == 1 {
-            RESOLVE.replace("multisampled_2d", "2d")
+            RESOLVE
+                .replace("multisampled_2d", "2d")
+                .replace("SAMPLES: i32 = 4", "SAMPLES: i32 = 1")
         } else {
             RESOLVE.to_string()
         };
