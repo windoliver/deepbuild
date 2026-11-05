@@ -101,6 +101,8 @@ const MERGE_POLL_MS = 2_000;
 /** The loop rule: more than this many turns started by another session's messages, in the window, with no prompt from you. */
 const LOOP_TURNS = 20;
 const LOOP_MS = 10 * 60_000;
+/** What a prompt held because you answered to hold the loop says. */
+const HOLDING = "DeepBuild held this prompt: you said to hold this session's turns that another session's messages start until you prompt it.";
 /** How long after a session is first seen its issue is compared, so its process's lead is linked first. */
 const ISSUE_SETTLE_MS = 5_000;
 /** A session with no hook for this long is no longer in the repo. */
@@ -123,8 +125,8 @@ export class Siblings {
   private timer: NodeJS.Timeout | undefined;
   /** Each session's turns since your last prompt to it: when each began, and whether another session's message began it. */
   private readonly turns = new Map<string, { id: string; at: number; peer: boolean }[]>();
-  /** The loop asks waiting on you, by each session they hold. */
-  private readonly loops = new Map<string, { ask: string; pair: string[]; at: number }>();
+  /** The loop asks waiting on you, by each session they hold; `hold` once you answered to hold them until you prompt them. */
+  private readonly loops = new Map<string, { ask: string; pair: string[]; at: number; hold?: boolean }>();
   constructor(private readonly o: SiblingOptions) {}
 
   /** The map and what was delivered, read back from the record at the hub's start; nothing is queued from them. */
@@ -139,6 +141,7 @@ export class Siblings {
       const m = await this.mapped(r.id, r.agent ?? 'claude-code', r.worktree);
       if (!m) continue;
       m.seen = r.last_seen;
+      await this.placed(m);
       for (const f of (await this.o.raw(`SELECT path FROM session_files WHERE session = ? AND kind IN ('edit', 'write')`, [r.id])) as { path: string }[]) {
         const path = this.inRepo(m, f.path);
         if (path) m.files.set(path, { version: `r:${path}`, lines: [] });
@@ -149,9 +152,12 @@ export class Siblings {
   private async restoreLoops(): Promise<void> {
     const rows = (await this.o.raw(`SELECT id, session_id, ts, json_extract(data, '$.from') AS origin FROM events WHERE kind = 'user.ask' AND ts >= ? AND session_id IS NOT NULL ORDER BY log_pos`, [this.o.now() - LOOP_MS])) as { id: string; session_id: string; ts: number; origin: string }[];
     for (const r of rows) this.turn(r.session_id, r.id, r.origin, r.ts);
-    // A loop ask still open holds its session's next such prompt again.
-    const open = (await this.o.raw(`SELECT id, session_id, created FROM asks WHERE status IN ('open', 'later') AND session_id IS NOT NULL AND (question LIKE '% Let them go on?' OR question LIKE '% Let it go on?')`)) as { id: string; session_id: string; created: number }[];
-    for (const a of open) this.loops.set(a.session_id, { ask: `ask:${a.id}`, pair: [a.session_id], at: a.created });
+    // A loop ask still open, or answered to hold them, holds its session's next such prompt again, unless you prompted it since.
+    const open = (await this.o.raw(`SELECT id, session_id, created, status, answer FROM asks WHERE session_id IS NOT NULL AND (status IN ('open', 'later') OR answer NOT LIKE '%go-on%') AND (question LIKE '% Let them go on?' OR question LIKE '% Let it go on?')`)) as { id: string; session_id: string; created: number; status: string }[];
+    for (const a of open) {
+      const yours = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'user.ask' AND session_id = ? AND ts > ? AND json_extract(data, '$.from') IN ('person', 'app') LIMIT 1`, [a.session_id, a.created]);
+      if (!yours.length) this.loops.set(a.session_id, { ask: `ask:${a.id}`, pair: [a.session_id], at: a.created, ...(a.status !== 'open' && a.status !== 'later' ? { hold: true } : {}) });
+    }
   }
   /** A prompt's origin, by its event: yours starts the count again; another session's adds one, once, however often its hook is read. */
   turn(session: string, id: string, origin: string, at: number): void {
@@ -179,15 +185,19 @@ export class Siblings {
     if (origin !== 'session') return undefined;
     const now = this.o.now();
     let open = this.loops.get(meta.session);
+    if (open?.hold) return HOLDING;
     if (open?.ask) {
       const [row] = (await this.o.raw(`SELECT status, answer FROM asks WHERE id = ?`, [open.ask.slice(4)])) as { status: string; answer: string | null }[];
       if (row && row.status !== 'open' && row.status !== 'later') {
-        for (const id of open.pair) this.loops.delete(id);
         if (String(row.answer).includes('go-on')) {
+          for (const id of open.pair) this.loops.delete(id);
           for (const id of open.pair) this.turns.set(id, (this.turns.get(id) ?? []).filter((t) => t.at > now));
           return undefined;
         }
-        open = undefined;
+        // You said to hold them: held until you prompt the session, never asked again.
+        const held = { ...open, hold: true };
+        for (const id of open.pair) this.loops.set(id, held);
+        return HOLDING;
       }
     }
     if (!open && !this.looping(meta.session)) return undefined;
@@ -242,14 +252,8 @@ export class Siblings {
       return;
     }
     m.ended = false;
-    const head = await headOf(m.cwd).catch(() => undefined);
-    if (head) {
-      m.head = head.sha;
-      m.branch = head.branch;
-      m.issue = issueOf(head.branch);
-      // Its branch against each other session's, ready before a notice asks.
-      for (const o of this.others(m)) this.dryMerge(m, o);
-    }
+    // Its branch against each other session's, ready before a notice asks.
+    if (await this.placed(m)) for (const o of this.others(m)) this.dryMerge(m, o);
     if (meta.event === 'SessionStart') this.started(m);
     await this.sameIssue(m);
     const before = drafts.find((d) => d.kind === 'tool.before');
@@ -260,10 +264,7 @@ export class Siblings {
         const path = typeof p === 'string' ? this.inRepo(m, p) : undefined;
         if (!path) continue;
         // Before the edit: which other sessions changed the file. Then it's this session's change too.
-        for (const s of this.others(m)) {
-          const theirs = s.files.get(path);
-          if (theirs) this.queue(m, this.fileNotice(m, s, path, theirs));
-        }
+        this.heard(m, path);
         const mine = m.files.get(path) ?? { version: meta.id, lines: [] };
         mine.version = meta.id;
         m.files.set(path, mine);
@@ -288,9 +289,26 @@ export class Siblings {
     const file = meta.hunks && meta.call?.input.file_path;
     const path = typeof file === 'string' ? this.inRepo(m, file) : undefined;
     if (!path) return undefined;
+    this.heard(m, path);
     if (!m.files.has(path)) m.files.set(path, { version: meta.id, lines: [] });
     m.ahead.add(meta.toolUse!);
     return [path];
+  }
+  /** Which other sessions changed a file this session changes: each a notice for it. */
+  private heard(m: Mapped, path: string): void {
+    for (const s of this.others(m)) {
+      const theirs = s.files.get(path);
+      if (theirs) this.queue(m, this.fileNotice(m, s, path, theirs));
+    }
+  }
+  /** The session's head, branch and issue, as its worktree stands now; whether it has a head. */
+  private async placed(m: Mapped): Promise<boolean> {
+    const head = await headOf(m.cwd).catch(() => undefined);
+    if (!head) return false;
+    m.head = head.sha;
+    m.branch = head.branch;
+    m.issue = issueOf(head.branch);
+    return true;
   }
 
   /**

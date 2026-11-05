@@ -34,16 +34,16 @@ const needsSubject = (kind: string): boolean => {
 };
 
 /**
- * A structuredPatch hunk in line numbers (#352): the new lines each run of removed and added lines changed, its lines
- * equal at both ends taken off, so an insert above a line counts as the insert alone; a run that only removes marks
- * where it was. The lines' text is compared here and dropped.
+ * A structuredPatch hunk in line numbers (#352): one hunk per run of removed and added lines, its context lines left
+ * out and its lines equal at both ends taken off, so an insert above a line counts as the insert alone; a run that only
+ * removes marks where it was. Each starts where it stands once the runs above it are applied. The lines' text is
+ * compared here and dropped.
  */
 function hunkOf(h: JsonObject): Hunk[] {
   const nums = [h.oldStart, h.oldLines, h.newStart, h.newLines];
   if (!nums.every((n) => Number.isInteger(n) && Number(n) >= 0) || !Array.isArray(h.lines)) return [];
-  const [oldStart, oldLines, newStart, newLines] = nums as number[];
-  const changed: number[] = [];
-  let line = newStart!;
+  const runs: Hunk[] = [];
+  let line = h.newStart as number;
   let gone: string[] = [];
   let came: string[] = [];
   const flush = () => {
@@ -51,9 +51,10 @@ function hunkOf(h: JsonObject): Hunk[] {
     while (head < gone.length && head < came.length && gone[head] === came[head]) head++;
     let tail = 0;
     while (tail < gone.length - head && tail < came.length - head && gone[gone.length - 1 - tail] === came[came.length - 1 - tail]) tail++;
-    const first = line - came.length;
-    for (let i = head; i < came.length - tail; i++) changed.push(first + i);
-    if (came.length - tail <= head && gone.length - tail > head) changed.push(first + head);
+    const first = line - came.length + head;
+    const removed = gone.length - head - tail;
+    const added = came.length - head - tail;
+    if (removed || added) runs.push({ oldStart: first, oldLines: removed, newLines: added, changed: added ? Array.from({ length: added }, (_, i) => first + i) : [first] });
     gone = [];
     came = [];
   };
@@ -61,10 +62,11 @@ function hunkOf(h: JsonObject): Hunk[] {
     const text = str(raw);
     if (text.startsWith('-')) { if (came.length) flush(); gone.push(text.slice(1)); }
     else if (text.startsWith('+')) { came.push(text.slice(1)); line++; }
-    else { flush(); line++; }
+    // "\ No newline at end of file" is about the line before it, not a line of its own.
+    else if (!text.startsWith('\\')) { flush(); line++; }
   }
   flush();
-  return [{ oldStart: oldStart!, oldLines: oldLines!, newLines: newLines!, changed: [...new Set(changed)].sort((a, b) => a - b) }];
+  return runs;
 }
 
 let adapters: AdapterRegistry | undefined;
