@@ -55,6 +55,8 @@ pub struct Plants {
     pub sweep: crate::sweep::Plants,
     /// #440's plants in the hull builder.
     pub hull: crate::hull::Plants,
+    /// #443's planted outline reader: every contour filled on its own, so no counter is a hole.
+    pub outline_ignores_rule: bool,
 }
 
 impl Plants {
@@ -73,6 +75,7 @@ impl Plants {
             "seam_twist_left" => p.sweep.seam_twist = true,
             "hull_keeps_face_points" => p.hull.keeps_face_points = true,
             "hull_fan_input_order" => p.hull.fan_input_order = true,
+            "outline_ignores_fill_rule" => p.outline_ignores_rule = true,
             _ => return None,
         }
         Some(p)
@@ -225,6 +228,11 @@ pub struct Ctx<'a> {
     pub doc: &'a Value,
     pub id: &'a str,
     pub plants: Plants,
+    /// The build's outline sources (#443), which an `extrude`'s text, path or vector outline
+    /// comes through; empty where nothing reads one.
+    pub outlines: &'a [deep_canvas::registry::SealedOutline],
+    /// The planted wrong program by name, which an outline source may hold (#443).
+    pub planted: Option<&'a str>,
 }
 
 /// Builds `kind` from `params`, smooth or flat as `shade` says.
@@ -233,6 +241,7 @@ pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
         "slab@1" => slab(params, ctx)?,
         "lathe@1" => lathe(params, ctx.plants)?,
         "extrude@1" if params.get("along").is_some() => sweep_of(params, ctx)?.build(),
+        "extrude@1" if sourced(params) => extrude_sourced(params, ctx)?,
         "extrude@1" => extrude(params)?,
         "tube@1" => tube_item(params, ctx)?,
         "ball@1" => ball(params, ctx.plants)?,
@@ -408,6 +417,15 @@ pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), F
         },
         "lathe@1" => lathe_count(params, ctx.plants)?,
         "extrude@1" if params.get("along").is_some() => sweep_of(params, ctx)?.counts(),
+        "extrude@1" if sourced(params) => {
+            let mut total = (0, 0);
+            for shell in shells_of(params, ctx)? {
+                let (o, h) = (shell.outer, shell.holes);
+                let c = layered_count(&shaped(p_depth(params)?, o, h, params)?.0);
+                total = (total.0 + c.0, total.1 + c.1);
+            }
+            total
+        }
         "extrude@1" => layered_count(&extrude_shape(params)?.0),
         "tube@1" => {
             let p = tube_path(params, ctx)?;
@@ -825,6 +843,11 @@ fn extrude_shape(p: &Value) -> Result<Extrusion, Fault> {
         return extrude_levels(p);
     }
     let (o, h) = (outline(p, "outline")?, holes(p, "holes")?);
+    shaped(p_depth(p)?, o, h, p)
+}
+
+/// An `extrude`'s span along its axis: from, to and up.
+fn p_depth(p: &Value) -> Result<(f64, f64, V3), Fault> {
     let (from, to, up) = match p.get("depth") {
         Some(d @ Value::Object(_)) => {
             let up = match d.get("up") {
@@ -842,8 +865,115 @@ fn extrude_shape(p: &Value) -> Result<Extrusion, Fault> {
     if to <= from {
         return Err(bad("depth"));
     }
+    Ok((from, to, up))
+}
+
+/// One outline with its holes extruded over `depth`, bevelled and twisted as `p` says.
+fn shaped(
+    depth: (f64, f64, V3),
+    o: Vec<V2>,
+    h: Vec<Vec<V2>>,
+    p: &Value,
+) -> Result<Extrusion, Fault> {
+    let (from, to, up) = depth;
     let (levels, heights) = bevelled(o, h, from, to, num(p, "bevel", 0.0)?)?;
     Ok((levels, heights, up, rad(num(p, "twist", 0.0)?)))
+}
+
+/// An `extrude` whose `outline` names a source: `{text}`, `{path}` or `{vector}` (#443).
+pub fn sourced(p: &Value) -> bool {
+    p.get("outline")
+        .is_some_and(|o| o.is_object() && deep_canvas::outline::form_of(o).is_some())
+}
+
+/// A refusal a builder raises with its own code, beside the path it names (#443).
+pub fn coded(code: &str, path: &str) -> Fault {
+    format!("{code}{CODED}{path}")
+}
+
+/// What splits a [`coded`] fault's code from its path.
+pub const CODED: char = '\u{1f}';
+
+/// The codes an outline source refuses with (#443), beside `module_missing`.
+pub const OUTLINE_CODES: [&str; 5] = [
+    "module_missing",
+    "outline.stroke",
+    "ref_unresolved",
+    "asset_missing",
+    "text.glyph_missing",
+];
+
+/// The outlines an `extrude`'s `outline` names, through the build's outline sources, and the
+/// shells their fill rule makes of them, in meters in the item's plane.
+pub fn outlines_of(p: &Value, ctx: &Ctx<'_>) -> Result<deep_canvas::outline::Outlines, Fault> {
+    let o = p.get("outline").ok_or_else(|| bad("outline"))?;
+    let form = deep_canvas::outline::form_of(o).ok_or_else(|| bad("outline"))?;
+    let size = o
+        .get("size")
+        .and_then(Value::as_f64)
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .ok_or_else(|| bad("outline/size"))?;
+    let flatten = num(p, "flatten", 0.001)?;
+    if !(flatten > 0.0 && flatten <= 0.1) {
+        return Err(bad("flatten"));
+    }
+    let source = ctx
+        .outlines
+        .iter()
+        .find(|s| s.form == form)
+        .ok_or_else(|| {
+            coded(
+                "module_missing",
+                deep_canvas::outline::module_of(form).unwrap_or(form),
+            )
+        })?;
+    let none = |_: &str| None;
+    let request = deep_canvas::outline::Request {
+        outline: o,
+        size,
+        flatten,
+        doc: ctx.doc,
+        bytes: &none,
+        planted: ctx.planted,
+    };
+    (source.fill)(&request).map_err(|r| coded(r.code, &r.path))
+}
+
+fn shells_of(p: &Value, ctx: &Ctx<'_>) -> Result<Vec<deep_canvas::outline::Shell>, Fault> {
+    let o = outlines_of(p, ctx)?;
+    let shells = deep_canvas::outline::shells(&o, ctx.plants.outline_ignores_rule);
+    if shells.is_empty() {
+        return Err(bad("outline"));
+    }
+    Ok(shells)
+}
+
+/// Each shell its fill rule makes of the outlines, extruded; the shells of one glyph or one item
+/// make one closed part, named as the source names them (`glyph<k>` for text), its genus their
+/// holes'.
+fn extrude_sourced(p: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
+    let depth = p_depth(p)?;
+    let mut m = Mesh::default();
+    for shell in shells_of(p, ctx)? {
+        let name = shell.of.split(' ').next().unwrap_or("solid").to_string();
+        let (levels, z, up, twist) = shaped(depth, shell.outer, shell.holes, p)?;
+        let (z0, z1) = (z[0], z[z.len() - 1]);
+        let mut one = layered(&levels, |q, l| {
+            let a = twist * (z[l] - z0) / (z1 - z0);
+            let (c, s) = (cos(a), sin(a));
+            add(
+                [q[0] * c - q[1] * s, q[0] * s + q[1] * c, 0.0],
+                scale(up, z[l]),
+            )
+        });
+        let (tris, genus) = one.closed.remove("solid").unwrap_or_default();
+        let base = m.triangles() as u32;
+        m.append(&one, "");
+        let entry = m.closed.entry(name).or_default();
+        entry.0.extend(tris.iter().map(|t| t + base));
+        entry.1 += genus;
+    }
+    Ok(m)
 }
 
 /// `levels: [[z, polygon]]`, in place of the outline, holes, depth and bevel: a prism through
@@ -2124,6 +2254,8 @@ mod tests {
             doc: &doc,
             id: "",
             plants: Plants::default(),
+            outlines: &[],
+            planted: None,
         };
         (
             build(kind, &p, &ctx).unwrap(),
@@ -2224,6 +2356,8 @@ mod tests {
             doc: &doc,
             id: "it",
             plants: Plants::default(),
+            outlines: &[],
+            planted: None,
         };
         for (kind, plain, p) in [
             (
@@ -2320,6 +2454,8 @@ mod tests {
                     doc: &doc,
                     id,
                     plants: Plants::default(),
+                    outlines: &[],
+                    planted: None,
                 },
             )
             .unwrap()
@@ -2354,6 +2490,8 @@ mod tests {
                 doc: &doc,
                 id: "t",
                 plants: Plants::default(),
+                outlines: &[],
+                planted: None,
             },
         )
         .unwrap();
@@ -2375,6 +2513,8 @@ mod tests {
             doc: &doc,
             id: "bar",
             plants: Plants::default(),
+            outlines: &[],
+            planted: None,
         };
         let m = build("extrude@1", &p, &ctx).unwrap();
         assert_eq!(

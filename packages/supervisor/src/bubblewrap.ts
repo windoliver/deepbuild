@@ -59,7 +59,7 @@ function rootBinds(): string[] {
  * flags, which travel in the DEEP_CONFINE variable with the program's own arguments: neither bwrap's nor the helper's
  * command line then repeats the program's, which anything counting a program's processes by its command line would count.
  */
-export function bwrapArgs(run: string, cwd: string, grant: Grant, guards: readonly Guard[], plant: Widening = {}): { bwrap: string[]; helper: string[] } {
+function bwrapArgs(run: string, cwd: string, grant: Grant, guards: readonly Guard[], plant: Widening = {}): { bwrap: string[]; helper: string[] } {
   const flags: string[] = ['--log-fd', '3'];
   for (const p of [cwd, ...(grant.read ?? [])]) flags.push('--read', real(p));
   for (const p of grant.write ?? []) flags.push('--write', real(p));
