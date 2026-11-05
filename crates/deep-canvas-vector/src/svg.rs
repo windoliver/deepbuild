@@ -33,11 +33,25 @@ const READ: &[&str] = &[
 /// The elements that draw only where referenced, never where they stand.
 const REFERENCED: &[&str] = &["defs", "style", "clipPath", "mask", "pattern", "marker"];
 
+/// The elements a `url(#id)` paint names: the pattern the import draws, and the gradients and
+/// hatches it names.
+const SERVERS: &[&str] = &[
+    "pattern",
+    "linearGradient",
+    "radialGradient",
+    "meshgradient",
+    "hatch",
+];
+
 /// The most clip regions one path may draw inside (Mask `mask@1`: masks nest at most 4 deep).
 const CLIP_DEPTH: usize = 4;
 
 /// The most pattern tiles one fill draws.
 const MAX_TILES: f64 = 4096.0;
+
+/// The most paths and clip regions one SVG draws, so `<use>`s, patterns and markers that hold
+/// one another refuse instead of multiplying past memory.
+const MAX_DRAWN: usize = 65_536;
 
 /// Why an SVG is refused, naming what it found.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -160,9 +174,8 @@ pub struct Svg {
 }
 
 /// Which importer reads an SVG: the honest one, or a planted wrong program.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Twin {
-    #[default]
     Honest,
     /// #398 AC6's: ignores every `<clipPath>` and `clip-path`, naming none.
     SkipsClipPath,
@@ -202,6 +215,7 @@ pub fn import(bytes: &[u8], classes: &[String], twin: Twin) -> Result<Svg, Refus
         parts: Vec::new(),
         paths: Vec::new(),
         clips: Vec::new(),
+        decorated: 0,
     };
     let style = import.style(&Style::default(), root);
     for child in root.children().filter(Node::is_element) {
@@ -260,11 +274,14 @@ fn scan<'a, 'i>(
                     return Err(Refusal::External(value.into()));
                 }
             }
-            if let Some(at) = value.find("url(") {
-                let inner = value[at + 4..].trim_start().trim_start_matches(['"', '\'']);
-                if !inner.starts_with('#') {
-                    return Err(Refusal::External(value.into()));
-                }
+            if outside(value) {
+                return Err(Refusal::External(value.into()));
+            }
+        }
+        if name == "style" {
+            let css: String = node.children().filter_map(|c| c.text()).collect();
+            if outside(&css) {
+                return Err(Refusal::External(css.trim().into()));
             }
         }
         if let Some(id) = node.attribute("id") {
@@ -281,6 +298,14 @@ fn scan<'a, 'i>(
         }
     }
     Ok(())
+}
+
+/// Whether any `url(…)` in `value` names something outside the SVG.
+fn outside(value: &str) -> bool {
+    value.match_indices("url(").any(|(at, _)| {
+        let inner = value[at + 4..].trim_start().trim_start_matches(['"', '\'']);
+        !inner.starts_with('#')
+    })
 }
 
 fn view_box(root: Node<'_, '_>) -> [f64; 4] {
@@ -305,7 +330,8 @@ fn view_box(root: Node<'_, '_>) -> [f64; 4] {
 enum Spec {
     Color(Color),
     None,
-    Server(String),
+    /// A paint server's id, and the color drawn where it names none.
+    Server(String, Option<Color>),
 }
 
 /// The properties an element inherits, with the opacity of its ancestors folded in.
@@ -397,14 +423,14 @@ impl Style {
                 color: *color,
                 opacity: opacity * self.opacity,
             }),
-            Spec::None | Spec::Server(_) => None,
+            Spec::None | Spec::Server(..) => None,
         }
     }
 }
 
-/// The id a `url(#id)` names; `None` for `none` or anything else.
+/// The id a `url(#id)` names, whatever follows it; `None` for `none` or anything else.
 fn local_url(v: &str) -> Option<String> {
-    let inner = v.trim().strip_prefix("url(")?.strip_suffix(')')?;
+    let (inner, _) = v.trim().strip_prefix("url(")?.split_once(')')?;
     let inner = inner.trim().trim_matches(['"', '\'']);
     Some(inner.strip_prefix('#')?.to_string())
 }
@@ -577,6 +603,9 @@ struct Import<'a, 'i, 'c> {
     parts: Vec<Part>,
     paths: Vec<Painted>,
     clips: Vec<Clip>,
+    /// How many pattern fills and markers have drawn, whose tiles and marks sit outside the
+    /// geometry an object bounding box measures.
+    decorated: usize,
 }
 
 impl<'a, 'i> Import<'a, 'i, '_> {
@@ -596,6 +625,40 @@ impl<'a, 'i> Import<'a, 'i, '_> {
             .map(|(_, v)| v.trim().to_string())
     }
 
+    /// Whether `node` is `display: none`, by its attribute or a rule.
+    fn hidden(&self, node: Node<'_, '_>) -> bool {
+        self.own(node, "display").as_deref() == Some("none")
+    }
+
+    /// `node`'s `transform` attribute; one a rule or `style` sets instead (CSS transforms,
+    /// with units the attribute doesn't take) is named.
+    fn transform_of(&mut self, node: Node<'_, '_>) -> Affine {
+        let attr = node.attribute("transform");
+        if self.own(node, "transform").as_deref() != attr.map(str::trim) {
+            unread_once(&mut self.unread, "transform");
+        }
+        transform(attr.unwrap_or(""))
+    }
+
+    /// An inherited property at `node`: its own, else its nearest ancestor's.
+    fn inherited(&self, node: Node<'_, '_>, name: &str) -> Option<String> {
+        node.ancestors()
+            .filter(Node::is_element)
+            .find_map(|n| self.own(n, name))
+    }
+
+    /// The style a referenced element (a mask, pattern or marker) draws its content in: what
+    /// its ancestors pass down where it stands, but not their opacity, which it isn't drawn in.
+    fn referenced_style(&mut self, node: Node<'_, '_>) -> Style {
+        let above: Vec<Node> = node.ancestors().skip(1).filter(Node::is_element).collect();
+        let mut s = Style::default();
+        for a in above.into_iter().rev() {
+            s = self.style(&s, a);
+        }
+        s.opacity = 1.0;
+        self.style(&s, node)
+    }
+
     /// Draws `node` under `ctm`, inside the clip region `clip`; `uses` counts the `<use>`s,
     /// pattern tiles and markers it is inside, whose copies hold no parts of their own.
     fn walk(
@@ -612,12 +675,17 @@ impl<'a, 'i> Import<'a, 'i, '_> {
             || !READ.contains(&name)
             || REFERENCED.contains(&name)
             || matches!(name, "title" | "desc" | "metadata")
-            || node.attribute("display") == Some("none")
+            || self.hidden(node)
         {
             return Ok(());
         }
+        if self.paths.len() + self.clips.len() > MAX_DRAWN {
+            return Err(Refusal::Malformed(format!(
+                "over {MAX_DRAWN} paths and clips: <use>s, patterns or markers that multiply"
+            )));
+        }
         let style = self.style(parent, node);
-        let ctm = ctm.then(&transform(node.attribute("transform").unwrap_or("")));
+        let ctm = ctm.then(&self.transform_of(node));
         let class_part = node.attribute("class").and_then(|c| {
             c.split_whitespace()
                 .find(|c| self.classes.iter().any(|k| k == c))
@@ -638,6 +706,7 @@ impl<'a, 'i> Import<'a, 'i, '_> {
             _ => None,
         };
         let (first, first_clip) = (self.paths.len(), self.clips.len());
+        let decorated = self.decorated;
         let inner = own.or(part);
         match name {
             "svg" | "g" | "a" => {
@@ -674,12 +743,13 @@ impl<'a, 'i> Import<'a, 'i, '_> {
         }
         // What the element drew goes into its clip path's region, then its mask's.
         if self.paths.len() > first {
+            let decorated = self.decorated != decorated;
             let clip_path = self.own(node, "clip-path").and_then(|v| local_url(&v));
             if let Some(id) = clip_path.filter(|_| self.twin != Twin::SkipsClipPath) {
-                self.clip_path(&id, ctm, first, first_clip, clip);
+                self.clip_path(&id, ctm, first, first_clip, clip, decorated);
             }
             if let Some(id) = self.own(node, "mask").and_then(|v| local_url(&v)) {
-                self.mask(&id, ctm, first, first_clip, clip);
+                self.mask(&id, ctm, first, first_clip, clip, decorated);
             }
         }
         // A part that draws nothing isn't one, nor is anything inside it.
@@ -705,10 +775,21 @@ impl<'a, 'i> Import<'a, 'i, '_> {
         let Some((verbs, ends)) = outline_of(node, &mut self.unread) else {
             return Ok(());
         };
-        if let Spec::Server(id) = &style.fill {
+        // A paint server's id that names no paint server draws its fallback color.
+        let mut style = style.clone();
+        for paint in [&mut style.fill, &mut style.stroke] {
+            if let Spec::Server(id, fallback) = &*paint {
+                let server = self.ids.get(id).map(|n| n.tag_name().name());
+                if !server.is_some_and(|s| SERVERS.contains(&s)) {
+                    *paint = fallback.map_or(Spec::None, Spec::Color);
+                }
+            }
+        }
+        let style = &style;
+        if let Spec::Server(id, _) = &style.fill {
             self.pattern(id, &verbs, ctm, style, part, clip, uses)?;
         }
-        if let Spec::Server(id) = &style.stroke {
+        if let Spec::Server(id, _) = &style.stroke {
             // A stroke paint server isn't read; a gradient is already named where it stands.
             if let Some(server) = self.ids.get(id).map(|n| n.tag_name().name()) {
                 if READ.contains(&server) {
@@ -811,6 +892,7 @@ impl<'a, 'i> Import<'a, 'i, '_> {
         first: usize,
         first_clip: usize,
         under: Option<usize>,
+        decorated: bool,
     ) {
         let Some(&target) = self
             .ids
@@ -819,8 +901,14 @@ impl<'a, 'i> Import<'a, 'i, '_> {
         else {
             return;
         };
-        let mut t = ctm.then(&transform(target.attribute("transform").unwrap_or("")));
-        if target.attribute("clipPathUnits") == Some("objectBoundingBox") {
+        let mut t = ctm.then(&self.transform_of(target));
+        let obb = target.attribute("clipPathUnits") == Some("objectBoundingBox");
+        if obb && decorated {
+            // Its box would count the tiles and marks drawn past the element's geometry.
+            unread_once(&mut self.unread, "clipPath");
+            return;
+        }
+        if obb {
             let Some([x, y, w, h]) = self.user_bounds(first, ctm) else {
                 return;
             };
@@ -830,15 +918,9 @@ impl<'a, 'i> Import<'a, 'i, '_> {
         let mut readable =
             self.own(target, "clip-path").is_none() && self.deepest(first) < CLIP_DEPTH;
         for child in target.children().filter(Node::is_element) {
-            let declared = self.sheet.declarations(child);
-            let set = |k: &str| {
-                declared
-                    .iter()
-                    .rev()
-                    .find(|(n, _)| n == k)
-                    .map(|(_, v)| v.trim())
-            };
-            if set("clip-rule") == Some("evenodd") || set("clip-path").is_some() {
+            if self.inherited(child, "clip-rule").as_deref() == Some("evenodd")
+                || self.own(child, "clip-path").is_some()
+            {
                 readable = false;
             }
             if let Some(v) = self.clip_outline(child, t, 0) {
@@ -865,10 +947,10 @@ impl<'a, 'i> Import<'a, 'i, '_> {
 
     /// A clip path child's outline under `ctm`: a shape, or a `<use>` of one.
     fn clip_outline(&mut self, node: Node<'a, 'i>, ctm: Affine, uses: usize) -> Option<Vec<Verb>> {
-        if node.attribute("display") == Some("none") || uses >= USE_DEPTH {
+        if self.hidden(node) || uses >= USE_DEPTH {
             return None;
         }
-        let ctm = ctm.then(&transform(node.attribute("transform").unwrap_or("")));
+        let ctm = ctm.then(&self.transform_of(node));
         if node.tag_name().name() == "use" {
             let target = href(node)
                 .and_then(|h| h.strip_prefix('#'))
@@ -881,8 +963,9 @@ impl<'a, 'i> Import<'a, 'i, '_> {
     }
 
     /// An element's `<mask>` of solid shapes that don't overlap: what it drew, once inside each
-    /// shape at the shape's luminance (sRGB-encoded, as SVG takes it) times its opacity, all
-    /// inside the mask's region. Any other mask is named, and what it masks draws unmasked.
+    /// shape at the shape's luminance (sRGB-encoded, as SVG takes it; its alpha alone for
+    /// `mask-type: alpha`) times its opacity, all inside the mask's region. Any other mask is
+    /// named, and what it masks draws unmasked.
     fn mask(
         &mut self,
         id: &str,
@@ -890,10 +973,17 @@ impl<'a, 'i> Import<'a, 'i, '_> {
         first: usize,
         first_clip: usize,
         under: Option<usize>,
+        decorated: bool,
     ) {
         let Some(&target) = self.ids.get(id).filter(|n| n.tag_name().name() == "mask") else {
             return;
         };
+        let content_obb = target.attribute("maskContentUnits") == Some("objectBoundingBox");
+        if decorated && (target.attribute("maskUnits") != Some("userSpaceOnUse") || content_obb) {
+            // Its box would count the tiles and marks drawn past the element's geometry.
+            unread_once(&mut self.unread, "mask");
+            return;
+        }
         let Some(bbox) = self.user_bounds(first, ctm) else {
             return;
         };
@@ -915,16 +1005,18 @@ impl<'a, 'i> Import<'a, 'i, '_> {
             side("width", vw, 1.2),
             side("height", vh, 1.2),
         ];
-        let content = match target.attribute("maskContentUnits") {
-            Some("objectBoundingBox") => ctm.then(&Affine([bw, 0.0, 0.0, bh, bx, by])),
-            _ => ctm,
+        let content = if content_obb {
+            ctm.then(&Affine([bw, 0.0, 0.0, bh, bx, by]))
+        } else {
+            ctm
         };
-        let style = self.style(&Style::default(), target);
+        let style = self.referenced_style(target);
+        let alpha = self.own(target, "mask-type").as_deref() == Some("alpha");
         let mut shapes = Vec::new();
         let readable = self.own(target, "mask").is_none()
             && self.own(target, "clip-path").is_none()
             && self.deepest(first) + 2 <= CLIP_DEPTH
-            && self.mask_shapes(target, content, &style, 0, &mut shapes)
+            && self.mask_shapes(target, content, &style, 0, alpha, &mut shapes)
             && !overlap(&shapes);
         let (true, [Some(x), Some(y), Some(w), Some(h)]) = (readable, region) else {
             unread_once(&mut self.unread, "mask");
@@ -972,21 +1064,21 @@ impl<'a, 'i> Import<'a, 'i, '_> {
         }
     }
 
-    /// A mask's solid shapes under `ctm`, each with its alpha; false when it holds anything else
-    /// (a stroke, a paint server, a marker, a clip or mask of its own).
+    /// A mask's solid shapes under `ctm`, each with its alpha (its coverage alone where `alpha`);
+    /// false when it holds anything else (a stroke, a paint server, a marker, an even-odd fill, a
+    /// clip or mask of its own).
     fn mask_shapes(
         &mut self,
         node: Node<'a, 'i>,
         ctm: Affine,
         parent: &Style,
         uses: usize,
+        alpha: bool,
         out: &mut Vec<(Vec<Verb>, f64)>,
     ) -> bool {
         for child in node.children().filter(Node::is_element) {
             let name = child.tag_name().name();
-            if matches!(name, "title" | "desc" | "metadata")
-                || child.attribute("display") == Some("none")
-            {
+            if matches!(name, "title" | "desc" | "metadata") || self.hidden(child) {
                 continue;
             }
             if uses >= USE_DEPTH
@@ -996,9 +1088,9 @@ impl<'a, 'i> Import<'a, 'i, '_> {
                 return false;
             }
             let style = self.style(parent, child);
-            let ctm = ctm.then(&transform(child.attribute("transform").unwrap_or("")));
+            let ctm = ctm.then(&self.transform_of(child));
             let ok = match name {
-                "g" | "a" => self.mask_shapes(child, ctm, &style, uses, out),
+                "g" | "a" => self.mask_shapes(child, ctm, &style, uses, alpha, out),
                 "use" => {
                     let target = href(child)
                         .and_then(|h| h.strip_prefix('#'))
@@ -1008,11 +1100,11 @@ impl<'a, 'i> Import<'a, 'i, '_> {
                     // The use stands in for its target, as a group holding it would.
                     target.is_some_and(|t| {
                         let inner = self.style(&style, t);
-                        let ctm = ctm.then(&transform(t.attribute("transform").unwrap_or("")));
-                        self.mask_target(t, ctm, &inner, uses + 1, out)
+                        let ctm = ctm.then(&self.transform_of(t));
+                        self.mask_target(t, ctm, &inner, uses + 1, alpha, out)
                     })
                 }
-                _ => self.mask_target(child, ctm, &style, uses, out),
+                _ => self.mask_target(child, ctm, &style, uses, alpha, out),
             };
             if !ok {
                 return false;
@@ -1029,29 +1121,36 @@ impl<'a, 'i> Import<'a, 'i, '_> {
         ctm: Affine,
         style: &Style,
         uses: usize,
+        alpha: bool,
         out: &mut Vec<(Vec<Verb>, f64)>,
     ) -> bool {
         if matches!(node.tag_name().name(), "g" | "a") {
-            return self.mask_shapes(node, ctm, style, uses, out);
+            return self.mask_shapes(node, ctm, style, uses, alpha, out);
         }
         let Some((verbs, _)) = outline_of(node, &mut self.unread) else {
             return !matches!(node.tag_name().name(), "text" | "image" | "use" | "svg");
         };
-        if style.stroke != Spec::None || style.markers.iter().any(Option::is_some) {
+        if style.stroke != Spec::None
+            || style.markers.iter().any(Option::is_some)
+            || style.fill_rule == FillRule::EvenOdd
+        {
             return false;
         }
         let rgb = match &style.fill {
             Spec::None => return true,
-            Spec::Server(_) => return false,
+            Spec::Server(..) => return false,
             Spec::Color(Color::Rgb(c)) => *c,
             // currentColor where nothing sets color is the initial color, black.
             Spec::Color(Color::Current) => [0, 0, 0],
         };
-        let luminance =
-            (0.2125 * rgb[0] as f64 + 0.7154 * rgb[1] as f64 + 0.0721 * rgb[2] as f64) / 255.0;
+        let coverage = if alpha {
+            1.0
+        } else {
+            (0.2125 * rgb[0] as f64 + 0.7154 * rgb[1] as f64 + 0.0721 * rgb[2] as f64) / 255.0
+        };
         out.push((
             verbs.iter().map(|v| ctm.verb(*v)).collect(),
-            luminance * style.fill_opacity * style.opacity,
+            coverage * style.fill_opacity * style.opacity,
         ));
         true
     }
@@ -1154,13 +1253,19 @@ impl<'a, 'i> Import<'a, 'i, '_> {
         let Some(content) = content else {
             return Ok(());
         };
+        if style.fill_rule == FillRule::EvenOdd {
+            // The fill's outline holds the tiles as a clip region, which fills non-zero.
+            unread_once(&mut self.unread, "fill-rule");
+            return Ok(());
+        }
+        self.decorated += 1;
         let holder = self.clips.len();
         self.clips.push(Clip {
             verbs: verbs.iter().map(|v| ctm.verb(*v)).collect(),
             alpha: style.fill_opacity * style.opacity,
             parent: clip,
         });
-        let inside = self.style(&Style::default(), target);
+        let inside = self.referenced_style(target);
         let cell = rect([0.0, 0.0, w, h], 0.0, 0.0);
         for j in j0 as i64..j1 as i64 {
             for i in i0 as i64..i1 as i64 {
@@ -1273,6 +1378,7 @@ impl<'a, 'i> Import<'a, 'i, '_> {
         } else {
             style.stroke_width
         };
+        self.decorated += 1;
         let r = view.at([rx, ry]);
         let (s, c) = (ops::sin(angle), ops::cos(angle));
         let place = ctm
@@ -1294,7 +1400,7 @@ impl<'a, 'i> Import<'a, 'i, '_> {
             Some(self.clips.len() - 1)
         };
         // The marker's own properties, drawn at the opacity of the element it marks.
-        let mut own = self.style(&Style::default(), m);
+        let mut own = self.referenced_style(m);
         own.opacity *= style.opacity;
         for child in m.children().filter(Node::is_element) {
             self.walk(child, place.then(&view), &own, part, inside, uses + 1)?;
@@ -1563,7 +1669,7 @@ impl Affine {
     }
 
     /// The transform that undoes this one; `None` when it flattens the plane.
-    pub fn inverse(&self) -> Option<Affine> {
+    pub(crate) fn inverse(&self) -> Option<Affine> {
         let [a, b, c, d, e, f] = self.0;
         let det = a * d - b * c;
         if det.abs() < 1e-12 {
@@ -1667,8 +1773,10 @@ fn spec(text: &str) -> Option<Spec> {
         return Some(Spec::None);
     }
     if t.starts_with("url(") {
-        // A reference outside the SVG refuses it at the scan; one to nothing paints nothing.
-        return Some(local_url(t).map_or(Spec::None, Spec::Server));
+        // A reference outside the SVG refuses it at the scan; one to nothing paints its
+        // fallback color, or nothing.
+        let fallback = t.split_once(')').and_then(|(_, f)| color(f));
+        return Some(local_url(t).map_or(Spec::None, |id| Spec::Server(id, fallback)));
     }
     color(t).map(Spec::Color)
 }
@@ -2089,6 +2197,148 @@ mod tests {
             <path d="M 10 10 L 50 10" stroke="black" opacity="0.5" marker-end="url(#k)"/></svg>"#,
         );
         assert_eq!(svg.paths[1].fill.unwrap().opacity, 0.5);
+    }
+
+    fn doc(body: &str) -> String {
+        format!(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">{body}</svg>"#)
+    }
+
+    #[test]
+    fn a_marker_that_marks_itself_refuses_instead_of_doubling_each_level() {
+        let svg = doc(
+            r#"<marker id="m" overflow="visible" markerUnits="userSpaceOnUse">
+            <path d="M0 0 L1 0" marker-start="url(#m)" marker-end="url(#m)"/></marker>
+            <path d="M0 0 L1 0" marker-start="url(#m)" marker-end="url(#m)"/>"#,
+        );
+        let found = import(svg.as_bytes(), &[], Twin::Honest);
+        assert!(
+            matches!(found, Err(Refusal::Malformed(_))),
+            "{:?}",
+            found.map(|s| s.paths.len())
+        );
+    }
+
+    #[test]
+    fn a_pattern_inside_its_own_tiles_refuses_instead_of_multiplying_them() {
+        let svg = doc(
+            r#"<pattern id="p" patternUnits="userSpaceOnUse" width="4" height="4">
+            <rect width="1" height="1"/><rect width="64" height="64" fill="url(#p)"/></pattern>
+            <rect width="64" height="64" fill="url(#p)"/>"#,
+        );
+        let found = import(svg.as_bytes(), &[], Twin::Honest);
+        assert!(
+            matches!(found, Err(Refusal::Malformed(_))),
+            "{:?}",
+            found.map(|s| s.paths.len())
+        );
+    }
+
+    #[test]
+    fn an_alpha_mask_takes_its_shapes_alpha_not_their_luminance() {
+        let svg = read(&doc(
+            r##"<mask id="k" style="mask-type:alpha"><rect width="64" height="64" fill="#D9D9D9"/></mask>
+            <rect width="64" height="64" fill="red" mask="url(#k)"/>"##,
+        ));
+        assert_eq!(svg.clips[svg.paths[0].clip.unwrap()].alpha, 1.0);
+    }
+
+    #[test]
+    fn a_style_rule_hiding_an_element_hides_it() {
+        let svg = read(&doc(
+            r#"<style>.st0{display:none}</style><rect class="st0" width="64" height="64"/>"#,
+        ));
+        assert!(svg.paths.is_empty(), "{:?}", svg.paths);
+    }
+
+    #[test]
+    fn a_css_transform_is_named_not_dropped() {
+        let svg = read(&doc(
+            r#"<style>rect{transform:translate(10px,0)}</style><rect width="4" height="4"/>"#,
+        ));
+        assert!(
+            svg.unread.contains(&"transform".to_string()),
+            "{:?}",
+            svg.unread
+        );
+    }
+
+    #[test]
+    fn a_style_reference_outside_the_svg_refuses_it() {
+        for body in [
+            r#"<style>rect{fill:url(https://x.test/a.svg#p)}</style><rect width="4" height="4"/>"#,
+            r#"<rect width="4" height="4" style="fill:url(#a);stroke:url(https://x.test/b.svg#q)"/>"#,
+        ] {
+            let found = import(doc(body).as_bytes(), &[], Twin::Honest);
+            assert!(
+                matches!(found, Err(Refusal::External(_))),
+                "{body}: {found:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_paint_server_with_a_fallback_color_draws_the_server_or_the_color() {
+        let tiles = read(&doc(
+            r#"<pattern id="p" patternUnits="userSpaceOnUse" width="8" height="8">
+            <rect width="4" height="4" fill="blue"/></pattern>
+            <rect width="64" height="64" fill="url(#p) red"/>"#,
+        ));
+        assert_eq!(tiles.paths.len(), 64);
+        let fallback = read(&doc(
+            r#"<rect width="4" height="4" fill="url(#none) red"/>"#,
+        ));
+        assert_eq!(
+            fallback.paths[0].fill.unwrap().color,
+            Color::Rgb([255, 0, 0])
+        );
+    }
+
+    #[test]
+    fn an_even_odd_rule_the_clips_cannot_carry_is_named() {
+        let pattern = read(&doc(
+            r#"<pattern id="p" patternUnits="userSpaceOnUse" width="8" height="8">
+            <rect width="8" height="8" fill="blue"/></pattern>
+            <path fill-rule="evenodd" d="M0 0H64V64H0Z M16 16H48V48H16Z" fill="url(#p)"/>"#,
+        ));
+        assert!(
+            pattern.unread.contains(&"fill-rule".to_string()),
+            "{:?}",
+            pattern.unread
+        );
+        let clip = read(&doc(
+            r#"<g clip-rule="evenodd"><clipPath id="c"><path d="M0 0H64V64H0Z M16 16H48V48H16Z"/>
+            </clipPath></g><rect width="64" height="64" clip-path="url(#c)"/>"#,
+        ));
+        assert!(
+            clip.unread.contains(&"clipPath".to_string()),
+            "{:?}",
+            clip.unread
+        );
+    }
+
+    #[test]
+    fn a_bounding_box_clip_on_an_element_with_tiles_or_markers_is_named() {
+        let svg = read(&doc(
+            r#"<pattern id="p" patternUnits="userSpaceOnUse" width="7" height="7">
+            <rect width="7" height="7" fill="blue"/></pattern>
+            <clipPath id="c" clipPathUnits="objectBoundingBox"><rect width="0.5" height="1"/></clipPath>
+            <rect width="10" height="10" fill="url(#p)" clip-path="url(#c)"/>"#,
+        ));
+        assert!(
+            svg.unread.contains(&"clipPath".to_string()),
+            "{:?}",
+            svg.unread
+        );
+    }
+
+    #[test]
+    fn a_pattern_inherits_what_its_ancestors_set() {
+        let svg = read(&doc(
+            r#"<g fill="blue"><pattern id="p" patternUnits="userSpaceOnUse" width="8" height="8">
+            <rect width="4" height="4"/></pattern></g>
+            <rect width="8" height="8" fill="url(#p)"/>"#,
+        ));
+        assert_eq!(svg.paths[0].fill.unwrap().color, Color::Rgb([0, 0, 255]));
     }
 
     #[test]
