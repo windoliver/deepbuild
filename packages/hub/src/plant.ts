@@ -48,6 +48,8 @@ export type Plant =
   | 'new-run-is-evidence' | 'counts-waiting-stops'
   // #120's: the long-wait lines wait for the turn's stop, so a long turn of short calls shows none while it runs.
   | 'line-at-stop'
+  // #1014's: the record's turn walk takes a subagent's stop as a turn end.
+  | 'turn-closes-at-child-stop'
   // #340's: a note the waiter delivered recorded as nothing, and the app's words taken for yours with no request ID.
   | 'app-note-unrecorded' | 'app-note-as-person'
   // #340's: a brief with the requirements' text or only at startup, a queue line of the newest message alone,
@@ -56,6 +58,8 @@ export type Plant =
   | 'counts-every-enqueue' | 'slow-brief' | 'app-note-answers-authority'
   // #347's: a stager with no ceiling on files or seconds, and one that stages every shell call whose writes it can't predict.
   | 'stages-without-ceiling' | 'stages-unpredicted-writes'
+  // #1294's: a stager whose class covers only untracked and ignored files, and one that copies on a clean tree too.
+  | 'stages-untracked-only' | 'stages-clean-tree'
   // #356's: pages rewritten each run, a deleted line relearned, values copied, merging by name or never, everything read again, a
   // contradicted claim deleted.
   | 'rewrites' | 'resurrects' | 'copies-values' | 'merge-by-name' | 'never-merge' | 'rereads-all' | 'deletes-contradicted'
@@ -157,10 +161,12 @@ const PLANTS: readonly string[] = [
   'runs-disk-bytes',
   'new-run-is-evidence', 'counts-waiting-stops',
   'line-at-stop',
+  'turn-closes-at-child-stop',
   'app-note-unrecorded', 'app-note-as-person',
   'brief-full-text', 'brief-at-startup-only', 'queue-shows-newest', 'continuation-as-person', 'continuation-by-likeness',
   'counts-every-enqueue', 'slow-brief', 'app-note-answers-authority',
   'stages-without-ceiling', 'stages-unpredicted-writes',
+  'stages-untracked-only', 'stages-clean-tree',
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
   'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',
   'churn-no-full-collection', 'churn-no-resident-read',

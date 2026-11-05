@@ -13,6 +13,7 @@
 
 #[cfg(feature = "test-meter")]
 mod allocations;
+mod blur;
 mod calibrate;
 mod columns;
 mod compare;
@@ -32,6 +33,7 @@ mod live;
 mod liveview;
 mod lod;
 mod marks2d;
+mod opframe;
 mod parity;
 mod plugin;
 mod reference;
@@ -154,6 +156,12 @@ pub enum Planted {
     /// stepped from the last frame; mesh edges read unwelded, or drawn without the depth test;
     /// a shared result released when a revision drops its last reader.
     ParticlesIntegrate,
+    /// #419's wrong programs (tests/acceptance/419/README.md: Assumed surfaces 11).
+    VelocityFromTransform,
+    SamplerStepsWorld,
+    VelocityPairsByIndex,
+    SettleResetsEachFrame,
+    SamplerHoldsCamera,
     EdgesUnwelded,
     EdgesSkipDepth,
     ReleasesAtRevision,
@@ -218,6 +226,25 @@ pub enum Planted {
     ClimbNeverStepsDown,
     CanonicalClimbs,
     ReclimbsWithoutViewChange,
+    /// #428's wrong programs (tests/acceptance/428/README.md: Planted programs).
+    DropsDispersion,
+    AbsorptionIgnoresThickness,
+    TransmissionIgnoresRoughness,
+    DispersionSamplesOnce,
+    SpecularColorIgnored,
+    IridescenceIgnoresThickness,
+    DiffuseLambert,
+    OrenNayarUncompensated,
+    RetroreflectionIgnored,
+    FlakesByPixel,
+    // #483: the structural steps' wrong programs.
+    IterateFeedsFirst,
+    SortTiesDecreasing,
+    CompactByAtomic,
+    IndexWraps,
+    MipsLevel0Only,
+    MipsKeptUnderOldKey,
+    PoolWithoutClear,
 }
 
 impl Planted {
@@ -289,6 +316,11 @@ impl Planted {
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,
             "particles_integrate" => Planted::ParticlesIntegrate,
+            "velocity_from_transform" => Planted::VelocityFromTransform,
+            "sampler_steps_world" => Planted::SamplerStepsWorld,
+            "velocity_pairs_by_index" => Planted::VelocityPairsByIndex,
+            "settle_resets_each_frame" => Planted::SettleResetsEachFrame,
+            "sampler_holds_camera" => Planted::SamplerHoldsCamera,
             "edges_unwelded" => Planted::EdgesUnwelded,
             "edges_skip_depth" => Planted::EdgesSkipDepth,
             "releases_at_revision" => Planted::ReleasesAtRevision,
@@ -334,6 +366,23 @@ impl Planted {
             "climb_never_steps_down" => Planted::ClimbNeverStepsDown,
             "canonical_climbs" => Planted::CanonicalClimbs,
             "reclimbs_without_view_change" => Planted::ReclimbsWithoutViewChange,
+            "drops_dispersion" => Planted::DropsDispersion,
+            "absorption_ignores_thickness" => Planted::AbsorptionIgnoresThickness,
+            "transmission_ignores_roughness" => Planted::TransmissionIgnoresRoughness,
+            "dispersion_samples_once" => Planted::DispersionSamplesOnce,
+            "specular_color_ignored" => Planted::SpecularColorIgnored,
+            "iridescence_ignores_thickness" => Planted::IridescenceIgnoresThickness,
+            "diffuse_lambert" => Planted::DiffuseLambert,
+            "oren_nayar_uncompensated" => Planted::OrenNayarUncompensated,
+            "retroreflection_ignored" => Planted::RetroreflectionIgnored,
+            "flakes_by_pixel" => Planted::FlakesByPixel,
+            "iterate_feeds_first" => Planted::IterateFeedsFirst,
+            "sort_ties_decreasing" => Planted::SortTiesDecreasing,
+            "compact_by_atomic" => Planted::CompactByAtomic,
+            "index_wraps" => Planted::IndexWraps,
+            "mips_level0_only" => Planted::MipsLevel0Only,
+            "mips_kept_under_old_key" => Planted::MipsKeptUnderOldKey,
+            "pool_without_clear" => Planted::PoolWithoutClear,
             _ => return None,
         })
     }
@@ -541,6 +590,7 @@ impl App {
             Some("operators") => effects::operators(self),
             Some("calibrate") => calibrate::calibrate(self),
             Some("reference") => effects::reference(self, out, call),
+            Some("check_operator") if opframe::wants(call) => opframe::call(self, out, call),
             Some("check_operator") => effects::check_operator(self, call),
             Some("op") => effects::op(self, call),
             Some("columns") => columns::call(self, call),
@@ -637,7 +687,13 @@ fn main() {
                 _ => bad_input(),
             },
             "--planted" => match args.next().as_deref().and_then(Planted::parse) {
-                Some(p) => planted = Some(p),
+                Some(p) => {
+                    if p == Planted::DropsDispersion {
+                        deep_canvas_scene3d::gltf::DROPS_DISPERSION
+                            .store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    planted = Some(p)
+                }
                 None => bad_input(),
             },
             "--withhold" => match args.next().as_deref().and_then(deep_gpu::seam::row) {

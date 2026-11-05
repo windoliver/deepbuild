@@ -1,0 +1,47 @@
+# #419 acceptance suite at the base, 5def43f9 (Merge pull request #1307), before any implementation.
+#
+# Not run at the base: the surfaces plainly don't exist there, and no cargo binary was built (the owner asked for a
+# fast job). What was checked instead:
+#
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/419/tsconfig.json   -> exit 0, no errors
+#   (after npm ci in this worktree: the repo's pinned TypeScript, @types/node and vitest)
+#   The fixtures' own numbers, run on the CPU helpers alone (node --experimental-strip-types on helpers.ts):
+#     walker: each leg's band 3,982 px (1,788 covered at frame time); foot travel 13.96 px per 180° shutter; an ideal
+#       16-sample frame against the sharp one: mean |S − sharp| 0.280 per leg (the blur threshold is 0.12, the
+#       velocity tolerance 0.1)
+#     slider frame 12: 10.00 px of travel per shutter; an ideal 8-sample frame has 16 partly covered px on the centre
+#       row (threshold 12), the unblurred frame 0 (limit 2)
+#     car: lines 20–49 judged (30, columns 40 to 1896); 12.50 px of travel per shutter; an ideal 16-sample band reads
+#       12.708 px wide with energy 1.0000 (13.229 with samples at both shutter ends), a lone 1 px line 1.000; the car's
+#       whole pixels x 760–1159, y 465–614; a held camera smears the car ±6.25 px
+#     flag: swept bounds x 80–560, y 200–280 px; bar B 16,000 px; vertex 2's index-paired velocity 480 px, capped at
+#       32 px, smears to x = 576
+#     lab: the stated integrator gives 241 step hashes over 2 s at 120 Hz, all 241 distinct; ball_a at 0.5 s moves
+#       5.75 m/s, 7.19 px per 180° shutter
+#
+# Why each test fails at the base, read from the base's code (crates/deep-gpu-layer, crates/deep-canvas-scene3d,
+# crates/deep-canvas-motion). deep-gpu refuses every --planted name this suite uses at startup (Planted::parse has none
+# of velocity_from_transform, sampler_steps_world, velocity_pairs_by_index, settle_resets_each_frame,
+# sampler_holds_camera: bad_input, exit 1), so every planted twin fails there too. view3d's parse ignores `class` and
+# `viewer`, and Look3::read ignores `motion_blur`, `samples.export`, `samples.at_rest`, `filter`, `vary` and `sequence`.
+#
+#   declared-moves.test.ts AC1  the slider documents carry a `hold` marker, which the motion module's marker kinds
+#                               (cue, shot, section, record) refuse with bad_marker_kind, so both tests' replies are
+#                               refusals ("was answered, not refused"); without the marker, frame 12 would have no
+#                               partly covered pixels (no motion blur).
+#   settled-still.test.ts  AC2  no frame reports `samples` ("reports samples {drawn, settling}" fails); the export
+#                               draws samples.live (1), not 16.
+#   velocity-seek.test.ts  AC3  no velocity blur: the seeked frame has 0 partly covered pixels (needs 12) and equals the
+#                               frame with blur off.
+#   walker.test.ts         AC4  fixture.skin@1 falls to scene3d's `others` and draws nothing: the unblurred frame shows
+#                               no leg (posed on 2,194 of 3,982 band px, under 80%) and neither blurred frame shows blur.
+#   physics-lab.test.ts    AC5  fixture.world@1 draws nothing and the reply has no `worlds` ("reports no step hashes
+#                               for the world lab").
+#   topology.test.ts       AC6  mesh.sequence@1 draws nothing (0 px lit, needs 14,000) and no frame raises
+#                               velocity_topology.
+#   settle-viewer.test.ts  AC7  view3d refuses targets: ["scene"] (bad_input: "targets are final, linear, ids,
+#                               pre_tone and dirt"), so both replies are refusals.
+#   camera-track.test.ts   AC8  no motion blur: every line stays 1 px wide ("not 12.5 ± 1"); the car's pixels equal.
+#   taste.test.ts          AC9  no TASTE.json: INCONCLUSIVE, never PASS.
+#
+# A run at the base, when one is made, is recorded beside this note by the job that runs it.

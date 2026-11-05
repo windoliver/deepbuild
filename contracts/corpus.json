@@ -3351,6 +3351,38 @@
       ]
     },
     {
+      "name": "earlier-release/R1/command.staged@2/01",
+      "group": "earlier-release",
+      "source": "packages/contracts/fixtures/command.staged@2/01.json",
+      "samples": [
+        {
+          "schema": "command.staged@2",
+          "value": {
+            "v": 2,
+            "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+            "kind": "command.staged",
+            "writer": "core",
+            "actor": "you",
+            "scope": "you",
+            "ts": 1760013451123,
+            "data": {
+              "call": "toolu_01A2B3C4D5E6F7G8H9",
+              "command": "git reset --hard",
+              "folders": [],
+              "files": [
+                {
+                  "path": "/work/shop/src/a.ts",
+                  "digest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+                }
+              ],
+              "until": 1760272651123
+            },
+            "subject": "session:01K74FKZVK8Q2X5R7M3N9P4T6W"
+          }
+        }
+      ]
+    },
+    {
       "name": "earlier-release/R1/commit.made@1/01",
       "group": "earlier-release",
       "source": "packages/contracts/fixtures/commit.made@1/01.json",
