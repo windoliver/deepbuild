@@ -27,7 +27,7 @@ use crate::liveview::surface_of;
 use crate::session3::{self, lock};
 use crate::status;
 use crate::window::OverlayPicture;
-use crate::{effects, refused, App, Planted};
+use crate::{blur, effects, refused, App, Planted};
 use deep_scene3d_render::surface::{self, Surface, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
 
 pub const FLICKS_PER_SECOND: u64 = 705_600_000;
@@ -106,6 +106,12 @@ struct Args {
     lod: bool,
     light_cut: bool,
     masks: bool,
+    /// The view's class (#419): an export draws every frame with all of the look's export
+    /// samples and never settles; the live view draws its live samples while moving.
+    export: bool,
+    /// Viewer-only input in session state, from the frame each names (#419): `{pointer, hover,
+    /// selection, readout}`, never a document revision.
+    viewer: Vec<(u64, Value)>,
 }
 
 /// Milliseconds from this process's spawn, as the kernel records its start, to now.
@@ -253,11 +259,29 @@ fn parse(call: &Value) -> Result<Args, Value> {
         .filter_map(Value::as_str)
         .map(str::to_string)
         .collect::<BTreeSet<_>>();
-    if targets
-        .iter()
-        .any(|t| !matches!(t.as_str(), "final" | "linear" | "ids" | "pre_tone" | "dirt"))
-    {
-        return Err(bad("targets are final, linear, ids, pre_tone and dirt"));
+    if targets.iter().any(|t| {
+        !matches!(
+            t.as_str(),
+            "final" | "linear" | "ids" | "pre_tone" | "dirt" | "scene"
+        )
+    }) {
+        return Err(bad(
+            "targets are final, linear, ids, pre_tone, dirt and scene",
+        ));
+    }
+    let export = match call["class"].as_str() {
+        None | Some("live") => false,
+        Some("export") => true,
+        Some(_) => return Err(bad("class is live or export")),
+    };
+    let mut viewer = Vec::new();
+    for v in call["viewer"].as_array().into_iter().flatten() {
+        let Some(frame) = v["frame"].as_u64() else {
+            return Err(bad(
+                "a viewer entry is {frame, pointer?, hover?, selection?, readout?}",
+            ));
+        };
+        viewer.push((frame, v.clone()));
     }
     let capture = match &call["capture"] {
         Value::String(s) if s == "every" => Capture::Every,
@@ -398,6 +422,8 @@ fn parse(call: &Value) -> Result<Args, Value> {
         lod: call["lod"].as_bool().unwrap_or(false),
         light_cut: call["light_cut"].as_bool().unwrap_or(false),
         masks: call["masks"].as_bool().unwrap_or(false),
+        export,
+        viewer,
     })
 }
 
@@ -583,72 +609,127 @@ fn pick(
         .map(|(id, _)| id.clone())
 }
 
-/// Sub-sample k's offset from the pixel's centre, px: Halton's base 2 and base 3 at k, less ½.
-fn jitter(k: u32) -> [f64; 2] {
-    let halton = |mut i: u32, b: u32| {
-        let (mut f, mut r) = (1.0, 0.0);
-        while i > 0 {
-            f /= f64::from(b);
-            r += f * f64::from(i % b);
-            i /= b;
-        }
-        r
-    };
-    [halton(k, 2) - 0.5, halton(k, 3) - 0.5]
+fn srgb_decode(c: u8) -> f64 {
+    let c = f64::from(c) / 255.0;
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
 }
 
-/// The frame as the mean of itself and its sub-samples: the linear target's f32 values, and
-/// the final BGRA bytes averaged in linear light.
-fn mean(drawn: &mut session3::Drawn, subs: &[session3::Drawn]) {
-    let n = (subs.len() + 1) as f32;
+fn srgb_encode(c: f64) -> u8 {
+    let c = if c <= 0.003_130_8 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    };
+    (c * 255.0).round().clamp(0.0, 255.0) as u8
+}
+
+/// A sub-sample's pixels: its final bytes and its linear target.
+struct Part {
+    bytes: Option<Vec<u8>>,
+    linear: Option<Vec<u8>>,
+}
+
+impl Part {
+    fn of(d: &session3::Drawn) -> Part {
+        Part {
+            bytes: d.bytes.clone(),
+            linear: d.targets.as_ref().map(|(l, _)| l.clone()),
+        }
+    }
+}
+
+/// The frame as the weighted mean of its sub-samples, in index order (#419): the linear
+/// target's values, and the final BGRA bytes averaged in linear light. A frame of one sample is
+/// that sample as drawn.
+fn mean(drawn: &mut session3::Drawn, parts: &[(f64, &Part)]) {
+    if parts.len() < 2 {
+        if let Some((_, d)) = parts.first() {
+            drawn.bytes.clone_from(&d.bytes);
+            if let (Some((l, _)), Some(dl)) = (drawn.targets.as_mut(), &d.linear) {
+                l.clone_from(dl);
+            }
+        }
+        return;
+    }
+    let total: f64 = parts.iter().map(|(w, _)| w).sum();
     if let Some((linear, _)) = drawn.targets.as_mut() {
-        let mut acc: Vec<f32> = linear
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .map(|b| f32::from_le_bytes(*b))
-            .collect();
-        for s in subs {
-            if let Some((l, _)) = &s.targets {
+        let mut acc = vec![0f64; linear.len() / 4];
+        for (w, s) in parts {
+            if let Some(l) = &s.linear {
                 for (a, b) in acc.iter_mut().zip(l.as_chunks::<4>().0) {
-                    *a += f32::from_le_bytes(*b);
+                    *a += w * f64::from(f32::from_le_bytes(*b));
                 }
             }
         }
-        *linear = acc.iter().flat_map(|v| (v / n).to_le_bytes()).collect();
+        *linear = acc
+            .iter()
+            .flat_map(|v| ((v / total) as f32).to_le_bytes())
+            .collect();
     }
-    let decode = |c: u8| {
-        let c = f32::from(c) / 255.0;
-        if c <= 0.04045 {
-            c / 12.92
-        } else {
-            ((c + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    let encode = |c: f32| {
-        let c = if c <= 0.003_130_8 {
-            c * 12.92
-        } else {
-            1.055 * c.powf(1.0 / 2.4) - 0.055
-        };
-        (c * 255.0).round().clamp(0.0, 255.0) as u8
-    };
     if let Some(bytes) = drawn.bytes.as_mut() {
-        let mut acc: Vec<f32> = bytes.iter().map(|c| decode(*c)).collect();
-        for s in subs {
+        let mut acc = vec![0f64; bytes.len()];
+        for (w, s) in parts {
             if let Some(b) = &s.bytes {
-                for (a, c) in acc.iter_mut().zip(b) {
-                    *a += decode(*c);
+                for (i, (a, c)) in acc.iter_mut().zip(b).enumerate() {
+                    // Alpha averages as coverage, the color channels in linear light.
+                    *a += w * if i % 4 == 3 {
+                        f64::from(*c)
+                    } else {
+                        srgb_decode(*c)
+                    };
                 }
             }
         }
         for (i, (out, a)) in bytes.iter_mut().zip(acc).enumerate() {
-            // Alpha averages as coverage, the color channels in linear light.
             *out = if i % 4 == 3 {
-                (a / n).round().clamp(0.0, 255.0) as u8
+                (a / total).round().clamp(0.0, 255.0) as u8
             } else {
-                encode(a / n)
+                srgb_encode(a / total)
             };
+        }
+    }
+}
+
+/// Motion blur by velocity over the drawn frame (#419): the reconstruction filter on the linear
+/// target and on the final bytes in linear light.
+fn resolve_velocity(
+    drawn: &mut session3::Drawn,
+    vel: &blur::Velocity,
+    size: [u32; 2],
+    b: &deep_canvas_scene3d::samples::Blur,
+) {
+    let mut colors: Vec<Vec<f64>> = Vec::new();
+    if let Some((linear, _)) = &drawn.targets {
+        colors.push(
+            linear
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| f64::from(f32::from_le_bytes(*c)))
+                .collect(),
+        );
+    }
+    if let Some(bytes) = &drawn.bytes {
+        colors.push(bytes.iter().map(|c| srgb_decode(*c)).collect());
+    }
+    let before = colors.clone();
+    blur::reconstruct(&mut colors, vel, size, b);
+    let mut it = colors.into_iter().zip(before);
+    if let Some((linear, _)) = drawn.targets.as_mut() {
+        let (c, _) = it.next().expect("the linear target's colors");
+        *linear = c.iter().flat_map(|v| (*v as f32).to_le_bytes()).collect();
+    }
+    if let Some(bytes) = drawn.bytes.as_mut() {
+        let (c, was) = it.next().expect("the final bytes' colors");
+        for (i, out) in bytes.iter_mut().enumerate() {
+            // Only resolved pixels change: an untouched one keeps its byte exactly.
+            if i % 4 != 3 && c[i] != was[i] {
+                *out = srgb_encode(c[i]);
+            }
         }
     }
 }
@@ -889,6 +970,22 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     };
     // Whether the key sun drew its cascades in any frame: the shadow pass the reply lists (#424).
     let mut casts = false;
+    // #419: the document's reading holds, its worlds' bakes (whose step hashes the reply reports),
+    // the samples a live view holds while it settles at rest, and the viewer's session state.
+    let mut holds = deep_canvas_scene3d::samples::holds(&args.doc);
+    let mut worlds: BTreeMap<String, deep_canvas_scene3d::fixtures::World> = BTreeMap::new();
+    for (id, item) in args.doc["items"].as_object().into_iter().flatten() {
+        if item["kind"] == "fixture.world@1" {
+            let w =
+                deep_canvas_scene3d::fixtures::bake(&item["params"], &format!("items/{id}/params"))
+                    .map_err(|r| refused(r.code, r.path))?;
+            worlds.insert(id.clone(), w);
+        }
+    }
+    let mut settle: Vec<(f64, Part)> = Vec::new();
+    let mut settled_on: Option<Scene> = None;
+    let mut hover: Option<String> = None;
+    let mut viewer_selection: Vec<String> = Vec::new();
     let result = (|| -> Result<(), Value> {
         // The lights the policy last left out: a change is reported once, by ID (#421).
         let mut left_out: Vec<String> = Vec::new();
@@ -901,6 +998,39 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     apply_patch(&mut args.doc, writer, ops, k)?;
                     patched = true;
                 }
+            }
+            // Viewer-only input (#419): the hover and selection are session state; a readout's
+            // text changes as its template's bound value would.
+            for (frame, v) in &args.viewer {
+                if *frame != n && !(n == args.from && *frame < n) {
+                    continue;
+                }
+                if let Some(h) = v.get("hover") {
+                    hover = h.as_str().map(str::to_string);
+                }
+                if let Some(sel) = v.get("selection").and_then(Value::as_array) {
+                    viewer_selection = sel
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect();
+                }
+                if let (Some(item), Some(text)) = (
+                    v.pointer("/readout/item").and_then(Value::as_str),
+                    v.pointer("/readout/text"),
+                ) {
+                    let at = format!("/items/{item}/params/template");
+                    match args.doc.pointer_mut(&at) {
+                        Some(slot) => *slot = text.clone(),
+                        None => {
+                            return Err(refused("bad_input", format!("viewer: readout {item}")));
+                        }
+                    }
+                    patched = true;
+                }
+            }
+            if patched {
+                holds = deep_canvas_scene3d::samples::holds(&args.doc);
             }
             // The patched document's bindings are the ones drawn (a slice op can't add or
             // remove one, only leave one dangling, which refuses), and its roles keep the
@@ -1089,45 +1219,283 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let evaluated = scene.clone();
             // The pipelines compiled while drawing this frame, for `counts` (#424).
             let compiled_before = session3::pipelines(app).len();
-            // Look: samples (#423): a frame of n sub-samples is their mean in linear light,
-            // each offset by the sample's index alone (Halton 2, 3), drawn before the frame.
-            let samples = args.look.live_samples;
-            let mut subs = Vec::new();
-            let scene = if samples > 1 && !noop {
-                for k in 1..samples {
-                    let mut sub = (*scene).clone();
-                    sub.jitter = jitter(k + 1);
-                    subs.push(session3::draw(
-                        app,
-                        &opened,
-                        Arc::new(sub),
-                        args.look.clone(),
-                        n,
-                        0,
-                        true,
-                        false,
-                    )?);
+            // #419: the frame's sub-samples (Look: samples; Motion blur). Each is the pure
+            // evaluation at its own time with its own offset, both from its index alone.
+            let looks = &args.look.samples;
+            let fps = args.fps as f64;
+            let in_hold = holds.iter().any(|(a, b)| t >= *a && t <= *b);
+            let blur = args.look.blur.as_ref().filter(|_| !in_hold && !noop);
+            let shutter = blur.map_or(0.0, |b| b.shutter_s(fps) * FLICKS_PER_SECOND as f64);
+            let edges = (
+                app.planted == Some(Planted::EdgesUnwelded),
+                app.planted == Some(Planted::EdgesSkipDepth),
+            );
+            let at_time = |tk: i64, labels: &mut Labels| -> Result<Scene, Value> {
+                let mut sc = evaluate_with(&composed, tk, &args.look, labels, &read)
+                    .map_err(|r| refused(r.code, r.path))?;
+                sc.texels.clone_from(&scene.texels);
+                sc.ground = scene.ground;
+                sc.set_cutaway(scene.cutaway.clone());
+                sc.plant_edges(edges.0, edges.1);
+                if let Some(status) = status.as_ref().filter(|_| bound) {
+                    status::strokes(&mut sc, status, &bindings, &args.states)?;
+                }
+                Ok(sc)
+            };
+            // A live view at rest (its frame draws as the one before it does) with `settle`
+            // adds samples frame by frame until it holds the export's.
+            let settling_view = !args.export && looks.settle && !noop;
+            let at_rest = settling_view && {
+                let prev = at_time(
+                    t - (FLICKS_PER_SECOND as f64 / fps).round() as i64,
+                    &mut labels,
+                )?;
+                blur::draws_same(&prev, &scene)
+            };
+            if app.planted == Some(Planted::SettleResetsEachFrame)
+                || !at_rest
+                || settled_on
+                    .as_ref()
+                    .is_some_and(|s| !blur::draws_same(s, &scene))
+            {
+                settle.clear();
+            }
+            let pixel = if args.export {
+                looks.export
+            } else if at_rest {
+                (settle.len() as u32 + 1).min(looks.export)
+            } else {
+                looks.live
+            };
+            // Motion blur by samples: its shutter times, unless nothing travels half a pixel.
+            let mut notices: Vec<Value> = Vec::new();
+            let mut blur_n = 0;
+            let mut timed: Vec<Scene> = Vec::new();
+            if let Some(b) =
+                blur.filter(|b| b.method == deep_canvas_scene3d::samples::Method::Samples)
+            {
+                let mut n_b = b.samples;
+                if !args.export {
+                    if let Some(cap) = b.preview_cap.filter(|c| *c < n_b) {
+                        n_b = cap;
+                        notices.push(json!({"code": "motion_blur_capped", "samples": cap}));
+                    }
+                }
+                let n_all = n_b.max(pixel);
+                let plan = deep_canvas_scene3d::samples::plan(n_all, pixel, looks, true);
+                let times: Vec<i64> = plan
+                    .iter()
+                    .map(|s| t + (s.time * shutter).round() as i64)
+                    .collect();
+                for tk in &times {
+                    let mut sc = at_time(*tk, &mut labels)?;
+                    if app.planted == Some(Planted::SamplerHoldsCamera) {
+                        sc.camera = scene.camera.clone();
+                    }
+                    // `exclude`: those items keep their frame-time evaluation.
+                    for l in sc.layers.iter_mut() {
+                        for s in l.solids.iter_mut().filter(|s| b.exclude.contains(&s.id)) {
+                            if let Some(f) = scene
+                                .layers
+                                .iter()
+                                .flat_map(|l| &l.solids)
+                                .find(|f| f.id == s.id)
+                            {
+                                *s = f.clone();
+                            }
+                        }
+                    }
+                    timed.push(sc);
+                }
+                let moves = match (timed.first(), timed.last()) {
+                    (Some(a), Some(z)) if b.adaptive => blur::travel(a, z) >= 0.5,
+                    (Some(a), Some(z)) => !blur::draws_same(a, z),
+                    _ => false,
+                };
+                if moves {
+                    blur_n = n_all;
+                    // #419 AC5's wrong program steps each world to each sample's time.
+                    if app.planted == Some(Planted::SamplerStepsWorld) {
+                        for w in worlds.values_mut() {
+                            for tk in &times {
+                                let x = *tk as f64 / FLICKS_PER_SECOND as f64 * w.step_hz;
+                                let k = (x.floor().max(0.0) as usize).min(w.states.len() - 1);
+                                let dt = (x - k as f64) / w.step_hz;
+                                w.states[k] = w.step(&w.states[k], dt);
+                            }
+                        }
+                    }
+                } else {
+                    timed.clear();
+                }
+            }
+            let n_all = if blur_n > 0 { blur_n } else { pixel };
+            let plan = deep_canvas_scene3d::samples::plan(n_all, pixel, looks, blur_n > 0);
+            let velocity_on =
+                blur.is_some_and(|b| b.method == deep_canvas_scene3d::samples::Method::Velocity);
+            let sub_scene = |k: usize| -> Arc<Scene> {
+                let mut sc = if timed.is_empty() {
+                    (*scene).clone()
+                } else {
+                    timed[k].clone()
+                };
+                sc.jitter = plan[k].offset;
+                Arc::new(sc)
+            };
+            // The viewer's marks draw over the frame, never in it: its selection, hover and
+            // readouts, from one more draw at sample 0 laid over the resolved frame.
+            let mut over_selection = args.selection.clone();
+            over_selection.extend(viewer_selection.iter().cloned());
+            over_selection.extend(hover.iter().cloned());
+            let overlay = !scene.readouts.is_empty() || over_selection.len() > args.selection.len();
+            let mut drawn_over = None;
+            if overlay {
+                let mut sc = (*sub_scene(0)).clone();
+                let readouts = std::mem::take(&mut sc.readouts);
+                match sc.layers.first_mut() {
+                    Some(l) => l.labels.extend(readouts),
+                    None => sc.layers.push(deep_canvas_scene3d::scene::Layer3 {
+                        labels: readouts,
+                        ..Default::default()
+                    }),
+                }
+                let plain = lock(&fx).settings.clone();
+                let mut with = plain.clone();
+                with.selection = effects::settings(
+                    &scene,
+                    &args.look_json,
+                    &args.look,
+                    &over_selection,
+                    fx_t,
+                    doc_seed,
+                    effects::Seeding::Item,
+                )
+                .selection;
+                lock(&fx).settings = with;
+                let d = session3::draw(
+                    app,
+                    &opened,
+                    Arc::new(sc),
+                    args.look.clone(),
+                    n,
+                    0,
+                    false,
+                    false,
+                );
+                lock(&fx).settings = plain;
+                drawn_over = Some(d?);
+                let _ = ui.latch();
+            }
+            // The samples drawn now: all but sample 0 first, then sample 0, the frame's own draw;
+            // or, settling, the one sample this frame adds (sample 0 again once settled).
+            let settling_now = at_rest && !args.export;
+            let new_k: usize = if settling_now {
+                settle.len().min(n_all as usize - 1)
+            } else {
+                0
+            };
+            let mut subs: Vec<(f64, Part)> = Vec::new();
+            if !settling_now {
+                for k in 1..n_all as usize {
+                    subs.push((
+                        plan[k].weight,
+                        Part::of(&session3::draw(
+                            app,
+                            &opened,
+                            sub_scene(k),
+                            args.look.clone(),
+                            n,
+                            0,
+                            true,
+                            false,
+                        )?),
+                    ));
                     // Shown and passed over, so its slot frees for the next.
                     let _ = ui.latch();
                 }
-                let mut first = (*scene).clone();
-                first.jitter = jitter(1);
-                Arc::new(first)
-            } else {
-                scene
-            };
+            }
             let mut drawn = session3::draw(
                 app,
                 &opened,
-                scene,
+                sub_scene(if settling_now && settle.len() < n_all as usize {
+                    new_k
+                } else {
+                    0
+                }),
                 args.look.clone(),
                 n,
                 delay,
-                read_targets,
+                read_targets || velocity_on || overlay,
                 shows && n == args.from,
             )?;
-            if !subs.is_empty() {
-                mean(&mut drawn, &subs);
+            let plain0 = drawn.bytes.clone();
+            if settling_now {
+                if settle.len() < n_all as usize {
+                    settle.push((plan[new_k].weight, Part::of(&drawn)));
+                    settled_on = Some((*scene).clone());
+                }
+                let parts: Vec<(f64, &Part)> = settle.iter().map(|(w, d)| (*w, d)).collect();
+                mean(&mut drawn, &parts);
+            } else if !subs.is_empty() {
+                let first = Part::of(&drawn);
+                let mut parts: Vec<(f64, &Part)> = vec![(plan[0].weight, &first)];
+                parts.extend(subs.iter().map(|(w, d)| (*w, d)));
+                mean(&mut drawn, &parts);
+            }
+            let drawn_samples = if settling_now {
+                settle.len() as u32
+            } else {
+                n_all
+            };
+            let samples_report = json!({
+                "drawn": drawn_samples,
+                "settling": settling_now && drawn_samples < looks.export,
+            });
+            // Motion blur by velocity: from the evaluation at t ± s/2, never an earlier frame.
+            if let (true, Some(b)) = (velocity_on, blur) {
+                let open = at_time(t - (shutter / 2.0).round() as i64, &mut labels)?;
+                let close = at_time(t + (shutter / 2.0).round() as i64, &mut labels)?;
+                let pairing = match app.planted {
+                    Some(Planted::VelocityFromTransform) => blur::Pairing::TransformOnly,
+                    Some(Planted::VelocityPairsByIndex) => blur::Pairing::ByIndex,
+                    _ => blur::Pairing::Shipped,
+                };
+                if let (Some((_, ids)), Some(depth)) = (&drawn.targets, &drawn.depth) {
+                    let vel = blur::velocity(
+                        &scene,
+                        &open,
+                        &close,
+                        ids,
+                        &drawn.picks,
+                        depth,
+                        size,
+                        b.max_px,
+                        pairing,
+                    );
+                    for item in &vel.topology {
+                        notices.push(json!({"code": "velocity_topology", "item": item}));
+                    }
+                    resolve_velocity(&mut drawn, &vel, size, b);
+                }
+            }
+            let scene_bytes = drawn.bytes.clone();
+            // The viewer's marks laid over the resolved frame where they drew.
+            if let (Some(over), Some(plain), Some(bytes)) =
+                (&drawn_over, &plain0, drawn.bytes.as_mut())
+            {
+                if let Some(ob) = &over.bytes {
+                    for ((o, p), b) in ob
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .zip(plain.as_chunks::<4>().0)
+                        .zip(bytes.as_chunks_mut::<4>().0)
+                    {
+                        if o != p {
+                            *b = *o;
+                        }
+                    }
+                }
             }
             casts |= !drawn.counts.shadow_maps.is_empty();
             let compiled: Vec<&'static str> = session3::pipelines(app)
@@ -1173,6 +1541,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let mut frame = Map::new();
             frame.insert("frame".into(), json!(n));
             frame.insert("settled".into(), json!(settled));
+            frame.insert("samples".into(), samples_report);
+            if !notices.is_empty() {
+                frame.insert("notices".into(), json!(notices));
+            }
             frame.insert("resident".into(), json!(resident));
             if let Some(values) = values {
                 frame.insert("values".into(), values);
@@ -1208,6 +1580,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if capture {
                 if let (Some(bgra), true) = (&drawn.bytes, args.targets.contains("final")) {
                     frame.insert("final".into(), json!(write_final(out, bgra, size)?));
+                }
+                // The frame before the viewer's marks (#419).
+                if let (Some(bgra), true) = (&scene_bytes, args.targets.contains("scene")) {
+                    frame.insert("scene".into(), json!(write_final(out, bgra, size)?));
                 }
                 if let (Some(pre), true) = (&drawn.pre_tone, args.targets.contains("pre_tone")) {
                     frame.insert("pre_tone".into(), json!(write_named(out, pre, "f32")?));
@@ -1414,6 +1790,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         "frames": frames, "passes": passes, "status": status_report, "surface": drew,
         "layers": layers_report(&args.doc, &args.hidden),
     });
+    if !worlds.is_empty() {
+        reply["worlds"] = Value::Object(
+            worlds
+                .iter()
+                .map(|(id, w)| (id.clone(), json!({"step_hashes": w.hashes()})))
+                .collect(),
+        );
+    }
     if args.imports {
         reply["imports"] = json!(import_report);
     }
