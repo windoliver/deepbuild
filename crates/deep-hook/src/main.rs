@@ -25,6 +25,7 @@ use deep_contracts::{parse, Value};
 use deep_hook::matcher;
 
 mod actions;
+mod heavy;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -451,6 +452,46 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
             )
         };
     Some(call)
+}
+
+/// The heavy.command@1 entry a shell call's command matches (#1015), read from the payload as the agent sent it.
+fn heavy_call(payload: &Value, plant: Option<&str>) -> Option<(heavy::Hit, String)> {
+    let Some(Value::String(tool)) = member(payload, "tool_name") else {
+        return None;
+    };
+    if tool != "Bash" && tool != "bash" {
+        return None;
+    }
+    let Some(Value::String(command)) =
+        member(payload, "tool_input").and_then(|i| member(i, "command"))
+    else {
+        return None;
+    };
+    let cwd = match member(payload, "cwd") {
+        Some(Value::String(cwd)) if Path::new(cwd).is_absolute() => Some(PathBuf::from(cwd)),
+        _ => None,
+    };
+    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
+    heavy::matched(command, cwd.as_deref(), &home, plant).map(|hit| (hit, command.clone()))
+}
+
+/// `deep-hook heavy`: the heavy.command@1 entry a command line on stdin matches in the current folder (#1016), as
+/// `{"name", "jobs", "jobs_flag"}`, or `null`; `deep lease` reads it to know how the command takes jobs.
+fn heavy_entry() -> ExitCode {
+    let mut command = String::new();
+    let _ = io::stdin().read_to_string(&mut command);
+    let cwd = env::current_dir().ok();
+    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
+    match heavy::matched(&command, cwd.as_deref(), &home, None) {
+        Some(hit) => println!(
+            "{{\"name\":{},\"jobs\":{},\"jobs_flag\":{}}}",
+            quoted(&hit.name),
+            quoted(&hit.jobs),
+            hit.jobs_flag.as_deref().map_or("null".to_string(), quoted)
+        ),
+        None => println!("null"),
+    }
+    ExitCode::SUCCESS
 }
 
 /// `deep-hook check`: whether a guard@1 entry matches a call, read on stdin as `{"entry": guard@1, "call":
@@ -1130,6 +1171,29 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         .collect::<Vec<_>>()
         .join(",");
     let read = read_fields(called.as_ref(), &matched);
+    // A shell call that runs a heavy command (#1015), for the hub to run under `deep lease`; spooled with it, so a
+    // hub that was away reads that it ran unleased.
+    let plant = env::var("DEEP_HUB_PLANT").ok();
+    let heavy = parsed
+        .as_ref()
+        .filter(|_| event == "PreToolUse")
+        .and_then(|p| heavy_call(p, plant.as_deref()));
+    let heavy_field = heavy
+        .as_ref()
+        .map(|(hit, command)| {
+            let kinds = hit
+                .kinds
+                .iter()
+                .map(|k| quoted(k))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!(
+                ",\"heavy\":{{\"name\":{},\"kinds\":[{kinds}],\"form\":{}}}",
+                quoted(&hit.name),
+                quoted(&heavy::form(command, &hit.kinds))
+            )
+        })
+        .unwrap_or_default();
     // At SessionStart, whether each billing key is set in the environment the agent gave this process.
     let billing = if event == "SessionStart" {
         let keys = BILLING_KEYS
@@ -1159,7 +1223,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             ""
         };
         format!(
-            "{{\"v\":1,\"agent\":{},\"event\":{},\"seq\":\"{seq}\",\"id\":\"{id}\",\"pid\":{},\"ppid\":{},\"matched\":[{names}]{read},\"payload\":{payload}{billing}{f_test}}}\n",
+            "{{\"v\":1,\"agent\":{},\"event\":{},\"seq\":\"{seq}\",\"id\":\"{id}\",\"pid\":{},\"ppid\":{},\"matched\":[{names}]{read}{heavy_field},\"payload\":{payload}{billing}{f_test}}}\n",
             quoted(agent),
             quoted(event),
             std::process::id(),
@@ -1204,7 +1268,69 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             eprintln!("{denial}");
             ExitCode::from(2)
         }
+        // A heavy command with the hub up but late is leased all the same (#1015): matching never waits on the hub.
+        None if late => leased_alone(agent, parsed.as_ref(), heavy.as_ref(), plant.as_deref()),
         None => ExitCode::SUCCESS,
+    }
+}
+
+/// A heavy call's decision with the hub up but late: rewritten into its `deep lease` form for an agent whose calls
+/// can be rewritten (Claude Code), denied once with that form for one whose calls can't (Codex); any other runs as
+/// written. A call already in its leased form is let through, unless the planted wrong program for AC2 denies it again.
+fn leased_alone(
+    agent: &str,
+    payload: Option<&Value>,
+    heavy: Option<&(heavy::Hit, String)>,
+    plant: Option<&str>,
+) -> ExitCode {
+    let command = payload
+        .and_then(|p| member(p, "tool_input"))
+        .and_then(|i| member(i, "command"))
+        .and_then(|c| match c {
+            Value::String(s) => Some(s.as_str()),
+            _ => None,
+        });
+    if agent == "codex"
+        && plant == Some("denies-every-retry")
+        && command.is_some_and(|c| c.trim_start().starts_with("deep lease"))
+    {
+        let c = command.unwrap_or_default();
+        eprintln!("{}", heavy::denial(c, c, "deep lease"));
+        return ExitCode::from(2);
+    }
+    let Some((hit, command)) = heavy else {
+        return ExitCode::SUCCESS;
+    };
+    if plant == Some("runs-matched-as-written") {
+        return ExitCode::SUCCESS;
+    }
+    let form = heavy::form(command, &hit.kinds);
+    match agent {
+        "codex" => {
+            eprintln!("{}", heavy::denial(command, &form, &hit.name));
+            ExitCode::from(2)
+        }
+        "claude-code" => {
+            let mut input = match payload.and_then(|p| member(p, "tool_input")) {
+                Some(Value::Object(members)) => members.clone(),
+                _ => Vec::new(),
+            };
+            input.retain(|(k, _)| k != "command");
+            input.push(("command".to_string(), Value::String(form)));
+            let out = Value::Object(vec![(
+                "hookSpecificOutput".to_string(),
+                Value::Object(vec![
+                    (
+                        "hookEventName".to_string(),
+                        Value::String("PreToolUse".to_string()),
+                    ),
+                    ("updatedInput".to_string(), Value::Object(input)),
+                ]),
+            )]);
+            println!("{}", deep_contracts::jcs(&out));
+            ExitCode::SUCCESS
+        }
+        _ => ExitCode::SUCCESS,
     }
 }
 
@@ -1672,10 +1798,11 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
+            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
         ),
         [arg] if arg == "statusline" => return statusline(),
         [arg] if arg == "check" => return check(),
+        [arg] if arg == "heavy" => return heavy_entry(),
         [arg] if arg == "match" => return matching(),
         [arg, from, to] if arg == "clone" => return clone(Path::new(from), Path::new(to)),
         [arg, line] if arg == "statusline-send" => {

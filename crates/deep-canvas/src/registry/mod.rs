@@ -72,7 +72,7 @@ const MACHINES: &[&str] = &["any", "same"];
 const TOOLS: &[&str] = &["deep_show", "deep_query", "deep_kinds", "deep_patch"];
 
 /// The core kinds the core draws a module's kind as, until modules draw their own.
-const DRAWS_AS: &[&str] = &["rect@1"];
+const DRAWS_AS: &[&str] = &["rect@1", "path@1"];
 
 /// An array's domain (Array and table).
 const DOMAINS: &[&str] = &["item", "row", "element", "document"];
@@ -154,7 +154,14 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("curve", "scene3d"),
     ("material", "scene3d"),
     ("sky", "scene3d"),
+    ("vector", "vector"),
+    // R1's mark sets, scales and axes are the data module's, which marks2d draws.
+    ("marks", "data"),
+    ("axis", "data"),
+    ("scale", "data"),
     ("puff", "scene3d"),
+    ("cutaway", "scene3d"),
+    ("instance", "scene3d"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status

@@ -348,13 +348,13 @@ export function classify(failures, findings, baseline) {
 
 // Each job runs through the machine's throttle table (docs/parallel-proof.md, section 6): the workspace build, clippy and
 // cargo test as build, the vitest and node --test blocks as test and the timed ones as timed, waiting at most 30 minutes
-// for its grant.
+// for its grant; each, its parallel blocks too, under a cpu.slot of the calling session's through scripts/lease (#1015).
 function run(logs, label, command, args, env = {}) {
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
   const descriptor = openSync(log, 'w');
   const cls = label.endsWith('timed') ? 'timed' : /^(?:vitest|node)/.test(label) ? 'test' : 'build';
   return new Promise((done) => {
-    const child = spawn(process.execPath, ['scripts/throttle.mjs', cls, '--wait', '30', '--', command, ...args], { cwd: root, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
+    const child = spawn(process.execPath, ['scripts/throttle.mjs', cls, '--wait', '30', '--', join(root, 'scripts/lease'), command, ...args], { cwd: root, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
     child.on('error', (error) => { closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
     child.on('close', (status) => { closeSync(descriptor); done({ label, log, status, output: readFileSync(log, 'utf8') }); });
   });
