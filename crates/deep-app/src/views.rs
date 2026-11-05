@@ -427,10 +427,13 @@ impl Render for Shipped {
                                     .hover(|style| style.bg(chrome.hover)),
                             )
                             .children(readings.into_iter().enumerate().map(|(n, reading)| {
+                                // A reading wider than the sidebar ends in an ellipsis; its
+                                // accessibility label keeps the whole of it.
                                 label(("sidebar-reading", index * READINGS + n), reading)
                                     .h(px(18.))
                                     .pl_4()
                                     .text_color(chrome.ink_secondary)
+                                    .truncate()
                             }))
                     },
                 )),
