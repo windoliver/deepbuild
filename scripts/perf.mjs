@@ -100,32 +100,40 @@ function alive(pid) {
     return gone.code === 'EPERM';
   }
 }
-// The takeover mark: a file only one run can create, held for a read and a rename. One left by a run
-// killed inside that window names a process that is gone, and is removed; two runs that find the same
-// one could, in the microseconds between, both go on, which needs that kill first.
+// The takeover mark: a file only one run can create, held for a read and a rename. It appears whole, as
+// the lock does, so a run that finds it always reads whose it is (one made empty and then written could
+// be read empty and taken for a killed run's). One left by a run killed inside that window names a
+// process that is gone, and is removed; two runs that find the same one could, in the microseconds
+// between, both go on, which needs that kill first.
 function underTakeover(file, act) {
   const mark = `${file}.takeover`;
+  const mine = `${mark}.${process.pid}`;
   const until = Date.now() + 10_000;
-  for (;;) {
-    try {
-      writeFileSync(mark, String(process.pid), { flag: 'wx' });
-      break;
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
+  writeFileSync(mine, String(process.pid));
+  try {
+    for (;;) {
+      try {
+        linkSync(mine, mark);
+        break;
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+      }
+      let holder;
+      try {
+        holder = Number(readFileSync(mark, 'utf8'));
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        throw error;
+      }
+      if (!(Number.isInteger(holder) && holder > 0 && holder !== process.pid && alive(holder))) {
+        rmSync(mark, { force: true });
+        continue;
+      }
+      if (Date.now() > until) throw blocked(`another perf run (process ${holder}) is taking ${dirname(file)}`, `Wait for that preflight to finish. If none is running: rm ${mark}`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
     }
-    let holder;
-    try {
-      holder = Number(readFileSync(mark, 'utf8'));
-    } catch (error) {
-      if (error.code === 'ENOENT') continue;
-      throw error;
-    }
-    if (!(Number.isInteger(holder) && holder > 0 && holder !== process.pid && alive(holder))) {
-      rmSync(mark, { force: true });
-      continue;
-    }
-    if (Date.now() > until) throw blocked(`another perf run (process ${holder}) is taking ${dirname(file)}`, `Wait for that preflight to finish. If none is running: rm ${mark}`);
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+  } finally {
+    rmSync(mine, { force: true });
   }
   try {
     return act();

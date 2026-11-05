@@ -340,3 +340,46 @@ test('perf runs racing for a killed run\'s lock never check at the same time, ho
   assert.equal(spans.length, 1, `${spans.length} runs checked: ${JSON.stringify(spans)}`);
   assert.equal(existsSync(join(kept, 'lock')), false, 'a run left the lock behind');
 });
+
+// The Mac found two runs checking at once in the test above. A run the machine pauses just after making the
+// takeover mark leaves it there without its number for that pause; a second run that reads it then must not
+// take it for a killed run's. Here the first run's mark stays numberless for 2.5 s, and the second, started
+// once the first holds the mark or the lock, reads the lock slowly so that the first comes back in between.
+test('a run paused while making the takeover mark keeps it: a second run that finds it waits', async (t) => {
+  const { cwd, cache, env } = repository(t, (root) => `
+    import { appendFileSync } from 'node:fs';
+    const start = Date.now();
+    await new Promise((done) => setTimeout(done, 8000));
+    appendFileSync(${JSON.stringify(join(root, 'base-spans'))}, JSON.stringify([start, Date.now()]) + '\\n');
+  `);
+  const kept = keptRoot(cache);
+  mkdirSync(kept, { recursive: true, mode: 0o700 });
+  writeFileSync(join(kept, 'lock'), String(spawnSync(process.execPath, ['-e', '']).pid));
+  const preload = fileURLToPath(new URL('fixtures/slow-lock.cjs', import.meta.url));
+  const held = (slow) => {
+    const child = spawn(process.execPath, ['-r', preload, 'scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })],
+      { cwd, env: { ...env, ...slow } });
+    let output = '';
+    child.stdout.on('data', (chunk) => { output += chunk; });
+    return { child, done: new Promise((done) => child.on('close', (status) => done({ status, output }))) };
+  };
+  const first = held({ SLOW_MARK_WRITE_MS: '2500' });
+  const holds = () => {
+    if (existsSync(join(kept, 'lock.takeover'))) return true;
+    try {
+      return readFileSync(join(kept, 'lock'), 'utf8') === String(first.child.pid);
+    } catch {
+      return false;
+    }
+  };
+  for (const until = Date.now() + 60_000; !holds();) {
+    assert.ok(Date.now() < until, 'the first run took neither the mark nor the lock within 60 s');
+    await new Promise((done) => setTimeout(done, 5));
+  }
+  const second = held({ SLOW_LOCK_READ_MS: '5000' });
+  const results = await Promise.all([first.done, second.done]);
+  for (const { status, output } of results) if (status !== 0) assert.match(output, /BLOCKED perf: (another perf run|could not take)/, output);
+  const spans = readFileSync(join(cwd, 'base-spans'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(spans.length, 1, `${spans.length} runs checked: ${JSON.stringify(spans)}`);
+  assert.equal(existsSync(join(kept, 'lock')), false, 'a run left the lock behind');
+});

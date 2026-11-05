@@ -13,6 +13,19 @@ fs.readFileSync = function (path, ...rest) {
   if (isLock(path)) hold(readMs);
   return result;
 };
+// A takeover mark made empty and filled after is held empty, as a run the machine pauses between the two leaves it.
+const markMs = Number(process.env.SLOW_MARK_WRITE_MS ?? 0);
+const write = fs.writeFileSync;
+fs.writeFileSync = function (path, data, options) {
+  if (!(markMs > 0 && String(path).endsWith('.takeover') && options?.flag === 'wx')) return write.call(this, path, data, options);
+  const fd = fs.openSync(path, 'wx');
+  try {
+    hold(markMs);
+    fs.writeSync(fd, String(data));
+  } finally {
+    fs.closeSync(fd);
+  }
+};
 const rename = fs.renameSync;
 fs.renameSync = function (from, to) {
   const result = rename.call(this, from, to);
