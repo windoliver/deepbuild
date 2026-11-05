@@ -483,6 +483,8 @@ fn opening(doc: &Value, p: &Value) -> Result<Mesh, Fault> {
         doc: &doc0,
         id: "",
         plants: Default::default(),
+        outlines: &[],
+        planted: None,
     };
     let leaf = builders::build("slab@1", &json!({"size": [width, height, thick]}), &ctx)?;
     // The leaf turns about its hinge, the side it hangs on, by `open` of a quarter turn.
@@ -755,6 +757,8 @@ fn roof(p: &Value) -> Result<Mesh, Fault> {
                 doc: &doc0,
                 id: "",
                 plants: Default::default(),
+                outlines: &[],
+                planted: None,
             };
             builders::build(
                 "lathe@1",

@@ -184,6 +184,41 @@ fn operator_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
             ),
         ));
     }
+    // #483: what an operator's outputs hold counts in the class's operator storage (Operator
+    // budgets by class), its own and the document's together, the largest named.
+    let cap_mb: u64 = match class {
+        "core_view" => 8,
+        "figure" => 32,
+        "data_view" | "work_product" => 64,
+        _ => 128,
+    };
+    let held = |o: &graph::Operator| -> u64 {
+        o.storage.values().map(|s| u64::from(s.count) * 4).sum::<u64>()
+            + o.textures.values().map(graph::TexOut::bytes).sum::<u64>()
+    };
+    let own = held(&checked.op);
+    let all: Vec<(String, u64)> = doc["items"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(k, v)| {
+            let o = graph::read(&operator_of(k, v)?).ok()?;
+            Some((k.clone(), held(&o)))
+        })
+        .collect();
+    let total: u64 = all.iter().map(|(_, b)| b).sum();
+    let largest = all.iter().max_by_key(|(k, b)| (*b, std::cmp::Reverse(k.clone()))).map(|(k, _)| k.as_str());
+    if own > cap_mb << 20 || (total > cap_mb << 20 && largest == Some(id)) {
+        out.push(raised(
+            "over_budget",
+            format!("items/{id}/params/outputs"),
+            format!(
+                "{id}: its outputs hold {:.1} MB ({:.1} MB with the document's other operators), past the {class} class's {cap_mb} MB of operator storage",
+                own as f64 / f64::from(1u32 << 20),
+                total as f64 / f64::from(1u32 << 20)
+            ),
+        ));
+    }
     let probe = format!("items/{id}/outputs/");
     for (cid, c) in doc["checks"].as_object().into_iter().flatten() {
         let reads = c["probe"].as_str().is_some_and(|p| p.starts_with(&probe));
@@ -204,6 +239,11 @@ fn operator_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
 fn register(r: &mut Registrar) {
     for (name, place) in PASSES {
         r.pass(name, place);
+    }
+    // #483: the structural steps, entries of the core's gpu.step@1, each with its exactness
+    // fixture and planted twin.
+    for (name, value) in crate::table::structural_entries() {
+        r.entry("gpu.step@1", name, value, "R6");
     }
     for (name, kind) in OPERATOR_KINDS {
         r.kind(operator_entry(name), &[], "")

@@ -6,6 +6,7 @@ pub mod builders;
 pub mod building;
 pub mod curve;
 pub mod cut;
+pub mod fixtures;
 pub mod frames;
 /// The look's finish in f64, which the look module owns (#418).
 pub use deep_canvas_marks::finish;
@@ -20,6 +21,7 @@ pub mod modifiers;
 pub mod module;
 pub mod overlay;
 pub mod poly;
+pub mod samples;
 pub mod scene;
 pub mod sky;
 pub mod spatial;
@@ -30,7 +32,7 @@ pub mod uv;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 18] = [
+pub const PLANTED: [&str; 20] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -49,4 +51,8 @@ pub const PLANTED: [&str; 18] = [
     "subdivide_first_corner",
     "bevel_drops_wear",
     "bevel_faces_unparted",
+    // #443: an outline reader that ignores the fill rule, and an extrude that sets each glyph at
+    // its own advance.
+    "outline_ignores_fill_rule",
+    "extrude_own_advance",
 ];

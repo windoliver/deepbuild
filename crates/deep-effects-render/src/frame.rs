@@ -110,6 +110,8 @@ pub struct Effects {
     /// The document whose composed operators the chain runs, with the emitter's and the
     /// check's planted programs: built into `docops` on the device at the next frame.
     pub op_doc: Option<(Value, Options, deep_canvas_effects::check::CheckOptions)>,
+    /// The structural steps' planted programs (#483) the document's operators run under.
+    pub op_hooks: crate::docops::Hooks,
     /// The document's composed pass and compute operators (#429), run in the effects chain.
     pub docops: Option<crate::docops::DocOps>,
     /// Each operator's resolution this frame, by item; 1 when not given.
@@ -169,6 +171,7 @@ impl Effects {
             half: None,
             dirt: None,
             op_doc: None,
+            op_hooks: crate::docops::Hooks::default(),
             docops: None,
             op_resolution: BTreeMap::new(),
             op_canonical: false,
@@ -689,7 +692,15 @@ impl Post for Effects {
             cur = out;
         }
         if let Some((doc, options, planted)) = self.op_doc.take() {
-            self.docops = Some(crate::docops::DocOps::new(device, &doc, options, planted, &[]));
+            self.docops = Some(crate::docops::DocOps::with(
+                device,
+                &doc,
+                options,
+                planted,
+                &[],
+                self.op_hooks,
+                BTreeMap::new(),
+            ));
         }
         if let Some(ops) = self.docops.as_mut() {
             let res = self.op_resolution.clone();

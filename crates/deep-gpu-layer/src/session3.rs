@@ -109,10 +109,12 @@ pub fn open_doc(
     doc: &Value,
 ) -> Result<Opened, Value> {
     let (options, planted) = effects::operator_plants(app.planted);
+    let hooks = effects::operator_hooks(app.planted);
     let doc = doc.clone();
     let on = On::of(app);
     open_with(&on, size, timings, with_stage, move |fx| {
         fx.op_doc = Some((doc, options, planted));
+        fx.op_hooks = hooks;
     })
 }
 
