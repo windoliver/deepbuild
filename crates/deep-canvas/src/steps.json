@@ -43,7 +43,7 @@
   "ge@1": [{"args": [{"i": 2}, {"i": 2}], "expect": {"b": true}}, {"args": [{"f": 1}, {"f": 2}], "expect": {"b": false}}],
   "gt@1": [{"args": [{"i": 2}, {"i": 2}], "expect": {"b": false}}, {"args": [{"f": 3}, {"f": 2}], "expect": {"b": true}}],
   "hash@1": [{"args": [{"u": 1}, {"u": 2}, {"u": 3}, {"u": 4}], "expect": {"u": 1693730102}}, {"args": [{"u": 5}], "expect": {"u": 2161170183}}],
-  "index@1": [{"args": [{"v": [10, 20, 30]}, {"u": 1}], "expect": {"f": 20}}],
+  "index@1": [{"args": [{"v": [10, 20, 30]}, {"u": 1}], "expect": {"f": 20}}, {"args": [{"v": [0, 1, 2, 3, 4, 5, 6, 7, 8]}, {"u": 20}], "expect": {"f": 8}}],
   "inverse_sqrt@1": [{"args": [{"f": 4}], "expect": {"f": 0.5}}],
   "le@1": [{"args": [{"i": 1}, {"i": 2}], "expect": {"b": true}}, {"args": [{"f": 3}, {"f": 2}], "expect": {"b": false}}],
   "length@1": [{"args": [{"v": [3, 4]}], "expect": {"f": 5}}],
