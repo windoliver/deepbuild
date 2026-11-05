@@ -246,6 +246,12 @@
     "called_by": "deep-hook statusline"
   },
   {
+    "method": "notifications.report",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#994"
+  },
+  {
     "method": "views.shown",
     "since": "R2",
     "stability": "preview",
