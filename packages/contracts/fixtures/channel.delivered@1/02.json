@@ -1,0 +1,30 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8H2",
+  "kind": "channel.delivered",
+  "subject": "device:01K74G4B6D8F0H2K4M6P8R0T2W",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017111123,
+  "data": {
+    "channel": "paseo",
+    "thread_key": "device:01K74G4B6D8F0H2K4M6P8R0T2W",
+    "item": {
+      "thread_key": "device:01K74G4B6D8F0H2K4M6P8R0T2W",
+      "summary": "This device was unpaired.",
+      "link": "deepbuild://ask/01K74G4B6D8F0H2K4M6P8R0T2V",
+      "answerable": "view",
+      "options": [],
+      "revision": 1,
+      "hub": "hub:01K74G4B6D8F0H2K4M6P8R0T2V",
+      "refused": null,
+      "unpaired": {
+        "device": "device:01K74G4B6D8F0H2K4M6P8R0T2W",
+        "by": "studio-mac"
+      }
+    },
+    "outcome": "stalled",
+    "ack": null
+  }
+}

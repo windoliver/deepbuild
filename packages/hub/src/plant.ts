@@ -122,7 +122,9 @@ export type Plant =
   | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model'
   // #1016's: a jobserver of its own for each build, a pipe topped up while a build runs, and a runner's share that
   // ignores the builds running beside it.
-  | 'jobserver-per-build' | 'refills-while-running' | 'share-ignores-running-build';
+  | 'jobserver-per-build' | 'refills-while-running' | 'share-ignores-running-build'
+  // #65's: channels that take a channel's word, or cross one channel's trouble over to another.
+  | 'trusts-channel-proof' | 'last-writer-wins' | 'live-buttons-after-answer' | 'closes-on-failed-send' | 'takes-turns-at-token' | 'reconnects-every-channel' | 'buttons-for-authority' | 'keeps-unpaired-key';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -181,6 +183,7 @@ const PLANTS: readonly string[] = [
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
   'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
+  'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

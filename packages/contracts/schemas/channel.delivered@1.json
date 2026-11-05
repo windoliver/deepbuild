@@ -1,0 +1,248 @@
+{
+  "title": "channel.delivered@1",
+  "description": "The hub handed a channel an item to deliver, and what the channel said came of it: delivered with the provider's acknowledgement, stalled, timed out or in conflict. A delivered with no acknowledgement is recorded stalled. Only the core appends it (#65).",
+  "x-since": "R2",
+  "x-stability": "preview",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "channel.delivered"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(ask|device):[0-9A-Za-z]+$",
+      "description": "The thread this event is about: an ask, or a device told it was unpaired."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$",
+          "description": "The channel's name, as its plug-in registered it.",
+          "maxLength": 8192
+        },
+        "thread_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The thread key: the item's handle, one thread per item on every channel."
+        },
+        "item": {
+          "type": "object",
+          "description": "The item as the hub rendered it for this channel and handed to its deliver.",
+          "properties": {
+            "thread_key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The thread key: the item's handle, one thread per item on every channel."
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 8192,
+              "description": "The hub's words for this channel; empty on a text message."
+            },
+            "link": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9+.-]*://\\S+$",
+              "maxLength": 8192,
+              "description": "The one link to the item, the same on every channel."
+            },
+            "answerable": {
+              "type": "string",
+              "enum": [
+                "answer",
+                "view",
+                "cancel",
+                "closed"
+              ],
+              "description": "What the person may do with it on this channel, by the trusted-path rule.",
+              "x-closure": {
+                "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                "reopens": "a new major of this schema",
+                "mark": "exhaustive"
+              }
+            },
+            "options": {
+              "type": "array",
+              "maxItems": 32,
+              "description": "The answer buttons: none unless it is answerable here.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "description": "The option's ID."
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "description": "The option's words."
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "description": "The card's revision, which a device's signature covers."
+            },
+            "hub": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "This hub's ID, which a device's signature covers."
+            },
+            "refused": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "Why the hub refused this channel's last answer on the thread, or null."
+            },
+            "unpaired": {
+              "type": "object",
+              "description": "The notice to a device that it was unpaired, and by which Mac.",
+              "properties": {
+                "device": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192,
+                  "description": "The device's ID."
+                },
+                "by": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192,
+                  "description": "The Mac that unpaired it."
+                }
+              },
+              "required": [
+                "device",
+                "by"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "thread_key",
+            "summary",
+            "link",
+            "answerable",
+            "options",
+            "revision",
+            "hub",
+            "refused"
+          ],
+          "additionalProperties": false
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "delivered",
+            "stalled",
+            "timed_out",
+            "conflict"
+          ],
+          "description": "What came of the send, as recorded.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "ack": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The provider's acknowledgement of a delivered send, or null."
+        }
+      },
+      "required": [
+        "channel",
+        "thread_key",
+        "item",
+        "outcome",
+        "ack"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "subject",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

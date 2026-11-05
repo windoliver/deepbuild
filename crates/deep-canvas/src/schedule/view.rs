@@ -486,6 +486,12 @@ impl<'a> View<'a> {
         Ok(&self.session.outside)
     }
 
+    /// The build's outline sources (#443): the core's `outline.source@1`, which `extrude` reads
+    /// outlines through without naming the module that fills a form.
+    pub fn outlines(&self) -> &'a [crate::registry::SealedOutline] {
+        &self.sealed.outlines
+    }
+
     /// `table:<name>`: a table's value.
     pub fn table<T: Any + Send + Sync>(&mut self, name: &str) -> Result<Arc<T>, OpError> {
         self.declared(&format!("table:{name}"))?;
