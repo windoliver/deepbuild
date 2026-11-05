@@ -11,7 +11,7 @@ The wiki's claims and pages (#355), a first-party extension: every line of a pag
 
 ## What it may import
 
-A first-party extension on the core: only `@deepbuild/record`, `@deepbuild/extension-host` (for project trust) and `node:` built-ins, through public entries. It never imports `@deepbuild/reading` (which stands on it), the hub, the CLI or the app, and never fetches a link.
+A first-party extension on the core: only `@deepbuild/record` (project trust included) and `node:` built-ins, through public entries. It never imports `@deepbuild/reading` (which stands on it), the hub, the CLI or the app, and never fetches a link.
 
 ## Deviations
 
