@@ -139,10 +139,15 @@ impl Store {
         });
         crate::write_texture(queue, &white, 0, &[255; 4], 4, [1, 1]);
         let white = white.create_view(&Default::default());
+        // A placeholder until the stand-in below is bound, in an empty layout so it's valid (#1285).
+        let empty = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[],
+        });
         let mut store = Store {
             none: d.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
-                layout: &layout,
+                layout: &empty,
                 entries: &[],
             }),
             layout,

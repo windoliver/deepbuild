@@ -1,0 +1,18 @@
+...
+     Running ../../tests/acceptance/995/app/panel.rs (<scratch>/e2e-target/debug/deps/acceptance_995-6f6ca3127443a14d)
+running 1 tests
+TU: error: ../src/freedreno/vulkan/tu_knl.cc:387: failed to open device /dev/dri/renderD128 (VK_ERROR_INCOMPATIBLE_DRIVER)
+revision 10: 224.3 MB
+revision 100: 228.7 MB
+revision 200: 228.4 MB
+revision 300: 228.3 MB
+revision 400: 228.3 MB
+revision 500: 228.1 MB
+revision 600: 227.9 MB
+revision 700: 222.7 MB
+revision 800: 222.5 MB
+revision 900: 222.5 MB
+revision 1000: 222.5 MB
+test presenting_1000_revisions_with_new_1_mb_pictures_keeps_memory_within_20_mb_and_only_the_shown_pictures_held ... ok
+test result: ok. 1 passed; 0 failed
+exit 0
