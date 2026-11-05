@@ -1,0 +1,564 @@
+# #1285 acceptance suite at the base, 0c153d7c (Merge pull request #1279), before any implementation.
+#
+# Run on this Mac (macOS, Metal), deep-gpu built by the suite's own `cargo build --locked --bin deep-gpu` (a no-op
+# rebuild of the base's binary):
+#
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/1285/tsconfig.json   -> exit 0, no errors
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1285 \
+#     --testTimeout=1800000 --no-file-parallelism                                  -> exit 1, 4 of 4 tests fail
+#
+# Each fails for the issue's reason:
+#
+#   sky.test.ts     AC1  the sky frame is 100% at luma <= 0.06 (blank), no pixel bright; stderr holds "The current set
+#                        RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3".
+#   box.test.ts     AC2  both frames black: the frame with the box is blank, its corners aren't sky, and its middle
+#                        equals the sky-only frame (0, 0, 0 both); stderr names 'scene3d.sky' again.
+#   puffs.test.ts   AC3  the frame with the puffs is black where the control is its dark grey background (16, 17, 20):
+#                        the middle isn't brighter, the corners changed; gpu_ms 0 with the puffs (the control's is
+#                        above 0); stderr holds "... 'scene3d.puff' label expects a BindGroup to be set at index 3".
+#   castle.test.ts  AC4  all six frames (0-2 and 360-362) 100% at luma <= 0.06 and gpu_ms 0.
+#
+# Also at the base, and also caught by the stderr checks of AC1 and AC3: every view3d, even of a camera alone (which
+# draws, gpu_ms above 0), writes "In Device::create_bind_group: Number of bindings in bind group descriptor (0) does
+# not match the number of bindings defined in the bind group layout (11)". The criteria say no device validation error
+# is written, so that one must go too.
+#
+# Paths below: <repo> is the checkout.
+#
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1285
+
+stdout | castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AC4 #1285.3c874962: stderr: deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Device::create_bind_group
+    Number of bindings in bind group descriptor (0) does not match the number of bindings defined in the bind group layout (11)
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In a CommandEncoder, label = 'deep-gpu layer'
+    In a draw command, kind: Draw
+      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Queue::submit
+    
+AC4 #1285.3c874962: frame 0: 100.0% of pixels at luma ≤ 0.06, gpu_ms 0
+AC4 #1285.3c874962: frame 1: 100.0% of pixels at luma ≤ 0.06, gpu_ms 0
+AC4 #1285.3c874962: frame 2: 100.0% of pixels at luma ≤ 0.06, gpu_ms 0
+AC4 #1285.3c874962: frame 360: 100.0% of pixels at luma ≤ 0.06, gpu_ms 0
+AC4 #1285.3c874962: frame 361: 100.0% of pixels at luma ≤ 0.06, gpu_ms 0
+AC4 #1285.3c874962: frame 362: 100.0% of pixels at luma ≤ 0.06, gpu_ms 0
+
+ ❯ castle.test.ts (1 test | 1 failed) 9258ms
+   ❯ AC4 #1285.3c874962 the castle draws (1)
+     × AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0 3044ms
+stdout | box.test.ts > AC2 #1285.9b9bfe99 a lit box in front of the camera draws over the sky > AC2 #1285.9b9bfe99 with a lit mark.box@1 in front of the camera, the box draws over the near-white sky: the box's pixels differ from the sky's, and the sky still shows around it
+AC2 #1285.9b9bfe99: middle pixel with the box 0, 0, 0, the sky alone 0, 0, 0; 144 of 144 middle pixels within 16 codes of the sky
+
+ ❯ box.test.ts (1 test | 1 failed) 7218ms
+   ❯ AC2 #1285.9b9bfe99 a lit box in front of the camera draws over the sky (1)
+     × AC2 #1285.9b9bfe99 with a lit mark.box@1 in front of the camera, the box draws over the near-white sky: the box's pixels differ from the sky's, and the sky still shows around it 2598ms
+stdout | puffs.test.ts > AC3 #1285.a78aa552 puff@1 clouds without a sky draw > AC3 #1285.a78aa552 a view3d of puff@1 clouds and no sky@1 draws the clouds: its frame differs from the frame without them, its gpu_ms is above 0, and no device validation error is written
+AC3 #1285.a78aa552: control corner 16, 17, 20, middle 16, 17, 20; with puffs corner 0, 0, 0, middle 0, 0, 0; 100.0% of pixels changed by the puffs (100.0% dark); gpu_ms with puffs 0, without 0.637125049252063; stderr: deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Device::create_bind_group
+    Number of bindings in bind group descriptor (0) does not match the number of bindings defined in the bind group layout (11)
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Device::create_bind_group
+    Number of bindings in bind group descriptor (0) does not match the number of bindings defined in the bind group layout (11)
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In a CommandEncoder, label = 'deep-gpu layer'
+ 
+
+ ❯ puffs.test.ts (1 test | 1 failed) 7171ms
+   ❯ AC3 #1285.a78aa552 puff@1 clouds without a sky draw (1)
+     × AC3 #1285.a78aa552 a view3d of puff@1 clouds and no sky@1 draws the clouds: its frame differs from the frame without them, its gpu_ms is above 0, and no device validation error is written 2355ms
+stdout | sky.test.ts > AC1 #1285.2ac36129 a camera and a bright sky@1 draw a frame that isn't blank > AC1 #1285.2ac36129 a view3d of a camera and a near-white sky@1 draws a final frame that isn't blank under film.blank's measure, and deep-gpu writes no device validation error to stderr
+AC1 #1285.2ac36129: 100.0% of the sky frame's pixels at luma ≤ 0.06; stderr: deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Device::create_bind_group
+    Number of bindings in bind group descriptor (0) does not match the number of bindings defined in the bind group layout (11)
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In a CommandEncoder, label = 'deep-gpu layer'
+    In a draw command, kind: Draw
+      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Queue::submit
+    
+
+ ❯ sky.test.ts (1 test | 1 failed) 7313ms
+   ❯ AC1 #1285.2ac36129 a camera and a bright sky@1 draw a frame that isn't blank (1)
+     × AC1 #1285.2ac36129 a view3d of a camera and a near-white sky@1 draws a final frame that isn't blank under film.blank's measure, and deep-gpu writes no device validation error to stderr 2172ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  box.test.ts > AC2 #1285.9b9bfe99 a lit box in front of the camera draws over the sky > AC2 #1285.9b9bfe99 with a lit mark.box@1 in front of the camera, the box draws over the near-white sky: the box's pixels differ from the sky's, and the sky still shows around it
+AssertionError: the sky and the box isn't blank under film.blank's measure (luma ≤ 0.06 over ≥ 98% of its pixels): 100.0% of its pixels are at or under 0.06: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ notBlank helpers.ts:75:190
+
+ ❯ box.test.ts:37:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/23]⎯
+
+ FAIL  box.test.ts > AC2 #1285.9b9bfe99 a lit box in front of the camera draws over the sky > AC2 #1285.9b9bfe99 with a lit mark.box@1 in front of the camera, the box draws over the near-white sky: the box's pixels differ from the sky's, and the sky still shows around it
+AssertionError: the sky shows around the box: every corner pixel is bright and within 8 codes of the sky alone; 144 of 144 aren't, such as (0, 0) = 0, 0, 0 against the sky's 0, 0, 0: expected 144 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 144
+
+ ❯ box.test.ts:39:351
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/23]⎯
+
+ FAIL  box.test.ts > AC2 #1285.9b9bfe99 a lit box in front of the camera draws over the sky > AC2 #1285.9b9bfe99 with a lit mark.box@1 in front of the camera, the box draws over the near-white sky: the box's pixels differ from the sky's, and the sky still shows around it
+AssertionError: the box draws over the sky: every pixel of the middle 12 × 12 differs from the sky's by more than 16 codes; 144 of 144 don't, such as (26, 18) = 0, 0, 0 against the sky's 0, 0, 0: expected 144 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 144
+
+ ❯ box.test.ts:44:338
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/23]⎯
+
+ FAIL  box.test.ts > AC2 #1285.9b9bfe99 a lit box in front of the camera draws over the sky > AC2 #1285.9b9bfe99 with a lit mark.box@1 in front of the camera, the box draws over the near-white sky: the box's pixels differ from the sky's, and the sky still shows around it
+AssertionError: drawing the sky and the box: deep-gpu writes no device validation error to stderr; stderr was:
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Device::create_bind_group
+    Number of bindings in bind group descriptor (0) does not match the number of bindings defined in the bind group layout (11)
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In a CommandEncoder, label = 'deep-gpu layer'
+    In a draw command, kind: Draw
+      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Queue::submit
+    In a draw command, kind: Draw
+      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Device::create_bind_group
+    Number of bindings in bind group descriptor (0) does not match the number of bindings defined in the bind group layout (11)
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In a CommandEncoder, label = 'deep-gpu layer'
+    In a draw command, kind: Draw
+      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Queue::submit
+    In a draw command, kind: Draw
+      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3
+
+: expected [ …(10) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3",
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3",
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3",
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3",
++ ]
+
+ ❯ noValidationError helpers.ts:55:143
+     53| /** No device validation error was written while drawing (a soft check…
+     54| export function noValidationError(stderr: string, what: string): void {
+     55|   expect.soft(validationErrors(stderr), `${what}: deep-gpu writes no d…
+       |                                                                                                                                               ^
+     56| }
+     57|
+ ❯ box.test.ts:45:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/23]⎯
+
+ FAIL  castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AssertionError: the castle's frame 0 isn't blank under film.blank's measure (luma ≤ 0.06 over ≥ 98% of its pixels): 100.0% of its pixels are at or under 0.06: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ notBlank helpers.ts:75:190
+
+ ❯ castle.test.ts:36:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/23]⎯
+
+ FAIL  castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AssertionError: the castle's frame 0: gpu_ms is above 0: expected 0 to be greater than 0
+ ❯ castle.test.ts:38:88
+     36|         notBlank(im, `the castle's frame ${f.frame}`);
+     37|         expect.soft(f.gpu_ms, `the castle's frame ${f.frame} carries i…
+     38|         expect.soft(f.gpu_ms ?? 0, `the castle's frame ${f.frame}: gpu…
+       |                                                                                        ^
+     39|       }
+     40|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/23]⎯
+
+ FAIL  castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AssertionError: the castle's frame 1 isn't blank under film.blank's measure (luma ≤ 0.06 over ≥ 98% of its pixels): 100.0% of its pixels are at or under 0.06: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ notBlank helpers.ts:75:190
+
+ ❯ castle.test.ts:36:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/23]⎯
+
+ FAIL  castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AssertionError: the castle's frame 1: gpu_ms is above 0: expected 0 to be greater than 0
+ ❯ castle.test.ts:38:88
+     36|         notBlank(im, `the castle's frame ${f.frame}`);
+     37|         expect.soft(f.gpu_ms, `the castle's frame ${f.frame} carries i…
+     38|         expect.soft(f.gpu_ms ?? 0, `the castle's frame ${f.frame}: gpu…
+       |                                                                                        ^
+     39|       }
+     40|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/23]⎯
+
+ FAIL  castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AssertionError: the castle's frame 2 isn't blank under film.blank's measure (luma ≤ 0.06 over ≥ 98% of its pixels): 100.0% of its pixels are at or under 0.06: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ notBlank helpers.ts:75:190
+
+ ❯ castle.test.ts:36:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/23]⎯
+
+ FAIL  castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AssertionError: the castle's frame 2: gpu_ms is above 0: expected 0 to be greater than 0
+ ❯ castle.test.ts:38:88
+     36|         notBlank(im, `the castle's frame ${f.frame}`);
+     37|         expect.soft(f.gpu_ms, `the castle's frame ${f.frame} carries i…
+     38|         expect.soft(f.gpu_ms ?? 0, `the castle's frame ${f.frame}: gpu…
+       |                                                                                        ^
+     39|       }
+     40|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/23]⎯
+
+ FAIL  castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AssertionError: the castle's frame 360 isn't blank under film.blank's measure (luma ≤ 0.06 over ≥ 98% of its pixels): 100.0% of its pixels are at or under 0.06: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ notBlank helpers.ts:75:190
+
+ ❯ castle.test.ts:36:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/23]⎯
+
+ FAIL  castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AssertionError: the castle's frame 360: gpu_ms is above 0: expected 0 to be greater than 0
+ ❯ castle.test.ts:38:88
+     36|         notBlank(im, `the castle's frame ${f.frame}`);
+     37|         expect.soft(f.gpu_ms, `the castle's frame ${f.frame} carries i…
+     38|         expect.soft(f.gpu_ms ?? 0, `the castle's frame ${f.frame}: gpu…
+       |                                                                                        ^
+     39|       }
+     40|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/23]⎯
+
+ FAIL  castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AssertionError: the castle's frame 361 isn't blank under film.blank's measure (luma ≤ 0.06 over ≥ 98% of its pixels): 100.0% of its pixels are at or under 0.06: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ notBlank helpers.ts:75:190
+
+ ❯ castle.test.ts:36:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/23]⎯
+
+ FAIL  castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AssertionError: the castle's frame 361: gpu_ms is above 0: expected 0 to be greater than 0
+ ❯ castle.test.ts:38:88
+     36|         notBlank(im, `the castle's frame ${f.frame}`);
+     37|         expect.soft(f.gpu_ms, `the castle's frame ${f.frame} carries i…
+     38|         expect.soft(f.gpu_ms ?? 0, `the castle's frame ${f.frame}: gpu…
+       |                                                                                        ^
+     39|       }
+     40|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/23]⎯
+
+ FAIL  castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AssertionError: the castle's frame 362 isn't blank under film.blank's measure (luma ≤ 0.06 over ≥ 98% of its pixels): 100.0% of its pixels are at or under 0.06: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ notBlank helpers.ts:75:190
+
+ ❯ castle.test.ts:36:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/23]⎯
+
+ FAIL  castle.test.ts > AC4 #1285.3c874962 the castle draws > AC4 #1285.3c874962 the castle draws non-blank frames at the start of its orbit and at its half-turn, and with timings each frame's gpu_ms is above 0
+AssertionError: the castle's frame 362: gpu_ms is above 0: expected 0 to be greater than 0
+ ❯ castle.test.ts:38:88
+     36|         notBlank(im, `the castle's frame ${f.frame}`);
+     37|         expect.soft(f.gpu_ms, `the castle's frame ${f.frame} carries i…
+     38|         expect.soft(f.gpu_ms ?? 0, `the castle's frame ${f.frame}: gpu…
+       |                                                                                        ^
+     39|       }
+     40|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/23]⎯
+
+ FAIL  puffs.test.ts > AC3 #1285.a78aa552 puff@1 clouds without a sky draw > AC3 #1285.a78aa552 a view3d of puff@1 clouds and no sky@1 draws the clouds: its frame differs from the frame without them, its gpu_ms is above 0, and no device validation error is written
+AssertionError: the clouds draw over the middle: every pixel of the middle 8 × 8 is brighter than the frame without them by more than 16 codes in some channel; 64 of 64 don't: expected 64 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 64
+
+ ❯ puffs.test.ts:44:228
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/23]⎯
+
+ FAIL  puffs.test.ts > AC3 #1285.a78aa552 puff@1 clouds without a sky draw > AC3 #1285.a78aa552 a view3d of puff@1 clouds and no sky@1 draws the clouds: its frame differs from the frame without them, its gpu_ms is above 0, and no device validation error is written
+AssertionError: only the clouds change the frame: every corner pixel (no puff reaches the corners) is within 2 codes of the frame without them; 64 of 64 aren't, such as (0, 0) = 0, 0, 0 against 16, 17, 20: expected 64 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 64
+
+ ❯ puffs.test.ts:47:371
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/23]⎯
+
+ FAIL  puffs.test.ts > AC3 #1285.a78aa552 puff@1 clouds without a sky draw > AC3 #1285.a78aa552 a view3d of puff@1 clouds and no sky@1 draws the clouds: its frame differs from the frame without them, its gpu_ms is above 0, and no device validation error is written
+AssertionError: the frame with the puffs: gpu_ms is above 0: expected 0 to be greater than 0
+ ❯ puffs.test.ts:51:91
+     49|     expect.soft(control!.frame.gpu_ms ?? 0, 'the frame without the puf…
+     50|     expect.soft(clouds!.frame.gpu_ms, 'the frame with the puffs carrie…
+     51|     expect.soft(clouds!.frame.gpu_ms ?? 0, 'the frame with the puffs: …
+       |                                                                                           ^
+     52|     noValidationError(stderr, 'drawing the puffs');
+     53|   }, 1_800_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/23]⎯
+
+ FAIL  puffs.test.ts > AC3 #1285.a78aa552 puff@1 clouds without a sky draw > AC3 #1285.a78aa552 a view3d of puff@1 clouds and no sky@1 draws the clouds: its frame differs from the frame without them, its gpu_ms is above 0, and no device validation error is written
+AssertionError: drawing the puffs: deep-gpu writes no device validation error to stderr; stderr was:
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Device::create_bind_group
+    Number of bindings in bind group descriptor (0) does not match the number of bindings defined in the bind group layout (11)
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Device::create_bind_group
+    Number of bindings in bind group descriptor (0) does not match the number of bindings defined in the bind group layout (11)
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In a CommandEncoder, label = 'deep-gpu layer'
+    In a draw command, kind: Draw
+      The current set RenderPipeline with 'scene3d.puff' label expects a BindGroup to be set at index 3
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Queue::submit
+    In a draw command, kind: Draw
+      The current set RenderPipeline with 'scene3d.puff' label expects a BindGroup to be set at index 3
+
+: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "      The current set RenderPipeline with 'scene3d.puff' label expects a BindGroup to be set at index 3",
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "      The current set RenderPipeline with 'scene3d.puff' label expects a BindGroup to be set at index 3",
++ ]
+
+ ❯ noValidationError helpers.ts:55:143
+     53| /** No device validation error was written while drawing (a soft check…
+     54| export function noValidationError(stderr: string, what: string): void {
+     55|   expect.soft(validationErrors(stderr), `${what}: deep-gpu writes no d…
+       |                                                                                                                                               ^
+     56| }
+     57|
+ ❯ puffs.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/23]⎯
+
+ FAIL  sky.test.ts > AC1 #1285.2ac36129 a camera and a bright sky@1 draw a frame that isn't blank > AC1 #1285.2ac36129 a view3d of a camera and a near-white sky@1 draws a final frame that isn't blank under film.blank's measure, and deep-gpu writes no device validation error to stderr
+AssertionError: the camera and the near-white sky isn't blank under film.blank's measure (luma ≤ 0.06 over ≥ 98% of its pixels): 100.0% of its pixels are at or under 0.06: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ notBlank helpers.ts:75:190
+
+ ❯ sky.test.ts:29:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/23]⎯
+
+ FAIL  sky.test.ts > AC1 #1285.2ac36129 a camera and a bright sky@1 draw a frame that isn't blank > AC1 #1285.2ac36129 a view3d of a camera and a near-white sky@1 draws a final frame that isn't blank under film.blank's measure, and deep-gpu writes no device validation error to stderr
+AssertionError: the near-white sky fills the view: at least 98% of the pixels are bright (luma ≥ 0.5): expected 0 to be greater than or equal to 0.98
+ ❯ sky.test.ts:33:118
+     31|     let bright = 0;
+     32|     for (let i = 0; i < n; i++) if (luma(sky!.final, i) >= 0.5) bright…
+     33|     expect.soft(bright / n, 'the near-white sky fills the view: at lea…
+       |                                                                                                                      ^
+     34|     noValidationError(stderr, 'drawing the camera and the sky');
+     35|   }, 1_800_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/23]⎯
+
+ FAIL  sky.test.ts > AC1 #1285.2ac36129 a camera and a bright sky@1 draw a frame that isn't blank > AC1 #1285.2ac36129 a view3d of a camera and a near-white sky@1 draws a final frame that isn't blank under film.blank's measure, and deep-gpu writes no device validation error to stderr
+AssertionError: drawing the camera and the sky: deep-gpu writes no device validation error to stderr; stderr was:
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Device::create_bind_group
+    Number of bindings in bind group descriptor (0) does not match the number of bindings defined in the bind group layout (11)
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In a CommandEncoder, label = 'deep-gpu layer'
+    In a draw command, kind: Draw
+      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3
+
+deep-gpu: the device raised a validation error: Validation Error
+
+Caused by:
+  In Queue::submit
+    In a draw command, kind: Draw
+      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3
+
+: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3",
++   "deep-gpu: the device raised a validation error: Validation Error",
++   "      The current set RenderPipeline with 'scene3d.sky' label expects a BindGroup to be set at index 3",
++ ]
+
+ ❯ noValidationError helpers.ts:55:143
+     53| /** No device validation error was written while drawing (a soft check…
+     54| export function noValidationError(stderr: string, what: string): void {
+     55|   expect.soft(validationErrors(stderr), `${what}: deep-gpu writes no d…
+       |                                                                                                                                               ^
+     56| }
+     57|
+ ❯ sky.test.ts:34:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/23]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  4 failed (4)
+   Start at  17:13:07
+   Duration  31.41s (tests 100%)
+
