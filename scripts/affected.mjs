@@ -273,11 +273,20 @@ const stateOf = (message = '') => message.match(/^(?:\w*Error: )?(BLOCKED|INCONC
 /** The results in a vitest or node --test report: failures with their state, and the tests that passed, by ID. */
 export function reportResults(cwd, text) {
   const failures = [], passed = [], stack = [];
-  for (const line of text.split('\n').filter(Boolean)) {
-    const row = JSON.parse(line);
+  const path = (file) => relative(cwd, file.startsWith('file:') ? fileURLToPath(file) : file).split(sep).join('/');
+  for (const [index, line] of text.split('\n').entries()) {
+    if (!line) continue;
+    let row;
+    try { row = JSON.parse(line); } catch {
+      // A line that doesn't parse, such as a record cut short with the next run on, hides whatever its records said:
+      // each file it names is unknown, and a line naming none is unknown as itself.
+      const files = [...line.matchAll(/\{"type":"\w+","file":("(?:[^"\\]|\\.)*")/g)].map(([, file]) => named(path(JSON.parse(file)), '(file)'));
+      for (const id of files.length ? new Set(files) : [`report line ${index + 1}`]) failures.push({ id, state: 'INCONCLUSIVE', message: `line ${index + 1} of the report doesn't parse` });
+      continue;
+    }
     if (row.type === 'unhandled') failures.push({ id: 'vitest › unhandled error', state: 'FAIL', message: row.message });
     if (!row.file) continue;
-    const file = relative(cwd, row.file.startsWith('file:') ? fileURLToPath(row.file) : row.file).split(sep).join('/');
+    const file = path(row.file);
     // node --test names a test alone; its suites are the tests started around it.
     if (row.type === 'start') stack[row.nesting] = row.name;
     const name = row.nesting === undefined ? row.name : [...stack.slice(0, row.nesting), row.name].join(' › ');
