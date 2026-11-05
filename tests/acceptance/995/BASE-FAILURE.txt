@@ -1,0 +1,41 @@
+#995's acceptance test at the merge base e2e6e1cc (origin/main), run on November 4, 2026 on this Linux arm64 box
+(20 cores, 121 GiB, swap in use) under a 1-minute load average of about 200 to 230 (other sessions' builds and suites),
+dev profile, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0. Home paths shortened to ~.
+
+The base's deep-app binary doesn't build on Linux (crates/deep-app/src/main.rs:113 calls the macOS-only
+`trusted::post_forged` outside a cfg: error[E0425] "cannot find function `post_forged` in module `trusted`"), and cargo
+builds the package's binary for every test target. So this run is from a scratch copy of the base with that one call put
+under `#[cfg(target_os = "macos")]`, plus this suite's files and its [[test]] entry; show.rs and everything else as at
+the base. GPUI's headless renderer on this box is wgpu on Mesa's Vulkan (the "TU: error" line is Mesa's freedreno probe
+failing over to another device).
+
+$ cargo test --locked -p deep-app --test acceptance_995
+     Running ../../tests/acceptance/995/app/panel.rs (~/deepbuild/.claude/worktrees/issue-1002-ca8dda/target/debug/deps/acceptance_995-6f6ca3127443a14d)
+running 2 tests
+TU: error: ../src/freedreno/vulkan/tu_knl.cc:387: failed to open device /dev/dri/renderD128 (VK_ERROR_INCOMPATIBLE_DRIVER)
+revision 10: 271.6 MB
+revision 100: 370.4 MB
+revision 200: 476.0 MB
+revision 300: 580.8 MB
+revision 400: 676.8 MB
+revision 500: 781.6 MB
+revision 600: 886.4 MB
+revision 700: 991.1 MB
+revision 800: 1095.9 MB
+revision 900: 1200.8 MB
+revision 1000: 1305.6 MB
+test presenting_1000_revisions_with_new_1_mb_pictures_keeps_memory_within_20_mb_and_only_the_shown_pictures_held ... FAILED
+---- presenting_1000_revisions_with_new_1_mb_pictures_keeps_memory_within_20_mb_and_only_the_shown_pictures_held ----
+FAIL: the canvas panel held 1034.0 MB more after 1,000 revisions than after the first 10 (271.6 MB at revision 10, 1305.6 MB at revision 1,000), past the 20 MB allowed: it keeps pictures no shown revision uses
+test presenting_1000_revisions_frees_the_gpus_copies_of_pictures_no_shown_revision_uses ... FAILED
+---- presenting_1000_revisions_frees_the_gpus_copies_of_pictures_no_shown_revision_uses ----
+INCONCLUSIVE: off macOS the GPU's memory needn't be the process's (it grew 1034.0 MB here), so whether the panel frees the GPU's copies is judged on macOS, where the footprint counts them
+test result: FAILED. 0 passed; 2 failed
+error: test failed, to rerun pass `-p deep-app --test acceptance_995`
+Caused by:
+  process didn't exit successfully: `~/deepbuild/.claude/worktrees/issue-1002-ca8dda/target/debug/deps/acceptance_995-6f6ca3127443a14d` (exit status: 1)
+
+The criterion's verdict fails for the expected reason, naming the panel: memory grows 1,034 MB over 990 revisions,
+about one decoded 1 MB picture (1,048,576 bytes) per revision, because `present` never removes a picture. Both rects
+were drawn right (no read-back failure), so the base loads and draws every picture the test presents. The GPU verdict
+is INCONCLUSIVE off macOS, as designed; it is judged on a reference Mac.
