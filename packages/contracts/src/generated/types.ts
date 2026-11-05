@@ -4971,6 +4971,29 @@ export interface ProcessTracked {
   evidence?: Array<string>;
 }
 
+/** product.built@1 */
+export interface ProductBuilt {
+  v: 1;
+  id: string;
+  kind: "product.built";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    product: string;
+    path: string;
+    key: string;
+    commit: string;
+    bytes: number;
+    store_bytes: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** promise.blocked@1 */
 export interface PromiseBlocked {
   v: 1;

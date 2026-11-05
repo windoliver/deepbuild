@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6Y",
+  "kind": "product.built",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "product": "target",
+    "path": "target",
+    "key": "0f3a9c2b7d1e4f5a6b8c9d0e",
+    "commit": "c40a390ad7e39ef7bba70bf9d1322a33be74c6d3",
+    "bytes": 734003200,
+    "store_bytes": 912261120
+  }
+}
