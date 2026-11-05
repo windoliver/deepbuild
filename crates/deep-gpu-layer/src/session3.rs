@@ -53,6 +53,21 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         ids_by_draw_position: p == Some(Planted::IdsByDrawPosition),
         ids_ignore_mask: p == Some(Planted::IdsIgnoreMask),
         cuts_color_only: p == Some(Planted::CutsColorOnly),
+        // #428's shading plants, a bit each in scene3d.wgsl's order.
+        lobes: [
+            Planted::AbsorptionIgnoresThickness,
+            Planted::TransmissionIgnoresRoughness,
+            Planted::DispersionSamplesOnce,
+            Planted::SpecularColorIgnored,
+            Planted::IridescenceIgnoresThickness,
+            Planted::DiffuseLambert,
+            Planted::OrenNayarUncompensated,
+            Planted::RetroreflectionIgnored,
+            Planted::FlakesByPixel,
+        ]
+        .iter()
+        .position(|q| p == Some(*q))
+        .map_or(0, |i| 16 << i),
     }
 }
 
