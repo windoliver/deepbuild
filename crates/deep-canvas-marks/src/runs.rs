@@ -100,7 +100,7 @@ fn vitest_values(line: &str) -> Option<(String, String)> {
     let (at, matcher) = MATCHERS
         .iter()
         .filter_map(|m| Some((rest.find(m)?, m)))
-        .min_by_key(|(at, m)| (*at, usize::MAX - m.len()))?;
+        .min_by_key(|(at, m)| (*at, std::cmp::Reverse(m.len())))?;
     Some((
         rest[..at].to_string(),
         rest[at + matcher.len()..].to_string(),
