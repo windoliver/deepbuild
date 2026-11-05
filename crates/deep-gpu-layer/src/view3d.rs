@@ -720,46 +720,6 @@ fn mean(drawn: &mut session3::Drawn, parts: &[(f64, &Part)]) {
     }
 }
 
-/// Motion blur by velocity over the drawn frame (#419): the reconstruction filter on the linear
-/// target and on the final bytes in linear light.
-fn resolve_velocity(
-    drawn: &mut session3::Drawn,
-    vel: &blur::Velocity,
-    size: [u32; 2],
-    b: &deep_canvas_scene3d::samples::Blur,
-) {
-    let mut colors: Vec<Vec<f64>> = Vec::new();
-    if let Some((linear, _)) = &drawn.targets {
-        colors.push(
-            linear
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .map(|c| f64::from(f32::from_le_bytes(*c)))
-                .collect(),
-        );
-    }
-    if let Some(bytes) = &drawn.bytes {
-        colors.push(bytes.iter().map(|c| srgb_decode(*c)).collect());
-    }
-    let before = colors.clone();
-    blur::reconstruct(&mut colors, vel, size, b);
-    let mut it = colors.into_iter().zip(before);
-    if let Some((linear, _)) = drawn.targets.as_mut() {
-        let (c, _) = it.next().expect("the linear target's colors");
-        *linear = c.iter().flat_map(|v| (*v as f32).to_le_bytes()).collect();
-    }
-    if let Some(bytes) = drawn.bytes.as_mut() {
-        let (c, was) = it.next().expect("the final bytes' colors");
-        for (i, out) in bytes.iter_mut().enumerate() {
-            // Only resolved pixels change: an untouched one keeps its byte exactly.
-            if i % 4 != 3 && c[i] != was[i] {
-                *out = srgb_encode(c[i]);
-            }
-        }
-    }
-}
-
 pub(crate) fn png(rgba: &[u8], size: [u32; 2]) -> Result<Vec<u8>, Value> {
     let mut out = Vec::new();
     image::codecs::png::PngEncoder::new_with_quality(
@@ -1252,7 +1212,17 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let looks = &args.look.samples;
             let fps = args.fps as f64;
             let in_hold = holds.iter().any(|(a, b)| t >= *a && t <= *b);
-            let blur = args.look.blur.as_ref().filter(|_| !in_hold && !noop);
+            // `vary: time` spreads the look's own samples over a 180° shutter (Look: samples).
+            let time_only = deep_canvas_scene3d::samples::Blur {
+                samples: 1,
+                ..Default::default()
+            };
+            let blur = args
+                .look
+                .blur
+                .as_ref()
+                .or(looks.vary.time.then_some(&time_only))
+                .filter(|_| !in_hold && !noop);
             let shutter = blur.map_or(0.0, |b| b.shutter_s(fps) * FLICKS_PER_SECOND as f64);
             let edges = (
                 app.planted == Some(Planted::EdgesUnwelded),
@@ -1361,9 +1331,28 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let plan = deep_canvas_scene3d::samples::plan(n_all, pixel, looks, blur_n > 0);
             let velocity_on =
                 blur.is_some_and(|b| b.method == deep_canvas_scene3d::samples::Method::Velocity);
+            // Motion blur by velocity: the renderer's velocity target reads the evaluations at
+            // t ± s/2, never an earlier frame.
+            let mut moving = scene.clone();
+            if let (true, Some(b)) = (velocity_on, blur) {
+                let open = at_time(t - (shutter / 2.0).round() as i64, &mut labels)?;
+                let close = at_time(t + (shutter / 2.0).round() as i64, &mut labels)?;
+                let pairing = match app.planted {
+                    Some(Planted::VelocityFromTransform) => blur::Pairing::TransformOnly,
+                    Some(Planted::VelocityPairsByIndex) => blur::Pairing::ByIndex,
+                    _ => blur::Pairing::Shipped,
+                };
+                let (motion, topology) = blur::motion(&scene, &open, &close, pairing, b);
+                for item in &topology {
+                    notices.push(json!({"code": "velocity_topology", "item": item}));
+                }
+                let mut sc = (*scene).clone();
+                sc.motion = Some(Arc::new(motion));
+                moving = Arc::new(sc);
+            }
             let sub_scene = |k: usize| -> Arc<Scene> {
                 let mut sc = if timed.is_empty() {
-                    (*scene).clone()
+                    (*moving).clone()
                 } else {
                     timed[k].clone()
                 };
@@ -1453,7 +1442,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 args.look.clone(),
                 n,
                 delay,
-                read_targets || velocity_on || overlay,
+                read_targets || overlay,
                 shows && n == args.from,
             )?;
             let plain0 = drawn.bytes.clone();
@@ -1479,33 +1468,6 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 "drawn": drawn_samples,
                 "settling": settling_now && drawn_samples < looks.export,
             });
-            // Motion blur by velocity: from the evaluation at t ± s/2, never an earlier frame.
-            if let (true, Some(b)) = (velocity_on, blur) {
-                let open = at_time(t - (shutter / 2.0).round() as i64, &mut labels)?;
-                let close = at_time(t + (shutter / 2.0).round() as i64, &mut labels)?;
-                let pairing = match app.planted {
-                    Some(Planted::VelocityFromTransform) => blur::Pairing::TransformOnly,
-                    Some(Planted::VelocityPairsByIndex) => blur::Pairing::ByIndex,
-                    _ => blur::Pairing::Shipped,
-                };
-                if let (Some((_, ids)), Some(depth)) = (&drawn.targets, &drawn.depth) {
-                    let vel = blur::velocity(
-                        &scene,
-                        &open,
-                        &close,
-                        ids,
-                        &drawn.picks,
-                        depth,
-                        size,
-                        b.max_px,
-                        pairing,
-                    );
-                    for item in &vel.topology {
-                        notices.push(json!({"code": "velocity_topology", "item": item}));
-                    }
-                    resolve_velocity(&mut drawn, &vel, size, b);
-                }
-            }
             let scene_bytes = drawn.bytes.clone();
             // The viewer's marks laid over the resolved frame where they drew.
             if let (Some(over), Some(plain), Some(bytes)) =
