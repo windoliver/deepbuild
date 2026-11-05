@@ -1,0 +1,15 @@
+{
+  "name": "remap",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #429 acceptance suite: one recipe that makes a 1 m box with the document's material `redm` and a channel of its own on its width, for criterion 7's recipe instance under a reversed time remap.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "scene3d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "remap.cube@1": "remap.cube@1.json"
+  }
+}

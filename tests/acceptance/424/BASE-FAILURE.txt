@@ -1,0 +1,43 @@
+# #424 acceptance suite at the base, 79d98cbc (Merge pull request #1242), before any implementation.
+#
+# Not run at the base: the surfaces plainly don't exist there, and no cargo binary was built (the owner asked for a
+# fast job). What was checked instead:
+#
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/424/tsconfig.json   -> exit 0, no errors
+#   (TypeScript 5.9.3, @types/node 24.19.2 and vitest 5.0.5, the repo's pins, installed in a scratch folder)
+#   The fixtures' own numbers, run on the CPU helpers alone: the saddle reference judges 68,466 pixels and the
+#   figure-eight 125,558 (each over 20,000); the beams overlap on 5,983 to 13,086 pixels at the poses tried (over 100);
+#   the catcher's shadow core covers 1,156 pixels (over 800); the section's floor has 4,070 pixels to judge lit and
+#   1,110 dark before the texel margin (over 500 each).
+#
+# Why each test fails at the base, read from the base's code (crates/deep-gpu-layer, crates/deep-canvas-scene3d,
+# crates/deep-scene3d-render). deep-gpu refuses every --planted name this suite uses at startup (Planted::parse has
+# none of ids_by_draw_position, ids_ignore_mask, add_writes_depth, add_skips_depth_test, cut_color_only,
+# single_pixel_pick: bad_input, exit 1), so every half that runs a planted program fails there too.
+#
+#   shadow-catcher.test.ts AC1  the catcher test may pass at the base (#421's catch: shadow over a window). The shells:
+#                               view3d reads no `cutaway`, so where the cut should open the outer shell over the inner
+#                               (poses near +X) the outer front still draws: "still read as if the outer front were
+#                               drawn". sort_bias exists at the base.
+#   cutaway.test.ts        AC2  no cutaway@1 kind (the document with it is refused or the item ignored) and no view
+#                               `cutaway`: the cube shows past the plane on every frame; the pump isn't cut ("falls by
+#                               a quarter" fails).
+#   adjust.test.ts         AC3  adjust opacity is coverage on the object with no depth pass of its own, so the
+#                               double-sided block's far wall blends over the ground; frames carry no `compiled`
+#                               ("reports the pipelines compiled while drawing it" fails).
+#   picks.test.ts          AC4  no instance@1 kind (refused or not drawn: no trees#<id> pick), no group@1 visible, no
+#                               cutaway; the planted half is refused.
+#   additive.test.ts       AC5  the shipped test may pass at the base (#421's add: depth-tested, no depth write, casts
+#                               nothing); the planted test fails, both names refused.
+#   per-pixel.test.ts      AC6  no per-pixel resolve: `resolve: per_pixel` draws sorted, so the saddle misses on one
+#                               side (under 99.9%). The sorted twin's test may pass at the base.
+#   fragments-cap.test.ts  AC7  no fragment lists, no fragments_capped notice.
+#   budget.test.ts         AC8  INCONCLUSIVE off a reference Mac; on one, the per-pixel and sorted draws are the same
+#                               picture, so "differs on at least 1% of pixels" fails before any timing counts.
+#   section.test.ts        AC9  no cutaway: wall_px draws ("the scene3d.geometry pass draws the removed wall_px") and
+#                               the floor is dark where the cut should open it; cascades report splits only, no maps
+#                               ("reports no shadow maps").
+#   pick-margin.test.ts    AC10 the base's pick reads one pixel, so both clicks name nothing; the plant is refused.
+#   taste.test.ts          AC11 no TASTE.json: INCONCLUSIVE, never PASS.
+#
+# A run at the base, when one is made, is recorded beside this note by the job that runs it.

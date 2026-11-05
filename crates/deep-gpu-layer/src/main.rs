@@ -13,6 +13,8 @@
 
 #[cfg(feature = "test-meter")]
 mod allocations;
+mod calibrate;
+mod columns;
 mod compare;
 mod compile;
 mod conformance;
@@ -24,9 +26,11 @@ mod frames;
 mod golden;
 mod guard;
 mod host;
+mod interp_suite;
 mod levels;
 mod live;
 mod liveview;
+mod lod;
 mod marks2d;
 mod parity;
 mod plugin;
@@ -34,7 +38,9 @@ mod reference;
 mod scene;
 mod seam;
 mod session3;
+mod simplify;
 mod status;
+mod steps_ref;
 #[cfg(feature = "test-meter")]
 mod testgpu;
 mod textures;
@@ -162,6 +168,17 @@ pub enum Planted {
     StatusBeforeToneMap,
     /// #418's: the bloom's lens dirt laid over the frame instead of multiplying its light.
     DirtOverlay,
+    /// #429's wrong programs (tests/acceptance/429/README.md: Planted programs).
+    RenderBackDrawsLiveOnly,
+    TakesDeclaredClass,
+    AttributeStride16,
+    PartialUpdate2Bytes,
+    RecopiesWholeColumn,
+    F32CompareFloorExact,
+    TrustsWriteIndex,
+    DropsSwizzleLast,
+    NoiseWeightHalved,
+    SettlesWithFallback,
     /// #423's wrong programs (tests/acceptance/423/README.md: Planted programs): the
     /// metallic-roughness map decoded from sRGB; a PNG's gAMA applied as it decodes; every map
     /// sampled at anisotropy 1; a KTX2 normal map transcoded as sRGB color.
@@ -175,11 +192,32 @@ pub enum Planted {
     /// environment light alone; metallic premixed into one F0 before shading.
     DrawsBlack,
     DropsClouds,
+    /// #424's wrong programs.
+    AddWritesDepth,
+    AddWithoutDepthTest,
+    IdsByDrawPosition,
+    IdsIgnoreMask,
+    CutsColorOnly,
+    SinglePixelPick,
     CascadeCacheKeepsStale,
     PrefilterOverFrames,
     UncompensatedLobe,
     CompensatesEnvironmentOnly,
     PremixedMetallic,
+    /// #425's wrong programs (tests/acceptance/425/README.md: Planted programs): a band or the
+    /// light cut held by session hysteresis; a band change faded over wall-clock time; a mesh
+    /// level chosen from the previous frame's view; band masks keyed per band; the blend level
+    /// computed in f32 from the drawn frame; a climb that never steps down; canonical renders at
+    /// the live rung; a frame-health drop climbed again without a view change.
+    BandHysteresis,
+    LightCutHysteresis,
+    BandFadeByWallClock,
+    LevelByEarlierFrame,
+    BandMasksIndependent,
+    BlendLevelOnGpu,
+    ClimbNeverStepsDown,
+    CanonicalClimbs,
+    ReclimbsWithoutViewChange,
 }
 
 impl Planted {
@@ -260,17 +298,42 @@ impl Planted {
             "spot_counts_cone" => Planted::SpotCountsCone,
             "status_before_tone_map" => Planted::StatusBeforeToneMap,
             "dirt_overlay" => Planted::DirtOverlay,
+            "render_back_draws_live_only" => Planted::RenderBackDrawsLiveOnly,
+            "takes_declared_class" => Planted::TakesDeclaredClass,
+            "attribute_stride_16" => Planted::AttributeStride16,
+            "partial_update_2_bytes" => Planted::PartialUpdate2Bytes,
+            "recopies_whole_column" => Planted::RecopiesWholeColumn,
+            "f32_compare_floor_exact" => Planted::F32CompareFloorExact,
+            "trusts_write_index" => Planted::TrustsWriteIndex,
+            "drops_swizzle_last" => Planted::DropsSwizzleLast,
+            "noise_weight_halved" => Planted::NoiseWeightHalved,
+            "settles_with_fallback" => Planted::SettlesWithFallback,
             "mr_from_srgb" => Planted::MrFromSrgb,
             "applies_image_gamma" => Planted::AppliesImageGamma,
             "anisotropy_one" => Planted::AnisotropyOne,
             "normal_map_as_srgb" => Planted::NormalMapAsSrgb,
             "draws_black" => Planted::DrawsBlack,
             "drops_clouds" => Planted::DropsClouds,
+            "add_writes_depth" => Planted::AddWritesDepth,
+            "add_skips_depth_test" => Planted::AddWithoutDepthTest,
+            "ids_by_draw_position" => Planted::IdsByDrawPosition,
+            "ids_ignore_mask" => Planted::IdsIgnoreMask,
+            "cut_color_only" => Planted::CutsColorOnly,
+            "single_pixel_pick" => Planted::SinglePixelPick,
             "cascade_cache_keeps_stale" => Planted::CascadeCacheKeepsStale,
             "prefilter_over_frames" => Planted::PrefilterOverFrames,
             "uncompensated_lobe" => Planted::UncompensatedLobe,
             "compensates_environment_only" => Planted::CompensatesEnvironmentOnly,
             "premixed_metallic" => Planted::PremixedMetallic,
+            "band_hysteresis" => Planted::BandHysteresis,
+            "light_cut_hysteresis" => Planted::LightCutHysteresis,
+            "band_fade_by_wall_clock" => Planted::BandFadeByWallClock,
+            "level_by_earlier_frame" => Planted::LevelByEarlierFrame,
+            "band_masks_independent" => Planted::BandMasksIndependent,
+            "blend_level_on_gpu" => Planted::BlendLevelOnGpu,
+            "climb_never_steps_down" => Planted::ClimbNeverStepsDown,
+            "canonical_climbs" => Planted::CanonicalClimbs,
+            "reclimbs_without_view_change" => Planted::ReclimbsWithoutViewChange,
             _ => return None,
         })
     }
@@ -470,16 +533,22 @@ impl App {
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("simplify") => simplify::call(out, call),
             Some("workers") => textures::workers(self),
             Some("tone") => tone::call(self, out, call),
             Some("host") => host::call(self, out, call),
             Some("guard") => guard::call(self, out, call),
             Some("operators") => effects::operators(self),
+            Some("calibrate") => calibrate::calibrate(self),
             Some("reference") => effects::reference(self, out, call),
             Some("check_operator") => effects::check_operator(self, call),
             Some("op") => effects::op(self, call),
+            Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),
             Some("cross_gpu") => effects::cross_gpu(self, call),
+            Some("op_table") => steps_ref::op_table(),
+            Some("steps_reference") => steps_ref::steps_reference(self, out),
+            Some("interp_suite") => interp_suite::call(self, call),
             Some("golden") => golden::golden(self, out, call),
             Some("decide") => golden::decide(self, call),
             Some("live") => live::call(self, out, call),

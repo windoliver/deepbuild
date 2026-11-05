@@ -2083,6 +2083,7 @@ dependencies = [
  "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-text",
+ "meshopt",
  "serde_json",
  "vello_cpu",
 ]
@@ -2194,6 +2195,7 @@ dependencies = [
  "gpui-shell",
  "image",
  "libc",
+ "meshopt",
  "serde_json",
  "sha2 0.11.1",
  "wgpu 30.0.1",
@@ -2316,6 +2318,7 @@ name = "deep-scene3d-render"
 version = "0.0.0"
 dependencies = [
  "bytemuck",
+ "deep-canvas-effects",
  "deep-canvas-scene3d",
  "deep-gpu",
  "serde_json",
@@ -6102,6 +6105,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "meshopt"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a403c16e3ca5752600e1d4c5ba3ba2a6496f407ded66e767f05279514363f461"
+dependencies = [
+ "bitflags 2.13.2",
+ "cc",
+ "float-cmp 0.10.0",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

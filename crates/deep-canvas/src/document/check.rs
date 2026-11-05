@@ -259,6 +259,7 @@ fn check_by(
                 Tail::Document => {
                     check_id_maps(&lowered, &mut issues);
                     check_controls(&lowered, &mut issues);
+                    check_time_remaps(&lowered, &expansions, &mut issues);
                     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
                     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
                     super::rules::check(&lowered, &mut issues, |entries, work| {
@@ -1938,6 +1939,53 @@ fn check_controls(doc: &Value, issues: &mut Vec<Issue>) {
             fields.get("role").cloned().unwrap_or(Value::Null),
             what,
         ));
+    }
+}
+
+/// Each time remap (Time remap; #429): its target a recipe instance the check expanded, and its
+/// map `reverse`, the one preset this build plays, over the document's span; the other maps and a
+/// placement target land later and are refused, naming the field.
+fn check_time_remaps(doc: &Value, expansions: &[Expansion], issues: &mut Vec<Issue>) {
+    let Some(entries) = member(doc, "time_remaps").and_then(Value::as_object) else {
+        return;
+    };
+    let span = member(doc, "transport").and_then(|t| member(t, "span"));
+    for (key, entry) in entries {
+        let Some(fields) = entry.as_object() else {
+            continue;
+        };
+        let mut bad = |code, field: &str, what: &str| {
+            let actual = fields.get(field).cloned().unwrap_or(Value::Null);
+            let path = format!("time_remaps/{key}/{field}");
+            issues.push(Issue::error(code, key, path, actual, what));
+        };
+        for field in fields.keys() {
+            if !["target", "map", "clamp"].contains(&field.as_str()) {
+                bad("unknown_field", field, "not a field of a time remap");
+            }
+        }
+        let target = fields.get("target").and_then(Value::as_str);
+        if !target.is_some_and(|t| expansions.iter().any(|e| e.instance == t)) {
+            bad(
+                "ref_unresolved",
+                "target",
+                "names no recipe instance of the document",
+            );
+        }
+        if fields.get("map").and_then(Value::as_str) != Some("reverse") {
+            bad(
+                "out_of_range",
+                "map",
+                "this build plays a time remap's `reverse` map; the other maps land later",
+            );
+        }
+        if span.is_none_or(|s| s == "auto" || s == "open") {
+            bad(
+                "out_of_range",
+                "map",
+                "a reverse map runs over the document's span, which it doesn't give",
+            );
+        }
     }
 }
 
