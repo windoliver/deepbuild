@@ -2565,11 +2565,14 @@ impl Format {
 
 /// The record as pinned to one frame (canvas primitives: Bound value; Status binding): each
 /// reading's value and as-of time, each status source's state, and the time the frame is pinned
-/// to, the host time live and the mapped record time in a replay, on the record's clock.
+/// to, the host time live and the mapped record time in a replay, on the record's clock. A
+/// reading printed with a known number of decimals, such as a run's assertion value, carries
+/// them in `precision`, and no format shows more.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Record {
     pub readings: BTreeMap<String, f64>,
     pub as_of: BTreeMap<String, i64>,
+    pub precision: BTreeMap<String, u32>,
     pub states: BTreeMap<String, String>,
     pub pinned: i64,
 }
@@ -2620,7 +2623,14 @@ fn show(
         }
     };
     let value = record.readings.get(source).copied();
-    let text = format.show(value);
+    let text = match record.precision.get(source) {
+        Some(&p) => Format {
+            precision: Some(format.precision.map_or(p, |f| f.min(p))),
+            ..format.clone()
+        }
+        .show(value),
+        None => format.show(value),
+    };
     let (Some(after), Some(as_of), Some(_)) = (stale_after, record.as_of.get(source), value) else {
         return Ok(Shown {
             bound: bid.to_string(),

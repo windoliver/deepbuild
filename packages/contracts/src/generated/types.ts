@@ -2977,6 +2977,31 @@ export interface CommandStaged {
   evidence?: Array<string>;
 }
 
+/** command.staged@2 */
+export interface CommandStagedV2 {
+  v: 2;
+  id: string;
+  kind: "command.staged";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    command: string;
+    folders: Array<string>;
+    files?: Array<{
+      path: string;
+      digest: string;
+    }>;
+    until: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** commit.made@1 */
 export interface CommitMade {
   v: 1;
@@ -4916,6 +4941,28 @@ export interface OpenItemOpenedV2 {
     text: string;
     item: string;
     from: "agent" | "section" | "bug" | "issue" | "limit" | "placeholder" | "task" | "review_thread";
+    resolved_by?: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** open_item.opened@3 */
+export interface OpenItemOpenedV3 {
+  v: 3;
+  id: string;
+  kind: "open_item.opened";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    text: string;
+    item: string;
+    from: "agent" | "section" | "bug" | "issue" | "limit" | "placeholder" | "task" | "review_thread" | "verdict";
     resolved_by?: string;
   };
   evidence?: Array<string>;

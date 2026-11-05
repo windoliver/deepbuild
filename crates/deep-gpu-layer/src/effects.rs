@@ -976,6 +976,7 @@ pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
     (
         Options {
             drops_swizzle_last: p == Some(Planted::DropsSwizzleLast),
+            index_wraps: p == Some(Planted::IndexWraps),
             ..Options::default()
         },
         check::CheckOptions {
@@ -986,6 +987,20 @@ pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
             noise_weight_halved: p == Some(Planted::NoiseWeightHalved),
         },
     )
+}
+
+/// The structural steps' planted programs (#483), as the operators' runtime takes them; the pool
+/// marker is the test hook's, set by check_operator.
+pub fn operator_hooks(p: Option<Planted>) -> deep_effects_render::docops::Hooks {
+    deep_effects_render::docops::Hooks {
+        marker: None,
+        no_clear: p == Some(Planted::PoolWithoutClear),
+        feeds_first: p == Some(Planted::IterateFeedsFirst),
+        level0_only: p == Some(Planted::MipsLevel0Only),
+        old_key: p == Some(Planted::MipsKeptUnderOldKey),
+        ties_decreasing: p == Some(Planted::SortTiesDecreasing),
+        compact_by_atomic: p == Some(Planted::CompactByAtomic),
+    }
 }
 
 /// The compute operator `op` builds: one storage input of 32-bit words per argument, the step

@@ -34,6 +34,7 @@ mod query;
 mod registries;
 mod sandbox;
 mod ring;
+mod runs;
 mod scene3d;
 mod seams;
 mod serve;
@@ -950,17 +951,29 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             })
         }
     };
-    let record = entries(input, "record", |o| {
-        Some(RecordObject {
-            session: match o.get("session")? {
-                Value::Null => None,
-                v => Some(v.as_str()?.to_string()),
-            },
-            state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
-            value: optional(o.get("value"), Value::as_f64)?,
-            as_of: optional(o.get("as_of"), Value::as_i64)?,
-        })
-    })?;
+    // #629: a list is a replay's run record entries; an object, the record's objects by handle.
+    let (record, runs) = match input.get("record") {
+        Some(Value::Array(list)) => (
+            BTreeMap::new(),
+            list.iter()
+                .map(|e| runs::entry(e).map(|_| e.clone()))
+                .collect::<Option<Vec<_>>>()?,
+        ),
+        _ => (
+            entries(input, "record", |o| {
+                Some(RecordObject {
+                    session: match o.get("session")? {
+                        Value::Null => None,
+                        v => Some(v.as_str()?.to_string()),
+                    },
+                    state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
+                    value: optional(o.get("value"), Value::as_f64)?,
+                    as_of: optional(o.get("as_of"), Value::as_i64)?,
+                })
+            })?,
+            Vec::new(),
+        ),
+    };
     let claims = entries(input, "claims", |c| {
         let session = c.get("session")?.as_str()?.to_string();
         let requirements = match c.get("requirements") {
@@ -1154,6 +1167,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "sends_without_serial" => Planted::SendsWithoutSerial,
                 "serial_carries_many_sends" => Planted::SerialCarriesManySends,
                 "bound_value_a_frame_late" => Planted::BoundValueAFrameLate,
+                "resolver_reads_summary" => Planted::ResolverReadsSummary,
+                "unparsable_reads_zero" => Planted::UnparsableReadsZero,
                 "keymap_unchecked" => Planted::KeymapUnchecked,
                 "conflicts_unreported" => Planted::ConflictsUnreported,
                 "focused_panel_takes_escape" => Planted::FocusedPanelTakesEscape,
@@ -1339,6 +1354,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         panels,
         docs,
         record,
+        runs,
         claims,
         window,
         display,

@@ -65,6 +65,25 @@ fn deep_noise2(p: vec2<f32>, seed: u32, period: u32) -> f32 {
 }
 ";
 
+/// `sample3d@1` (#483): a trilinear lookup of a 3D texture written as its eight texel loads, so it
+/// reads every format alike, r32float included, which isn't filterable on every adapter.
+pub const SAMPLE3D: &str = "fn deep_sample3d(t: texture_3d<f32>, uvw: vec3<f32>) -> vec4<f32> {
+    let n = vec3<i32>(textureDimensions(t));
+    let p = clamp(uvw, vec3<f32>(0.0), vec3<f32>(1.0)) * vec3<f32>(n) - 0.5;
+    let b = floor(p);
+    let f = p - b;
+    let i = vec3<i32>(b);
+    let hi = n - vec3<i32>(1);
+    var acc = vec4<f32>(0.0);
+    for (var k = 0; k < 8; k++) {
+        let o = vec3<i32>(k & 1, (k >> 1) & 1, (k >> 2) & 1);
+        let w = select(1.0 - f, f, vec3<bool>(o == vec3<i32>(1)));
+        acc += textureLoad(t, clamp(i + o, vec3<i32>(0), hi), 0) * (w.x * w.y * w.z);
+    }
+    return acc;
+}
+";
+
 /// Whether any step, in any body, is a seeded noise step.
 fn uses_noise(steps: &std::collections::BTreeMap<String, Step>) -> bool {
     steps.values().any(|s| {
@@ -99,7 +118,7 @@ pub fn input_bytes(
         }
     };
     for (name, input) in &c.op.inputs {
-        if matches!(input.ty, Ty::Tex(_) | Ty::Storage(..))
+        if matches!(input.ty, Ty::Tex(_) | Ty::Tex3(_) | Ty::Storage(..))
             || matches!(input.from, From::Time | From::Seed)
         {
             continue;
@@ -327,6 +346,28 @@ impl W<'_> {
             let store = format!(
                 "atomic{f}(&out_{buf}[min({i}, {}u)], {v});",
                 out.count.max(1) - 1
+            );
+            match &s.when {
+                Some(w) => self.line(&format!("if {} {{ {store} }}", ident(w))),
+                None => self.line(&store),
+            }
+            return;
+        }
+        if name == "store" {
+            // A texel of a texture output (#483), at its index clamped into the texture.
+            let Some(Arg::Ref(tex, None)) = s.args.get("tex") else {
+                unreachable!("checked")
+            };
+            let out = &self.c.op.textures[tex];
+            let (vt, dims) = if out.dim3 { ("vec3", 3) } else { ("vec2", 2) };
+            let at = self.arg_as(s, "ixy", &Ty::V(Sc::U32, dims));
+            let v = match out.format.as_str() {
+                "r32uint" => format!("vec4<u32>({}, 0u, 0u, 1u)", self.arg_as(s, "v", &Ty::U32)),
+                "r32float" => format!("vec4<f32>({}, 0.0, 0.0, 1.0)", self.arg_as(s, "v", &Ty::F32)),
+                _ => self.arg_as(s, "v", &Ty::V(Sc::F32, 4)),
+            };
+            let store = format!(
+                "textureStore(out_{tex}, min({at}, textureDimensions(out_{tex}) - {vt}<u32>(1u)), {v});"
             );
             match &s.when {
                 Some(w) => self.line(&format!("if {} {{ {store} }}", ident(w))),
@@ -680,6 +721,20 @@ impl W<'_> {
                     _ => format!("textureLoad({tex}, {at}, 0)"),
                 }
             }
+            "load3d" => {
+                let tex = self.raw(s, "tex");
+                let at = self.arg_as(s, "ixyz", &Ty::V(Sc::I32, 3));
+                let at = format!("clamp({at}, vec3<i32>(0), last_{tex})");
+                match self.arg_ty(s, "tex") {
+                    Ty::Tex3(Tex::Uint) => format!("textureLoad({tex}, {at}, 0).x"),
+                    _ => format!("textureLoad({tex}, {at}, 0)"),
+                }
+            }
+            "sample3d" => format!(
+                "deep_sample3d({}, {})",
+                self.raw(s, "tex"),
+                self.arg_as(s, "uvw", &Ty::V(Sc::F32, 3))
+            ),
             "size" => format!("textureDimensions({})", self.raw(s, "tex")),
             "element" => "e".into(),
             "bitcast" => match (self.arg_ty(s, "x"), &out) {
@@ -730,15 +785,40 @@ impl W<'_> {
                     unreachable!()
                 };
                 let i = self.raw(s, "i");
+                // The index clamps into [0, n - 1] (structural steps); the planted twin wraps.
+                let at = if self.options.index_wraps {
+                    format!("u32({i}) % {n}u")
+                } else {
+                    format!("min(u32({i}), {}u)", n - 1)
+                };
                 // An input array is read in place from the uniform, its elements in whole vec4
-                // slots; a const array is a module constant.
+                // slots; a const array is a module constant; any other array value is a step's,
+                // read from a copy in function memory, which WGSL indexes at run time.
                 match s.args.get("a") {
-                    Some(Arg::Ref(a, None)) if self.c.op.inputs.contains_key(a) => unslot(
-                        &format!("inputs.{a}[min(u32({i}), {}u)]", n - 1),
-                        &Ty::V(Sc::F32, l),
-                    ),
-                    _ => format!("{}[min(u32({i}), {}u)]", self.raw(s, "a"), n - 1),
+                    Some(Arg::Ref(a, None)) if self.c.op.inputs.contains_key(a) => {
+                        unslot(&format!("inputs.{a}[{at}]"), &Ty::V(Sc::F32, l))
+                    }
+                    Some(Arg::Ref(a, None))
+                        if self.c.op.steps.get(a).is_some_and(|x| x.op == "const@1") =>
+                    {
+                        format!("{}[{at}]", self.raw(s, "a"))
+                    }
+                    _ => {
+                        self.line(&format!("var {}_of = {};", ident(id), self.raw(s, "a")));
+                        format!("{}_of[{at}]", ident(id))
+                    }
                 }
+            }
+            "with" => {
+                let Ty::Arr(sc, l, n) = self.arg_ty(s, "a") else {
+                    unreachable!()
+                };
+                let i = self.raw(s, "i");
+                let v = self.arg_as(s, "v", &Ty::V(sc, l));
+                let copy = format!("{}_copy", ident(id));
+                self.line(&format!("var {copy}: {ow} = {};", self.raw(s, "a")));
+                self.line(&format!("{copy}[min(u32({i}), {}u)] = {v};", n - 1));
+                copy
             }
             _ => "0".into(),
         };
@@ -841,6 +921,8 @@ pub struct Options {
     /// The planted binding that declares a vec3 attribute at WGSL's 16-byte `vec3` stride over
     /// its packed 12-byte data.
     pub attribute_stride_16: bool,
+    /// The planted small-array index that wraps (`i mod n`) instead of clamping (#483).
+    pub index_wraps: bool,
 }
 
 /// The inputs' uniform, the sampler and the texture and storage bindings, in binding order.
@@ -850,9 +932,12 @@ fn bindings(c: &Checked, options: Options, m: &mut String) {
     if uses_noise(&c.op.steps) {
         m.push_str(NOISE);
     }
+    if c.op.steps.values().any(|s| s.op == "sample3d@1") {
+        m.push_str(SAMPLE3D);
+    }
     m.push_str("struct Inputs {\n    unused: vec4<f32>,\n");
     for (n, i) in &c.op.inputs {
-        if !matches!(i.ty, Ty::Tex(_) | Ty::Storage(..))
+        if !matches!(i.ty, Ty::Tex(_) | Ty::Tex3(_) | Ty::Storage(..))
             && !matches!(i.from, From::Time | From::Seed)
         {
             let _ = writeln!(m, "    {n}: {},", slot(&i.ty));
@@ -900,6 +985,15 @@ fn bindings(c: &Checked, options: Options, m: &mut String) {
         );
         b += 1;
     }
+    for (name, t) in &c.op.textures {
+        let dim = if t.dim3 { "3d" } else { "2d" };
+        let _ = writeln!(
+            m,
+            "@group(1) @binding({b}) var out_{name}: texture_storage_{dim}<{}, write>;",
+            t.format
+        );
+        b += 1;
+    }
 }
 
 /// The storage outputs an atomic statement adds into, anywhere in the steps: WGSL holds them as
@@ -929,7 +1023,7 @@ fn prologue(w: &mut W<'_>) {
             From::Time => "frame.time.x".to_string(),
             From::Seed => "frame.seed.x".to_string(),
             // Textures and storage bind as they are, and arrays are read in place.
-            _ if matches!(i.ty, Ty::Tex(_) | Ty::Arr(..) | Ty::Storage(..)) => continue,
+            _ if matches!(i.ty, Ty::Tex(_) | Ty::Tex3(_) | Ty::Arr(..) | Ty::Storage(..)) => continue,
             _ => unslot(&format!("inputs.{n}"), &i.ty),
         };
         w.line(&format!("let {}: {} = {e};", input_ident(n), i.ty.wgsl()));
@@ -937,8 +1031,13 @@ fn prologue(w: &mut W<'_>) {
     // Each texture's last texel, which every load clamps to, read once.
     for n in w.c.textures.clone() {
         let t = input_ident(&n);
+        let v = if matches!(w.c.op.inputs[&n].ty, Ty::Tex3(_)) {
+            "vec3"
+        } else {
+            "vec2"
+        };
         w.line(&format!(
-            "let last_{t}: vec2<i32> = vec2<i32>(textureDimensions({t})) - vec2<i32>(1);"
+            "let last_{t}: {v}<i32> = {v}<i32>(textureDimensions({t})) - {v}<i32>(1);"
         ));
     }
     for id in w.c.order.clone() {

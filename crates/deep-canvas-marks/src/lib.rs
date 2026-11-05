@@ -28,4 +28,5 @@ pub mod paint;
 pub mod path;
 pub mod pathops;
 pub mod relations;
+pub mod runs;
 pub mod scene;

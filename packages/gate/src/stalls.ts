@@ -8,7 +8,7 @@
 export interface StopReading { items: string[]; passing: string[]; runs: string[] }
 /** One task's count: send-backs since its last new evidence, the stop before, and the rule it stalled on, if it did. */
 export interface StallCount { rounds: number; last?: { items: string; passing: Set<string> }; seen: Set<string>; stalled?: string }
-export type StallRule = 'two stops with the same open items' | 'three send-backs without new evidence';
+export type StallRule = 'two stops with the same open items' | 'three send-backs without new evidence' | 'four stops in a row did work and ended on an empty message';
 /** The stop's fate: sent back as round `round` of 3; or not, because the claim stalled at this stop (`stalled`) or before. */
 export type StopFate = { sendBack: true; round: number } | { sendBack: false; stalled?: StallRule };
 

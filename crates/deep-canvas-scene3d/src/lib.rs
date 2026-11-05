@@ -6,6 +6,7 @@ pub mod builders;
 pub mod building;
 pub mod curve;
 pub mod cut;
+pub mod fixtures;
 pub mod frames;
 /// The look's finish in f64, which the look module owns (#418).
 pub use deep_canvas_marks::finish;
@@ -20,6 +21,7 @@ pub mod modifiers;
 pub mod module;
 pub mod overlay;
 pub mod poly;
+pub mod samples;
 pub mod scene;
 pub mod sky;
 pub mod spatial;
