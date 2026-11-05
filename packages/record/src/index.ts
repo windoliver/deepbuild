@@ -97,6 +97,8 @@ export interface RecordOptions {
   commitEach?: boolean;
   schemas?: readonly SchemaEntry[];
   migrations?: readonly Migration[];
+  /** A planted wrong program; only tests set it. #1014's: the turn walk takes a subagent's stop as a turn end. */
+  plant?: 'turn-closes-at-child-stop';
 }
 export interface Row { [column: string]: unknown }
 export interface Table { name: string; primaryKey: string[]; rows: Row[] }
@@ -312,7 +314,7 @@ class SqliteRecord implements RecordStore {
     const columns = this.db.prepare("SELECT name FROM pragma_table_info('events')").all() as { name: string }[];
     if (columns.length && !columns.some((c) => c.name === 'unverified')) this.db.exec('ALTER TABLE events ADD COLUMN unverified INTEGER NOT NULL DEFAULT 0');
     this.db.exec(DDL);
-    this.projector = new Projector(this.db);
+    this.projector = new Projector(this.db, options.plant);
     this.stale = this.projector.ensure();
     const extra = options.schemas ?? [];
     this.registry = registry([...listSchemas(), ...extra]);

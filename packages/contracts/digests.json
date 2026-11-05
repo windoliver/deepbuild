@@ -59,6 +59,7 @@
   "claim.sized@1": "d1:98efb14cbd346b63f02e02364b7d09327ce604488a210199869c0593de10e0ab",
   "claim.stalled@1": "d1:fba28a742f50e98c8f21fa670bdb7724906f689a9b956170de931ae6dfdbeb12",
   "command.staged@1": "d1:231ceacd40f2359673d6b94787eb4da3698881811a2cf025b2716ddaad2348c9",
+  "command.staged@2": "d1:03e378d0ce71f961864bf75d28423445e7de5dc1e3b78a0c34c4e0bb4fe2763a",
   "commit.made@1": "d1:228d52dcb0d6b9e1a4b4c052c07a7f1eee09bd0d94a3db6f66498a19faf9ae24",
   "composition.reopened@1": "d1:34cdbe698dc3cf6fab587a1d5c0583052b043c7b603f4b0e9a34d52bbe03e64f",
   "composition.tested@1": "d1:438d218acaede5e4c7674c7ad9c23e5433bead0665ec90775c43767ea38eff4d",
