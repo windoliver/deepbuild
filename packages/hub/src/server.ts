@@ -63,6 +63,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['windows.report', ['app', 'cli', 'hook']],
   // The app API's views/shown and views/hidden (#262): the views the app shows, repeated every 5 s while shown.
   ['views.shown', ['app']], ['views.hidden', ['app']],
+  // What macOS says of the app's notifications (#994), when the app connects and when it changes.
+  ['notifications.report', ['app']],
   // The canvas side (#806): `deep show` from the CLI; revisions and messages read; the app's input and what it draws.
   ['canvas.show', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
@@ -167,7 +169,7 @@ const versionRefusal = (value: Obj): Refusal =>
 
 
 interface CoreLink {
-  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' }): void;
+  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'notifier-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' }): void;
   request(request: CoreRequest): Promise<unknown>;
   /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
   started: Promise<{ hooks: string[] }>;
@@ -220,6 +222,7 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
     post: (message) => {
       if (message.op === 'hook') void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined);
       else if (message.op === 'waiter-gone') core.waiterGone(message.key);
+      else if (message.op === 'notifier-gone') void core.notifierGone();
       else if (message.op === 'hook-gone') core.hookGone(message.id, message.session);
       else if (message.op === 'overrun') void core.overrun(message).catch(() => undefined);
       else if (message.op === 'later') core.later(message.session, message.cwd, message.text);
@@ -315,6 +318,8 @@ interface Guard { match?: unknown; scope?: unknown; mode?: unknown; reason?: unk
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
   private readonly conns = new Set<Conn>();
+  /** The connection that last reported the app's notification setting. */
+  private notifier: Conn | undefined;
   private readonly subs = new Map<string, Sub>();
   private core!: CoreLink;
   private parsers!: Parsers;
@@ -523,6 +528,10 @@ class Hub {
       this.conns.delete(conn);
       for (const sub of conn.subs) this.unsubscribe(conn, sub);
       if (conn.waiter) this.core.post({ op: 'waiter-gone', key: conn.id });
+      if (conn === this.notifier) {
+        this.notifier = undefined;
+        this.core.post({ op: 'notifier-gone' });
+      }
     });
     sock.on('data', (chunk: Buffer) => this.read(conn, chunk));
     sock.write(this.helloLine);
@@ -1046,6 +1055,9 @@ class Hub {
           return { off };
         }));
       }
+      case 'notifications.report':
+        this.notifier = conn;
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }));
       case 'hub.health':
       case 'health':
         return void reply(this.core.request({ op: 'health' }).then((health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj) })));

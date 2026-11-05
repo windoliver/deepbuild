@@ -32,6 +32,7 @@ pub mod record;
 pub mod setup;
 pub mod show;
 pub mod shown;
+pub mod single;
 pub mod states;
 pub mod text;
 pub mod views;
@@ -134,9 +135,12 @@ pub fn menu_bar_title(sessions: &[Session]) -> String {
     waiting_count(sessions).to_string()
 }
 
-/// What the menu bar shows: while setup hasn't finished, that it didn't, never a number (#1002); else the count.
+/// What the menu bar shows: while setup hasn't finished, that it didn't, never a number (#1002); then what the app
+/// can't reach (#994); else the count.
 pub fn menu_bar_line(sessions: &[Session]) -> String {
-    setup::count().map_or_else(|| menu_bar_title(sessions), str::to_owned)
+    setup::count()
+        .or_else(|| notify::reach().short())
+        .map_or_else(|| menu_bar_title(sessions), str::to_owned)
 }
 
 /// The rebuilds this panel host has taken.
@@ -502,7 +506,7 @@ impl Render for Spike {
         )
         .h_full();
 
-        let count = format!("{} waiting on you", self.waiting());
+        let count = notify::reach().count(format!("{} waiting on you", self.waiting()));
         let content = match &self.panel {
             Some(panel) => div()
                 .flex_1()
