@@ -13,6 +13,7 @@
 
 #[cfg(feature = "test-meter")]
 mod allocations;
+mod blur;
 mod calibrate;
 mod columns;
 mod compare;
@@ -154,6 +155,12 @@ pub enum Planted {
     /// stepped from the last frame; mesh edges read unwelded, or drawn without the depth test;
     /// a shared result released when a revision drops its last reader.
     ParticlesIntegrate,
+    /// #419's wrong programs (tests/acceptance/419/README.md: Assumed surfaces 11).
+    VelocityFromTransform,
+    SamplerStepsWorld,
+    VelocityPairsByIndex,
+    SettleResetsEachFrame,
+    SamplerHoldsCamera,
     EdgesUnwelded,
     EdgesSkipDepth,
     ReleasesAtRevision,
@@ -289,6 +296,11 @@ impl Planted {
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,
             "particles_integrate" => Planted::ParticlesIntegrate,
+            "velocity_from_transform" => Planted::VelocityFromTransform,
+            "sampler_steps_world" => Planted::SamplerStepsWorld,
+            "velocity_pairs_by_index" => Planted::VelocityPairsByIndex,
+            "settle_resets_each_frame" => Planted::SettleResetsEachFrame,
+            "sampler_holds_camera" => Planted::SamplerHoldsCamera,
             "edges_unwelded" => Planted::EdgesUnwelded,
             "edges_skip_depth" => Planted::EdgesSkipDepth,
             "releases_at_revision" => Planted::ReleasesAtRevision,
