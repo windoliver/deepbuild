@@ -2977,6 +2977,31 @@ export interface CommandStaged {
   evidence?: Array<string>;
 }
 
+/** command.staged@2 */
+export interface CommandStagedV2 {
+  v: 2;
+  id: string;
+  kind: "command.staged";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    command: string;
+    folders: Array<string>;
+    files?: Array<{
+      path: string;
+      digest: string;
+    }>;
+    until: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** commit.made@1 */
 export interface CommitMade {
   v: 1;
