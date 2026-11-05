@@ -41,11 +41,15 @@ mod replica {
         if first {
             // A launch reads this home's hub, when one answers; a setup that stopped left none.
             let root = deep_app::hub::root();
-            if let Ok(reader) = deep_app::record::RecordReader::open(
+            match deep_app::record::RecordReader::open(
                 &deep_app::hub::address(),
                 &root.join("control.token"),
             ) {
-                deep_app::record::install(reader);
+                Ok(reader) => deep_app::record::install(reader),
+                Err(_) => deep_app::notify::publish(deep_app::notify::Reach {
+                    hub_down: true,
+                    ..Default::default()
+                }),
             }
         } else {
             deep_app::views::set_state(deep_replica::load_state());
