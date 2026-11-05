@@ -113,6 +113,18 @@ it('refuses a model endpoint off this machine over plain http, which the tunnel 
   expect(report.after.reason).toMatch(/http:\/\/model\.example:8080.*https/);
 }, 60_000);
 
+it('refuses a replay whose sandbox would read your home, where the CLI is installed in its top folder', async () => {
+  // Failed on a launcher that granted the CLI's folder whatever it held, so with claude in your home's top folder the
+  // agent could read your Claude, gh and ssh credentials.
+  const w = world(0);
+  writeFileSync(join(w.box, 'claude'), readFileSync(join(w.box, 'bin', 'claude')));
+  chmodSync(join(w.box, 'claude'), 0o755);
+  const report = await runEval({ plan: w.plan(600_000), tasks: w.tasks, root: join(w.box, 'work'), env: { ...w.env, PATH: `${w.box}:${w.env.PATH}` } });
+  expect(report.runs).toEqual([]);
+  expect(report.after.reason).toContain(`reads ${w.box}`);
+  expect(report.after.reason).toMatch(/holds your home/);
+}, 60_000);
+
 it("ends a run on the sandbox helper's exit line though it arrives in two pieces", async () => {
   // Failed on a reader that looked for "exit" inside each chunk of fd 3, so a line split across two chunks never ended
   // the run while the sandbox stayed up.
@@ -136,6 +148,8 @@ sleep 30
     expect(performance.now() - t0).toBeLessThan(15_000);
     expect(lines).toContainEqual(expect.objectContaining({ type: 'result', result: 'Fixed it.' }));
   } finally {
-    try { process.kill(-Number(readFileSync(pidFile, 'utf8')), 'SIGKILL'); } catch { /* gone */ }
+    // Only the group the fake wrote down: an empty file would read 0, and kill(0) is this runner's own group.
+    const pgid = existsSync(pidFile) ? Number(readFileSync(pidFile, 'utf8')) : 0;
+    if (pgid > 1) try { process.kill(-pgid, 'SIGKILL'); } catch { /* gone */ }
   }
 }, 60_000);
