@@ -7,8 +7,8 @@ import { existsSync, realpathSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { scrubText } from '@deepbuild/evidence';
 import type { LeaseTable } from '@deepbuild/leases';
-import { answers, downStack, newRun, upStack, type composeKind, type Stack, type Take, type Up } from '@deepbuild/env-local';
-import { alive, type Host, type Supervisor } from '@deepbuild/supervisor';
+import type { upStack, Stack, Take, Up } from '@deepbuild/env-local';
+import { alive, type Supervisor } from '@deepbuild/supervisor';
 import { downLeaving } from './leftover.js';
 import { refusal, Refused, type Plant } from './wire.js';
 
@@ -16,6 +16,14 @@ type Obj = Record<string, unknown>;
 type Rows = (query: string, params?: readonly (string | number | bigint | null)[]) => Promise<unknown[]>;
 /** Where a refusal points for the caller's surface, and what starts a stack there. */
 export interface At { path: string; remedy: string }
+
+/** The runtime stack lifecycle supplied by the composition root; stack policy never selects a concrete provider. */
+export interface StackEnvironment {
+  newRun(at: number): string;
+  up(options: Parameters<typeof upStack>[1]): Promise<Up>;
+  down(run: string): Promise<void>;
+  healthy(stack: Stack): Promise<boolean>;
+}
 
 export interface StacksOptions {
   raw: Rows;
@@ -26,9 +34,8 @@ export interface StacksOptions {
   scrub: (values: string[]) => void;
   appendCore(kind: string, data: Obj, extra: { subject?: string }): Promise<void>;
   supervisor: () => Supervisor;
-  host: () => Host;
+  environment: StackEnvironment;
   leases: () => LeaseTable;
-  compose: () => ReturnType<typeof composeKind> | undefined;
   stopping: () => boolean;
   /** An agent session's process: whether it ended, its PID and the start time it had. */
   session(id: string): { ended?: boolean; pid: number; start: string } | undefined;
@@ -90,7 +97,7 @@ export class Stacks {
     const rising = this.rising.get(worktree);
     const owner = rising ? await this.ownerOf(rising) : undefined;
     if (rising && caller && owner && owner !== caller) throw (new Refused(refusal('role', at.path, `The stack coming up in ${worktree} runs on keys ${owned(owner!)} leased, so only they, or you from your own terminal, take it down.`, worktree)));
-    if (rising) void downStack(this.o.host(), rising);
+    if (rising) void this.o.environment.down(rising);
     return this.inTurn(worktree, () => this.downIn(worktree, at, rising, caller));
   }
 
@@ -106,9 +113,9 @@ export class Stacks {
    * loaded are scrubbed, and handed to `held` for the run's own output.
    */
   forRun(folder: string, held?: string[]): { run: string; up: Promise<Up> } {
-    const run = newRun(this.o.now());
+    const run = this.o.environment.newRun(this.o.now());
     this.runs.add(run);
-    const up = upStack(this.o.host(), { run, folder, compose: this.o.compose(), sharedProject: this.o.plant === 'compose-default-project', byValue: this.o.plant === 'env-loads-by-value', take: this.take('core', run), scrub: (v) => { held?.push(...v); this.scrubValues(v); } })
+    const up = this.o.environment.up({ run, folder, sharedProject: this.o.plant === 'compose-default-project', byValue: this.o.plant === 'env-loads-by-value', take: this.take('core', run), scrub: (v) => { held?.push(...v); this.scrubValues(v); } })
       .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }));
     return { run, up };
   }
@@ -119,7 +126,7 @@ export class Stacks {
    */
   async takeDown(run: string): Promise<{ stopped: number[]; left: string[] }> {
     try {
-      await downStack(this.o.host(), run);
+      await this.o.environment.down(run);
       return await this.o.supervisor().cleanup(run);
     } finally {
       this.runs.delete(run);
@@ -243,7 +250,7 @@ export class Stacks {
     if (running && holder && owner && owner !== holder) return { status: 'BLOCKED', worktree, cause: `the stack in ${worktree} runs on leases ${(this.taken.get(running.run) ?? []).join(', ')} held by ${owned(owner)}, so it stays theirs; their deep env down, or yours from your own terminal, ends it` };
     // A stack whose keys an ended session leased starts again under its new holder, so no key outlives its session's use.
     const orphaned = running !== undefined && this.owners.has(running.run) && owner === undefined && this.owners.get(running.run) !== (holder ?? 'core');
-    if (running && !orphaned && (await this.o.supervisor().status(running.run)).state === 'running' && (await answers(running))) {
+    if (running && !orphaned && (await this.o.supervisor().status(running.run)).state === 'running' && (await this.o.environment.healthy(running))) {
       return { status: 'ready', run: running.run, worktree, ports: running.ports, ...(running.project ? { project: running.project } : {}) };
     }
     // Any other is taken down, and a new one started.
@@ -252,10 +259,10 @@ export class Stacks {
       await this.takeDown(running.run).catch(() => undefined);
     }
     if (this.o.stopping()) return { status: 'BLOCKED', worktree, cause: 'the hub is stopping' };
-    const run = newRun(this.o.now());
+    const run = this.o.environment.newRun(this.o.now());
     this.runs.add(run);
     this.rising.set(worktree, run);
-    const up = await upStack(this.o.host(), { run, folder: worktree, compose: this.o.compose(), sharedProject: this.o.plant === 'compose-default-project', byValue: this.o.plant === 'env-loads-by-value', take: this.take(holder ?? 'core', run), scrub: (v) => this.scrubValues(v), ...(holder ? { holder } : {}) })
+    const up = await this.o.environment.up({ run, folder: worktree, sharedProject: this.o.plant === 'compose-default-project', byValue: this.o.plant === 'env-loads-by-value', take: this.take(holder ?? 'core', run), scrub: (v) => this.scrubValues(v), ...(holder ? { holder } : {}) })
       .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }))
       .finally(() => this.rising.delete(worktree));
     if (up.status === 'BLOCKED') {
