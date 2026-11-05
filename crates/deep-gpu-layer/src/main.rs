@@ -218,6 +218,17 @@ pub enum Planted {
     ClimbNeverStepsDown,
     CanonicalClimbs,
     ReclimbsWithoutViewChange,
+    /// #428's wrong programs (tests/acceptance/428/README.md: Planted programs).
+    DropsDispersion,
+    AbsorptionIgnoresThickness,
+    TransmissionIgnoresRoughness,
+    DispersionSamplesOnce,
+    SpecularColorIgnored,
+    IridescenceIgnoresThickness,
+    DiffuseLambert,
+    OrenNayarUncompensated,
+    RetroreflectionIgnored,
+    FlakesByPixel,
 }
 
 impl Planted {
@@ -334,6 +345,16 @@ impl Planted {
             "climb_never_steps_down" => Planted::ClimbNeverStepsDown,
             "canonical_climbs" => Planted::CanonicalClimbs,
             "reclimbs_without_view_change" => Planted::ReclimbsWithoutViewChange,
+            "drops_dispersion" => Planted::DropsDispersion,
+            "absorption_ignores_thickness" => Planted::AbsorptionIgnoresThickness,
+            "transmission_ignores_roughness" => Planted::TransmissionIgnoresRoughness,
+            "dispersion_samples_once" => Planted::DispersionSamplesOnce,
+            "specular_color_ignored" => Planted::SpecularColorIgnored,
+            "iridescence_ignores_thickness" => Planted::IridescenceIgnoresThickness,
+            "diffuse_lambert" => Planted::DiffuseLambert,
+            "oren_nayar_uncompensated" => Planted::OrenNayarUncompensated,
+            "retroreflection_ignored" => Planted::RetroreflectionIgnored,
+            "flakes_by_pixel" => Planted::FlakesByPixel,
             _ => return None,
         })
     }
@@ -637,7 +658,13 @@ fn main() {
                 _ => bad_input(),
             },
             "--planted" => match args.next().as_deref().and_then(Planted::parse) {
-                Some(p) => planted = Some(p),
+                Some(p) => {
+                    if p == Planted::DropsDispersion {
+                        deep_canvas_scene3d::gltf::DROPS_DISPERSION
+                            .store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    planted = Some(p)
+                }
                 None => bad_input(),
             },
             "--withhold" => match args.next().as_deref().and_then(deep_gpu::seam::row) {
