@@ -15,6 +15,7 @@ export { shippedFill } from './shipped.js';
 export { cleanFills, slotKits } from './slots/kits.js';
 export { slotProblems, type SlotProblem } from './slot-check.js';
 export { CHECK_RUNTIME } from './slots/check-kind.js';
+export type { ChannelAnswer, ChannelCtx, ChannelFill, ChannelItem, ChannelReply, ChannelRequest, Delivered as ChannelDelivered, Received as ChannelReceived } from './slots/channel.js';
 export type { EnvironmentFill, EnvSpec as EnvironmentSpec, Handle as EnvironmentHandle, Lease as EnvironmentLease } from './slots/environment.js';
 export { kitProblems, runKit } from './dispatch.js';
 export { proveFake, replay } from './runner.js';

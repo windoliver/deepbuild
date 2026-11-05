@@ -1,0 +1,84 @@
+# #65 acceptance suite on the base (2735a7dd, origin/main), no implementation
+
+Command, from the worktree root, after `npm ci && npm run build --workspaces` and `scripts/lease cargo build --locked -q -p deep-hook`,
+with Node 24.22.0 first on PATH, on macOS (Darwin 25.6.0), November 4, 2026:
+
+    node node_modules/vitest/vitest.mjs run --testTimeout=600000 --no-file-parallelism --root tests/acceptance/65
+
+Result: Test Files 7 failed (7); Tests 30 failed (30); nothing passed, nothing skipped. The type check
+(node node_modules/typescript/bin/tsc -p tests/acceptance/65/tsconfig.json) passes.
+
+kit.test.ts was corrected after that run (the planted package's id, test/planted-channel@1.0.0, held the text
+"channel@1", so the install's output named it by accident; the id is now test/no-ack and the match needs channel@1
+standing alone) and that file alone was run again; its three lines below are from that run.
+
+Each test (30) and the first failure it reports:
+
+answers.test.ts > AC1 #65.82812f3b a choice answered on the paired phone is closed on chat, email and text, and in Needs you, within 10 s
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+answers.test.ts > AC2 #65.c0406413 an approve from your linked chat account on an authority ask is refused naming the trusted path, the ask stays open, and chat gets the card back with the reason
+    Error: the chat channel plug-in is missing: no packages/channels/chat/deepbuild.json (README, The surface (my choice))
+answers.test.ts > AC3 #65.19700b29 the phone's signed approve of a held permission request reaches the session as allow and is saved as a decision
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+answers.test.ts > AC3 #65.19700b29 the same approve with no signature counts as nothing for the authority ask and points to the trusted path
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+answers.test.ts > AC3 #65.19700b29 on paseo's own phone app, on a real phone
+    Error: BLOCKED: paseo's phone app runs only on a real phone paired through paseo's relay, which no test here can reach; the stand-in phone (fixtures/providers.ts) proves the hub's side (README, Readings)
+answers.test.ts > AC10 #65.05709fd8 B on the phone, then C in the app 2 s later: B is the one answer, and C is refused naming B and the paseo channel
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+proof.test.ts > AC1 #65.82812f3b AC2 #65.c0406413 AC3 #65.19700b29 a task finished on the phone has its check re-run and closes on chat and email; chat's approve of the push is refused
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+proofs.test.ts > AC5 #65.bd21c26c an answer marked as signed by the paired phone with another key's signature is refused naming the phone's device, and counts as nothing
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+proofs.test.ts > AC5 #65.bd21c26c a chat answer naming an account the hub holds no link for is refused naming that account, and counts as nothing
+    Error: the chat channel plug-in is missing: no packages/channels/chat/deepbuild.json (README, The surface (my choice))
+proofs.test.ts > AC8 #65.2fec5389 "I did it" by email, with no device key and no account link, is refused and the task stays open
+    Error: the email channel plug-in is missing: no packages/channels/email/deepbuild.json (README, The surface (my choice))
+proofs.test.ts > AC15 #65.fdfea15b unpaired on the trusted path, the phone is told so, and its signed answer is refused naming its device
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+proofs.test.ts > AC16 #65.84e09e8f the phone's signed answer, counted by its own hub, replayed to a second hub is refused there naming hub
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+proofs.test.ts > AC16 #65.84e09e8f an answer signed 11 minutes ago is refused naming at
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+proofs.test.ts > AC16 #65.84e09e8f an answer signed over a card changed on the way is refused naming card_hash
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+kit.test.ts > AC4 #65.7430b5d9 channel@1's planted delivered-without-ack fails the kit, its delivery recorded stalled, naming the item
+    Error: the conformance package has no channel@1 kit: slotKits() holds check.kind@1, index@1, environment@1, source@1, reading.source@1, resolver@1, panel@1, route@1, action@1 (README, The surface (my choice))
+kit.test.ts > AC4 #65.7430b5d9 a planted channel package that reports delivered with no acknowledgement is refused at install by channel@1, naming the item, and carries nothing
+    AssertionError: the install names the kit: expected 'Source: /private/tmp/dh16-3V7yX3/plan…' to match /(^|[^\w/-])channel@1\b/-])channel@1\b
+kit.test.ts > AC5 #65.bd21c26c channel@1's planted signed-without-signature fails the kit
+    Error: the conformance package has no channel@1 kit: slotKits() holds check.kind@1, index@1, environment@1, source@1, reading.source@1, resolver@1, panel@1, route@1, action@1 (README, The surface (my choice))
+routes.test.ts > AC6 #65.fc037c24 the cards every channel carried, as the record holds them and as the providers got them, hold no token, no diff and no evidence hash
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+routes.test.ts > AC7 #65.0a1ebdd7 an urgent authority ask unseen on the phone reaches chat only after its 5-minute wait
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+routes.test.ts > AC7 #65.0a1ebdd7 at 23:00 inside quiet hours 22:00 to 07:00 the urgent ask goes out and the choice waits, then goes once quiet hours end
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+routes.test.ts > AC8 #65.2fec5389 every text message is the item's link alone, the same link chat got, with no summary, no buttons and no words
+    Error: the chat channel plug-in is missing: no packages/channels/chat/deepbuild.json (README, The surface (my choice))
+routes.test.ts > AC14 #65.08d3ff31 on chat, the authority ask raised first arrives view only with the words; the choice raised after it arrives answerable, and first
+    Error: the chat channel plug-in is missing: no packages/channels/chat/deepbuild.json (README, The surface (my choice))
+sends.test.ts > AC11 #65.af4419b9 answered in the app while chat's card is in flight: chat's card ends showing "Plain files" with no buttons
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+    (after the run this test's world dropped the paseo channel it never used; it now stops at chat's, the same missing surface)
+sends.test.ts > AC11 #65.af4419b9 a press on chat's card after its ask closed changes neither the card nor the decision
+    Error: the chat channel plug-in is missing: no packages/channels/chat/deepbuild.json (README, The surface (my choice))
+sends.test.ts > AC11 #65.af4419b9 a send to chat that fails leaves the ask open in Needs you, on the phone and in email
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+sends.test.ts > AC12 #65.b9ca998f once the chat provider reports a second client, the hub records chat's conflict and calls chat no more, a new item included
+    Error: the chat channel plug-in is missing: no packages/channels/chat/deepbuild.json (README, The surface (my choice))
+sends.test.ts > AC13 #65.fbb68832 the phone silent for 2 minutes: an item raised meanwhile reaches chat within 10 s, the phone gets it once it's back, and chat is sent nothing twice
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+budgets.test.ts > AC9 #65.a9fef351 the perf lane has the channels' task, a #65 first measurement, valid against the merge base's budgets
+    AssertionError: budgets.json has a task running benchmarks/channels.mjs: expected 0 to be greater than 0
+budgets.test.ts > AC9 #65.a9fef351 `node benchmarks/channels.mjs` runs, and what it measured holds: an item at a channel within 10 s, each channel plug-in under 50 MB
+    Error: the paseo channel plug-in is missing: no packages/channels/paseo/deepbuild.json (README, The surface (my choice))
+budgets.test.ts > AC9 #65.a9fef351 through a real hub, an ask raised while chat is connected reaches chat's provider within 10 s
+    Error: the chat channel plug-in is missing: no packages/channels/chat/deepbuild.json (README, The surface (my choice))
+
+Every hub-world test stops at its first step, world() in helpers.ts, on the missing channel plug-in it installs
+(packages/channels/<name>/deepbuild.json), before any hub starts, except the AC4 install test, whose hub starts and
+whose `deep install` of fixtures/planted-channel exits 1 with "deep.registerChannel is not a function" and no
+channel@1. The kit tests stop at the missing channel@1 kit in slotKits(); the budget task test at the missing
+benchmarks/channels.mjs task; the real phone reads BLOCKED. The twins were not run: there is no implementation
+for a wrong program to differ from.
