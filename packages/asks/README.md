@@ -12,7 +12,7 @@ The asks core (#318): an ask is raised only from a place in ask.sources@1, holds
 
 ## What it may import
 
-Core layer. It reaches `@deepbuild/contracts` and `@deepbuild/record` through their package entries, plus `node:` built-ins. It never imports an extension, the hub, the CLI or the app, and no resolver decides inside it: the gate stays here.
+Core layer. It reaches `@deepbuild/contracts` and `@deepbuild/record` through their package entries, plus `@deepbuild/adapters` (the shipped adapters' `errorTurnHook` cap, which decides whether a block's automatic continue can reach a session) and `node:` built-ins. It never imports an extension, the hub, the CLI or the app, and no resolver decides inside it: the gate stays here.
 
 ## Deviations
 
