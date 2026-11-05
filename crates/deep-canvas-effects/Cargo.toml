@@ -16,3 +16,9 @@ rust-version = "1.95"
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+# Issue #1312: criteria 1 and 2's acceptance tests, written blind in tests/acceptance/1312: the shipped particles
+# operator on the CPU reference keeps a particle born inside emit.span alive until its life ends, on its own path.
+[[test]]
+name = "acceptance_1312"
+path = "../../tests/acceptance/1312/operator.rs"
