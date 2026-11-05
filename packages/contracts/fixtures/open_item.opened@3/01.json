@@ -1,0 +1,15 @@
+{
+  "v": 3,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "open_item.opened",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "task_ref": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+    "text": "R1 (\"The checkout journey accepts a valid token\") waits for a run of checkout-journey.sh",
+    "item": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "from": "verdict"
+  }
+}
