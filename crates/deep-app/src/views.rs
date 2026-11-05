@@ -486,21 +486,24 @@ impl Render for Shipped {
                             marked(("sidebar-session", index), entry, text)
                                 .role(Role::Button)
                                 .h(px(24.))
-                                .px_1()
+                                // Every row leaves room for the bar and a gap after it, so opening one moves no text.
+                                .pl(px(10.))
+                                .pr_1()
                                 .rounded_sm()
                                 .border_2()
                                 .border_color(ring)
                                 .hover(|style| style.bg(chrome.hover))
-                                // The open session: the selected fill, and a bar of the primary ink at its leading
-                                // edge, since in dark the fill can only be faint while status keeps 3:1 on it.
+                                // The open session: the selected fill, and a bar of the primary ink the row's full
+                                // height at its leading edge, since in dark the fill can only be faint while status
+                                // keeps 3:1 on it.
                                 .when(selected.as_ref() == Some(session), |row| {
                                     row.relative().bg(chrome.selected).child(
                                         div()
                                             .absolute()
                                             .left_0()
-                                            .top(px(3.))
-                                            .bottom(px(3.))
-                                            .w(px(2.))
+                                            .top_0()
+                                            .bottom_0()
+                                            .w(px(3.))
                                             .bg(chrome.ink_primary),
                                     )
                                 })
