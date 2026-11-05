@@ -8,7 +8,7 @@ import { call } from './client.js';
 import { rowReadings } from './codex-loops.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
-import { clockTime } from './promises.js';
+import { clockTime, elapsed } from './promises.js';
 
 type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
 /** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
@@ -31,7 +31,7 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const notes = new Map(((await query("SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND session_id IS NOT NULL AND (json_extract(data, '$.reading') LIKE '%watch-only%' OR (json_extract(data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = events.session_id AND later.log_pos > events.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) ORDER BY log_pos")) as { session_id: string; text: string }[]).map((r) => [r.session_id, r.text]));
   // A turn you interrupted, with no prompt since (#39).
   const interrupted = new Set(((await query("SELECT e.session_id FROM events e WHERE e.kind = 'session.reading' AND json_extract(e.data, '$.reading') LIKE 'Interrupt:%' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = e.session_id AND a.kind = 'user.ask' AND a.log_pos > e.log_pos)")) as { session_id: string }[]).map((r) => r.session_id));
-  const ago = (ms: number | null) => (ms === null ? 'a while' : minutes(now - ms));
+  const ago = (ms: number | null) => (ms === null ? 'a while' : elapsed(now - ms));
   const rows = sessions.map((s): StatusRow => {
     const open = asks.get(s.id);
     const promised = due.get(s.id);
@@ -46,12 +46,12 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
       : s.status === 'finished' ? ['finished', `its turn stopped ${ago(s.last_seen)} ago`]
       : ['working', `last seen ${ago(s.last_seen)} ago`];
     const note = notes.get(s.id);
-    return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state, why, ...(note ? { note } : {}) };
+    return { id: s.id, repo: repoOf(s.worktree) ?? s.project_id ?? 'no repo', agent: s.agent ?? 'agent', state, why, ...(note ? { note } : {}) };
   });
   const finished = rows.filter((r) => r.state === 'finished');
   if (finished.length) await lastTurns(query, finished, new Map(sessions.map((s) => [s.id, s.worktree])));
   const codex = rows.filter((r) => r.agent === 'codex');
-  const readings = await rowReadings(query, codex.map((r) => r.id), now, minutes);
+  const readings = await rowReadings(query, codex.map((r) => r.id), now, elapsed);
   for (const row of codex) if (readings.has(row.id)) row.readings = readings.get(row.id)!;
   return rows;
 }
@@ -139,10 +139,6 @@ function repoOf(worktree: string | null): string | undefined {
     }
   }
 }
-const minutes = (ms: number): string => {
-  for (const [unit, size] of [['d', 86_400_000], ['h', 3_600_000], ['m', 60_000]] as const) if (ms >= size) return `${Math.floor(ms / size)}${unit}`;
-  return `${Math.max(0, Math.floor(ms / 1000))}s`;
-};
 
 /**
  * The listing: every session that needs you, is stuck or is flagged first, under its repo, then the working ones, then

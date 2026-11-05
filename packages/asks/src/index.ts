@@ -192,6 +192,12 @@ export interface AsksOptions {
    * since the last call, and null otherwise. Left out, a network task closes only on a verdict.
    */
   network?: { read(): { host: string; reached: boolean; at: number } | null };
+  /**
+   * Whether an agent's adapter has a hook for a turn that ends in an error (its `errorTurnHook` cap): without one no
+   * automatic continue could reach the session, so none starts. The hub passes its own adapter registry's answer;
+   * left out, the shipped adapters' caps answer, and an agent no adapter knows has none.
+   */
+  errorTurnHook?: (agent: string) => boolean;
 }
 /** An ask's place in its life (ask.machine@1's states), as the inbox shows it. */
 export type InboxStatus = 'queued' | 'shown' | 'later' | 'folded' | 'held' | 'closed';
@@ -1906,7 +1912,7 @@ class AsksCore implements Asks {
         if (this.covered.has(stop.id)) continue;
         if (await this.raiseBlock(stop, now)) acted = true;
         else this.fresh.add(session); // BLOCKED on the settings: kept for the next tick the hub owes (a stop or verdict landing, an open ask).
-      } else if ((TRANSIENT.has(stop.cause) || stop.cause === 'context_overflow') && errorTurnHook(this.sessions.get(session)?.agent ?? '')
+      } else if ((TRANSIENT.has(stop.cause) || stop.cause === 'context_overflow') && (this.options.errorTurnHook ?? shippedErrorTurnHook)(this.sessions.get(session)?.agent ?? '')
         && now - stop.ts < CONTINUE_WINDOW && !this.continuedSince(stop)) {
         await this.continueFrom(stop, stop.cause === 'context_overflow' ? 'context_overflow' : 'transient', null, now);
         acted = true;
@@ -2139,11 +2145,8 @@ const chatThread = (data: Obj): { link: string; expect: string } | undefined => 
   return isObj(thread) && typeof thread.link === 'string' && typeof thread.expect === 'string' ? { link: thread.link, expect: thread.expect } : undefined;
 };
 let adapters: AdapterRegistry | undefined;
-/**
- * Whether an agent's facts give a hook for a turn that ends in an error: without one (Codex) no automatic continue could
- * reach the session, so none starts. An agent no adapter knows gets none either.
- */
-function errorTurnHook(agent: string): boolean {
+/** The shipped adapters' `errorTurnHook` cap, when the caller passes no registry of its own; an agent no adapter knows has none. */
+function shippedErrorTurnHook(agent: string): boolean {
   try {
     return (adapters ??= shipped()).get(ADAPTERS[agent] ?? agent).caps.errorTurnHook === true;
   } catch {

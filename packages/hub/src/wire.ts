@@ -2,6 +2,8 @@
 // is error@3's shape. Shared by the main thread, the parser workers and the core.
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
+import { ulid as eventId } from '@deepbuild/record/ids';
+export { ulidTime } from '@deepbuild/record/ids';
 
 export const VERSION = 1;
 /** The features the hub lists in its hello; a client turns off any of its own the hub doesn't list. */
@@ -41,20 +43,9 @@ export const startOf = (pid: number): Promise<string | undefined> => new Promise
   }
 });
 
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-/** A ULID at `ms`: 48 bits of time, then 80 bits, random or the 20 hex digits given. */
+/** Preserve the hook clock's normalization, then use the database-free event-ID entry. */
 export function ulid(ms: number, hex = randomBytes(10).toString('hex')): string {
-  let out = '';
-  let time = BigInt(Math.max(0, Math.floor(ms)));
-  for (let i = 0; i < 10; i++) { out = CROCKFORD[Number(time & 31n)] + out; time >>= 5n; }
-  let random = BigInt(`0x${hex}`);
-  let tail = '';
-  for (let i = 0; i < 16; i++) { tail = CROCKFORD[Number(random & 31n)] + tail; random >>= 5n; }
-  return out + tail;
-}
-/** The time a ULID was minted at, in ms. */
-export function ulidTime(id: string): number {
-  return [...id.slice(0, 10)].reduce((ms, c) => ms * 32 + CROCKFORD.indexOf(c), 0);
+  return eventId(Math.max(0, Math.floor(ms)), hex);
 }
 /** A ULID at `ms` whose random part is a hash of `key`, so the same source always gets the same ID and the record holds it once. */
 export const derivedId = (ms: number, key: string): string => ulid(ms, createHash('sha256').update(key).digest('hex').slice(0, 20));

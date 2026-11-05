@@ -3,7 +3,7 @@
 // The `events` table is the source of truth. Every other table is a projection the record rebuilds by
 // replaying it. An event's ID is its identity; its `seq` is its order within its session; its `log_pos`
 // is its position in the log, assigned here at append inside the commit that writes it.
-import { randomBytes } from 'node:crypto';
+import { ulid } from './ids.js';
 import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, renameSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
@@ -17,7 +17,8 @@ import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.
 import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, openReadOnly, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
 
-export { compareReplay, parseClaimLine, planHash, PROJECTIONS, testStorage };
+export { compareReplay, parseClaimLine, planHash, PROJECTIONS, testStorage, ulid };
+export { openTrust, type ProjectTrust } from './trust.js';
 export type { Comparison, Measure, MeasureResult, ReplayPlan, ReplayResult, ReplayRun, TaskPair, Variant } from './replay.js';
 export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Message, Resolved, SliceEntry, Storage, SyncCall, TestStorage };
 
@@ -159,6 +160,8 @@ export async function readSince(record: RecordStore, cursor: number, kinds: read
   }
 }
 
+/** The core's connection, appending for the person (and session) behind `connection`. */
+export const asCore = (connection: Connection): Connection => ({ writer: 'core', actor: connection.actor, scope: connection.scope, ...(connection.session ? { session: connection.session } : {}) });
 /** The record's JSON for one event: seq as its decimal string. */
 export const toJson = (event: Event): string => JSON.stringify(event, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v));
 
@@ -219,17 +222,6 @@ CREATE TABLE IF NOT EXISTS lost_sessions (session TEXT PRIMARY KEY) STRICT;
 
 type Obj = { [key: string]: JsonValue };
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-/** A ULID minted at `ms`: 48 bits of time, 80 of randomness. */
-export function ulid(ms: number): string {
-  let out = '';
-  let time = BigInt(ms);
-  for (let i = 0; i < 10; i++) { out = CROCKFORD[Number(time & 31n)] + out; time >>= 5n; }
-  let random = BigInt(`0x${randomBytes(10).toString('hex')}`);
-  let tail = '';
-  for (let i = 0; i < 16; i++) { tail = CROCKFORD[Number(random & 31n)] + tail; random >>= 5n; }
-  return out + tail;
-}
 /** A string cut to at most `max` UTF-16 units without splitting a surrogate pair. */
 function cut(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -523,7 +515,7 @@ class SqliteRecord implements RecordStore {
           const ev = put.evidence;
           const ts = this.options.now();
           // Straight to appendNow: this append is already counted in flight, so a close waits for both.
-          await this.appendNow({ writer: 'core', actor: connection.actor, scope: connection.scope, ...(connection.session ? { session: connection.session } : {}) }, {
+          await this.appendNow(asCore(connection), {
             v: 1, id: ulid(ts), kind: 'evidence.stored', ts,
             data: { sha256: ev.sha256, kind: ev.kind, type: ev.type, size: ev.size, origin: ev.origin, redaction: ev.redaction, license: ev.license.name, derived_from: [...ev.derivedFrom], step_times: [] },
           });

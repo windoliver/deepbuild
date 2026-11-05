@@ -21,6 +21,28 @@ function run(file: string, args: string[]): Promise<string> {
 }
 
 export interface Proc { pid: number; ppid: number; pgid: number; start: string }
+
+/** Whether a process (or, given a negative ID, a process group) still exists: a signal of 0 asks without sending one. */
+export function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+/** A `ps` read that never rejects: a table that can't be read reads empty. */
+const quietPs = (args: string[]): Promise<string> => run('/bin/ps', args).catch(() => '');
+/** The live members of a process group, zombies left out; none for a group that is gone. */
+export async function groupMembers(pgid: number | undefined): Promise<number[]> {
+  if (!pgid || !alive(-pgid)) return [];
+  return (await quietPs(['-A', '-o', 'pid=,pgid=,stat='])).split('\n').map((l) => l.trim().split(/\s+/))
+    .filter((f) => f.length === 3 && Number(f[1]) === pgid && !f[2]!.startsWith('Z')).map((f) => Number(f[0]));
+}
+/** The CPU time a process group has used so far, as `ps` reports it; it changes only while the group works. */
+export async function groupCpu(pgid: number): Promise<string> {
+  return (await quietPs(['-A', '-o', 'pgid=,cputime='])).split('\n').map((l) => l.trim().split(/\s+/)).filter((f) => Number(f[0]) === pgid).map((f) => f[1]).join(',');
+}
 /**
  * A process's start time read before the event loop turns: a child that has already exited is still in the table,
  * since nothing has reaped it yet, where an asynchronous read would find it gone (a run of `true` through bubblewrap).
