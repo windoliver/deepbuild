@@ -100,7 +100,7 @@ Row: `not notified`. Count, lowercased: `notifications` and `off` and `system se
   through the real hub. `hub.test.ts` drives the doctor alone from a connection that says hello as the app, so the
   doctor's path is proved with no app built. The row is drawn by the replica (`window.rs`).
 - **Sound (AC4).** `Posted.sound` on the replica's virtual clock, the notifier's own output.
-- **The deadline (Scope).** The hub's test clock (`DEEP_HUB_TEST_CLOCK_STEPS=1`) steps past a 1 m wait.
+- **The deadline (Scope).** `deadline-redraft/`: the hub's test clock (`DEEP_HUB_TEST_CLOCK_STEPS=1`) steps in rounds until the default comes.
 - **AC5.** `taste.test.ts`. See The taste call.
 
 ## Fixtures
@@ -116,7 +116,8 @@ With Node 24.22 first on `PATH`, the workspaces built (`npm ci; npm run build --
 ```sh
 cargo test --locked -p deep-replica --test acceptance_994_sound     # AC4, Scope: sound
 cargo test --locked -p deep-replica --test acceptance_994_window    # AC3's row, Scope: the count
-npx vitest run --root tests/acceptance/994 --no-file-parallelism hub.test    # AC3's doctor, Scope: the deadline
+npx vitest run --root tests/acceptance/994 --no-file-parallelism hub.test    # AC3's doctor
+npx vitest run --root tests/acceptance/994 --no-file-parallelism deadline-redraft    # Scope: the deadline
 npx vitest run --root tests/acceptance/994 --no-file-parallelism app.test    # AC1, AC2, AC3 on real processes
 DA994_SCREENS=<dir> DA994_NOTIFICATION=1 npx vitest run --root tests/acceptance/994 --no-file-parallelism taste.test    # AC5
 npx tsc -p tests/acceptance/994/tsconfig.json
@@ -156,7 +157,7 @@ The issue's Scope, beyond the criteria:
 | Read at start and when it becomes active | Start: AC3 on the real app. Active: `window.rs`, `scope_the_app_reads_the_setting_again_…`, both ways | An app that reads once |
 | Off or alerts none: the count says so with the fix | `window.rs`, `scope_the_count_says_…`, `scope_alerts_set_to_none_…` | |
 | `deep doctor` for alerts set to none | `hub.test.ts` | A doctor that knows only denied |
-| Its deadline counts only time it was seen | `hub.test.ts`, `scope: unseen with notifications off …`, and its allowed control | A deadline that runs on (the base's core); a hold that never ends |
+| Its deadline counts only time it was seen | `deadline-redraft/deadline.test.ts`, the blind redraft swapped in on the owner's call, Nov 5: the first draft's single step past the deadline raced the ask's first showing and its minimum notice | Its README |
 | Asks due within 2 s play one sound | `sound.rs`, `scope_asks_due_within_2_s_…`: due 1.5 s apart share one, due 3.5 s later plays its own | The base's one each; a notifier that sounds once and never again |
 | Each session keeps one notification | AC4 | |
 
