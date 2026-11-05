@@ -6,7 +6,7 @@ The hub's supervisor (#236), part of its trusted ring and the local implementati
 
 ## Where new code goes
 
-- `src/supervisor.ts`: runs, ownership and stops; `src/egress.ts`: a run's credential stand-ins, its CA and egress filter (#1106); `src/procs.ts`: the process table; `src/timer.ts`: long deadlines; `src/types.ts`: the seam and `host@1` shapes.
+- `src/supervisor.ts`: runs, ownership and stops; `src/egress.ts`: a run's credential stand-ins, its CA and egress filter (#1106); `src/procs.ts`: the process table, and the liveness and process-group reads (`alive`, `groupMembers`, `groupCpu`) the runner and the hub use; `src/timer.ts`: long deadlines; `src/types.ts`: the seam and `host@1` shapes.
 - A sandbox backend goes behind the seam beside `src/seatbelt.ts` (macOS) and `src/bubblewrap.ts` (Linux, #70) and ships only once it passes `src/suite.ts`.
 - Tests sit in `src/*.test.ts`; acceptance tests live in `tests/acceptance/236` and are never edited.
 

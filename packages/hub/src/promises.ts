@@ -116,6 +116,11 @@ export function clockTime(ms: number): string {
   const two = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
 }
+/** How long a span is, in the largest whole unit that is at least 1: 2d, 3h, 5m, 30s. */
+export function elapsed(ms: number): string {
+  for (const [unit, size] of [['d', 86_400_000], ['h', 3_600_000], ['m', 60_000]] as const) if (ms >= size) return `${Math.floor(ms / size)}${unit}`;
+  return `${Math.max(0, Math.floor(ms / 1000))}s`;
+}
 /** What the agent reads when its promised check comes due, naming the quote and its due time. */
 /** The token a wake-up's text carries, by which the wake's own prompt is known: this promise, this set of it. */
 export function promiseToken(state: PromiseState): string { return `promise:${state.id}:${state.set}`; }

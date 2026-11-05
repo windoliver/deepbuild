@@ -112,3 +112,30 @@ process alone (it needs two Codex threads in one `deep mcp` process; #39's suite
 are INCONCLUSIVE (macOS only), so the 6 of 6 on macOS is not run here. In a scratch test (removed), with `app: false`: an unstamped
 `deep_claim` from the Codex stand-in is refused `unbound` (the first draft's failure), and the redrafted `showFigure` files the Codex
 session's claim; its `deep_show` reply was `unavailable` (no canvas core built here), not `unbound`.
+
+# Blind redraft: the replay's Codex stamps (AC1, #1229)
+
+From criterion 1 (each scenario played "against a real hub, real agent stand-ins") and #39: a Codex session's `deep_*` call binds only
+to the PreToolUse deep-hook stamped for it, by session, tool name and a digest of its arguments (design: Socket roles). The replay
+(`replay.ts`) called `deep_claim` and `deep_show` from each scenario session's stand-in with no stamp, so a Codex session's calls
+(`Codex: release notes`, #393's BRAVO) were refused: its `deep_show` with `no_session`, its `deep_claim` with `unbound`, where the
+stand-in presents the one and files the other. The #1176 redraft stamped AC2's `showFigure`; the replay was left as it was.
+
+## The change
+
+- `openWorld` stamps each scenario claim's `deep_claim` with the very `claimArgs()` it then sends.
+- `play` stamps a `deep_show` made by a scenario session's agent, and a `render_back`'s `deep_show`, with `showArgs` of the call under
+  that stand-in's listed schema, which is what `deepShow` then sends, as `showFigure` does. A `deep_show` from `opened.hand` (bound to
+  no session) is not stamped. `Stand.stamp` sends nothing for a Claude Code stand-in, so its calls are as before.
+
+Every test name, assertion and `#806.<id>` tag is as it was; no other file changed. A Codex stamp's hook process now falls inside the call's
+measured `ms`; the entries with `bounds` on `ms` (`settle`, `hidden`) play only a Claude Code session, whose stamp sends nothing.
+
+## Run here (Linux)
+
+`npx tsc -p tests/acceptance/806/tsconfig.json` passes. In a scratch test (removed), with `app: false`: the Codex session's `deep_show`
+through `play` is presented at revision 1 (it was `refused`, `no_session`) and a claim filed by it through `openWorld` is filed (it was
+`unbound`); the Claude Code session's is presented either way. With the stamps sending `{}` instead, the same test gives `no_session`
+and `unbound` again. Not run: a Codex `render_back` (the scratch test plays none). `replay393.test.ts`, `replay384.test.ts` and
+`sessions.test.ts`: 10 pass and 10 are INCONCLUSIVE (macOS only), the same counts and tests as at the base, so no replay here shows the
+change; the replays of a Codex session's calls with the app are not run here.

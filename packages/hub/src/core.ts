@@ -2,8 +2,7 @@
 // session it claims, binds deep mcp calls to sessions, supervises check runs, replays deep-hook's spool, runs
 // retention, and answers the socket's methods. It runs in a worker thread of its own, so a disk sync, a run's
 // output or a backfill never holds up the event loop that acknowledges hooks.
-import { execFile, spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { appendFileSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { access, chmod, copyFile, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { writtenOf as wikiWritten } from '@deepbuild/wiki';
@@ -12,7 +11,7 @@ import { Numbers } from './numbers.js';
 import { availableParallelism, homedir, networkInterfaces } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { shipped } from '@deepbuild/adapters';
+import { ADAPTERS, shipped } from '@deepbuild/adapters';
 import { openArchive } from '@deepbuild/archive';
 import { AskRefused, duration, openAsks, subjectKey, type Asks, type Delivery, type Resolver } from '@deepbuild/asks';
 import { openLedger, type BudgetInput, type Ledger } from '@deepbuild/budget';
@@ -21,13 +20,12 @@ import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type O
 import { citedEvidence, openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust, type ViewShown } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
-import { answers, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, type Stack, type Take, type Up } from '@deepbuild/env-local';
-import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
-import { freshCount, judgeStop, leftOpen, openCheckouts, priceDefinition, slot, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
+import { answers as stackHealthy, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack } from '@deepbuild/env-local';
+import { freshCount, judgeStop, leftOpen, openCheckouts, priceDefinition, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
 import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
-import { after, openSupervisor, openUnder, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
+import { alive as running, openSupervisor, openUnder, type Grant, type Host, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, recordVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, HOLD_MARGIN_MS, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
@@ -60,16 +58,19 @@ import { OpenItems } from './open-items.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
 import { apiHost, networkCheck, reachable, slackConfig, slackThread, slackThreads } from './reach.js';
 import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
-import { downLeaving } from './leftover.js';
-import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
+import { Answers, answerText, type Answer } from './answers.js';
+import { RUN_AS_YOU, Runs } from './runs.js';
+import { retain } from './retention.js';
+import { Stacks } from './stacks.js';
 import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
-import { driveCall, Replica, REPLICA_LEASE } from './drive.js';
+import { Replicas, REPLICA_LEASE } from './drive.js';
+import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
 import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
-import { copySynced, disk, keepAside, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
+import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
 
 /** A process running Codex's own binary, by the path it was started from. */
@@ -136,19 +137,6 @@ const reusedPids = (): number[] => {
   try { const list = JSON.parse(readFileSync(file, 'utf8')) as unknown; return Array.isArray(list) ? list.filter((n): n is number => Number.isSafeInteger(n)) : []; } catch { return []; }
 };
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-/** A per-session key's holder, as a person reads it. */
-const owned = (holder: string): string => (holder === 'core' ? 'your own terminal\'s deep env up' : `session ${holder.slice('mcp:'.length)}`);
-const running = (pid: number): boolean => {
-  try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
-};
-/** The PIDs that listen on the TCP port, as lsof shows them; a failed lsof rejects, since it proves nothing. */
-const listening = (port: number): Promise<number[]> => new Promise((done, fail) => {
-  execFile('/usr/sbin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
-    // lsof exits 1 with no output when nothing listens.
-    if (error && !((error as { code?: unknown }).code === 1 && stdout.trim() === '' && stderr.trim() === '')) return fail(Error(`lsof can't list port ${port}'s listeners: ${stderr.trim() || error.message}`));
-    done([...new Set(String(stdout ?? '').split('\n').filter((l) => l.startsWith('p')).map((l) => Number(l.slice(1))))]);
-  });
-});
 const isUnder = (path: string, dir: string) => {
   const rel = relative(dir, path);
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
@@ -338,8 +326,6 @@ const PULL_LOOKUP_MS = 4000;
  */
 const OWN_TURN = "NOT (e.kind = 'agent.stop' AND json_extract(e.data, '$.child') IS NOT NULL)";
 const holdsTurns = (data: Obj): boolean => data.owner === 'you' || ['sign_in_required', 'token_refresh_failed', 'plan_window_spent', 'refusal'].includes(String(data.cause));
-/** An answered ask, as a route delivers it. */
-interface Answer { id: string; session: string; question: string | null; options: string | null; answer: string | null; words: string | null; image: string | null }
 /** Your words sent from the app into a session (#340), by the delivery's request ID. */
 interface Note { session: string; text: string; request: string }
 /**
@@ -353,25 +339,7 @@ interface Cursor {
 }
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
 interface Stamp { session: string; tool: string; digest: string }
-/** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
-interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number;
-  /** A claim's check (#30): the command line the command check kind runs in `cwd`, hermetically through host@1; `argv` is what it would be as a shell line. */
-  command?: string;
-  /** The commands a base run of it finds as stand-ins by name (#874). */
-  stand_ins?: string[];
-  /** Rebuilt from the record (#996), its environment named variables whose values the record doesn't keep: it can't run again as it was. */
-  withheld?: string[] }
-/**
- * How long a claim's check runs when its definition names no deadline: a day, so a run no tool ends is still stopped and
- * recorded overran. Spec-draft sets a check's own deadline from the time it took when drafted (#30); until it does, this stands.
- */
-const CHECK_DEADLINE_MS = 24 * 3_600_000;
-/** What a run gets when run.start names no grant: your files and programs, as you, in the sandbox all the same (Access: run-as-you). */
-const RUN_AS_YOU: Grant = { run_as_you: true };
-const GRANT_LISTS = ['read', 'write', 'hosts', 'sockets'] as const;
 
-/** How long a run past its deadline has to stop once asked. */
-const RUN_KILL_GRACE_MS = 10_000;
 /** A prompt Codex's subagent got, which its hook names with the root's session ID and an agent_id. */
 const childPrompt = (meta: HookMeta): boolean => meta.agent === 'codex' && Boolean(meta.fields?.agent_id);
 /** One events row as the record stores it, its seq read as text so no digit is lost. */
@@ -383,43 +351,6 @@ const eventText = (r: Row): string => `{"v":${r.v},"id":${q(r.id)},"kind":${q(r.
   + `"data":${r.data},"evidence":${r.evidence ?? '[]'}${r.subject === null ? '' : `,"subject":${q(r.subject)}`}${r.seq === null ? '' : `,"seq":${q(r.seq)}`}`
   + `${r.session_id === null ? '' : `,"session":${q(r.session_id)}`}${r.project_id === null ? '' : `,"project":${q(r.project_id)}`}${r.agent === null ? '' : `,"agent":${q(r.agent)}`},"verified":${r.unverified ? 'false' : 'true'}}`;
 
-/**
- * What the record keeps of a run's spec in its run.started@3 (#996): each text as the evidence store would scrub it and
- * within the read cap, each list within its bound. What that changed is named in `withheld` ($NAME for a variable), and
- * a run rebuilt from the record with any of it withheld can't run again as it was.
- */
-function recordable(run: Run, held: string[]): { spec: Obj; withheld: string[] } {
-  const CAP = 8192;
-  const MANY = 65536;
-  const withheld: string[] = [];
-  const clean = (v: string): string => scrubText(v, { env: run.env, held }).slice(0, CAP);
-  const list = (name: string, values: string[], max: number, empty = true): string[] => {
-    const kept = values.slice(0, max).map(clean).filter((v) => empty || v);
-    if (kept.length !== values.length || kept.some((v, i) => v !== values[i])) withheld.push(name);
-    return kept;
-  };
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(run.env)) {
-    if (/^[^=]+$/.test(k) && k.length <= CAP && clean(v) === v) env[k] = v;
-    else withheld.push(`$${k.slice(0, CAP - 1)}`);
-  }
-  const argv = list('argv', run.argv, MANY);
-  const cwd = clean(run.cwd);
-  if (cwd !== run.cwd) withheld.push('cwd');
-  const grant = Object.fromEntries(Object.entries(run.grant).map(([k, v]) => [k, Array.isArray(v) ? list(`grant.${k}`, v, MANY) : v]));
-  const command = run.command === undefined ? undefined : clean(run.command);
-  if (run.command !== undefined && command !== run.command) withheld.push('command');
-  const stand_ins = run.stand_ins && list('stand_ins', run.stand_ins, 1024, false);
-  const deadline = run.deadline !== undefined && Number.isFinite(run.deadline) && run.deadline >= 0 ? run.deadline : null;
-  if (run.deadline !== undefined && deadline === null) withheld.push('deadline');
-  return {
-    spec: {
-      argv: argv.length ? argv : ['-'], cwd: cwd || '/', env, grant: grant as JsonValue, deadline_ms: deadline,
-      ...(command ? { command } : {}), ...(stand_ins ? { stand_ins } : {}),
-    },
-    withheld: [...new Set(withheld)].slice(0, MANY),
-  };
-}
 
 export class Core {
   private readonly root: Root;
@@ -534,23 +465,14 @@ export class Core {
   private lost = false;
   /** Unset until the start opened it: a start that fails before has nothing to close or ask. */
   private extensions: ExtensionHost | undefined;
-  private readonly runs = new Map<string, { run: Run; done: Promise<void>; stop(): void }>();
-  /** The run journal (`runs.json`), read once at start: what the file holds, each change written through. */
-  private journal: Record<string, Run> = {};
-  /** The stack `deep env up` started in each worktree, by the worktree's real path, and each one on its way up. */
-  private readonly stacks = new Map<string, Stack>();
-  /** Each worktree's env up and down, one after another. */
-  private readonly turns = new Map<string, Promise<unknown>>();
-  /** Every stack run started and not yet cleaned up, a run's or a worktree's, so the hub's stop takes each down. */
-  private readonly stackRuns = new Set<string>();
-  /** The per-session keys each stack run leased through the table (#332), by lease ID, ended once its processes are gone. */
-  private readonly taken = new Map<string, string[]>();
-  /** Who leased each stack run's per-session keys: its session's deep mcp, or the core. */
-  private readonly owners = new Map<string, string>();
+  /** The supervisor's runs (runs.ts). */
+  private readonly runs: Runs;
+  /** Each worktree's stack and every stack run a check started (#331, #332). */
+  private readonly stacks: Stacks;
+  /** Each session's deep_drive replicas (#124). */
+  private readonly replicas: Replicas;
   /** The screen each session's computer use last switched to, one it leases (#332). */
   private readonly onScreen = new Map<string, string>();
-  /** Each worktree's stack run while it waits for its health route, so a down can end it rather than wait. */
-  private readonly rising = new Map<string, string>();
   private readonly subscribers = new Map<string, number>();
   /** Appends handed to the record and not yet settled: a read waits for them, so it sees every hook acknowledged before it. */
   private readonly inflight = new Set<Promise<unknown>>();
@@ -639,6 +561,7 @@ export class Core {
   private readonly projects = new Map<string, string>();
   /** The asks raised for permission prompts and saved offers, by handle: their answer is never delivered as a message (#23). */
   private readonly prompts = new Set<string>();
+  private readonly answers: Answers;
   /** paseo's plugin (#55): the token each agent's DeepBuild MCP server binds by, to the agent's own session. */
   private readonly binds = new Map<string, string>();
   /** The sessions paseo runs that another adapter gates: a permission prompt there shows in paseo, not a terminal. */
@@ -751,6 +674,26 @@ export class Core {
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
     });
+    this.answers = new Answers({
+      raw: (query, params) => this.record.raw(query, params), settled: () => Promise.allSettled([...this.inflight]),
+      excluded: (id) => this.handed.has(id) || this.prompts.has(`ask:${id}`),
+      delivered: options.plant === 'words-only-at-turn-start' ? undefined : (session) => { const live = this.live.get(session); if (live) live.words ??= 'answer'; },
+      append: (data, v) => this.appendCore('delivery.outcome', data, { subject: data.delivery, ...(v === 2 ? { v } : {}) }),
+    });
+    this.stacks = new Stacks({
+      raw: (query, params) => this.record.raw(query, params), now: this.now, plant: options.plant, held: options.held, scrub: (values) => this.scrubbing(values),
+      appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), supervisor: () => this.supervisor, leases: () => this.leases,
+      environment: { newRun, up: (spec) => upStack(this.host, { ...spec, compose: this.compose }), down: (run) => downStack(this.host, run), healthy: stackHealthy },
+      stopping: () => this.stopping, session: (id) => this.sessions.get(id), startOf: (pid) => this.startOf(pid, true),
+    });
+    this.runs = new Runs({
+      journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
+      raw: (query, params) => this.record.raw(query, params), sync: () => this.record.sync(), appendAsCore: (input) => this.append(this.connection('core'), input as EventInput),
+      appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), stored: (put, what) => this.stored(put, what),
+      invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), recorded: (run, record) => this.gate.recorded(run, record),
+      stopping: () => this.stopping, stacks: this.stacks, store: () => this.store, host: () => this.host, supervisor: () => this.supervisor, leases: () => this.leases, extensions: () => this.extensions,
+    });
+    this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
       raw: (query) => this.record.raw(query), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
       root: this.root.dir, forge: this.options.forge ?? 'https://api.github.com',
@@ -804,7 +747,7 @@ export class Core {
     const crashed = existsSync(this.root.state) && readFileSync(this.root.state, 'utf8').trim() === 'running';
     this.writeState('running');
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
-    await this.openJournal();
+    await this.runs.open();
     // The continues the hub carried before this start are those recorded before it; opening the core below settles
     // what landed while the hub was down (a task's check passed, a window reset, a fresh transient stop), and each
     // continue that records is routed right after, never skipped as already carried (#85).
@@ -822,7 +765,11 @@ export class Core {
       if (holdsTurns(d)) this.routesOf(row.session_id).blocked = String(d.cause);
     }
     // Opening the supervisor reaps what the record says a run left before this start.
-    const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: (d) => this.answered(d), home: this.root.dir, threads: slackThreads(this.root.dir), network: networkCheck() });
+    const asks = this.asks = await openAsks({
+      record: this.record, now: this.now, deliver: (d) => this.answered(d), home: this.root.dir, threads: slackThreads(this.root.dir), network: networkCheck(),
+      // The hub's own adapters answer, so the facts it maps hooks by are the facts that decide a continue.
+      errorTurnHook: (agent) => { try { return registry().get(ADAPTERS[agent] ?? agent).caps.errorTurnHook === true; } catch { return false; } },
+    });
     await this.continues();
     this.askingSoon();
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
@@ -941,9 +888,7 @@ export class Core {
     for (const v of await leases.leases()) {
       if (!SESSION_KINDS.includes(v.lease.resource.kind) || !(v.lease.holder === 'core' || v.lease.holder.startsWith('mcp:'))) continue;
       const [row] = (await this.record.raw(`SELECT json_extract(data, '$.run') AS run FROM events WHERE kind = 'lease.acquired' AND subject = ? LIMIT 1`, [v.lease.id])) as { run: string | null }[];
-      if (!row?.run) continue;
-      this.taken.set(row.run, [...(this.taken.get(row.run) ?? []), v.lease.id]);
-      await this.giveBack(row.run).catch(() => undefined);
+      if (row?.run) await this.stacks.adopt(row.run, v.lease.id);
     }
     this.host = this.options.host
       ? ((await import(pathToFileURL(this.options.host).href)) as { default: (local: Host) => Host }).default(this.supervisor)
@@ -990,7 +935,7 @@ export class Core {
       this.judge(session);
     }
     await this.judgedAcrossRestart();
-    await this.recoverRuns();
+    await this.runs.recover();
     await this.retain();
     this.every('retention', DAY, () => this.retain());
     // Each staged copy is let go at its set time (#347): at start, then once an hour.
@@ -1326,9 +1271,9 @@ export class Core {
       if (meta.event === 'SessionStart' && meta.agent === 'pi') session.ended = false;
       if (meta.event === 'SessionEnd') {
         session.ended = true;
-        this.endStacks(session.id);
+        this.stacks.endFor(session.id);
         // Its replicas end with it, and their leases with them (#124).
-        for (const held of this.replicas.values()) if (held.session === session.id) void held.replica.end();
+        this.replicas.endFor(session.id);
         this.stamps = this.stamps.filter((stamp) => stamp.session !== session.id);
       }
       // A replayed PreToolUse was let through late; its call has run, so it stamps nothing a later call could bind.
@@ -2610,50 +2555,20 @@ export class Core {
    * answered asks it names.
    */
   private async waitingFor(session: string, scope?: string): Promise<Answer[]> {
-    await Promise.allSettled([...this.inflight]);
-    const thread = `COALESCE((SELECT thread_id FROM sessions WHERE id = '${sql(session)}'), '${sql(session)}')`;
-    const mine = scope ?? `COALESCE((SELECT thread_id FROM sessions WHERE id = a.session_id), a.session_id) = ${thread}`;
-    const rows = ((await this.record.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer FROM asks a WHERE a.status = 'answered' AND ${mine}
-      AND NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.delivery = a.id AND d.outcome = 'delivered') ORDER BY a.answered`)) as Omit<Answer, 'words' | 'image'>[])
-      .filter((row) => !this.handed.has(row.id) && !this.prompts.has(`ask:${row.id}`));
-    if (!rows.length) return [];
-    // Your words and the screenshot sent from the card (#327) ride on the answer event, which the asks table doesn't
-    // carry: one read of those events for the rows still waiting, the latest per ask.
-    const events = (await this.record.raw(`SELECT subject, data FROM events WHERE kind = 'ask.answered' AND subject IN (${rows.map(() => '?').join(', ')}) ORDER BY log_pos`, rows.map((row) => `ask:${row.id}`))) as { subject: string; data: string }[];
-    const latest = new Map(events.map((e) => [e.subject, JSON.parse(e.data) as { words?: unknown; image?: unknown }]));
-    return rows.map((row) => {
-      const data = latest.get(`ask:${row.id}`) ?? {};
-      return { ...row, words: typeof data.words === 'string' ? data.words : null, image: typeof data.image === 'string' ? data.image : null };
-    });
+    return this.answers.waitingFor(session, scope);
   }
   /** The answers as the agent reads them, each naming its ask. */
   private answerText(rows: Answer[]): string {
-    const lines = rows.map((row) => {
-      const chosen = row.answer === null ? null : JSON.parse(row.answer) as unknown;
-      const options = row.options === null ? [] : JSON.parse(row.options) as { id: string; label: string }[];
-      const label = options.find((o) => o.id === chosen)?.label;
-      // An answer of words or a screenshot alone is already the answer: it isn't said twice.
-      const beside = [row.words === null || row.words === chosen ? [] : [`your words: "${row.words}"`], row.image === null ? [] : [`a screenshot, sha256 ${row.image}`]].flat();
-      if (row.image !== null && row.image === chosen) return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: a screenshot, sha256 ${row.image}${row.words === null ? '' : ` — with your words: "${row.words}"`}.`;
-      return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: ${label ? `${label} (${String(chosen)})` : String(chosen)}${beside.length ? ` — with ${beside.join(' and ')}` : ''}.`;
-    });
-    return `DeepBuild delivers your answers:\n${lines.join('\n')}`;
+    return answerText(rows);
   }
   /** The asks a running deep_ask or deep_wait of a session whose package places answers will return itself. */
   private readonly askWaits = new Map<string, string>();
   private async outcome(ask: string, via: string, outcome: 'delivered' | 'stalled' | 'timed_out' | 'replaced' | 'waiting'): Promise<void> {
-    // An answer of yours delivered into a session starts its loop's held checks at the next green turn end (#965).
-    if (outcome === 'delivered' && this.options.plant !== 'words-only-at-turn-start') {
-      const [row] = (await this.record.raw(`SELECT session_id FROM asks WHERE id = ?`, [ask]).catch(() => [])) as { session_id: string | null }[];
-      const live = row?.session_id ? this.live.get(row.session_id) : undefined;
-      if (live) live.words ??= 'answer';
-    }
-    return this.appendCore('delivery.outcome', { delivery: `ask:${ask}`, via, outcome }, { subject: `ask:${ask}`, ...(outcome === 'waiting' ? { v: 2 } : {}) }).catch(() => undefined);
+    return this.answers.outcome(ask, via, outcome);
   }
   /** An answer to a Codex session that ended waits on its task, and only the same thread's resume hears it (#39). */
   private async waitsOnTask(delivery: Delivery): Promise<void> {
-    const [last] = (await this.record.raw(`SELECT e.kind, s.agent FROM events e JOIN sessions s ON s.id = e.session_id WHERE e.session_id = '${sql(delivery.session)}' AND e.kind IN ('session.start', 'session.end') ORDER BY e.log_pos DESC LIMIT 1`)) as { kind: string; agent: string }[];
-    if (last?.kind === 'session.end' && last.agent === 'codex') await this.outcome(delivery.ask.replace(/^ask:/, ''), 'on_task', 'waiting');
+    await this.answers.waitsOnTask(delivery);
   }
   /**
    * Each answer handed to a hook's reply once (#906). The session is read first: an answer a turn already shows is
@@ -4653,7 +4568,7 @@ export class Core {
   private forgetEnded(): void {
     for (const id of this.endedOrder) if (!this.sessions.get(id)?.ended) this.endedOrder.delete(id);
     // A stack it still owns asks whether it lives, and only one in memory can answer that it ended.
-    const owning = new Set(this.owners.values());
+    const owning = this.stacks.holders();
     const ended = [...this.endedOrder].filter((id) => { const s = this.sessions.get(id)!; return !s.closed.length && !s.pending.size && !owning.has(`mcp:${id}`); });
     for (const id of ended.slice(0, Math.max(0, ended.length - ENDED_KEPT))) {
       this.endedOrder.delete(id);
@@ -4740,7 +4655,7 @@ export class Core {
         return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.reflecting(async () => ({ rows: await statusRows((sql) => this.record.raw(sql), this.now()) })));
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
-      case 'run.start': return this.runStart(params);
+      case 'run.start': return this.runs.start(params);
       case 'test.load': return this.testLoad(params);
       case 'record.backup': return this.backup(params);
       case 'lease.wait': return this.heavy.wait(params, context.peer, () => this.agentAbove(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
@@ -5055,7 +4970,7 @@ export class Core {
     const [before] = (await this.record.raw(`SELECT COUNT(*) AS n FROM claims WHERE session_id = ? AND subject_ref = ?`, [session, task_ref])) as { n: number }[];
     await this.append(this.connection('core', { session, agent: live.agent }), { v: 2, id, kind: 'claim.made', ts, data: { task_ref, attempt: (before?.n ?? 0) + 1, commit, scope: 'session', predictions: [] } });
     const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
-    const { run } = await this.runStart({ check: name, claim: `claim:${id}`, commit, argv: ['/bin/sh', '-c', check.run], command: check.run, cwd: checkout.dir }, deadline);
+    const { run } = await this.runs.start({ check: name, claim: `claim:${id}`, commit, argv: ['/bin/sh', '-c', check.run], command: check.run, cwd: checkout.dir }, deadline);
     const outcome = await this.runEnded(String(run)).finally(() => this.checkouts.ended(checkout, `claim:${id}`).catch(() => undefined));
     if (outcome === 'passed') return;
     const [done] = (await this.record.raw(`SELECT json_extract(data, '$.findings') AS findings FROM events WHERE kind = 'run.finished' AND subject = ? LIMIT 1`, [String(run)])) as { findings: string | null }[];
@@ -5292,7 +5207,7 @@ export class Core {
         case 'deep_evidence': return await this.attach(session!, args);
         case 'deep_propose': return await this.propose(session!, args);
         case 'deep_env': return await this.deepEnv(session!, String(args.action));
-        case 'deep_drive': return await this.drive(session!, args);
+        case 'deep_drive': return await this.replicas.drive(session!, args);
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
@@ -5334,71 +5249,6 @@ export class Core {
     this.stamps.splice(this.stamps.indexOf(bound), 1);
     return bound.session;
   }
-  // ---- deep_drive (#124): a session's replicas, each its own deep-drive process under the replica lease.
-
-  /** Each replica process a launch started, by the handle the hub gave it: the binary's own handle, its session, and its end. */
-  private readonly replicas = new Map<string, { replica: Replica; own: string; session: string; gone: Promise<void> }>();
-
-  /**
-   * One deep_drive call. A launch takes the replica lease, refused naming it when the machine runs its two, then
-   * starts a deep-drive process for the session; every other call goes to the process the session's launch started,
-   * and close ends it. Its lease is released once the process has exited, however it ends.
-   */
-  private async drive(session: string, args: Obj): Promise<Obj> {
-    const call = driveCall(args) as Obj;
-    if (call.call === 'launch') return this.launchReplica(session, call);
-    const handle = String(args.replica);
-    const held = this.replicas.get(handle);
-    if (!held?.own || held.session !== session) throw refuse('not_found', '/params/arguments/replica', 'Name a replica your session launched and hasn\'t closed; deep_drive\'s launch starts one.', args.replica);
-    const reply = await held.replica.call({ ...call, replica: held.own });
-    if (call.call === 'close') {
-      await held.replica.end();
-      await held.gone;
-    }
-    return reply.replica === undefined ? reply : { ...reply, replica: handle };
-  }
-  private async launchReplica(session: string, call: Obj): Promise<Obj> {
-    const id = ulid(this.now());
-    const handle = `replica:${id}`;
-    let lease: string | undefined;
-    // The planted hub launches without the lease (#124's wrong program).
-    if (this.options.plant !== 'deep-drive-no-lease') {
-      const got = await this.leases.lease({ holder: `mcp:${session}` }, { host: 'local', kind: REPLICA_LEASE.name, key: handle }, 'exclusive');
-      if (got.status !== 'granted') {
-        return { ok: false, error: { code: 'blocked', lease: REPLICA_LEASE.name, message: `No replica was launched: the ${REPLICA_LEASE.name} lease allows ${REPLICA_LEASE.cap} per machine, and ${got.message}.` } };
-      }
-      lease = got.lease.id;
-    }
-    const out = join(this.root.dir, 'replicas', id);
-    let replica: Replica;
-    try {
-      mkdirSync(out, { recursive: true });
-      replica = new Replica(out);
-    } catch (error) {
-      if (lease) await this.leases.release(lease, []);
-      throw error;
-    }
-    const gone = replica.exited.then(async () => {
-      this.replicas.delete(handle);
-      if (lease) await this.leases.release(lease, []);
-    }).catch(() => undefined);
-    const entry = { replica, own: '', session, gone };
-    this.replicas.set(handle, entry);
-    let reply: Obj;
-    try {
-      reply = await replica.call(call);
-    } catch (error) {
-      await replica.end();
-      throw error;
-    }
-    if (reply.ok !== true || typeof reply.replica !== 'string') {
-      await replica.end();
-      return reply;
-    }
-    entry.own = reply.replica;
-    return { ...reply, replica: handle };
-  }
-
   // ---- The canvas side (#806): deep_show, `deep show`, render-back, and what the app draws.
 
   /** The canvas core, started at the first canvas call; the world file a test gives it; the app's presentations. */
@@ -5862,7 +5712,7 @@ export class Core {
     const [claim] = (await this.record.raw(`SELECT id, data FROM events WHERE session_id = ? AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; data: string }[];
     if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
     const commit = String((JSON.parse(claim.data) as Obj).commit);
-    const { run } = await this.runStart({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check.run], cwd }, deadline);
+    const { run } = await this.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check.run], cwd }, deadline);
     // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.
     const until = Date.now() + this.askWait(session);
     for (;;) {
@@ -6060,7 +5910,7 @@ export class Core {
   }
   /** A run's outcome, once its finish is in the record. */
   private async runEnded(run: string): Promise<string> {
-    await this.runs.get(run)?.done.catch(() => undefined);
+    await this.runs.ended(run);
     const [row] = (await this.record.raw(`SELECT outcome FROM runs WHERE id = ?`, [run.slice(4)])) as { outcome: string | null }[];
     return row?.outcome ?? 'stopped';
   }
@@ -6139,10 +5989,10 @@ export class Core {
       const out = await this.ledger.request(this.connection('core'), { run: id, check: r.check, inputs, issue: paid.task });
       if (out.status !== 'started') throw Error(out.status === 'BLOCKED' ? (out.cause === 'price' ? `${out.missing} is unknown` : `the budget for ${paid.task} has no room for it (${out.ask})`) : `it waits for your answer, ${out.ask}`);
     }
-    const { run } = await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? null, ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id);
+    const { run } = await this.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? null, ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id);
     if (paid) {
       const charge = () => this.ledger.charge(this.connection('core'), String(run), this.priceOf(r.check, 'costs') ?? this.priceOf(r.check) ?? 0);
-      void (this.runs.get(String(run))?.done ?? Promise.resolve()).catch(() => undefined).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
+      void this.runs.ended(String(run)).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
     }
     return String(run);
   }
@@ -6219,91 +6069,6 @@ export class Core {
     return { sha256: (await this.stored(put, 'the pasted image')).sha256 };
   }
 
-  // ---- The supervisor's runs.
-
-  /**
-   * The journal as this start finds it (#996). One it can't read is kept aside under a name with its time, never read
-   * as empty: its runs in flight are rebuilt from their run.started, and one reading names the file.
-   */
-  private async openJournal(): Promise<void> {
-    let bytes: Buffer;
-    try {
-      bytes = readFileSync(this.root.runs);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-      throw error;
-    }
-    try {
-      const runs = JSON.parse(bytes.toString('utf8')) as unknown;
-      if (isObj(runs)) {
-        this.journal = runs as Record<string, Run>;
-        return;
-      }
-    } catch {
-      // Damaged: kept aside below.
-    }
-    const aside = keepAside(this.root.runs, bytes, this.now());
-    // The core's run.started@3 carries what a run runs; an earlier one can't be run again from the record, and no
-    // other writer's start or finish counts.
-    const rows = (await this.record.raw(`SELECT s.data FROM events s WHERE s.kind = 'run.started' AND s.writer = 'core' AND s.v >= 3 AND NOT EXISTS
-      (SELECT 1 FROM events f WHERE f.kind = 'run.finished' AND f.writer = 'core' AND json_extract(f.data, '$.run') = json_extract(s.data, '$.run')) ORDER BY s.log_pos`)) as { data: string }[];
-    // The reading first, then the journal written again: a cut in between finds it damaged and rebuilds it again.
-    const now = this.now();
-    await this.appendCore('reading.recorded', {
-      reading: `reading:${ulid(now)}`, value: rows.length, unit: 'runs rebuilt from the record', as_of: now,
-      source: `${basename(this.root.runs)} couldn't be read, so it was kept aside as ${basename(aside)}`, n: 1, outside: false,
-    });
-    this.writeJournal((runs) => {
-      for (const row of rows) {
-        const d = JSON.parse(row.data) as Obj;
-        const needs = (isObj(d.needs) ? d.needs : {}) as Obj;
-        runs[String(d.run)] = {
-          run: String(d.run), check: String(d.check), claim: String(d.claim), commit: String(d.commit), argv: d.argv as string[], env: d.env as Record<string, string>,
-          cwd: String(d.cwd), grant: d.grant as Grant, lane: d.lane === 'fast' ? 'fast' : 'slow', expected_ms: typeof needs.expected_ms === 'number' ? needs.expected_ms : null,
-          ...(typeof d.deadline_ms === 'number' ? { deadline: d.deadline_ms } : {}), ...(d.environment === true ? { environment: true } : {}),
-          ...(typeof d.command === 'string' ? { command: d.command } : {}), ...(Array.isArray(d.stand_ins) ? { stand_ins: d.stand_ins as string[] } : {}),
-          ...(Array.isArray(d.withheld) && d.withheld.length ? { withheld: d.withheld as string[] } : {}),
-        };
-      }
-    });
-  }
-  /** Changes the journal and writes it whole: a temp file, synced, renamed and its folder synced, one numbered point. */
-  private writeJournal(update: (runs: Record<string, Run>) => void): void {
-    update(this.journal);
-    writeSynced(this.root.runs, Buffer.from(JSON.stringify(this.journal)));
-    this.durable.point('journal_rewrite');
-  }
-
-  /** run.start, and deep_run's runs with the deadline their spec gives, in ms. */
-  private async runStart(params: Obj, deadline?: number, id?: string): Promise<Obj> {
-    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins } = params;
-    const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
-    if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
-    if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
-    if (typeof commit !== 'string' || !/^[0-9a-f]{40}$/.test(commit)) throw new Refused(refusal('pattern', '/params/commit', 'Name the commit by its 40-character SHA.', commit));
-    if (!Array.isArray(argv) || !argv.length || argv.some((a) => typeof a !== 'string')) throw new Refused(refusal('type', '/params/argv', 'Give the run its program and arguments as strings.', argv));
-    if (!isObj(env) || Object.values(env).some((v) => typeof v !== 'string')) throw new Refused(refusal('type', '/params/env', 'Give env as names to string values.', env));
-    if (typeof cwd !== 'string' || !isAbsolute(cwd)) throw new Refused(refusal('type', '/params/cwd', 'Give the run its folder as an absolute path.', cwd));
-    if (!isObj(grant) || Object.keys(grant).some((k) => k !== 'run_as_you' && !(GRANT_LISTS as readonly string[]).includes(k))) {
-      throw new Refused(refusal('type', '/params/grant', 'Give the grant as read, write, hosts and sockets lists, or run_as_you.', grant));
-    }
-    for (const k of GRANT_LISTS) {
-      const list = grant[k];
-      if (list !== undefined && (!Array.isArray(list) || list.some((v) => typeof v !== 'string' || (k !== 'hosts' && !isAbsolute(v))))) {
-        throw new Refused(refusal('type', `/params/grant/${k}`, k === 'hosts' ? 'List hosts as host:port strings.' : 'List absolute paths.', list));
-      }
-    }
-    if (grant.run_as_you !== undefined && typeof grant.run_as_you !== 'boolean') throw new Refused(refusal('type', '/params/grant/run_as_you', 'Give run_as_you as true or false.', grant.run_as_you));
-    if (typeof environment !== 'boolean') throw new Refused(refusal('type', '/params/environment', 'Give environment as true when the run needs its folder\'s stack running.', environment));
-    const run = await this.launch({
-      run: id ?? `run:${ulid(this.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment ? { environment } : {}),
-      ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
-      ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
-      ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
-    });
-    return { run };
-  }
-
   /** The denied calls that ran anyway in a claim's session (#1033): as they arrived, and as the record holds them. */
   private async overridesFor(claim: string): Promise<{ call: string; label: string; ts: number }[]> {
     const [row] = (await this.record.raw(`SELECT session_id FROM events WHERE kind = 'claim.made' AND id = ? LIMIT 1`, [claim.slice(6)])) as { session_id: string | null }[];
@@ -6312,312 +6077,20 @@ export class Core {
     const seen = this.overrides.get(row.session_id) ?? [];
     return [...seen, ...recorded.filter((r) => !seen.some((s) => s.call === r.call))];
   }
-  /** The session a claim was made in, as a lease holder; the core's own for a claim the record doesn't hold. */
-  private async claimSession(claim: string): Promise<string> {
-    const [row] = (await this.record.raw(`SELECT session_id FROM events WHERE kind = 'claim.made' AND id = ? LIMIT 1`, [claim.slice(6)])) as { session_id: string | null }[];
-    return row?.session_id ? `session:${letters(row.session_id)}` : 'core';
-  }
-  /** Starts a run through the host, sandboxed, with the hub's run token injected; its output becomes scrubbed evidence. */
-  private async launch(run: Run): Promise<string> {
-    this.writeJournal((runs) => { runs[run.run] = run; });
-    // Every check run takes a `cpu.slot` from the kernel's lease table first, held for the claim's session (#29):
-    // at most half the cores run checks, and the slot shows in the lease table under that session. A fast-lane run
-    // may take the slot the pool keeps for a held stop's quick checks (#907).
-    const holder = await this.claimSession(run.claim);
-    const lease = await slot(this.leases, holder, run.run, run.lane === 'fast' ? 'fast' : 'slow');
-    // Where it runs and what it needs (#29), so a later placement can pick any host from the same record.
-    const ts = this.now();
-    const { spec, withheld } = recordable(run, this.options.held);
-    await this.append(this.connection('core'), {
-      v: 3, id: ulid(ts), kind: 'run.started', ts, subject: run.run,
-      data: {
-        run: run.run, check: run.check, claim: run.claim, commit: run.commit, host: 'local', needs: { cores: 1, memory_mb: 0, stack_slot: run.environment ? 1 : 0, gpus: 0, expected_ms: run.expected_ms ?? null }, lane: run.lane ?? 'slow',
-        // What it runs (#996): a journal that can't be read is rebuilt from it.
-        ...spec, withheld, ...(run.environment ? { environment: true } : {}),
-      },
-    }).catch(async (error: unknown) => {
-      // A start the record refused never ran: it leaves neither its slot nor the journal, and the refusal is what's thrown.
-      await this.leases.release(lease.id, []).catch(() => undefined);
-      try { this.writeJournal((runs) => { delete runs[run.run]; }); } catch { /* the restart's recovery finds no start for it */ }
-      throw error;
-    });
-    const token = randomBytes(24).toString('base64url');
-    const env = { ...run.env, DEEP_RUN_TOKEN: token };
-    const values = this.options.plant === 'no-run-values' ? undefined : { env, held: [token, ...this.options.held] };
-    const writer = this.store.connect({ role: 'deepbuild', via: 'job' });
-    const label = { source: run.run, redaction: 'complete' as const, license: { name: 'local', allows: [] }, ...(values ? { run: values } : {}) };
-    const sinks = [writer.text({ kind: 'run.stdout', ...label }), writer.text({ kind: 'run.stderr', ...label })];
-    let writes = Promise.resolve();
-    const output = {
-      stdout: (chunk: Buffer) => { writes = writes.then(() => sinks[0]!.write(chunk)); },
-      stderr: (chunk: Buffer) => { writes = writes.then(() => sinks[1]!.write(chunk)); },
-    };
-    let stop: () => void;
-    let ended: Promise<{ code: number | null; failed?: string; missing?: string; record?: CommandRun }>;
-    if (run.command !== undefined) {
-      // A claim's check runs through the command check kind (#30): hermetic, through host@1, with its deadline and the
-      // hub going down stopping it; its output, counts, failures, attempts and stand-ins come back as one closed record.
-      // A kind a loaded package installed in place of the shipped one (`replaces`, #349) runs it instead, through the
-      // extension host, which hands it host@1: its result is check.kind@1's, with no exit, output, attempts or stand-ins.
-      const spec = { kind: 'command', runner: run.command, inputs: [run.check], depth: 'unit', oracle: 'code' as const, contract: null };
-      const deadline = run.deadline ?? CHECK_DEADLINE_MS;
-      const controller = new AbortController();
-      stop = () => controller.abort();
-      const empty = { stdout: '', stderr: '', sha256: { stdout: sha256Hex(new Uint8Array()), stderr: sha256Hex(new Uint8Array()) } };
-      const replaced = async (): Promise<boolean> => (await this.extensions?.checks().catch(() => []) ?? []).some((c) => c.kind === 'command');
-      ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun }> => {
-        if (!byPackage) {
-          // #669's planted runner judges the run by its exit code alone, whatever masks it.
-          const exitOnly = this.options.plant === 'runner-passes-masked-exit' ? { plant: 'exit-code-only' as const } : {};
-          const record = await runCommandCheck({ host: this.host, run: run.run, spec, checkout: run.cwd, deadline, env, ...(run.grant.hosts?.length ? { hosts: run.grant.hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly });
-          return { code: record.exit?.code ?? null, record };
-        }
-        const result = await this.extensions!.runCheck('command', spec, { checkout: run.cwd, deadline });
-        return { code: null, record: { run: run.run, ...result, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } };
-      }).catch((error: Error) => ({ code: null, failed: error.message }));
-    } else if (this.options.plant === 'run-spawns-itself') {
-      // The planted wrong program: the hub spawns the run itself, past the host and its sandbox.
-      const child = spawn(run.argv[0]!, run.argv.slice(1), { cwd: run.cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
-      child.stdout!.on('data', output.stdout);
-      child.stderr!.on('data', output.stderr);
-      ended = new Promise((done) => {
-        child.on('error', (error) => done({ code: null, failed: error.message }));
-        child.on('close', (code) => done({ code }));
-      });
-      stop = () => { try { process.kill(-child.pid!, 'SIGTERM'); } catch { /* gone */ } };
-    } else {
-      // A run that needs the app has its stack brought up from its own folder first, its check's checkout; a stack
-      // that isn't ready makes the run missing, and its own process never starts.
-      const stackRun = run.environment ? newRun(this.now()) : undefined;
-      if (stackRun) this.stackRuns.add(stackRun);
-      const stack: Promise<Up | undefined> = stackRun
-        ? upStack(this.host, { run: stackRun, folder: run.cwd, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project', byValue: this.options.plant === 'env-loads-by-value', take: this.take('core', stackRun), scrub: (v) => { values?.held.push(...v); this.scrubValues(v); } })
-          .catch((error: Error) => ({ status: 'BLOCKED' as const, run: stackRun, cause: error.message }))
-        : Promise.resolve(undefined);
-      const started = stack.then<Started | { run: string; status: 'missing'; cause: string }>(async (up) => {
-        if (up?.status === 'BLOCKED') return { run: run.run, status: 'missing', cause: up.cause };
-        if (up) {
-          // Its database's clone is recorded (#332).
-          await this.cloned(run.run, up.stack);
-        }
-        const ports = Object.entries(up?.stack.ports ?? {});
-        const hosts = ports.map(([, port]) => `127.0.0.1:${port}`);
-        return this.host.start({
-          run: run.run, argv: run.argv, cwd: run.cwd, env: { ...env, ...Object.fromEntries(ports.map(([name, port]) => [name, String(port)])) },
-          grant: hosts.length ? { ...run.grant, hosts: [...(run.grant.hosts ?? []), ...hosts] } : run.grant, output,
-        });
-      });
-      ended = started.then(async (s) => {
-        if (s.status === 'missing') return { code: null, missing: s.cause };
-        if (s.status === 'BLOCKED') return { code: null, failed: `BLOCKED: no ${s.kind} free` };
-        const exit = await this.host.wait(run.run);
-        return { code: exit.code };
-      }, (error: Error) => ({ code: null, failed: error.message }));
-      // The stack goes down once the run has ended, its leases released by its cleanup.
-      if (stackRun) ended = ended.then(async (end) => { await this.takeDown(stackRun).catch(() => undefined); return end; });
-      stop = () => {
-        void started.then(() => this.host.signal(run.run, 'SIGTERM')).catch(() => undefined);
-        // A run still held on a resource never starts: given up on, its start resolves BLOCKED.
-        void this.supervisor.status(run.run).then((s) => (s.state === 'held' ? this.supervisor.cleanup(run.run) : undefined)).catch(() => undefined);
-      };
-    }
-    // A run still going at its spec's deadline is stopped and ends overran (#27), never passed or failed; the command
-    // check kind holds its own runs to theirs.
-    let overran = false;
-    const disarm = run.deadline && run.command === undefined ? after(run.deadline, () => { overran = true; stop(); setTimeout(() => void this.host.signal(run.run, 'SIGKILL').catch(() => undefined), RUN_KILL_GRACE_MS).unref(); }) : undefined;
-    const done = ended.then(async ({ code, failed, missing, record }) => {
-      disarm?.();
-      // What the run left behind is stopped and its leases released before its finish is recorded.
-      if (this.options.plant !== 'run-spawns-itself') await this.supervisor.cleanup(run.run).catch(() => undefined);
-      // The kind's record holds the run's output, scrubbed by value: it goes to the store as the sinks' would.
-      if (record) { output.stdout(Buffer.from(record.output.stdout)); output.stderr(Buffer.from(record.output.stderr)); }
-      await writes;
-      const evidence: string[] = [];
-      for (const sink of sinks) {
-        const put = await sink.close();
-        if (put.status === 'stored') evidence.push((await this.stored(put, `${run.run}'s output`)).sha256);
-      }
-      if (record) {
-        // The output's digests are the store's, the same text scrubbed once more by what the hub holds, so the verdict's
-        // evidence names what run.finished names.
-        const [stdout, stderr] = evidence;
-        if (stdout !== undefined && stderr !== undefined) record = { ...record, output: { ...record.output, sha256: { stdout, stderr } } };
-        record = this.gate.recorded(run.run, record);
-        const outcome = record.outcome;
-        const findings = outcome === 'stopped' ? ['hub stopped'] : record.mask !== null ? [`uncounted: ${record.mask}`] : record.failures.slice(0, 20).map((f) => `${f.test} (${f.file}:${f.line}): ${f.message}`);
-        // What the kind's result names as its evidence beyond the output (a replacing kind's content keys) is kept with the findings.
-        findings.push(...record.evidence.filter((e) => !/^(stdout|stderr) [0-9a-f]{64}$/.test(e)).slice(0, 20));
-        const first = record.failures[0];
-        await this.finish(run, outcome, findings, evidence, {
-          tests_run: record.testsRun, passed: Math.max(0, record.testsRun - new Set(record.failures.map((f) => f.test)).size),
-          assertion: first?.assertion ? first.test : null, points_to: first ? `${first.file}:${first.line}` : null,
-        });
-        return;
-      }
-      const outcome = this.stopping ? 'stopped' : overran ? 'overran' : missing ? 'missing' : code === 0 ? 'passed' : 'failed';
-      const findings = this.stopping ? ['hub stopped'] : overran ? [`still running at its deadline of ${words(run.deadline!)}, so it was stopped`] : missing ? [`its stack never came up: ${missing}`] : failed ? [failed] : [];
-      await this.finish(run, outcome, findings, evidence);
-    });
-    this.runs.set(run.run, { run, done, stop });
-    void done.finally(() => this.leases.release(lease.id, []).catch(() => undefined)).finally(() => this.runs.delete(run.run));
-    return run.run;
-  }
-  private async finish(run: Run, outcome: string, findings: string[], evidence: string[], counts: { tests_run: number; passed: number; assertion: string | null; points_to: string | null } = { tests_run: 0, passed: 0, assertion: null, points_to: null }): Promise<void> {
-    await this.appendCore('run.finished', {
-      run: run.run, outcome, tests_run: counts.tests_run, passed: counts.passed, runs: 1, evidence, check: run.check, assertion: counts.assertion, expected: null, actual: null, step: null,
-      points_to: counts.points_to, findings, environment: `${process.platform}-${process.arch}`,
-    }, { subject: run.run });
-    // The journal keeps the run until its finish is durable, so a cut before then reruns it.
-    await this.record.sync();
-    this.writeJournal((runs) => { delete runs[run.run]; });
-  }
-  /** After a start with runs still in the journal: each was in flight when the hub stopped without a clean stop. */
-  private async recoverRuns(): Promise<void> {
-    const recorded = async (kind: string, run: string) => (await this.record.raw(`SELECT 1 FROM events WHERE kind = ? AND json_extract(data, '$.run') = ? LIMIT 1`, [kind, run.replace(/'/g, "''")])).length > 0;
-    for (const run of Object.values({ ...this.journal })) {
-      if (await recorded('run.finished', run.run)) {
-        this.writeJournal((runs) => { delete runs[run.run]; });
-        continue;
-      }
-      // Its processes were reaped when the supervisor opened.
-      if (await recorded('run.started', run.run)) await this.finish(run, 'stopped', ['hub restarted'], []);
-      else this.writeJournal((runs) => { delete runs[run.run]; });
-      // Its checkout went as the service opened, so it isn't run again where nothing is left: what it would have shown stays unknown.
-      // One rebuilt without values its environment had can't run again as it was either (#996).
-      if (run.withheld?.length || (run.cwd && isUnder(run.cwd, realpathSync(join(this.root.dir, 'checkouts'))))) {
-        const [claim] = (await this.record.raw(`SELECT commit_sha, verdict_id FROM claims WHERE id = '${sql(run.claim.slice(6))}'`)) as { commit_sha: string | null; verdict_id: string | null }[];
-        // A verdict it already has stands.
-        if (!claim?.verdict_id) await this.invalid(run.claim, claim?.commit_sha ?? run.commit, `${run.check} was cut short by a hub restart${run.withheld?.length ? `, and the record doesn't keep its ${run.withheld.join(', ')}` : ''}`, 'INCONCLUSIVE');
-        continue;
-      }
-      // Its claim's check runs again.
-      await this.launch({ ...run, run: `run:${ulid(this.now())}`, cwd: run.cwd ?? process.cwd(), grant: run.grant ?? RUN_AS_YOU });
-    }
-  }
 
-  // ---- deep env up and down (#331): a worktree's stack through env-local, every process through the host.
+  // ---- The supervisor's runs: runs.ts.
 
-  private worktreeOf(params: Obj): string {
-    const { worktree } = params;
-    if (typeof worktree !== 'string' || !isAbsolute(worktree) || !existsSync(worktree)) throw new Refused(refusal('type', '/params/worktree', 'Name the worktree by its absolute path.', worktree));
-    return realpathSync(worktree);
-  }
-  /** Runs the worktree's env call once every earlier one for it has finished: a second up waits and finds the first's stack, an up during a down starts after it. */
-  private inTurn(worktree: string, call: () => Promise<Obj>): Promise<Obj> {
-    const turn = (this.turns.get(worktree) ?? Promise.resolve()).catch(() => undefined).then(call);
-    this.turns.set(worktree, turn);
-    void turn.catch(() => undefined).then(() => { if (this.turns.get(worktree) === turn) this.turns.delete(worktree); });
-    return turn;
-  }
-  /**
-   * Signals a stack run down through the host, then the supervisor stops what's left of it and releases its leases;
-   * the keys its session leased through the table (#332) end once every process recorded for it is gone, citing those ends.
-   */
-  private async takeDown(run: string): Promise<{ stopped: number[]; left: string[] }> {
-    try {
-      await downStack(this.host, run);
-      return await this.supervisor.cleanup(run);
-    } finally {
-      this.stackRuns.delete(run);
-      await this.giveBack(run).catch(() => undefined);
-    }
-  }
-  /**
-   * Ends the per-session keys a stack run leased once every process recorded for it has its process.ended, citing
-   * those; while one runs, or for a run whose start nothing recorded, the record decides, never a guess.
-   */
-  private async giveBack(run: string): Promise<void> {
-    const ids = this.taken.get(run) ?? [];
-    if (!ids.length) return;
-    const rows = await this.record.raw(`SELECT kind, id, json_extract(data, '$.pid') AS pid FROM events WHERE kind IN ('process.tracked', 'process.ended') AND json_extract(data, '$.run') = ?`, [run]) as { kind: string; id: string; pid: number }[];
-    const ended = rows.filter((r) => r.kind === 'process.ended');
-    if (rows.some((r) => r.kind === 'process.tracked' && !ended.some((e) => e.pid === r.pid))) return;
-    this.taken.delete(run);
-    this.owners.delete(run);
-    for (const id of ids) await this.leases.release(id, ended.map((r) => r.id));
-  }
-  /**
-   * env-local's Take for one stack run (#332): one of the keys, leased to the holder for the run through the kernel's
-   * table, or BLOCKED naming each lease that holds them, so a session never starts on a key another one holds.
-   */
-  private take(holder: string, run: string): Take {
-    // Two variables leased from one pool get two keys: a key this stack already holds isn't leased to it again.
-    const mine = new Set<string>();
-    return async (kind, keys) => {
-      // Keys of a stack already taken down, whose cleanup left a process the supervisor has since seen end, go back.
-      for (const other of [...this.taken.keys()]) if (!this.stackRuns.has(other)) await this.giveBack(other).catch(() => undefined);
-      // A worktree's stack whose process ended on its own is cleaned up first, which records its ends and gives its keys back.
-      for (const [worktree, stack] of [...this.stacks]) {
-        if (!this.taken.has(stack.run)) continue;
-        // A stack whose session is gone without a SessionEnd goes down with it, so its keys don't outlive it.
-        if (this.owners.has(stack.run) && (await this.ownerOf(stack.run)) === undefined) {
-          if (this.stacks.get(worktree) === stack) this.stacks.delete(worktree);
-          await this.takeDown(stack.run).catch(() => undefined);
-          continue;
-        }
-        if (!(await this.gone(stack.run))) continue;
-        if (this.stacks.get(worktree) === stack) this.stacks.delete(worktree);
-        await this.takeDown(stack.run).catch(() => undefined);
-      }
-      const held: string[] = [];
-      for (const key of keys) {
-        if (mine.has(`${kind}:${key}`)) continue;
-        const got = await this.leases.lease({ holder, run }, { host: 'local', kind, key }, 'exclusive');
-        if (got.status === 'granted') {
-          mine.add(`${kind}:${key}`);
-          this.taken.set(run, [...(this.taken.get(run) ?? []), got.lease.id]);
-          this.owners.set(run, holder);
-          return { key };
-        }
-        held.push(got.message);
-      }
-      return { cause: `no ${kind} of ${keys.join(', ')} is free to lease: ${held.join('; ')}` };
-    };
-  }
-  /** A session that ended takes the stacks its keys back down with it, so no key outlives its session (#332). */
-  private endStacks(session: string): void {
-    for (const [worktree, stack] of this.stacks) {
-      if (this.owners.get(stack.run) === `mcp:${session}`) void this.downFor(worktree, { path: '/params/worktree', remedy: 'deep env up' }).catch(() => undefined);
-    }
-  }
-  /** Whether a stack run ended on its own: its first process exited, and none recorded for it still runs in the background. */
-  private async gone(run: string): Promise<boolean> {
-    if ((await this.supervisor.status(run).catch(() => undefined))?.state !== 'exited') return false;
-    const pids = await this.record.raw(`SELECT DISTINCT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = ?`, [run]) as { pid: number }[];
-    return !pids.some((r) => running(r.pid));
-  }
-  /**
-   * Who a stack run's per-session keys stay with: its owner, unless that is a session that has ended, which owns
-   * nothing; one that ended without a SessionEnd (its agent killed) is ended once its agent's process is gone. A start
-   * that can't be read (ps failing under load) proves nothing, so the session keeps its stack while its process runs.
-   */
-  private async ownerOf(run: string): Promise<string | undefined> {
-    const owner = this.owners.get(run);
-    const session = owner?.startsWith('mcp:') ? this.sessions.get(owner.slice('mcp:'.length)) : undefined;
-    if (!session) return owner;
-    if (session.ended) return undefined;
-    const start = await this.startOf(session.pid, true);
-    return (start === undefined ? running(session.pid) : start === session.start) ? owner : undefined;
-  }
-  /** Values env-local loaded into a stack: scrubbed by value from hook text and evidence from now on (#332). */
-  private scrubValues(values: string[]): void {
-    const fresh = [...new Set(values)].filter((value) => !this.options.held.includes(value));
-    if (!fresh.length) return;
-    this.options.held.push(...fresh);
-    this.scrubbing(fresh);
-  }
-  /** A run's database clone, kept in the record: the template's seed record, the template's digest and when it was cloned (#332). */
-  private async cloned(run: string, stack: Stack): Promise<void> {
-    // The planted wrong program copies the database and drops its record.
-    if (!stack.seed || this.options.plant === 'env-clone-without-record') return;
-    const held = { held: this.options.held };
-    const { source, copied_at, migration, template } = stack.seed;
-    await this.appendCore('seed.cloned', { run, stack: stack.run, source: scrubText(source, held), copied_at: scrubText(copied_at, held), migration: scrubText(migration, held), template, cloned_at: this.now() }, { subject: run });
-  }
+  // ---- deep env up and down (#331): a worktree's stack through env-local (stacks.ts), every process through the host.
+
   /** `deep env up`: its leases are held by the agent session whose process runs the command, found by the peer check, or by the core from your own terminal. */
   private async envUp(params: Obj, context: CallContext): Promise<Obj> {
-    const worktree = this.worktreeOf(params);
-    return this.upFor(worktree, await this.envCaller(context.peer, worktree));
+    const worktree = this.stacks.worktreeOf(params);
+    return this.stacks.up(worktree, await this.envCaller(context.peer, worktree));
+  }
+  /** `deep env down`, for the caller's session or your own terminal (stacks.ts). */
+  private async envDown(params: Obj, context: CallContext): Promise<Obj> {
+    const worktree = this.stacks.worktreeOf(params);
+    return this.stacks.down(worktree, { path: '/params/worktree', remedy: 'deep env up' }, await this.envCaller(context.peer, worktree));
   }
   /**
    * The agent session a `deep env` caller runs under, or none for your own terminal (#332). A caller whose start can't
@@ -6630,9 +6103,6 @@ export class Core {
     const session = await this.agentAbove(peer);
     return session ? `mcp:${session}` : undefined;
   }
-  private upFor(worktree: string, holder?: string): Promise<Obj> {
-    return this.inTurn(worktree, () => this.riseIn(worktree, holder));
-  }
   /**
    * deep_env (#331): the bound session's own worktree's stack, up or down, as `deep env up` and `deep env down` run
    * there. The worktree is the session's, from its hooks, never from the call, so a child session in a worktree of its
@@ -6643,93 +6113,7 @@ export class Core {
     const cwd = this.sessions.get(session)!.cwd;
     if (!existsSync(cwd)) throw refuse('not_found', '/params/arguments', `Session ${session}'s worktree ${cwd} doesn't exist; its stack runs from its worktree alone.`, cwd);
     const worktree = realpathSync(cwd);
-    return action === 'up' ? this.upFor(worktree, `mcp:${session}`) : this.downFor(worktree, { path: '/params/arguments', remedy: 'deep_env with action up' }, `mcp:${session}`);
-  }
-  private async riseIn(worktree: string, holder?: string): Promise<Obj> {
-    let running = this.stacks.get(worktree);
-    // A stack that ended on its own is no one's: it is cleaned up, which gives its keys back, and a new one starts.
-    if (running && (await this.gone(running.run))) {
-      this.stacks.delete(worktree);
-      await this.takeDown(running.run).catch(() => undefined);
-      running = undefined;
-    }
-    // A stack is reused only while its process runs and its health route still answers 200, and by an agent session
-    // only when no other session leased its keys: they stay that session's (#332).
-    const owner = running ? await this.ownerOf(running.run) : undefined;
-    if (running && holder && owner && owner !== holder) return { status: 'BLOCKED', worktree, cause: `the stack in ${worktree} runs on leases ${(this.taken.get(running.run) ?? []).join(', ')} held by ${owned(owner)}, so it stays theirs; their deep env down, or yours from your own terminal, ends it` };
-    // A stack whose keys an ended session leased starts again under its new holder, so no key outlives its session's use.
-    const orphaned = running !== undefined && this.owners.has(running.run) && owner === undefined && this.owners.get(running.run) !== (holder ?? 'core');
-    if (running && !orphaned && (await this.supervisor.status(running.run)).state === 'running' && (await answers(running))) {
-      return { status: 'ready', run: running.run, worktree, ports: running.ports, ...(running.project ? { project: running.project } : {}) };
-    }
-    // Any other is taken down, and a new one started.
-    if (running) {
-      this.stacks.delete(worktree);
-      await this.takeDown(running.run).catch(() => undefined);
-    }
-    if (this.stopping) return { status: 'BLOCKED', worktree, cause: 'the hub is stopping' };
-    const run = newRun(this.now());
-    this.stackRuns.add(run);
-    this.rising.set(worktree, run);
-    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project', byValue: this.options.plant === 'env-loads-by-value', take: this.take(holder ?? 'core', run), scrub: (v) => this.scrubValues(v), ...(holder ? { holder } : {}) })
-      .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }))
-      .finally(() => this.rising.delete(worktree));
-    if (up.status === 'BLOCKED') {
-      // What it started is stopped and its leases released; a stack that never started has nothing to clean.
-      await this.takeDown(run).catch(() => undefined);
-      return { status: 'BLOCKED', worktree, cause: up.cause };
-    }
-    // A session that ended while its stack came up leaves no key behind: the stack goes down with it.
-    const ended = this.owners.get(run);
-    if (ended && (await this.ownerOf(run)) === undefined) {
-      await this.takeDown(run).catch(() => undefined);
-      return { status: 'BLOCKED', worktree, cause: `${owned(ended)} ended while its stack came up` };
-    }
-    const unrecorded = await this.cloned(run, up.stack).then(() => undefined, (error: Error) => error.message);
-    if (unrecorded) {
-      await this.takeDown(run).catch(() => undefined);
-      return { status: 'BLOCKED', worktree, cause: `its database's clone record couldn't be kept: ${unrecorded}` };
-    }
-    this.stacks.set(worktree, up.stack);
-    return { status: 'ready', run, worktree, ports: up.stack.ports, ...(up.stack.project ? { project: up.stack.project } : {}) };
-  }
-  /**
-   * Takes the worktree's stack down: signalled through the host, then the supervisor's cleanup stops what it can
-   * prove is the run's and ends its leases once every recorded process is gone. A process it can't prove, or one
-   * that was never recorded and still listens on a leased port, is reported with its PID and the port, never stopped.
-   */
-  private async envDown(params: Obj, context: CallContext): Promise<Obj> {
-    const worktree = this.worktreeOf(params);
-    return this.downFor(worktree, { path: '/params/worktree', remedy: 'deep env up' }, await this.envCaller(context.peer, worktree));
-  }
-  /** `at` names, for the caller's surface, where a refusal points and what starts a stack there. */
-  /** `caller` is the agent session's deep mcp asking; a stack whose keys another session leased stays up for it (#332). */
-  private async downFor(worktree: string, at: { path: string; remedy: string }, caller?: string): Promise<Obj> {
-    // A stack still coming up is signalled down now: its up ends BLOCKED, and this down's turn follows it.
-    const rising = this.rising.get(worktree);
-    const owner = rising ? await this.ownerOf(rising) : undefined;
-    if (rising && caller && owner && owner !== caller) throw (new Refused(refusal('role', at.path, `The stack coming up in ${worktree} runs on keys ${owned(owner!)} leased, so only they, or you from your own terminal, take it down.`, worktree)));
-    if (rising) void downStack(this.host, rising);
-    return this.inTurn(worktree, () => this.downIn(worktree, at, rising, caller));
-  }
-  private async downIn(worktree: string, at: { path: string; remedy: string }, interrupted?: string, caller?: string): Promise<Obj> {
-    const stack = this.stacks.get(worktree);
-    // The up it interrupted took its own stack down and cleaned it up.
-    if (!stack && interrupted) return { run: interrupted, stopped: [], left: [] };
-    if (!stack) throw new Refused(refusal('not_found', at.path, `No stack runs for ${worktree}; start one with ${at.remedy}.`, worktree));
-    const owner = await this.ownerOf(stack.run);
-    if (caller && owner && owner !== caller) throw new Refused(refusal('role', at.path, `The stack in ${worktree} runs on keys ${owned(owner)} leased, so only they, or you from your own terminal, take it down.`, worktree));
-    const ports = Object.values(stack.ports);
-    const recorded = (await this.record.raw(`SELECT DISTINCT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = ?`, [stack.run]) as { pid: number }[]).map((r) => r.pid);
-    const before = recorded.filter(running);
-    this.stacks.delete(worktree);
-    const { result: cleaned, left } = await downLeaving(ports, { listen: listening, leases: async () => (await this.leases.leases()).map((v) => v.lease) }, async () => {
-      // The planted wrong program stops whatever listens on the leased ports, the run's or not.
-      if (this.options.plant === 'env-kills-by-port') for (const port of ports) for (const pid of await listening(port)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
-      return this.takeDown(stack.run);
-    });
-    const stopped = [...new Set([...before.filter((pid) => !running(pid)), ...cleaned.stopped])];
-    return { run: stack.run, stopped, left };
+    return action === 'up' ? this.stacks.up(worktree, `mcp:${session}`) : this.stacks.down(worktree, { path: '/params/arguments', remedy: 'deep_env with action up' }, `mcp:${session}`);
   }
 
   // ---- Spool, retention and the test load.
@@ -6820,38 +6204,11 @@ export class Core {
     }
   }
 
-  /**
-   * The retention pass: keeps the files decisions, verdicts and recorded readings cite, the transcripts transcript.archived links and the
-   * CI logs ci.archived links, which outlive the forge's own retention only if ours keeps them.
-   */
+  /** The retention pass (retention.ts). */
   private async retain(): Promise<void> {
-    // What a decision or verdict cites, the series batches a notice cites for 30 days (#262), and a reading's evidence (#45).
-    const cited = this.options.plant === 'empty-cited' ? new Set<string>() : await citedEvidence(this.record, this.now());
-    if (this.options.plant !== 'empty-cited') {
-      const readings = (await this.record.raw("SELECT evidence FROM events WHERE kind = 'reading.recorded' AND evidence IS NOT NULL")) as { evidence: string }[];
-      for (const r of readings) for (const h of JSON.parse(r.evidence) as string[]) cited.add(h);
-    }
-    const linked = (await this.record.raw("SELECT json_extract(data, '$.evidence') AS sha FROM events WHERE kind = 'transcript.archived'")) as { sha: string | null }[];
-    const logs = (await this.record.raw("SELECT evidence FROM events WHERE kind = 'ci.archived' AND evidence IS NOT NULL")) as { evidence: string }[];
-    const archived = new Set([...linked.flatMap((r) => (r.sha ? [r.sha] : [])), ...logs.flatMap((r) => JSON.parse(r.evidence) as string[])]);
-    const { removed } = await this.store.retain({ cited, archived });
-    for (const sha256 of removed) await this.appendCore('evidence.removed', { sha256 }).catch(() => undefined);
-    await this.pruneSnapshots(cited).catch(() => undefined);
-  }
-  /**
-   * Lets go of the snapshots nothing holds (#31): an open claim's (no verdict, its task not closed), an open ask's, and
-   * any with evidence a verdict or decision cites. Empty output is one hash for every run, so it holds none.
-   */
-  private async pruneSnapshots(cited: ReadonlySet<string>): Promise<void> {
-    const open = (await this.record.raw('SELECT DISTINCT r.commit_sha AS sha FROM runs r JOIN claims c ON c.id = r.claim_id LEFT JOIN tasks t ON t.task_ref = c.subject_ref WHERE c.verdict_id IS NULL AND t.closed IS NULL')) as { sha: string | null }[];
-    const asks = (await this.record.raw("SELECT pinned_to FROM asks WHERE status IN ('open', 'later')")) as { pinned_to: string | null }[];
-    const runs = (await this.record.raw('SELECT commit_sha AS sha, evidence FROM runs WHERE evidence IS NOT NULL')) as { sha: string | null; evidence: string }[];
-    const verdicts = (await this.record.raw("SELECT json_extract(data, '$.commit') AS sha, evidence FROM events WHERE kind = 'verdict.made' AND evidence IS NOT NULL")) as { sha: string | null; evidence: string }[];
-    const empty = sha256Hex(new Uint8Array());
-    const pins = asks.flatMap((a) => { const pin = JSON.parse(a.pinned_to ?? 'null') as { kind: string; ref: string } | null; return pin?.kind === 'commit' ? [pin.ref] : []; });
-    await this.checkouts.prune({
-      open_claims: open.flatMap((r) => (r.sha ? [r.sha] : [])), open_asks: pins,
-      kept_evidence: [...runs, ...verdicts].flatMap((r) => (r.sha && (JSON.parse(r.evidence) as string[]).some((sha) => sha !== empty && cited.has(sha)) ? [{ snapshot: r.sha, behind_decision: true }] : [])),
+    await retain({
+      raw: (query) => this.record.raw(query), store: this.store, checkouts: this.checkouts, cited: () => citedEvidence(this.record, this.now()), keepNothing: this.options.plant === 'empty-cited',
+      removed: (sha256) => this.appendCore('evidence.removed', { sha256 }),
     });
   }
 
@@ -6953,15 +6310,15 @@ export class Core {
     await this.stating;
     this.writeCursors();
     this.canvasCore?.close();
-    await Promise.allSettled([...this.replicas.values()].map(async (r) => { await r.replica.end(); await r.gone; }));
-    for (const { stop } of this.runs.values()) stop();
+    await this.replicas.close();
+    this.runs.stopAll();
     // Each worktree's stack goes down with the hub, through the supervisor.
-    await Promise.race([Promise.allSettled([...this.stackRuns].map((run) => this.takeDown(run))), new Promise((done) => setTimeout(done, 5000))]);
+    await this.stacks.close();
     // Each running job is stopped through the supervisor; one still stopping is reaped on the next start.
     const jobs = await this.runner.list().catch(() => [] as JobRecord[]);
     await Promise.race([Promise.allSettled(jobs.filter((j) => j.state === 'running' || j.state === 'waiting').map((j) => this.runner.cancel(j.job))), new Promise((done) => setTimeout(done, 5000))]);
     await this.runner.close();
-    await Promise.race([Promise.allSettled([...this.runs.values()].map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
+    await this.runs.settled();
     await this.checkouts.close().catch(() => undefined);
     await this.appendCore('hub.stopped', { reason }).catch(() => undefined);
     await this.extensions?.close();

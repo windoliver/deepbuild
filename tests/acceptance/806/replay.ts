@@ -10,7 +10,8 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  App, Stand, World, deepShow, deepShowCli, evidenceRoot, hubCall, makeHome, putPng, readEvidence, startHub, t26, t384, t393, tempDir, uuidOf,
+  App, Stand, World, deepShow, deepShowCli, evidenceRoot, hubCall, makeHome, putPng, readEvidence, showArgs, showSchema, startHub, t26, t384, t393, tempDir,
+  uuidOf,
   type AgentKind, type JsonObject, type JsonValue, type WorldFile,
 } from './helpers.ts';
 
@@ -121,7 +122,10 @@ export async function openWorld(o: OpenOptions): Promise<Opened> {
   for (const [handle, raw] of Object.entries(claimDefs)) {
     const def = t393.obj(raw, `claim ${handle}`);
     const agent = agents.get(String(def['session']))!;
-    const made = t26.valueOf(await t26.callTool(agent.stand, 'deep_claim', t26.claimArgs()), `deep_claim of ${handle} by ${agent.name}`);
+    // Each call stamped as its agent stamps it (#39: a Codex call binds by its PreToolUse, with the arguments it sends).
+    const claim = t26.claimArgs();
+    await agent.stand.stamp(hub, 'deep_claim', claim);
+    const made = t26.valueOf(await t26.callTool(agent.stand, 'deep_claim', claim), `deep_claim of ${handle} by ${agent.name}`);
     const real = String(made.claim ?? `claim:${made.event}`);
     claims.set(handle, real);
     deliverables[real] = { session: agent.real, deliverables: def['deliverables'] ?? [] };
@@ -179,6 +183,7 @@ export async function play(scenario: JsonObject, opened: Opened): Promise<Played
       case 'deep_show': {
         const agent = typeof raw['session'] === 'string' ? opened.agents.get(raw['session']) : undefined;
         if (typeof raw['session'] === 'string' && !agent) throw Error(`the scenario's deep_show names session ${raw['session']}, which it doesn't hold`);
+        if (agent) await agent.stand.stamp(opened.hub, 'deep_show', showArgs(call, await showSchema(agent.stand)));
         reply = (await deepShow(agent ? agent.stand : opened.hand, call, 'deep_show')).reply;
         break;
       }
@@ -186,7 +191,9 @@ export async function play(scenario: JsonObject, opened: Opened): Promise<Played
         const agent = opened.agents.get(String(raw['session']))!;
         // deep_show's `t` is time-grammar text in every replay (one JSON type a field, #26's strict schemas); #384's render_back gives flicks.
         const t = typeof call['t'] === 'number' ? secondsText(call['t']) : call['t'];
-        reply = (await deepShow(agent.stand, { doc: call['doc'], t, rev: call['rev'], size: call['size'], include: ['pixels'] }, 'render-back through deep_show')).reply;
+        const back = { doc: call['doc'], t, rev: call['rev'], size: call['size'], include: ['pixels'] };
+        await agent.stand.stamp(opened.hub, 'deep_show', showArgs(back, await showSchema(agent.stand)));
+        reply = (await deepShow(agent.stand, back, 'render-back through deep_show')).reply;
         break;
       }
       case 'deep show': {
