@@ -42,3 +42,37 @@ Two worktrees of one commit, `npm ci` in each, run in turn with the observation
   started a fresh path-keyed copy of about 20 GB with 15 GB free, and it was stopped. That a new worktree needs a
   whole new copy is the cost this issue removes. t3-a's cold 2033 s is what main pays in every new worktree.
 - To free disk, the owner's OK cleared `~/Library/Caches/deepbuild-perf` (38 GB) afterwards.
+
+## The settle run at `0f132a2a`: a lock race, and checks that outlive their allowance
+
+Mac15,12 (M3, 8 cores), macOS 14.7.7, Node 24.22.0. Worktrees t3-a and t3-b at `0f132a2a` after `npm ci`, the
+kept copies empty at the start. Files are in `~/deepbuild-handoffs/1119-mac/` on the Spark.
+
+**Suites:** `node --test tests/acceptance/1119/*.test.mjs tests/perf.test.mjs` passed 19 of 20. The failure was
+`tests/perf.test.mjs:319`, "perf runs racing for a killed run's lock never check at the same time, however they
+interleave": `2 runs checked: [[1793871512894,1793871513894],[1793871513448,1793871514449]]`, two check windows
+overlapping by 0.45 s.
+
+| Run | Record | Verdict | Wall / user / sys | Built |
+|---|---|---|---|---|
+| a1 (t3-a, first) | `wrote 6391 files, deleted 0; … nothing` | `BLOCKED perf: spawnSync /usr/bin/time ETIMEDOUT` | 2161 s / 4536 s / 375 s | 2837 |
+| a2 (t3-a, again) | `wrote 0 files, deleted 32; … nothing` | `BLOCKED perf: Command failed: npm ci` (`ENOTEMPTY … base/copy/node_modules/.vitest-cache`) | 26 s / 7 s / 13 s | 0 |
+| b (t3-b) | `wrote 0 files, deleted 30; … nothing` | `BLOCKED perf: spawnSync /usr/bin/time ETIMEDOUT` | 1430 s / 109 s / 19 s | 39, none of them deep-show |
+
+- **The lock race was this change's.** `underTakeover` made its mark with `writeFileSync(…, { flag: 'wx' })`, which
+  creates the file empty and writes the pid after. A run that lost the race and read it in between read `''`, took
+  the mark for a killed run's, removed it and went on beside its holder. Fixed in `964dc5d2`: the mark is written
+  to `lock.takeover.<pid>` and linked into place, as the lock already is. Its test holds one run's mark empty for
+  2.5 s. On the Mac it failed 3 of 3 at `0f132a2a` (`2 runs checked: [[1793916666300,1793916674302],
+  [1793916673923,1793916681926]]`, in `t3-mark-unfixed.txt`); with the fix, the 1119 and perf suites passed 21 of 21
+  three times (`t3-mark-fixed.txt`). The Spark could not run perf.test then: its load stayed over its 20 cores.
+- **A check stopped at its allowance keeps running; that is main's.** `measureOnce` in `scripts/benchmark.mjs`
+  times the checks with `spawnSync('/usr/bin/time', …, { timeout })`, which kills only `/usr/bin/time`. On the Spark,
+  a command it ran wrote its file 2 s after `ETIMEDOUT`. On the Mac, a1's checks most likely kept building in the
+  kept copy after perf released the lock: a2's `npm ci` met a `.vitest-cache` still being written, and b used 109 s
+  of CPU in 1430 s and counted builds it may not have made. So **b is no AC1 count.** The fix is its own task.
+- **t3-b2 (rerun of b, nothing left running):** a cold start, not a settled one. The Mac's hostname had changed from
+  `MacBook-Air-97.local` to `MacBook-Air-97`, so perf made a new per-host folder (25 GB, beside the old 47 GB one)
+  and rebuilt it all: `wrote 6391 files, deleted 0`, `ETIMEDOUT`, 2095 s / 3843 s / 335 s, 2835 built. The earlier
+  runs in this file were also under `MacBook-Air-97`, and the settle run under `MacBook-Air-97.local`: macOS's name
+  changes with the network.
