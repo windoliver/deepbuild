@@ -19,9 +19,30 @@ struct Frame {
     // step reads (#429).
     inverse_clip: mat4x4<f32>,
     eye: vec4<f32>,
+    // The cutaway (#424): each plane's normal and offset; how many, 1 to intersect, its cap's
+    // bits (1: drawn, 2: lit); the cap's role, linear RGB.
+    cut: array<vec4<f32>, 4>,
+    cut_info: vec4<u32>,
+    cap: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
+
+// Whether the cutaway hides `p`: past any of its planes, or past all of them when it intersects.
+fn cut_hides(p: vec3<f32>) -> bool {
+    let count = frame.cut_info.x;
+    if count == 0u {
+        return false;
+    }
+    var any = false;
+    var all = true;
+    for (var k = 0u; k < count; k++) {
+        let past = dot(frame.cut[k].xyz, p) > frame.cut[k].w;
+        any = any || past;
+        all = all && past;
+    }
+    return select(any, all, frame.cut_info.y == 1u);
+}
 
 struct Targets {
     @location(0) color: vec4<f32>,
@@ -170,6 +191,91 @@ const ADD: u32 = 3u;
 const ALPHA_CUTOFF: f32 = 0.5;
 // Its material samples texture maps (#423): group 3 holds them.
 const MAPS: u32 = 8192u;
+// The cutaway reaches it (#424).
+const CUT: u32 = 16384u;
+// #424's planted program: a mask part's ID written through its holes.
+const IDS_THROUGH_MASK: u32 = 8u;
+
+// The frame's adjust table (#424; Object: adjust): entry k at 3(k − 1).
+@group(1) @binding(8) var<uniform> adjusts: array<vec4<f32>, 768>;
+
+fn oklab(c: vec3<f32>) -> vec3<f32> {
+    let l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
+    let m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
+    let s = 0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b;
+    let r = pow(max(vec3<f32>(l, m, s), vec3<f32>(0.0)), vec3<f32>(1.0 / 3.0));
+    return vec3<f32>(
+        0.2104542553 * r.x + 0.7936177850 * r.y - 0.0040720468 * r.z,
+        1.9779984951 * r.x - 2.4285922050 * r.y + 0.4505937099 * r.z,
+        0.0259040371 * r.x + 0.7827717662 * r.y - 0.8086757660 * r.z,
+    );
+}
+
+fn from_oklab(c: vec3<f32>) -> vec3<f32> {
+    let l = c.x + 0.3963377774 * c.y + 0.2158037573 * c.z;
+    let m = c.x - 0.1055613458 * c.y - 0.0638541728 * c.z;
+    let s = c.x - 0.0894841775 * c.y - 1.2914855480 * c.z;
+    let q = vec3<f32>(l * l * l, m * m * m, s * s * s);
+    return vec3<f32>(
+        4.0767416621 * q.x - 3.3077115913 * q.y + 0.2309699292 * q.z,
+        -1.2684380046 * q.x + 2.6097574011 * q.y - 0.3413193965 * q.z,
+        -0.0041960863 * q.x - 0.7034186147 * q.y + 1.7076147010 * q.z,
+    );
+}
+
+// A lit color under adjust entry `k` (0: none), in the design's fixed order: exposure, contrast
+// about mid gray, gamma, hue and saturation in OKLCh, brightness, tint, then invert.
+fn adjusted(c0: vec3<f32>, k: u32) -> vec3<f32> {
+    if k == 0u {
+        return c0;
+    }
+    let a = adjusts[3u * (k - 1u)];
+    let b = adjusts[3u * (k - 1u) + 1u];
+    let tint = adjusts[3u * (k - 1u) + 2u];
+    var c = max(c0, vec3<f32>(0.0)) * exp2(a.x);
+    c = 0.18 * pow(c / 0.18, vec3<f32>(a.y));
+    c = pow(c, vec3<f32>(1.0 / a.z));
+    if a.w != 0.0 || b.x != 1.0 {
+        let lab = oklab(c);
+        let h = radians(a.w);
+        let ab = vec2<f32>(lab.y * cos(h) - lab.z * sin(h), lab.y * sin(h) + lab.z * cos(h)) * b.x;
+        c = max(from_oklab(vec3<f32>(lab.x, ab)), vec3<f32>(0.0));
+    }
+    c = c * b.y;
+    if b.w > 0.5 {
+        c = c * tint.rgb;
+    }
+    if b.z > 0.5 {
+        c = vec3<f32>(1.0) - clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
+    }
+    return c;
+}
+
+// Where the view ray through a back face at `w` enters what the cutaway keeps (#424): the cap's
+// point, and the plane it lies on (w), or w < 0 where none.
+fn cap_at(w: vec3<f32>) -> vec4<f32> {
+    let d = select(normalize(lights.forward.xyz), normalize(w - lights.view.xyz), lights.view.w > 0.5);
+    let intersect = frame.cut_info.y == 1u;
+    var best = select(1e30, -1.0, intersect);
+    var plane = -1.0;
+    for (var k = 0u; k < frame.cut_info.x; k++) {
+        let p = frame.cut[k];
+        let nd = dot(p.xyz, d);
+        if nd >= 0.0 {
+            continue;
+        }
+        // Toward the eye from `w`, the distance to this plane.
+        let s = (p.w - dot(p.xyz, w)) / -nd;
+        if s < 0.0 {
+            continue;
+        }
+        if (intersect && s > best) || (!intersect && s < best) {
+            best = s;
+            plane = f32(k);
+        }
+    }
+    return vec4<f32>(w - d * best, plane);
+}
 
 // Issue #423: a material's texture maps (canvas primitives: Material: texture maps), in the order
 // base color, metallic-roughness, normal, occlusion, emission. Each map's uv transform is two
@@ -238,7 +344,8 @@ struct Mapped {
 };
 
 struct MeshOut {
-    @builtin(position) pos: vec4<f32>,
+    // Invariant, so a fade's color pass meets its own depth pass exactly (#424).
+    @builtin(position) @invariant pos: vec4<f32>,
     @location(0) normal: vec3<f32>,
     @location(1) @interpolate(flat) color: u32,
     @location(2) @interpolate(flat) pick: u32,
@@ -487,7 +594,12 @@ fn lobes(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, s: Surface, a2: f32, dfg_v: v
 // neighbourhood that doesn't block it, the point first pushed along its normal by a texel and a
 // half (1 outside the cascade).
 fn cascade_lit(i: u32, world: vec3<f32>, n: vec3<f32>) -> f32 {
-    let p = world + n * (1.5 * lights.texels[i]);
+    // Biased toward the sun, by a texel plus 1.5 texels of the surface's slope to the light, so
+    // the point keeps its own place in the map: the shadow's edge lands where the casters put
+    // it, and a cut face beside a kept edge isn't shadowed by that edge (#424).
+    let c = clamp(dot(n, frame.light.xyz), 0.05, 1.0);
+    let slope = min(sqrt(1.0 - c * c) / c, 4.0);
+    let p = world + frame.light.xyz * ((1.0 + 1.5 * slope) * lights.texels[i]);
     let lp = lights.cascades[i] * vec4<f32>(p, 1.0);
     let uv = lp.xy * vec2<f32>(0.5, -0.5) + 0.5;
     if any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) || lp.z > 1.0 {
@@ -874,7 +986,29 @@ fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
 
 // `keyed`: with no light, no sky and no environment, a material takes the view's own key light, as
 // a solid without a material does; only a material operator's solid asks for it (#429).
-fn shade(in: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, keyed: bool) -> Targets {
+fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, keyed: bool) -> Targets {
+    var in = in0;
+    // A cutaway hides what lies past its planes (#424); with a cap, a back face seen through the
+    // cut shades as the cut face: a matte surface of the cap's role on its plane, facing along
+    // its normal, or the role itself under cap_light: flat.
+    let cut = (in.flags & CUT) != 0u && frame.cut_info.x > 0u;
+    if cut && cut_hides(in.world) {
+        discard;
+    }
+    if cut && (frame.cut_info.z & 1u) != 0u && front == ((in.flags & MIRRORED) != 0u) {
+        let c = cap_at(in.world);
+        if c.w < 0.0 {
+            discard;
+        }
+        in.world = c.xyz;
+        in.normal = -frame.cut[u32(c.w)].xyz;
+        in.base = vec4<f32>(frame.cap.rgb, 1.0);
+        in.surface = vec4<f32>(0.0, 1.0, 0.0, 0.0);
+        in.specular = vec4<f32>(1.0, 1.0, 1.0, 0.03);
+        in.emission = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        in.flags = (in.flags & (NO_RECEIVE | CUT)) | MATERIAL | DOUBLE_SIDED
+            | select(UNLIT, 0u, (frame.cut_info.z & 2u) != 0u);
+    }
     let n = normalize(in.normal);
     if (in.flags & MATERIAL) != 0u {
         // Its back faces are culled; a negative determinant turns its winding over.
@@ -894,6 +1028,10 @@ fn shade(in: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, k
         var alpha = m.alpha;
         if mode == MASK {
             if alpha < cutoff {
+                // The planted wrong program writes the part's ID through its hole.
+                if (lights.count.z & IDS_THROUGH_MASK) != 0u {
+                    return Targets(vec4<f32>(0.0), in.pick);
+                }
                 discard;
             }
             alpha = 1.0;
@@ -901,7 +1039,7 @@ fn shade(in: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, k
         let s = m.s;
         let facing = m.n;
         if (in.flags & UNLIT) != 0u {
-            return Targets(see_through(s.base + m.emission, alpha, mode), in.pick);
+            return Targets(see_through(adjusted(s.base + m.emission, in.op.w), alpha, mode), in.pick);
         }
         let d = direct(in, facing, s, m.spread);
         // A shadow catcher writes black, as opaque as the share of light its shadow removes, at
@@ -911,7 +1049,7 @@ fn shade(in: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, k
         }
         if keyed && lights.count.x == 0u && frame.sky_top.w <= 0.0 && env.k.x <= 0.0 {
             let key = 0.45 * occlusion(in.pos.xy, s.base) + 0.55 * max(dot(facing, frame.light.xyz), 0.0);
-            let unlit = fogged(s.base * key + in.emission.rgb, in.world);
+            let unlit = fogged(adjusted(s.base * key + in.emission.rgb, in.op.w), in.world);
             return Targets(see_through(unlit, alpha, mode), in.pick);
         }
         var ambient: vec3<f32>;
@@ -921,7 +1059,7 @@ fn shade(in: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, k
             ambient = sky_light(in, facing, s);
         }
         // A map's occlusion scales the ambient term alone (#423).
-        let lit = fogged(d.color + ambient * m.occlusion + m.emission, in.world);
+        let lit = fogged(adjusted(d.color + ambient * m.occlusion + m.emission, in.op.w), in.world);
         return Targets(see_through(lit, alpha, mode), in.pick);
     }
     let facing = max(dot(n, frame.light.xyz), 0.0);
@@ -942,15 +1080,168 @@ fn shade(in: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, k
     let albedo = paint(in.color);
     let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
     let a = in.emission.w;
-    return Targets(vec4<f32>(fogged(albedo * lit + in.emission.rgb, in.world) * a, a), in.pick);
+    return Targets(vec4<f32>(fogged(adjusted(albedo * lit + in.emission.rgb, in.op.w), in.world) * a, a), in.pick);
+}
+
+// ---- the per-pixel resolve (#424; Object: see-through order): a per-pixel item's fragments
+// join per-pixel lists in its writer layer, then one pass composites each pixel's by depth.
+
+struct OitInfo {
+    // Fragments written this frame (past `capacity` none is kept); the room; the target's width.
+    count: atomic<u32>,
+    capacity: u32,
+    width: u32,
+    pad: u32,
+};
+
+// Each pixel's list head (a node's index + 1, 0 for none); the nodes: premultiplied RGBA as
+// halves, the depth's bits, the next node; the count.
+@group(1) @binding(9) var<storage, read_write> oit_heads: array<atomic<u32>>;
+@group(1) @binding(10) var<storage, read_write> oit_nodes: array<vec4<u32>>;
+@group(1) @binding(11) var<storage, read_write> oit_info: OitInfo;
+
+// The most fragments one pixel composites in depth order; any past them blend in behind them.
+const OIT_LAYERS: u32 = 8u;
+
+@fragment
+fn oit_fs(in0: MeshOut, @builtin(front_facing) front: bool) -> Targets {
+    let g = array<vec4<f32>, 2>(dpdx(in0.uv), dpdy(in0.uv));
+    let local_n = normalize(cross(dpdx(in0.local), dpdy(in0.local)) + vec3<f32>(0.0, 1e-9, 0.0));
+    var in = in0;
+    in.flags = in.flags | DOUBLE_SIDED;
+    let t = shade(in, front, local_n, g, false);
+    let i = atomicAdd(&oit_info.count, 1u);
+    if i < oit_info.capacity {
+        let px = vec2<u32>(in.pos.xy);
+        let prev = atomicExchange(&oit_heads[px.y * oit_info.width + px.x], i + 1u);
+        oit_nodes[i] = vec4<u32>(pack2x16float(t.color.rg), pack2x16float(t.color.ba), bitcast<u32>(in.pos.z), prev);
+    }
+    return Targets(vec4<f32>(0.0), 0u);
+}
+
+// Each pixel's fragments, farthest first, over what's behind them; nothing when the frame ran
+// out of room, where the per-pixel items draw sorted instead. The kept layers stay packed (two
+// halves a word) so the pass holds few registers.
+@fragment
+fn oit_resolve_fs(@builtin(position) pos: vec4<f32>) -> Targets {
+    if atomicLoad(&oit_info.count) > oit_info.capacity {
+        discard;
+    }
+    let px = vec2<u32>(pos.xy);
+    var at = atomicLoad(&oit_heads[px.y * oit_info.width + px.x]);
+    if at == 0u {
+        discard;
+    }
+    // Nearest first, as a depth key that grows toward the eye (reversed Z; the planted forward Z
+    // turned over).
+    let forward = frame.px.w > 0.5;
+    var key: array<f32, 8>;
+    var color: array<vec2<u32>, 8>;
+    var n = 0u;
+    var tail = vec4<f32>(0.0);
+    var guard = 0u;
+    while at != 0u && guard < 1048576u {
+        let node = oit_nodes[at - 1u];
+        var k = bitcast<f32>(node.z);
+        if forward {
+            k = -k;
+        }
+        var c = node.xy;
+        if n == OIT_LAYERS {
+            // Full: the farthest of the kept layers and this one, whichever is farther, blends in
+            // behind the rest.
+            if k > key[n - 1u] {
+                let far = color[n - 1u];
+                n -= 1u;
+                tail = tail + vec4<f32>(unpack2x16float(far.x), unpack2x16float(far.y)) * (1.0 - tail.a);
+            } else {
+                tail = tail + vec4<f32>(unpack2x16float(c.x), unpack2x16float(c.y)) * (1.0 - tail.a);
+                at = node.w;
+                guard += 1u;
+                continue;
+            }
+        }
+        // Insert by key, nearest first.
+        var j = n;
+        while j > 0u && key[j - 1u] < k {
+            key[j] = key[j - 1u];
+            color[j] = color[j - 1u];
+            j -= 1u;
+        }
+        key[j] = k;
+        color[j] = c;
+        n += 1u;
+        at = node.w;
+        guard += 1u;
+    }
+    var acc = tail;
+    for (var i = n; i > 0u; i--) {
+        let c = vec4<f32>(unpack2x16float(color[i - 1u].x), unpack2x16float(color[i - 1u].y));
+        acc = c + acc * (1.0 - c.a);
+    }
+    return Targets(acc, 0u);
+}
+
+// A per-pixel item drawn sorted, only in a frame whose fragments ran out of room.
+@fragment
+fn oit_fallback_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
+    let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
+    let local_n = normalize(cross(dpdx(in.local), dpdy(in.local)) + vec3<f32>(0.0, 1e-9, 0.0));
+    if atomicLoad(&oit_info.count) <= oit_info.capacity {
+        discard;
+    }
+    return shade(in, front, local_n, g, false);
+}
+
+// A frame with a capped cutaway draws its solids through this entry (#424): a cap shades the back
+// face seen through the cut, drawn an eighth of a pixel's depth slope nearer the eye (never past its plane),
+// so a coplanar front face of a neighbouring part never hides it, while a front face of its own
+// part in front of it still does.
+struct CutTargets {
+    @location(0) color: vec4<f32>,
+    @location(1) id: u32,
+    @builtin(frag_depth) depth: f32,
+};
+
+@fragment
+fn mesh_cut_fs(in: MeshOut, @builtin(front_facing) front: bool) -> CutTargets {
+    let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
+    let local_n = normalize(cross(dpdx(in.local), dpdy(in.local)) + vec3<f32>(0.0, 1e-9, 0.0));
+    let slope = fwidth(in.pos.z);
+    var depth = in.pos.z;
+    let back = front == ((in.flags & MIRRORED) != 0u);
+    if (in.flags & CUT) != 0u && frame.cut_info.x > 0u && (frame.cut_info.z & 1u) != 0u && back {
+        let c = cap_at(in.world);
+        if c.w >= 0.0 {
+            let clip = frame.clip * vec4<f32>(c.xyz, 1.0);
+            let plane = clip.z / clip.w;
+            // Nearer is larger under reversed Z, smaller under the planted forward Z.
+            if frame.px.w > 0.5 {
+                depth = max(in.pos.z - 0.125 * slope, plane);
+            } else {
+                depth = min(in.pos.z + 0.125 * slope, plane);
+            }
+            depth = clamp(depth, 0.0, 1.0);
+        }
+    }
+    let t = shade(in, front, local_n, g, false);
+    return CutTargets(t.color, t.id, depth);
+}
+
+// The shadow passes' fragment stage (#424): what a cutaway removes casts nothing.
+@fragment
+fn shadow_fs(in: MeshOut) {
+    if (in.flags & CUT) != 0u && cut_hides(in.world) {
+        discard;
+    }
 }
 
 // The ao prepass (#418): an opaque solid's world normal; its depth goes to the prepass's own
 // depth target.
 @fragment
 fn ao_normal_fs(in: MeshOut) -> @location(0) vec4<f32> {
-    // A see-through solid writes no occlusion depth.
-    if in.emission.w < 1.0 {
+    // A see-through solid writes no occlusion depth, nor what a cutaway removes (#424).
+    if in.emission.w < 1.0 || ((in.flags & CUT) != 0u && cut_hides(in.world)) {
         discard;
     }
     return vec4<f32>(normalize(in.normal), 1.0);
