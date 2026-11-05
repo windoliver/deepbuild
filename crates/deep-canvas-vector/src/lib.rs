@@ -9,6 +9,7 @@ use serde_json::{json, Map, Value};
 
 pub mod lower;
 pub mod module;
+pub mod outline_source;
 pub mod svg;
 
 pub use lower::Write;
