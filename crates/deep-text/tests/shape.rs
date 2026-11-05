@@ -9,14 +9,27 @@ fn bundled_families_only() {
     let mut shaper = Shaper::new();
     let mut families = shaper.families();
     families.sort();
-    assert_eq!(families, ["Inter", "JetBrains Mono"]);
+    assert_eq!(
+        families,
+        [
+            "Caveat",
+            "Inter",
+            "JetBrains Mono",
+            "Noto Emoji",
+            "Noto Sans Arabic",
+            "Noto Sans SC",
+            "STIX Two Math"
+        ]
+    );
 }
 
 #[test]
 fn mono_lines_up_by_column() {
     let mut shaper = Shaper::new();
     let spec = Spec {
-        role: Role::Mono,
+        family: Role::Mono.family(),
+        fallback: &[],
+        lang: None,
         ..Spec::label("iiii")
     };
     let narrow = shaper.shape(&spec).width;

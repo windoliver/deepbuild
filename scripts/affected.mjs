@@ -2,10 +2,11 @@
 // file, near or far, through the packages' entries, names its path or a dist build of it, or runs a crate the change
 // reaches; a crate when it or a crate it depends on changed. Each runs with its own runner: vitest or node --test by
 // what the file imports, cargo test for crates. The files lanes.mjs runs alone run one at a time after everything
-// else, which runs in parallel, and those it leaves to a person don't run. Failures main already has
+// else, which runs in parallel, and those it leaves to a person don't run. Its timed files run last, one at a time
+// under a timed grant, and only with --timed: unrun, they leave the run INCONCLUSIVE. Failures main already has
 // (known-failures.json) read apart from new ones, and a timing budget missed under load reads INCONCLUSIVE.
 //
-//   node scripts/affected.mjs [--list] [--wide] [--record] [path ...]
+//   node scripts/affected.mjs [--list] [--wide] [--record] [--timed] [path ...]
 //
 // Paths stand for the change, which is otherwise the worktree against its merge base with origin/main. --list prints
 // the selection without running it. --wide also runs the suites that see the change only through another package's
@@ -16,7 +17,7 @@ import { loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { alone, byHand, changedPaths, checks, ownLane } from './lanes.mjs';
+import { alone, byHand, changedPaths, checks, ownLane, timed } from './lanes.mjs';
 import { isTestFile, listFiles, named, underTestPaths } from './proof-change.mjs';
 import { childEnv } from './proof-runs.mjs';
 
@@ -252,15 +253,18 @@ export function runnerOf(file, source) {
   return file.endsWith('.ts') ? 'vitest' : 'node';
 }
 
-/** The selected test files by runner and block, after those lanes.mjs leaves to a person or to a lane of its own. */
+/**
+ * The selected test files by runner and block, after those lanes.mjs leaves to a person or to a lane of its own, and
+ * apart from them, by runner, those it names timed.
+ */
 export function plan(cwd, tests) {
-  const blocks = { parallel: { vitest: [], node: [] }, alone: { vitest: [], node: [] } }, skipped = [];
+  const blocks = { parallel: { vitest: [], node: [] }, alone: { vitest: [], node: [] } }, timedFiles = { vitest: [], node: [] }, skipped = [];
   for (const file of tests) {
     if (listed(byHand, file) || (file.startsWith('tests/acceptance/') && /\.live\.test\./.test(file))) skipped.push(`${file} (by hand)`);
     else if (listed(ownLane, file)) skipped.push(`${file} (a lane of its own)`);
-    else blocks[listed(alone, file) ? 'alone' : 'parallel'][runnerOf(file, readFileSync(join(cwd, file), 'utf8'))].push(file);
+    else (listed(timed, file) ? timedFiles : blocks[listed(alone, file) ? 'alone' : 'parallel'])[runnerOf(file, readFileSync(join(cwd, file), 'utf8'))].push(file);
   }
-  return { blocks, skipped };
+  return { blocks, skipped, timed: timedFiles };
 }
 
 // A failure that names its own state keeps it, as runLanes reads one: a check that couldn't run reads BLOCKED.
@@ -342,11 +346,15 @@ export function classify(failures, findings, baseline) {
   return { known, fresh, unsure };
 }
 
+// Each job runs through the machine's throttle table (docs/parallel-proof.md, section 6): the workspace build, clippy and
+// cargo test as build, the vitest and node --test blocks as test and the timed ones as timed, waiting at most 30 minutes
+// for its grant; each, its parallel blocks too, under a cpu.slot of the calling session's through scripts/lease (#1015).
 function run(logs, label, command, args, env = {}) {
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
   const descriptor = openSync(log, 'w');
+  const cls = label.endsWith('timed') ? 'timed' : /^(?:vitest|node)/.test(label) ? 'test' : 'build';
   return new Promise((done) => {
-    const child = spawn(command, args, { cwd: root, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
+    const child = spawn(process.execPath, ['scripts/throttle.mjs', cls, '--wait', '30', '--', join(root, 'scripts/lease'), command, ...args], { cwd: root, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
     child.on('error', (error) => { closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
     child.on('close', (status) => { closeSync(descriptor); done({ label, log, status, output: readFileSync(log, 'utf8') }); });
   });
@@ -364,8 +372,10 @@ async function main(args) {
     selection.crates = [...new Set([...selection.crates, ...selection.wide.filter((node) => node.startsWith('cargo ')).map((node) => node.slice(14))])].sort();
     selection.wide = [];
   }
-  const { blocks, skipped } = plan(root, selection.tests);
-  for (const [block, runners] of Object.entries(blocks)) for (const [runner, files] of Object.entries(runners)) if (files.length) console.log(`${block} ${runner}: ${files.join(' ')}`);
+  const { blocks, skipped, timed: timedFiles } = plan(root, selection.tests);
+  const runTimed = args.includes('--timed');
+  const unrunTimed = runTimed ? [] : [...timedFiles.vitest, ...timedFiles.node].sort();
+  for (const [block, runners] of Object.entries({ ...blocks, timed: timedFiles })) for (const [runner, files] of Object.entries(runners)) if (files.length) console.log(`${block} ${runner}: ${files.join(' ')}${block === 'timed' && !runTimed ? ' (--timed runs them)' : ''}`);
   if (selection.crates.length) console.log(`parallel cargo test: ${selection.crates.join(' ')}`);
   for (const line of skipped) console.log(`SKIP ${line}`);
   for (const path of selection.none) console.log(`NOTE ${path} reaches no test`);
@@ -388,14 +398,23 @@ async function main(args) {
   ]));
   if (blocks.alone.vitest.length) jobs.push(await vitest(blocks.alone.vitest, ['--no-file-parallelism'], 'vitest-alone'));
   if (blocks.alone.node.length) jobs.push(await node(blocks.alone.node, ['--test-concurrency=1'], 'node-alone'));
+  if (runTimed && timedFiles.vitest.length) jobs.push(await vitest(timedFiles.vitest, ['--no-file-parallelism'], 'vitest-timed'));
+  if (runTimed && timedFiles.node.length) jobs.push(await node(timedFiles.node, ['--test-concurrency=1'], 'node-timed'));
 
   const failures = [], passed = [], findings = [];
   for (const job of jobs) {
+    // A job the throttle didn't run, for want of a grant or of its table, ran nothing, so none of its results is read:
+    // it is unrun, never a failure on main.
+    const [, state, message] = job.output.match(/^(INCONCLUSIVE|BLOCKED) (no grant|throttle): (.*)/) ?? [];
+    if (state) {
+      failures.push({ id: `${job.label} job`, state, message });
+      continue;
+    }
     if (job.label === 'build' && job.status !== 0) failures.push({ id: 'npm run build --workspaces', state: 'FAIL', message: job.output.split('\n').find((line) => /error/.test(line)) ?? '' });
     if (job.label.startsWith('lint')) findings.push(...lintFindings(root, job.label.slice(5), job.output, job.status));
     if (job.label === 'cargo') { const results = cargoResults(job.output, job.status, workspace); failures.push(...results.failures); passed.push(...results.passed); }
     if (/^(?:vitest|node)/.test(job.label)) {
-      const files = blocks[job.label.endsWith('alone') ? 'alone' : 'parallel'][job.label.split('-')[0]];
+      const files = ({ ...blocks, timed: timedFiles })[job.label.split('-')[1] ?? 'parallel'][job.label.split('-')[0]];
       let report = '';
       try { report = readFileSync(join(logs, `${job.label}.jsonl`), 'utf8'); } catch {}
       const results = reportResults(root, report);
@@ -421,7 +440,9 @@ async function main(args) {
   for (const { id, message } of fresh) console.log(`NEW FAIL ${id}${message && message !== 'lint' ? `: ${message}` : ''}`);
   for (const path of selection.every) console.log(`INCONCLUSIVE ${path} feeds every suite; run npm run preflight`);
   if (selection.wide.length) console.log(`INCONCLUSIVE ${selection.wide.length} suites that see the change through another package's process were not run; the release preflight or --wide runs them`);
-  const state = fresh.length ? 'FAIL' : unsure.length || selection.every.length || selection.wide.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS';
+  if (unrunTimed.length) console.log(`INCONCLUSIVE ${unrunTimed.length} timed ${unrunTimed.length === 1 ? 'file was' : 'files were'} not run; --timed runs them under a timed grant: ${unrunTimed.join(' ')}`);
+  console.log(`TIMED the timed list, from scripts/lanes.mjs (${timed.length}): ${timed.join(' ')}`);
+  const state = fresh.length ? 'FAIL' : unsure.length || selection.every.length || selection.wide.length || unrunTimed.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS';
   console.log(`${state} affected: ${fresh.length} new, ${known.length} already failing on main, ${unsure.length} inconclusive or blocked, ${passed.length} passed, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}; logs in ${logs}`);
   return { FAIL: 1, INCONCLUSIVE: 2 }[state] ?? 0;
 }

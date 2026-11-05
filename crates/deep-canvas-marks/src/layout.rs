@@ -432,7 +432,9 @@ impl Tree<'_, '_, '_> {
             return refuse("bad_layout", id);
         }
         let shaped = self.shaper.shape(&Spec {
-            role,
+            family: role.family(),
+            fallback: &[],
+            lang: None,
             size,
             weight: weight as u16,
             line_height: params
@@ -444,8 +446,13 @@ impl Tree<'_, '_, '_> {
                 .and_then(|b| b.get("w"))
                 .map(|v| num(Some(v), 0., id))
                 .transpose()?,
+            max_lines: params
+                .get("max_lines")
+                .and_then(Value::as_u64)
+                .and_then(|n| u16::try_from(n).ok()),
             bound,
             tabular: bound,
+            mask: params.get("overflow").and_then(Value::as_str) == Some("mask"),
             ..Spec::label(text)
         });
         Ok(Leaf {

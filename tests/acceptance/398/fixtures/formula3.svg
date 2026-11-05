@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 170" width="460" height="170">
+  <!-- A three-term formula. Each term is a 125 u square, filled, with its own 3 u stroke, its path starting
+       at its top-left corner and running clockwise on screen; centrelines on pixel centres. -->
+  <path id="t1" d="M 20.5 20.5 L 145.5 20.5 L 145.5 145.5 L 20.5 145.5 Z" fill="#3366cc" stroke="#000000" stroke-width="3"/>
+  <path id="t2" d="M 170.5 20.5 L 295.5 20.5 L 295.5 145.5 L 170.5 145.5 Z" fill="#3366cc" stroke="#000000" stroke-width="3"/>
+  <path id="t3" d="M 320.5 20.5 L 445.5 20.5 L 445.5 145.5 L 320.5 145.5 Z" fill="#3366cc" stroke="#000000" stroke-width="3"/>
+</svg>

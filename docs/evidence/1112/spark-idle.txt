@@ -1,0 +1,23 @@
+# #1112 idle readings on the Spark: load and swap, three times five minutes apart
+# The 50% swap and load-under-8 limits are the Mac's acceptance criterion; these are the Spark's readings.
+# idle reading 1: 2026-11-03T04:51:37Z
+$ uptime
+ 20:51:37 up 2 days,  1:04,  2 users,  load average: 0.34, 0.32, 0.29
+$ free -h | grep Swap
+Swap:           15Gi        96Ki        15Gi
+builds running (cargo, vitest, proof): none
+# idle reading 2: 2026-11-03T04:56:37Z
+$ uptime
+ 20:56:37 up 2 days,  1:09,  2 users,  load average: 2.00, 1.59, 0.87
+$ free -h | grep Swap
+Swap:           15Gi        96Ki        15Gi
+builds running (cargo, vitest, proof): none
+# idle reading 3: 2026-11-03T05:01:37Z
+$ uptime
+ 21:01:37 up 2 days,  1:14,  2 users,  load average: 3.25, 2.56, 1.50
+$ free -h | grep Swap
+Swap:           15Gi        96Ki        15Gi
+builds running (cargo, vitest, proof): 964878 ~/.local/opt/node-v24.22.0-linux-arm64/bin/node /tmp/deep-proof-run-B6a0nL/deep-proof-checkout-EVczVQ/node_modules/vitest/vitest.mjs 
+# Note: reading 3 is not idle. Another session's proof run (vitest in /tmp/deep-proof-run-B6a0nL, a live run
+# with its own watcher) started between readings 2 and 3. Even so, swap stayed at 96Ki of 15Gi and the
+# 1-minute load stayed under 8 in all three readings.

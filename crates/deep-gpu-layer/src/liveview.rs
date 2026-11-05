@@ -7,6 +7,7 @@
 //! resolves the window's frames into the linear target. What the view allocates is counted at
 //! the sizes the device reports. Once warm, a frame allocates nothing on the core's side.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -19,8 +20,10 @@ use deep_gpu::alloc::outside;
 use deep_gpu::device::Device;
 use deep_gpu::memory;
 use deep_gpu::meter::{Rung, MAX_PASSES};
+use deep_effects_render::docops::{DocOps, Row, Times};
+use deep_effects_render::runner::Frame;
 use deep_gpu::surface::{allocate, Handoff, Path};
-use deep_scene3d_render::surface::{Filter, Surface, OUTLINE_PASS};
+use deep_scene3d_render::surface::{Filter, Surface, LABEL_PASS, OUTLINE_PASS};
 pub use deep_scene3d_render::surface::{Upscale, SHARPEN_PASS as SHARPEN, UPSCALE_PASS as UPSCALE};
 use deep_scene3d_render::{Planted as Planted3, Renderer, LINEAR};
 use serde_json::Value;
@@ -292,6 +295,30 @@ impl Timer {
         })
     }
 
+    /// A pass's two writes split across two passes: the first writes its beginning, the
+    /// second its end, so the passes between them time as one (#397).
+    pub fn bracket(
+        &self,
+        i: Option<usize>,
+    ) -> (
+        Option<wgpu::RenderPassTimestampWrites<'_>>,
+        Option<wgpu::RenderPassTimestampWrites<'_>>,
+    ) {
+        let Some(w) = self.writes(i) else {
+            return (None, None);
+        };
+        (
+            Some(wgpu::RenderPassTimestampWrites {
+                end_of_pass_write_index: None,
+                ..w.clone()
+            }),
+            Some(wgpu::RenderPassTimestampWrites {
+                beginning_of_pass_write_index: None,
+                ..w
+            }),
+        )
+    }
+
     pub fn end(&mut self, i: Option<usize>) {
         if let Some(i) = i {
             self.marks[i].cpu[1] = self.since();
@@ -470,6 +497,15 @@ pub struct Drawing {
     pub offsets: Offsets,
     pub effects_resolution: f64,
     pub canonical: bool,
+    /// Whether a still scene may settle: not while a frame it drew is still in flight, whose
+    /// completion releases what it read (#421).
+    pub settles: bool,
+}
+
+/// What a view draws: a 3D scene's frames, or a 2D document's (#397).
+pub enum Content {
+    Scene(Box<Frames>),
+    Flat(Box<crate::flat::Flat>),
 }
 
 pub struct View {
@@ -479,7 +515,7 @@ pub struct View {
     /// The slot the last drawn frame is in.
     pub shown: Option<usize>,
     renderer: Renderer,
-    frames: Frames,
+    frames: Content,
     /// Whether the renderer last prepared a scene of `frames`, so a frame need only write what
     /// moved.
     prepared: bool,
@@ -493,8 +529,43 @@ pub struct View {
     history: Option<History>,
     /// What the view allocated beyond `low` and `history`, as the device reports it.
     base_bytes: Option<u64>,
+    /// How the last frame drew (its rung and internal scale) and how many frames it has drawn
+    /// since its scene last changed: a still scene settles once its history is full (#421).
+    still: Option<(Rung, f64, u32)>,
+    /// The document's composed pass and compute operators (#429), each at the resolution its
+    /// writer's meter gives it, and what each drew last frame.
+    pub ops: DocOps,
+    pub op_resolution: BTreeMap<String, f64>,
+    pub op_rows: Vec<Row>,
+    /// #429's planted render-back, which draws live-only operators as the live view does.
+    pub canonical_draws_live_only: bool,
     #[cfg(feature = "test-meter")]
     pub test: crate::testgpu::Items,
+}
+
+/// The live meter's timer as the operators' [`Times`], each pass charged to `session`.
+struct LiveTimes<'a> {
+    timer: &'a mut Timer,
+    session: usize,
+}
+
+impl Times for LiveTimes<'_> {
+    fn start(&mut self, mark: &'static str, _: &mut wgpu::CommandEncoder) -> Option<usize> {
+        self.timer.start(mark, self.session)
+    }
+    fn render(&self, i: Option<usize>) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
+        self.timer.writes(i)
+    }
+    fn compute(&self, i: Option<usize>) -> Option<wgpu::ComputePassTimestampWrites<'_>> {
+        self.timer.writes(i).map(|w| wgpu::ComputePassTimestampWrites {
+            query_set: w.query_set,
+            beginning_of_pass_write_index: w.beginning_of_pass_write_index,
+            end_of_pass_write_index: w.end_of_pass_write_index,
+        })
+    }
+    fn end(&mut self, i: Option<usize>, _: &mut wgpu::CommandEncoder) {
+        self.timer.end(i);
+    }
 }
 
 impl View {
@@ -505,7 +576,7 @@ impl View {
         path: Path,
         size: [u32; 2],
         slots: u32,
-        frames: Frames,
+        frames: Content,
         scale: f64,
         window: u32,
         look: &Look3,
@@ -516,12 +587,15 @@ impl View {
                 (0..slots).map(|_| allocate(device, path, size)).collect();
             let mut renderer = Renderer::new(device, Planted3::default());
             let mut frames = frames;
-            let prepared = match frames.at(0, size, &Offsets::default(), labels) {
-                Ok(scene) => {
-                    renderer.prepare(device, scene, look);
-                    true
-                }
-                Err(_) => false,
+            let prepared = match &mut frames {
+                Content::Scene(frames) => match frames.at(0, size, &Offsets::default(), labels) {
+                    Ok(scene) => {
+                        renderer.prepare(device, scene, look);
+                        true
+                    }
+                    Err(_) => false,
+                },
+                Content::Flat(_) => false,
             };
             (slots, renderer, frames, prepared)
         });
@@ -539,15 +613,21 @@ impl View {
             drew: (1.0, "none"),
             history: None,
             base_bytes,
+            still: None,
+            ops: DocOps::empty(),
+            op_resolution: BTreeMap::new(),
+            op_rows: Vec::new(),
+            canonical_draws_live_only: false,
             #[cfg(feature = "test-meter")]
             test: crate::testgpu::Items::default(),
         })
     }
 
     /// Draws `frames` from the next frame on: a revision's document.
-    pub fn set_frames(&mut self, frames: Frames) {
+    pub fn set_frames(&mut self, frames: Content) {
         self.frames = frames;
         self.prepared = false;
+        self.still = None;
     }
 
     /// What the view itself holds on the device, as the device reports it.
@@ -586,13 +666,24 @@ impl View {
         }
     }
 
+    /// Hands the shown slot its finished frame: a copy slot reads its frame back here, so its
+    /// pixels are the frame's only after this.
+    pub fn finish(&self, device: &Device) -> Result<(), String> {
+        match self.shown {
+            Some(s) => self.slots[s].finish(device),
+            None => Ok(()),
+        }
+    }
+
     /// The slot's pixels, BGRA rows top-down, after its frame finished.
     pub fn pixels(&self) -> Option<Vec<u8>> {
         Some(self.slots[self.shown?].read())
     }
 
-    /// Records the frame at `t` into `encoder`, each pass timed by `timer` as `session`'s. Fails
-    /// only when the document can't be evaluated.
+    /// Records the frame at `t` into `encoder`, each pass timed by `timer` as `session`'s, and
+    /// says whether it drew: a scene that hasn't changed since a frame drawn the same way, once
+    /// its history is full, records nothing (#421). Fails only when the document can't be
+    /// evaluated.
     #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &mut self,
@@ -605,11 +696,35 @@ impl View {
         encoder: &mut wgpu::CommandEncoder,
         timer: &mut Timer,
         session: usize,
-    ) -> Result<(), Refused> {
+    ) -> Result<bool, Refused> {
         let scale = if drawing.canonical {
             1.0
         } else {
             drawing.rung.scale(self.scale)
+        };
+        let evaluated = match &mut self.frames {
+            Content::Scene(frames) if !drawing.canonical && drawing.rung != Rung::Placeholder => {
+                frames.at(t, self.size, &drawing.offsets, labels)?;
+                let still = match self.still {
+                    Some((rung, s, n))
+                        if drawing.settles && self.prepared && !frames.changed() =>
+                    {
+                        (rung == drawing.rung && s == scale).then_some(n)
+                    }
+                    _ => None,
+                };
+                #[cfg(feature = "test-meter")]
+                let still = still.filter(|_| self.test.bound.is_empty());
+                if still.is_some_and(|n| n >= self.window) {
+                    return Ok(false);
+                }
+                self.still = Some((drawing.rung, scale, still.map_or(0, |n| n + 1)));
+                true
+            }
+            _ => {
+                self.still = None;
+                false
+            }
         };
         // The scene is evaluated at the view's size; the renderer draws it at the internal size
         // and returns it to full size through the upscale, once its pipelines are compiled.
@@ -648,12 +763,24 @@ impl View {
             });
             timer.end(i);
             self.after(encoder, slot);
-            return Ok(());
+            return Ok(true);
         }
-        self.frames.at(t, self.size, &drawing.offsets, labels)?;
-        let scene = self.frames.scene();
+        let frames = match &mut self.frames {
+            Content::Scene(frames) => frames,
+            Content::Flat(flat) => {
+                self.drew = (1.0, "none");
+                flat.draw(device, t, self.size, &slot_view, encoder, timer, session)
+                    .map_err(|(code, path)| Refused { code, path })?;
+                self.after(encoder, slot);
+                return Ok(true);
+            }
+        };
+        if !evaluated {
+            frames.at(t, self.size, &drawing.offsets, labels)?;
+        }
+        let scene = frames.scene();
         let clip = scene.camera.clip(Depth::Reversed);
-        match self.frames.moved().filter(|_| self.prepared) {
+        match frames.moved().filter(|_| self.prepared) {
             Some(moved) => self.renderer.prepare_moved(device, scene, look, moved),
             None => self.renderer.prepare(device, scene, look),
         }
@@ -662,7 +789,7 @@ impl View {
         self.renderer.record_geometry(encoder, timer.writes(i));
         timer.end(i);
         let Some((linear_texture, linear)) = self.renderer.linear() else {
-            return Ok(());
+            return Ok(true);
         };
         let (linear_texture, linear) = (linear_texture.clone(), linear.clone());
         #[cfg(feature = "test-meter")]
@@ -686,7 +813,44 @@ impl View {
             session,
         );
         #[cfg(not(feature = "test-meter"))]
-        let _ = (clip, &linear, drawing.effects_resolution);
+        let _ = drawing.effects_resolution;
+        if !self.ops.ops.is_empty() {
+            // Column-major, as the operators' frame holds it.
+            let flat: [f64; 16] = std::array::from_fn(|i| clip[i % 4][i / 4]);
+            let frame = Frame {
+                clip: flat.map(|x| x as f32),
+                inverse_clip: deep_effects_render::reference::inverse(&flat).map(|x| x as f32),
+                eye: [0.0; 4],
+                t: (t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64) as f32,
+                seed: 0,
+            };
+            let roles: BTreeMap<String, [f64; 3]> = look
+                .roles
+                .iter()
+                .map(|(k, c)| (k.clone(), crate::effects::linear_of(*c)))
+                .collect();
+            let res = &self.op_resolution;
+            let canonical = drawing.canonical && !self.canonical_draws_live_only;
+            let (rows, recs, out) = self.ops.plan(
+                device,
+                &linear,
+                None,
+                None,
+                internal,
+                &frame,
+                &roles,
+                &|i| res.get(i).copied().unwrap_or(1.0),
+                canonical,
+            );
+            let mut times = LiveTimes { timer, session };
+            for r in &recs {
+                outside(|| r.record(encoder, &mut times));
+            }
+            if let Some(o) = out {
+                outside(|| self.ops.blit_into(device, encoder, &o, &linear, internal));
+            }
+            self.op_rows = rows;
+        }
         if self.window > 0 && !drawing.canonical {
             self.resolve_history(
                 device,
@@ -721,13 +885,18 @@ impl View {
                 timer.end(i);
             }
         }
-        if let Some(draw) = self.renderer.outline_draw(false) {
-            let i = timer.start(OUTLINE_PASS, session);
-            draw.record(encoder, &slot_view, timer.writes(i));
-            timer.end(i);
+        for (name, draw) in [
+            (OUTLINE_PASS, self.renderer.outline_draw(false)),
+            (LABEL_PASS, self.renderer.label_draw()),
+        ] {
+            if let Some(draw) = draw {
+                let i = timer.start(name, session);
+                draw.record(encoder, &slot_view, timer.writes(i));
+                timer.end(i);
+            }
         }
         self.after(encoder, slot);
-        Ok(())
+        Ok(true)
     }
 
     fn after(&self, encoder: &mut wgpu::CommandEncoder, slot: usize) {

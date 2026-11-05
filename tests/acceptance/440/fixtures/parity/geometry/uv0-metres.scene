@@ -1,0 +1,15 @@
+{
+  "scene": "uv0-metres",
+  "format": 1,
+  "about": "Parity fixture for #440 AC3 (Builder: uv). Parts of very different sizes, from 0.1 m to 4 m, each with uv0 in metres: three slab boxes and an L-shaped extrusion box-projected, a lathe cylinder's side projected around its axis (one UV unit along the circle is one metre of arc), and a slab with uv_scale 0.5 (one UV unit is half a metre, so two UV units a metre). Expected (closed form): on every triangle, both singular values of the map from the surface in metres to uv0 equal 1 / uv_scale within 1%, so a texture keeps one texel density across all of them. The lathe's 32 flat sides stretch the arc against the chord by (pi/32) / sin(pi/32) = 1.0016, inside the 1%. density_rel is the bound.",
+  "density_rel": 0.01,
+  "items": {
+    "brick": { "kind": "slab@1", "params": { "size": [0.25, 0.1, 0.15], "uv0": "box" } },
+    "table": { "kind": "slab@1", "params": { "size": [1.2, 0.05, 0.8], "uv0": "box" } },
+    "floor": { "kind": "slab@1", "params": { "size": [4, 0.2, 2.5], "uv0": "box" } },
+    "bracket": { "kind": "extrude@1", "params": { "outline": [[0, 0], [0.6, 0], [0.6, 0.2], [0.2, 0.2], [0.2, 0.5], [0, 0.5]], "depth": 0.3, "uv0": "box" } },
+    "column": { "kind": "lathe@1", "params": { "outline": [[0.5, 0, false], [0.5, 1.2, false]], "segments": 32, "caps": "none", "uv0": { "cylinder": { "axis": "y" } } } },
+    "tile": { "kind": "slab@1", "params": { "size": [1, 0.5, 2], "uv0": "box", "uv_scale": 0.5 } }
+  },
+  "density": { "brick": 1, "table": 1, "floor": 1, "bracket": 1, "column": 1, "tile": 2 }
+}

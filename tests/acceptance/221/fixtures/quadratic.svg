@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80" width="240" height="80">
+  <path id="num-b" d="M 10 22 L 22 22 L 22 25 L 10 25 Z M 26 10 L 30 10 L 30 34 L 26 34 Z" fill="#000000"/>
+  <path id="pm" d="M 40 20 L 52 20 L 52 23 L 40 23 Z M 44.5 14 L 47.5 14 L 47.5 29 L 44.5 29 Z M 40 31 L 52 31 L 52 34 L 40 34 Z" fill="#000000"/>
+  <path id="sqrt" d="M 58 26 L 64 24 L 67 32 L 74 4 L 140 4 L 140 7 L 76 7 L 68 39 L 64 39 Z" fill="#000000"/>
+  <path id="disc" d="M 80 34 C 80 10 136 10 136 34 Z" fill="#000000"/>
+  <path id="bar" d="M 10 44 L 150 44 L 150 47 L 10 47 Z" fill="#000000"/>
+  <path id="den" d="M 60 52 L 100 52 L 100 76 L 60 76 Z" fill="#000000"/>
+</svg>

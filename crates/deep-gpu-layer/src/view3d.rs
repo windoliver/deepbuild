@@ -9,12 +9,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use deep_canvas::document::{apply_ops, writer_layer, Writing};
+use deep_canvas::document::{apply_ops, check_packed, writer_layer, Issue, Packs, Writing};
 use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
+use deep_canvas_scene3d::scene::{evaluate_with, placed_at, Labels, Scene};
 use deep_gpu::device::Backend;
 use deep_scene3d_render::status::{Mode, COLORS_PASS, GUARD_PASS};
 use deep_scene3d_render::SHADOW_PASS;
@@ -59,6 +59,18 @@ struct Args {
     window: Option<Window3>,
     latency: Vec<u64>,
     counts: bool,
+    /// The glTF files `mesh.asset@1` items name, by sha256 (#420), and the images a material's
+    /// maps or a glTF name (#423).
+    assets: std::collections::BTreeMap<String, std::path::PathBuf>,
+    /// A JSON glTF's external buffers and images: `{glTF sha → {uri → sha}}` (#423).
+    uris: BTreeMap<String, BTreeMap<String, String>>,
+    /// An asset's license, by its hash (#423).
+    licenses: BTreeMap<String, Value>,
+    /// The evidence store an import keeps each texture in, by hash (#423).
+    store: Option<std::path::PathBuf>,
+    /// Report each scene import and the maps' receipt (#423).
+    imports: bool,
+    receipt: bool,
     /// The documents an item may open by reference, by doc handle.
     docs: BTreeMap<String, std::path::PathBuf>,
     /// Report each label's glyphs and the atlas pages they sample (#381).
@@ -76,6 +88,15 @@ struct Args {
     status: Option<Status>,
     /// The GPU surface the view draws through (#386).
     surface: Surface,
+    /// The pack folders installed before the document's check, by `owner/name` (#429), or
+    /// `deepbuild/<name>` when the call names only the folder (#422).
+    packs: Vec<(Option<String>, std::path::PathBuf)>,
+    /// The paths whose evaluated values each frame reports (#429).
+    evaluate: Vec<String>,
+    /// Writer layers not visible in this session, which draw, light and cast nothing (#422).
+    hidden: BTreeSet<String>,
+    /// Each frame reports the key sun's cascade splits (#422).
+    cascades: bool,
 }
 
 /// Milliseconds from this process's spawn, as the kernel records its start, to now.
@@ -124,6 +145,73 @@ pub(crate) fn pair(v: &Value) -> Option<[u32; 2]> {
     ])
 }
 
+/// `doc` without the items of the `hidden` writer layers, nor those layers (#422: a layer not
+/// visible draws, lights and casts nothing, as if absent).
+fn without_layers(doc: &Value, hidden: &BTreeSet<String>) -> Value {
+    let mut d = doc.clone();
+    if let Some(items) = d.get_mut("items").and_then(Value::as_object_mut) {
+        items.retain(|_, item| !item["layer"].as_str().is_some_and(|l| hidden.contains(l)));
+    }
+    if let Some(layers) = d.get_mut("layers").and_then(Value::as_object_mut) {
+        layers.retain(|id, _| !hidden.contains(id));
+    }
+    d
+}
+
+/// The document's visible writer layers back to front (#422): by the band their writer's kind
+/// gives (Band; deep-canvas's `Writer::band`), then by their order key and ID.
+fn layers_report(doc: &Value, hidden: &BTreeSet<String>) -> Value {
+    use deep_canvas::show::{Writer, WriterKind};
+    let mut rows: Vec<(deep_canvas::show::Band, String, String, String)> = Vec::new();
+    for (id, layer) in doc["layers"].as_object().into_iter().flatten() {
+        if hidden.contains(id) {
+            continue;
+        }
+        let text = layer["writer"].as_str().unwrap_or_default();
+        let (kind, rest) = text.split_once(':').unwrap_or((text, ""));
+        let kind = match kind {
+            "you" => WriterKind::You,
+            "shell" => WriterKind::Shell,
+            "record" => WriterKind::Record,
+            "plugin" => WriterKind::Plugin,
+            _ => WriterKind::Agent,
+        };
+        let band = Writer {
+            kind,
+            id: rest.to_string(),
+        }
+        .band();
+        let order = layer["order"].as_str().unwrap_or_default().to_string();
+        rows.push((band, order, id.clone(), text.to_string()));
+    }
+    rows.sort();
+    json!(rows
+        .into_iter()
+        .map(|(band, _, layer, writer)| json!({"layer": layer, "writer": writer, "band": band.name()}))
+        .collect::<Vec<_>>())
+}
+
+/// The modules a view3d document and its packs' recipes may name: the shipped ones and the
+/// building module (#422).
+fn pack_sealed() -> Result<&'static deep_canvas::registry::Sealed, Value> {
+    static SEALED: std::sync::OnceLock<Option<deep_canvas::registry::Sealed>> =
+        std::sync::OnceLock::new();
+    SEALED
+        .get_or_init(|| {
+            crate::plugin::shipped_modules()
+                .into_iter()
+                .chain([deep_canvas_scene3d::building::module()])
+                .fold(
+                    deep_canvas::registry::Registry::new(deep_canvas::registry::BuildSet::Full),
+                    deep_canvas::registry::Registry::with,
+                )
+                .seal()
+                .ok()
+        })
+        .as_ref()
+        .ok_or_else(|| refused("render_failed", "the pack build's modules don't seal"))
+}
+
 fn parse(call: &Value) -> Result<Args, Value> {
     let bad = |what: &str| refused("bad_input", what);
     let path = call["doc"].as_str().ok_or_else(|| bad("doc is a path"))?;
@@ -158,9 +246,9 @@ fn parse(call: &Value) -> Result<Args, Value> {
         .collect::<BTreeSet<_>>();
     if targets
         .iter()
-        .any(|t| !matches!(t.as_str(), "final" | "linear" | "ids"))
+        .any(|t| !matches!(t.as_str(), "final" | "linear" | "ids" | "pre_tone" | "dirt"))
     {
-        return Err(bad("targets are final, linear and ids"));
+        return Err(bad("targets are final, linear, ids, pre_tone and dirt"));
     }
     let capture = match &call["capture"] {
         Value::String(s) if s == "every" => Capture::Every,
@@ -209,7 +297,26 @@ fn parse(call: &Value) -> Result<Args, Value> {
         };
         clicks.push((frame, at));
     }
+    let mut packs = Vec::new();
+    for p in call["packs"].as_array().into_iter().flatten() {
+        // A folder (its id `deepbuild/<name>`, #422) or `{id, dir}` (#429).
+        let (id, dir) = match (p.as_str(), p["id"].as_str(), p["dir"].as_str()) {
+            (Some(dir), ..) => (None, dir),
+            (None, Some(id), Some(dir)) => (Some(id.to_string()), dir),
+            _ => return Err(bad("a pack is a folder or {id, dir}")),
+        };
+        packs.push((id, std::path::PathBuf::from(dir)));
+    }
+    let mut evaluate = Vec::new();
+    for p in call["evaluate"].as_array().into_iter().flatten() {
+        match p.as_str() {
+            Some(path) if path.starts_with("items/") => evaluate.push(path.to_string()),
+            _ => return Err(bad("evaluate lists paths items/<id>/…")),
+        }
+    }
     Ok(Args {
+        packs,
+        evaluate,
         docs,
         doc,
         look,
@@ -232,6 +339,33 @@ fn parse(call: &Value) -> Result<Args, Value> {
         window,
         latency,
         counts: call["counts"].as_bool().unwrap_or(false),
+        assets: call["assets"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter_map(|(sha, p)| Some((sha.clone(), std::path::PathBuf::from(p.as_str()?))))
+            .collect(),
+        uris: call["uris"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(sha, m)| {
+                let m = m
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|(u, s)| Some((u.clone(), s.as_str()?.to_string())))
+                    .collect();
+                (sha.clone(), m)
+            })
+            .collect(),
+        licenses: call["licenses"]
+            .as_object()
+            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            .unwrap_or_default(),
+        store: call["store"].as_str().map(std::path::PathBuf::from),
+        imports: call["imports"].as_bool().unwrap_or(false),
+        receipt: call["receipt"].as_bool().unwrap_or(false),
         labels: call["labels"].as_bool().unwrap_or(false),
         clicks,
         states,
@@ -239,7 +373,86 @@ fn parse(call: &Value) -> Result<Args, Value> {
         status,
         cold: call["cold"].as_bool().unwrap_or(false),
         surface: surface_of(call.get("surface")).map_err(|e| bad(&e))?,
+        hidden: call["hidden"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect(),
+        cascades: call["cascades"].as_bool().unwrap_or(false),
     })
+}
+
+/// The packs a call installs (#429): each folder read as deep-show's pack store reads one
+/// (`pack.json`, its `id` set to `owner/name`, each recipe file it names inlined) and admitted
+/// through the pack check once.
+fn install(packs: &[(Option<String>, std::path::PathBuf)]) -> Result<Packs, Value> {
+    let read = |p: &std::path::Path| -> Result<Value, Value> {
+        let at = |e: String| refused("bad_input", format!("{}: {e}", p.display()));
+        let text = std::fs::read_to_string(p).map_err(|e| at(e.to_string()))?;
+        serde_json::from_str(&text).map_err(|e| at(e.to_string()))
+    };
+    let mut out = Packs::default();
+    for (id, dir) in packs {
+        let mut manifest = read(&dir.join("pack.json"))?;
+        let Some(fields) = manifest.as_object_mut() else {
+            return Err(refused("bad_input", format!("{}: a pack is an object", dir.display())));
+        };
+        let id = id.clone().unwrap_or_else(|| {
+            format!("deepbuild/{}", fields.get("name").and_then(Value::as_str).unwrap_or_default())
+        });
+        fields.insert("id".into(), json!(id));
+        if let Some(Value::Object(recipes)) = fields.get_mut("recipes") {
+            for entry in recipes.values_mut() {
+                if let Some(file) = entry.as_str() {
+                    *entry = read(&dir.join(file))?;
+                }
+            }
+        }
+        out.admit(&manifest, pack_sealed()?)
+            .map_err(|issues| issues_refused(&issues))?;
+    }
+    Ok(out)
+}
+
+fn issues_refused(issues: &[Issue]) -> Value {
+    json!({"code": "refused", "issues": issues.iter().map(Issue::to_json).collect::<Vec<_>>()})
+}
+
+/// A document that names packs, as the check lowers it: its recipe instances expanded into their
+/// derived items and their channels; refused with the check's issues when nothing expanded
+/// (#429). A payload without the stored fields (#422's castle) still draws its expansion.
+fn lowered(doc: &Value, packs: &Packs) -> Result<Value, Value> {
+    let checked = check_packed(doc, pack_sealed()?, packs);
+    if !checked.ok && checked.expansions.is_empty() {
+        let errors: Vec<Issue> = checked
+            .issues
+            .into_iter()
+            .filter(|i| i.severity == "error")
+            .collect();
+        return Err(issues_refused(&errors));
+    }
+    Ok(checked.lowered)
+}
+
+/// Each path of `paths` (`items/<id>/<field>…`) as the canvas core evaluates `doc` at `t`
+/// (#429): null where the item or field isn't there.
+fn values_at(doc: &Value, t: i64, paths: &[String]) -> Result<Value, Value> {
+    let items = placed_at(doc, t).map_err(|r| refused(r.code, r.path))?;
+    let mut out = Map::new();
+    for path in paths {
+        let rest = path.strip_prefix("items/").unwrap_or_default();
+        let (id, field) = rest.split_once('/').unwrap_or((rest, ""));
+        let value = items
+            .iter()
+            .find(|(i, _, _)| i == id)
+            .and_then(|(_, item, _)| item.pointer(&format!("/{field}")))
+            .cloned()
+            .unwrap_or(Value::Null);
+        out.insert(path.clone(), value);
+    }
+    Ok(Value::Object(out))
 }
 
 /// A patch's ops applied as `writer`, to the layer its connection stands for.
@@ -324,6 +537,76 @@ fn pick(
         .map(|(id, _)| id.clone())
 }
 
+/// Sub-sample k's offset from the pixel's centre, px: Halton's base 2 and base 3 at k, less ½.
+fn jitter(k: u32) -> [f64; 2] {
+    let halton = |mut i: u32, b: u32| {
+        let (mut f, mut r) = (1.0, 0.0);
+        while i > 0 {
+            f /= f64::from(b);
+            r += f * f64::from(i % b);
+            i /= b;
+        }
+        r
+    };
+    [halton(k, 2) - 0.5, halton(k, 3) - 0.5]
+}
+
+/// The frame as the mean of itself and its sub-samples: the linear target's f32 values, and
+/// the final BGRA bytes averaged in linear light.
+fn mean(drawn: &mut session3::Drawn, subs: &[session3::Drawn]) {
+    let n = (subs.len() + 1) as f32;
+    if let Some((linear, _)) = drawn.targets.as_mut() {
+        let mut acc: Vec<f32> = linear
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
+            .collect();
+        for s in subs {
+            if let Some((l, _)) = &s.targets {
+                for (a, b) in acc.iter_mut().zip(l.as_chunks::<4>().0) {
+                    *a += f32::from_le_bytes(*b);
+                }
+            }
+        }
+        *linear = acc.iter().flat_map(|v| (v / n).to_le_bytes()).collect();
+    }
+    let decode = |c: u8| {
+        let c = f32::from(c) / 255.0;
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let encode = |c: f32| {
+        let c = if c <= 0.003_130_8 {
+            c * 12.92
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        };
+        (c * 255.0).round().clamp(0.0, 255.0) as u8
+    };
+    if let Some(bytes) = drawn.bytes.as_mut() {
+        let mut acc: Vec<f32> = bytes.iter().map(|c| decode(*c)).collect();
+        for s in subs {
+            if let Some(b) = &s.bytes {
+                for (a, c) in acc.iter_mut().zip(b) {
+                    *a += decode(*c);
+                }
+            }
+        }
+        for (i, (out, a)) in bytes.iter_mut().zip(acc).enumerate() {
+            // Alpha averages as coverage, the color channels in linear light.
+            *out = if i % 4 == 3 {
+                (a / n).round().clamp(0.0, 255.0) as u8
+            } else {
+                encode(a / n)
+            };
+        }
+    }
+}
+
 pub(crate) fn png(rgba: &[u8], size: [u32; 2]) -> Result<Vec<u8>, Value> {
     let mut out = Vec::new();
     image::codecs::png::PngEncoder::new_with_quality(
@@ -356,6 +639,46 @@ pub(crate) fn picks_json(picks: &[(String, u32)]) -> Value {
 }
 
 /// Writes `bytes` under `out`, named by their SHA-256 with `ext`; returns the name.
+/// A lens dirt PNG from the call's assets (#418): each pixel's value its red channel ÷ 255.
+fn dirt_png(
+    assets: &BTreeMap<String, std::path::PathBuf>,
+    sha: &str,
+) -> Result<deep_canvas_effects::interp::Image, Value> {
+    let path = "look/bloom/dirt/texture";
+    let file = assets
+        .get(sha)
+        .ok_or_else(|| refused("asset_missing", path))?;
+    let bytes = std::fs::read(file).map_err(|_| refused("asset_missing", path))?;
+    let img = image::load_from_memory(&bytes)
+        .map_err(|_| refused("out_of_range", path))?
+        .to_rgba8();
+    let mut out = deep_canvas_effects::interp::Image::new(img.width(), img.height());
+    for (p, px) in out.px.iter_mut().zip(img.pixels()) {
+        let d = f64::from(px.0[0]) / 255.0;
+        *p = [d, d, d, 1.0];
+    }
+    Ok(out)
+}
+
+/// The dirt image as the bloom's mix reads it at each pixel of a `size` frame, stretched over it:
+/// f32 RGBA with d in red, green and blue.
+fn dirt_target(dirt: &deep_canvas_effects::interp::Image, size: [u32; 2]) -> Vec<u8> {
+    let mut out = Vec::with_capacity((size[0] * size[1] * 16) as usize);
+    for y in 0..size[1] {
+        for x in 0..size[0] {
+            let uv = [
+                (f64::from(x) + 0.5) / f64::from(size[0]),
+                (f64::from(y) + 0.5) / f64::from(size[1]),
+            ];
+            let d = dirt.sample(uv)[0] as f32;
+            for v in [d, d, d, 1.0] {
+                out.extend_from_slice(&v.to_le_bytes());
+            }
+        }
+    }
+    out
+}
+
 pub(crate) fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, Value> {
     let name = hex(bytes);
     std::fs::write(
@@ -408,6 +731,15 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
 
 fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut args = parse(call)?;
+    // A document that names packs draws as the check lowers it, the call's packs installed
+    // first (#429).
+    let packs = install(&args.packs)?;
+    let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
+    let mut lowered_doc = if packed {
+        Some(lowered(&args.doc, &packs)?)
+    } else {
+        None
+    };
     let noop = app.backend == Backend::Noop;
     if noop && !args.clicks.is_empty() {
         return Err(refused(
@@ -439,7 +771,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     };
     let size = args.size;
     let timings = args.timings && !noop;
-    let opened = session3::open(app, size, timings, shows)?;
+    let opened = session3::open_doc(app, size, timings, shows, &args.doc)?;
     session3::surface(app, args.surface)?;
     let (ui, fx) = (opened.ui.clone(), opened.fx.clone());
     // What the view compiled as it opened, before its first frame (#854).
@@ -469,12 +801,43 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut strokes = false;
     // Held slots, each with the frame whose present releases it.
     let mut held: Vec<(u64, usize)> = Vec::new();
-    let wants_targets = args.targets.contains("linear") || args.targets.contains("ids");
+    let wants_targets = ["linear", "ids", "pre_tone"]
+        .iter()
+        .any(|t| args.targets.contains(*t));
+    // The bloom's lens dirt (#418): a PNG the assets name, its red channel ÷ 255, or seeded, made
+    // once for the whole call; and as the `dirt` target, sampled at each pixel of the frame.
+    let dirt = match args.look_json["bloom"]["dirt"]["texture"].as_str() {
+        Some("seeded") | None => None,
+        Some(sha) => Some(Arc::new(dirt_png(&args.assets, sha)?)),
+    };
+    let mut dirt_file: Option<String> = None;
     let mut levels = Levels::new(
         std::mem::take(&mut args.docs),
         app.planted == Some(Planted::LoadsEverything),
     );
+    // An asset's bytes by hash, and a JSON glTF's external files as `<sha>/<uri>` (#423).
+    let (assets, uris) = (args.assets.clone(), args.uris.clone());
+    let read = move |key: &str| -> Option<Vec<u8>> {
+        let sha = match key.split_once('/') {
+            Some((gltf, uri)) => uris.get(gltf)?.get(uri)?.as_str(),
+            None => key,
+        };
+        std::fs::read(assets.get(sha)?).ok()
+    };
+    // Each scene import's report, and every image's path by hash for the decode worker.
+    let mut map_paths = args.assets.clone();
+    let import_report = crate::textures::imports(
+        &args.doc,
+        &read,
+        &args.licenses,
+        args.store.as_ref(),
+        &mut map_paths,
+    )?;
+    let mut receipt = Value::Null;
     let result = (|| -> Result<(), Value> {
+        // The lights the policy last left out: a change is reported once, by ID (#421).
+        let mut left_out: Vec<String> = Vec::new();
+        let mut dropped: Vec<String> = Vec::new();
         for n in args.from..args.from + args.frames {
             // A seek applies every patch up to the frame it opens at.
             let mut patched = false;
@@ -488,6 +851,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             // remove one, only leave one dangling, which refuses), and its roles keep the
             // distance.
             if patched {
+                if packed {
+                    lowered_doc = Some(lowered(&args.doc, &packs)?);
+                }
                 bindings = status::bindings(&args.doc)?;
                 if let Some(status) = status.as_ref().filter(|_| bound) {
                     if let Some(r) =
@@ -499,9 +865,47 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
             levels.collect();
-            let (composed, resident) = levels.compose(&args.doc);
-            let mut scene = evaluate(&composed, t, &args.look, &mut labels)
+            let (mut composed, resident) = levels.compose(lowered_doc.as_ref().unwrap_or(&args.doc));
+            if !args.hidden.is_empty() {
+                composed = without_layers(&composed, &args.hidden);
+            }
+            let mut scene = evaluate_with(&composed, t, &args.look, &mut labels, &read)
                 .map_err(|r| refused(r.code, r.path))?;
+            let values = if args.evaluate.is_empty() {
+                None
+            } else {
+                Some(values_at(&composed, t, &args.evaluate)?)
+            };
+            // Its maps, made ready in the decode worker once per run and held to the
+            // document's decoded-image cap (#423).
+            let (texels, made) = crate::textures::prepare(app, &scene, &map_paths)?;
+            scene.texels = texels;
+            if n == args.from {
+                receipt = made;
+            }
+            // A particles@1 count past its class's limit is refused, never clamped (#420).
+            let class = args.doc.pointer("/budget/class").and_then(Value::as_str);
+            if let Some(path) = effects::count_refusal(&scene, class) {
+                return Err(refused("out_of_range", path));
+            }
+            // #420 AC6's wrong programs: mesh edges unwelded, or drawn over their faces.
+            scene.plant_edges(
+                app.planted == Some(Planted::EdgesUnwelded),
+                app.planted == Some(Planted::EdgesSkipDepth),
+            );
+            // Each mesh-edge line's segments, in world metres, as `counts` reports them.
+            let edge_segments: Map<String, Value> = scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.lines)
+                .filter(|l| l.edges.is_some())
+                .map(|l| {
+                    (
+                        l.id.clone(),
+                        json!(l.segments.iter().map(|s| [s.a, s.b]).collect::<Vec<_>>()),
+                    )
+                })
+                .collect();
             // A stroke binding draws its outline around the object, exact (#386).
             if let Some(status) = status.as_ref().filter(|_| bound) {
                 status::strokes(&mut scene, status, &bindings, &args.states)?;
@@ -521,16 +925,34 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 Some(Planted::NoiseFromClock) => effects::Seeding::Clock,
                 _ => effects::Seeding::Item,
             };
+            // #420 AC1's wrong program steps the operators' clock from the last frame drawn,
+            // so a seek starts it again at zero; the shipped one reads t itself.
+            let fx_t = match app.planted {
+                Some(Planted::ParticlesIntegrate) => (n - args.from) as f64 / args.fps as f64,
+                _ => n as f64 / args.fps as f64,
+            };
             let settings = effects::settings(
                 &scene,
                 &args.look_json,
                 &args.look,
                 &args.selection,
-                n as f64 / args.fps as f64,
+                fx_t,
                 doc_seed,
                 seeding,
             );
-            lock(&fx).settings = settings;
+            let mut settings = settings;
+            if dirt.is_some() {
+                settings.dirt = dirt.clone();
+            }
+            if args.targets.contains("dirt") && dirt_file.is_none() {
+                if let Some(d) = &settings.dirt {
+                    dirt_file = Some(write_named(out, &dirt_target(d, size), "f32")?);
+                }
+            }
+            {
+                let mut fx = lock(&fx);
+                fx.settings = settings;
+            }
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
             } else {
@@ -581,7 +1003,34 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
             }
             let evaluated = scene.clone();
-            let drawn = session3::draw(
+            // Look: samples (#423): a frame of n sub-samples is their mean in linear light,
+            // each offset by the sample's index alone (Halton 2, 3), drawn before the frame.
+            let samples = args.look.live_samples;
+            let mut subs = Vec::new();
+            let scene = if samples > 1 && !noop {
+                for k in 1..samples {
+                    let mut sub = (*scene).clone();
+                    sub.jitter = jitter(k + 1);
+                    subs.push(session3::draw(
+                        app,
+                        &opened,
+                        Arc::new(sub),
+                        args.look.clone(),
+                        n,
+                        0,
+                        true,
+                        false,
+                    )?);
+                    // Shown and passed over, so its slot frees for the next.
+                    let _ = ui.latch();
+                }
+                let mut first = (*scene).clone();
+                first.jitter = jitter(1);
+                Arc::new(first)
+            } else {
+                scene
+            };
+            let mut drawn = session3::draw(
                 app,
                 &opened,
                 scene,
@@ -591,6 +1040,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 read_targets,
                 shows && n == args.from,
             )?;
+            if !subs.is_empty() {
+                mean(&mut drawn, &subs);
+            }
             if n == args.from {
                 moved = drawn.moved;
                 // The first frame is settled once drawn: its time from the spawn, then which
@@ -603,6 +1055,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                         .collect();
                     *report = json!({"since_spawn_ms": ms, "pipelines": pipelines});
                 }
+            }
+            // A material operator that can't draw refuses the frame, never drawn without it.
+            if let Some((op, why)) = drawn.counts.operators_refused.first() {
+                return Err(refused("operator_compile", format!("{op}: {why}")));
             }
             if delay > 0 {
                 held.push((n + delay, drawn.slot));
@@ -627,6 +1083,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             frame.insert("frame".into(), json!(n));
             frame.insert("settled".into(), json!(settled));
             frame.insert("resident".into(), json!(resident));
+            if let Some(values) = values {
+                frame.insert("values".into(), values);
+            }
             if let Some(bytes) = drawn.gpu_bytes {
                 frame.insert("gpu_bytes".into(), json!(bytes));
             }
@@ -659,6 +1118,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 if let (Some(bgra), true) = (&drawn.bytes, args.targets.contains("final")) {
                     frame.insert("final".into(), json!(write_final(out, bgra, size)?));
                 }
+                if let (Some(pre), true) = (&drawn.pre_tone, args.targets.contains("pre_tone")) {
+                    frame.insert("pre_tone".into(), json!(write_named(out, pre, "f32")?));
+                }
+                if let Some(name) = &dirt_file {
+                    frame.insert("dirt".into(), json!(name));
+                }
                 if let Some((linear, ids)) = &drawn.targets {
                     if args.targets.contains("linear") {
                         frame.insert("linear".into(), json!(write_named(out, linear, "f32")?));
@@ -679,6 +1144,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("labels".into(), labels);
                 frame.insert("pages".into(), pages);
             }
+            // Lights the budget left out, and shadows it dropped, reported once per change.
+            let c = &drawn.counts;
+            if c.lights_left_out != left_out || c.shadows_dropped != dropped {
+                left_out.clone_from(&c.lights_left_out);
+                dropped.clone_from(&c.shadows_dropped);
+                let notice =
+                    json!({"code": "lights_over_budget", "lights": left_out, "shadows": dropped});
+                frame.insert("notices".into(), json!([notice]));
+            }
             if args.counts {
                 let c = &drawn.counts;
                 let encoded: Vec<Value> = c
@@ -690,6 +1164,13 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("replayed".into(), json!(c.replayed));
                 frame.insert("instances_written".into(), json!(c.instances_written));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
+                frame.insert("segments".into(), Value::Object(edge_segments));
+            }
+            if args.cascades {
+                frame.insert(
+                    "cascades".into(),
+                    json!({"splits": drawn.counts.cascade_splits}),
+                );
             }
             if let Some((gpu_ms, passes)) = &drawn.timing {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
@@ -719,7 +1200,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         }
     }
     session3::close(app);
-    result?;
+    // An over-cap document is refused, its imports still reported: the import comes before the
+    // count it makes (#423).
+    if let Err(mut r) = result {
+        if args.imports && r["code"] == "over_budget" {
+            r["imports"] = json!(import_report);
+        }
+        return Err(r);
+    }
     // The frame's passes in order: the shadow map when a sun casts, geometry, the effects and
     // the output.
     let effects = lock(&fx);
@@ -775,8 +1263,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         "sharpen": args.surface.sharpen,
         "size_px": size, "internal_px": internal,
     });
-    let mut reply =
-        json!({"frames": frames, "passes": passes, "status": status_report, "surface": drew});
+    let mut reply = json!({
+        "frames": frames, "passes": passes, "status": status_report, "surface": drew,
+        "layers": layers_report(&args.doc, &args.hidden),
+    });
+    if args.imports {
+        reply["imports"] = json!(import_report);
+    }
+    if args.receipt {
+        reply["receipt"] = receipt;
+    }
     if let Some((_, report)) = cold {
         reply["cold"] = report;
     }

@@ -119,6 +119,8 @@ export const plantedOverlap: { 'one-way': Overlap } = {
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
 /** How long a lease is granted for; past it, a lease whose holder still runs is only stale. */
 const DAY = 86_400_000;
+/** How many runs' processes, and how many holders' ends, stay in memory when no lease depends on them. */
+const KEPT = 64;
 const FORM = /^(?:exact|glob|prefix|pool\(([1-9][0-9]*)\))$/;
 /**
  * The `cpu.slot` key slow-lane runs and agents' heavy commands lease (#907): of a pool of two or more, it holds at most
@@ -204,6 +206,13 @@ class Table implements LeaseTable {
       case 'session.gone': {
         const holder = e.subject?.startsWith('session:') ? e.subject : e.session ? `session:${e.session}` : undefined;
         if (holder && !this.ends.has(holder)) this.ends.set(holder, e.id);
+        if (this.ends.size > KEPT) {
+          const holding = new Set([...this.held.values()].map((h) => h.lease.holder));
+          for (const ended of this.ends.keys()) {
+            if (this.ends.size <= KEPT) break;
+            if (!holding.has(ended)) this.ends.delete(ended);
+          }
+        }
         break;
       }
       case 'process.tracked':
@@ -211,6 +220,7 @@ class Table implements LeaseTable {
         const run = d.run as string;
         const procs = this.procs.get(run) ?? this.procs.set(run, new Map()).get(run)!;
         procs.set(d.pid as number, e.kind === 'process.ended' ? e.id : undefined);
+        this.forgetRuns();
         break;
       }
     }
@@ -354,6 +364,15 @@ class Table implements LeaseTable {
     this.ends.set(holder, id);
     await this.append('session.gone', 1, holder, { pid: h.agent.pid, start: h.agent.start }, ts, id);
     return id;
+  }
+  /** Past the newest runs, each with nothing running and no lease held leaves memory. */
+  private forgetRuns(): void {
+    if (this.procs.size <= KEPT) return;
+    const holding = new Set([...this.held.values()].map((h) => h.run));
+    for (const [run, procs] of this.procs) {
+      if (this.procs.size <= KEPT) return;
+      if (!holding.has(run) && [...procs.values()].every(Boolean)) this.procs.delete(run);
+    }
   }
   /** The run's recorded processes still running, and the process.ended events that prove the others gone. */
   private processes(run: string | undefined): { running: number[]; proof: string[] } {

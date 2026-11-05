@@ -63,6 +63,9 @@ export class Stacks {
 
   constructor(private readonly o: StacksOptions) {}
 
+  /** Sessions retained by the core until their stack's keys have been released. */
+  holders(): ReadonlySet<string> { return new Set(this.owners.values()); }
+
   /** A worktree named by its absolute path, as its real path. */
   worktreeOf(params: Obj): string {
     const { worktree } = params;
@@ -105,7 +108,7 @@ export class Stacks {
   forRun(folder: string, held?: string[]): { run: string; up: Promise<Up> } {
     const run = newRun(this.o.now());
     this.runs.add(run);
-    const up = upStack(this.o.host(), { run, folder, compose: this.o.compose(), sharedProject: this.o.plant === 'compose-default-project', take: this.take('core', run), scrub: (v) => { held?.push(...v); this.scrubValues(v); } })
+    const up = upStack(this.o.host(), { run, folder, compose: this.o.compose(), sharedProject: this.o.plant === 'compose-default-project', byValue: this.o.plant === 'env-loads-by-value', take: this.take('core', run), scrub: (v) => { held?.push(...v); this.scrubValues(v); } })
       .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }));
     return { run, up };
   }
@@ -252,7 +255,7 @@ export class Stacks {
     const run = newRun(this.o.now());
     this.runs.add(run);
     this.rising.set(worktree, run);
-    const up = await upStack(this.o.host(), { run, folder: worktree, compose: this.o.compose(), sharedProject: this.o.plant === 'compose-default-project', take: this.take(holder ?? 'core', run), scrub: (v) => this.scrubValues(v), ...(holder ? { holder } : {}) })
+    const up = await upStack(this.o.host(), { run, folder: worktree, compose: this.o.compose(), sharedProject: this.o.plant === 'compose-default-project', byValue: this.o.plant === 'env-loads-by-value', take: this.take(holder ?? 'core', run), scrub: (v) => this.scrubValues(v), ...(holder ? { holder } : {}) })
       .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }))
       .finally(() => this.rising.delete(worktree));
     if (up.status === 'BLOCKED') {

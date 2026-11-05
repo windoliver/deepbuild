@@ -7,7 +7,7 @@
         "module": "text",
         "version": "1.0.0",
         "reads": [
-          "core.lowered",
+          "core.fields",
           "refs",
           "reading",
           "view(locale)"

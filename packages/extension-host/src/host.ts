@@ -22,17 +22,22 @@
 // judged by what the hub recorded for it (./schedules.ts); a notice goes out only for a subscription you made and only
 // on fresh readings; and a send leaves only under your standing rule or your yes, its key claimed before it goes out
 // (./sends.ts).
+//
+// Live readings (#262): Read now re-reads what a view binds, each source through its quota; a while-shown cadence runs
+// once a period while a view that binds its source is shown, as the app reports it; and a series call lands as one
+// batch file named by one reading.batch event, its windows' rollups as files named by reading.rollup events
+// (./series.ts), so a bound value resolves at a frame's pinned log position.
 import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
+import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
-import { runKit, slotKits } from '@deepbuild/conformance';
+import type { EvidenceStore } from '@deepbuild/evidence';
 import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
@@ -44,10 +49,11 @@ import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece
 import { packageDigest } from './digest.js';
 import { answered, jobPrompt, jobRequest, type Answer } from './jobs.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
-import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings } from './schedules.js';
+import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings, type Verdict } from './schedules.js';
+import { missing, SeriesStore, shownValue, type BoundValue, type Rollup, type Span } from './series.js';
 import { Sends, type SendRow, type SendRule } from './sends.js';
 import { declareSource, handleOf, nodeHttp, openBrowser, osSecrets, Sources, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
-import { Terminals, type OpenSpec } from './terminals.js';
+import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
 
 /** A package inside DeepBuild's signed release, as the release's signed manifest lists it. */
@@ -68,7 +74,11 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   // #103's: a hub that wires a use by its interface's name alone, serves a use the provider's newest shape, keeps a use
   // wired to the piece it prefers once that piece is gone, removes a required use's provider with no ask, reads an
   // optional use with no provider as empty, and runs a call through an edge under the provider's own grant.
-  | 'compares-names-alone' | 'serves-newest-minor' | 'wires-by-name' | 'detaches-silently' | 'optional-reads-empty' | 'call-under-provider-grant';
+  | 'compares-names-alone' | 'serves-newest-minor' | 'wires-by-name' | 'detaches-silently' | 'optional-reads-empty' | 'call-under-provider-grant'
+  // #989's hosted terminals: hosts that keep the start size, drop the bottom rows, keep every byte, read a FIFO or
+  // block their output on input; hubs that leave a closed terminal's files, throw once input is full, or stop or
+  // read as ended a host of another protocol version.
+  | TerminalPlant;
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -139,6 +149,8 @@ export interface ExtensionHostOptions {
   /** Methods this host answers `unsupported` to, as a shim that dropped them would: the contract step's planted twin (#139). */
   unsupported?: readonly string[];
   plant?: Plant;
+  /** The hosted-terminal host protocol this hub speaks, and the hosts it starts state (#989). Default: TERMINAL_PROTOCOL. */
+  terminalProtocol?: number;
   /** The OS secret store a source's secret is read from (#364). Default: the Keychain on macOS, and none elsewhere. */
   secrets?: SecretStore;
   /** Opens your browser at a sign-in page. Default: macOS's open. */
@@ -147,6 +159,8 @@ export interface ExtensionHostOptions {
   http?: HttpClient;
   /** Replay: each source call is answered from this recording, never through the client, and no secret is read. */
   replay?: Recording;
+  /** The evidence store a series' batch and rollup files go to and are read back from, through their hash (#262). Without one, a series call makes no reading. */
+  evidence?: EvidenceStore;
   /** The runner R1 built (#366): every plug-in's model job goes through it, on your own agent. Without one, deep.runner.run refuses. */
   runner?: Runner;
   /**
@@ -159,6 +173,8 @@ export interface ExtensionHostOptions {
    * whose users are the pieces whose runs used what it provides. A version the host last saw otherwise is a new one.
    */
   firstParty?: { id: string; version: string; provides: string[] }[];
+  /** Marks each write of the hosted terminals index as a durable write point, as the hub's test disk numbers them (#996). */
+  point?: () => void;
 }
 export interface InstallFrom {
   from: string;
@@ -184,6 +200,10 @@ export type Delivered =
   | { status: 'delivered'; session: string; adapter: string; route: Route }
   | { status: 'held'; session: string; adapter: string };
 export interface Conformance { id: string; version: string; digest: string; passed: boolean; reasons: string[] }
+/** A views/shown report, as the app sends it on the app API for each view it shows, at once and every 5 s (#262). */
+export interface ViewShown { view: string; window: string; visible: boolean; minimized: boolean; display_awake: boolean; session_locked: boolean; replica: boolean }
+/** A notice you created, with its sentence, which names the schedule a source that runs only while shown gave it (#262). */
+export interface NoticeRow { id: string; kind: string; key: string; source: string | null; sentence: string; every: number | null }
 export interface Loaded { status: 'loaded'; id: string; version: string; place: 'hub' | 'sandbox'; run: string | null }
 export interface Refused { status: 'refused'; id: string; version: string; reason: string }
 export type Load = Loaded | Refused;
@@ -208,6 +228,10 @@ export interface ExtensionHost {
   revoke(connection: Connection, id: string, word: 'run_as_you'): Promise<void>;
   /** Raw input for a hosted terminal, written to its program: only from the app, which sends the panel you focused. */
   rawInput(connection: Connection, terminal: string, text: string): Promise<void>;
+  /** What the app's tab for a hosted terminal shows now (#989), for every terminal the hub knows, loaded or not: only for the app. */
+  tab(connection: Connection, terminal: string): Promise<TerminalTab>;
+  /** The focused tab's size in cells, from the app: the program's terminal and the tab's screen take it (#989). */
+  resize(connection: Connection, terminal: string, cols: number, rows: number): Promise<void>;
   /** Runs its conformance on its files now; the result is kept for that digest. */
   check(pkg: Installed): Promise<Conformance>;
   /** Whether a conformance result is kept for this id and version, passed or failed; a load with none is refused. */
@@ -299,9 +323,24 @@ export interface ExtensionHost {
   /** Your resume of a paused schedule, on the trusted path. */
   resumeSchedule(connection: Connection, name: string): Promise<void>;
   /** You asked to be told of a notice kind's cause, on the trusted path: recorded as notice.subscribed. Its event's ID. */
-  subscribeNotice(connection: Connection, kind: string, key: string): Promise<string>;
+  /**
+   * A notice you created on the trusted path; `on` names the source it is about, in your words, and a slower cadence
+   * it may name. On a source that runs only while shown, the plug-in's job that checks it gets a schedule of its own.
+   */
+  subscribeNotice(connection: Connection, kind: string, key: string, on?: { source: string; words: string; every?: number }): Promise<string>;
   /** Your standing rule for sends, on the trusted path. Its handle. */
   setSendRule(connection: Connection, rule: SendRule): Promise<string>;
+  /** The app API's views/shown and views/hidden (#262): what decides which while-shown cadences run. */
+  viewsShown(connection: Connection, report: ViewShown): Promise<void>;
+  viewsHidden(connection: Connection, report: { view: string; window: string }): Promise<void>;
+  /** Bound values, live or as of a frame's pinned log position, in the order asked (#262). */
+  boundValues(handles: string[], at?: { log_pos: number }): Promise<BoundValue[]>;
+  /** One window's rollups of a series source by series, from the file its reading.rollup names; null when none is kept. */
+  rollup(source: string, span: Span, start: number): Promise<Record<string, Rollup> | null>;
+  /** The notices you created, each with its sentence. */
+  listNotices(): Promise<NoticeRow[]>;
+  /** One run of a check kind, judged: a result citing evidence or a batch whose file is gone or fails its hash is INVALID, naming it. */
+  judgeCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number }): Promise<{ verdict: Verdict; cause: string | null; result: CheckResult }>;
   /**
    * Runs a loaded package's own tests (#366), each file under its tests/ in turn, in the package's own process, on this
    * host's recording and clock: what ran, and each failure in the test's own words. None ran is no pass.
@@ -359,6 +398,15 @@ const INDEX = 'index@1';
 const SOURCE = 'source@1';
 /** The hub's own connection, for what only the core appends. */
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
+/** A notice you created on a source, as the host keeps it beside its notice.subscribed (#262). */
+interface SavedNotice { kind: string; key: string; source: string; words: string; sentence: string; every: number | null; job?: string }
+const refuseNotice = (why: string): never => { throw Error(`subscribeNotice: ${why}`); };
+/** A bound value's handle: a number source's reading, or one series of a series source (#262). */
+const BOUND = /^reading:([a-z][a-z0-9_.-]*)(?:#(.+))?$/;
+/** Read now keeps an answer this recent (#262). */
+const KEPT_MS = 2_000;
+/** A view not reported shown again within this long counts as hidden (#262). */
+const SHOWN_MS = 10_000;
 /** Who a package's own test calls its actions as (#366): you, in the app. */
 const TESTER: Connection = { writer: 'app', actor: 'you', scope: 'you' };
 /** How long one test file of a package may run. */
@@ -441,6 +489,8 @@ interface Ext {
   hubBound: boolean;
   /** The sources it registered, by name, as declared (#364); their functions stay with the package. */
   sources: Map<string, Declared>;
+  /** Its views, each with the reading handles it binds (#262). */
+  views: Map<string, string[]>;
   /** The sources each check kind it registered reads, as declared (#365). */
   checkReads: Map<string, string[]>;
   /** How many times its code started in this copy: a restart imports a hub package's code afresh. */
@@ -764,6 +814,14 @@ class Host implements ExtensionHost {
   /** Each store's items as the record holds them, and their bytes in all, kept as they are put (#365): only this host writes them. */
   private readonly storeItems = new Map<string, { items: Map<string, { value: unknown; generation: number; bytes: number }>; bytes: number }>();
   private timer: NodeJS.Timeout | undefined;
+  /** The hub's series, once it has an evidence store (#262). */
+  private readonly series: SeriesStore | undefined;
+  /** The app's last views/shown report for each view and window (#262). */
+  private readonly shown = new Map<string, { report: ViewShown; at: number }>();
+  /** When each while-shown source is next called (#262). */
+  private readonly shownNext = new Map<string, number>();
+  /** Each source whose last call the quota refused, with when it can run (#262). */
+  private readonly quotaUntil = new Map<string, number>();
 
   constructor(private readonly options: ExtensionHostOptions) {
     this.entries = this.read('installed.json');
@@ -773,9 +831,24 @@ class Host implements ExtensionHost {
     this.keys = this.read('keys.json');
     this.published = new Map((options.api ?? extensionApi()).map((e) => [e.method, e]));
     this.runAsYou = this.read('run-as-you.json');
-    this.terminals = new Terminals(options.home, options.supervisor);
+    const plant = options.plant;
+    this.terminals = new Terminals(options.home, options.supervisor, {
+      protocol: options.terminalProtocol ?? TERMINAL_PROTOCOL,
+      // A writer the host refused, by its process: recorded, never delivered.
+      refused: (terminal, pid) => {
+        const now = options.now();
+        void options.record.append(CORE, { v: 1, id: ulid(now), kind: 'terminal.refused', ts: now, data: { terminal, pid } }).catch(() => undefined);
+      },
+      ...((TERMINAL_PLANTS as readonly string[]).includes(plant as string) ? { plant: plant as TerminalPlant } : {}),
+      ...(options.point ? { point: options.point } : {}), now: options.now,
+    });
+    const series = this.series = options.evidence ? new SeriesStore({
+      record: options.record, evidence: options.evidence, now: options.now, connection: CORE,
+      timeoutOf: (name) => [...this.exts.values()].map((e) => e.live ? e.sources.get(name) : undefined).find((s): s is Polled => s?.variant === 'polled')?.timeout,
+    }) : undefined;
     this.sources = new Sources({
       now: options.now, http: options.http ?? nodeHttp, secrets: options.secrets ?? osSecrets(), ...(options.replay ? { replay: options.replay } : {}),
+      ...(series ? { land: (source: Polled, asOf: number, values: Map<string, number>) => series.land(source, asOf, values) } : {}),
       // Each call's cost and each new reading, as the core: the hub makes every source call.
       append: async (kind, data) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind, ts: options.now(), data } as EventInput); },
     });
@@ -912,7 +985,12 @@ class Host implements ExtensionHost {
   }
   private manifestAt(folder: string): Manifest {
     let m = this.manifests.get(folder);
-    if (!m) this.manifests.set(folder, m = manifestOf(folder));
+    if (!m) {
+      // Only installed folders' are kept: an install in a new folder takes its old one's place (#824).
+      const installed = new Set(Object.values(this.entries).map((e) => e.folder));
+      for (const old of this.manifests.keys()) if (!installed.has(old)) this.manifests.delete(old);
+      this.manifests.set(folder, m = manifestOf(folder));
+    }
     return m;
   }
   /**
@@ -1146,13 +1224,22 @@ class Host implements ExtensionHost {
       }
       return;
     }
-    await Promise.all(owned.map((t) => this.terminals.stop(t)));
+    // A lost one stays listed as lost: what it runs can't be proven from damaged bytes.
+    await Promise.all(owned.filter((t) => !t.lost).map((t) => this.terminals.stop(t)));
   }
   async rawInput(connection: Connection, terminal: string, text: string): Promise<void> {
     if (connection.writer !== 'app' && this.options.plant !== 'input-from-any-writer') {
       throw Error(`raw input for ${terminal} comes only from the panel you focused in the app, not from ${connection.writer}${connection.session ? ` in session ${connection.session}` : ''}`);
     }
-    this.terminals.input(terminal, text);
+    await this.terminals.input(terminal, text);
+  }
+  async tab(connection: Connection, terminal: string): Promise<TerminalTab> {
+    if (connection.writer !== 'app') throw Error(`${terminal}'s tab is the app's, not ${connection.writer}'s`);
+    return this.terminals.tab(terminal);
+  }
+  async resize(connection: Connection, terminal: string, cols: number, rows: number): Promise<void> {
+    if (connection.writer !== 'app') throw Error(`${terminal}'s size comes only from the tab you focused in the app, not from ${connection.writer}`);
+    await this.terminals.resize(terminal, cols, rows);
   }
   /** Whether a loaded package holds the grant a call needs: run-as-you only once its manifest asks for it and you approved it. */
   private holds(ext: Ext, needs: string): boolean {
@@ -1205,6 +1292,8 @@ class Host implements ExtensionHost {
     const runs: KitRun[] = [];
     // One fill held to its slot's kit: the run is kept, and anything but PASS refuses the install, naming the case.
     const judge = async <F extends SlotFill>(slot: string, name: string, what: string, fill: (revision: number) => F): Promise<void> => {
+      // The kits load with the first install that runs one: a hub that installs nothing never holds them.
+      const { runKit, slotKits } = await import('@deepbuild/conformance');
       const kit = slotKits().find((k) => k.slot === slot) as SlotKit<F> | undefined;
       if (!kit) throw Error(`the conformance package ships no ${slot} kit`);
       const report = await runKit(kit, fill(kit.revision), { parts: ['fixed'] });
@@ -1277,7 +1366,14 @@ class Host implements ExtensionHost {
   async readSource(name: string): Promise<SourceRead> {
     const ext = [...this.exts.values()].find((e) => e.live && e.sources.get(name)?.variant === 'polled');
     if (!ext) return { status: 'BLOCKED', source: name, cause: `no loaded package registers the polled source ${name}` };
-    return this.sources.read(ext.entry.id, ext.sources.get(name) as Polled, (answer) => this.ask(ext, CALL_MS, `${name}'s parser`, 'source.parse', { name, answer }));
+    return (await this.readPolled(ext, name)).read;
+  }
+  /** One read of a loaded plug-in's polled source, through the hub, keeping when the quota refused it (#262). */
+  private async readPolled(owner: Ext, name: string): Promise<{ read: SourceRead; handle: string | null; held: boolean }> {
+    const got = await this.sources.readOne(owner.entry.id, owner.sources.get(name) as Polled, (answer) => this.ask(owner, CALL_MS, `${name}'s parser`, 'source.parse', { name, answer }));
+    if (got.read.status === 'reading' || got.read.status === 'batch') this.quotaUntil.delete(name);
+    else if (got.read.until !== undefined) this.quotaUntil.set(name, got.read.until);
+    return got;
   }
   recording(): Recording {
     return this.sources.recording();
@@ -1371,7 +1467,63 @@ class Host implements ExtensionHost {
     return { status: 'events', source: name, events };
   }
   async tick(): Promise<void> {
-    if (!this.closed) await this.scheduler.tick();
+    if (this.closed) return;
+    await this.shownTick();
+    await this.scheduler.tick();
+    await this.series?.tick();
+  }
+  /**
+   * Each while-shown cadence that is due (#262): one call a period for the source, however many views bind it, while
+   * one of them is shown; none once none is, or while the schedule a notice gave its checking job stands in for it.
+   */
+  private async shownTick(): Promise<void> {
+    const now = this.options.now();
+    const standIn = new Map<string, number>();
+    for (const n of Object.values(this.read<SavedNotice>('notices.json'))) if (n.every !== null) standIn.set(n.source, Math.min(standIn.get(n.source) ?? Infinity, n.every));
+    for (const ext of [...this.exts.values()].filter((e) => e.live)) {
+      for (const source of ext.sources.values()) {
+        if (source.variant !== 'polled' || !source.whileShown) continue;
+        const every = source.whileShown.every;
+        if (!this.sourceShown(source.name, now) || (standIn.get(source.name) ?? Infinity) <= every) {
+          this.shownNext.delete(source.name);
+          continue;
+        }
+        const due = this.shownNext.get(source.name) ?? now;
+        if (now < due) continue;
+        this.shownNext.set(source.name, due + every > now ? due + every : now + every);
+        await this.readPolled(ext, source.name);
+      }
+    }
+  }
+  /** Whether a view that binds the source is shown: the app reported it in the last 10 s, visible, not minimized, on an awake display, unlocked, and not a replica's. */
+  private sourceShown(source: string, now: number): boolean {
+    const bound = new Set([...this.exts.values()].filter((e) => e.live).flatMap((e) => [...e.views].filter(([, binds]) => binds.some((b) => BOUND.exec(b)?.[1] === source)).map(([view]) => view)));
+    for (const { report, at } of this.shown.values()) {
+      if (bound.has(report.view) && now - at < SHOWN_MS && report.visible && !report.minimized && report.display_awake && !report.session_locked && !report.replica) return true;
+    }
+    return false;
+  }
+  /**
+   * `deep.readNow(view)` (#262): every source the plug-in's view binds, read at once, each through its quota. One
+   * answered in the last 2 s keeps that answer; one the quota refuses reads `quota` until it can run.
+   */
+  private async readNow(ext: Ext, view: unknown): Promise<{ view: string; sources: { source: string; status: 'kept' | 'read' | 'quota' | 'failed'; until?: number; cause?: string }[] }> {
+    const binds = typeof view === 'string' ? ext.views.get(view) : undefined;
+    if (!binds) throw Error(`deep.readNow: ${String(view)} isn't a view ${ext.entry.id} registered`);
+    const names = [...new Set(binds.map((b) => BOUND.exec(b)![1]!))];
+    const now = this.options.now();
+    return {
+      view: view as string,
+      sources: await Promise.all(names.map(async (source) => {
+        const owner = [...this.exts.values()].find((e) => e.live && e.sources.get(source)?.variant === 'polled');
+        if (!owner) return { source, status: 'failed' as const, cause: `no loaded plug-in registers the polled source ${source}` };
+        const last = this.sources.last(source);
+        if (last && now - last.as_of <= KEPT_MS) return { source, status: 'kept' as const };
+        const { read } = await this.readPolled(owner, source);
+        if (read.status === 'reading' || read.status === 'batch') return { source, status: 'read' as const };
+        return read.until === undefined ? { source, status: 'failed' as const, cause: read.cause } : { source, status: 'quota' as const, until: read.until };
+      })),
+    };
   }
   async idle(): Promise<void> {
     await this.scheduler.idle();
@@ -1413,19 +1565,111 @@ class Host implements ExtensionHost {
     this.trustedPath(connection, 'a schedule is resumed');
     await this.scheduler.resume(name);
   }
-  async subscribeNotice(connection: Connection, kind: string, key: string): Promise<string> {
+  async subscribeNotice(connection: Connection, kind: string, key: string, on?: { source: string; words: string; every?: number }): Promise<string> {
     this.trustedPath(connection, 'a notice is subscribed to');
-    if (!Object.values(this.entries).some((e) => (manifestOf(e.folder).notices ?? []).includes(kind))) throw Error(`no installed plug-in declares the notice kind ${kind}`);
+    const plugin = Object.values(this.entries).find((e) => (manifestOf(e.folder).notices ?? []).includes(kind))?.id;
+    if (!plugin) throw Error(`no installed plug-in declares the notice kind ${kind}`);
     if (typeof key !== 'string' || !key) throw Error(`a subscription to ${kind} names what it is for`);
+    const saved = on === undefined ? undefined : await this.noticeOn(plugin, kind, key, on);
     const now = this.options.now();
     const id = ulid(now);
     await this.options.record.append(connection, { v: 1, id, kind: 'notice.subscribed', ts: now, data: { notice_kind: kind, key, by: connection.actor } });
+    if (saved) this.save('notices.json', { ...this.read('notices.json'), [id]: saved });
+    // Its checking job runs at once, then on the schedule the notice gave it.
+    if (saved?.job) await this.scheduler.runNow(saved.job);
     return id;
+  }
+  /**
+   * A notice you create on a source (#262). On one that runs only while shown, the plug-in's job that checks the notice
+   * gets a schedule of its own, reading the source each run, at its while-shown cadence or the slower one the notice
+   * names, and the sentence says so; a plug-in with no such job has the notice refused, naming it.
+   */
+  private async noticeOn(plugin: string, kind: string, key: string, on: { source: string; words: string; every?: number }): Promise<SavedNotice> {
+    const words = typeof on?.words === 'string' && on.words ? on.words : refuseNotice('a notice you create says what it is in your words');
+    const named = `the notice "${words}" (${kind}, for ${key})`;
+    const source = [...this.exts.values()].filter((e) => e.live).map((e) => e.sources.get(on.source)).find((x): x is Polled => x?.variant === 'polled');
+    if (!source) refuseNotice(`${named} is on ${String(on.source)}, which no loaded plug-in registers as a polled source`);
+    if (on.every !== undefined && (!Number.isSafeInteger(on.every) || on.every < 1000)) refuseNotice(`${named} names a cadence of ${String(on.every)} ms; a cadence is at least 1000 ms`);
+    if (!source!.whileShown) return { kind, key, source: on.source, words, sentence: `${words}: checked when ${plugin}'s jobs read ${on.source}`, every: null };
+    const job = this.scheduler.decls().find((d) => d.plugin === plugin && d.declares.notices.includes(kind) && d.declares.readings.includes(on.source));
+    if (!job) refuseNotice(`${named} is refused: ${on.source} runs only while a view is shown, and ${plugin} declares no job that checks ${kind} by reading it`);
+    const every = Math.max(on.every ?? 0, source!.whileShown.every);
+    const current = job!.cadence;
+    const given = Math.min(every, ...Object.values(this.read<SavedNotice>('notices.json')).filter((n) => n.job === job!.name && n.every !== null).map((n) => n.every!));
+    if (!current || !('every' in current) || current.every > given) await this.scheduler.edit(job!.name, { every: given });
+    const seconds = every % 1000 ? `${every} ms` : `${every / 1000} s`;
+    return { kind, key, source: on.source, words, job: job!.name, every, sentence: `${words}: ${job!.name} checks it every ${seconds}, reading ${on.source} each run, since ${on.source} runs only while a view is shown` };
   }
   async setSendRule(connection: Connection, rule: SendRule): Promise<string> {
     this.trustedPath(connection, 'a standing rule for sends is set');
     if (!this.entries[rule?.piece]) throw Error(`${String(rule?.piece)} isn't installed`);
     return this.sending.setRule(rule);
+  }
+  async viewsShown(connection: Connection, report: ViewShown): Promise<void> {
+    this.trustedPath(connection, 'a view is reported shown');
+    const r = (isPlain(report) ? report : {}) as Record<string, unknown>;
+    const flags = ['visible', 'minimized', 'display_awake', 'session_locked', 'replica'] as const;
+    if (typeof r.view !== 'string' || typeof r.window !== 'string' || flags.some((f) => typeof r[f] !== 'boolean')) {
+      throw Error(`views/shown names its view and window and says whether it is ${flags.join(', ')}`);
+    }
+    this.shown.set(`${r.view}\n${r.window}`, { report: { ...(r as unknown as ViewShown) }, at: this.options.now() });
+  }
+  async viewsHidden(connection: Connection, report: { view: string; window: string }): Promise<void> {
+    this.trustedPath(connection, 'a view is reported hidden');
+    this.shown.delete(`${report?.view}\n${report?.window}`);
+  }
+  async boundValues(handles: string[], at?: { log_pos: number }): Promise<BoundValue[]> {
+    if (at !== undefined && !Number.isSafeInteger(at?.log_pos)) throw Error('a bound value is pinned to a log position');
+    const now = this.options.now();
+    return Promise.all(handles.map(async (handle): Promise<BoundValue> => {
+      const m = typeof handle === 'string' ? BOUND.exec(handle) : null;
+      if (!m) return missing(String(handle), `${String(handle)} isn't reading:<source> or reading:<source>#<series>`);
+      const [, source, series] = m as unknown as [string, string, string | undefined];
+      if (at) {
+        if (series !== undefined) return this.series ? this.series.at(handle, source, series, at.log_pos) : missing(handle, 'this hub keeps no series');
+        const [row] = (await this.options.record.raw("SELECT data FROM events WHERE kind = 'reading.recorded' AND log_pos <= ? AND json_extract(data, '$.source') = ? ORDER BY log_pos DESC LIMIT 1", [at.log_pos, source])) as { data: string }[];
+        const d = row ? JSON.parse(row.data) as { value: number; as_of: number } : undefined;
+        return d ? shownValue(handle, d.value, d.as_of) : missing(handle, `no reading of ${source} at or before log position ${at.log_pos}`);
+      }
+      const until = this.quotaUntil.get(source);
+      if (until !== undefined && now < until) return { handle, status: 'quota', value: null, as_of: null, shown: `quota until ${new Date(until).toISOString()}`, until };
+      if (series !== undefined) {
+        const v = this.series?.live(source, series);
+        return v ? shownValue(handle, v.value, v.as_of) : missing(handle, `no batch of ${source} holds ${series}`);
+      }
+      const last = this.sources.last(source)?.read;
+      return last?.status === 'reading' ? shownValue(handle, last.reading.value, last.reading.as_of) : missing(handle, `no reading of ${source}`);
+    }));
+  }
+  async rollup(source: string, span: Span, start: number): Promise<Record<string, Rollup> | null> {
+    const r = this.series ? await this.series.rollup(source, span, start) : null;
+    if (typeof r === 'string') throw Error(`the ${span} rollup of ${source} from ${new Date(start).toISOString()} ${r}`);
+    return r;
+  }
+  async listNotices(): Promise<NoticeRow[]> {
+    const saved = this.read<SavedNotice>('notices.json');
+    const rows = (await this.options.record.raw("SELECT id, data FROM events WHERE kind = 'notice.subscribed' ORDER BY log_pos")) as { id: string; data: string }[];
+    return rows.map((r) => {
+      const d = JSON.parse(r.data) as { notice_kind: string; key: string };
+      const n = saved[r.id];
+      return { id: r.id, kind: d.notice_kind, key: d.key, source: n?.source ?? null, sentence: n?.sentence ?? `${d.notice_kind} for ${d.key}`, every: n?.every ?? null };
+    });
+  }
+  async judgeCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number }): Promise<{ verdict: Verdict; cause: string | null; result: CheckResult }> {
+    const result = await this.runCheck(kind, spec, ctx);
+    // What it cites must still be what it was: a file gone or failing its hash makes the run INVALID, naming it.
+    const files = new Map<string, string>(result.evidence.map((sha) => [sha, `evidence ${sha}`]));
+    for (const handle of result.read ?? []) {
+      const b = await this.series?.batch(handle);
+      if (b) files.set(b.file, `the batch ${handle}, file ${b.file}`);
+    }
+    for (const [sha, what] of files) {
+      const why = !this.options.evidence || !(await this.options.evidence.get(sha)) ? 'is gone'
+        : await this.options.evidence.read(sha).then(() => null, (e: Error) => (e.message.includes('match') ? 'fails its hash: its bytes no longer match' : e.message));
+      if (why) return { verdict: 'INVALID', cause: `it cites ${what}, which ${why}`, result };
+    }
+    const verdict: Verdict = result.outcome === 'passed' ? 'PASS' : result.outcome === 'failed' ? 'FAIL' : result.outcome === 'missing' ? 'BLOCKED' : result.outcome === 'ran_nothing' ? 'INVALID' : 'INCONCLUSIVE';
+    return { verdict, cause: verdict === 'PASS' ? null : `its run ended ${result.outcome}`, result };
   }
   /** The secret a package's manifest names, or a refusal naming it. */
   private secretOf(extension: string, name: string): void {
@@ -1504,7 +1748,7 @@ class Host implements ExtensionHost {
     return {
       entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
-      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
+      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -2179,11 +2423,16 @@ class Host implements ExtensionHost {
         return { terminal: t.terminal, run: t.run, pid: t.pid };
       }
       case 'deep.terminal.list':
-        return this.terminals.of(id).map((t) => ({ terminal: t.terminal, run: t.run, pid: t.pid, title: t.title }));
+        return this.terminals.of(id).map((t) => ({ terminal: t.terminal, run: t.run, pid: t.pid, title: t.title, ...(t.lost ? { lost: true } : {}) }));
       case 'deep.terminal.read':
         return this.terminals.read(id, args[0] as string, args[1] as number);
+      case 'deep.terminal.close': {
+        const t = this.terminals.of(id).find((x) => x.terminal === args[0]);
+        if (!t) throw Error(`${id} has no terminal ${String(args[0])}`);
+        return void (await this.terminals.stop(t));
+      }
       case 'deep.terminal.write':
-        return void this.terminals.input(args[0] as string, args[1] as string);
+        return void (await this.terminals.input(args[0] as string, args[1] as string));
       case 'deep.notices.send': {
         quiet();
         // #348's wrong program checks nothing here, as it checks no grant but deep.record.query's.
@@ -2223,10 +2472,14 @@ class Host implements ExtensionHost {
           run.blocked ??= `missing source ${source}`;
           return { status: 'BLOCKED', source, cause: run.blocked };
         }
-        const got = await this.sources.readOne(owner.entry.id, owner.sources.get(source) as Polled, (answer) => this.ask(owner, CALL_MS, `${source}'s parser`, 'source.parse', { name: source, answer }));
+        const got = await this.readPolled(owner, source);
         if (got.read.status === 'reading') {
           if (got.handle) run.changes.push(got.handle);
           return { status: 'reading', reading: { ...got.read.reading, handle: got.handle } };
+        }
+        if (got.read.status === 'batch') {
+          run.changes.push(got.read.batch.handle);
+          return got.read;
         }
         if (got.read.status === 'BLOCKED') run.blocked ??= got.read.cause;
         else if (got.held) run.held ??= got.read.cause;
@@ -2249,13 +2502,19 @@ class Host implements ExtensionHost {
       // A view, its pages and its ⌘K commands (#366): its panel reads only what its sources read.
       case 'deep.registerView': {
         const refusal = this.viewRefusal(ext, args);
-        if (refusal === null) return null;
+        if (refusal === null) {
+          ext.views.set(args[0] as string, ((args[3] as { binds?: string[] } | undefined)?.binds ?? []).slice());
+          return null;
+        }
         if (conformance) ext.refusals.push(refusal);
         throw Error(`deep.registerView: ${refusal}`);
       }
       case 'deep.runner.run':
         quiet();
         return this.runJob(ext, args[0], scope);
+      case 'deep.readNow':
+        quiet();
+        return this.readNow(ext, args[0]);
       default:
         throw Error(`${method} isn't wired into this host yet`);
     }
@@ -2275,7 +2534,14 @@ class Host implements ExtensionHost {
       const at = lines.findIndex((line) => NETWORK.test(line));
       if (at >= 0) return `${name}'s panel calls the network itself, at ${panel}/${file}:${at + 1}: ${lines[at]!.trim().slice(0, 200)}; a panel shows what its sources read, which the hub fetches`;
     }
-    const v = (isPlain(view) ? view : {}) as { pages?: unknown; commands?: unknown };
+    const v = (isPlain(view) ? view : {}) as { pages?: unknown; commands?: unknown; binds?: unknown };
+    // What it binds, each a reading of a source its manifest declares (#262).
+    if (v.binds !== undefined && !Array.isArray(v.binds)) return `${name}'s binds is a list of reading handles`;
+    const own = (ext.manifest.sources ?? []).map((x) => x.name);
+    for (const b of (v.binds as unknown[] | undefined) ?? []) {
+      const m = typeof b === 'string' ? BOUND.exec(b) : null;
+      if (!m || !own.includes(m[1]!)) return `${name} binds ${JSON.stringify(b)}, which isn't reading:<source> or reading:<source>#<series> of a source ${ext.entry.id}'s manifest declares`;
+    }
     const pages = Array.isArray(v.pages) ? v.pages : [];
     const commands = Array.isArray(v.commands) ? v.commands : [];
     for (const page of pages) {
@@ -2691,7 +2957,9 @@ class Host implements ExtensionHost {
     if (!texts(n.readings)) refuse('a notice cites the readings behind it, as a list of their handles');
     const now = this.options.now();
     for (const handle of n.readings as string[]) {
-      const [r] = (await this.options.record.raw('SELECT source, as_of FROM readings WHERE reading = ?', [handle])) as { source: string; as_of: number }[];
+      // A series' batch is a reading too, by its reading.batch's handle (#262).
+      let [r] = (await this.options.record.raw('SELECT source, as_of FROM readings WHERE reading = ?', [handle])) as ({ source: string; as_of: number } | undefined)[];
+      r ??= await this.series?.batch(handle);
       // A runner answer is a reading too (#366): stale once the first reading it cites is.
       const answer = r ? undefined : await this.answerOf(handle);
       if (answer?.piece === id) {
@@ -3142,6 +3410,7 @@ class Host implements ExtensionHost {
   async ready(): Promise<void> {
     if (this.isReady) return this.starting;
     this.isReady = true;
+    this.terminals.attach();
     // The hub's own timer: schedules fire from it, never from the app's clock (#365).
     this.timer = setInterval(() => void this.tick().catch(() => undefined), TIMER_MS);
     this.timer.unref();
@@ -3170,6 +3439,8 @@ class Host implements ExtensionHost {
     if (ext.server) throw Error(`${id} is already turned on`);
     for (const route of routes) if (!ext.routes.has(route)) throw Error(`${id} registered no route ${route}`);
     const chosen = new Set(routes);
+    // node:http loads only for a package turned on: about 2.7 MB of heap the hub's core otherwise never holds.
+    const { createServer: createHttpServer } = await import('node:http');
     // A request has the call deadline to arrive whole; one that fails is that request's alone.
     const server = createHttpServer({ requestTimeout: CALL_MS, connectionsCheckingInterval: 1000 }, (req, res) => void this.serve(ext, chosen, req, res).catch(() => res.destroy()));
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -3243,6 +3514,22 @@ class Host implements ExtensionHost {
     return out.sort((a, b) => (a.user + a.uses).localeCompare(b.user + b.uses));
   }
 
+  /** One reading names a terminals index this start couldn't read whole, and the terminals it lost (#996). */
+  async opened(): Promise<void> {
+    const damaged = this.terminals.damaged;
+    if (!damaged) return;
+    // The reading first, then the index written again: a cut in between finds the index damaged and reads it again.
+    const now = this.options.now();
+    await this.options.record.append(CORE, {
+      v: 1, id: ulid(now), kind: 'reading.recorded', ts: now,
+      data: {
+        reading: `reading:${ulid(now)}`, value: damaged.lost.length, unit: 'terminals lost', as_of: now, n: 1, outside: false,
+        source: `terminals.json couldn't be read whole, so it was kept aside as ${basename(damaged.aside)}; lost: ${damaged.lost.slice(0, 50).join(', ') || 'none'}${damaged.lost.length > 50 ? ` and ${damaged.lost.length - 50} more` : ''}`,
+      },
+    });
+    this.terminals.settle();
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -3257,6 +3544,7 @@ class Host implements ExtensionHost {
     // A terminal that lives past the app runs on, its run kept by the supervisor; AC1's wrong program stops them all.
     const stopping = this.terminals.all().filter((t) => !t.kept || this.options.plant === 'close-stops-every-host');
     await Promise.all(stopping.map((t) => this.terminals.stop(t).catch(() => undefined)));
+    this.terminals.close();
   }
 }
 
@@ -3277,5 +3565,7 @@ function copyPackage(from: string, to: string): void {
 }
 
 export async function openExtensionHost(options: ExtensionHostOptions): Promise<ExtensionHost> {
-  return new Host(options);
+  const host = new Host(options);
+  await host.opened();
+  return host;
 }

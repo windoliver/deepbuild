@@ -7,7 +7,7 @@ export type JsonObject = { [key: string]: JsonValue };
 /** deep-hook's request line, a hook.request@3 instance as it crosses the wire: seq is its decimal string. */
 export interface HookRequestLine {
   v: 1; agent: string; event: string; seq: string; id: string; pid: number; ppid: number; matched: string[]; payload: JsonValue;
-  late?: boolean; billing?: Record<string, boolean>; notes?: Record<string, string>; stage?: Record<string, string[]>;
+  late?: boolean; billing?: Record<string, boolean>; notes?: Record<string, string>; stage?: Record<string, string[]>; heavy?: { name: string; kinds: string[]; form: string };
 }
 
 /** One event an adapter mapped (adapter.event@1): rule is the JSON Pointer of the facts entry that decided it. */
@@ -62,11 +62,16 @@ export interface Adapter {
   skills?(home: string): Skill[];
   /** The hook output the agent reads for a permission request answered with `answer`: allow only from its decision. */
   permissionReply?(answer: PermissionAnswer, request: HookRequestLine): JsonValue;
+  /** The route to its model of a session started in `env` (#87): whether each variable or setting that moves it was
+   *  set, never its value. */
+  routeAtStart?(env: Readonly<Record<string, string | undefined>>): SessionRoute;
 }
+/** What an adapter records at a session's start about the route to its model, by name, true or false. */
+export type SessionRoute = Record<string, boolean>;
 /** The parts of an adapter that aren't data; everything else comes from its facts file. */
 export interface AdapterParts {
   caps: AdapterCaps; unsupported: Unsupported; doctor(): DoctorItem[];
-  readUsage?: Adapter['readUsage']; classifyStop?: Adapter['classifyStop']; skills?: Adapter['skills']; permissionReply?: Adapter['permissionReply'];
+  readUsage?: Adapter['readUsage']; classifyStop?: Adapter['classifyStop']; skills?: Adapter['skills']; permissionReply?: Adapter['permissionReply']; routeAtStart?: Adapter['routeAtStart'];
 }
 
 export interface AdapterRegistry {

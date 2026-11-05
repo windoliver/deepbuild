@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "id": "rel-221-pivot-sw",
+  "profile": "figure",
+  "title": "Scaling about the lower left corner",
+  "description": "Issue #221 AC4: a rect and a curved path, each scaled 2 about its sw box point.",
+  "size": [800, 600],
+  "transport": {"span": "2s"},
+  "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+  "items": {
+    "card": {"id": "card", "kind": "rect@1", "layer": "main", "name": "Card", "order": "a1",
+      "at": {"pivot": "sw", "scale": [2, 2, 1]},
+      "params": {"box": [100, 200, 80, 40], "paint": {"fill": {"role": "accent"}}}},
+    "arch": {"id": "arch", "kind": "path@1", "layer": "main", "name": "Arch", "order": "a2",
+      "at": {"pivot": "sw", "scale": [2, 2, 1]},
+      "params": {"d": "M 300 400 C 280 300 420 300 400 400 Z", "paint": {"fill": {"role": "ink"}}}},
+    "grow": {"id": "grow", "kind": "rect@1", "layer": "main", "name": "Growing card", "order": "a3",
+      "at": {"pivot": "sw"},
+      "params": {"box": [500, 300, 60, 30], "paint": {"fill": {"role": "accent"}}}}
+  },
+  "channels": {
+    "grow-sx": {"target": "items/grow/at/scale/0", "type": "f32",
+      "keys": {"k0": {"t": "0s", "value": 1, "interp": "linear"}, "k1": {"t": "2s", "value": 2, "interp": "linear"}}},
+    "grow-sy": {"target": "items/grow/at/scale/1", "type": "f32",
+      "keys": {"k0": {"t": "0s", "value": 1, "interp": "linear"}, "k1": {"t": "2s", "value": 2, "interp": "linear"}}}
+  }
+}

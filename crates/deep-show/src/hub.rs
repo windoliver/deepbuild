@@ -178,6 +178,9 @@ pub enum Planted {
     AcceptsEverySampleRate8To192k,
     /// #411: `items/<id>/modifiers/<k>#out` reads the stack's final result for every k.
     PrefixReadsFinal,
+    /// #1162 AC3's wrong program: deep_query evaluates each `at.place` relation against its
+    /// target's box as the previous evaluation in this call left it (at time 0 before any).
+    RelationFromPreviousBox,
     /// #411: a why names its canvas module and operator and no document field or default.
     WhyNamesOperatorOnly,
     /// #411: a why lists only the first write to its value.
@@ -259,6 +262,8 @@ pub enum Planted {
     EncodesInDecodeWorker,
     /// #498: the probe rounds each presentation time to the nearest flick.
     ProbeRoundsToFlicks,
+    /// #397: the table probe keeps each text cell NFC instead of its raw bytes.
+    ProbeStoresNormalized,
     /// #498: untagged streams are assumed BT.601 at every height.
     AssumesBt601,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
@@ -269,6 +274,10 @@ pub enum Planted {
     KeepsVoicesOnSwitch,
     /// #498: closing a panel fades its voices over 5 ms, longer than a block.
     FadesOnClose,
+    /// #421: a view keeps an item only when its bounds' centre is inside.
+    CullByCenter,
+    /// #421: a node's hierarchy bounds union only its direct children's own bounds.
+    BoundsChildrenOnly,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -290,6 +299,13 @@ pub struct Startup {
     pub network: Option<crate::seams::NetFault>,
     /// #140: the planted card that treats unknown occlusion as unobscured.
     pub ignores_unknown_occlusion: bool,
+    /// #200: a planted wrong `deep://registries` listing.
+    pub listing: Option<crate::registries::Listing>,
+    /// #412: a planted wrong deep_kinds listing, sheet, dump, diff or gallery.
+    pub kinds: Option<crate::kinds::Planted>,
+    /// #415: a planted wrong first-party layout: pages@1 under a pack's cap, or nav.graph's
+    /// validators trusting the header's link count.
+    pub layouts: deep_canvas_sandbox::layouts::Planted,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
@@ -371,6 +387,8 @@ pub struct RecordObject {
 }
 
 pub struct Claim {
+    /// The session that made the claim: its working agent.
+    pub session: String,
     pub deliverables: Vec<String>,
     /// The locked definition's requirements, each one check input (#403).
     pub requirements: Vec<Requirement>,
@@ -454,8 +472,8 @@ pub struct PatchCall {
 pub enum Call {
     /// #411: deep_query, and deep.canvas.read for a check plug-in.
     SceneQuery(Box<crate::query::Query>),
-    /// #411: a deep_show or deep show call in a diagnostic mode.
-    Mode(Box<Show>, String),
+    /// #411: a deep_show or deep show call in a diagnostic mode; #412: from its readings' cursor.
+    Mode(Box<Show>, String, usize),
     /// #379: the cost model's micro-benchmark.
     Costs,
     /// #140: the network seam's conformance suite.
@@ -487,12 +505,40 @@ pub enum Call {
     Revisions(String),
     /// The sealed set as the build holds it (#305).
     Registry,
+    /// #420: an item's built mesh, or its count from its params.
+    Geometry(Box<crate::geometry::Geometry>),
+    /// #420: every kind's schema, dirty map, reads, fixture and sweep.
+    KindSchemas,
+    /// #421: the spatial index's bounds and the answers to its queries.
+    Spatial(Box<crate::spatial::Spatial>),
     /// #306: the pack store's rows.
     Packs,
-    /// #306: one pack version installed mid-run.
+    /// #306: one pack version installed mid-run; #200: through a session, which wrote it.
     InstallPack {
         id: String,
         dir: PathBuf,
+        session: Option<String>,
+    },
+    /// #200: `deep://registries/<core version>`.
+    Registries,
+    /// #490: `fn`, one expression of the closed function list.
+    Fn(Box<Map<String, Value>>),
+    /// #490: `path`, an item's drawn path.
+    Path { doc: String, item: String },
+    /// #412: deep_kinds, its fields as the call gave them.
+    Kinds(Value),
+    /// #238: the sandbox module's counts of checks, links, rewrites and check-time runs.
+    Sandbox,
+    /// #238: the providers a document's current revision ran at check, with their output.
+    Provided(String),
+    /// #415: the check-time validation of one data asset in a layout of `data.layout@1`.
+    Validate { layout: String, path: PathBuf },
+    /// #200: an entry of a registry by name, through a document's pinned packs, `runs` times.
+    Lookup {
+        doc: String,
+        registry: String,
+        name: String,
+        runs: usize,
     },
     Screen,
     /// The sealed plan as published at `deep://schedule/<core version>` (#387).
@@ -733,6 +779,10 @@ pub struct Scenario {
     pub placement_planted: placement::Planted,
     pub fault: Option<Fault>,
     pub planted: Option<Planted>,
+    /// A canvas module's wrong program by name, which the scheduler hands its operators (#420).
+    pub module_planted: Option<String>,
+    /// A first-party pack's planted twin by name, applied as the store reads the pack (#433).
+    pub pack_planted: Option<String>,
     pub calls: Vec<Call>,
     /// Each call's arrival on the clock, in flicks (0 without one).
     pub at: Vec<i64>,
@@ -766,6 +816,17 @@ pub struct Scenario {
     pub decode_caps: deep_codecs::Caps,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
+    /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub
+    /// recorded at install.
+    pub installed: Vec<Value>,
+    /// #412: the entries plug-ins fill, each `{plugin, registry, entry, kit}` with the kit result
+    /// the hub recorded for it on this core.
+    pub plugin_entries: Vec<Value>,
+    /// #412: a folder of guides and examples (`gallery.json` and its files) used in place of the
+    /// installed ones.
+    pub gallery: Option<PathBuf>,
+    /// #412: the corpus runner's recorded runs, `{example, module_set, played, exit}`, last last.
+    pub corpus_runs: Vec<Value>,
     /// Every session's pool in place of its budget class's (#857).
     pub threads: Option<usize>,
     /// Work that isn't a frame, running from before the first call to after the last (#857).
@@ -833,6 +894,8 @@ pub struct Hub<'a> {
     /// The pack store (#306): the versions admitted, and one row per offer.
     pub packs: Packs,
     pub pack_rows: Vec<crate::packs::Row>,
+    /// #200: the session that installed each pack, by `owner/name@version`.
+    pub pack_authors: BTreeMap<String, String>,
     /// Each document's expansions at its last check, for the replies that carry them.
     pub expansions: BTreeMap<String, Vec<Expansion>>,
     /// The displays, the windows on them and the card's placement (#400).
@@ -856,6 +919,8 @@ pub struct Hub<'a> {
     pub shapings: HashMap<Arc<deep_text::cache::Key>, u32>,
     /// What answered the card: the option and the release's platform stamp (#327).
     pub card_answer: Option<(String, i64)>,
+    /// The sandbox module's check-time work (#238).
+    pub sandbox: crate::sandbox::Host,
 }
 
 /// A snapshot's straight RGBA, its size and each item's box in its pixels.
@@ -917,6 +982,7 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         admits_frame_json: startup.admits_frame_json,
         runs_every_node: scenario.planted == Some(Planted::RunsEveryNode),
         forgets_changes: scenario.planted == Some(Planted::RebuildsDrawList),
+        module: scenario.module_planted.clone(),
     };
     Options {
         access_log: startup.test_build,
@@ -969,6 +1035,7 @@ impl<'a> Hub<'a> {
             verdicts_made: BTreeMap::new(),
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
+            pack_authors: BTreeMap::new(),
             expansions: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
@@ -990,13 +1057,14 @@ impl<'a> Hub<'a> {
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
+            sandbox: crate::sandbox::Host::planted(startup.layouts),
             vias: BTreeMap::new(),
             shapings: HashMap::new(),
         };
         deep_text::cache::record();
         // The store's packs, each checked once here and never on a document's open.
         for (id, dir) in &scenario.packs {
-            hub.install_pack(id, dir);
+            hub.install_pack(id, dir, None);
         }
         hub
     }
@@ -1094,14 +1162,30 @@ impl<'a> Hub<'a> {
 
     /// `install_pack` (#306): one pack version read from its folder and put through the pack
     /// check once.
-    pub fn install_pack(&mut self, id: &str, dir: &std::path::Path) -> Value {
-        crate::packs::install(
+    pub fn install_pack(
+        &mut self,
+        id: &str,
+        dir: &std::path::Path,
+        session: Option<&str>,
+    ) -> Value {
+        let sealed = &self.startup.sealed;
+        let sandbox = &mut self.sandbox;
+        let reply = crate::packs::install(
             &mut self.packs,
             &mut self.pack_rows,
-            &self.startup.sealed,
+            sealed,
             id,
             dir,
-        )
+            self.scenario.pack_planted.as_deref(),
+            &mut |manifest, pack| sandbox.vet(manifest, pack, sealed),
+        );
+        // #200: a pack installed through a session is that agent's own: its entries are listed
+        // with origin agent, and in a registry that binds author they bind only its own claims.
+        if let (Some(s), "installed") = (session, reply["outcome"].as_str().unwrap_or_default()) {
+            let key = format!("{id}@{}", reply["version"].as_str().unwrap_or_default());
+            self.pack_authors.insert(key, s.to_string());
+        }
+        reply
     }
 
     /// A fresh scheduler's options: the hub's own (#488's comparisons run each side on its own
@@ -1173,6 +1257,65 @@ impl<'a> Hub<'a> {
 
     /// A new session for a document: its epochs from the scenario's start, the look's tokens
     /// and the record's readings.
+    /// The look a document names by asset, resolved over the bundled faces (#1162).
+    fn look_of(&self, doc: &Value) -> Option<Look> {
+        let name = doc.pointer("/look/asset")?.as_str()?;
+        let id = name.split('@').next()?;
+        let sha = doc.pointer(&format!("/assets/{id}/sha256"))?.as_str()?;
+        let bytes = (sha.len() == 64)
+            .then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())
+            .flatten()?;
+        let def: Value = serde_json::from_slice(&bytes).ok()?;
+        let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
+        look::resolve(&def, &bundled).ok()
+    }
+
+    /// Mark set columns that read the agent's table, inlined from the evidence store as
+    /// `deep-canvas-render` reads them (#397, #1162): what every frame of a revision draws.
+    pub(crate) fn inline_tables(
+        &self,
+        form: &mut Value,
+    ) -> Result<(), deep_marks_vello::tables::Refused> {
+        match form {
+            Value::Object(map) => {
+                deep_marks_vello::tables::tables(map, Some(&self.scenario.evidence))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Each `vector@1` item's imported outline, inlined from the evidence store as
+    /// `params.outline` (#398, #1162): what the vector kind draws as in a frame.
+    /// The import's issues come back: an SVG the store doesn't hold is `asset_missing`.
+    pub(crate) fn inline_vectors(&self, form: &mut Value) -> Vec<Issue> {
+        let Value::Object(map) = form else { return Vec::new() };
+        let root = &self.scenario.evidence;
+        let (issues, imported) = deep_canvas_vector::check(
+            map,
+            |sha| (sha.len() == 64).then(|| std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()).flatten(),
+            false,
+        );
+        let Some(Value::Object(items)) = map.get_mut("items") else { return issues };
+        for (id, found) in &imported {
+            if let Some(item) = items.get_mut(id) {
+                let mut outline =
+                    deep_canvas_vector::lower::outline(&found.svg, item, &found.colors);
+                // Its source too, which a frame mid-write lowers again at its progress (#1162).
+                let src = item.pointer("/params/src").and_then(Value::as_str).unwrap_or("");
+                if let Some(bytes) = (src.len() == 64)
+                    .then(|| std::fs::read(root.join(&src[..2]).join(&src[2..])).ok())
+                    .flatten()
+                {
+                    outline["svg"] = Value::String(String::from_utf8_lossy(&bytes).into_owned());
+                }
+                if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
+                    params.insert("outline".into(), outline);
+                }
+            }
+        }
+        issues
+    }
+
     pub(crate) fn new_session(&self) -> DocSession {
         let mut s = DocSession::new(
             self.scenario.epoch_start,
@@ -1317,18 +1460,47 @@ impl<'a> Hub<'a> {
         }
         let mut reply = match call {
             Call::Show(show) => self.show_call(show),
-            Call::Mode(show, mode) => {
+            Call::Mode(show, mode, cursor) => {
                 self.vias.insert(show.doc.clone(), show.via.clone());
-                self.mode_show(show, mode)
+                self.mode_show(show, mode, *cursor)
             }
             Call::Patch(p) => self.patch(p, None, self.now),
             Call::Read { doc, via } => self.read(doc, via.as_ref()),
             Call::History { doc, item } => self.history(doc, item),
             Call::ByWriter(doc) => self.by_writer(doc),
             Call::Registry => self.registry_reply(),
+            Call::Geometry(g) => self.geometry(g),
+            Call::KindSchemas => self.kind_schemas_reply(),
+            Call::Spatial(s) => self.spatial(s),
             Call::SceneQuery(q) => self.scene_query(q),
             Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
-            Call::InstallPack { id, dir } => self.install_pack(id, dir),
+            Call::InstallPack { id, dir, session } => {
+                self.install_pack(id, dir, session.as_deref())
+            }
+            Call::Registries => self.registries_reply(),
+            Call::Fn(c) => crate::function::reply(c),
+            Call::Path { doc, item } => match self.current(doc) {
+                Some(row) => crate::function::path_reply(&row.doc, item),
+                None => json!({"outcome": "refused", "code": "no_revision"}),
+            },
+            Call::Kinds(c) => self.kinds_reply(c),
+            Call::Sandbox => json!({
+                "module": "sandbox",
+                "version": self.startup.sealed.modules.iter().find(|m| m.name == "sandbox").map(|m| m.version.to_string()),
+                "checks": self.sandbox.checks, "links": self.sandbox.links,
+                "rewrites": self.sandbox.rewrites, "runs": self.sandbox.runs,
+            }),
+            Call::Validate { layout, path } => self.sandbox.validate(&self.startup.sealed, layout, path),
+            Call::Provided(doc) => json!({
+                "doc": doc,
+                "provided": self.sandbox.provided.get(doc).cloned().unwrap_or_default(),
+            }),
+            Call::Lookup {
+                doc,
+                registry,
+                name,
+                runs,
+            } => self.lookup_reply(doc, registry, name, *runs),
             Call::Costs => crate::costs::measure(self.startup),
             Call::NetworkSuite {
                 macos,
@@ -1663,6 +1835,13 @@ impl<'a> Hub<'a> {
             &writer,
             &title,
         );
+        // The document's look (Document envelope: `look: {asset: look@major}`), read from the
+        // evidence store by its asset's hash; one the store doesn't hold leaves the shipped look.
+        if let Ok(doc) = &stamped {
+            if let Some(look) = self.look_of(doc) {
+                self.look = look;
+            }
+        }
         let mut notices = Vec::new();
         // #403: in a claim that names the document, an item of a kind this build doesn't know
         // blocks its checks, naming the kind, while the rest still draws.
@@ -1694,6 +1873,7 @@ impl<'a> Hub<'a> {
                 skipped = crate::verdict::unknown_items(&result.notices);
                 blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = result.issues;
+                blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
                 // the rest.
                 if self.scenario.planted == Some(Planted::AcceptsEverySampleRate8To192k) {
@@ -1711,6 +1891,8 @@ impl<'a> Hub<'a> {
                     }
                 }
                 issues.extend(unreadable_handles(&doc, |h| self.can_read(&writer, h)));
+                // #238: the providers the document names run at its check, once per content key.
+                issues.extend(self.sandbox.provide(&self.startup.sealed, &show.doc, &doc));
                 let scope = match self.scenario.planted {
                     Some(Planted::DiffsItemsOnly) => Scope::ItemsOnly,
                     _ => Scope::Every,
@@ -1755,13 +1937,31 @@ impl<'a> Hub<'a> {
         let visible = self.doc_visible(&show.doc);
         // The form that draws: the document with each recipe instance's derived items in its
         // place (#306), less the items skipped as `unknown_kind` (#403).
-        let drawn_form = stamped.as_ref().map(|doc| {
+        let mut drawn_form = stamped.as_ref().map(|doc| {
             let expansions = fresh.as_ref().map(|(e, _)| e.as_slice());
             crate::verdict::without(
                 &crate::packs::drawn(doc, expansions.unwrap_or(&[])),
                 &skipped,
             )
         });
+        if let Some(form) = drawn_form.as_mut() {
+            if let Err(r) = self.inline_tables(form) {
+                issues.push(unfit_issue(r.code, r.path));
+            }
+            issues.extend(self.inline_vectors(form));
+        }
+        // Mark set columns that read a column source, resolved and narrowed by the core's
+        // column view at the frame's step (#397).
+        if let Some(form) = drawn_form.as_mut() {
+            let entries = self
+                .startup
+                .sealed
+                .registry(deep_canvas::columns::REGISTRY)
+                .map_or(&[][..], |r| r.entries.as_slice());
+            // A step is a 60 fps frame: 11,760,000 flicks.
+            let step = show.t.max(0) as u64 / 11_760_000;
+            issues.extend(deep_canvas::columns::view(form, entries, step));
+        }
         if let Some(doc) = stamped
             .as_ref()
             .filter(|_| !issues.iter().any(|i| i.severity == "error"))
@@ -1846,7 +2046,9 @@ impl<'a> Hub<'a> {
         let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
         // A revision with 3D writer layers renders back on the GPU (#378).
         let three = visible && wants_pixels && deep_canvas_scene3d::scene::has_3d(&doc);
-        let drawn = if visible && wants_pixels && !three {
+        // A 3D writer layer draws its 2D items as overlays (Writer layer): the 2D frame of the
+        // same revision at `t`, drawn over the 3D frame (#1162).
+        let drawn = if visible && wants_pixels {
             self.live_drawn(&show.doc, show.t)
         } else {
             None
@@ -1866,6 +2068,9 @@ impl<'a> Hub<'a> {
                 !(n.code == "deprecated"
                     && self.scenario.planted == Some(Planted::LoadsDeprecatedSilently))
             })
+            // A kind this build draws without a kind registry entry (rect@1, path@1) is drawn,
+            // not skipped, as `unknown_items` reads it, so no notice says it is (#490).
+            .filter(|n| !(n.code == "unknown_kind" && n.actual.as_str().is_some_and(shared::knows)))
             .map(Notice::to_json)
             .collect()
     }
@@ -1924,17 +2129,31 @@ impl<'a> Hub<'a> {
                 }
                 Ok(()) => {
                     let mut batches = Vec::new();
+                    let instanced = crate::packs::instanced(
+                        self.expansions
+                            .get(&show.doc)
+                            .map_or(&[][..], Vec::as_slice),
+                    );
                     let pixels = match drawn3d {
-                        Some(drawn3d) => drawn3d.ok(),
+                        Some(drawn3d) => drawn3d.ok().map(|(mut rgba, size, boxes)| {
+                            // The 2D items over the 3D frame, with no ground of their own.
+                            let mut boxes = boxes;
+                            if let Some(d) = drawn {
+                                let (over, drew) =
+                                    self.renderer.raster_batched(d, size, None, &instanced);
+                                batches = drew;
+                                snapshot::over(&mut rgba, &over);
+                                let scale = d.scale(size);
+                                boxes.extend(
+                                    d.boxes().into_iter().map(|(id, b)| (id, b.map(|v| v * scale))),
+                                );
+                            }
+                            (rgba, size, boxes)
+                        }),
                         None => {
                             let drawn = drawn.expect("a revision with no error was drawn");
                             let size = show.size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
                             let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-                            let instanced = crate::packs::instanced(
-                                self.expansions
-                                    .get(&show.doc)
-                                    .map_or(&[][..], Vec::as_slice),
-                            );
                             let (rgba, drew) =
                                 self.renderer
                                     .raster_batched(drawn, size, Some(ground), &instanced);

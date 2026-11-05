@@ -1,0 +1,111 @@
+#323 acceptance suite on the base commit 83e4159c (main), 2026-11-03 21:45-22:12 UTC, before any #323 code.
+Run: npx vitest run --root tests/acceptance/323 --no-file-parallelism --testTimeout=600000   (Node 24.22.0, macOS,
+12 cores; npm run build --workspaces and cargo build --locked -q -p deep-hook first)
+Result: Test Files 7 failed (7); Tests 19 failed (19). Every test fails at a named assertion for its criterion, or
+BLOCKED on a plant the base doesn't list. None crashes the runner. Trimmed to each test's failing assertion.
+
+Runs: the first full run (21:58 UTC, 195 s) had all 19 fail as below. The final full run (22:03-22:10 UTC, 447 s)
+ran at a 1-minute load of 35 to 56 on 12 cores, from other sessions on this Mac; in it targets.test.ts's two tests
+failed in setup (AC4: the session's UserPromptSubmit never reached the record; AC9: Z's stop got no verdict in
+90 s), so that file was run again alone (22:11 UTC, 11 s) and its lines below are from that run. The setup of every
+scenario now says BLOCKED when its task never lands (README, How to run), as AC9's already did for its verdict.
+
+What the base does: it writes no open item from a stop (open_item.opened comes only from deep_open_item); it shows
+no solve line and reads no `targets`; it judges a threshold's unit only in #322's lint of work-item criteria, not a
+handed requirement; it flags no journey for its negative cases (the receipt's `proof` it already writes); its
+validity gate sends back a claim whose final message cites a command never run, before any check runs, and runs
+nothing; it proposes a changed referenced file (learn.proposed) listing no verdicts; "I did it" on an unblock task
+closes it with no run; it reads no review threads; its send class doesn't cover `gh api …/replies`; it reads no
+TodoWrite list or Codex plan; and it lists none of this suite's plants.
+
+final-message.test.ts
+  x AC1 #323.035dc227 the TODO the turn leaves in src/auth.js and the "not implemented" stub ... are open items; ...
+    Error: AC1 #323.035dc227 the TODO left in src/auth.js, a changed file, must become an open item of
+    session:3849…#0 naming the file and the placeholder: its open items are none
+  x AC2 #323.70229cc2 the two follow-ups and issue #12 each get an open item, and ... all three are still open
+    Error: AC2 #323.70229cc2 the follow-up "The refresh endpoint also accepts expired tokens" must become an open
+    item of session:3849…#0: its open items are none
+  x AC3 #323.5966273a the PR body's "Known limit", README's "doesn't check the token's audience yet" and the
+    "Still open" item each become an open item
+    Error: AC3 #323.5966273a the final message's "Still open" item, "The e2e test for expired tokens was not run",
+    must become an open item of session:3849…#0: its open items are none
+  x AC7 #323.d33fe764 with the definition and the spec passing, a stop that says to run
+    `node scripts/verify-expiry.js`, a missing script, runs it once and is sent back with its output
+    Error: AC7 #323.d33fe764 the gate runs `node scripts/verify-expiry.js`, which the final message tells you to
+    run, once before the stop's reply: 0 runs of it; the claim's runs are none
+    (the base's reply: "DeepBuild sent this claim back before any check ran: - the run `node
+    scripts/verify-expiry.js` it cites was never made in this session")
+
+definition.test.ts
+  x AC5 #323.73adf79a R2 has no check: the definition's solve line names R2 with no check before the session
+    stops; a definition whose every requirement has a check reads fully covered
+    Error: AC5 #323.73adf79a the locked definition of session:00ec…#0 shows its solve line (a `solve` string in the
+    record naming the task) before any claim: none; its lock is definition.locked at log_pos 9 {…}
+  x AC6 #323.6f18b734 R1 "A login answers in under 300" is BLOCKED naming the threshold and its missing unit, ...
+    Error: AC6 #323.6f18b734 R1's threshold, "under 300", carries no unit, so the claim can't pass:
+    {"outcome":"PASS",…,"reasons":[".deepbuild/checks/login-speed.sh: PASS on 1 clean run",
+    ".deepbuild/checks/login-speed-ms.sh: PASS on 1 clean run","unit: PASS on 1 clean run"],…}
+  x AC8 #323.cd7cac96 R2, a journey with no near miss, is flagged as having no negative case (R1 ... isn't); ...
+    Error: AC8 #323.cd7cac96 R2 is a journey with no negative case (no near miss), so the record flags it, naming R2
+    and "negative case": nothing does
+
+targets.test.ts (run alone, 22:11 UTC)
+  x AC4 #323.a78cd64d R1 targets src/auth.js#checkToken; once the session renames checkToken to verifyToken, the
+    claim is INVALID naming checkToken, ...
+    Error: AC4 #323.a78cd64d R1's target src/auth.js#checkToken no longer resolves after the rename, so the claim
+    never passes, whatever its checks show: {"outcome":"PASS",…,"reasons":[".deepbuild/checks/expired-token.sh:
+    PASS on 1 clean run","unit: PASS on 1 clean run"],…}
+  x AC9 #323.15c51ef6 the latency floor changes on disk from 300 ms to 100 ms: the change ... is proposed listing
+    X's verdict, ... and not Z's
+    Error: AC9 #323.15c51ef6 before the floor changes, its proposal (or the ask for it) lists the verdicts it would
+    make stale: X's PASS (verdict:01M6HQEV… or claim:01M6HQES…), whose check reads .deepbuild/checks/latency.floor;
+    it says learn.proposed at log_pos 169 {"layer":"learned","target":".deepbuild/checks/latency.floor",
+    "diff":".deepbuild/checks/latency.floor: approved sha256 21f4…, now …",…}
+
+did-it.test.ts
+  x AC10 #323.11d61eef "I did it" with the license not accepted re-runs `ready`, which fails, ...
+    Error: AC10 #323.11d61eef "I did it" re-runs the task's check, `ready`: no run of it started after your answer;
+    runs since: none
+    (the session's deep_ask raised the unblock task and your answer counted, exit 0, before this)
+
+match.test.ts
+  x AC11 #323.056bfe4d the port 3000 item raised twice in another form is one item, port 3001 is two; ...
+    Error: AC11 #323.056bfe4d stop 1's "Still open" item, "Check the café login on port 3000.", must become an
+    open item (AC3's reading): the task's open items are none
+  x AC11 #323.056bfe4d (wrong program) a normalizer that drops numbers (DEEP_HUB_PLANT=normalizer-drops-numbers) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=normalizer-drops-numbers did not start: …
+    Error: DEEP_HUB_PLANT=normalizer-drops-numbers names no planted program
+
+review.test.ts
+  x AC12 #323.9ddcf826 PR 21 has two unresolved threads: the stop's claim gets one open item for each, ...
+    Error: AC12 #323.9ddcf826 the unresolved review thread PRRT_kwDOAcme0021a on PR 21 must become one open item of
+    session:336a…#0, naming the thread: 0 name it; the task's open items are none
+  x AC12 #323.9ddcf826 (wrong program) a gate that reads only the PR body (DEEP_HUB_PLANT=pr-body-only) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=pr-body-only did not start: …
+    Error: DEEP_HUB_PLANT=pr-body-only names no planted program
+  x AC13 #323.b0a29209 PRRT_kwDOAcme0023a, resolved by the session's account you-gh, keeps its open item open ...
+    Error: AC13 #323.b0a29209 at the first stop both threads are unresolved, so each is an open item of
+    session:778b…#0: PRRT_kwDOAcme0023a has none, PRRT_kwDOAcme0023b has none; the task's open items are none
+  x AC13 #323.b0a29209 (wrong program) a gate that counts every resolved thread as closed
+    (DEEP_HUB_PLANT=resolved-counts-closed) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=resolved-counts-closed did not start: …
+    Error: DEEP_HUB_PLANT=resolved-counts-closed names no planted program
+  x AC14 #323.d6d5ec0c the session's `gh api … /comments/9101/replies`, tried twice, is held at PreToolUse ...
+    Error: AC14 #323.d6d5ec0c try 1 of the reply to PRRT_kwDOAcme0023a is a send in your name, so it is held before
+    it runs; deep-hook allowed it: exit 0 after 10 ms, stdout "", stderr ""
+
+todos.test.ts
+  x AC15 #323.bc9c6272 a Claude Code session's TodoWrite list of four, ... gives two open items quoting them, ...;
+    a Codex session's last plan update gives the same two
+    Error: AC15 #323.bc9c6272 [Claude Code] the TodoWrite item "Run the unit test for expired tokens", left in
+    progress at the stop, is an open item quoting it: the task's open items are none
+  x AC15 #323.bc9c6272 (wrong program) a gate that closes an open item the agent marked completed
+    (DEEP_HUB_PLANT=completed-closes-item) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=completed-closes-item did not start: …
+    Error: DEEP_HUB_PLANT=completed-closes-item names no planted program
+
+Not reached on the base: AC15's Codex half runs after the Claude Code half, which fails first. A separate probe on
+the base (not kept) drove the same Codex session to its lock, its patch and its stop: the stop was judged and sent
+back on the unit check, so the Codex half reaches its assertions on a hub that passes the Claude Code half.
+
+Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/323/tsconfig.json  -> no errors.

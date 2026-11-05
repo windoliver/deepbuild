@@ -86,7 +86,9 @@ describe('AC15 #31.a271090e after a hub killed mid-run restarts, no checkout it 
     const w = makeWorld({ drafts: [draftFor(BEHAVIOR, { requirements: [req('R1', 'An expired token is rejected', { check: CHECK_FILE, asserts: [`${CHECK_FILE}:3`] })] })] });
     // The drafted check marks the folder it runs in and stays running: the hub is killed under it.
     const MARK = '.dh31-running';
-    writeFileSync(join(w.repo, CHECK_FILE), `#!/bin/sh\ntouch ${MARK}\nexec sleep 300\n`, { mode: 0o755 });
+    // Node alone, on line 3, with no `exec` before it: the tracers see into Node, where `touch`, `sleep` or `exec` would make
+    // the run uncounted before it starts (Traced programs).
+    writeFileSync(join(w.repo, CHECK_FILE), `#!/bin/sh\n# Drafted check: marks the folder it runs in, then stays running.\nnode -e "require('fs').writeFileSync('${MARK}', ''); setTimeout(() => {}, 300e3)"\n`, { mode: 0o755 });
     gitIn(w.repo, ['add', '-A']);
     gitIn(w.repo, ['commit', '-q', '-m', 'the drafted check']);
     // The hub's temp folder is the world's, so a checkout anywhere it may put one is under this root.

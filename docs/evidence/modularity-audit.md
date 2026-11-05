@@ -1,6 +1,22 @@
 # Modularity audit — partial implementation, not closed
 
-## Scope and base
+## Current integration checkpoint
+
+The branch has been reconciled with main at `0c153d7cd4dd167130f62fafc382114c47ed261a`. Six merge conflicts were resolved without changing acceptance tests or known-failure baselines. The extracted run service now carries main's durable journal recovery, `run.started@3` redaction/withheld fields, paid-run IDs, stand-in/host arguments, and gate-adjusted results. Retention preserves main's notice/series and reading evidence. Stack credential-mode plants and session-retention ownership are preserved.
+
+Fresh checks on this integrated tree:
+
+- Hub package TypeScript check: PASS.
+- `npm run build --workspaces`, under the build throttle: PASS on the existing built tree. This does **not** establish cold-build correctness.
+- Root typecheck: FAIL, including stale test interfaces; no test was changed to clear it.
+- The small affected selection below: FAIL, 39 new relative to main's baseline, 16 known, 4 passed. The cold-ID test still fails. The other reports include repository lint/dependency findings; full implementation verification remains unrun.
+- The first affected attempt ran no tests because the old built CLI lacked `deep lease`; after the workspace rebuild the updated wrapper executed the checks. No throttle/lease bypass was used.
+
+### Approval needed to repair an implementation-coupled test
+
+`tests/record-ids.test.mjs` currently asserts the exact loaded filename `record/src/ids.ts`. The cold-package test copies the package under `node_modules`, where Node rejects TypeScript stripping (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`); pointing the default export at the source `.ts` file is not a fix. The proposed repair is a directly runnable JavaScript IDs implementation with a declaration, plus changing only the filename assertion to the public entry's resolved URL. Keep the one-loaded-module assertion, every exact encoding vector, all 1,000 seeded cases, and the cold-build test unchanged. This is pending approval under the repository's test-change rule; no test has been edited for it.
+
+## Original checkpoint scope and base
 
 This draft preserves the TypeScript package audit requested in the conversation. It does not claim a package-by-package Rust audit or complete architecture remediation.
 

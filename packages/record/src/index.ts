@@ -11,8 +11,9 @@ import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contr
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
-import { CHECKED, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type SliceEntry, type Transcripts } from './learned.js';
+import { CHECKED, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, placingTranscript, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type Placing, type SliceEntry, type Transcripts } from './learned.js';
 import { compareReplay, planHash } from './replay.js';
+import { movable, type Refusal } from './lifecycle.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, openReadOnly, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
@@ -131,6 +132,8 @@ export interface RecordStore {
    * holds and whether it is outside content; a decision's answer; an evidence file's text. Undefined for nothing.
    */
   resolve(handle: string): Promise<Resolved | undefined>;
+  /** A session's archived transcript, through its newest transcript.archived link; undefined for a session none links (#1098). */
+  transcript(session: string): Promise<Message[] | undefined>;
   /**
    * Keeps a file in the evidence store as the core, recorded as evidence.stored under the connection's project, so
    * a learned change can cite it by its `ev:` handle and reach the repo the file is from (#355).
@@ -173,7 +176,7 @@ const SCHEMA_VERSION = 1;
 /** Events a replay reads at a time. */
 const REPLAY_PAGE = 5000;
 /** The kinds that record a decision: only the core appends them, and each commits FULL, in its own commit. */
-const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'definition.locked', 'definition.revised', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone',
+const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
   'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set']);
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
@@ -186,9 +189,12 @@ const STORE_ITEM = 'store.item@1';
 const TEXT_FIELD: Readonly<Record<string, string>> = { 'tool.before': 'command', 'tool.after': 'command', 'permission.request': 'command', 'user.ask': 'text', 'task.completed': 'title' };
 /** What content-free mode keeps of each text field: nothing its schema allows. */
 const BLANK: Readonly<Record<string, string | null>> = { command: null, text: '', title: '-' };
-/** An event's content-free fields only: its text field kept as content-free mode keeps it (#363, a record grant without text). */
+/** The fields of a run's spec a run.started carries since v3 (#996): what it runs, its folder, environment and grant. */
+const RUN_SPEC = ['argv', 'cwd', 'env', 'command', 'grant', 'stand_ins'];
+/** An event's content-free fields only: its text field kept as content-free mode keeps it (#363, a record grant without text), and no run's spec. */
 export function contentFree(event: Event): Event {
   const field = TEXT_FIELD[event.kind];
+  if (event.kind === 'run.started' && isObj(event.data)) return { ...event, data: Object.fromEntries(Object.entries(event.data).filter(([k]) => !RUN_SPEC.includes(k))) };
   return field && isObj(event.data) ? { ...event, data: { ...event.data, [field]: BLANK[field] ?? null } } : event;
 }
 
@@ -222,6 +228,18 @@ CREATE TABLE IF NOT EXISTS lost_sessions (session TEXT PRIMARY KEY) STRICT;
 
 type Obj = { [key: string]: JsonValue };
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+/** Each event kind's schema versions in `entries`, added to `into`: a kind's list is replaced, never changed in place. */
+function versionsOf(entries: readonly SchemaEntry[], into: Map<string, number[]>): Map<string, number[]> {
+  for (const { schema } of entries) {
+    const properties = isObj(schema.properties) ? schema.properties : {};
+    const kind = isObj(properties.kind) ? properties.kind.const : undefined;
+    const version = isObj(properties.v) ? properties.v.const : undefined;
+    if (typeof kind === 'string' && typeof version === 'number') into.set(kind, [...(into.get(kind) ?? []), version].sort((a, b) => a - b));
+  }
+  return into;
+}
+/** The published schemas' versions, read once: they never change in a process, so a record opened again reads none. */
+let published: ReadonlyMap<string, number[]> | undefined;
 /** A string cut to at most `max` UTF-16 units without splitting a surrogate pair. */
 function cut(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -257,7 +275,7 @@ class SqliteRecord implements RecordStore {
   private readonly backend: Backend;
   private readonly projector: Projector;
   private readonly registry: Registry;
-  private readonly versions = new Map<string, number[]>();
+  private readonly versions: Map<string, number[]>;
   private readonly migrations = new Map<string, Migration>();
   private readonly evidenceWriter: EvidenceWriter | undefined;
   private readonly queue: Pending[] = [];
@@ -274,6 +292,7 @@ class SqliteRecord implements RecordStore {
   private next = 1;
   private blockEnd = 1;
   private readonly transcripts: Transcripts = new Map();
+  private readonly placing: Placing = new Map();
   /** The rollback running now, which the next one waits for. */
   private rolling: Promise<unknown> = Promise.resolve();
   /** Set when a projection an older version made had other columns: the open replays the log before any read. */
@@ -295,14 +314,10 @@ class SqliteRecord implements RecordStore {
     this.db.exec(DDL);
     this.projector = new Projector(this.db);
     this.stale = this.projector.ensure();
-    const entries = [...listSchemas(), ...(options.schemas ?? [])];
-    this.registry = registry(entries);
-    for (const { schema } of entries) {
-      const properties = isObj(schema.properties) ? schema.properties : {};
-      const kind = isObj(properties.kind) ? properties.kind.const : undefined;
-      const version = isObj(properties.v) ? properties.v.const : undefined;
-      if (typeof kind === 'string' && typeof version === 'number') this.versions.set(kind, [...(this.versions.get(kind) ?? []), version].sort((a, b) => a - b));
-    }
+    const extra = options.schemas ?? [];
+    this.registry = registry([...listSchemas(), ...extra]);
+    published ??= versionsOf(listSchemas(), new Map());
+    this.versions = versionsOf(extra, new Map(published));
     for (const m of options.migrations ?? []) {
       // Forward only, one step per version, so a replay through them always ends.
       if (!(m.to > m.from)) throw new RecordError('schema', `migration ${m.kind}@${m.from} must move forward, not to ${m.to}`, { kind: m.kind, path: '/migrations' });
@@ -310,6 +325,15 @@ class SqliteRecord implements RecordStore {
       this.migrations.set(`${m.kind}@${m.from}`, m);
     }
     this.evidenceWriter = options.evidence?.connect({ role: 'deepbuild', via: 'job' });
+  }
+
+  /**
+   * The first log position the lifecycle gate judged (#570): a record made before the gate keeps the moves it
+   * accepted then, so its rebuild holds what it held.
+   */
+  private lifecycleFrom(): number {
+    const value = (key: string) => (this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+    return Number(value('lifecycle_from') ?? value('log_block_end') ?? 1);
   }
 
   /** Reads the record's state, marks this run as started, and finds the events a cut lost. */
@@ -323,7 +347,7 @@ class SqliteRecord implements RecordStore {
     // A cut's fact outlives clean restarts: a session whose start it lost is judged at its claim, whenever that comes.
     this.unclean = wasRunning || meta.get('cut') === '1';
     // A FULL commit: a cut after this open that loses it would read the earlier clean stop as this run's.
-    this.commitMeta({ schema: String(SCHEMA_VERSION), state: 'running', ...(this.unclean ? { cut: '1' } : {}) });
+    this.commitMeta({ schema: String(SCHEMA_VERSION), state: 'running', lifecycle_from: String(this.lifecycleFrom()), ...(this.unclean ? { cut: '1' } : {}) });
     if (wasRunning) this.recover(durable);
   }
 
@@ -366,8 +390,8 @@ class SqliteRecord implements RecordStore {
     // Every session still active at that commit may have lost its tail, a claim of its own included: its
     // next claim, surviving here or replayed from a spool, reads INVALID.
     // Ended means nothing of the session reached the log after its end and no turn of it is open: a finish
-    // that landed late, after it resumed, exempts nothing.
-    const active = this.db.prepare("SELECT id FROM sessions s WHERE NOT (status IN ('finished', 'failed') AND ended_log_pos IS NOT NULL AND ended_log_pos <= ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.id AND e.log_pos > s.ended_log_pos) AND NOT EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.stopped = 0))").all(lastFull) as { id: string }[];
+    // that landed late, after it resumed, exempts nothing. The core's reading of its state and its finding the process gone (#992) are none of it.
+    const active = this.db.prepare("SELECT id FROM sessions s WHERE NOT (status IN ('finished', 'failed') AND ended_log_pos IS NOT NULL AND ended_log_pos <= ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.id AND e.log_pos > s.ended_log_pos AND e.kind NOT IN ('session.state', 'session.gone')) AND NOT EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.stopped = 0))").all(lastFull) as { id: string }[];
     const mark = this.db.prepare('INSERT OR IGNORE INTO lost_sessions (session) VALUES (?)');
     this.backend.commit(this.db, 'normal', () => { for (const { id } of active) mark.run(id); });
     for (const { id } of active) this.lost.add(id);
@@ -452,7 +476,8 @@ class SqliteRecord implements RecordStore {
     const result = this.registry.validate(plugin === undefined ? `${kind}@${input.v}` : STORE_ITEM, event);
     if (!result.ok) {
       const issue = result.issues[0]!;
-      throw new RecordError('schema', `${issue.code} at ${issue.path || '/'}: ${issue.remediation}`, { path: issue.path });
+      // It names the event it refuses, and the object that event is about.
+      throw new RecordError('schema', `${issue.code} at ${issue.path || '/'}: ${issue.remediation} (${kind} ${String(input.id)}${input.subject ? ` on ${String(input.subject)}` : ''})`, { path: issue.path });
     }
     const prepared: Prepared = {
       input, writer: connection.writer, actor: connection.actor, scope: connection.scope,
@@ -483,7 +508,12 @@ class SqliteRecord implements RecordStore {
       const run = (before ? before.catch(() => undefined) : Promise.resolve()).then(() => this.appendNow(connection, input));
       this.byId.set(key, run);
       try {
-        return await run;
+        const appended = await run;
+        // An archived copy is read as it lands, so an ask placing its plan's targets finds it parsed (#1098).
+        if (input.kind === 'transcript.archived' && typeof (input.data as { evidence?: unknown } | undefined)?.evidence === 'string') {
+          await placingTranscript(this.options.evidence, this.placing, (input.data as { evidence: string }).evidence);
+        }
+        return appended;
       } finally {
         if (this.byId.get(key) === run) this.byId.delete(key);
       }
@@ -605,7 +635,8 @@ class SqliteRecord implements RecordStore {
   private commit(items: Prepared[], mode: Durability, also?: () => void): Outcome[] {
     const outcomes: Outcome[] = [];
     try {
-      this.reserve(items.length);
+      // Each event, and a move.refused for each object it could move.
+      this.reserve(items.reduce((n, p) => n + 1 + movable(p.input.kind, p.data), 0));
       const existing = this.stmt('SELECT log_pos, hash FROM events WHERE id = ?');
       const insert = this.stmt('INSERT INTO events (id, log_pos, v, ts, project_id, session_id, seq, agent, writer, actor, scope, kind, subject, data, evidence, hash, unverified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       const write = (work: () => void) => (mode === 'full' ? this.full(work) : this.backend.commit(this.db, 'normal', work));
@@ -617,9 +648,17 @@ class SqliteRecord implements RecordStore {
             else outcomes.push({ ok: false, error: new RecordError('conflict', `event ${p.input.id} is already in the log with other content`, { id: p.input.id }), prepared: p });
             continue;
           }
-          const log_pos = this.next++;
-          insert.run(p.input.id, log_pos, p.input.v, p.input.ts, p.project, p.session, p.seq, p.agent, p.writer, p.actor, p.scope, p.input.kind, p.input.subject ?? null, JSON.stringify(p.data), p.evidence.length ? JSON.stringify(p.evidence) : null, p.hash, p.unverified ? 1 : 0);
-          this.projector.apply(this.projected(p, log_pos));
+          const put = (q: Prepared): { log_pos: number; refused: Refusal[] } => {
+            const log_pos = this.next++;
+            insert.run(q.input.id, log_pos, q.input.v, q.input.ts, q.project, q.session, q.seq, q.agent, q.writer, q.actor, q.scope, q.input.kind, q.input.subject ?? null, JSON.stringify(q.data), q.evidence.length ? JSON.stringify(q.evidence) : null, q.hash, q.unverified ? 1 : 0);
+            return { log_pos, refused: this.projector.apply(this.projected(q, log_pos)) };
+          };
+          const { log_pos, refused } = put(p);
+          // A move its lifecycle table doesn't allow is refused and recorded in the same commit; the event stays.
+          for (const data of refused) {
+            const ts = this.options.now();
+            put(this.sealed(this.prepare({ writer: 'core', actor: p.actor, scope: p.scope }, { v: 1, id: ulid(ts), kind: 'move.refused', ts, data: { ...data } })));
+          }
           outcomes.push({ ok: true, appended: { log_pos, existing: false }, prepared: p, log_pos });
         }
         also?.();
@@ -694,6 +733,7 @@ class SqliteRecord implements RecordStore {
     try {
       this.backend.commit(this.db, 'normal', () => {
         this.projector.drop();
+        const from = this.lifecycleFrom();
         let after = 0;
         for (;;) {
           const rows = page.all(after, REPLAY_PAGE) as StoredRow[];
@@ -702,7 +742,7 @@ class SqliteRecord implements RecordStore {
             this.projector.apply({
               id: e.id, v: e.v, kind: e.kind, ts: e.ts, seq: e.seq ?? null, log_pos: e.log_pos, session: e.session ?? null, project: e.project ?? null, agent: e.agent ?? null,
               writer: e.writer, actor: e.actor, scope: e.scope, subject: e.subject ?? null, data: this.migrate(e.kind, e.v, e.data), evidence: e.evidence,
-            });
+            }, e.log_pos >= from);
             after = e.log_pos;
           }
           if (rows.length < REPLAY_PAGE) break;
@@ -745,6 +785,12 @@ class SqliteRecord implements RecordStore {
   async resolve(handle: string): Promise<Resolved | undefined> {
     await this.settle();
     return resolveHandle(this.db, this.options.evidence, this.transcripts, handle);
+  }
+
+  async transcript(session: string): Promise<Message[] | undefined> {
+    await this.settle();
+    const [row] = this.db.prepare('SELECT transcript FROM sessions WHERE id = ?').all(session) as { transcript: string | null }[];
+    return row?.transcript ? placingTranscript(this.options.evidence, this.placing, row.transcript) : undefined;
   }
 
   async keep(connection: Connection, file: { bytes: Uint8Array; kind: string; source: string }): Promise<string> {

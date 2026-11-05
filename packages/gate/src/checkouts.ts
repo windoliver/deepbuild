@@ -23,7 +23,8 @@ export type CheckoutPlant =
   | 'links-dependencies' | 'stands-in-always' | 'stamps-time' | 'keeps-every-snapshot' | 'drops-decisions' | 'removes-at-session-end'
   | 'snapshot-unbounded' | 'snapshots-one-at-a-time' | 'git-inherits-env';
 export interface CheckoutsOptions { store: string; root: string; kinds: CheckRunnerFill[]; host: Supervisor; leases: LeaseTable; now(): number; plant?: CheckoutPlant }
-export interface Snapshot { commit: string; wrote: boolean }
+/** `tree` is the snapshot's tree: the same tree on another HEAD is another snapshot, but the same inputs for a check (#45). */
+export interface Snapshot { commit: string; wrote: boolean; tree: string }
 /**
  * One claim's budget for its snapshot and its checkout together: 8 s of git work from `since`, and no stage restarts
  * the clock. Past it, every git process it started is stopped by its PID and the work ends with an `OverBudget`.
@@ -101,13 +102,13 @@ const inside = (path: string): boolean => !isAbsolute(path) && !normalize(path).
 /** The deadline a check names in `asserts`, as `deadline:5s`. */
 const namesDeadline = (asserts: string[] | undefined): boolean => asserts?.some((a) => a.startsWith('deadline:')) ?? false;
 /** A failure at an assertion its check names: one of `asserts`, or with no such list any assertion in its own files. */
-function atNamed(f: Failure, c: ClaimCheckInput): boolean {
+function atNamed(f: Failure, c: Pick<ClaimCheckInput, 'own' | 'asserts'>): boolean {
   if (!f.assertion) return false;
   if (c.asserts?.length) return c.asserts.includes(`${f.file}:${f.line}`);
   return !c.own.length || c.own.some((o) => f.file === o || f.file.startsWith(`${o}/`));
 }
 /** Whether a run on the base proves the fix, and why not: only a test that started and failed at a named assertion, or overran a named deadline. */
-export function baseProof(r: CheckResult, c: ClaimCheckInput, plant?: CheckoutPlant): { on_assertion: boolean; why: string | null } {
+export function baseProof(r: Pick<CheckResult, 'outcome' | 'testsRun' | 'failures'>, c: Pick<ClaimCheckInput, 'own' | 'asserts'>, plant?: CheckoutPlant): { on_assertion: boolean; why: string | null } {
   if (r.outcome === 'passed') return { on_assertion: false, why: 'passes on the merge base, so it can\'t prove the fix' };
   if (plant === 'any-nonzero-base-exit') return { on_assertion: true, why: null };
   const started = r.testsRun > 0 || r.failures.some((f) => f.test !== '(run)' && f.file !== '.') && r.outcome === 'overran';
@@ -287,16 +288,16 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
       const links = untracked.filter((p) => INSTALLS.includes(basename(p)) && lstatSync(join(worktree, p)).isSymbolicLink());
       if (links.length) await git(worktree, ['update-index', '--force-remove', '-z', '--stdin'], env, links.join('\0'));
       const tree = await git(worktree, ['write-tree'], env);
-      if (tree === await git(worktree, ['rev-parse', `${head}^{tree}`])) return { commit: head, wrote: false };
+      if (tree === await git(worktree, ['rev-parse', `${head}^{tree}`])) return { commit: head, wrote: false, tree };
       const date = o.plant === 'stamps-time' ? new Date().toISOString() : FIXED_DATE;
       const commit = await git(worktree, ['commit-tree', tree, '-p', head, '-m', 'deep snapshot'], { ...env, ...FIXED, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date });
-      if (o.plant === 'snapshot-into-repo') return { commit, wrote: true };
+      if (o.plant === 'snapshot-into-repo') return { commit, wrote: true, tree };
       const known = await refOf(commit);
       // Written again: its 30 days start over, so a new claim on old bytes never loses its snapshot.
       if (known) await inStore(['update-ref', '-d', known]);
       await inStore(['update-ref', `${SNAPSHOTS}${Math.floor(o.now())}/${commit}`, commit]);
-      if (known) return { commit, wrote: false };
-      return { commit, wrote: true };
+      if (known) return { commit, wrote: false, tree };
+      return { commit, wrote: true, tree };
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -18,7 +18,9 @@ use serde_json::Value;
 
 use crate::compile::{compile_with, Compiled};
 use crate::glow;
-use crate::reference::{target, Camera};
+use crate::reference::{target, upload, Camera};
+use deep_canvas_effects::graph::Tex;
+use deep_canvas_effects::interp::Image;
 use crate::runner::{Runner, LINEAR};
 
 /// One particles@1 item: its compute operator's params, its seed and how its dots draw.
@@ -31,9 +33,16 @@ pub struct Sparks {
     pub seed: u32,
     pub size_px: f64,
     pub opacity: f64,
-    /// Linear colors at birth and at death.
-    pub from: [f64; 3],
-    pub to: [f64; 3],
+    /// Its size in px and its opacity at birth and at death (#420: channels over life).
+    pub size: [f64; 2],
+    pub fade: [f64; 2],
+    /// Its color over life: up to four stops, each its place in life and a linear color, mixed
+    /// in OKLab.
+    pub stops: Vec<(f64, [f64; 3])>,
+    /// `dot`, `spark`, `puff` or `streak`, by its place in that list.
+    pub draw: u32,
+    /// A puff shaded at half resolution.
+    pub half: bool,
 }
 
 /// What the look, the document and the session turn on this frame, and each effect's values.
@@ -49,6 +58,8 @@ pub struct Settings {
     pub outline_width: u32,
     /// The look's bloom as `bloom.*` params.
     pub bloom: Option<BTreeMap<String, Value>>,
+    /// The bloom's lens dirt image, each pixel's value 0 to 1 (#418).
+    pub dirt: Option<Arc<Image>>,
     /// Each role the effects read, linear.
     pub roles: BTreeMap<String, [f64; 3]>,
     /// The frame's time, s.
@@ -64,6 +75,8 @@ pub struct Planted {
     pub off_by_two: bool,
     /// The glow blurs at full resolution 64 more times.
     pub slow_glow: bool,
+    /// #418: the lens dirt laid over the frame, `intensity × d` added to every pixel.
+    pub dirt_overlay: bool,
 }
 
 /// A pass of the frame, for the view's reply: its name, the targets it reads and writes, and the
@@ -87,12 +100,37 @@ pub struct Effects {
     /// The chain's targets by index, with their sizes.
     targets: Vec<([u32; 2], wgpu::TextureView)>,
     sparks: Option<SparkDraw>,
+    /// The lens dirt on the GPU, with the image it holds; black with none.
+    dirt: Option<(Option<Arc<Image>>, wgpu::TextureView)>,
+    /// The document whose composed operators the chain runs, with the emitter's and the
+    /// check's planted programs: built into `docops` on the device at the next frame.
+    pub op_doc: Option<(Value, Options, deep_canvas_effects::check::CheckOptions)>,
+    /// The document's composed pass and compute operators (#429), run in the effects chain.
+    pub docops: Option<crate::docops::DocOps>,
+    /// Each operator's resolution this frame, by item; 1 when not given.
+    pub op_resolution: BTreeMap<String, f64>,
+    /// A canonical render, where live-only operators draw their fallback.
+    pub op_canonical: bool,
+    /// What each operator drew last frame.
+    pub op_rows: Vec<crate::docops::Row>,
 }
 
 struct SparkDraw {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     instances: wgpu::Buffer,
+    /// The particles its instance buffer holds: a showpiece's count grows it (#420).
+    capacity: u32,
+}
+
+/// An instance buffer for `count` particles.
+fn instance_buffer(d: &wgpu::Device, count: u32) -> wgpu::Buffer {
+    d.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("particles instances"),
+        size: u64::from(count) * u64::from(PARTICLE_FLOATS) * 4,
+        usage: wgpu::BufferUsages::STORAGE,
+        mapped_at_creation: false,
+    })
 }
 
 /// The library's stage graph with this ID, compiled (the GPU's planted pass when asked).
@@ -118,13 +156,36 @@ impl Effects {
             runners: BTreeMap::new(),
             targets: Vec::new(),
             sparks: None,
+            dirt: None,
+            op_doc: None,
+            docops: None,
+            op_resolution: BTreeMap::new(),
+            op_canonical: false,
+            op_rows: Vec::new(),
         }
+    }
+
+    /// The lens dirt's texture: the settings' image, or one black texel with none.
+    fn dirt_view(&mut self, device: &Device) -> wgpu::TextureView {
+        let want = self.settings.dirt.clone();
+        let same = |held: &Option<Arc<Image>>| match (held, &want) {
+            (None, None) => true,
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        };
+        if !self.dirt.as_ref().is_some_and(|(held, _)| same(held)) {
+            let black = Image::new(1, 1);
+            let (tex, _) = upload(device, Tex::Float, want.as_deref().unwrap_or(&black));
+            self.dirt = Some((want, tex.create_view(&Default::default())));
+        }
+        self.dirt.as_ref().expect("made above").1.clone()
     }
 
     fn runner(&mut self, device: &Device, id: &str) -> Arc<Runner> {
         let karis = !self.planted.without_karis;
         let options = Options {
             off_by_two: self.planted.off_by_two,
+            ..Options::default()
         };
         self.runners
             .entry(id.to_string())
@@ -272,16 +333,12 @@ impl Effects {
             cache: None,
         });
         let layout = pipeline.get_bind_group_layout(0);
-        let instances = d.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("particles instances"),
-            size: u64::from(shipped::MAX_PARTICLES * PARTICLE_FLOATS) * 4,
-            usage: wgpu::BufferUsages::STORAGE,
-            mapped_at_creation: false,
-        });
+        let instances = instance_buffer(d, shipped::MAX_PARTICLES);
         self.sparks = Some(SparkDraw {
             pipeline,
             layout,
             instances,
+            capacity: shipped::MAX_PARTICLES,
         });
     }
 
@@ -300,13 +357,31 @@ impl Effects {
         let d = &device.device;
         let compute = self.runner(device, "particles.sparks@1");
         self.spark_draw(device);
+        if let Some(draw) = self.sparks.as_mut().filter(|dr| dr.capacity < s.count) {
+            draw.instances = instance_buffer(d, s.count);
+            draw.capacity = s.count;
+        }
         let draw = self.sparks.as_ref().expect("made above");
         let mut c = *camera;
         c.seed = s.seed;
-        let values = interp::inputs(&compute.compiled.checked, &s.params, &self.settings.roles);
-        let (g0, g1, buffers) =
-            compute.bind(d, &c.frame(), [1, 1], &values, &[], &[&draw.instances]);
-        let mut uni: Vec<u8> = Vec::with_capacity(112);
+        // One dispatch per operator's worth of particles, each from its offset (a showpiece's
+        // count runs past one).
+        let chunk = shipped::MAX_PARTICLES;
+        let mut dispatches = Vec::new();
+        for k in 0..s.count.div_ceil(chunk).max(1) {
+            let mut params = s.params.clone();
+            params.insert("particles.offset".into(), Value::from(k * chunk));
+            let values = interp::inputs(&compute.compiled.checked, &params, &self.settings.roles);
+            let bound = compute.bind(d, &c.frame(), [1, 1], &values, &[], &[&draw.instances]);
+            dispatches.push((bound, (s.count - k * chunk).min(chunk)));
+        }
+        let mut uni: Vec<u8> = Vec::with_capacity(192);
+        let mut stops = s.stops.clone();
+        stops.truncate(4);
+        let n_stops = stops.len().max(1) as f32;
+        while stops.len() < 4 {
+            stops.push(*stops.last().unwrap_or(&(0.0, [1.0, 1.0, 1.0])));
+        }
         let floats = camera
             .clip
             .iter()
@@ -317,11 +392,13 @@ impl Effects {
                 s.size_px as f32,
                 s.opacity as f32,
             ])
+            .chain([s.size[0], s.size[1], s.fade[0], s.fade[1]].map(|x| x as f32))
+            .chain([s.draw as f32, f32::from(u8::from(s.half)), n_stops, 0.0])
+            .chain(stops.iter().map(|st| st.0 as f32))
             .chain(
-                [
-                    s.from[0], s.from[1], s.from[2], 0.0, s.to[0], s.to[1], s.to[2], 0.0,
-                ]
-                .map(|x| x as f32),
+                stops
+                    .iter()
+                    .flat_map(|st| [st.1[0] as f32, st.1[1] as f32, st.1[2] as f32, 0.0]),
             );
         for v in floats {
             uni.extend_from_slice(&v.to_le_bytes());
@@ -349,15 +426,18 @@ impl Effects {
         let profiler = self.profiler.clone();
         let count = s.count;
         Box::new(move |encoder| {
-            let _keep = (buffers, ub);
-            match &profiler {
-                Some(p) => {
-                    let p = p.lock().unwrap_or_else(|e| e.into_inner());
-                    let q = p.begin_pass_query(SPARKS, encoder);
-                    compute.dispatch(encoder, count, &(g0, g1), q.compute_pass_timestamp_writes());
-                    p.end_query(encoder, q);
+            let _keep = &ub;
+            for ((g0, g1, _buffers), n) in &dispatches {
+                let groups = (g0.clone(), g1.clone());
+                match &profiler {
+                    Some(p) => {
+                        let p = p.lock().unwrap_or_else(|e| e.into_inner());
+                        let q = p.begin_pass_query(SPARKS, encoder);
+                        compute.dispatch(encoder, *n, &groups, q.compute_pass_timestamp_writes());
+                        p.end_query(encoder, q);
+                    }
+                    None => compute.dispatch(encoder, *n, &groups, None),
                 }
-                None => compute.dispatch(encoder, count, &(g0, g1), None),
             }
             timed(&profiler, SPARKS, encoder, |e, ts| {
                 let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -495,8 +575,41 @@ impl Post for Effects {
             ));
             cur = out;
         }
+        if let Some((doc, options, planted)) = self.op_doc.take() {
+            self.docops = Some(crate::docops::DocOps::new(device, &doc, options, planted, &[]));
+        }
+        if let Some(ops) = self.docops.as_mut() {
+            let res = self.op_resolution.clone();
+            let (rows, recs, out) = ops.plan(
+                device,
+                &cur,
+                Some(frame.ids),
+                Some(frame.depth),
+                size,
+                &camera.frame(),
+                &s.roles,
+                &|i| res.get(i).copied().unwrap_or(1.0),
+                self.op_canonical,
+            );
+            self.op_rows = rows;
+            for r in recs {
+                let profiler = self.profiler.clone();
+                jobs.push((
+                    r.mark.into(),
+                    Box::new(move |e| {
+                        r.record(e, &mut crate::docops::Profiled::new(profiler));
+                    }),
+                ));
+            }
+            if let Some(o) = out {
+                cur = o;
+            }
+        }
         if let Some(bloom) = &s.bloom {
-            let (runs, params) = glow::chain(size, bloom);
+            let (runs, mut params) = glow::chain(size, bloom);
+            if self.planted.dirt_overlay {
+                params.insert("bloom.overlay".into(), Value::from(1.0));
+            }
             let ids = [
                 if self.planted.without_karis {
                     "glow.down@1"
@@ -509,6 +622,7 @@ impl Post for Effects {
             ];
             let first = next;
             let scene = cur.clone();
+            let dirt = self.dirt_view(device);
             let mut levels: BTreeMap<usize, wgpu::TextureView> = BTreeMap::new();
             let mut parts: Vec<Job> = Vec::new();
             for r in &runs {
@@ -519,6 +633,7 @@ impl Post for Effects {
                     ("bloom", level(r.a)),
                     ("large", level(r.b)),
                     ("scene", scene.clone()),
+                    ("dirt", dirt.clone()),
                 ]);
                 let out = self.target(device, first + r.out.unwrap_or(runs.len()), r.size);
                 parts.push(self.pass_job(
@@ -610,7 +725,19 @@ impl Post for Shared {
             ns_per_px,
             determinism: Determinism::SameMachine,
         };
-        vec![
+        // The document's composed operators, after the shipped effects in the effects chain.
+        let fx = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        let marks: Vec<(String, f64)> = match (&fx.docops, &fx.op_doc) {
+            (Some(ops), _) => ops
+                .ops
+                .iter()
+                .map(|o| (o.mark.to_string(), o.declared_ns))
+                .collect(),
+            (None, Some((doc, ..))) => crate::docops::marks(doc),
+            (None, None) => Vec::new(),
+        };
+        drop(fx);
+        let mut out = vec![
             pass(GRID, "effects", 0, vec!["linear", "depth"], 0.12),
             pass(
                 SHADOW,
@@ -622,7 +749,20 @@ impl Post for Shared {
             pass(SPARKS, "effects", 2, vec!["linear", "depth"], 0.05),
             pass(OUTLINE, "effects", 3, vec!["linear", "ids"], 0.06),
             pass(GLOW, "bloom", 0, vec!["linear"], 0.25),
-        ]
+        ];
+        for (k, (name, ns)) in marks.into_iter().enumerate() {
+            out.push(Pass {
+                name,
+                place: "effects",
+                order: 4 + k as u32,
+                reads: vec!["linear"],
+                writes: vec!["linear"],
+                resolution: Resolution::Full,
+                ns_per_px: ns as f32,
+                determinism: Determinism::SameMachine,
+            });
+        }
+        out
     }
 
     fn shadows(&self) -> bool {

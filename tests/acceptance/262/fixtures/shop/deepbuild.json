@@ -1,0 +1,22 @@
+{
+  "id": "test/shop",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["hosts"] },
+  "checks": ["ext.shop.report", "ext.shop.cites"],
+  "actions": ["ext.shop.read_now", "ext.shop.notify"],
+  "notices": ["ext.shop.rate_passed", "ext.shop.latency_high"],
+  "sources": [
+    { "name": "ext.shop.fresh", "variant": "polled" },
+    { "name": "ext.shop.spent", "variant": "polled" },
+    { "name": "ext.shop.ready", "variant": "polled" },
+    { "name": "ext.shop.rate", "variant": "polled" },
+    { "name": "ext.shop.errors", "variant": "polled" },
+    { "name": "ext.shop.fleet", "variant": "polled" },
+    { "name": "ext.shop.wide", "variant": "polled" },
+    { "name": "ext.shop.metrics", "variant": "polled" }
+  ],
+  "requires": {
+    "preview": ["deep.registerSource", "deep.registerView", "deep.readNow", "deep.schedule", "deep.notices.send", "deep.registerAction"]
+  }
+}

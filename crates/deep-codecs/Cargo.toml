@@ -14,7 +14,9 @@ publish = false
 [dependencies]
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# Issue #423: KTX2 maps (Basis Universal ETC1S or UASTC) transcoded to BC in the decode worker.
+basisu_c_sys = { version = "0.9.1", features = ["extra"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"

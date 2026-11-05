@@ -1,0 +1,45 @@
+#!/usr/bin/env node
+// A stand-in for the `claude` binary, the one boundary these tests don't own (README, The claude stand-in). It never
+// loads a plugin's code: `plugin validate` prints the lines Claude Code's validator would print for the plugin, kept
+// beside it as validate.txt by the test, and reads nothing else of the plugin. Every call is noted in
+// $DEEP_1033_CLAUDE_LOG when that is set.
+import { appendFileSync, existsSync, readFileSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+
+const args = process.argv.slice(2);
+if (process.env.DEEP_1033_CLAUDE_LOG) appendFileSync(process.env.DEEP_1033_CLAUDE_LOG, `${JSON.stringify(args)}\n`);
+
+/** The plugin folder a validate argument names: a folder, a file in it, or `name@marketplace` from the registry. */
+function folderOf(arg) {
+  if (!arg) return undefined;
+  if (existsSync(arg)) {
+    let dir = statSync(arg).isDirectory() ? resolve(arg) : dirname(resolve(arg));
+    for (let i = 0; i < 3 && !existsSync(join(dir, 'validate.txt')); i++) dir = dirname(dir);
+    return existsSync(join(dir, 'validate.txt')) ? dir : undefined;
+  }
+  const home = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude');
+  try {
+    const registry = JSON.parse(readFileSync(join(home, 'plugins', 'installed_plugins.json'), 'utf8'));
+    const [entry] = registry.plugins?.[arg] ?? [];
+    return entry?.installPath;
+  } catch {
+    return undefined;
+  }
+}
+
+if (args[0] === '--version') {
+  console.log('2.1.308 (Claude Code)');
+} else if (args[0] === 'auth' && args[1] === 'status') {
+  console.log(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty', subscriptionType: 'max' }));
+} else if (args[0] === 'plugin' && args[1] === 'validate') {
+  const dir = folderOf(args.slice(2).find((a) => !a.startsWith('-')));
+  if (!dir || existsSync(join(dir, 'unreadable')) || !existsSync(join(dir, 'validate.txt'))) {
+    process.stderr.write(`✘ Could not read the plugin at ${args[2] ?? '(none)'}: no readable .claude-plugin/plugin.json\n`);
+    process.exit(1);
+  }
+  process.stdout.write(readFileSync(join(dir, 'validate.txt'), 'utf8').replaceAll('{dir}', dir));
+} else {
+  process.stderr.write(`claude (test stand-in): ${args.join(' ')} is not something this stand-in answers\n`);
+  process.exit(1);
+}

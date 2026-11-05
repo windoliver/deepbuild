@@ -1,0 +1,109 @@
+{
+  "id": "familiar.perspective_camera",
+  "version": "1.0",
+  "title": "Perspective camera",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The library's PerspectiveCamera: its vertical fov across our wider side at its aspect, its local −Z forward to our target, its rotation's turn about that axis to our roll.",
+  "inputs": {
+    "fov": {
+      "type": "number",
+      "default": 50,
+      "unit": "deg",
+      "min": 0,
+      "max": 179,
+      "about": "vertical"
+    },
+    "aspect": {
+      "type": "number",
+      "default": 1,
+      "min": 0.0001,
+      "about": ""
+    },
+    "near": {
+      "type": "number",
+      "default": 0.1,
+      "unit": "m",
+      "min": 0,
+      "about": ""
+    },
+    "far": {
+      "type": "number",
+      "default": 2000,
+      "unit": "m",
+      "min": 0,
+      "about": ""
+    },
+    "position": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "m",
+      "about": ""
+    },
+    "rotation": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "deg",
+      "about": "in the library's default order XYZ"
+    }
+  },
+  "let": {
+    "ca": "cos(rad(rotation[0]))",
+    "sa": "sin(rad(rotation[0]))",
+    "cb": "cos(rad(rotation[1]))",
+    "sb": "sin(rad(rotation[1]))",
+    "cc": "cos(rad(rotation[2]))",
+    "sc": "sin(rad(rotation[2]))",
+    "m00": "cb * cc",
+    "m01": "-cb * sc",
+    "m02": "sb",
+    "m10": "ca * sc + sa * sb * cc",
+    "m11": "ca * cc - sa * sb * sc",
+    "m12": "-sa * cb",
+    "m20": "sa * sc - ca * sb * cc",
+    "m21": "sa * cc + ca * sb * sc",
+    "m22": "ca * cb",
+    "wide": "aspect >= 1 ? 2 * deg(atan(tan(rad(fov) / 2) * aspect)) : fov",
+    "f0": "-m02",
+    "f1": "-m12",
+    "f2": "-m22",
+    "r0": "-f2",
+    "r2": "f0",
+    "rl": "sqrt(r0 * r0 + r2 * r2)",
+    "u0": "-r2 * f1 / rl",
+    "u1": "(r2 * f0 - r0 * f2) / rl",
+    "u2": "r0 * f1 / rl",
+    "roll": "rl > 0.000000001 ? -deg(atan2((m01 * r0 + m21 * r2) / rl, m01 * u0 + m11 * u1 + m21 * u2)) : 0"
+  },
+  "steps": {
+    "camera": {
+      "op": "item",
+      "kind": "camera@1",
+      "params": {
+        "projection": "perspective",
+        "fov": "wide",
+        "near": "near",
+        "far": "far",
+        "roll": "roll",
+        "position": [
+          "position[0]",
+          "position[1]",
+          "position[2]"
+        ],
+        "target": [
+          "position[0] + f0",
+          "position[1] + f1",
+          "position[2] + f2"
+        ]
+      }
+    }
+  }
+}

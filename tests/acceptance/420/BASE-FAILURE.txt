@@ -1,0 +1,598 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-420-f87578/agent-a88b3f37ee7d4b4f6/tests/acceptance/420
+
+ ❯ building.test.ts (5 tests | 5 failed) 106524ms
+   ❯ AC3 #420.1aa64c41 building kinds from the building module, each declaring what it reads (3)
+     × AC3 #420.1aa64c41 walls, openings, slabs, roofs and stairs are the building module's kinds, each declaring reads: a wall its siblings and children, an opening and a slab refs 2975ms
+     × AC3 #420.1aa64c41 the house builds each of the five as a closed mesh it declares; wa mitres to x = 4.1 only beside wb; the door takes 0.9 × 2.1 × 0.2 m³ out of wa; the floor loses the stair's well; the stair has 15 risers of at most 0.18 m 59ms
+     × AC3 #420.1aa64c41 what each reads decides what rebuilds: changing the roof's pitch alone leaves wa's and the floor's node keys, while removing wb changes wa's 78ms
+   ❯ AC3 #420.1aa64c41 a recipe repeat without a fixed count is refused (2)
+     × AC3 #420.1aa64c41 a repeat counted by its input installs and expands at check (control); one counted by t and one with no count are refused by the pack check, naming the recipe and the step 79ms
+     × AC3 #420.1aa64c41 a document that drives the repeat's count with a channel on f1's n is refused, naming items/f1/params/n; the same document without the channel is presented 78ms
+ ❯ watertight.test.ts (7 tests | 6 failed) 143171ms
+   ❯ AC5 #420.adbf19b6 builders: declared counts, watertight closed parts, Euler characteristic by genus, closed-form areas and volumes (7)
+     × AC5 #420.adbf19b6 every case declares the vertices it builds, before building and after, and every closed part is watertight with V − E + F = 2 − 2g and its closed-form area and volume to 1e-6 1407ms
+     × AC5 #420.adbf19b6 ported from Godot's test_primitives.cpp and Unreal's prism counts: a slab box has exactly six face normals, a lathe cylinder's side points sit at its radius and its caps at its ends, and an n-sided prism has between 4n − 4 and 4n triangles 39ms
+     × AC5 #420.adbf19b6 planted twin torus_genus_0 fails case torus, naming torus and V − E + F 29ms
+     × AC5 #420.adbf19b6 planted twin vertex_count_off_by_one fails case box, naming box and declares 31ms
+     × AC5 #420.adbf19b6 planted twin cap_left_open fails case cylinder, naming cylinder and open edges 20ms
+     × AC5 #420.adbf19b6 planted twin ball_scaled fails case ball_octa, naming ball_octa and area and volume 26ms
+ ❯ edges.test.ts (4 tests | 4 failed) 40836ms
+   ❯ AC6 #420.2e5e696d mesh edges of a 1 m slab box (4)
+     × AC6 #420.2e5e696d quads draws 12 segments and all 18, counted on welded positions, each edge once (noop lane) 5304ms
+     × AC6 #420.2e5e696d the planted edges_unwelded draws 24 segments for quads and fails the count 26ms
+     × AC6 #420.2e5e696d in a three-quarter view the 9 edges away from the hidden corner draw unbroken at 3 px and the 3 at it draw nowhere 253ms
+     × AC6 #420.2e5e696d the planted edges_skip_depth draws the 3 hidden edges and fails, naming each 219ms
+ ❯ modifiers.test.ts (4 tests | 4 failed) 34435ms
+   ❯ AC2 #420.0fd522a3 modifiers in their declared order, pure in params and time (4)
+     × AC2 #420.0fd522a3 array-then-mirror and mirror-then-array each build their own order's result, and the stack rows name each modifier's class (generate) and that neither reads time 2702ms
+     × AC2 #420.0fd522a3 each modifier is pure in its params and time: two processes build the same; an array whose offset a channel moves reads time, and at 1 s sought equals played and equals its offset's closed result 88ms
+     × AC2 #420.0fd522a3 while playing 26 frames over 1 s, the item whose modifiers don't read time never rebuilds after the first frame, while the time-reading one rebuilds every frame 131ms
+     × AC2 #420.0fd522a3 a revision that only reorders am's modifiers is a recorded change: am is listed as changed, a new current revision with another hash, and am's geometry becomes the other order's 78ms
+ ❯ release.test.ts (2 tests | 2 failed) 372064ms
+   ❯ AC7 #420.c4a5924c a shared result is released only after the GPU finished every frame that binds it (2)
+     × AC7 #420.c4a5924c removing the last item sampling a 2048 px texture while a frame that samples it is in flight: no error, released after that frame's gpu_done by the meter's count, and not bound by the next frame 7651ms
+     × AC7 #420.c4a5924c the planted releases_at_revision raises a destroyed_resource error on the in-flight frame 5 and fails, naming the texture 58ms
+ ❯ dirty.test.ts (3 tests | 3 failed) 45313ms
+   ❯ AC8 #420.34e8fe7a every schema path of every scene3d and building kind: a one-path revision and one frame equal a clean rebuild (3)
+     × AC8 #420.34e8fe7a the kinds call lists every scene3d and building kind the issue adds, each with a fixture and a sweep over every param and every dirty-map path 2519ms
+     × AC8 #420.34e8fe7a for every path of every scene3d and building kind, a revision changing only that path and one frame equal a clean rebuild, node by node, by hash 35ms
+     × AC8 #420.34e8fe7a the planted slab_size_as_shading (slab@1 maps its rebuild-class size to shading) fails the sweep, naming slab@1 and params/size 27ms
+ ❯ disabled.test.ts (2 tests | 2 failed) 32623ms
+   ❯ AC9 #420.9d6960ba a disabled modifier reads nothing (2)
+     × AC9 #420.9d6960ba moving the rail a disabled curve_deform names leaves the bar's keys and work unchanged; enabling it rebuilds the bar once, after which it follows the rail 3262ms
+     × AC9 #420.9d6960ba the planted keeps_disabled_refs (a key that keeps a disabled modifier's references) rebuilds the bar when the rail moves and fails, naming the modifier 44ms
+ ❯ particles.test.ts (5 tests | 1 failed) 65556ms
+   ❯ AC1 #420.822cf410 particles seeked to a time equal particles played to it (5)
+     × AC1 #420.822cf410 the planted particles_integrate (a mutant that steps particles from the last frame) fails seek against play, naming the frame 31ms
+ ❯ flat-tree.test.ts (2 tests | 2 failed) 114787ms
+   ❯ AC4 #420.fc311e1d a flat-shaded low-poly tree (2)
+     × AC4 #420.fc311e1d the tree's trunk and crown are counted before they build (the crown's 240 by the design's formula), build exactly that many vertices, at most three per triangle, and one normal per face 1355ms
+     × AC4 #420.fc311e1d the planted flat_as_smooth (a mutant: smooth normals over shared vertices) fails the flat check, naming tree.crown 23ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 29 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  building.test.ts > AC3 #420.1aa64c41 building kinds from the building module, each declaring what it reads > AC3 #420.1aa64c41 walls, openings, slabs, roofs and stairs are the building module's kinds, each declaring reads: a wall its siblings and children, an opening and a slab refs
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ building.test.ts:53:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/29]⎯
+
+ FAIL  building.test.ts > AC3 #420.1aa64c41 building kinds from the building module, each declaring what it reads > AC3 #420.1aa64c41 the house builds each of the five as a closed mesh it declares; wa mitres to x = 4.1 only beside wb; the door takes 0.9 × 2.1 × 0.2 m³ out of wa; the floor loses the stair's well; the stair has 15 risers of at most 0.18 m
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ building.test.ts:69:51
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/29]⎯
+
+ FAIL  building.test.ts > AC3 #420.1aa64c41 building kinds from the building module, each declaring what it reads > AC3 #420.1aa64c41 what each reads decides what rebuilds: changing the roof's pitch alone leaves wa's and the floor's node keys, while removing wb changes wa's
+AssertionError: the house: no error issue: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"actual\":\"^1\",\"check\":\"document.validate\",\"code\":\"module_missing\",\"fix\":\"Open the document in a build with the module, or remove the field.\",\"ids\":[],\"path\":\"requires/modules/building\",\"severity\":\"error\",\"what\":\"the document requires the building module, which this build lacks\"}",
++ ]
+
+ ❯ admitted helpers.ts:324:68
+    322| export function admitted(reply: JsonObject, what: string): void {
+    323|   const errs = errors(issues(reply, what));
+    324|   expect(errs.map((e) => canon(e.raw)), `${what}: no error issue`).toE…
+       |                                                                    ^
+    325|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).map(…
+    326|   expect(skipped.map((n) => canon(n)), `${what}: no item skipped as an…
+ ❯ building.test.ts:115:102
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/29]⎯
+
+ FAIL  building.test.ts > AC3 #420.1aa64c41 a recipe repeat without a fixed count is refused > AC3 #420.1aa64c41 a repeat counted by its input installs and expands at check (control); one counted by t and one with no count are refused by the pack check, naming the recipe and the step
+AssertionError: test/rows@1.0.0, whose repeat counts by n, installs: [{"actual":">=0.0.0","check":"document.validate","code":"module_missing","fix":"Open the document in a build with the module, or remove the field.","ids":[],"path":"requires/modules/building","severity":"error","what":"pack `test/rows@1.0.0` requires the building module, which this build lacks"},{"actual":"builder","check":"document.validate","code":"out_of_range","fix":"Give the field a value of its type inside its range.","ids":[],"path":"recipes/rows.fence@1/steps/post/op","severity":"error","what":"not a step op of this slice (mark, item)"}]: expected 'refused' to be 'installed' // Object.is equality
+
+Expected: "installed"
+Received: "refused"
+
+ ❯ building.test.ts:134:116
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/29]⎯
+
+ FAIL  building.test.ts > AC3 #420.1aa64c41 a recipe repeat without a fixed count is refused > AC3 #420.1aa64c41 a document that drives the repeat's count with a channel on f1's n is refused, naming items/f1/params/n; the same document without the channel is presented
+AssertionError: the fence without the channel: no error issue: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"actual\":\">=0.0.0\",\"check\":\"document.validate\",\"code\":\"module_missing\",\"fix\":\"Open the document in a build with the module, or remove the field.\",\"ids\":[],\"path\":\"packs/0/requires/modules/building\",\"severity\":\"error\",\"what\":\"pack `test/rows@1.0.0` requires the building module, which this build lacks\"}",
++   "{\"actual\":\"^1\",\"check\":\"document.validate\",\"code\":\"module_missing\",\"fix\":\"Open the document in a build with the module, or remove the field.\",\"ids\":[],\"path\":\"requires/modules/building\",\"severity\":\"error\",\"what\":\"the document requires the building module, which this build lacks\"}",
++ ]
+
+ ❯ admitted helpers.ts:324:68
+    322| export function admitted(reply: JsonObject, what: string): void {
+    323|   const errs = errors(issues(reply, what));
+    324|   expect(errs.map((e) => canon(e.raw)), `${what}: no error issue`).toE…
+       |                                                                    ^
+    325|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).map(…
+    326|   expect(skipped.map((n) => canon(n)), `${what}: no item skipped as an…
+ ❯ building.test.ts:154:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/29]⎯
+
+ FAIL  dirty.test.ts > AC8 #420.34e8fe7a every schema path of every scene3d and building kind: a one-path revision and one frame equal a clean rebuild > AC8 #420.34e8fe7a the kinds call lists every scene3d and building kind the issue adds, each with a fixture and a sweep over every param and every dirty-map path
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ listed dirty.test.ts:31:24
+ ❯ dirty.test.ts:76:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/29]⎯
+
+ FAIL  dirty.test.ts > AC8 #420.34e8fe7a every schema path of every scene3d and building kind: a one-path revision and one frame equal a clean rebuild > AC8 #420.34e8fe7a for every path of every scene3d and building kind, a revision changing only that path and one frame equal a clean rebuild, node by node, by hash
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ listed dirty.test.ts:31:24
+ ❯ dirty.test.ts:98:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/29]⎯
+
+ FAIL  dirty.test.ts > AC8 #420.34e8fe7a every schema path of every scene3d and building kind: a one-path revision and one frame equal a clean rebuild > AC8 #420.34e8fe7a the planted slab_size_as_shading (slab@1 maps its rebuild-class size to shading) fails the sweep, naming slab@1 and params/size
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ listed dirty.test.ts:31:24
+ ❯ dirty.test.ts:106:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/29]⎯
+
+ FAIL  disabled.test.ts > AC9 #420.9d6960ba a disabled modifier reads nothing > AC9 #420.9d6960ba moving the rail a disabled curve_deform names leaves the bar's keys and work unchanged; enabling it rebuilds the bar once, after which it follows the rail
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ steps disabled.test.ts:48:19
+ ❯ disabled.test.ts:77:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/29]⎯
+
+ FAIL  disabled.test.ts > AC9 #420.9d6960ba a disabled modifier reads nothing > AC9 #420.9d6960ba the planted keeps_disabled_refs (a key that keeps a disabled modifier's references) rebuilds the bar when the rail moves and fails, naming the modifier
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ steps disabled.test.ts:48:19
+ ❯ disabled.test.ts:90:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/29]⎯
+
+ FAIL  edges.test.ts > AC6 #420.2e5e696d mesh edges of a 1 m slab box > AC6 #420.2e5e696d quads draws 12 segments and all 18, counted on welded positions, each edge once (noop lane)
+AssertionError: the frame lists the segments each mesh-edge line drew (counts: true): expected null not to be null
+ ❯ segmentsOf edges.test.ts:49:98
+     47| /** The segments a line drew, failing when the frame doesn't list them…
+     48| function segmentsOf(f: Frame3, id: string): [V3, V3][] {
+     49|   expect(f.segments, 'the frame lists the segments each mesh-edge line…
+       |                                                                                                  ^
+     50|   const s = f.segments!.get(id);
+     51|   expect(s, `the frame lists ${id}'s segments`).toBeDefined();
+ ❯ edges.test.ts:148:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/29]⎯
+
+ FAIL  edges.test.ts > AC6 #420.2e5e696d mesh edges of a 1 m slab box > AC6 #420.2e5e696d the planted edges_unwelded draws 24 segments for quads and fails the count
+AssertionError: deep-gpu run --backend noop --planted edges_unwelded exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ accepted helpers.ts:197:139
+    195| function accepted(s: Started, name: string, calls: number): JsonObject…
+    196|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    197|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ runGpu helpers.ts:639:10
+ ❯ draw edges.test.ts:42:19
+ ❯ edges.test.ts:152:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/29]⎯
+
+ FAIL  edges.test.ts > AC6 #420.2e5e696d mesh edges of a 1 m slab box > AC6 #420.2e5e696d in a three-quarter view the 9 edges away from the hidden corner draw unbroken at 3 px and the 3 at it draw nowhere
+AssertionError: the frame lists the segments each mesh-edge line drew (counts: true): expected null not to be null
+ ❯ segmentsOf edges.test.ts:49:98
+     47| /** The segments a line drew, failing when the frame doesn't list them…
+     48| function segmentsOf(f: Frame3, id: string): [V3, V3][] {
+     49|   expect(f.segments, 'the frame lists the segments each mesh-edge line…
+       |                                                                                                  ^
+     50|   const s = f.segments!.get(id);
+     51|   expect(s, `the frame lists ${id}'s segments`).toBeDefined();
+ ❯ edges.test.ts:161:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/29]⎯
+
+ FAIL  edges.test.ts > AC6 #420.2e5e696d mesh edges of a 1 m slab box > AC6 #420.2e5e696d the planted edges_skip_depth draws the 3 hidden edges and fails, naming each
+AssertionError: the frame lists the segments each mesh-edge line drew (counts: true): expected null not to be null
+ ❯ segmentsOf edges.test.ts:49:98
+     47| /** The segments a line drew, failing when the frame doesn't list them…
+     48| function segmentsOf(f: Frame3, id: string): [V3, V3][] {
+     49|   expect(f.segments, 'the frame lists the segments each mesh-edge line…
+       |                                                                                                  ^
+     50|   const s = f.segments!.get(id);
+     51|   expect(s, `the frame lists ${id}'s segments`).toBeDefined();
+ ❯ edges.test.ts:169:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/29]⎯
+
+ FAIL  flat-tree.test.ts > AC4 #420.fc311e1d a flat-shaded low-poly tree > AC4 #420.fc311e1d the tree's trunk and crown are counted before they build (the crown's 240 by the design's formula), build exactly that many vertices, at most three per triangle, and one normal per face
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ tree flat-tree.test.ts:31:35
+ ❯ flat-tree.test.ts:71:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/29]⎯
+
+ FAIL  flat-tree.test.ts > AC4 #420.fc311e1d a flat-shaded low-poly tree > AC4 #420.fc311e1d the planted flat_as_smooth (a mutant: smooth normals over shared vertices) fails the flat check, naming tree.crown
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ tree flat-tree.test.ts:31:35
+ ❯ flat-tree.test.ts:87:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/29]⎯
+
+ FAIL  modifiers.test.ts > AC2 #420.0fd522a3 modifiers in their declared order, pure in params and time > AC2 #420.0fd522a3 array-then-mirror and mirror-then-array each build their own order's result, and the stack rows name each modifier's class (generate) and that neither reads time
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ modifiers.test.ts:67:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/29]⎯
+
+ FAIL  modifiers.test.ts > AC2 #420.0fd522a3 modifiers in their declared order, pure in params and time > AC2 #420.0fd522a3 each modifier is pure in its params and time: two processes build the same; an array whose offset a channel moves reads time, and at 1 s sought equals played and equals its offset's closed result
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ run modifiers.test.ts:88:23
+ ❯ modifiers.test.ts:93:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/29]⎯
+
+ FAIL  modifiers.test.ts > AC2 #420.0fd522a3 modifiers in their declared order, pure in params and time > AC2 #420.0fd522a3 while playing 26 frames over 1 s, the item whose modifiers don't read time never rebuilds after the first frame, while the time-reading one rebuilds every frame
+AssertionError: the document: no error issue: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"actual\":\"items/moving/modifiers/0/params/offset/0\",\"check\":\"document.validate\",\"code\":\"ref_unresolved\",\"fix\":\"Name an ID the document holds, or remove the reference.\",\"ids\":[\"slide\"],\"path\":\"channels/slide/target\",\"severity\":\"error\",\"what\":\"items/moving/modifiers/0/params/offset/0 reaches nothing\"}",
++ ]
+
+ ❯ admitted helpers.ts:324:68
+    322| export function admitted(reply: JsonObject, what: string): void {
+    323|   const errs = errors(issues(reply, what));
+    324|   expect(errs.map((e) => canon(e.raw)), `${what}: no error issue`).toE…
+       |                                                                    ^
+    325|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).map(…
+    326|   expect(skipped.map((n) => canon(n)), `${what}: no item skipped as an…
+ ❯ modifiers.test.ts:107:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/29]⎯
+
+ FAIL  modifiers.test.ts > AC2 #420.0fd522a3 modifiers in their declared order, pure in params and time > AC2 #420.0fd522a3 a revision that only reorders am's modifiers is a recorded change: am is listed as changed, a new current revision with another hash, and am's geometry becomes the other order's
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ modifiers.test.ts:121:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/29]⎯
+
+ FAIL  particles.test.ts > AC1 #420.822cf410 particles seeked to a time equal particles played to it > AC1 #420.822cf410 the planted particles_integrate (a mutant that steps particles from the last frame) fails seek against play, naming the frame
+AssertionError: deep-gpu run --planted particles_integrate exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ accepted helpers.ts:197:139
+    195| function accepted(s: Started, name: string, calls: number): JsonObject…
+    196|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    197|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ runGpu helpers.ts:639:10
+ ❯ hashes particles.test.ts:51:19
+ ❯ seekProblems particles.test.ts:62:16
+ ❯ particles.test.ts:86:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/29]⎯
+
+ FAIL  release.test.ts > AC7 #420.c4a5924c a shared result is released only after the GPU finished every frame that binds it > AC7 #420.c4a5924c removing the last item sampling a 2048 px texture while a frame that samples it is in flight: no error, released after that frame's gpu_done by the meter's count, and not bound by the next frame
+AssertionError: the live call was answered, not refused: {"code":"bad_input","reason":"an event is open, close, revise, camera, rung or canonical"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:209:79
+    207| export function answered(reply: JsonObject, what: string): JsonObject {
+    208|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    209|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    210|   return reply;
+    211| }
+ ❯ liveReply helpers.ts:779:3
+ ❯ run release.test.ts:59:10
+ ❯ release.test.ts:119:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/29]⎯
+
+ FAIL  release.test.ts > AC7 #420.c4a5924c a shared result is released only after the GPU finished every frame that binds it > AC7 #420.c4a5924c the planted releases_at_revision raises a destroyed_resource error on the in-flight frame 5 and fails, naming the texture
+AssertionError: deep-gpu run --planted releases_at_revision exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ accepted helpers.ts:197:139
+    195| function accepted(s: Started, name: string, calls: number): JsonObject…
+    196|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    197|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ runGpu helpers.ts:639:10
+ ❯ run release.test.ts:49:19
+ ❯ release.test.ts:126:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/29]⎯
+
+ FAIL  watertight.test.ts > AC5 #420.adbf19b6 builders: declared counts, watertight closed parts, Euler characteristic by genus, closed-form areas and volumes > AC5 #420.adbf19b6 every case declares the vertices it builds, before building and after, and every closed part is watertight with V − E + F = 2 − 2g and its closed-form area and volume to 1e-6
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ built watertight.test.ts:55:35
+ ❯ watertight.test.ts:126:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/29]⎯
+
+ FAIL  watertight.test.ts > AC5 #420.adbf19b6 builders: declared counts, watertight closed parts, Euler characteristic by genus, closed-form areas and volumes > AC5 #420.adbf19b6 ported from Godot's test_primitives.cpp and Unreal's prism counts: a slab box has exactly six face normals, a lathe cylinder's side points sit at its radius and its caps at its ends, and an n-sided prism has between 4n − 4 and 4n triangles
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ built watertight.test.ts:55:35
+ ❯ watertight.test.ts:137:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/29]⎯
+
+ FAIL  watertight.test.ts > AC5 #420.adbf19b6 builders: declared counts, watertight closed parts, Euler characteristic by genus, closed-form areas and volumes > AC5 #420.adbf19b6 planted twin torus_genus_0 fails case torus, naming torus and V − E + F
+ FAIL  watertight.test.ts > AC5 #420.adbf19b6 builders: declared counts, watertight closed parts, Euler characteristic by genus, closed-form areas and volumes > AC5 #420.adbf19b6 planted twin vertex_count_off_by_one fails case box, naming box and declares
+ FAIL  watertight.test.ts > AC5 #420.adbf19b6 builders: declared counts, watertight closed parts, Euler characteristic by genus, closed-form areas and volumes > AC5 #420.adbf19b6 planted twin cap_left_open fails case cylinder, naming cylinder and open edges
+ FAIL  watertight.test.ts > AC5 #420.adbf19b6 builders: declared counts, watertight closed parts, Euler characteristic by genus, closed-form areas and volumes > AC5 #420.adbf19b6 planted twin ball_scaled fails case ball_octa, naming ball_octa and area and volume
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ built watertight.test.ts:55:35
+ ❯ watertight.test.ts:156:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/29]⎯
+
+
+ Test Files  9 failed (9)
+      Tests  29 failed | 5 passed (34)
+   Start at  16:28:35
+   Duration  958.71s (tests 100%)
+

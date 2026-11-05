@@ -94,6 +94,12 @@ Never: The source of truth; the wiki's pages are.
 
 Never: Called from a panel or past its quota, or a reading without its source and as-of time, or a tool not counted as read.
 
+## Canvas
+
+- deep_kinds. Look up what this core can draw before you write a document, with the kinds, recipes, packs and registries it has, each with its schema, an example by hash, its stability and whether it is available here; the word another tool uses for one, from a familiar-names pack; and the installed guides and gallery, read in pages.
+
+Never: Drawn outside its panel or over the question card.
+
 ## Physics
 
 - deep_show. Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document's issues and snapshots by hash.
@@ -105,3 +111,7 @@ Never: Code run per step, a body created mid-run, a GPU simulation's result used
 - deep_show. Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document's issues and snapshots by hash.
 
 Never: Sound that starts without your gesture, a capture without the system picker or the OS permission, or without its indicator, a microphone combined with network access you didn't see, or a voice cloned from evidence.
+
+## Working on a canvas document
+
+Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it.

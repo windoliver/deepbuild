@@ -1,0 +1,112 @@
+# #1117 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (d2623d97, no scripts/bays.mjs), in this worktree with node_modules from npm ci
+
+$ node --test 'tests/acceptance/1117/*.test.mjs'
+(stack-trace and assertion-object lines dropped; home paths read ~, each test's sandbox <sandbox>)
+
+✖ #1117.a9ce2b57 lock holder death releases the bay: with every pair held, a holder killed by SIGKILL frees its pair for the next claim (109.112271ms)
+✖ #1117.ab479591 outside a held pair, tests/proof.test.mjs and the 569 scene proofs take no pair, and bays.mjs refuses a scene repository (100.956476ms)
+✖ #1117.ab479591 inside a held pair, tests/proof.test.mjs and the 569 scene proofs take no pair, and bays.mjs refuses under a pair's holder (82.361998ms)
+✖ #1117.b2c7cfc4 a run after an aborted run rebuilds every file the abort left different, though each kept its size and mtime (78.74921ms)
+✖ #1117.af1d4c7e a planted mutant or a rewritten kit-ledger.json from a previous run never survives into the next, nor do its planted files (60.808874ms)
+✖ #1117.4ebbfb21 a planted binary in a sealed bay's target/ is detected at claim and built cold, and the record says so (97.785111ms)
+✖ #1117.4ebbfb21 a replaced rlib in a sealed bay's target/ (same size, same mtime, other bytes) is detected at claim and built cold, and the record says so (93.612694ms)
+✖ #1117.029c15e6 a bay build with CARGO_TARGET_DIR set in the parent environment still writes to <bay>/target, and nothing to that folder (66.84938ms)
+✖ #1117.e77894d3 a second run of the same tree in a bay compiles 0 crates, at the same fixed path, and its tests see this tree's binary (81.488065ms)
+✖ #1117.f25af808 bay-target size is a reading: the release record carries the bytes of <bay>/target, empty before a build and full after (77.509007ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 0
+ℹ fail 10
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 238.128617
+
+Each failure, at its assertion:
+
+✖ #1117.a9ce2b57 lock holder death releases the bay: with every pair held, a holder killed by SIGKILL frees its pair for the next claim (109.112271ms)
+  AssertionError [ERR_ASSERTION]: the run never reached its command's hold in a bay
+  (stderr)   Error: Cannot find module '<sandbox-home>/deepbuild/.claude/worktrees/w/scripts/bays.mjs'
+
+✖ #1117.ab479591 outside a held pair, tests/proof.test.mjs and the 569 scene proofs take no pair, and bays.mjs refuses a scene repository (100.956476ms)
+  AssertionError [ERR_ASSERTION]: bays.mjs printed no "NO BAY" line for a scene repository
+  (stderr)   Error: Cannot find module '~/deepbuild/.claude/worktrees/issue-1117-fa777e/scripts/bays.mjs'
+
+✖ #1117.ab479591 inside a held pair, tests/proof.test.mjs and the 569 scene proofs take no pair, and bays.mjs refuses under a pair's holder (82.361998ms)
+  AssertionError [ERR_ASSERTION]: bays.mjs printed no "BAY claim {…}" line
+  (stderr)   Error: Cannot find module '<sandbox-home>/deepbuild/.claude/worktrees/w/scripts/bays.mjs'
+
+✖ #1117.b2c7cfc4 a run after an aborted run rebuilds every file the abort left different, though each kept its size and mtime (78.74921ms)
+  AssertionError [ERR_ASSERTION]: bays.mjs printed no "BAY claim {…}" line
+  (stderr)   Error: Cannot find module '<sandbox-home>/deepbuild/.claude/worktrees/w/scripts/bays.mjs'
+
+✖ #1117.af1d4c7e a planted mutant or a rewritten kit-ledger.json from a previous run never survives into the next, nor do its planted files (60.808874ms)
+  AssertionError [ERR_ASSERTION]: bays.mjs printed no "BAY claim {…}" line
+  (stderr)   Error: Cannot find module '<sandbox-home>/deepbuild/.claude/worktrees/w/scripts/bays.mjs'
+
+✖ #1117.4ebbfb21 a planted binary in a sealed bay's target/ is detected at claim and built cold, and the record says so (97.785111ms)
+  AssertionError [ERR_ASSERTION]: bays.mjs printed no "BAY claim {…}" line
+  (stderr)   Error: Cannot find module '<sandbox-home>/deepbuild/.claude/worktrees/w/scripts/bays.mjs'
+
+✖ #1117.4ebbfb21 a replaced rlib in a sealed bay's target/ (same size, same mtime, other bytes) is detected at claim and built cold, and the record says so (93.612694ms)
+  AssertionError [ERR_ASSERTION]: bays.mjs printed no "BAY claim {…}" line
+  (stderr)   Error: Cannot find module '<sandbox-home>/deepbuild/.claude/worktrees/w/scripts/bays.mjs'
+
+✖ #1117.029c15e6 a bay build with CARGO_TARGET_DIR set in the parent environment still writes to <bay>/target, and nothing to that folder (66.84938ms)
+  AssertionError [ERR_ASSERTION]: bays.mjs printed no "BAY claim {…}" line
+  (stderr)   Error: Cannot find module '<sandbox-home>/deepbuild/.claude/worktrees/w/scripts/bays.mjs'
+
+✖ #1117.e77894d3 a second run of the same tree in a bay compiles 0 crates, at the same fixed path, and its tests see this tree's binary (81.488065ms)
+  AssertionError [ERR_ASSERTION]: bays.mjs printed no "BAY claim {…}" line
+  (stderr)   Error: Cannot find module '<sandbox-home>/deepbuild/.claude/worktrees/w/scripts/bays.mjs'
+
+✖ #1117.f25af808 bay-target size is a reading: the release record carries the bytes of <bay>/target, empty before a build and full after (77.509007ms)
+  AssertionError [ERR_ASSERTION]: bays.mjs printed no "BAY claim {…}" line
+  (stderr)   Error: Cannot find module '<sandbox-home>/deepbuild/.claude/worktrees/w/scripts/bays.mjs'
+
+Every test fails at its AssertionError in the test or its helpers (tests/acceptance/1117/), never on an import:
+the "Cannot find module …/scripts/bays.mjs" lines are the stderr of the bays.mjs process each test starts, which
+the failing assertion prints. No helper imports the code under test.
+
+## A planted program, and the planted wrong programs
+
+No implementation exists yet. To check that the tests can pass and that each named wrong program fails them, a
+throwaway planted bays.mjs (written for this check only, kept out of the repository; it reads the tree's files straight
+from the worktree by listFiles, not from a git archive and bundle, compares bytes, seals target/ and node_modules/ by path, size, mtime_ns and inode, and claims
+through throttle.mjs's acquire('bay-pair')) was put at scripts/bays.mjs in a scratch copy of this checkout
+(node_modules linked). On the Spark (20 cores, Linux arm64, cargo 1.99.1, node 24.22.0):
+
+  ℹ tests 10, pass 10, fail 0, in 76 s (the two proofs.test.mjs tests take about 38 s each, all of it
+  tests/proof.test.mjs and tests/acceptance/569/before.test.mjs; every other test takes 1-2 s).
+
+Then one rule at a time was broken in that planted program (PLANTED_TWIN=<name>), and the suite run again:
+
+- blob-id-compare (decides which files to write by the blob ID it last wrote, not by the bytes on disk):
+  ✖ #1117.b2c7cfc4 a run after an aborted run rebuilds every file the abort left different, …
+  ✖ #1117.af1d4c7e a planted mutant or a rewritten kit-ledger.json from a previous run never survives …
+    AssertionError: the bay does not hold exactly the tree's files and bytes (outside .git, target and node_modules)
+  every other test passed.
+- relocated-target (each run gets a new folder and the warm target is moved in, and back after):
+  ✖ #1117.e77894d3 … AssertionError: the second run of the same tree used another bay path, …
+  ✖ #1117.029c15e6 … AssertionError: the bay build did not write <sandbox-home>/deepbuild-bays/1/run-…/target/debug/greet
+  (and, by its bookkeeping, #1117.af1d4c7e, both #1117.4ebbfb21 and #1117.f25af808); #1117.b2c7cfc4 and
+  #1117.a9ce2b57 passed.
+- trusted-seal (a seal that exists is taken as intact, its stat listing never compared):
+  ✖ #1117.4ebbfb21 a planted binary … AssertionError: the claim record's seal is "intact", not "broken", after target/ was tampered with
+  ✖ #1117.4ebbfb21 a replaced rlib … AssertionError: the claim record's seal is "intact", not "broken", after target/ was tampered with
+  every other test passed.
+
+Two more wrong programs, beyond the three the issue names:
+
+- backdate (writes a changed file with an old mtime, as `git archive | tar -x` does):
+  ✖ #1117.b2c7cfc4 … AssertionError: crates/word/src/lib.rs was rewritten with an mtime from before this run (2001-09-09T01:…)
+  ✖ #1117.af1d4c7e … AssertionError: crates/word/src/lib.rs was put back with an mtime from before this run (2001-09-09T01:…)
+- anyrepo (gives a bay to any repository) fails the outside test of #1117.ab479591 ("printed no NO BAY line for a
+  scene repository"); noancestor (ignores a pair held by an ancestor) fails its inside test ("under a held pair,
+  bays.mjs asked from the worktree printed no NO BAY line").
+
+Also seen in that check: a workspace copied to a new path with its target (cp -a) reads every crate fresh to cargo,
+yet the fixture's integration test fails there (CARGO_MANIFEST_DIR baked at the old path), which is why every build
+step also runs cargo test.

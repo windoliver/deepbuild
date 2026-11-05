@@ -1,0 +1,39 @@
+{
+  "id": "rows.fence",
+  "version": "1.0",
+  "title": "Fence",
+  "license": "MIT",
+  "author": "the #420 acceptance suite",
+  "description": "n walls 1.5 m long and 1 m high, 2 m apart along x: a repeat whose count is the input n, fixed at check.",
+  "inputs": {
+    "n": {
+      "type": "integer",
+      "default": 3,
+      "min": 1,
+      "max": 12,
+      "about": "how many walls"
+    }
+  },
+  "steps": {
+    "post": {
+      "op": "builder",
+      "kind": "arch.wall@1",
+      "repeat": {
+        "count": "n",
+        "as": "i"
+      },
+      "params": {
+        "a": ["2 * i", 0],
+        "b": ["2 * i + 1.5", 0],
+        "thickness": 0.1,
+        "height": 1,
+        "justify": "center",
+        "outside": "none",
+        "cut_height": 1
+      }
+    }
+  },
+  "outputs": {
+    "parts": ["post"]
+  }
+}
