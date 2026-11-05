@@ -1,0 +1,14 @@
+{
+  "issue": 425,
+  "criterion": "#425.e26677a1",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation (Tao Feng asked in session: \"can you judge for me\")",
+  "when": "2026-11-05T01:44:52Z",
+  "screenshots": {
+    "mesh-levels.png": "bd65f88e2c4e7b032481f1f4f45af8499e46ca413a2314bec45aad3134395f55",
+    "band-blend.png": "fc977c72f2c7e6bf6f187a79b35aeda464eeee11fe6e449f1d430ca8f7299f20",
+    "ladder-climb.png": "0addd83b08bf19f1f709c5ce343980c80003c2adba1bff84a21ce9bea354090f",
+    "orbit-zoom.apng": "620240ca04e4f55c8b69640ad08b103417d684201ecba7bc1f5f89ce027789ef"
+  },
+  "note": "The rock gets coarser with distance without visible popping between levels. The ball reads as itself at full band and as its box below 48 px. Inside the margin both draw through the per-pixel dither the design specifies; at 320x240 the dither is visibly speckled, which is the design's own revisit trigger (dither crawl under motion), not a defect here. The climb's second frame is visibly sharper than the first (scale 0.5 to 1). The orbit and zoom shows the ball, the blend and the box in turn with shadows that follow. Re-recorded after the gap work (proxy, lod_px, shadow levels, climb rungs): the pictures moved by at most 2 code values in 24 bytes, from recompiled shader arithmetic, and reproduce byte for byte."
+}
