@@ -618,6 +618,10 @@ mod trusted {
     pub fn start(_: super::Mode, _: &mut gpui_kit::App) {
         eprintln!("deep-app: the cursor window and the probes run on macOS only");
     }
+
+    pub fn post_forged(_: u64) {
+        eprintln!("deep-app: the probes run on macOS only");
+    }
 }
 
 /// `--color-check` (#140): every layer the app presents through, read back and asked its colorspace.
