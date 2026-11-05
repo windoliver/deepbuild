@@ -94,6 +94,44 @@ pub struct Solid {
     pub maps: Option<Arc<crate::light::Maps>>,
     /// The material operator its material names (#429), which shades it per pixel.
     pub op: Option<SolidOp>,
+    /// Whether the scene's cutaway reaches it (#424).
+    pub cut: bool,
+    /// Object: see-through order's `resolve: per_pixel` (#424): its fragments join per-pixel
+    /// lists and composite by depth per pixel, back faces included.
+    pub per_pixel: bool,
+    /// Its item's adjust (#424): its colour adjustments apply to its lit color before fog, and
+    /// an opacity below 1 draws it see-through after a depth pass of its own; `None` at the
+    /// identity.
+    pub adjust: Option<Adjust3>,
+}
+
+/// An item's adjust as a 3D item takes it in shading (Object: adjust; Item and kind: adjust):
+/// its tint in linear RGB.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Adjust3 {
+    pub opacity: f64,
+    pub exposure: f64,
+    pub contrast: f64,
+    pub gamma: f64,
+    pub hue: f64,
+    pub saturation: f64,
+    pub brightness: f64,
+    pub tint: Option<[f64; 3]>,
+    pub invert: bool,
+}
+
+impl Adjust3 {
+    /// Whether it changes no color (its opacity aside).
+    pub fn colors(&self) -> bool {
+        self.exposure != 0.0
+            || self.contrast != 1.0
+            || self.gamma != 1.0
+            || self.hue != 0.0
+            || self.saturation != 1.0
+            || self.brightness != 1.0
+            || self.tint.is_some()
+            || self.invert
+    }
 }
 
 /// A material operator on one solid (#429): the `gpu.material@1` item as evaluated, and the
@@ -559,9 +597,25 @@ pub struct Scene {
     pub texels: BTreeMap<String, Arc<crate::light::Texels>>,
     /// The frame's sub-pixel offset, px right and down (#423: Look: samples).
     pub jitter: [f64; 2],
+    /// The first `cutaway@1` (#424), which the solids it reaches are cut by in every pass.
+    pub cutaway: Option<crate::cut::Cutaway>,
+    /// The per-pixel resolve's room (#424): the view's `max_fragments`, and the most fragments
+    /// the class's GPU memory holds at 16 B each.
+    pub fragments: [u64; 2],
 }
 
 impl Scene {
+    /// Cuts the scene by `cutaway` (#424): a view input in session state replaces the
+    /// document's, and reaches the solids its `applies_to` names.
+    pub fn set_cutaway(&mut self, cutaway: Option<crate::cut::Cutaway>) {
+        for s in self.layers.iter_mut().flat_map(|l| &mut l.solids) {
+            s.cut = cutaway
+                .as_ref()
+                .is_some_and(|c| !c.planes.is_empty() && c.reaches(&s.id));
+        }
+        self.cutaway = cutaway;
+    }
+
     /// Whether the key sun's shadow is drawn through its cascades (#422): a shadowed sun over a
     /// scene whose solids name materials, which shade it per pixel. A scene of painted solids
     /// alone keeps the single fitted map the effects' shadow reads (#380).
@@ -1711,6 +1765,9 @@ fn asset_scene(
                 maps,
                 // An imported material names no operator.
                 op: None,
+                cut: false,
+                per_pixel: false,
+                adjust: None,
             });
         }
     }
@@ -1839,6 +1896,26 @@ pub(crate) fn evaluate_compiled(
     let mut puffs = 0u64;
     let mut others = Vec::new();
     let mut curves = BTreeMap::new();
+    // #424: the prototypes instancers name, whose solids are kept in their own space whether or
+    // not they draw themselves; the instancers, placed once every layer is read; the cutaway.
+    let mut protos_wanted: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    for (id, item) in items.iter() {
+        if item.get("kind").and_then(Value::as_str) == Some("instance@1") && shown(&items, id) {
+            for p in item
+                .pointer("/params/of")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                if let Some(p) = p.as_str() {
+                    protos_wanted.insert(p);
+                }
+            }
+        }
+    }
+    let mut protos: HashMap<String, Vec<Solid>> = HashMap::new();
+    let mut instancers: Vec<(usize, String)> = Vec::new();
+    let mut cutaway = None;
     for layer_id in &order {
         let Some(list) = by_layer.get_mut(layer_id) else {
             continue;
@@ -1851,6 +1928,14 @@ pub(crate) fn evaluate_compiled(
         };
         for &(_, id, item) in list.iter() {
             let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+            // An item draws when it and every parent are visible (Item: `visible`, inherited);
+            // a prototype is read either way, for its instancers.
+            let visible = shown(&items, id);
+            let proto = protos_wanted.contains(id.as_str());
+            if !visible && !proto {
+                continue;
+            }
+            let before = layer.solids.len();
             let path = format!("items/{id}/params");
             let empty = Value::Object(Map::new());
             let params = item.get("params").unwrap_or(&empty);
@@ -1907,6 +1992,9 @@ pub(crate) fn evaluate_compiled(
                         alpha: surface.alpha,
                         emission: surface.emission,
                         op: solid_op(&items, map, program, t, id, item)?,
+                        cut: false,
+                        per_pixel: false,
+                        adjust: None,
                     });
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
@@ -1990,6 +2078,9 @@ pub(crate) fn evaluate_compiled(
                         alpha: surface.alpha,
                         emission: surface.emission,
                         op: solid_op(&items, map, program, t, id, item)?,
+                        cut: false,
+                        per_pixel: false,
+                        adjust: None,
                     });
                 }
                 // A curve draws nothing; what follows it (particles along it, #420) reads it
@@ -2124,8 +2215,25 @@ pub(crate) fn evaluate_compiled(
                         flicker,
                     ));
                 }
-                // A material draws nothing itself; the objects naming it read it (#418).
-                "camera@1" | "sky@1" | "material@1" => {}
+                // A material draws nothing itself; the objects naming it read it (#418). A group
+                // draws nothing either: its children take its transform and its `visible` (#424).
+                "camera@1" | "sky@1" | "material@1" | "group@1" => {}
+                // #424: an instancer's elements, placed once its prototypes are read.
+                "instance@1" => instancers.push((layers.len(), id.clone())),
+                "cutaway@1" if cutaway.is_none() => {
+                    cutaway = Some(crate::cut::cutaway(
+                        id,
+                        params,
+                        &path,
+                        |r| {
+                            look.role(r).map(|c| {
+                                c.map(|v| deep_canvas::color::srgb_decode(f64::from(v) / 255.0))
+                            })
+                        },
+                        look.basis == crate::look::Basis::Physical,
+                    )?);
+                }
+                "cutaway@1" => {}
                 _ => others.push(Other {
                     id: id.clone(),
                     kind: kind.to_string(),
@@ -2133,11 +2241,76 @@ pub(crate) fn evaluate_compiled(
                     pos: origin(&world(&items, id)),
                 }),
             }
+            if proto {
+                protos.insert(id.clone(), layer.solids[before..].to_vec());
+            }
+            if !visible {
+                layer.solids.truncate(before);
+            }
         }
-        if !layer.items().is_empty() {
+        if !layer.items().is_empty() || instancers.iter().any(|(l, _)| *l == layers.len()) {
             layers.push(layer);
         }
     }
+    // Each element: its prototype's solids moved from the prototype's world to the instancer's
+    // world × the element's own transform, addressed `<instancer>#<id>` (Instance `instance@1`).
+    for (l, id) in &instancers {
+        let path = format!("items/{id}/params");
+        let empty = Value::Object(Map::new());
+        let params = items[id.as_str()].get("params").unwrap_or(&empty);
+        let (of, elements) = crate::cut::elements(params, &path)?;
+        let at = world(&items, id);
+        let from: Vec<Affine3> = of
+            .iter()
+            .map(|p| crate::cut::inverse(&world(&items, p)))
+            .collect();
+        for e in elements {
+            let Some(solids) = protos.get(&of[e.proto]) else {
+                return refused("ref_unresolved", format!("{path}/of"));
+            };
+            let place = matmul(&matmul(&at, &e.at), &from[e.proto]);
+            for (k, s) in solids.iter().enumerate() {
+                let mut s = s.clone();
+                s.id = if solids.len() == 1 {
+                    format!("{id}#{}", e.id)
+                } else {
+                    format!("{id}#{}#{k}", e.id)
+                };
+                s.model = matmul(&place, &s.model);
+                s.op = None;
+                bounds.extend(s.points());
+                layers[*l].solids.push(s);
+            }
+        }
+    }
+    layers.retain(|l| !l.items().is_empty());
+    let mut max_fragments: u64 = 8_388_608;
+    // Each solid's adjust past opacity, by its item (an element's, its instancer's), and how it
+    // resolves (#424).
+    for s in layers.iter_mut().flat_map(|l| &mut l.solids) {
+        let owner = s.id.split('#').next().unwrap_or(&s.id);
+        s.adjust = items.get(owner).and_then(|i| adjust3(look, i));
+        let item = items.get(owner);
+        s.per_pixel =
+            item.and_then(|i| i.get("resolve")).and_then(Value::as_str) == Some("per_pixel");
+        if s.per_pixel {
+            if let Some(m) = item
+                .and_then(|i| i.get("max_fragments"))
+                .and_then(Value::as_u64)
+            {
+                max_fragments = max_fragments.min(m.max(1));
+            }
+        }
+    }
+    // The class's GPU memory, at 16 B a fragment (Object: see-through order).
+    let budget = Value::Object(
+        map.get("budget")
+            .map(|b| ("budget".to_string(), b.clone()))
+            .into_iter()
+            .collect(),
+    );
+    let gpu = deep_canvas::budget::of(&budget).map_or(512 << 20, |(_, l)| l.gpu_bytes);
+    let fragments = [max_fragments, (gpu / 16).max(max_fragments)];
 
     let camera_id = map.get("camera").and_then(Value::as_str);
     let Some(cam_item) = camera_id.and_then(|c| items.get(c)) else {
@@ -2186,7 +2359,7 @@ pub(crate) fn evaluate_compiled(
     if puffs > cap {
         return refused("out_of_range", "budget/puffs");
     }
-    Ok(Scene {
+    let mut scene = Scene {
         size,
         camera,
         ground: look.ground,
@@ -2200,7 +2373,53 @@ pub(crate) fn evaluate_compiled(
         pages: labels.pages(),
         texels: BTreeMap::new(),
         jitter: [0.0; 2],
-    })
+        cutaway: None,
+        fragments,
+    };
+    scene.set_cutaway(cutaway);
+    Ok(scene)
+}
+
+/// Whether `id` and each of its parents are visible (Item: `visible`, inherited).
+fn shown(items: &Items<'_>, id: &str) -> bool {
+    let mut at = Some(id);
+    let mut seen = 0;
+    while let Some(i) = at {
+        let Some(item) = items.get(i) else {
+            return true;
+        };
+        if item.get("visible") == Some(&Value::Bool(false)) {
+            return false;
+        }
+        at = item.get("parent").and_then(Value::as_str);
+        seen += 1;
+        if seen > 64 {
+            return true;
+        }
+    }
+    true
+}
+
+/// An item's adjust (Item and kind: adjust), `None` at the identity (#424).
+fn adjust3(look: &Look3, item: &Value) -> Option<Adjust3> {
+    let m = item.get("adjust")?.as_object()?;
+    let n = |k: &str, d: f64| num(m.get(k)).unwrap_or(d);
+    let a = Adjust3 {
+        opacity: n("opacity", 1.0).clamp(0.0, 1.0),
+        tint: m
+            .get("tint")
+            .and_then(|t| t.as_str().or_else(|| t.get("role").and_then(Value::as_str)))
+            .and_then(|r| look.role(r))
+            .map(|c| c.map(|v| deep_canvas::color::srgb_decode(f64::from(v) / 255.0))),
+        hue: n("hue", 0.0),
+        saturation: n("saturation", 1.0),
+        brightness: n("brightness", 1.0),
+        contrast: n("contrast", 1.0),
+        exposure: n("exposure", 0.0),
+        gamma: n("gamma", 1.0),
+        invert: m.get("invert") == Some(&Value::Bool(true)),
+    };
+    (a.colors() || a.opacity < 1.0).then_some(a)
 }
 
 fn xy(v: Option<&Value>) -> Option<[f64; 2]> {
