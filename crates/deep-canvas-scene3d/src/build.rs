@@ -219,6 +219,19 @@ fn fault(id: &str, path: String) -> OpError {
     if path == crate::hull::FLAT {
         return OpError::new(crate::hull::FLAT, format!("items/{id}"));
     }
+    // A refusal with its own code (#443): a missing module is named as itself.
+    if let Some((code, at)) = path.split_once(builders::CODED) {
+        let code = builders::OUTLINE_CODES
+            .into_iter()
+            .find(|c| *c == code)
+            .unwrap_or("out_of_range");
+        let at = if code == "module_missing" || at.starts_with("items/") {
+            at.to_string()
+        } else {
+            format!("items/{id}/{at}")
+        };
+        return OpError::new(code, at);
+    }
     OpError::new("out_of_range", format!("items/{id}/{path}"))
 }
 
@@ -256,6 +269,8 @@ pub fn built(
         doc,
         id,
         plants: planted.and_then(Plants::named).unwrap_or_default(),
+        outlines: &run.outlines,
+        planted,
     };
     let counts = builders::counts(&kind, &params, &ctx)?;
     let mesh = builders::build(&kind, &params, &ctx)?;
@@ -282,6 +297,7 @@ fn run_scene3d(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
     let run = stack::Run {
         planted: v.planted().map(str::to_string),
+        outlines: v.outlines().to_vec(),
         ..Default::default()
     };
     let out = built(doc, &id, &item, &run, 0.0).map_err(|p| fault(&id, p))?;
@@ -295,6 +311,7 @@ fn run_scene3d_live(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
     let run = stack::Run {
         planted: v.planted().map(str::to_string),
+        outlines: v.outlines().to_vec(),
         ..Default::default()
     };
     let out = built(doc, &id, &item, &run, t).map_err(|p| fault(&id, p))?;
