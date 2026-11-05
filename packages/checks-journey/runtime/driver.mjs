@@ -83,6 +83,8 @@ const boxOf = async (loc) => { try { const b = await loc.boundingBox(); return b
 
 // ---- What the page tells on its own: uncaught errors, failed asset requests, console errors, every request and its end.
 const requests = new Map();
+// The step whose page events these are: kept until the next step starts, since what a step's action set off (an error
+// thrown a task later, a request it started) may land after its records are taken, and is still that step's.
 let current = null;
 const ASSETS = ['script', 'stylesheet', 'image', 'font', 'media'];
 function watch() {
@@ -335,7 +337,6 @@ async function runStep(step, index) {
   if (entry.outcome === 'overran') {
     entry.controls = { appeared: [], left: [], changed: [] };
     entry.screenshot = await shot(`step-${index + 1}-${step.id}`);
-    current = null;
     flush();
     return false;
   }
@@ -359,7 +360,6 @@ async function runStep(step, index) {
     entry.animations = since(now.animations, mark);
     carried = { controls: now.controls, now: now.now };
   } else entry.screenshot = file;
-  current = null;
   flush();
   return entry.outcome === 'passed';
 }
