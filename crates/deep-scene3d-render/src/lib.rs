@@ -3938,7 +3938,7 @@ impl Renderer {
                     &self.solid_layout,
                     &self.planted,
                     k,
-                    k == usize::from(GLASS),
+                    k == usize::from(GLASS) || k == usize::from(PER_PIXEL),
                 ));
                 self.compiled += 1;
                 self.names.push(CLEAR_NAMES[k]);
@@ -4418,6 +4418,12 @@ impl Renderer {
                 if *kind == GLASS || (self.glass.is_some() && (*kind == BLEND || *kind == ADD)) {
                     continue;
                 }
+                // A per-pixel item adds its fragments after the resolve, at one sample, so one
+                // triangle adds each pixel's (#1173): at 4 samples a pixel runs for each
+                // triangle that covers any of its samples, twice along a shared edge.
+                if *kind == PER_PIXEL {
+                    continue;
+                }
                 let k = k as u32;
                 // A fade draws its depth pass, then its color where that depth holds (#424).
                 let kinds = if *kind == FADE {
@@ -4639,8 +4645,13 @@ impl Renderer {
         let profiler = self.profiler.clone();
         // The per-pixel resolve after the geometry pass (#424): its lists cleared first, then
         // composited, or the items drawn sorted where they ran out of room.
-        let resolve = match (&self.oit_pipelines, self.oit.active) {
-            (Some([resolve, fallback]), true) => Some((
+        let resolve = match (
+            &self.oit_pipelines,
+            &self.clear_pipelines[usize::from(PER_PIXEL)],
+            self.oit.active,
+        ) {
+            (Some([resolve, fallback]), Some(append), true) => Some((
+                append.clone(),
                 self.oit.heads.clone(),
                 self.oit.info.clone(),
                 resolve.clone(),
@@ -4675,7 +4686,7 @@ impl Renderer {
         let linear_texture = t.linear.clone();
         let motion = self.motion_frame.take().map(|m| (m, t.linear.clone()));
         let geometry: Job = Box::new(move |encoder| {
-            if let Some((heads, ..)) = &resolve {
+            if let Some((_, heads, ..)) = &resolve {
                 encoder.clear_buffer(heads, 0, None);
             }
             timed(&profiler, GEOMETRY_PASS, encoder, |encoder, timestamps| {
@@ -4690,7 +4701,8 @@ impl Renderer {
                     timestamps,
                 )
             });
-            if let Some((_, info, pipeline, fallback, binds, draws)) = &resolve {
+            if let Some((append, _, info, pipeline, fallback, binds, draws)) = &resolve {
+            per_pixel_pass(encoder, [&linear, &ids, &depth], append, binds, draws);
             timed(
                 &profiler,
                 "scene3d.resolve",
@@ -5739,6 +5751,60 @@ fn geometry_pass<'a>(
     });
 }
 
+/// The per-pixel items' fragments into their lists (#424), after the resolve (#1173).
+#[allow(clippy::type_complexity)]
+fn per_pixel_pass(
+    encoder: &mut wgpu::CommandEncoder,
+    [linear, ids, depth]: [&wgpu::TextureView; 3],
+    pipeline: &wgpu::RenderPipeline,
+    binds: &[wgpu::BindGroup; 4],
+    draws: &[(
+        wgpu::Buffer,
+        wgpu::Buffer,
+        u32,
+        wgpu::Buffer,
+        u32,
+        wgpu::BindGroup,
+    )],
+) {
+    let load = wgpu::Operations {
+        load: wgpu::LoadOp::Load,
+        store: wgpu::StoreOp::Store,
+    };
+    let attach = |view| {
+        Some(wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            depth_slice: None,
+            ops: load,
+        })
+    };
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("scene3d.per_pixel"),
+        color_attachments: &[attach(linear), attach(ids)],
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: depth,
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Load,
+                store: wgpu::StoreOp::Store,
+            }),
+            stencil_ops: None,
+        }),
+        ..Default::default()
+    });
+    for (i, b) in binds.iter().take(3).enumerate() {
+        pass.set_bind_group(i as u32, b, &[]);
+    }
+    pass.set_pipeline(pipeline);
+    for (vertices, indices, count, instances, k, maps) in draws {
+        pass.set_bind_group(3, maps, &[]);
+        pass.set_vertex_buffer(0, vertices.slice(..));
+        pass.set_vertex_buffer(1, instances.slice(..));
+        pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+        pass.draw_indexed(0..*count, 0, *k..*k + 1);
+    }
+}
+
 /// The transmissive parts' pass (#428): each drawn over the targets the geometry pass wrote,
 /// reading the opaque scene's copy.
 #[allow(clippy::type_complexity)]
@@ -6165,10 +6231,11 @@ mod tests {
         }
     }
 
-    /// The glass pass (#428) draws after the geometry pass resolves (#1173), so its pipelines
-    /// take the resolved targets' sample count and ID format, not the geometry pass's.
+    /// Glass (#428) and per-pixel items (#424) draw after the geometry pass resolves (#1173), so
+    /// their pipelines take the resolved targets' sample count and ID format, not the geometry
+    /// pass's.
     #[test]
-    fn a_glass_part_over_a_blend_part_draws_with_no_validation_error() {
+    fn glass_blend_and_per_pixel_parts_draw_with_no_validation_error() {
         let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
         let device = gpu.device();
         let look =
@@ -6180,6 +6247,8 @@ mod tests {
         items.insert("tint".into(), json!({"id": "tint", "kind": "material@1", "name": "Tint", "order": "a2", "layer": "main", "params": {"base_color": [1, 0.5, 0.2, 0.5], "alpha_mode": "blend"}}));
         items.insert("a".into(), part("a", "b0", -0.6, "glass"));
         items.insert("b".into(), part("b", "b1", 0.6, "tint"));
+        items.insert("c".into(), part("c", "b2", 0.0, "tint"));
+        items["c"]["resolve"] = json!("per_pixel");
         let doc = json!({
             "format": 1, "profile": "scene", "title": "T", "size": [96, 64], "camera": "cam",
             "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
@@ -6195,6 +6264,10 @@ mod tests {
         assert!(
             renderer.clear_pipelines[usize::from(GLASS)].is_some(),
             "the glass part is drawn as glass"
+        );
+        assert!(
+            renderer.clear_pipelines[usize::from(PER_PIXEL)].is_some(),
+            "the per-pixel part is drawn per pixel"
         );
         let raised = device.take_raised();
         assert!(raised.is_empty(), "the device raised: {raised:?}");
