@@ -77,6 +77,10 @@ struct Args {
     labels: bool,
     /// `(frame, at)`: a click at `at` view px while frame n is presented (#671).
     clicks: Vec<(u64, [f64; 2])>,
+    /// The selection's hit margin in px (#424; Selection: `hit.margin`), 3 unless the call says.
+    hit_margin: i64,
+    /// A `cutaway@1`'s params as a view input in session state, applied to every frame (#424).
+    cutaway: Option<Value>,
     /// The record's state for each status binding's source (#382).
     states: BTreeMap<String, String>,
     /// Report the first frame as a cold start: when it settled, from this process's spawn, and
@@ -97,6 +101,11 @@ struct Args {
     hidden: BTreeSet<String>,
     /// Each frame reports the key sun's cascade splits (#422).
     cascades: bool,
+    /// Each frame reports its level-of-detail rows and its light cut, and each captured frame
+    /// its band masks (#425).
+    lod: bool,
+    light_cut: bool,
+    masks: bool,
 }
 
 /// Milliseconds from this process's spawn, as the kernel records its start, to now.
@@ -368,6 +377,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
         receipt: call["receipt"].as_bool().unwrap_or(false),
         labels: call["labels"].as_bool().unwrap_or(false),
         clicks,
+        hit_margin: call
+            .pointer("/hit/margin")
+            .and_then(Value::as_u64)
+            .map_or(3, |m| m.min(64) as i64),
+        cutaway: call.get("cutaway").filter(|c| !c.is_null()).cloned(),
         states,
         theme,
         status,
@@ -381,6 +395,9 @@ fn parse(call: &Value) -> Result<Args, Value> {
             .map(str::to_string)
             .collect(),
         cascades: call["cascades"].as_bool().unwrap_or(false),
+        lod: call["lod"].as_bool().unwrap_or(false),
+        light_cut: call["light_cut"].as_bool().unwrap_or(false),
+        masks: call["masks"].as_bool().unwrap_or(false),
     })
 }
 
@@ -503,12 +520,18 @@ fn overlay_picture(o: &deep_canvas_scene3d::scene::Overlay) -> Option<OverlayPic
 /// What a click at `at` view px picks in a frame (canvas primitives: Selection, Spatial index):
 /// the topmost 2D overlay whose shapes cover it, else the item the object-ID target holds there,
 /// else nothing.
+///
+/// In 3D a pick reads the (2 × margin + 1)² window of the object-ID target around the pointer:
+/// the drawn ID nearest the pointer, ties by depth, nearest the camera first (#424; Selection:
+/// `hit.margin`), so a 1 px line or a point is pickable as in 2D.
 fn pick(
     scene: &deep_canvas_scene3d::scene::Scene,
     ids: &[u8],
+    depth: Option<&(Vec<u8>, bool)>,
     picks: &[(String, u32)],
     size: [u32; 2],
     at: [f64; 2],
+    margin: i64,
 ) -> Option<String> {
     use deep_canvas_scene3d::scene::Shape2;
     for o in scene.overlays.iter().rev() {
@@ -529,8 +552,31 @@ fn pick(
     if x < 0.0 || y < 0.0 || x >= f64::from(size[0]) || y >= f64::from(size[1]) {
         return None;
     }
-    let i = (y as usize * size[0] as usize + x as usize) * 4;
-    let p = u32::from_le_bytes(ids.get(i..i + 4)?.try_into().ok()?);
+    let read = |b: &[u8], i: usize| b.get(i * 4..i * 4 + 4).map(|v| [v[0], v[1], v[2], v[3]]);
+    // (distance², nearness) of the best pixel so far, and its ID.
+    let mut best: Option<((f64, f64), u32)> = None;
+    let (cx, cy) = (x as i64, y as i64);
+    for py in cy - margin..=cy + margin {
+        for px in cx - margin..=cx + margin {
+            if px < 0 || py < 0 || px >= i64::from(size[0]) || py >= i64::from(size[1]) {
+                continue;
+            }
+            let i = py as usize * size[0] as usize + px as usize;
+            let Some(p) = read(ids, i).map(u32::from_le_bytes).filter(|p| *p != 0) else {
+                continue;
+            };
+            let d2 = (px as f64 + 0.5 - at[0]).powi(2) + (py as f64 + 0.5 - at[1]).powi(2);
+            let near = depth.and_then(|(d, grows)| {
+                let z = f64::from(f32::from_le_bytes(read(d, i)?));
+                Some(if *grows { z } else { -z })
+            });
+            let key = (d2, -near.unwrap_or(0.0));
+            if best.is_none_or(|(k, _)| key.0 < k.0 || (key.0 == k.0 && key.1 < k.1)) {
+                best = Some((key, p));
+            }
+        }
+    }
+    let (_, p) = best?;
     picks
         .iter()
         .find(|(_, v)| *v == p)
@@ -834,6 +880,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         &mut map_paths,
     )?;
     let mut receipt = Value::Null;
+    // Level of detail and the light cut, chosen from each frame's view (#425).
+    let mut selection = crate::lod::Selection::new(app.planted);
+    let drawn_scale = if args.surface.scale < 1.0 && !noop {
+        args.surface.scale
+    } else {
+        1.0
+    };
+    // Whether the key sun drew its cascades in any frame: the shadow pass the reply lists (#424).
+    let mut casts = false;
     let result = (|| -> Result<(), Value> {
         // The lights the policy last left out: a change is reported once, by ID (#421).
         let mut left_out: Vec<String> = Vec::new();
@@ -880,6 +935,28 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             // document's decoded-image cap (#423).
             let (texels, made) = crate::textures::prepare(app, &scene, &map_paths)?;
             scene.texels = texels;
+            // Over a window's flat page the view shows the page where nothing draws, so what it
+            // lays over the page (a shadow catcher's alpha) composites in linear light (#424).
+            if let Some(w) = &args.window {
+                scene.ground = w.page;
+            }
+            // The view's cutaway, in session state, over the document's (#424).
+            if let Some(c) = &args.cutaway {
+                let look = &args.look;
+                let cut = deep_canvas_scene3d::cut::cutaway(
+                    "view",
+                    c,
+                    "cutaway",
+                    |r| {
+                        look.role(r).map(|c| {
+                            c.map(|v| deep_canvas::color::srgb_decode(f64::from(v) / 255.0))
+                        })
+                    },
+                    look.basis == deep_canvas_scene3d::look::Basis::Physical,
+                )
+                .map_err(|r| refused(r.code, r.path))?;
+                scene.set_cutaway(Some(cut));
+            }
             if n == args.from {
                 receipt = made;
             }
@@ -893,6 +970,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 app.planted == Some(Planted::EdgesUnwelded),
                 app.planted == Some(Planted::EdgesSkipDepth),
             );
+            let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
             // Each mesh-edge line's segments, in world metres, as `counts` reports them.
             let edge_segments: Map<String, Value> = scene
                 .layers
@@ -977,6 +1055,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 .map(|(_, at)| *at)
                 .collect();
             let read_targets = (capture && wants_targets || !clicks.is_empty()) && !noop;
+            // The planted wrong program reads the one pixel under the pointer (#424).
+            let margin = if app.planted == Some(Planted::SinglePixelPick) {
+                0
+            } else {
+                args.hit_margin
+            };
             if let (Some(status), Some(stage)) = (&status, &opened.stage) {
                 let (layer, marks, legend) = status::layer(
                     &scene,
@@ -1003,6 +1087,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
             }
             let evaluated = scene.clone();
+            // The pipelines compiled while drawing this frame, for `counts` (#424).
+            let compiled_before = session3::pipelines(app).len();
             // Look: samples (#423): a frame of n sub-samples is their mean in linear light,
             // each offset by the sample's index alone (Halton 2, 3), drawn before the frame.
             let samples = args.look.live_samples;
@@ -1043,6 +1129,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if !subs.is_empty() {
                 mean(&mut drawn, &subs);
             }
+            casts |= !drawn.counts.shadow_maps.is_empty();
+            let compiled: Vec<&'static str> = session3::pipelines(app)
+                .into_iter()
+                .skip(compiled_before)
+                .collect();
             if n == args.from {
                 moved = drawn.moved;
                 // The first frame is settled once drawn: its time from the spawn, then which
@@ -1144,6 +1235,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("labels".into(), labels);
                 frame.insert("pages".into(), pages);
             }
+            // Per-pixel items that ran out of room at the class's cap drew sorted (#424).
+            if drawn.counts.fragments_capped {
+                frame
+                    .entry("notices")
+                    .or_insert_with(|| json!([]))
+                    .as_array_mut()
+                    .expect("a list")
+                    .push(json!({"code": "fragments_capped", "fragments": drawn.counts.fragments}));
+            }
             // Lights the budget left out, and shadows it dropped, reported once per change.
             let c = &drawn.counts;
             if c.lights_left_out != left_out || c.shadows_dropped != dropped {
@@ -1151,7 +1251,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 dropped.clone_from(&c.shadows_dropped);
                 let notice =
                     json!({"code": "lights_over_budget", "lights": left_out, "shadows": dropped});
-                frame.insert("notices".into(), json!([notice]));
+                frame
+                    .entry("notices")
+                    .or_insert_with(|| json!([]))
+                    .as_array_mut()
+                    .expect("a list")
+                    .push(notice);
             }
             if args.counts {
                 let c = &drawn.counts;
@@ -1164,12 +1269,44 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("replayed".into(), json!(c.replayed));
                 frame.insert("instances_written".into(), json!(c.instances_written));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
+                frame.insert("compiled".into(), json!(compiled));
                 frame.insert("segments".into(), Value::Object(edge_segments));
             }
+            if args.lod {
+                frame.insert("lod".into(), crate::lod::rows(&choices));
+            }
+            if args.light_cut {
+                frame.insert("light_cut".into(), crate::lod::cut_json(&evaluated, &cut));
+            }
+            if args.masks && capture && !noop {
+                let mut rows = Vec::new();
+                for c in choices.iter().filter(|c| c.bands.len() == 2) {
+                    let (Some(level), Some(&(_, key))) =
+                        (c.blend, drawn.picks.iter().find(|(id, _)| *id == c.item))
+                    else {
+                        continue;
+                    };
+                    for (pass, size, bytes) in session3::masks(app, key, level) {
+                        let file = write_named(out, &bytes, "u8")?;
+                        rows.push(
+                            json!({"item": c.item, "pass": pass, "size": size, "file": file}),
+                        );
+                    }
+                }
+                frame.insert("masks".into(), json!(rows));
+            }
             if args.cascades {
+                // Each shadow map the key sun draws: its key, which holds the planes that cut its
+                // casters, and its texel in m (#424).
+                let maps: Vec<Value> = drawn
+                    .counts
+                    .shadow_maps
+                    .iter()
+                    .map(|(key, texel)| json!({"key": format!("{key:016x}"), "texel_m": texel}))
+                    .collect();
                 frame.insert(
                     "cascades".into(),
-                    json!({"splits": drawn.counts.cascade_splits}),
+                    json!({"splits": drawn.counts.cascade_splits, "maps": maps}),
                 );
             }
             if let Some((gpu_ms, passes)) = &drawn.timing {
@@ -1181,7 +1318,17 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 let answered: Vec<Value> = clicks
                     .iter()
                     .map(|at| {
-                        let p = ids.and_then(|ids| pick(&evaluated, ids, &drawn.picks, size, *at));
+                        let p = ids.and_then(|ids| {
+                            pick(
+                                &evaluated,
+                                ids,
+                                drawn.depth.as_ref(),
+                                &drawn.picks,
+                                size,
+                                *at,
+                                margin,
+                            )
+                        });
                         json!({"at": at, "pick": p})
                     })
                     .collect();
@@ -1212,7 +1359,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     // the output.
     let effects = lock(&fx);
     let mut passes = Vec::new();
-    if effects.settings.shadow.is_some() {
+    if effects.settings.shadow.is_some() || casts {
         passes.push(json!({"name": SHADOW_PASS, "reads": [], "writes": ["shadow"]}));
     }
     passes.push(json!({"name": GEOMETRY_PASS, "reads": [], "writes": ["linear", "ids", "depth"]}));
