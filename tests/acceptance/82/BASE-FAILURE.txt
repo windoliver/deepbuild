@@ -1,0 +1,78 @@
+#82 acceptance suite on the base commit 5def43f9 (origin/main), Node 24.22.0, target/debug/deep-hook built from it.
+
+  npx vitest run --root tests/acceptance/82 --no-file-parallelism --testTimeout=600000
+  node node_modules/typescript/bin/tsc -p tests/acceptance/82/tsconfig.json     -> no errors
+
+The machine was shared and loaded the whole time (12 cores; 1-minute load 5 to 56). The full suite ran three times
+while the tests were being fixed; the readings below are the last full run (23:13-23:21, load 27.5 at its start and
+18.7 at its end) for every file but four, which were changed after it and run again alone with these final bytes:
+replay.test.ts and answers.test.ts (23:22-23:28, load 16.8 to 5.7), restart.test.ts (23:32, load 6.8 to 8.6) and
+status.test.ts (23:33, load 7.4 to 7.8). What changed between the runs: the load rule (README, Load), the replay's
+pairing of stops with the record (a stop's events can land after its reply), AC7's sessions making FIX before their
+stops (its control was sent back on the spec's unit check), AC8's two judged stops ending on different "Still open"
+lists (the stalled-claim rule had let the second through), AC4's ten stops spread over 2.5 s (ten stops in the same
+millisecond outran deep-hook's 50 ms budget every time) and its no-claim check, and AC13's no-new-checks reading made
+an assertion, not a BLOCKED.
+
+Result: 18 tests. 8 pass on the base, 10 fail (2 of them BLOCKED on plants the base doesn't list), none skipped in
+these readings (earlier runs skipped AC4, AC11 and AC13 as INCONCLUSIVE under load).
+
+PASS on the base (the behavior is there already, from #303, #322 and #29):
+  AC1  honest.test.ts     item 11's "Want me to open the PR?" stop is blocked, a claim.sent_back, naming R1.
+  AC2  honest.test.ts     items 12 and 13: "Done." and the "Not verified:" list both claim, both FAIL, both sent back.
+  AC8  status.test.ts     an answer carrying OSC 7501 "done" makes no claim or verdict; the judged stop whose test
+                          output says "done" is FAIL and sent back on R1. (The base reads no status at all.)
+  AC9  answers.test.ts    the cart question that read two files is allowed, no claim.made or claim.sent_back, the task
+                          open; the next stop that edits is sent back naming R1.
+       and its plant claim-on-tool-calls fails as it must, naming stop B's agent.stop.
+  AC11 judged.test.ts     the typed question with one edit, the scheduled turn and the peer message's turn each claim
+                          and are sent back naming R1.
+  AC13 budgets.test.ts    (wrong program) the 10 ms reading fails on planted readings that add 15 ms.
+  Proof replay.test.ts    all 20 replayed stops (10 Claude Code, 10 Codex) make the claims fixtures/stops.json gives.
+
+FAIL on the base, each at its assertion:
+  AC3  nowork.test.ts
+       Error: AC3 #82.3f863987 [item 21] the stop that leaves your ask open with nothing done gets one send-back naming
+       the requirements still unmet; deep-hook let it through: exit 0 after 6 ms, stdout "", stderr ""
+  AC4  restart.test.ts
+       Error: AC4 #82.731c9e54 each session continues by the automatic continue after the app's resume prompt; the
+       resume turns did no work, so their stops make no claim, yet 10 claim.made were recorded after the restart and
+       the sessions were sent back on them: claim.made … {"task_ref":"task:item31","attempt":1,…}; …
+       (All ten were kept going, each by a send-back of a claim: "sent back 1/3: … R1 … is unproven: its check
+       .deepbuild/checks/expired-token.sh FAIL; the repo's spec check unit FAIL.")
+  AC5  pr.test.ts
+       Error: AC5 #82.fbbdd208 when you asked for a PR, the stop that opens it is never sent back: the record holds
+       claim.sent_back … {"claim":"claim:…","verdict":"verdict:…","round":1,"to":"session:…"}
+  AC6  pr.test.ts
+       Error: AC6 #82.7f8929f5 it works on R2 in the same PR, named by its link or as the same pull request: sent back
+       1/3: a d… · .deepbuild/checks/retry.test.cjs:4 · 3 tests · next: agent
+       (The base keeps it going by a send-back naming R2's check, never the PR.)
+  AC7  completion.test.ts
+       Error: AC7 #82.443b3a5a stop 1 after work ends on "No response requested." with R1 open, so it gets a completion
+       prompt within one hook, its own Stop reply (1 of at most 3); deep-hook let it through: exit 0 after 1304 ms,
+       stdout "{\"systemMessage\":\"says done 1/1 · 1 test · next: DeepBuild · receipt\"}", stderr ""
+  AC10 answers.test.ts
+       Error: AC10 #82.6e3bad75 stop E (agent.stop 01M6N9PR8CQ2XJKFJSKTQ5FQ5R), a no-work stop in a turn that a
+       send-back began, not a prompt you typed, still gets its one send-back; deep-hook let it through: exit 0 after
+       29510 ms, stdout "{\"systemMessage\":\"sent back 2/3: an expired token is rejected with 401: E… · 2 tests ·
+       next: agent\"}", stderr ""
+       (Stop C, the same question with no tool call, got no send-back: that half holds on the base.)
+  AC10 answers.test.ts (wrong program)
+       Error: BLOCKED: plant no-work-never-sent-back not listed in packages/hub/src/plant.ts
+       (DEEP_HUB_PLANT=no-work-never-sent-back)
+  AC11 judged.test.ts (wrong program)
+       Error: BLOCKED: plant skips-prompt-turns not listed in packages/hub/src/plant.ts (DEEP_HUB_PLANT=skips-prompt-turns)
+  AC12 pending.test.ts
+       Error: AC12 #82.be677619 an open item names the run still needed, R1's ("The checkout journey accepts a valid
+       token", checkout-journey.sh): []
+       (The stop went through and the claim stayed open; no open_item.opened was recorded for the task.)
+  AC13 budgets.test.ts
+       Error: AC13 #82.94380d25 the scheduled task's turn 1 changed nothing, so it needs no new checks (design: a stop
+       that changed no check's inputs reuses results and runs nothing); the hub ran run.started … {"check":"unit",…,
+       "lane":"fast",…}; run.started … {"check":".deepbuild/checks/expired-token.sh",…}
+       (Its first half held: the fix's fast-lane runs all ended before the stop's reply, inside the 60 s hold. The
+       10 ms reading wasn't reached.)
+
+Earlier full runs, at loads of 24 to 56, also met the load rule: deep-hook spooled hooks it couldn't hand to the hub
+in its 50 ms ("spooled …, but its sync didn't finish within the hook's 50 ms"), which made working turns read as no
+work, and the 30 s hold ran out before a stop's fast checks ended. Those now read INCONCLUSIVE (README, Load).
