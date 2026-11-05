@@ -5,13 +5,23 @@
 
 use std::collections::BTreeMap;
 
-use deep_canvas_effects::graph::{From, Kind, Sc, Tex, Ty};
+use deep_canvas_effects::graph::{Kind, Tex, Ty};
 use deep_canvas_effects::interp::Val;
 
 use crate::compile::Compiled;
 
 /// Every effects-chain and bloom target: linear, before tone mapping.
 pub const LINEAR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+
+/// A compute texture output's format (Operator output: `texture`).
+pub fn texture_format(name: &str) -> wgpu::TextureFormat {
+    match name {
+        "r32uint" => wgpu::TextureFormat::R32Uint,
+        "r32float" => wgpu::TextureFormat::R32Float,
+        "rgba16float" => wgpu::TextureFormat::Rgba16Float,
+        _ => wgpu::TextureFormat::Rgba8Unorm,
+    }
+}
 
 /// What the frame uniform holds (`emit::FRAME`).
 #[derive(Clone, Copy, Debug, Default)]
@@ -41,67 +51,9 @@ impl Frame {
     }
 }
 
-/// The inputs' uniform as the emitter laid it out: a leading unused vec4, then each value input
-/// in name order in whole vec4 slots (an array a slot per element, a matrix four).
+/// The inputs' uniform as the emitter laid it out ([`deep_canvas_effects::emit::input_bytes`]).
 pub fn input_bytes(c: &Compiled, values: &BTreeMap<String, Val>) -> Vec<u8> {
-    let mut b = vec![0u8; 16];
-    let word = |sc: Sc, x: f64| -> [u8; 4] {
-        match sc {
-            Sc::F32 => (x as f32).to_le_bytes(),
-            Sc::I32 => (x as i32).to_le_bytes(),
-            Sc::U32 | Sc::Bool => (x as u32).to_le_bytes(),
-        }
-    };
-    for (name, input) in &c.checked.op.inputs {
-        if matches!(input.ty, Ty::Tex(_) | Ty::Storage(..))
-            || matches!(input.from, From::Time | From::Seed)
-        {
-            continue;
-        }
-        let v = values.get(name);
-        match &input.ty {
-            Ty::V(sc, _) => {
-                let lanes = match v {
-                    Some(Val::N(_, l)) => l.clone(),
-                    _ => Vec::new(),
-                };
-                for i in 0..4 {
-                    b.extend_from_slice(&word(*sc, lanes.get(i).copied().unwrap_or(0.0)));
-                }
-            }
-            Ty::Arr(sc, _, n) => {
-                let items = match v {
-                    Some(Val::A(_, items)) => items.clone(),
-                    _ => Vec::new(),
-                };
-                for k in 0..*n as usize {
-                    for i in 0..4 {
-                        let x = items.get(k).and_then(|e| e.get(i)).copied().unwrap_or(0.0);
-                        b.extend_from_slice(&word(*sc, x));
-                    }
-                }
-            }
-            Ty::Mat(n) => {
-                let m = match v {
-                    Some(Val::M(_, m)) => m.clone(),
-                    _ => Vec::new(),
-                };
-                let n = *n as usize;
-                for c in 0..4 {
-                    for r in 0..4 {
-                        let x = if c < n && r < n {
-                            m.get(c * n + r).copied().unwrap_or(0.0)
-                        } else {
-                            0.0
-                        };
-                        b.extend_from_slice(&(x as f32).to_le_bytes());
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    b
+    deep_canvas_effects::emit::input_bytes(&c.checked, values)
 }
 
 enum Pipeline {
@@ -164,14 +116,21 @@ impl Runner {
             ),
         ];
         let textures = c.textures.iter().map(|name| {
-            let sample_type = match c.op.inputs[name].ty {
-                Ty::Tex(Tex::Uint) => wgpu::TextureSampleType::Uint,
+            let ty = &c.op.inputs[name].ty;
+            let sample_type = match ty {
+                Ty::Tex(Tex::Uint) | Ty::Tex3(Tex::Uint) => wgpu::TextureSampleType::Uint,
                 Ty::Tex(Tex::Depth) => wgpu::TextureSampleType::Depth,
+                // A 3D texture is read by its texels' loads (sample3d), so r32float binds too.
+                Ty::Tex3(_) => wgpu::TextureSampleType::Float { filterable: false },
                 _ => wgpu::TextureSampleType::Float { filterable: true },
             };
             wgpu::BindingType::Texture {
                 sample_type,
-                view_dimension: wgpu::TextureViewDimension::D2,
+                view_dimension: if matches!(ty, Ty::Tex3(_)) {
+                    wgpu::TextureViewDimension::D3
+                } else {
+                    wgpu::TextureViewDimension::D2
+                },
                 multisampled: false,
             }
         });
@@ -181,7 +140,16 @@ impl Runner {
             min_binding_size: None,
         };
         let buffers = (c.storage_inputs.iter().map(|_| storage(true)))
-            .chain(c.op.storage.iter().map(|_| storage(false)));
+            .chain(c.op.storage.iter().map(|_| storage(false)))
+            .chain(c.op.textures.values().map(|t| wgpu::BindingType::StorageTexture {
+                access: wgpu::StorageTextureAccess::WriteOnly,
+                format: texture_format(&t.format),
+                view_dimension: if t.dim3 {
+                    wgpu::TextureViewDimension::D3
+                } else {
+                    wgpu::TextureViewDimension::D2
+                },
+            }));
         entries.extend(
             textures
                 .chain(buffers)
@@ -244,6 +212,8 @@ impl Runner {
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
+            // Trilinear between a compute texture's mips (#483); one level reads as before.
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
             ..Default::default()
         });
         Runner {
@@ -265,6 +235,21 @@ impl Runner {
         values: &BTreeMap<String, Val>,
         textures: &[&wgpu::TextureView],
         storage: &[&wgpu::Buffer],
+    ) -> (wgpu::BindGroup, wgpu::BindGroup, [wgpu::Buffer; 2]) {
+        self.bind_with(device, frame, size, values, textures, storage, &[])
+    }
+
+    /// [`Runner::bind`] with a view for each texture output after the storage, in order.
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_with(
+        &self,
+        device: &wgpu::Device,
+        frame: &Frame,
+        size: [u32; 2],
+        values: &BTreeMap<String, Val>,
+        textures: &[&wgpu::TextureView],
+        storage: &[&wgpu::Buffer],
+        outs: &[&wgpu::TextureView],
     ) -> (wgpu::BindGroup, wgpu::BindGroup, [wgpu::Buffer; 2]) {
         use wgpu::util::DeviceExt as _;
         let fb = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -298,7 +283,8 @@ impl Runner {
         let resources = (textures
             .iter()
             .map(|v| wgpu::BindingResource::TextureView(v)))
-        .chain(storage.iter().map(|b| b.as_entire_binding()));
+        .chain(storage.iter().map(|b| b.as_entire_binding()))
+        .chain(outs.iter().map(|v| wgpu::BindingResource::TextureView(v)));
         entries.extend(
             resources
                 .zip(2..)

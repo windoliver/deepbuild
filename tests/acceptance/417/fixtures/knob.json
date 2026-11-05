@@ -1,0 +1,44 @@
+{
+  "format": 1,
+  "id": "state-ease-417",
+  "profile": "figure",
+  "title": "A toggle's knob and two stages",
+  "description": "A toggle whose knob moves from 17 to 47 when it turns on, by a transition follow that names no span or interp of its own, and a stages control whose stage b glides the camera from stage a's target to its own, naming no ease. Both take the look's time feel.",
+  "size": [320, 180],
+  "transport": { "span": "4s" },
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "slot": {
+      "id": "slot", "kind": "rect@1", "layer": "main", "name": "Toggle track", "order": "a0",
+      "params": { "box": [0, 80, 64, 20], "radius": 10, "paint": { "fill": { "role": "muted" } } }
+    },
+    "knob": {
+      "id": "knob", "kind": "circle@1", "layer": "main", "name": "Toggle knob", "order": "a1",
+      "params": { "center": [0, 90], "r": 8, "paint": { "fill": { "role": "accent" } } },
+      "at": { "pos": [17, 0, 0] }
+    },
+    "cam": {
+      "id": "cam", "kind": "camera@1", "layer": "main", "name": "Camera", "order": "a2",
+      "params": { "projection": "orthographic", "view_width": 320 }
+    }
+  },
+  "controls": {
+    "power": { "kind": "toggle", "class": "document", "label": "Power", "role": "switch", "default": false },
+    "steps": {
+      "kind": "stages", "class": "document", "label": "Steps", "default": "a",
+      "stages": { "a": { "label": "A", "shot": "shot-a" }, "b": { "label": "B", "shot": "shot-b" } }
+    }
+  },
+  "channels": {
+    "knob-x": {
+      "target": "items/knob/at/pos/0", "type": "f32",
+      "follow": { "source": { "control": "power", "values": { "false": 17, "true": 47 } }, "model": { "transition": {} } }
+    }
+  },
+  "shots": {
+    "shot-a": { "camera": "cam", "move": "hold", "target": [0, 0, 0] },
+    "shot-b": { "camera": "cam", "move": "hold", "target": [200, 100, 0], "join": { "glide": { "span": "0.8s" } } }
+  }
+}

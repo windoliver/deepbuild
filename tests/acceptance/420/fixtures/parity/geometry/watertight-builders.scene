@@ -1,0 +1,142 @@
+{
+  "scene": "watertight-builders",
+  "format": 1,
+  "about": "Parity fixture for #420 AC5: each case is one builder item built at t = 0 and read back with the geometry call (stage final, item space). Every case's declared vertex count must equal what it builds; every closed part must be watertight on welded positions (no open edges, no edge on three triangles, each edge wound both ways) with V - E + F = 2 - 2g for the genus g the builder reports; the genera of the closed parts must be the case's `genera`; and where the case gives `area` (m², every triangle) and `volume` (m³, every closed part) they must match to 1e-6 relative. Expected values come from closed forms in the params (formula), from the design (declared), or from the issue (genera). Each twin is a planted fault, reachable only through the scenario's `planted`, that must fail the case it names, the failure naming the case and the text in `names`.",
+  "curves": {
+    "loop": {
+      "kind": "curve@1",
+      "params": {
+        "points": [[1, 0, 0], [0.70710678118654752, 0, 0.70710678118654752], [0, 0, 1], [-0.70710678118654752, 0, 0.70710678118654752], [-1, 0, 0], [-0.70710678118654752, 0, -0.70710678118654752], [0, 0, -1], [0.70710678118654752, 0, -0.70710678118654752]],
+        "closed": true,
+        "mode": "linear"
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "box",
+      "item": { "kind": "slab@1", "params": { "size": [1, 2, 3] } },
+      "genera": [0],
+      "area": 22, "volume": 6,
+      "formula": { "box": [1, 2, 3] }
+    },
+    {
+      "name": "plank",
+      "item": { "kind": "slab@1", "params": { "outline": [[0, 0], [2, 0], [2, 1], [0, 1]], "thickness": 0.1 } },
+      "genera": [0],
+      "area": 4.6, "volume": 0.2,
+      "formula": { "prism": { "outline": [[0, 0], [2, 0], [2, 1], [0, 1]], "holes": [], "height": 0.1 } }
+    },
+    {
+      "name": "cylinder",
+      "item": { "kind": "lathe@1", "params": { "outline": [[0.5, 0, false], [0.5, 2, false]], "segments": 16, "caps": "flat" } },
+      "genera": [0],
+      "area": 7.773624033976462, "volume": 1.5307337294603591,
+      "formula": { "lathe": { "outline": [[0.5, 0], [0.5, 2]], "segments": 16, "closed": false } }
+    },
+    {
+      "name": "cone",
+      "item": { "kind": "lathe@1", "params": { "outline": [[0.5, 0, false], [0, 1, false]], "segments": 16, "caps": "flat" } },
+      "genera": [0],
+      "area": 2.5036537792715414, "volume": 0.25512228824339317,
+      "formula": { "lathe": { "outline": [[0.5, 0], [0, 1]], "segments": 16, "closed": false } }
+    },
+    {
+      "name": "torus",
+      "item": { "kind": "lathe@1", "params": { "outline": [[0.8, -0.2, false], [1.2, -0.2, false], [1.2, 0.2, false], [0.8, 0.2, false]], "segments": 24, "closed": true, "caps": "none" } },
+      "genera": [1],
+      "area": 9.981531447218376, "volume": 0.9938651331936796,
+      "formula": { "lathe": { "outline": [[0.8, -0.2], [1.2, -0.2], [1.2, 0.2], [0.8, 0.2]], "segments": 24, "closed": true } }
+    },
+    {
+      "name": "ball_octa",
+      "item": { "kind": "ball@1", "params": { "radius": 1, "tessellation": "geodesic", "base": "octa", "detail": 0 } },
+      "genera": [0],
+      "area": 6.928203230275509, "volume": 1.3333333333333333,
+      "formula": { "octahedron": 1 }
+    },
+    {
+      "name": "ball_icosa",
+      "item": { "kind": "ball@1", "params": { "radius": 1.5, "tessellation": "geodesic", "base": "icosa", "detail": 0 } },
+      "genera": [0],
+      "area": 21.542718112366362, "volume": 8.559508646656385,
+      "formula": { "icosahedron": 1.5 }
+    },
+    {
+      "name": "ball_uv",
+      "item": { "kind": "ball@1", "params": { "radius": 1, "segments": 32 } },
+      "genera": [0],
+      "declared": 561
+    },
+    {
+      "name": "ball_geodesic",
+      "item": { "kind": "ball@1", "params": { "radius": 1, "tessellation": "geodesic", "base": "icosa", "detail": 2 } },
+      "genera": [0],
+      "declared": 540
+    },
+    {
+      "name": "block",
+      "item": { "kind": "extrude@1", "params": { "outline": [[0, 0], [2, 0], [2, 1], [0, 1]], "depth": 0.5 } },
+      "genera": [0],
+      "area": 7, "volume": 1,
+      "formula": { "prism": { "outline": [[0, 0], [2, 0], [2, 1], [0, 1]], "holes": [], "height": 0.5 } }
+    },
+    {
+      "name": "ring_block",
+      "item": { "kind": "extrude@1", "params": { "outline": [[0, 0], [2, 0], [2, 1], [0, 1]], "holes": [[[0.5, 0.25], [1.5, 0.25], [1.5, 0.75], [0.5, 0.75]]], "depth": 0.5 } },
+      "genera": [1],
+      "area": 7.5, "volume": 0.75,
+      "formula": { "prism": { "outline": [[0, 0], [2, 0], [2, 1], [0, 1]], "holes": [[[0.5, 0.25], [1.5, 0.25], [1.5, 0.75], [0.5, 0.75]]], "height": 0.5 } }
+    },
+    {
+      "name": "pipe",
+      "item": { "kind": "tube@1", "params": { "path": [[0, 0, 0], [0, 2, 0]], "radius": 0.5, "segments": 16, "caps": "flat" } },
+      "genera": [0],
+      "area": 7.773624033976462, "volume": 1.5307337294603591,
+      "formula": { "lathe": { "outline": [[0.5, 0], [0.5, 2]], "segments": 16, "closed": false } }
+    },
+    {
+      "name": "hoop",
+      "item": { "kind": "tube@1", "params": { "path": "loop", "radius": 0.1, "segments": 8, "caps": "none" } },
+      "genera": [1]
+    },
+    {
+      "name": "spring",
+      "item": { "kind": "coil@1", "params": { "radius": 0.5, "pitch": 0.2, "wire": 0.05, "turns": 3 } },
+      "genera": null
+    },
+    {
+      "name": "sheet",
+      "item": { "kind": "plate@1", "params": { "grid": [4, 3], "size": [2, 1.5] } },
+      "genera": [],
+      "area": 3,
+      "formula": { "rectangle": [2, 1.5] }
+    }
+  ],
+  "twins": [
+    {
+      "planted": "torus_genus_0",
+      "case": "torus",
+      "fault": "The lathe reports genus 0 for its closed outline, so the torus is declared with genus 0 (the issue's twin).",
+      "names": ["torus", "V − E + F"]
+    },
+    {
+      "planted": "vertex_count_off_by_one",
+      "case": "box",
+      "fault": "The slab declares one vertex fewer than it builds.",
+      "names": ["box", "declares"]
+    },
+    {
+      "planted": "cap_left_open",
+      "case": "cylinder",
+      "fault": "The lathe leaves its top flat cap out, declaring one cap's vertices fewer, and still reports the part closed.",
+      "names": ["cylinder", "open edges"]
+    },
+    {
+      "planted": "ball_scaled",
+      "case": "ball_octa",
+      "fault": "The geodesic ball builds at 1.01 times its radius.",
+      "names": ["ball_octa", "area", "volume"]
+    }
+  ]
+}

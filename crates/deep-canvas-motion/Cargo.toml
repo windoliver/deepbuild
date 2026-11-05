@@ -7,11 +7,9 @@ publish = false
 
 # Issue #391: the line's slice of the motion module (channels and keys with linear, hold, Bézier
 # and the follow spring; placements with start, repeat and extend; the transport's loop) and the
-# frame clock's `valid_until`. Named deep-canvas* so the canvas lint reads it: a check reads what it
-# evaluates, so its math is f64 through deep-canvas's ops module on pinned libm.
-[[bin]]
-name = "deep-motion"
-path = "src/main.rs"
+# frame clock's `valid_until`; #489 the rest of motion@1. Named deep-canvas* so the canvas lint
+# reads it: a check reads what it evaluates, so its math is f64 through deep-canvas's ops module on
+# pinned libm. Its proof binary `deep-motion` is the crate crates/deep-motion.
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }

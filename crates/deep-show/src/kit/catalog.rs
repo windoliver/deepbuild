@@ -198,6 +198,14 @@ fn raised_with(
     let mut issues: Vec<Value> = result.issues.iter().map(|i| i.to_json()).collect();
     issues.extend(result.notices.iter().map(|n| n.to_json()));
     issues.extend(overflows(doc).iter().map(|i| i.to_json()));
+    // The form the frame draws, as deep_show's: the agent's tables and the vectors inlined from
+    // the evidence store, a vector's missing SVG its import's issue (#1162).
+    let mut form = doc.clone();
+    if let Err(r) = hub.inline_tables(&mut form) {
+        issues.push(unfit_issue(r.code, r.path).to_json());
+    }
+    issues.extend(hub.inline_vectors(&mut form).iter().map(|i| i.to_json()));
+    let doc = &form;
     // A check kind a module registers runs only when a check input names it (#403): each of
     // the sidecar's that does runs here, so a fixture raises what its codes name.
     for input in checks {

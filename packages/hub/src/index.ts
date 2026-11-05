@@ -20,8 +20,9 @@ import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
 import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.js';
 
 export { backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, memoryCommand, relationItems, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
-export { statusCommand } from './status.js';
+export { numbersCommand, statusCommand } from './status.js';
 export { showCommand } from './show.js';
+export { kindsCommand } from './canvas.js';
 export { doctorCommand, doctorItems } from './doctor.js';
 export { activePlant } from './plant.js';
 export { contractAdapter, type DeprecatedNotice, type RpcEntry } from './contracts.js';

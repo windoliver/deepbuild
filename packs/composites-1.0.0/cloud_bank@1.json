@@ -1,0 +1,59 @@
+{
+  "id": "composites.cloud_bank",
+  "version": "1.0",
+  "title": "Cloud bank",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A bank of faceted clouds: flat-shaded geodesic puffs in rows, each one's size and lift from its stable ID's seed.",
+  "inputs": {
+    "puffs": {
+      "type": "integer",
+      "default": 9,
+      "min": 1,
+      "max": 64,
+      "about": "how many puffs"
+    },
+    "spread": {
+      "type": "number",
+      "unit": "m",
+      "default": 12,
+      "min": 1,
+      "max": 200,
+      "about": ""
+    }
+  },
+  "steps": {
+    "puff": {
+      "op": "builder",
+      "kind": "ball@1",
+      "repeat": {
+        "count": "puffs",
+        "as": "i"
+      },
+      "params": {
+        "radius": "1 + (seed % 7) * 0.15",
+        "tessellation": "geodesic",
+        "base": "icosa",
+        "detail": 1,
+        "shade": "flat",
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "spread * ((i % 5) / 4 - 0.5)",
+          "(seed % 3) * 0.4",
+          "spread * 0.3 * floor(i / 5)"
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "puff"
+    ]
+  }
+}

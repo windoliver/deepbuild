@@ -169,6 +169,22 @@ const GROUPS: [([usize; 4], f64); 5] = [
     ([6, 7, 11, 12], 0.125),
 ];
 
+/// The bloom's threshold on the chain's first step (#418): with `cut` (a luminance in scene
+/// linear, 0 for none), only the light above it, `rgb × max(L − cut, 0) ÷ L`.
+fn prefilter(g: &mut G, rgb: &str) -> String {
+    let l = g.s("luminance@1", json!({"rgb": rgb}));
+    let over = g.sub(&l, "cut");
+    let zero = g.c(json!(0.0));
+    let over = g.s("max@1", json!({"a": over, "b": zero}));
+    let tiny = g.c(json!(1e-6));
+    let l = g.s("max@1", json!({"a": l, "b": tiny}));
+    let w = g.div(&over, &l);
+    let one = g.c(json!(1.0));
+    let on = g.s("gt@1", json!({"a": "cut", "b": zero}));
+    let w = g.select(&one, &w, &on);
+    g.mul(rgb, &w)
+}
+
 /// A 13-tap downsample of `src` to half its size; `karis` weights each group by 1 ÷ (1 + its
 /// luminance) and renormalizes, the Karis average for the chain's first step.
 pub fn down(karis: bool) -> Value {
@@ -199,7 +215,19 @@ pub fn down(karis: bool) -> Value {
         })
         .collect();
     let mut sum: Option<String> = None;
+    // The plain average beside the Karis one (#418), for the share of light the chain takes.
+    let mut plain: Option<String> = None;
     for (members, weight) in GROUPS {
+        if karis {
+            let a = g.add(&taps[members[0]], &taps[members[1]]);
+            let b = g.add(&taps[members[2]], &taps[members[3]]);
+            let s = g.add(&a, &b);
+            let term = g.mulk(&s, 0.25 * weight);
+            plain = Some(match plain {
+                None => term,
+                Some(p) => g.add(&p, &term),
+            });
+        }
         let avg = match &weights[members[0]] {
             Some(_) => {
                 let terms: Vec<(String, String)> = members
@@ -230,16 +258,47 @@ pub fn down(karis: bool) -> Value {
             Some(p) => g.add(&p, &term),
         });
     }
-    let out = sum.expect("five groups");
+    let sum = sum.expect("five groups");
+    // Alpha carries the share of the scene's light the Karis average holds back (#418): 1 less its
+    // luminance over the plain average's, 0 where nothing is lit, so the mix takes from the scene
+    // exactly what the bloom spreads and the frame keeps its energy; plain downsamples hold back
+    // nothing and write 0, so the upsamples carry the first level's alone to the mix.
+    let rgb = g.split(&sum, "rgb");
+    let held = match plain {
+        Some(p) => {
+            let p = g.split(&p, "rgb");
+            let lp = g.s("luminance@1", json!({"rgb": p}));
+            let lk = g.s("luminance@1", json!({"rgb": rgb}));
+            let tiny = g.c(json!(1e-6));
+            let lit = g.s("gt@1", json!({"a": lp, "b": tiny}));
+            let floor = g.s("max@1", json!({"a": lp, "b": tiny}));
+            let r = g.div(&lk, &floor);
+            let one = g.c(json!(1.0));
+            let held = g.sub(&one, &r);
+            let none = g.c(json!(0.0));
+            g.select(&none, &held, &lit)
+        }
+        None => g.c(json!(0.0)),
+    };
+    let rgb = if karis { prefilter(&mut g, &rgb) } else { rgb };
+    let out = g.s("compose@1", json!({"x": rgb, "y": held}));
     let (id, about) = if karis {
         ("glow.down_karis@1", "Glow's first downsample: 13 bilinear taps in five boxes, each tap weighted within its box by 1 ÷ (1 + its luminance) (the Karis average), to half size.")
     } else {
         ("glow.down@1", "Glow's downsample: 13 bilinear taps in five boxes, the centre box half the weight, to half size.")
     };
+    let inputs = if karis {
+        json!({
+            "src": texture("core", "color", "texture"),
+            "cut": param("bloom.cut", "f32", json!(0.0), [0.0, 1e9]),
+        })
+    } else {
+        json!({"src": texture("core", "color", "texture")})
+    };
     pass(
         id,
         about,
-        json!({"src": texture("core", "color", "texture")}),
+        inputs,
         g,
         &out,
         json!({"of": "src", "scale": 0.5}),
@@ -291,7 +350,12 @@ pub fn up() -> Value {
     )
 }
 
-/// The glow mixed into scene color: `scene × (1 − intensity) + bloom ÷ levels × intensity`.
+/// The glow mixed into scene color: `scene × (1 − conserve × share) + bloom ÷ levels × tint × (1 +
+/// dirt × d) × intensity`, with `conserve` the intensity with no threshold (energy conserving: the
+/// scene gives up the light the chain spreads, `share` being 1 less what its first downsample held
+/// back, carried in the bloom's alpha)
+/// and 0 with one, and `d` the lens dirt image's value at the pixel, stretched over the frame
+/// (#418). The planted overlay adds `dirt × d` to every pixel instead.
 pub fn mix() -> Value {
     let mut g = G::new();
     let uv = g.s("screen_uv@1", json!({}));
@@ -299,18 +363,45 @@ pub fn mix() -> Value {
     let bloom = g.sample("bloom", &uv);
     let levels = g.convert("levels", "f32");
     let b = g.div(&bloom, &levels);
-    let m = g.s("mix@1", json!({"a": scene, "b": b, "t": "intensity"}));
+    let b = g.split(&b, "rgb");
+    let b = g.mul(&b, "tint");
+    let dirt = g.sample("dirt", &uv);
+    let d = g.split(&dirt, "r");
+    let k = g.mul(&d, "dirt_intensity");
+    let one = g.c(json!(1.0));
+    let lens = g.add(&one, &k);
+    let b = g.mul(&b, &lens);
+    let b = g.mul(&b, "intensity");
+    // What the chain took from the scene: the share the first downsample passed on (1 less what
+    // its Karis average held back), by the intensity with no threshold (energy conserving), none
+    // with one.
+    let held = g.split(&bloom, "a");
+    let share = g.sub(&one, &held);
+    let taken = g.mul(&share, "conserve");
+    let keep = g.sub(&one, &taken);
+    let kept = g.split(&scene, "rgb");
+    let kept = g.mul(&kept, &keep);
+    let rgb = g.add(&kept, &b);
+    // The planted overlay: the dirt laid over the frame wherever it is, bloom or not.
+    let over = g.split(&dirt, "rgb");
+    let over = g.mul(&over, "dirt_intensity");
+    let over = g.mul(&over, "overlay");
+    let rgb = g.add(&rgb, &over);
     // Alpha stays the scene's.
-    let rgb = g.split(&m, "rgb");
     let a = g.split(&scene, "a");
     let out = g.s("compose@1", json!({"x": rgb, "y": a}));
     pass(
         "glow.mix@1",
-        "Glow mixed into scene color before tone mapping, energy conserving: the chain's sum over its levels, by the look's intensity.",
+        "Glow mixed into scene color before tone mapping, energy conserving with no threshold, tint or dirt: the chain's sum over its levels, by the look's intensity and tint, the lens dirt multiplying it where bloom is bright.",
         json!({
             "scene": texture("core", "color", "texture"),
             "bloom": texture("glow", "up0", "texture"),
+            "dirt": texture("glow", "dirt", "texture"),
             "intensity": param("bloom.intensity", "f32", json!(0.04), [0.0, 1.0]),
+            "conserve": param("bloom.conserve", "f32", json!(0.04), [0.0, 1.0]),
+            "overlay": param("bloom.overlay", "f32", json!(0.0), [0.0, 1.0]),
+            "tint": param("bloom.tint", "vec3<f32>", json!([1.0, 1.0, 1.0]), [0.0, 16.0]),
+            "dirt_intensity": param("bloom.dirt_intensity", "f32", json!(0.0), [0.0, 16.0]),
             "levels": param("bloom.levels", "u32", json!(5), [1.0, 8.0]),
         }),
         g,
@@ -717,15 +808,28 @@ pub fn outline() -> Value {
 
 /// At most this many particles one item draws (Particles `particles@1`: `count`).
 pub const MAX_PARTICLES: u32 = 65_536;
-/// Instance floats per particle: its position, and its age over its life (−1 when it isn't alive).
-pub const PARTICLE_FLOATS: u32 = 4;
+/// At most this many in a showpiece or an export (Operator budgets by class).
+pub const MAX_PARTICLES_SHOWPIECE: u32 = 1_048_576;
+/// Instance floats per particle: its position, its age over its life (−1 when it isn't alive),
+/// its velocity, and one unused.
+pub const PARTICLE_FLOATS: u32 = 8;
+/// The points an `along` curve is resampled to, evenly by arc length.
+pub const CURVE_POINTS: u32 = 16;
+
+/// The motions and emitter shapes, in the order of the codes the operator reads.
+pub const MOTIONS: [&str; 4] = ["ballistic", "along", "orbit", "drift"];
+pub const SHAPES: [&str; 4] = ["point", "disk", "sphere", "along"];
 
 /// Sparks: particle i's slot is born every `count ÷ rate` seconds while the emitter runs, and its
-/// age, life, direction and speed are a closed form of t, i, its generation and the item's seed,
-/// moved ballistically with linear drag. Nothing is carried from frame to frame.
+/// age, life, emit point, direction and speed are a closed form of t, i, its generation and the
+/// item's seed; its place at that age is a closed form of its motion (ballistic with linear
+/// drag, along a curve, an orbit about an axis, or a drift), as is its velocity. Nothing is
+/// carried from frame to frame.
 pub fn particles() -> Value {
     let mut g = G::new();
-    let e = g.s("element@1", json!({}));
+    // A showpiece's count past one dispatch runs as several, each from its `offset`.
+    let el = g.s("element@1", json!({}));
+    let e = g.add(&el, "offset");
     let fi = g.convert(&e, "f32");
     let t = g.s("t@1", json!({}));
     let countf = g.convert("count", "f32");
@@ -774,8 +878,71 @@ pub fn particles() -> Value {
     let dz = g.mul(&su, &sz);
     let dir = g.s("compose@1", json!({"x": dx, "y": cu, "z": dz}));
     let v0 = g.mul(&dir, &speed);
-    // Linear drag d: x(a) = v0 (1 − e^(−d a)) ÷ d + g (a ÷ d − (1 − e^(−d a)) ÷ d²); with no
-    // drag, v0 a + g a² ÷ 2.
+
+    // The curve at u ∈ [0, 1] and its unit tangent there, from its evenly spaced points.
+    let last = f64::from(CURVE_POINTS - 1);
+    let curve_at = |g: &mut G, u: &str| -> (String, String) {
+        let uc = g.s("clamp@1", json!({"x": u, "lo": 0.0, "hi": 1.0}));
+        let x = g.mulk(&uc, last);
+        let fl = g.s("floor@1", json!({"x": x}));
+        let fl = g.s("min@1", json!({"a": fl, "b": last - 1.0}));
+        let f = g.sub(&x, &fl);
+        let i0 = g.convert(&fl, "u32");
+        let k1 = g.ty(json!(1), "u32");
+        let i1 = g.add(&i0, &k1);
+        let p0 = g.s("index@1", json!({"a": "curve", "i": i0}));
+        let p1 = g.s("index@1", json!({"a": "curve", "i": i1}));
+        let d = g.sub(&p1, &p0);
+        let step = g.mul(&d, &f);
+        let p = g.add(&p0, &step);
+        let tan = g.s("normalize@1", json!({"x": d}));
+        (p, tan)
+    };
+    let is = |g: &mut G, input: &str, code: u32| -> String {
+        let k = g.ty(json!(code), "u32");
+        g.s("eq@1", json!({"a": input, "b": k}))
+    };
+
+    // Where it's born: the emitter's point, a disk across +Y, a ball, or a point along the curve.
+    let r_e1 = rnd(&mut g, 5);
+    let r_e2 = rnd(&mut g, 6);
+    let r_e3 = rnd(&mut g, 7);
+    let rr = g.s("sqrt@1", json!({"x": r_e1}));
+    let rr = g.mul(&rr, "radius");
+    let th = g.mulk(&r_e2, deep_canvas::ops::TAU);
+    let ct = g.s("cos@1", json!({"x": th}));
+    let st = g.s("sin@1", json!({"x": th}));
+    let dkx = g.mul(&rr, &ct);
+    let dkz = g.mul(&rr, &st);
+    let disk = g.s("compose@1", json!({"x": dkx, "y": zero, "z": dkz}));
+    let zz = g.mulk(&r_e2, 2.0);
+    let zz = g.sub(&zz, &one);
+    let zz2 = g.mul(&zz, &zz);
+    let ss = g.sub(&one, &zz2);
+    let ss = g.s("max@1", json!({"a": ss, "b": zero}));
+    let ss = g.s("sqrt@1", json!({"x": ss}));
+    let ph = g.mulk(&r_e3, deep_canvas::ops::TAU);
+    let cph = g.s("cos@1", json!({"x": ph}));
+    let sph = g.s("sin@1", json!({"x": ph}));
+    let bx = g.mul(&ss, &cph);
+    let bz = g.mul(&ss, &sph);
+    let ball_dir = g.s("compose@1", json!({"x": bx, "y": zz, "z": bz}));
+    let br = g.s("pow@1", json!({"a": r_e1, "b": 1.0 / 3.0}));
+    let br = g.mul(&br, "radius");
+    let ball = g.mul(&ball_dir, &br);
+    // The curve's points are in world metres; the emitter's are about its origin.
+    let (on_curve, _) = curve_at(&mut g, &r_e1);
+    let on_curve = g.sub(&on_curve, "origin");
+    let mut off = g.c(json!([0.0, 0.0, 0.0]));
+    for (code, at) in [(1, &disk), (2, &ball), (3, &on_curve)] {
+        let c = is(&mut g, "shape", code);
+        off = g.select(&off, at, &c);
+    }
+    let b = g.add("origin", &off);
+
+    // Ballistic, with linear drag d: x(a) = v0 (1 − e^(−d a)) ÷ d + g (a ÷ d − (1 − e^(−d a)) ÷
+    // d²) and v(a) = v0 e^(−d a) + g (1 − e^(−d a)) ÷ d; with no drag, v0 a + g a² ÷ 2 and
+    // v0 + g a.
     let small = g.s("lt@1", json!({"a": "drag", "b": 1e-4}));
     let dsafe = g.s("max@1", json!({"a": "drag", "b": 1e-4}));
     let nda = g.mul(&dsafe, &age);
@@ -791,30 +958,103 @@ pub fn particles() -> Value {
     let k2 = g.select(&k2, &half_a2, &small);
     let pv = g.mul(&v0, &k1);
     let pg = g.mul("gravity", &k2);
-    let p = g.add("origin", &pv);
-    let p = g.add(&p, &pg);
+    let p_bal = g.add(&b, &pv);
+    let p_bal = g.add(&p_bal, &pg);
+    let kept = g.select(&decay, &one, &small);
+    let vv = g.mul(&v0, &kept);
+    let vg = g.mul("gravity", &k1);
+    let v_bal = g.add(&vv, &vg);
+
+    // Along the curve at `speed`, from where it was born on it (or from its start).
+    let len = g.s("max@1", json!({"a": "curve_len", "b": 1e-6}));
+    let from_curve = is(&mut g, "shape", 3);
+    let s0 = g.mul(&r_e1, "curve_len");
+    let s0 = g.select(&zero, &s0, &from_curve);
+    let run = g.mul("speed", &age);
+    let sa = g.add(&s0, &run);
+    let u = g.div(&sa, &len);
+    let (p_along, tan) = curve_at(&mut g, &u);
+    let v_along = g.mul(&tan, "speed");
+
+    // An orbit about `axis` through the emitter at `spin` rad/s (Rodrigues' rotation).
+    let k = g.s("normalize@1", json!({"x": "axis"}));
+    let rel = g.sub(&b, "origin");
+    let ang = g.mul("spin", &age);
+    let ca = g.s("cos@1", json!({"x": ang}));
+    let sn = g.s("sin@1", json!({"x": ang}));
+    let kx = g.s("cross@1", json!({"a": k, "b": rel}));
+    let kd = g.s("dot@1", json!({"a": k, "b": rel}));
+    let r1 = g.mul(&rel, &ca);
+    let r2 = g.mul(&kx, &sn);
+    let omc = g.sub(&one, &ca);
+    let kdo = g.mul(&kd, &omc);
+    let r3 = g.mul(&k, &kdo);
+    let rot = g.add(&r1, &r2);
+    let rot = g.add(&rot, &r3);
+    let p_orbit = g.add("origin", &rot);
+    let kr = g.s("cross@1", json!({"a": k, "b": rot}));
+    let v_orbit = g.mul(&kr, "spin");
+
+    // A drift: each axis a sine of its own phase about where it was born.
+    let w = g.mulk("frequency", deep_canvas::ops::TAU);
+    let wa = g.mul(&w, &age);
+    let mut sins = Vec::new();
+    let mut coss = Vec::new();
+    for kph in [8, 9, 10] {
+        let r = rnd(&mut g, kph);
+        let phase = g.mulk(&r, deep_canvas::ops::TAU);
+        let x = g.add(&wa, &phase);
+        sins.push(g.s("sin@1", json!({"x": x})));
+        coss.push(g.s("cos@1", json!({"x": x})));
+    }
+    let wave = g.s(
+        "compose@1",
+        json!({"x": sins[0], "y": sins[1], "z": sins[2]}),
+    );
+    let slope = g.s(
+        "compose@1",
+        json!({"x": coss[0], "y": coss[1], "z": coss[2]}),
+    );
+    let dp = g.mul(&wave, "amplitude");
+    let p_drift = g.add(&b, &dp);
+    let aw = g.mul("amplitude", &w);
+    let v_drift = g.mul(&slope, &aw);
+
+    let mut p = p_bal;
+    let mut v = v_bal;
+    for (code, pm, vm) in [
+        (1, &p_along, &v_along),
+        (2, &p_orbit, &v_orbit),
+        (3, &p_drift, &v_drift),
+    ] {
+        let c = is(&mut g, "motion", code);
+        p = g.select(&p, pm, &c);
+        v = g.select(&v, vm, &c);
+    }
     let frac = g.div(&age, &life);
     let minus = g.c(json!(-1.0));
-    let w = g.select(&minus, &frac, &alive);
+    let wl = g.select(&minus, &frac, &alive);
     let inside = g.s("lt@1", json!({"a": e, "b": "count"}));
     let floats = g.ty(json!(PARTICLE_FLOATS), "u32");
     let base = g.mul(&e, &floats);
+    let mut lanes: Vec<(u32, String)> = Vec::new();
     for (k, lane) in [(0, "x"), (1, "y"), (2, "z")] {
-        let v = g.split(&p, lane);
+        lanes.push((k, g.split(&p, lane)));
+        lanes.push((k + 4, g.split(&v, lane)));
+    }
+    lanes.push((3, wl));
+    for (k, val) in lanes {
         let kc = g.ty(json!(k), "u32");
         let at = g.add(&base, &kc);
-        let id = g.s("write@1", json!({"buf": "inst", "i": at, "v": v}));
+        let id = g.s("write@1", json!({"buf": "inst", "i": at, "v": val}));
         set_when(&mut g, &id, &inside);
     }
-    let k3 = g.ty(json!(3), "u32");
-    let at = g.add(&base, &k3);
-    let id = g.s("write@1", json!({"buf": "inst", "i": at, "v": w}));
-    set_when(&mut g, &id, &inside);
     json!({
         "id": "particles.sparks@1", "kind": "compute", "origin": "shipped",
-        "about": "Sparks: each particle's age, life, direction and speed are a closed form of t, its index, its generation and the item's seed, moved ballistically with linear drag, written as instance columns.",
+        "about": "Sparks: each particle's age, life, emit point, direction and speed are a closed form of t, its index, its generation and the item's seed, placed by its motion's closed form (ballistic with linear drag, along a curve, an orbit or a drift), written with its velocity as instance columns.",
         "inputs": {
-            "count": param("particles.count", "u32", json!(256), [0.0, f64::from(MAX_PARTICLES)]),
+            "count": param("particles.count", "u32", json!(256), [0.0, f64::from(MAX_PARTICLES_SHOWPIECE)]),
+            "offset": param("particles.offset", "u32", json!(0), [0.0, f64::from(MAX_PARTICLES_SHOWPIECE)]),
             "rate": param("particles.rate", "f32", json!(100.0), [1e-3, 1e7]),
             "span": param("particles.span", "f32", json!(1e9), [0.0, 1e9]),
             "life_min": param("particles.life_min", "f32", json!(1.0), [1e-3, 1e4]),
@@ -824,12 +1064,23 @@ pub fn particles() -> Value {
             "drag": param("particles.drag", "f32", json!(0.0), [0.0, 1e3]),
             "gravity": param("particles.gravity", "vec3", json!([0.0, -9.8, 0.0]), [-1e4, 1e4]),
             "origin": param("particles.origin", "vec3", json!([0.0, 0.0, 0.0]), [-1e9, 1e9]),
+            "motion": param("particles.motion", "u32", json!(0), [0.0, 3.0]),
+            "shape": param("particles.shape", "u32", json!(0), [0.0, 3.0]),
+            "radius": param("particles.radius", "f32", json!(0.25), [0.0, 1e4]),
+            "curve": {"type": format!("array<vec3<f32>, {CURVE_POINTS}>"), "from": {"param": "particles.curve"},
+                      "default": vec![[0.0, 0.0, 0.0]; CURVE_POINTS as usize]},
+            "curve_len": param("particles.curve_len", "f32", json!(0.0), [0.0, 1e9]),
+            "speed": param("particles.speed", "f32", json!(1.0), [0.0, 1e4]),
+            "axis": param("particles.axis", "vec3", json!([0.0, 1.0, 0.0]), [-1e4, 1e4]),
+            "spin": param("particles.spin", "f32", json!(0.0), [-1e4, 1e4]),
+            "amplitude": param("particles.amplitude", "f32", json!(0.0), [0.0, 1e4]),
+            "frequency": param("particles.frequency", "f32", json!(0.0), [0.0, 1e4]),
             "seed": {"type": "u32", "from": "seed"},
         },
         "steps": g.done(),
-        "outputs": {"inst": {"storage": {"type": "f32", "count": MAX_PARTICLES * PARTICLE_FLOATS}}},
+        "outputs": {"inst": {"storage": {"type": "f32", "count": MAX_PARTICLES_SHOWPIECE * PARTICLE_FLOATS}}},
         "elements": MAX_PARTICLES, "workgroup": 64,
-        "determinism": "same_machine", "cost": {"ns_per_element": 0.03},
+        "determinism": "same_machine", "cost": {"ns_per_element": 0.13},
     })
 }
 
@@ -918,4 +1169,70 @@ pub fn library(karis: bool) -> Vec<Shipped> {
 /// Every shipped graph, each stage of a chain on its own.
 pub fn all() -> Vec<Value> {
     library(true).into_iter().flat_map(|s| s.stages).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::interp::{self, Env};
+    use std::collections::BTreeMap;
+
+    /// The particles operator over its first 256 slots, run by the CPU reference at `t`.
+    fn positions(params: &BTreeMap<String, Value>, t: f64) -> Vec<f64> {
+        let mut op = particles();
+        op["elements"] = json!(256);
+        let c = crate::check::read_and_check(&op).expect("the shipped particles operator checks");
+        let env = Env {
+            t,
+            seed: 7,
+            clip: [0.0; 16],
+            inverse_clip: [0.0; 16],
+            eye: [0.0; 4],
+            inputs: interp::inputs(&c, params, &BTreeMap::new()),
+            textures: BTreeMap::new(),
+            normals: [[0.0; 3]; 3],
+        };
+        let out = interp::compute(&c, &env, BTreeMap::new()).expect("it runs");
+        out["inst"][..256 * PARTICLE_FLOATS as usize].to_vec()
+    }
+
+    fn motion(code: u32) -> BTreeMap<String, Value> {
+        let curve: Vec<[f64; 3]> = (0..CURVE_POINTS)
+            .map(|k| [f64::from(k) * 0.1 - 1.5, 1.0, 0.0])
+            .collect();
+        BTreeMap::from([
+            ("particles.count".into(), json!(256)),
+            ("particles.rate".into(), json!(200.0)),
+            ("particles.life_min".into(), json!(2.0)),
+            ("particles.life_max".into(), json!(2.0)),
+            ("particles.motion".into(), json!(code)),
+            ("particles.shape".into(), json!(1)),
+            ("particles.radius".into(), json!(0.5)),
+            ("particles.curve".into(), json!(curve)),
+            ("particles.curve_len".into(), json!(3.1)),
+            ("particles.speed".into(), json!(1.5)),
+            ("particles.spin".into(), json!(2.0)),
+            ("particles.amplitude".into(), json!(0.4)),
+            ("particles.frequency".into(), json!(0.7)),
+        ])
+    }
+
+    /// Each motion is a closed form of t: evaluating at 1.2 s, then 0.4 s, then 1.2 s again
+    /// gives what the first did, and it isn't the ballistic motion's.
+    #[test]
+    fn each_motion_is_a_pure_function_of_t_and_its_own() {
+        let ballistic = positions(&motion(0), 1.2);
+        for code in 1..4u32 {
+            let name = MOTIONS[code as usize];
+            let p = motion(code);
+            let first = positions(&p, 1.2);
+            let _ = positions(&p, 0.4);
+            assert_eq!(positions(&p, 1.2), first, "{name} at 1.2 s, sought twice");
+            assert_ne!(first, ballistic, "{name} moves as ballistic does");
+            assert!(
+                first.iter().all(|x| x.is_finite()),
+                "{name} writes a non-finite value"
+            );
+        }
+    }
 }

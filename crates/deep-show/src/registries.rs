@@ -31,17 +31,18 @@ impl Hub<'_> {
     /// Every entry admitted packs fill, as each is listed: origin `agent` for a pack the working
     /// agent installed through its session, else `pack`.
     fn pack_entries(&self) -> Vec<SealedEntry> {
+        // #415: a pack's admitted layouts are data.layout@1 entries beside its `entries`.
+        let layouts = self.sandbox.layout_entries.iter().filter(|e| self.packs.all().any(|p| p.id.text() == e.pack));
         self.packs
             .all()
-            .flat_map(|p| {
-                let agent = self.pack_authors.contains_key(&p.id.text());
-                p.entries.iter().map(move |e| {
-                    let mut e = e.clone();
-                    if agent {
-                        e.origin = "agent";
-                    }
-                    e
-                })
+            .flat_map(|p| p.entries.iter())
+            .chain(layouts)
+            .map(|e| {
+                let mut e = e.clone();
+                if self.pack_authors.contains_key(&e.pack) {
+                    e.origin = "agent";
+                }
+                e
             })
             .collect()
     }
@@ -59,7 +60,15 @@ impl Hub<'_> {
                     .filter(|e| e.registry == r.def.name)
                     .cloned()
                     .collect();
-                r.to_json(&more)
+                let mut row = r.to_json(&more);
+                // #238: a program entry names its program and the bytes sandbox@1 rewrote it to.
+                for e in row["entries"].as_array_mut().into_iter().flatten() {
+                    let name = e["name"].as_str().unwrap_or_default().to_string();
+                    if let Some(p) = self.sandbox.programs.get(&(r.def.name.clone(), name)) {
+                        e["program"] = p.clone();
+                    }
+                }
+                row
             })
             .collect();
         if self.startup.listing != Some(Listing::WithoutSlots) {

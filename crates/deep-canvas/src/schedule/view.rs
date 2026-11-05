@@ -38,6 +38,8 @@ pub struct View<'a> {
     tails: Vec<(String, Val)>,
     /// [`View::changed`] answers `None` (#896's planted rebuild).
     forgets_changes: bool,
+    /// A canvas module's planted wrong program by name.
+    planted: Option<&'a str>,
 }
 
 /// What an operator left when its view finished: its writes, its reads, what a step noted and
@@ -60,6 +62,7 @@ impl<'a> View<'a> {
         log: bool,
         step: Option<StepCtx<'a>>,
         forgets_changes: bool,
+        planted: Option<&'a str>,
     ) -> View<'a> {
         let sop = &sealed.ops[node.op];
         View {
@@ -76,7 +79,14 @@ impl<'a> View<'a> {
             noted: None,
             tails: Vec::new(),
             forgets_changes,
+            planted,
         }
+    }
+
+    /// The canvas module's planted wrong program, when one is: reachable only through a proof
+    /// surface.
+    pub fn planted(&self) -> Option<&'a str> {
+        self.planted
     }
 
     /// What the operator wrote, in its writes' order, every read it made, what a step noted,
@@ -474,6 +484,12 @@ impl<'a> View<'a> {
     pub fn outside(&mut self) -> Result<&'a Outside, OpError> {
         self.declared("reading")?;
         Ok(&self.session.outside)
+    }
+
+    /// The build's outline sources (#443): the core's `outline.source@1`, which `extrude` reads
+    /// outlines through without naming the module that fills a form.
+    pub fn outlines(&self) -> &'a [crate::registry::SealedOutline] {
+        &self.sealed.outlines
     }
 
     /// `table:<name>`: a table's value.

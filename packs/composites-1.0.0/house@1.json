@@ -1,0 +1,210 @@
+{
+  "id": "composites.house",
+  "version": "1.0",
+  "title": "House",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "Four walls of the building module meeting at mitred corners, a floor slab and a gable roof over them.",
+  "inputs": {
+    "width": {
+      "type": "number",
+      "unit": "m",
+      "default": 6,
+      "min": 2,
+      "max": 40,
+      "about": "along x"
+    },
+    "depth": {
+      "type": "number",
+      "unit": "m",
+      "default": 4,
+      "min": 2,
+      "max": 40,
+      "about": "along z"
+    },
+    "height": {
+      "type": "number",
+      "unit": "m",
+      "default": 2.7,
+      "min": 2,
+      "max": 10,
+      "about": "the walls' height"
+    },
+    "pitch": {
+      "type": "number",
+      "unit": "deg",
+      "default": 35,
+      "min": 5,
+      "max": 60,
+      "about": "the roof's pitch"
+    }
+  },
+  "steps": {
+    "front": {
+      "op": "builder",
+      "kind": "arch.wall@1",
+      "params": {
+        "a": [
+          0,
+          0
+        ],
+        "b": [
+          "width",
+          0
+        ],
+        "thickness": 0.25,
+        "height": "height",
+        "justify": "center",
+        "outside": "left",
+        "cut_height": 1.2
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "right": {
+      "op": "builder",
+      "kind": "arch.wall@1",
+      "params": {
+        "a": [
+          "width",
+          0
+        ],
+        "b": [
+          "width",
+          "depth"
+        ],
+        "thickness": 0.25,
+        "height": "height",
+        "justify": "center",
+        "outside": "left",
+        "cut_height": 1.2
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "back": {
+      "op": "builder",
+      "kind": "arch.wall@1",
+      "params": {
+        "a": [
+          "width",
+          "depth"
+        ],
+        "b": [
+          0,
+          "depth"
+        ],
+        "thickness": 0.25,
+        "height": "height",
+        "justify": "center",
+        "outside": "left",
+        "cut_height": 1.2
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "left": {
+      "op": "builder",
+      "kind": "arch.wall@1",
+      "params": {
+        "a": [
+          0,
+          "depth"
+        ],
+        "b": [
+          0,
+          0
+        ],
+        "thickness": 0.25,
+        "height": "height",
+        "justify": "center",
+        "outside": "left",
+        "cut_height": 1.2
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "floor": {
+      "op": "builder",
+      "kind": "arch.slab@1",
+      "params": {
+        "outline": [
+          [
+            0,
+            0
+          ],
+          [
+            "width",
+            0
+          ],
+          [
+            "width",
+            "depth"
+          ],
+          [
+            0,
+            "depth"
+          ]
+        ],
+        "thickness": 0.2
+      },
+      "at": {
+        "pos": [
+          0,
+          -0.2,
+          0
+        ]
+      }
+    },
+    "roof": {
+      "op": "builder",
+      "kind": "arch.roof@1",
+      "params": {
+        "type": "gable",
+        "size": [
+          "width",
+          "depth"
+        ],
+        "pitch": "pitch",
+        "overhang": 0.3
+      },
+      "at": {
+        "pos": [
+          "width / 2",
+          "height",
+          "depth / 2"
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "front",
+      "right",
+      "back",
+      "left",
+      "floor",
+      "roof"
+    ]
+  }
+}

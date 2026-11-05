@@ -46,6 +46,111 @@
     }
   },
   {
+    "registry": "column.source@1",
+    "owner": "core",
+    "fill": [
+      "module"
+    ],
+    "resolve": "check",
+    "since": "R2",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "form": {
+          "type": "string"
+        },
+        "types": {
+          "type": "array"
+        },
+        "fixture": {
+          "type": "object"
+        },
+        "sources": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "form",
+        "types",
+        "fixture"
+      ]
+    }
+  },
+  {
+    "registry": "constraint@1",
+    "owner": "core",
+    "fill": [
+      "module"
+    ],
+    "resolve": "seal",
+    "since": "R2",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "reads": {
+          "type": "array"
+        },
+        "writes": {
+          "type": "array"
+        },
+        "fixture": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "reads",
+        "writes",
+        "fixture"
+      ]
+    }
+  },
+  {
+    "registry": "data.layout@1",
+    "owner": "core",
+    "fill": [
+      "module",
+      "first_party_pack",
+      "pack"
+    ],
+    "resolve": "check",
+    "since": "R6",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "validator": {
+          "type": "string"
+        },
+        "max_bytes": {
+          "type": "integer"
+        },
+        "twins": {
+          "type": "array"
+        },
+        "fixtures": {
+          "type": "array"
+        },
+        "doc": {
+          "type": "string"
+        },
+        "judged": {
+          "type": "array"
+        },
+        "admitted": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "validator",
+        "max_bytes",
+        "twins",
+        "doc"
+      ]
+    }
+  },
+  {
     "registry": "device.class@1",
     "owner": "core",
     "fill": [
@@ -76,6 +181,47 @@
         "fields",
         "bytes"
       ]
+    }
+  },
+  {
+    "registry": "ease@1",
+    "owner": "core",
+    "fill": [
+      "module",
+      "pack"
+    ],
+    "resolve": "seal",
+    "since": "R6",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "number"
+        },
+        "ease": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "x": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "y": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "mode": {
+          "type": "string"
+        },
+        "overshoot": {}
+      }
     }
   },
   {
@@ -280,6 +426,36 @@
       },
       "required": [
         "class"
+      ]
+    }
+  },
+  {
+    "registry": "outline.source@1",
+    "owner": "core",
+    "fill": [
+      "module"
+    ],
+    "resolve": "seal",
+    "since": "R6",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "form": {
+          "type": "string",
+          "enum": [
+            "text",
+            "path",
+            "vector"
+          ]
+        },
+        "fixture": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "form",
+        "fixture"
       ]
     }
   }

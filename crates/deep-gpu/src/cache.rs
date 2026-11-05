@@ -29,6 +29,13 @@ pub struct Entry<R> {
     readers: Vec<Reader>,
 }
 
+/// A result no revision reads any more, out of the cache, with its bytes.
+pub struct Retired<R> {
+    pub key: String,
+    pub result: R,
+    pub bytes: Option<u64>,
+}
+
 pub struct Cache<R> {
     entries: BTreeMap<String, Entry<R>>,
     planted: Planted,
@@ -70,12 +77,44 @@ impl<R> Cache<R> {
 
     /// The revision no longer reads anything: each result no revision reads any more is freed.
     pub fn release(&mut self, revision: u64) {
+        drop(self.retire(revision));
+    }
+
+    /// The revision no longer reads anything: each result no revision reads any more leaves the
+    /// cache at once and is handed back with its bytes and the writers whose revisions read it,
+    /// for its memory to go back once no submitted frame binds it (#420).
+    pub fn retire(&mut self, revision: u64) -> Vec<Retired<R>> {
+        let mut out = Vec::new();
         for e in self.entries.values_mut() {
             e.readers.retain(|r| r.revision != revision);
         }
-        if !self.planted.keeps_unread {
-            self.entries.retain(|_, e| !e.readers.is_empty());
+        if self.planted.keeps_unread {
+            return out;
         }
+        let gone: Vec<String> = self
+            .entries
+            .iter()
+            .filter(|(_, e)| e.readers.is_empty())
+            .map(|(k, _)| k.clone())
+            .collect();
+        for key in gone {
+            if let Some(e) = self.entries.remove(&key) {
+                out.push(Retired {
+                    key,
+                    result: e.result,
+                    bytes: e.bytes,
+                });
+            }
+        }
+        out
+    }
+
+    /// The writers whose revisions read the result at `key`.
+    pub fn writers(&self, key: &str) -> Vec<String> {
+        self.entries
+            .get(key)
+            .map(|e| e.readers.iter().map(|r| r.writer.clone()).collect())
+            .unwrap_or_default()
     }
 
     pub fn get(&self, key: &str) -> Option<&R> {

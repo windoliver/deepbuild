@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7D",
+  "kind": "waiver.ended",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760099851123,
+  "data": {
+    "waiver": "01K74FKZVK8Q2X5R7M3N9P4T7C",
+    "why": "date"
+  }
+}

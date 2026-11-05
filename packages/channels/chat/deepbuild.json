@@ -1,0 +1,11 @@
+{
+  "id": "deepbuild/channel-chat",
+  "version": "1.0.0",
+  "digest": "d1:874631ce1bd1d5a77c68e998ca83a5421adec1916a49e8433bd5bb9396264090",
+  "requires": {
+    "preview": [
+      "deep.registerChannel",
+      "deep.channel.fetch"
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "words",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A tool-word pack of the #412 acceptance suite: two words another tool's users know, each mapped onto a core kind with its stated conversion.",
+  "requires": {
+    "core": ">=0.0.0"
+  },
+  "aliases": {
+    "Circle": {
+      "target": "circle@1",
+      "conversion": "radius becomes r in u; arc_center becomes center, with y flipped and the origin moved to the top left"
+    },
+    "Rectangle": {
+      "target": "rect@1",
+      "conversion": "width and height become box[2] and box[3] in u; corner_radius becomes radius"
+    }
+  }
+}

@@ -8,7 +8,16 @@
 //! Vello CPU, and `check` with a look adding the marks2d module's own check; and #381's: `raster`
 //! answers each text@1 item's shown string and glyphs (`texts`), and takes `shapes_spans_apart`;
 //! and #854's: `idle`, a document held on screen on the real clock for `seconds`, its frames,
-//! wakeups and CPU read from this process.
+//! wakeups and CPU read from this process; and #398's: `check`, `raster` and `geometry` import
+//! each `vector@1` item's SVG from the line's `store` and draw it as marks2d's items, `geometry`
+//! answers a vector's `parts`, and the planted `write_fades_fills_from_start` and
+//! `import_skips_clip_path`; and #221's: every frame places items by relation, `check` refuses a
+//! `relation_cycle`, and `geometry` takes `t` and answers the item's `box` and its nine `points`;
+//! and #417's: `look` lists the shipped looks (`{"list": "shipped"}`) and answers font roles and
+//! each theme's roles in OKLab, `check` and `raster` hold the status distance only where the
+//! document binds status (and take the planted `status_distance_0_03`), set text in the look's
+//! fonts with its fallback list and `lang`, and refuse a grapheme no face draws with
+//! `text.glyph_missing`; a session's step may switch the look.
 //!
 //! A document's view is drawn headless with GPUI's offscreen Metal renderer through GPUI's own
 //! frame path, and only when the frame clock arms a frame: at the session's first frame, at a new
@@ -20,8 +29,9 @@
 //! CPU and by GPUI, the edges they draw and each glyph run and stroke as a coverage mask, which
 //! `deep-gpu`'s live-headless calls compare.
 
+use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use deep_canvas_marks::look::{self, Look};
 use deep_canvas_marks::scene::{Palette, Planted, Record};
@@ -56,8 +66,16 @@ fn palette_of(look: &Look, theme: Theme) -> &Palette {
     }
 }
 
+/// The look's type in a theme (#417): its fonts and fallback list.
+fn type_of(look: &Look, theme: Theme) -> &deep_canvas_marks::scene::Type {
+    match theme {
+        Theme::Dark => &look.dark_type,
+        Theme::Light => &look.light_type,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Theme {
+pub(crate) enum Theme {
     Light,
     Dark,
 }
@@ -76,6 +94,8 @@ struct Step {
     view: Option<View>,
     record: Option<Record>,
     frames: u32,
+    /// #417: the look the session is shown in from this step on.
+    look: Option<Look>,
 }
 
 enum Request {
@@ -100,6 +120,8 @@ enum Request {
         look: Look,
         steps: Vec<Step>,
         store: Option<PathBuf>,
+        /// #417 AC2's wrong program: a look switch that empties every node cache.
+        switch_rebuilds: bool,
     },
     /// #854: the document held on screen on the real clock.
     Idle {
@@ -127,6 +149,8 @@ enum Request {
 /// A line answered before any platform-specific work: a check, a look, or a refusal of either.
 enum Answer {
     Now(Value),
+    /// #160: a `path` line, answered frame by frame against the process's built tessellations.
+    Path(Box<raster::PathRequest>),
     Draw(Box<Request>),
 }
 
@@ -146,9 +170,13 @@ fn palette(value: &Value) -> Option<Palette> {
         .collect()
 }
 
-/// Each theme's roles as `#rrggbb`, or `#rrggbbaa` for a role at an alpha (#882).
+/// Each theme's roles as `#rrggbb`, or `#rrggbbaa` for a role at an alpha (#882), and (#417) a font
+/// role as the name of the look's font it names.
 fn roles(look: &Look) -> Value {
-    let theme = |opaque: &Palette, alpha: &std::collections::BTreeMap<String, look::Rgba>| {
+    type Fonts = std::collections::BTreeMap<String, String>;
+    let theme = |opaque: &Palette,
+                 alpha: &std::collections::BTreeMap<String, look::Rgba>,
+                 fonts: &Fonts| {
         let mut out: Map<String, Value> = opaque
             .iter()
             .map(|(r, [red, g, b])| (r.clone(), json!(format!("#{red:02x}{g:02x}{b:02x}"))))
@@ -156,15 +184,20 @@ fn roles(look: &Look) -> Value {
         out.extend(alpha.iter().map(|(r, [red, g, b, a])| {
             (r.clone(), json!(format!("#{red:02x}{g:02x}{b:02x}{a:02x}")))
         }));
+        out.extend(fonts.iter().map(|(r, f)| (r.clone(), json!(f))));
         Value::Object(out)
     };
-    json!({"light": theme(&look.light, &look.light_alpha), "dark": theme(&look.dark, &look.dark_alpha)})
+    json!({
+        "light": theme(&look.light, &look.light_alpha, &look.light_fonts),
+        "dark": theme(&look.dark, &look.dark_alpha, &look.dark_fonts),
+    })
 }
 
 /// A look as a request names it: a shipped look's ID, a look@1 definition, or #391's role map
 /// `{light, dark?}` (with no status map), with the definition it resolved from. The status guard
-/// refuses a look@1 that gives two states one glyph, naming the pair.
-fn look(value: Option<&Value>) -> Option<Result<(Look, Value), look::Refusal>> {
+/// refuses a look@1 that gives two states one glyph, naming the pair, and holds the status
+/// distance `at` where it holds.
+fn look(value: Option<&Value>, at: look::Distance) -> Option<Result<(Look, Value), look::Refusal>> {
     let def = match value? {
         Value::String(id) => look::shipped(id)?,
         Value::Object(map) if map.contains_key("status") || map.contains_key("palette") => {
@@ -179,16 +212,18 @@ fn look(value: Option<&Value>) -> Option<Result<(Look, Value), look::Refusal>> {
             let roles = Look {
                 light,
                 dark,
-                light_alpha: Default::default(),
-                dark_alpha: Default::default(),
-                status: None,
+                data_distance: map
+                    .get("data_distance")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(look::DATA_DISTANCE),
+                ..Look::default()
             };
             return Some(Ok((roles, Value::Object(map.clone()))));
         }
         _ => return None,
     };
     let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
-    Some(look::resolve(&def, &bundled).map(|l| (l, def)))
+    Some(look::resolve_in(&def, &bundled, at).map(|l| (l, def)))
 }
 
 /// The record a request pins: `readings` (a number, or `{value, as_of}` with its as-of time on the
@@ -253,19 +288,131 @@ fn doc(value: Option<&Value>) -> Option<Map<String, Value>> {
     value?.as_object().cloned()
 }
 
-/// The document check: the core's, then, with a look and no core error, the marks2d module's.
-fn check(doc: &Map<String, Value>, look: Option<&Look>) -> Value {
+/// Each imported `vector@1` item by ID (#398).
+type Vectors = BTreeMap<String, deep_canvas_vector::Imported>;
+
+/// The document check: the core's, then the vector module's import of each vector item from
+/// `store`, then, with a look and no error yet, the marks2d module's over the document with its
+/// vectors drawn as marks2d's items; and the imported vectors.
+fn check(
+    doc: &Map<String, Value>,
+    look: Option<&Look>,
+    store: Option<&Path>,
+    (skips_clip_path, distance_0_03): (bool, bool),
+) -> (Value, Vectors) {
     let result = deep_canvas::document::check(&Value::Object(doc.clone()));
     let mut issues = result.issues;
-    if let (true, Some(look)) = (result.ok, look) {
-        issues.extend(deep_canvas_marks::check::check(doc, look));
+    let (found, vectors) =
+        deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), skips_clip_path);
+    issues.extend(found);
+    // #406: a quote's raw bytes against its source's, and a formula's numbers.
+    issues.extend(deep_canvas_marks::check::quotes(doc, |sha| {
+        asset::bytes(store, sha)
+    }));
+    let (formula_numbers, formula_issues) = deep_canvas_vector::numbers(doc);
+    issues.extend(formula_issues);
+    // Relations (#221): a cycle through relations or parents, or a target the document lacks.
+    if !issues.iter().any(|i| i.severity == "error") {
+        let items = doc.get("items").and_then(Value::as_object);
+        let frame = deep_canvas_marks::relations::Frame::of(doc);
+        if let Err(r) =
+            deep_canvas_marks::relations::check(items.unwrap_or(&Map::new()), frame.safe)
+        {
+            let ids = match r.chain.as_slice() {
+                [] => vec![r.path.split('/').nth(1).unwrap_or("").to_string()],
+                [chain @ .., _] => chain.to_vec(),
+            };
+            let what = if r.chain.is_empty() {
+                "a relation names an item the document lacks or can't be read".to_string()
+            } else {
+                format!("placed by relation in a cycle: {}", r.chain.join(" → "))
+            };
+            let fix = if r.chain.is_empty() {
+                "Name an item the document holds, as `beside`, `onto` or `to` takes it."
+            } else {
+                "Place one item of the chain by something outside it, so no relation reads back."
+            };
+            issues.push(deep_canvas::document::Issue {
+                ids,
+                fix: fix.into(),
+                ..deep_canvas::document::Issue::error(
+                    r.code,
+                    "",
+                    r.path,
+                    json!({"chain": r.chain}),
+                    &what,
+                )
+            });
+        }
     }
     let ok = !issues.iter().any(|i| i.severity == "error");
-    json!({
+    if let (true, Some(look)) = (ok, look) {
+        let mut drawn = doc.clone();
+        if let Some(Value::Object(items)) = doc.get("items") {
+            let items = deep_canvas_vector::lower_items(items, &vectors, Default::default());
+            // #399: graphs draw as marks2d's items, and labels place where the view draws them.
+            let items = match graphs::lower(doc, &items, &vectors, Default::default()) {
+                Ok((mut items, _)) => {
+                    items.retain(|_, i| i.get("kind").and_then(Value::as_str) != Some("label@1"));
+                    items
+                }
+                Err(refusal) => {
+                    issues.push(deep_canvas::document::Issue::error(
+                        graphs::code(&refusal),
+                        "",
+                        refusal["path"].as_str().unwrap_or("").to_string(),
+                        json!(null),
+                        "the graph can't be laid out as its params say",
+                    ));
+                    items
+                }
+            };
+            drawn.insert("items".into(), Value::Object(items));
+        }
+        // An issue on an item a vector draws as names the vector.
+        // #417 AC9's wrong check compares against 0.03 in place of the look's status distance.
+        let min = distance_0_03.then_some(0.03);
+        for mut issue in deep_canvas_marks::check::check(&drawn, look, min) {
+            for id in issue.ids.iter_mut() {
+                if let Some(v) = vectors.keys().find(|v| id.starts_with(&format!("{v}."))) {
+                    *id = v.clone();
+                }
+            }
+            issues.push(issue);
+        }
+    }
+    let ok = !issues.iter().any(|i| i.severity == "error");
+    let numbers = [deep_canvas_marks::check::numbers(doc).0, formula_numbers].concat();
+    let answer = json!({
         "ok": ok,
         "issues": issues.iter().map(|i| i.to_json()).collect::<Vec<_>>(),
+        // #397: every number a mark set or an axis shows, with what it traces to; #406: a
+        // template's story numbers, a quote's quotation and a formula's numbers.
+        "numbers": numbers,
         "notices": result.notices.iter().map(|n| n.to_json()).collect::<Vec<_>>(),
-    })
+    });
+    (answer, vectors)
+}
+
+/// #398 AC6's wrong program, which `check`, `raster` and `geometry` take: an importer that skips
+/// `<clipPath>` without an issue. `None` for another planted value, which another command reads.
+fn skips_clip_path(input: &Map<String, Value>) -> bool {
+    input.get("planted").and_then(Value::as_str) == Some("import_skips_clip_path")
+}
+
+/// #417 AC9's wrong program, which `check` and `raster` take: a status distance of 0.03.
+fn distance_0_03(input: &Map<String, Value>) -> bool {
+    input.get("planted").and_then(Value::as_str) == Some("status_distance_0_03")
+}
+
+/// A look's answer: its definition, each theme's roles, and (#417) each theme's opaque roles in
+/// OKLab as resolved.
+fn look_answer(look: &Look, def: Value) -> Value {
+    let oklab = |m: &std::collections::BTreeMap<String, [f64; 3]>| {
+        Value::Object(m.iter().map(|(r, l)| (r.clone(), json!(l))).collect())
+    };
+    json!({"ok": true, "look": def, "roles": roles(look),
+           "oklab": {"light": oklab(&look.light_oklab), "dark": oklab(&look.dark_oklab)}})
 }
 
 /// A document the check refuses, as a drawing command answers it: the first error's code.
@@ -279,15 +426,21 @@ fn refused_by_check(checked: &Value) -> Option<Value> {
 }
 
 /// Every document a line carries (`doc`, and each step's in a session) with its mark sets'
-/// sidecar columns read from the line's `store` and inlined.
+/// sidecar columns read from the line's `store` and inlined, and the line's `doc`'s table columns
+/// read from its `evidence` store (#397).
 fn inline_sidecars(input: &mut Map<String, Value>) -> Result<(), Value> {
     let store = input
         .get("store")
         .and_then(Value::as_str)
         .map(PathBuf::from);
     let store = store.as_deref();
+    let evidence = input
+        .get("evidence")
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
     if let Some(Value::Object(doc)) = input.get_mut("doc") {
         asset::sidecars(doc, store)?;
+        asset::tables(doc, evidence.as_deref())?;
     }
     if let Some(Value::Array(steps)) = input.get_mut("steps") {
         for step in steps {
@@ -302,32 +455,164 @@ fn inline_sidecars(input: &mut Map<String, Value>) -> Result<(), Value> {
 fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     // `check` reads the document and the look, `look` the look alone; both answer on every
     // platform. A look the status guard refuses is the answer, and nothing is drawn.
+    if command == "look" && input.get("list").is_some() {
+        if input.get("list").and_then(Value::as_str) != Some("shipped") {
+            return None;
+        }
+        return Some(Answer::Now(json!({"ok": true, "shipped": look::SHIPPED})));
+    }
+    // The look's own guard holds the status distance everywhere, as the app's look; a document's
+    // look, only where the document binds status, which its check judges (#417).
+    let at = if command == "look" {
+        look::Distance::Everywhere
+    } else {
+        look::Distance::WhereStatusShows
+    };
     let look = match (command, input.get("look")) {
-        ("check" | "geometry", None) => None,
-        (_, value) => match look(value)? {
+        ("check" | "geometry" | "path", None) => None,
+        (_, value) => match look(value, at)? {
             Ok(found) => Some(found),
             Err(refusal) => return Some(Answer::Now(refusal.to_json())),
         },
     };
     if command == "look" {
         let (look, def) = look?;
-        return Some(Answer::Now(
-            json!({"ok": true, "look": def, "roles": roles(&look)}),
-        ));
+        return Some(Answer::Now(look_answer(&look, def)));
     }
-    if command == "check" {
+    let skips = skips_clip_path(input);
+    let near = distance_0_03(input);
+    let store_dir = store(input.get("store"))?;
+    if command == "path" {
+        let planted = match input.get("planted") {
+            None => Planted::None,
+            Some(Value::String(p)) => raster::planted_path(p)?,
+            Some(_) => return None,
+        };
         let doc = doc(input.get("doc"))?;
-        return Some(Answer::Now(check(&doc, look.as_ref().map(|(l, _)| l))));
+        let item = input.get("item")?.as_str()?.to_string();
+        let times: Vec<i64> = match input.get("times") {
+            None => vec![0],
+            Some(Value::Array(list)) => {
+                list.iter().map(Value::as_i64).collect::<Option<Vec<_>>>()?
+            }
+            Some(_) => return None,
+        };
+        let anchors: Vec<String> = match input.get("anchors") {
+            None => Vec::new(),
+            Some(Value::Array(list)) => list
+                .iter()
+                .map(|v| v.as_str().map(str::to_string))
+                .collect::<Option<Vec<_>>>()?,
+            Some(_) => return None,
+        };
+        let timing = match input.get("timing") {
+            None => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return None,
+        };
+        let (checked, vectors) = check(
+            &doc,
+            look.as_ref().map(|(l, _)| l),
+            store_dir.as_deref(),
+            (skips, near),
+        );
+        if let Some(refused) = refused_by_check(&checked) {
+            return Some(Answer::Now(refused));
+        }
+        return Some(Answer::Path(Box::new(raster::PathRequest {
+            doc,
+            item,
+            times,
+            anchors,
+            timing,
+            planted,
+            look: look.map(|(l, _)| l),
+            vectors,
+        })));
     }
-    if command == "geometry" {
+    // #399 AC7's wrong router, which `geometry` takes.
+    let straight = input.get("planted").and_then(Value::as_str) == Some("straight_router");
+    if command == "check" || command == "geometry" {
+        if input.get("planted").is_some() && !skips && !near && !(straight && command == "geometry")
+        {
+            return None;
+        }
         let doc = doc(input.get("doc"))?;
+        let (checked, vectors) = check(
+            &doc,
+            look.as_ref().map(|(l, _)| l),
+            store_dir.as_deref(),
+            (skips, near),
+        );
+        if command == "check" {
+            return Some(Answer::Now(checked));
+        }
         let item = input.get("item")?.as_str()?;
-        let checked = check(&doc, look.as_ref().map(|(l, _)| l));
-        return Some(Answer::Now(
-            refused_by_check(&checked).unwrap_or_else(|| raster::geometry(&doc, item)),
-        ));
+        let t = input.get("t").map_or(Some(0), Value::as_i64)?;
+        return Some(Answer::Now(refused_by_check(&checked).unwrap_or_else(
+            || {
+                let router = if straight {
+                    deep_canvas_graph::view::Router::Straight
+                } else {
+                    deep_canvas_graph::view::Router::Orthogonal
+                };
+                raster::geometry(&doc, item, t, &vectors, router)
+            },
+        )));
     }
     let (look, _) = look?;
+    // #399: the view's label placement at each stop of a camera path, and a series' crosshair.
+    if command == "labels" {
+        let placer = match input.get("planted") {
+            None => graphs::Placer::Honest,
+            Some(v) if v == "folds_every_label" => graphs::Placer::FoldsEveryLabel,
+            Some(_) => return None,
+        };
+        let stops = input
+            .get("path")?
+            .as_array()?
+            .iter()
+            .map(|s| {
+                let zoom = s
+                    .get("zoom")?
+                    .as_f64()
+                    .filter(|z| *z > 0.0 && z.is_finite())?;
+                Some((zoom, s.get("t").map_or(Some(0), Value::as_i64)?))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let doc = doc(input.get("doc"))?;
+        let (checked, vectors) = check(&doc, Some(&look), store_dir.as_deref(), (false, false));
+        if let Some(refusal) = refused_by_check(&checked) {
+            return Some(Answer::Now(refusal));
+        }
+        let mut boards: BTreeMap<i64, graphs::Board> = BTreeMap::new();
+        let mut steps = Vec::with_capacity(stops.len());
+        for (zoom, t) in stops {
+            let board = match boards.entry(t) {
+                std::collections::btree_map::Entry::Occupied(b) => b.into_mut(),
+                std::collections::btree_map::Entry::Vacant(slot) => {
+                    match raster::label_board(&doc, &look, t, &vectors) {
+                        Ok(b) => slot.insert(b),
+                        Err(refusal) => return Some(Answer::Now(refusal)),
+                    }
+                }
+            };
+            let (bucket, labels, folded) = board.stop(zoom, placer);
+            steps.push(
+                json!({"zoom": zoom, "bucket": bucket, "t": t, "folded": folded, "labels": labels}),
+            );
+        }
+        return Some(Answer::Now(json!({"ok": true, "steps": steps})));
+    }
+    if command == "crosshair" {
+        if input.get("planted").is_some() {
+            return None;
+        }
+        let doc = doc(input.get("doc"))?;
+        let item = input.get("item")?.as_str()?;
+        let x = input.get("x")?.as_f64()?;
+        return Some(Answer::Now(raster::crosshair(&doc, item, x)));
+    }
     if command == "raster" {
         let (planted, encoded_luma, spans_apart) = match input.get("planted") {
             None => (Planted::None, false, false),
@@ -340,7 +625,27 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             Some(Value::String(p)) if p == "sectors_source_over" => {
                 (Planted::SectorsSourceOver, false, false)
             }
+            Some(Value::String(p)) if p == "merge_zero_fills" => {
+                (Planted::MergeZeroFills, false, false)
+            }
+            Some(Value::String(p)) if p == "decimate_first_last" => {
+                (Planted::DecimateFirstLast, false, false)
+            }
+            Some(Value::String(p)) if p == "decimate_min_max" => {
+                (Planted::DecimateMinMax, false, false)
+            }
+            Some(Value::String(p))
+                if p == "write_fades_fills_from_start"
+                    || p == "import_skips_clip_path"
+                    || p == "status_distance_0_03" =>
+            {
+                (Planted::None, false, false)
+            }
             Some(_) => return None,
+        };
+        let write = match input.get("planted").and_then(Value::as_str) {
+            Some("write_fades_fills_from_start") => deep_canvas_vector::Write::FadesFillsFromStart,
+            _ => deep_canvas_vector::Write::Honest,
         };
         let config = raster::Config {
             simd: match input.get("simd").map(Value::as_str) {
@@ -380,15 +685,25 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             view: view(input.get("view"))?,
             t: input.get("t").map_or(Some(0), Value::as_i64)?,
             record: record(input)?,
-            store: store(input.get("store"))?,
+            store: store_dir,
             planted,
+            vectors: Vectors::new(),
+            write,
+            antialias: input.get("antialias").map_or(Some(true), Value::as_bool)?,
             encoded_luma,
             spans_apart,
             look,
             config,
             blend_inputs,
         };
-        let checked = check(&request.doc, Some(&request.look));
+        let mut request = request;
+        let (checked, vectors) = check(
+            &request.doc,
+            Some(&request.look),
+            request.store.as_deref(),
+            (skips, near),
+        );
+        request.vectors = vectors;
         return Some(Answer::Now(
             refused_by_check(&checked).unwrap_or_else(|| raster::answer(request)),
         ));
@@ -477,15 +792,28 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                                 .ok()
                                 .filter(|f| (1..=600).contains(f))?,
                         },
+                        look: match s.get("look") {
+                            None => None,
+                            l => match self::look(l, at)? {
+                                Ok((l, _)) => Some(l),
+                                Err(_) => return None,
+                            },
+                        },
                     })
                 })
                 .collect::<Option<Vec<_>>>()?;
             // The first step opens the session, so it carries the document.
             steps.first()?.doc.as_ref()?;
+            let switch_rebuilds = match input.get("planted") {
+                None => false,
+                Some(Value::String(p)) if p == "look_switch_rebuilds" => true,
+                Some(_) => return None,
+            };
             Request::Session {
                 look,
                 steps,
                 store: store(input.get("store"))?,
+                switch_rebuilds,
             }
         }
         "render" => {
@@ -514,16 +842,29 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
 pub fn main() {
     let command = std::env::args().nth(1).unwrap_or_default();
     if ![
-        "frames", "session", "render", "check", "look", "raster", "geometry", "idle",
+        "frames",
+        "session",
+        "render",
+        "check",
+        "look",
+        "raster",
+        "geometry",
+        "idle",
+        "labels",
+        "crosshair",
+        "path",
     ]
     .contains(&command.as_str())
     {
         eprintln!(
-            "deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry"
+            "deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path"
         );
         std::process::exit(2);
     }
     let mut out = io::stdout().lock();
+    // #160: the tessellations this process built, by their key, so `path` reports what a later
+    // frame reused.
+    let mut built = std::collections::BTreeSet::new();
     #[cfg(target_os = "macos")]
     let mut renderer = macos::Renderer::new();
     for buf in io::stdin().lock().split(b'\n') {
@@ -539,6 +880,7 @@ pub fn main() {
         let answer = match request {
             None => bad_input(),
             Some(Answer::Now(answer)) => answer,
+            Some(Answer::Path(request)) => raster::path_answer(*request, &mut built),
             Some(Answer::Draw(request)) => {
                 #[cfg(target_os = "macos")]
                 {
@@ -560,8 +902,10 @@ pub fn main() {
 
 mod asset;
 pub mod gpu;
+mod graphs;
 pub mod layer;
 #[cfg(target_os = "macos")]
 mod macos;
+mod place;
 mod raster;
 mod status;

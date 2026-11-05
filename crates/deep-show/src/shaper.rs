@@ -25,6 +25,9 @@ impl Pending {
 
 struct Job {
     text: String,
+    /// #417: the spec's fallback families and language, which the spec borrows.
+    fallback: Vec<&'static str>,
+    lang: Option<String>,
     spec: Spec<'static>,
     done: Arc<AtomicBool>,
 }
@@ -38,6 +41,8 @@ static WORKER: LazyLock<Mutex<Sender<Job>>> = LazyLock::new(|| {
             for job in jobs {
                 shaper.shape(&Spec {
                     text: &job.text,
+                    fallback: &job.fallback,
+                    lang: job.lang.as_deref(),
                     ..job.spec
                 });
                 job.done.store(true, Ordering::Release);
@@ -50,11 +55,22 @@ static WORKER: LazyLock<Mutex<Sender<Job>>> = LazyLock::new(|| {
 /// Shapes `spec` on the worker; its run lands in the shaped-run cache.
 pub fn shape_later(spec: &Spec<'_>) -> Pending {
     let done = Arc::new(AtomicBool::new(false));
+    // Every family is a bundled face's, so the worker holds each by the face's own name.
+    let bundled = |name: &str| {
+        deep_text::FACES
+            .iter()
+            .find(|f| f.family == name)
+            .map_or("", |f| f.family)
+    };
     let job = Job {
         text: spec.text.to_owned(),
+        fallback: spec.fallback.iter().map(|f| bundled(f)).collect(),
+        lang: spec.lang.map(str::to_owned),
         spec: Spec {
             text: "",
-            role: spec.role,
+            family: bundled(spec.family),
+            fallback: &[],
+            lang: None,
             size: spec.size,
             weight: spec.weight,
             line_height: spec.line_height,

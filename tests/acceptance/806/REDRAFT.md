@@ -80,3 +80,62 @@ real Codex is configured and signed in changed. The Claude Code live test and ev
 
 Checked: `npx tsc -p tests/acceptance/806/tsconfig.json`. Not run: the live test itself (it spends plan usage), so the three fixes are
 as reported from the 0.144.0 run, not re-proven here.
+
+
+# Blind redraft: the Codex stand-in's stamps (AC2, #1176)
+
+From criterion 2 ("... a scripted Codex session ... calls `deep_show` through `deep mcp` ...") and #39, which came after the first draft:
+where one process serves several sessions, as Codex's may, each `deep_*` call binds only to the PreToolUse deep-hook stamped for it, by
+session, tool name and a digest of its arguments (design: Socket roles). The first draft's Codex stand-in sent one PreToolUse, for `Bash`,
+when it established itself, and then called `deep_claim` and `deep_show` with no stamp, so the hub refused its `deep_claim` with `unbound`
+and the two AC2 tests with a Codex `showFigure` failed on every run. A real Codex fires PreToolUse for `mcp__*` tools
+(`adapters/codex.facts.json`, toolKinds), so the stand-in was the one at fault.
+
+## The change
+
+- `Stand.stamp(hub, tool, args)` (`helpers.ts`): for a Codex stand-in, the PreToolUse a real Codex fires before the call: `tool_name`
+  `mcp__deep__<tool>`, `tool_input` the call's arguments, a fresh `call_...` `tool_use_id`, the turn's `turn_id`, as #39's suite stamps
+  `deep_ask`. A Claude Code stand-in sends nothing: its `deep mcp` binds by its parent process, as before.
+- `showFigure` (`figure.ts`) stamps `deep_claim` with the very arguments it then sends, and `deep_show` with `showArgs` of the call under
+  the listed schema, which is what `deepShow` then sends (the schema is cached per stand-in, so both read the same one).
+- One new test, "AC2 the Codex stand-in's deep_claim stamped with other arguments than it sends is refused unbound", runs without the app:
+  the Codex stand-in stamps one `deep_claim` and sends another, and the call must be refused with code `unbound`; the failure names
+  `deep_claim`. Shown to fail when the stamp carries the same arguments: the hub then files the claim, and the test reports that
+  `deep_claim of the Codex session under a stamp for other arguments must be refused`.
+
+Every test name and assertion of the first draft is as it was; no other file changed. Not covered: a hub that binds a Codex call by its
+process alone (it needs two Codex threads in one `deep mcp` process; #39's suite has them).
+
+## Run here (Linux)
+
+`npx tsc -p tests/acceptance/806/tsconfig.json` passes. `sessions.test.ts`: the tool-list test and the new one pass; the five app tests
+are INCONCLUSIVE (macOS only), so the 6 of 6 on macOS is not run here. In a scratch test (removed), with `app: false`: an unstamped
+`deep_claim` from the Codex stand-in is refused `unbound` (the first draft's failure), and the redrafted `showFigure` files the Codex
+session's claim; its `deep_show` reply was `unavailable` (no canvas core built here), not `unbound`.
+
+# Blind redraft: the replay's Codex stamps (AC1, #1229)
+
+From criterion 1 (each scenario played "against a real hub, real agent stand-ins") and #39: a Codex session's `deep_*` call binds only
+to the PreToolUse deep-hook stamped for it, by session, tool name and a digest of its arguments (design: Socket roles). The replay
+(`replay.ts`) called `deep_claim` and `deep_show` from each scenario session's stand-in with no stamp, so a Codex session's calls
+(`Codex: release notes`, #393's BRAVO) were refused: its `deep_show` with `no_session`, its `deep_claim` with `unbound`, where the
+stand-in presents the one and files the other. The #1176 redraft stamped AC2's `showFigure`; the replay was left as it was.
+
+## The change
+
+- `openWorld` stamps each scenario claim's `deep_claim` with the very `claimArgs()` it then sends.
+- `play` stamps a `deep_show` made by a scenario session's agent, and a `render_back`'s `deep_show`, with `showArgs` of the call under
+  that stand-in's listed schema, which is what `deepShow` then sends, as `showFigure` does. A `deep_show` from `opened.hand` (bound to
+  no session) is not stamped. `Stand.stamp` sends nothing for a Claude Code stand-in, so its calls are as before.
+
+Every test name, assertion and `#806.<id>` tag is as it was; no other file changed. A Codex stamp's hook process now falls inside the call's
+measured `ms`; the entries with `bounds` on `ms` (`settle`, `hidden`) play only a Claude Code session, whose stamp sends nothing.
+
+## Run here (Linux)
+
+`npx tsc -p tests/acceptance/806/tsconfig.json` passes. In a scratch test (removed), with `app: false`: the Codex session's `deep_show`
+through `play` is presented at revision 1 (it was `refused`, `no_session`) and a claim filed by it through `openWorld` is filed (it was
+`unbound`); the Claude Code session's is presented either way. With the stamps sending `{}` instead, the same test gives `no_session`
+and `unbound` again. Not run: a Codex `render_back` (the scratch test plays none). `replay393.test.ts`, `replay384.test.ts` and
+`sessions.test.ts`: 10 pass and 10 are INCONCLUSIVE (macOS only), the same counts and tests as at the base, so no replay here shows the
+change; the replays of a Codex session's calls with the app are not run here.

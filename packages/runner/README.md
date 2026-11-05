@@ -7,6 +7,7 @@ DeepBuild's own headless jobs on your agent, apart from your sessions (#159): th
 ## Where new code goes
 
 - `src/runner.ts`: jobs, checkouts, plan windows, budgets and launch; `src/types.ts`: the public shapes.
+- A process or process group's liveness comes from the supervisor (`alive`, `groupMembers`, `groupCpu`), never a `ps` of the runner's own.
 - `src/egress.ts`: the job's only way out of its sandbox, a CONNECT tunnel to the hosts its agent names.
 - Regression tests go in `test/`; acceptance tests live in `tests/acceptance/159` and are never edited.
 

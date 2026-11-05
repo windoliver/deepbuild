@@ -11,7 +11,9 @@
 #[cfg(target_os = "macos")]
 mod apple;
 pub mod color;
+pub mod maps;
 pub mod mp4;
+pub mod table;
 mod wav;
 
 use std::collections::BTreeSet;
@@ -876,6 +878,18 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
         Err((r, sha)) => return (r, sha),
     };
     let sha = Some(opened.sha.clone());
+    // #423: a material's map made ready for the GPU, its texels written to `out` (maps.rs).
+    if op == "transcode" {
+        return (map_job(&opened.data, &job, planted), sha);
+    }
+    if op == "table" {
+        let key = job.s("key").unwrap_or_default();
+        let probed = table::probe(&opened.data, key);
+        return (
+            probed.map(|p| json!({"probe": p})).unwrap_or_else(|r| r),
+            sha,
+        );
+    }
     let f = match format(&opened.data) {
         Ok(f) => f,
         Err(r) => return (r, sha),
@@ -899,6 +913,37 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
         _ => Err(format!("no job {op}")),
     };
     (reply.unwrap_or_else(|e| json!({"error": e})), sha)
+}
+
+/// A `transcode` job: `role` (base_color, emission, normal, occlusion or data) and `bc` (the
+/// adapter samples BC) choose the format; the texels go to `out` (a file path).
+fn map_job(data: &[u8], job: &Job, planted: &Planted) -> Value {
+    let Some(role) = job.s("role").and_then(maps::Role::read) else {
+        return json!({"error": "a transcode names its role"});
+    };
+    let Some(out) = job.s("out") else {
+        return json!({"error": "a transcode names its out file"});
+    };
+    let bc = job.v.get("bc").and_then(Value::as_bool).unwrap_or(true);
+    let source = if maps::is_ktx2(data) {
+        "ktx2"
+    } else if data.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        "jpeg"
+    } else {
+        "png"
+    };
+    match maps::ready(data, role, bc, planted.is("applies_image_gamma")) {
+        Ok(r) => match std::fs::write(out, &r.data) {
+            Ok(()) => {
+                let mut v = r.json();
+                v["source"] = json!(source);
+                v["transcoder"] = json!(maps::TRANSCODER);
+                v
+            }
+            Err(e) => json!({"error": e.to_string()}),
+        },
+        Err(e) => refused("unreadable_image", json!({"why": e})),
+    }
 }
 
 /// The roles a helper process runs as.

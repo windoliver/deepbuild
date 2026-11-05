@@ -1,0 +1,38 @@
+Base run of the #87 numbers acceptance tests, on base commit 29d29ba5 (origin/main), Node 24.22.0, vitest 5.0.5,
+from the worktree root (shown as <worktree>):
+
+  npx vitest run --root tests/acceptance/87/numbers --testTimeout=600000
+
+Every test fails, and each fails on its own: the plug-in package @deepbuild/checks-numbers isn't at the base, and the
+tests import it lazily, so each test's first call into it throws. Nothing else at the base answers any criterion:
+there is no numbers kind, no kit for it, no re-run of a stated number or its recount, no run of an added term on a
+sample, and no timing check behind a stated speed. The base's run record has no timing report, and the verdict
+engine reads none (`packages/gate`'s `runTiming` reruns a timing check under load, and `packages/checks-command`
+reads each timed repeat's flush from a tool's report, but nothing names a baseline, toolchains or a machine, or
+judges a stated speed).
+
+ Test Files  6 failed (6)
+      Tests  8 failed (8)
+
+First failure, as printed:
+
+ FAIL  budget.test.ts > budgets: a numbers re-run within twice the original query's time > re-running a dashboard number on 300,000 rows takes at most twice the query's own time, fastest of five each
+Error: Cannot find module '/packages/checks-numbers/src/index.ts' imported from <worktree>/tests/acceptance/87/numbers/helpers.ts
+ ❯ budget.test.ts:31:19
+     29|     const value = original().value;
+     30|     const spec = numbersSpec([{ where: 'dashboard: distinct account an…
+     31|     const fill = (await numbers()).numbersFill();
+       |                   ^
+
+Every other failure is the same "Cannot find module '/packages/checks-numbers/src/index.ts'" at the test's first
+call into the plug-in: `runNumbers` in helpers.ts (dashboard.test.ts, proof.test.ts, sample.test.ts),
+`numbers()` in kit.test.ts, and `speed()` in speed.test.ts (the criterion's test and both wrong programs'). The
+budget test built its 300,000-row table and ran the original query before reaching the plug-in.
+
+Type check: with a declaration-only copy of the surface under test (README) placed temporarily
+(packages/checks-numbers/src/index.ts, and TimingReport with Run.timing in packages/verdicts/src/types.ts) and
+removed afterwards,
+
+  npx tsc -p tests/acceptance/87/numbers/tsconfig.json
+
+exits 0 with no output.

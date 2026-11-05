@@ -78,6 +78,8 @@ pub struct Frames {
     fast: Option<Fast>,
     /// Every solid's eight corners, in layer and solid order.
     bounds: Vec<Vec3>,
+    /// Whether the last [`Frames::at`] gave a scene other than the one before it (#421).
+    changed: bool,
 }
 
 impl Frames {
@@ -111,7 +113,7 @@ impl Frames {
             code: "out_of_range",
             path: String::new(),
         })?;
-        let scene = evaluate_compiled(map, &program, 0, look, labels)?;
+        let scene = evaluate_compiled(map, &program, 0, look, labels, None, &[])?;
         let state = program.state();
         let fast = fast_path(map, &program, &scene);
         let mut bounds = Vec::with_capacity(scene.layers.iter().map(|l| l.solids.len() * 8).sum());
@@ -132,6 +134,7 @@ impl Frames {
             scene,
             fast,
             bounds,
+            changed: true,
         })
     }
 
@@ -150,6 +153,12 @@ impl Frames {
     /// frame is evaluated whole.
     pub fn moved(&self) -> Option<&[(usize, usize)]> {
         self.fast.as_ref().map(|f| f.moved.as_slice())
+    }
+
+    /// Whether the last [`Frames::at`] changed the scene: a still scene settles and draws
+    /// nothing (#421).
+    pub fn changed(&self) -> bool {
+        self.changed
     }
 
     /// The scene at `t` (flicks) on a frame of `size` px, the view turned by `offsets`.
@@ -187,6 +196,7 @@ impl Frames {
         };
         let local =
             |item: usize| -> Affine3 { local_of(at(item, 0), at(item, 1), at(item, 2), [1.0; 3]) };
+        let mut changed = self.scene.size != size;
         for s in solids.iter() {
             let mut m = local(s.chain[0]);
             for &p in &s.chain[1..] {
@@ -201,7 +211,9 @@ impl Frames {
                 ],
             );
             self.bounds[s.corner..s.corner + 8].copy_from_slice(&corners8(&model));
-            self.scene.layers[s.layer].solids[s.index].model = model;
+            let solid = &mut self.scene.layers[s.layer].solids[s.index];
+            changed |= solid.model != model;
+            solid.model = model;
         }
         for &(field, slot) in &cam.fields {
             let v = slots[slot];
@@ -223,7 +235,7 @@ impl Frames {
             }
         }
         self.scene.size = size;
-        self.scene.camera = turned(
+        let camera = turned(
             &cam.spec,
             &cam.path,
             offsets,
@@ -232,6 +244,8 @@ impl Frames {
             cam.far,
             &self.bounds,
         )?;
+        self.changed = changed || self.scene.camera != camera;
+        self.scene.camera = camera;
         Ok(&self.scene)
     }
 
@@ -246,10 +260,24 @@ impl Frames {
     ) -> Result<&Scene, Refused> {
         let mut doc = self.doc.clone();
         doc["size"] = Value::from(vec![size[0], size[1]]);
-        self.scene = evaluate(&doc, t, &self.look, labels)?;
-        if *offsets == Offsets::default() {
-            return Ok(&self.scene);
+        let mut scene = evaluate(&doc, t, &self.look, labels)?;
+        if *offsets != Offsets::default() {
+            scene.camera = self.turned_whole(&doc, &scene, t, size, offsets)?;
         }
+        self.changed = scene != self.scene;
+        self.scene = scene;
+        Ok(&self.scene)
+    }
+
+    /// The camera at `t` turned by `offsets`, around `scene`'s solids.
+    fn turned_whole(
+        &mut self,
+        doc: &Value,
+        scene: &Scene,
+        t: i64,
+        size: [u32; 2],
+        offsets: &Offsets,
+    ) -> Result<crate::scene::Camera, Refused> {
         let map = doc.as_object().expect("a document is an object");
         self.program.evaluate(t, Validity::Full, &mut self.state);
         let items = deep_canvas_motion::eval::items(map, &self.program, &self.state);
@@ -266,12 +294,12 @@ impl Frames {
             path: r.path,
         })?;
         let mut bounds = Vec::new();
-        for l in &self.scene.layers {
+        for l in &scene.layers {
             for s in &l.solids {
                 corners_into(&s.model, &mut bounds);
             }
         }
-        self.scene.camera = turned(
+        turned(
             &spec,
             &path,
             offsets,
@@ -279,8 +307,7 @@ impl Frames {
             num(params.get("near")),
             num(params.get("far")),
             &bounds,
-        )?;
-        Ok(&self.scene)
+        )
     }
 }
 
@@ -315,11 +342,13 @@ fn turned(
 
 /// What the frame path rewrites for this document, or `None` when it moves anything else.
 fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Option<Fast> {
-    // A sun's direction and another module's items (#380) move with transforms this path
-    // doesn't follow, so a scene holding one is evaluated whole.
+    // A light's place and power (#421) and another module's items (#380) move with fields
+    // this path doesn't follow, so a scene holding one is evaluated whole.
     if !scene.overlays.is_empty()
-        || scene.sun.is_some()
+        || !scene.lights.is_empty()
         || !scene.others.is_empty()
+        // A builder's solid isn't a unit mesh its size scales (#420).
+        || scene.layers.iter().any(|l| l.solids.iter().any(|s| s.mesh.is_some()))
         || scene
             .layers
             .iter()
@@ -385,10 +414,17 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
             // The parents passed, after the solid itself.
             let mut seen: Vec<&str> = Vec::new();
             let item = items.get(&s.id)?;
+            // A pivot moves the matrix the fast path rebuilds from slots alone: evaluate whole.
+            if crate::scene::pivot_of(item).is_some() {
+                return None;
+            }
             let mut parent = item.get("parent").and_then(Value::as_str);
             while let Some(p) = parent {
                 if p == s.id || seen.contains(&p) || !items.contains_key(p) {
                     break;
+                }
+                if crate::scene::pivot_of(&items[p]).is_some() {
+                    return None;
                 }
                 chain.push(index(p)?);
                 seen.push(p);
@@ -500,6 +536,64 @@ mod tests {
             turned.camera.eye,
             whole.camera.eye
         );
+    }
+
+    /// A lamp riding the sliding box, a material whose roughness a channel keys, and a flicker
+    /// channel on the lamp (#421): every frame is the whole evaluation, the lamp where its box is
+    /// at t, the material's number and the flicker at their channels' values.
+    #[test]
+    fn lights_and_material_channels_follow_each_frame() {
+        for keyed in [false, true] {
+            let mut d = doc(false);
+            d["items"]["lamp"] = json!({"id": "lamp", "kind": "light.point@1", "name": "L", "order": "c0", "parent": "a", "params": {"power": 800}, "at": {"pos": [0, 2, 0]}});
+            d["items"]["m"] = json!({"id": "m", "kind": "material@1", "name": "M", "order": "c1", "params": {"roughness": 0.5}});
+            d["items"]["c"]["material"] = json!("m");
+            if keyed {
+                d["items"]["lamp"]["params"]["flicker"] = json!("buzz");
+                d["channels"]["rough"] = json!({"target": "items/m/params/roughness", "type": "f32", "keys": {"k0": {"t": "0s", "value": 0.1, "interp": "linear"}, "k1": {"t": "60s", "value": 0.9, "interp": "linear"}}});
+                d["channels"]["buzz"] = json!({"target": "items/lamp/params/gain", "type": "f32", "keys": {"k0": {"t": "0s", "value": 1, "interp": "linear"}, "k1": {"t": "60s", "value": 0, "interp": "linear"}}});
+            }
+            let mut labels = Labels::new();
+            let mut frames = Frames::new(&d, &look(), &mut labels).unwrap();
+            for n in [0i64, 1800, 3599] {
+                let t = n * 705_600_000 / 60;
+                let got = frames
+                    .at(t, [128, 96], &Offsets::default(), &mut labels)
+                    .unwrap()
+                    .clone();
+                assert_eq!(
+                    got,
+                    evaluate(&d, t, &look(), &mut labels).unwrap(),
+                    "keyed {keyed}, frame {n}"
+                );
+                let lamp = &got.lights[0];
+                let s = n as f64 / 3600.0;
+                assert!(
+                    (lamp.pos[0] - (-3.0 + 6.0 * s)).abs() < 1e-6,
+                    "keyed {keyed}, frame {n}: {:?}",
+                    lamp.pos
+                );
+                if keyed {
+                    let want = (1.0 - s) * 800.0 / (4.0 * std::f64::consts::PI);
+                    assert!(
+                        (lamp.intensity - want).abs() < 1e-6,
+                        "frame {n}: {}",
+                        lamp.intensity
+                    );
+                    let rough = got
+                        .layers
+                        .iter()
+                        .flat_map(|l| &l.solids)
+                        .find(|s| s.id == "c")
+                        .and_then(|s| s.material)
+                        .map(|m| m.roughness);
+                    assert!(
+                        rough.is_some_and(|r| (r - (0.1 + 0.8 * s)).abs() < 1e-6),
+                        "frame {n}: {rough:?}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

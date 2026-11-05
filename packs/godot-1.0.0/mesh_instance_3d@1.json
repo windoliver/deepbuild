@@ -1,0 +1,133 @@
+{
+  "id": "godot.mesh_instance_3d",
+  "version": "1.0",
+  "title": "MeshInstance3D",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "Godot 4's MeshInstance3D with a BoxMesh: metres and +Y up kept; rotation in radians in Godot's default YXZ order, through the rotation matrix to our degrees.",
+  "inputs": {
+    "mesh": {
+      "type": "record",
+      "default": {
+        "type": "BoxMesh",
+        "size": [
+          1,
+          1,
+          1
+        ]
+      },
+      "about": "BoxMesh only: {type, size}"
+    },
+    "position": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "m",
+      "about": ""
+    },
+    "rotation": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "rad",
+      "about": "Node3D.rotation, radians, the default order YXZ"
+    },
+    "scale": {
+      "type": "vec3",
+      "default": [
+        1,
+        1,
+        1
+      ],
+      "about": ""
+    }
+  },
+  "let": {
+    "mesh": "mesh.type == BoxMesh ? mesh : unmapped()",
+    "w": "mesh.size[0]",
+    "h": "mesh.size[1]",
+    "d": "mesh.size[2]",
+    "ca": "cos(rotation[0])",
+    "sa": "sin(rotation[0])",
+    "cb": "cos(rotation[1])",
+    "sb": "sin(rotation[1])",
+    "cc": "cos(rotation[2])",
+    "sc": "sin(rotation[2])",
+    "m00": "cb * cc + sb * sa * sc",
+    "m01": "-cb * sc + sb * sa * cc",
+    "m02": "sb * ca",
+    "m10": "ca * sc",
+    "m11": "ca * cc",
+    "m12": "-sa",
+    "m20": "-sb * cc + cb * sa * sc",
+    "m21": "sb * sc + cb * sa * cc",
+    "m22": "cb * ca",
+    "n00": "m00",
+    "n01": "m01",
+    "n02": "m02",
+    "n10": "m10",
+    "n11": "m11",
+    "n12": "m12",
+    "n20": "m20",
+    "n21": "m21",
+    "n22": "m22",
+    "rx": "abs(n20) < 0.9999999999 ? deg(atan2(n21, n22)) : 0",
+    "ry": "deg(asin(max(-1, min(1, -n20))))",
+    "rz": "abs(n20) < 0.9999999999 ? deg(atan2(n10, n00)) : deg(atan2(-n01, n11))",
+    "s0": "scale[0]",
+    "q0": "0 + 0",
+    "s1": "scale[1]",
+    "q1": "h / 2 + 0",
+    "s2": "scale[2]",
+    "q2": "0 + 0",
+    "px": "position[0]",
+    "py": "position[1]",
+    "pz": "position[2]"
+  },
+  "steps": {
+    "mesh": {
+      "op": "builder",
+      "kind": "slab@1",
+      "params": {
+        "size": [
+          "w",
+          "h",
+          "d"
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "px",
+          "py",
+          "pz"
+        ],
+        "rot": [
+          "rx",
+          "ry",
+          "rz"
+        ],
+        "scale": [
+          "s0",
+          "s1",
+          "s2"
+        ],
+        "pivot": [
+          "q0",
+          "q1",
+          "q2"
+        ]
+      }
+    }
+  }
+}

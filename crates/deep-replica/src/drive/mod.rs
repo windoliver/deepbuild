@@ -381,6 +381,8 @@ impl Replica {
                 gpui_kit::component::ThemeMode::Light
             };
             gpui_kit::component::Theme::change(mode, None, cx);
+            // gpui's headless window always reports light, so the chrome is told the theme instead.
+            deep_app::chrome::force_dark(Some(theme == "dark"));
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds {
                     origin: Point::default(),
@@ -573,7 +575,9 @@ impl Replica {
 
     fn notify(&mut self) {
         let now = self.now + self.clock.t * 1000 / FLICKS;
-        for posted in self.notifier.due(&self.events, now, None, true) {
+        let notifier = &mut self.notifier;
+        let due = deep_app::record::with_view(|view| notifier.due(view, now, None, true));
+        for posted in due.unwrap_or_default() {
             #[cfg(target_os = "macos")]
             if self.plant == Some(Plant::StartsSound) && posted.sound.is_some() {
                 plant::play_sound();

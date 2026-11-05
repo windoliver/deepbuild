@@ -12,7 +12,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
-import { parseClaimLine, ulid, type ClaimLine, type Connection, type RecordStore } from '@deepbuild/record';
+import { openTrust, parseClaimLine, ulid, type ClaimLine, type Connection, type RecordStore } from '@deepbuild/record';
 
 /** How a claim was known, strongest first. */
 export type Known = 'you' | 'decision' | 'repo' | 'inferred' | 'outside';
@@ -117,9 +117,6 @@ const render = (text: string, record: Record<string, unknown>): string =>
 
 export async function openWiki(o: WikiOptions): Promise<Wiki> {
   const { record, folder, now } = o;
-  // Loaded here, not with the module: what imports the wiki for its helpers (writtenOf, knownOf) never loads the
-  // extension host, its conformance kits and its supervisor (`deep find`, and the hub's main thread).
-  const { openTrust } = await import('@deepbuild/extension-host');
   const trust = await openTrust({ record, now });
 
   /** Whether the quote is at its source, how the source knew it, and what the record cites for it. */

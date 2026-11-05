@@ -1,6 +1,7 @@
 // The verdict engine (#28): a claim's checks, runs, coverage and definition in, one verdict out. Every rule
 // that applies is a row; the highest by precedence wins. Pure: every input, the time included, is an argument.
 import { createHash } from 'node:crypto';
+import { stableText } from '@deepbuild/contracts';
 import { moreRuns, runsNeeded } from './runs.js';
 import type {
   CheckResult, ClaimCheck, ClaimInput, Contradiction, Depth, Failure, FixTask, OpenItem, OpenItemScope, PointsTo, Prediction,
@@ -25,8 +26,7 @@ const sorted = (items: Iterable<string>): string[] => unique(items).sort();
 /** Unicode NFC, case folded, white space collapsed and trailing punctuation dropped. */
 const normalize = (text: string): string =>
   text.normalize('NFC').toLowerCase().replace(/\s+/g, ' ').replace(/[\s.,;:!?]+$/, '').trim();
-const canonical = (value: unknown): string => JSON.stringify(value, (_, v: unknown) =>
-  (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v));
+const canonical = stableText;
 const sha256 =(text: string): string => createHash('sha256').update(text).digest('hex');
 
 /** An open item's ID: a hash of its normalized text and its scope. */
@@ -177,6 +177,14 @@ class Selection {
     return r.check === c.check && r.outcome !== 'uncounted' && r.digest === c.digest
       && sameMap(r.environment, c.environment) && sameMap(r.tools, c.tools) && r.kept;
   }
+  /** A check's runs on the claim's commit whose timing report says they can't count (#87): INVALID, or a reading. */
+  untimed(c: ClaimCheck): Run[] {
+    return this.runs.filter((r) => r.timing && r.timing.outcome !== 'counts' && r.commit === this.claim.commit && r.check === c.check && r.digest === c.digest);
+  }
+  /** Why each of a check's uncounted runs on the claim's commit doesn't count, where it says. */
+  uncounted(c: ClaimCheck): string[] {
+    return this.runs.flatMap((r) => (r.outcome === 'uncounted' && r.uncounted_because && r.commit === this.claim.commit && r.check === c.check && r.digest === c.digest ? [r.uncounted_because] : []));
+  }
   /** A check's counted runs: its key matches, its evidence is kept, and it ran on the claim's commit or carries. */
   counted(c: ClaimCheck): Run[] {
     return this.runs.filter((r) => this.keyed(c, r) && (r.commit === this.claim.commit || this.carry(c, r.commit)));
@@ -285,7 +293,9 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
     // A fix is judged on its base run once the check's runs have ended: while they are still to come, so is that run (#31).
     if (isFix(claim, c) && state !== 'running') {
       const proves = 'a run of it on the merge base that fails on an assertion it names';
-      if (!c.base) row('INVALID', 'has no run on the merge base, so nothing proves the fix', undefined, proves);
+      // A check a stop or a restart cut short before its base run is INCONCLUSIVE for its stopped run (below), not
+      // unproved: the base run it never got is a run still needed (#669).
+      if (!c.base) { if (!runs.some((r) => r.outcome === 'stopped')) row('INVALID', 'has no run on the merge base, so nothing proves the fix', undefined, proves); }
       else if (c.base.outcome === 'passed') row('INVALID', 'passes on the merge base, so it can\'t prove the fix', undefined, proves);
       else if (!c.base.on_assertion) row('INVALID', 'failed on the merge base only off its named assertions, so it proves nothing', undefined, proves);
     }
@@ -302,6 +312,10 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
       row('INVALID', `two records of ${run} differ (${sorted(outcomes).join(', ')}), so neither counts`, 'two records of one run ID differ', 'one record per run ID');
     }
     for (const reason of unique(runs.flatMap((r) => (r.contract?.outcome === 'INVALID' ? r.contract.reasons : [])))) row('INVALID', reason);
+    // A timing check's run that can't count says why: an INVALID timing makes the check INVALID, a reading INCONCLUSIVE.
+    for (const r of sel.untimed(c)) for (const reason of r.timing!.reasons) row(r.timing!.outcome === 'INVALID' ? 'INVALID' : 'INCONCLUSIVE', r.timing!.outcome === 'INVALID' ? reason : `a reading, not a timing: ${reason}`);
+    // A check whose only runs are uncounted, each saying why, has nothing more to wait for: INCONCLUSIVE, naming why.
+    if (!runs.length) for (const why of unique(sel.uncounted(c))) row('INCONCLUSIVE', `uncounted: ${why}`);
     // An INVALID report makes its check INVALID whether or not it gives reasons.
     const silent = runs.filter((r) => r.contract?.outcome === 'INVALID' && !r.contract.reasons.length).map((r) => r.run);
     if (silent.length) row('INVALID', `contract report INVALID with no reasons from ${silent.join(', ')}`, 'a contract report is INVALID with no reasons');
@@ -429,11 +443,14 @@ export function verdict(claim: ClaimInput): Verdict {
   const reasons: string[] = [];
   const pointers = new Map(judged.map((j) => [j.check.check, pointer(sel, j)]));
 
-  const requirements = claim.requirements.map((q) => requirementOutcome(claim, q, judged.filter((j) => j.check.covers.includes(q.req)), pointers, approvals, items, reasons));
+  const calls: string[] = [];
+  const requirements = claim.requirements.map((q) => requirementOutcome(claim, q, judged.filter((j) => j.check.covers.includes(q.req)), pointers, approvals, calls, items, reasons));
   // One approve ask per own check, naming every requirement its approval closes.
   for (const [approve, reqs] of approvals) {
     asks.push({ kind: 'authority', question: `Approve ${approve} as the check for ${reqs.join(', ')}?`, req: reqs.length === 1 ? reqs[0]! : null, check: approve });
   }
+  // One ask per requirement only a model's judgment speaks to, once its checks found nothing against it (#87).
+  for (const req of calls) asks.push({ kind: 'taste', question: `${req} rests on a model's judgment alone: is it met?`, req, check: null });
   const outcomes: Result[] = [...judged.map((j) => j.result.outcome), ...requirements.map((r) => r.outcome)];
   /** The claim itself is INVALID: its reason goes first, with an open item naming what closes it. */
   const invalid = (why: string, evidence: string): void => {
@@ -542,7 +559,7 @@ export function verdict(claim: ClaimInput): Verdict {
 
 function requirementOutcome(
   claim: ClaimInput, q: Requirement, covering: Judged[], pointers: Map<string, Pointer | null>,
-  approvals: Map<string, string[]>, items: OpenItem[], reasons: string[],
+  approvals: Map<string, string[]>, calls: string[], items: OpenItem[], reasons: string[],
 ): RequirementOutcome {
   let asked = false;
   let own: Result;
@@ -550,13 +567,26 @@ function requirementOutcome(
   // The open item's words, when they differ from the reason's: the item leaves out what runs decide.
   let item: string | null = null;
   let closes = '';
-  const atDepth = covering.filter((j) => DEPTH[j.check.depth] >= DEPTH[q.depth] && (!q.numbers || j.check.contract !== undefined));
-  if (q.oracle === 'person') {
+  // A model's opinion is a reading, never a verdict (#68): a model's check covers nothing alone.
+  const atDepth = covering.filter((j) => j.check.oracle !== 'model' && DEPTH[j.check.depth] >= DEPTH[q.depth] && (!q.numbers || j.check.contract !== undefined));
+  if (q.oracle === 'model') {
+    own = 'INCONCLUSIVE';
+    why = `${q.req} rests on a model's judgment, which is a reading, never a verdict: it needs your call`;
+    closes = 'your call, beside the checked facts';
+    if (highest(covering.map((j) => j.result.outcome)) === 'PASS') {
+      calls.push(q.req);
+      asked = true;
+    }
+  } else if (q.oracle === 'person') {
     own = q.answer === undefined ? 'pending' : q.answer === 'unanswered' ? 'INCONCLUSIVE' : q.answer;
     if (own === 'pending') why = `${q.req} waits on your answer to ${q.ask ?? 'its ask'}`;
     else if (own === 'INCONCLUSIVE') why = `${q.req}: ${q.ask ?? 'its ask'} ended unanswered`;
     else if (own === 'FAIL') why = `${q.req}: your answer to ${q.ask ?? 'its ask'} is FAIL`;
     closes = `your answer to ${q.ask ?? 'its ask'}`;
+  } else if (atDepth.length === 0 && covering.some((j) => j.check.oracle === 'model')) {
+    own = 'INCONCLUSIVE';
+    why = `${q.req} is covered only by a model's check, whose opinion is a reading, never a verdict: it needs a check whose oracle is code, or your call`;
+    closes = `a check at depth ${q.depth} whose oracle is code, or your call`;
   } else if (atDepth.length === 0) {
     own = 'INVALID';
     const kind = q.numbers ? `check with a numeric contract at depth ${q.depth}` : `check at depth ${q.depth}`;

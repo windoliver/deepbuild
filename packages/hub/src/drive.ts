@@ -3,12 +3,12 @@
 // session's calls to the process its launch started and its reply back, as the binary gave it; the core takes the
 // replica lease before a launch, at most two per machine, and releases it once the process has exited.
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
-import type { LeaseKind } from '@deepbuild/leases';
-import { refuse } from './wire.js';
+import type { LeaseKind, LeaseTable } from '@deepbuild/leases';
+import { refuse, ulid, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -85,4 +85,81 @@ export function driveCall(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(driveCall);
   if (!isObj(value)) return value;
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => [k, driveCall(v)]));
+}
+
+export interface ReplicasOptions { folder: string; now: () => number; leases: () => LeaseTable; plant: Plant | undefined }
+
+/** Each session's replicas (#124): each its own deep-drive process under the replica lease, released once it exits. */
+export class Replicas {
+  /** Each replica process a launch started, by the handle the hub gave it: the binary's own handle, its session, and its end. */
+  private readonly held = new Map<string, { replica: Replica; own: string; session: string; gone: Promise<void> }>();
+  constructor(private readonly o: ReplicasOptions) {}
+
+  /**
+   * One deep_drive call. A launch takes the replica lease, refused naming it when the machine runs its two, then
+   * starts a deep-drive process for the session; every other call goes to the process the session's launch started,
+   * and close ends it. Its lease is released once the process has exited, however it ends.
+   */
+  async drive(session: string, args: Obj): Promise<Obj> {
+    const call = driveCall(args) as Obj;
+    if (call.call === 'launch') return this.launch(session, call);
+    const handle = String(args.replica);
+    const held = this.held.get(handle);
+    if (!held?.own || held.session !== session) throw refuse('not_found', '/params/arguments/replica', 'Name a replica your session launched and hasn\'t closed; deep_drive\'s launch starts one.', args.replica);
+    const reply = await held.replica.call({ ...call, replica: held.own });
+    if (call.call === 'close') {
+      await held.replica.end();
+      await held.gone;
+    }
+    return reply.replica === undefined ? reply : { ...reply, replica: handle };
+  }
+  /** A session that ended takes its replicas with it, and their leases (#124). */
+  endFor(session: string): void {
+    for (const held of this.held.values()) if (held.session === session) void held.replica.end();
+  }
+  /** Every replica ends with the hub. */
+  async close(): Promise<void> {
+    await Promise.allSettled([...this.held.values()].map(async (r) => { await r.replica.end(); await r.gone; }));
+  }
+  private async launch(session: string, call: Obj): Promise<Obj> {
+    const id = ulid(this.o.now());
+    const handle = `replica:${id}`;
+    let lease: string | undefined;
+    // The planted hub launches without the lease (#124's wrong program).
+    if (this.o.plant !== 'deep-drive-no-lease') {
+      const got = await this.o.leases().lease({ holder: `mcp:${session}` }, { host: 'local', kind: REPLICA_LEASE.name, key: handle }, 'exclusive');
+      if (got.status !== 'granted') {
+        return { ok: false, error: { code: 'blocked', lease: REPLICA_LEASE.name, message: `No replica was launched: the ${REPLICA_LEASE.name} lease allows ${REPLICA_LEASE.cap} per machine, and ${got.message}.` } };
+      }
+      lease = got.lease.id;
+    }
+    const out = join(this.o.folder, id);
+    let replica: Replica;
+    try {
+      mkdirSync(out, { recursive: true });
+      replica = new Replica(out);
+    } catch (error) {
+      if (lease) await this.o.leases().release(lease, []);
+      throw error;
+    }
+    const gone = replica.exited.then(async () => {
+      this.held.delete(handle);
+      if (lease) await this.o.leases().release(lease, []);
+    }).catch(() => undefined);
+    const entry = { replica, own: '', session, gone };
+    this.held.set(handle, entry);
+    let reply: Obj;
+    try {
+      reply = await replica.call(call);
+    } catch (error) {
+      await replica.end();
+      throw error;
+    }
+    if (reply.ok !== true || typeof reply.replica !== 'string') {
+      await replica.end();
+      return reply;
+    }
+    entry.own = reply.replica;
+    return { ...reply, replica: handle };
+  }
 }

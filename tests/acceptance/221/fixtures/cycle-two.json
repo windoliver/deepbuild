@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "id": "rel-221-cycle-two",
+  "profile": "figure",
+  "title": "Two items beside each other",
+  "description": "Issue #221 AC5: a beside b and b beside a, a cycle the check refuses as relation_cycle.",
+  "size": [800, 600],
+  "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+  "items": {
+    "a": {"id": "a", "kind": "rect@1", "layer": "main", "name": "A", "order": "a1", "at": {"place": {"beside": "b", "side": "e"}},
+      "params": {"box": [0, 0, 60, 40], "paint": {"fill": {"role": "accent"}}}},
+    "b": {"id": "b", "kind": "rect@1", "layer": "main", "name": "B", "order": "a2", "at": {"place": {"beside": "a", "side": "w"}},
+      "params": {"box": [0, 0, 60, 40], "paint": {"fill": {"role": "ink"}}}}
+  }
+}

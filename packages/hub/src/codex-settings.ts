@@ -21,7 +21,7 @@ const TOOL_TIMEOUT_S = 60;
 /** The slow lane's expected time unless `lanes.slow.expected_ms` in config.json says otherwise. */
 const SLOW_LANE_MS = 20 * 60_000;
 /** The MCP server's name in config.toml: its tools reach PreToolUse as `mcp__deep__<tool>`. */
-export const MCP_SERVER = 'deep';
+const MCP_SERVER = 'deep';
 export const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PreCompact', 'PostCompact', 'SubagentStart', 'SubagentStop', 'Stop', 'Interrupt', 'SessionEnd'];
 
 const home = (): string => process.env.CODEX_HOME || join(homedir(), '.codex');
@@ -44,8 +44,10 @@ export function fixedHook(root: string, built: string): string {
 }
 
 type Group = { hooks: Obj[] };
+// Codex runs a command with your login shell's `-c`, and `exec` keeps deep-hook Codex's own child, whose parent the
+// hub checks a hook by: dash, a /bin/sh login shell on Debian and Ubuntu, runs a lone command in a new shell's child.
 function ourGroups(hook: string): Record<string, Group> {
-  return Object.fromEntries(HOOKS.map((event) => [event, { hooks: [{ type: 'command', command: `${q(hook)} codex ${event}`, ...(event === 'Stop' ? { timeout: STOP_TIMEOUT_S } : {}) }] }]));
+  return Object.fromEntries(HOOKS.map((event) => [event, { hooks: [{ type: 'command', command: `exec ${q(hook)} codex ${event}`, ...(event === 'Stop' ? { timeout: STOP_TIMEOUT_S } : {}) }] }]));
 }
 const present = (groups: unknown, command: string): boolean => Array.isArray(groups) && groups.some((g) => isObj(g) && Array.isArray(g.hooks) && g.hooks.some((h) => isObj(h) && h.command === command));
 
@@ -61,7 +63,14 @@ export function withEntries(text: string, hook: string): string {
   let changed = false;
   for (const [event, group] of Object.entries(groups)) {
     if (present(hooks[event], String(group.hooks[0]!.command))) continue;
-    hooks[event] = [...(Array.isArray(hooks[event]) ? hooks[event] as unknown[] : []), group];
+    // Our entry from before it exec'd deep-hook gives way, so the hook runs it once; Codex asks to trust the new one.
+    const before = `${q(hook)} codex ${event}`;
+    const kept = (Array.isArray(hooks[event]) ? hooks[event] as unknown[] : []).flatMap((g) => {
+      if (!isObj(g) || !Array.isArray(g.hooks)) return [g];
+      const left = g.hooks.filter((h) => !(isObj(h) && h.command === before));
+      return left.length ? [{ ...g, hooks: left }] : [];
+    });
+    hooks[event] = [...kept, group];
     changed = true;
   }
   return changed ? `${JSON.stringify({ ...parsed.value, hooks }, null, 2)}\n` : text;
@@ -101,6 +110,8 @@ function recorded(root: string): Ours[] {
   if (!record || !isObj(record.hooks)) return [];
   return Object.entries(record.hooks).flatMap(([event, g]) => ((g as Group).hooks ?? []).map((entry) => ({ event, command: String(entry.command), entry })));
 }
+/** The entries setup wrote for Codex, each by its event and command. */
+export const recordedEntries = (root: string): { event: string; command: string }[] => recorded(root).map(({ event, command }) => ({ event, command }));
 
 // ---- config.toml: read as far as DeepBuild needs it, by table; what TOML itself refuses refuses the file.
 
@@ -272,6 +283,11 @@ export function recordedServer(root: string): { node: string; cli: string } | un
 }
 /** Your `hooks = false` under [features], which setup never flips. */
 export const hooksDisabled = (root: string): boolean => configTables(join(recordedHome(root), 'config.toml'))?.get('features')?.get('hooks') === 'false';
+/** Whether Codex's trusted projects hold one of a folder's paths (#322): its `[projects."<path>"]` table says `trust_level = "trusted"`. */
+export function codexTrusted(paths: string[]): boolean {
+  const tables = configTables();
+  return paths.some((p) => /^["']trusted["']$/.test(tables?.get(`projects.${p}`)?.get('trust_level') ?? ''));
+}
 /** The `tool_timeout_sec` Codex gives DeepBuild's MCP server, in seconds. */
 export function toolTimeoutS(file = codexConfig()): number {
   const set = configTables(file)?.get(`mcp_servers.${MCP_SERVER}`)?.get('tool_timeout_sec');
@@ -357,7 +373,7 @@ export function trustProblems(root: string): string[] {
   return [...listed.flatMap((h) => [...(h.trustStatus === 'trusted' ? [] : [`${h.eventName} ${h.trustStatus}`]), ...(h.enabled === false ? [`${h.eventName} disabled`] : [])]), ...missing];
 }
 /** Codex's own hook list, from `codex app-server`'s hooks/list; undefined when it gives none in time. */
-export function hookList(codex: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs = 10_000): Promise<Listed[] | undefined> {
+function hookList(codex: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs = 10_000): Promise<Listed[] | undefined> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
     try { child = spawn(codex, ['app-server'], { cwd, env, stdio: ['pipe', 'pipe', 'ignore'] }); } catch { return resolve(undefined); }

@@ -788,7 +788,7 @@ impl Scope {
     }
 
     /// The controls the canvas draws over itself: the full-screen button at its top right.
-    fn button(&self) -> Option<[f64; 4]> {
+    pub fn button(&self) -> Option<[f64; 4]> {
         let three_d = matches!(self.profile.as_str(), "scene" | "world" | "figure");
         if self.planted.full_screen_only_3d && !three_d {
             return None;
