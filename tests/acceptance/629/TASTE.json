@@ -1,0 +1,12 @@
+{
+  "issue": 629,
+  "criterion": "AC6",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), judging at the owner's request in the session (\"do u think they look right\"); the owner answered \"ok\"",
+  "when": "2026-11-05T07:04:51Z",
+  "screenshots": {
+    "bound-present.png": "a7737e51a45d116a8592b546091b0c77dce44ad950ddfc76b828528bd32c4b5d",
+    "bound-missing.png": "7addb6a962cc9fdb9cbdcae03f1cbf55eb3312ec31f6abf3e3cb96f554e77346"
+  },
+  "note": "Mac run at 563cbfc8 (Mac15,12, macOS 14.7.7). Present: the return card and the Cart total panel both read expected 18.01 and received 18, as Vitest's own message gives them, with no invented unit, each naming its source (cart · cart total). Missing: expected 18.01 USD and received '— · not reported' naming cart-e2e · cart total, never 0 or blank. Card and panel agree row for row. Weak points, not wrong: the middle dot in '— · not reported' reads a little busy; values aren't column-aligned, so a short number sits closer to its source than a long one; the deadline chart and the empty area are the replica's session view, not this feature."
+}
