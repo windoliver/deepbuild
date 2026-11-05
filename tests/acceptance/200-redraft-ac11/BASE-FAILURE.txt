@@ -1,0 +1,93 @@
+
+ RUN  v5.0.5 <repo>/tests/acceptance/200-redraft-ac11
+
+ ❯ registries.test.ts (9 tests | 1 failed) 16546ms
+   ❯ #200 AC11 (redraft) mark@1, builder@1, modifier@1 and check.kind.doc@1 seal with today's lists, and their kits and the GPU layer's refuse their planted wrong entries (9)
+     × AC11 (seal, today) mark@1, builder@1, modifier@1 and check.kind.doc@1 seal in a test build of the core and scene3d with today's marks, builders, modifiers and check kinds as the core's entries 349ms
+     ✓ AC11 (keys) every content key of the build's fixtures is unchanged from the merge base 12460ms
+     ✓ AC11 (planted) each one's kit refuses its planted wrong entry, naming the registry and the entry, and gpu.output@1's and gpu.function@1's refuse theirs the same way 179ms
+     ✓ AC11 (admits) a planted kit that admits every entry makes the seal refuse mark@1, naming it and its planted entry (a mark whose bounds leave out a pixel it draws), and fails this 207ms
+     ✓ AC11 (admits) a planted kit that admits every entry makes the seal refuse builder@1, naming it and its planted entry (a builder whose element count isn't computable from its params), and fails this 280ms
+     ✓ AC11 (admits) a planted kit that admits every entry makes the seal refuse modifier@1, naming it and its planted entry (a modifier declared deform that adds vertices), and fails this 324ms
+     ✓ AC11 (admits) a planted kit that admits every entry makes the seal refuse check.kind.doc@1, naming it and its planted entry (a check kind that emits a code the catalogue doesn't list), and fails this 441ms
+     ✓ AC11 (admits) a planted kit that admits every entry makes the seal refuse gpu.output@1, naming it and its planted entry (an output typed vec3 that its consumer reads as vec4), and fails this 290ms
+     ✓ AC11 (admits) a planted kit that admits every entry makes the seal refuse gpu.function@1, naming it and its planted entry (a step function declared exact whose body takes a float step), and fails this 216ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  registries.test.ts > #200 AC11 (redraft) mark@1, builder@1, modifier@1 and check.kind.doc@1 seal with today's lists, and their kits and the GPU layer's refuse their planted wrong entries > AC11 (seal, today) mark@1, builder@1, modifier@1 and check.kind.doc@1 seal in a test build of the core and scene3d with today's marks, builders, modifiers and check kinds as the core's entries
+AssertionError: the four registries in the test build of the core and scene3d:
+  builder@1 holds no entry hull@1 (today's); it holds none
+  builder@1 holds no entry slab@1 (today's); it holds none
+  builder@1 holds no entry lathe@1 (today's); it holds none
+  builder@1 holds no entry extrude@1 (today's); it holds none
+  builder@1 holds no entry tube@1 (today's); it holds none
+  builder@1 holds no entry ball@1 (today's); it holds none
+  builder@1 holds no entry coil@1 (today's); it holds none
+  builder@1 holds no entry plate@1 (today's); it holds none
+  builder@1 holds no entry display@1 (today's); it holds none
+  modifier@1 holds no entry mod.bevel@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.solidify@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.build@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.store@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.normals@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.curve_deform@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.simple_deform@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.displace@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.sway@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.bob@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.wave@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.spin@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.dash@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.outline@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1
+  modifier@1 holds no entry mod.boil@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1: expected [ …(24) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "builder@1 holds no entry hull@1 (today's); it holds none",
++   "builder@1 holds no entry slab@1 (today's); it holds none",
++   "builder@1 holds no entry lathe@1 (today's); it holds none",
++   "builder@1 holds no entry extrude@1 (today's); it holds none",
++   "builder@1 holds no entry tube@1 (today's); it holds none",
++   "builder@1 holds no entry ball@1 (today's); it holds none",
++   "builder@1 holds no entry coil@1 (today's); it holds none",
++   "builder@1 holds no entry plate@1 (today's); it holds none",
++   "builder@1 holds no entry display@1 (today's); it holds none",
++   "modifier@1 holds no entry mod.bevel@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.solidify@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.build@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.store@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.normals@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.curve_deform@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.simple_deform@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.displace@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.sway@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.bob@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.wave@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.spin@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.dash@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.outline@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++   "modifier@1 holds no entry mod.boil@1 (today's); it holds mod.array@1, mod.mirror@1, mod.subdivide@1",
++ ]
+
+ ❯ none registries.test.ts:88:73
+     86| const show = (v: JsonValue | undefined): string => JSON.stringify(v)?.…
+     87| function none(failures: readonly string[], what: string): void {
+     88|   expect(failures, `${what}:\n  ${failures.slice(0, 60).join('\n  ')}`…
+       |                                                                         ^
+     89| }
+     90| const named = (listed: string, expected: string): boolean =>
+ ❯ registries.test.ts:322:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  14:55:32
+   Duration  16.90s (tests 99%, transform 1%)
+
+exit 1
