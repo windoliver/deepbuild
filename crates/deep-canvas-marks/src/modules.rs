@@ -266,6 +266,12 @@ fn fonts() -> TableValue {
 
 fn register_text(r: &mut Registrar) {
     r.built_table("text.fonts", fonts);
+    // #443: a shaped run's glyph outlines, text's entry in the core's `outline.source@1`.
+    r.outline_source(
+        "text",
+        json!({"form": "text", "fixture": crate::outline_sources::text_fixture()}),
+        crate::outline_sources::text_fill,
+    );
     r.array("text.counter", "shown", "item", "text", "items");
     r.array("text.run", "run", "item", "text", "items");
     r.array("text.animated", "units", "item", "time", "items");
@@ -1323,6 +1329,12 @@ fn register_marks2d(r: &mut Registrar) {
 }
 
 fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
+    // #443: a path@1 item's outline, marks2d's entry in the core's `outline.source@1`.
+    r.outline_source(
+        "path",
+        json!({"form": "path", "fixture": crate::outline_sources::path_fixture()}),
+        crate::outline_sources::path_fill,
+    );
     // #221: placement by relation, the module's entries in the core's `constraint@1`.
     for (name, value) in relations::entries(planted) {
         r.entry("constraint@1", name, value, "R2");
