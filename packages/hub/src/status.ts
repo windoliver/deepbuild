@@ -13,7 +13,7 @@ import { rowReadings } from './codex-loops.js';
 import { numbersLines } from './numbers.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
-import { clockTime } from './promises.js';
+import { clockTime, elapsed } from './promises.js';
 import { startOf } from './wire.js';
 import { claimState, newestClaim } from './verdict-chat.js';
 import { verdictLine } from '@deepbuild/verdicts';
@@ -80,7 +80,7 @@ export async function sessionStates(query: (sql: string) => Promise<unknown[]>, 
   const interrupted = new Set(((await query(`SELECT e.session_id FROM ${events('e')} WHERE e.kind = 'session.reading'${of('e.session_id')} AND json_extract(e.data, '$.reading') LIKE 'Interrupt:%' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = e.session_id AND a.kind = 'user.ask' AND a.log_pos > e.log_pos)`)) as { session_id: string }[]).map((r) => r.session_id));
   // Each session's newest stop: a hook after it, such as Claude Code's idle-prompt notification, is no later stop.
   const stops = new Map(((await query(`SELECT session_id, MAX(ts) AS ts FROM ${events()} WHERE kind = 'agent.stop' AND session_id IS NOT NULL${of('session_id')} GROUP BY session_id`)) as { session_id: string; ts: number }[]).map((r) => [r.session_id, r.ts]));
-  const ago = (ms: number | null) => (ms === null ? 'a while' : minutes(now - ms));
+  const ago = (ms: number | null) => (ms === null ? 'a while' : elapsed(now - ms));
   // The planted wrong reading checks a permission prompt before a process gone.
   const waitingFirst = activePlant() === 'waiting-first';
   return sessions.map((s): Reading => {
@@ -118,7 +118,7 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
     else keyed.delete(e.session_id);
   }
   const rows = sessions.map((s): StatusRow => {
-    return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state: s.state, why: keyed.has(s.id) ? `${s.why}, billing an API key` : s.why, ...(s.note ? { note: s.note } : {}) };
+    return { id: s.id, repo: repoOf(s.worktree) ?? s.project_id ?? 'no repo', agent: s.agent ?? 'agent', state: s.state, why: keyed.has(s.id) ? `${s.why}, billing an API key` : s.why, ...(s.note ? { note: s.note } : {}) };
   });
   // The newest claim's line, from the record's claims, verdicts and runs, as the chat shows it (#83, #669).
   for (const row of rows) {
@@ -130,7 +130,7 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const finished = rows.filter((r) => r.state === 'finished');
   if (finished.length) await lastTurns(query, finished, new Map(sessions.map((s) => [s.id, s.worktree])));
   const codex = rows.filter((r) => r.agent === 'codex');
-  const readings = await rowReadings(query, codex.map((r) => r.id), now, minutes);
+  const readings = await rowReadings(query, codex.map((r) => r.id), now, elapsed);
   for (const row of codex) if (readings.has(row.id)) row.readings = readings.get(row.id)!;
   return rows;
 }
@@ -218,10 +218,6 @@ function repoOf(worktree: string | null): string | undefined {
     }
   }
 }
-const minutes = (ms: number): string => {
-  for (const [unit, size] of [['d', 86_400_000], ['h', 3_600_000], ['m', 60_000]] as const) if (ms >= size) return `${Math.floor(ms / size)}${unit}`;
-  return `${Math.max(0, Math.floor(ms / 1000))}s`;
-};
 
 /**
  * The listing: every session that needs you, is stuck or is flagged first, under its repo, then the working ones, then

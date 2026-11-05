@@ -3916,6 +3916,7 @@ export interface HeavyCommand {
   argv_prefix: Array<string>;
   kinds: Array<string>;
   jobs: string;
+  jobs_flag?: string;
 }
 
 /** hook.ack@1 */
@@ -4967,6 +4968,29 @@ export interface ProcessTracked {
     pgid: number;
     cwd: string;
     token: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** product.built@1 */
+export interface ProductBuilt {
+  v: 1;
+  id: string;
+  kind: "product.built";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    product: string;
+    path: string;
+    key: string;
+    commit: string;
+    bytes: number;
+    store_bytes: number;
   };
   evidence?: Array<string>;
 }
