@@ -10,6 +10,8 @@
 // targets. It writes them to `docs/evidence/428/` (README: The taste call), the screenshots byte for byte the renderer's
 // PNGs, printing each SHA-256. It then reads `tests/acceptance/428/TASTE.json`: none, or one made on other pictures, is
 // INCONCLUSIVE; `looks_wrong` fails; `looks_right` on exactly these passes. No other test reads these pictures or the call.
+//
+// Blind redraft of the dispute on AC9: only the sun's illuminance changed (README in this folder).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -18,7 +20,7 @@ import {
   readPng, requireMetal, runGpu, sceneAsset, sessionDoc, sha256, sun, useDir, useGpu, view3dCall, writeJson, PLAIN_LOOK,
   type Fetched, type JsonObject, type JsonValue, type SampleName,
 } from './helpers.ts';
-import { add, length, scale, sub, traceable, type V3 } from './reference.ts';
+import { add, length, lum, scale, sub, traceable, type V3 } from './reference.ts';
 
 const ID = AC[9];
 const bin = useGpu();
@@ -32,13 +34,27 @@ const SAMPLES: [SampleName, string][] = [
 const NAMES = [...SAMPLES.map(([, n]) => n), 'flake-panel.png', 'flake-dolly.apng'] as const;
 const SHOT: [number, number] = [1280, 800];
 
+// Redraft (README): the sun is metered for SHOW_LOOK's exposure instead of 30,000 lx at EV100 0, which would put every
+// lit surface far past white. Exposure scales linear light by 1 ÷ (1.2 × 2^EV100) (#378's reading of `exposure: EV100`),
+// and the design meters "from the light falling on the subject, as an incident meter reads it", keying the subject's
+// mean log luminance to middle gray within ±0.5 EV (render.exposure). An 18% Lambertian lit by E lux reads
+// 0.18 × E ÷ π before exposure, so it keys to middle gray at E = 1.2π × 2^EV100: 3.77 lx at EV100 0. SHOW_SKY's
+// environment (intensity 1) lies between its `top` and `low` colors, luminance 0.397 and 0.798, so it adds between
+// 1.25 and 2.51 lx on any surface; the sun takes the rest of the key at the middle of that range, 1.89 lx, and a
+// sun-facing surface then keys within ±0.5 EV at either bound (2.67 to 5.33 lx). The sky, which sets no exposure of
+// its own, draws at the look's.
+const KEY_LUX = 1.2 * Math.PI * 2 ** (SHOW_LOOK['exposure'] as number);
+const SKY_PARAMS = SHOW_SKY['params'] as Record<string, number[]>;
+const SKY_LUX = (Math.PI * (lum(SKY_PARAMS['top']!) + lum(SKY_PARAMS['low']!))) / 2;
+const SHOW_SUN_LUX = KEY_LUX - SKY_LUX;
+
 /** A three-quarter view of the sample, framed from its triangles' bounds. */
 function showcase(f: Fetched): JsonObject {
   const lo: V3 = [Infinity, Infinity, Infinity]; const hi: V3 = [-Infinity, -Infinity, -Infinity];
   for (const t of traceable(f.gltf).tris) for (const p of t.p) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k]!, p[k]!); hi[k] = Math.max(hi[k]!, p[k]!); }
   const centre = scale(add(lo, hi), 0.5); const r = length(sub(hi, lo)) / 2;
   const eye = add(centre, scale([0.35, 0.3, 1], (2.4 * r) / length([0.35, 0.3, 1])));
-  return sessionDoc(`show-${f.sample.name}`, SHOT, { cam: camera(eye, centre, 40, { near: r / 100, far: r * 20 }), sky: SHOW_SKY, sun: sun(30_000, [-40, 25, 0]), [ASSET]: sceneAsset(f.sha) });
+  return sessionDoc(`show-${f.sample.name}`, SHOT, { cam: camera(eye, centre, 40, { near: r / 100, far: r * 20 }), sky: SHOW_SKY, sun: sun(SHOW_SUN_LUX, [-40, 25, 0]), [ASSET]: sceneAsset(f.sha) });
 }
 
 describe(`${ID} the screenshots, the recording and the one taste call on them`, () => {
