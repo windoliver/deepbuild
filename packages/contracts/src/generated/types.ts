@@ -3916,6 +3916,7 @@ export interface HeavyCommand {
   argv_prefix: Array<string>;
   kinds: Array<string>;
   jobs: string;
+  jobs_flag?: string;
 }
 
 /** hook.ack@1 */
