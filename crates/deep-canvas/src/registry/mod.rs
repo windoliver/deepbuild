@@ -160,6 +160,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("axis", "data"),
     ("scale", "data"),
     ("puff", "scene3d"),
+    ("cutaway", "scene3d"),
+    ("instance", "scene3d"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
@@ -695,6 +697,8 @@ pub struct Registrar {
     pub registries: Vec<lists::RegistryDef>,
     /// The entries it fills at the seal, into its own registries or the core's (#200).
     pub entries: Vec<lists::EntryDef>,
+    /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
+    pub outline_fills: Vec<(String, crate::outline::Fill)>,
 }
 
 impl Registrar {
@@ -966,6 +970,19 @@ impl Registrar {
         self
     }
 
+    /// Fills an entry of the core's `outline.source@1` (#443): its value, which the registry's kit
+    /// holds to its item's 2D fill, and its own Rust, which `extrude` reads outlines through.
+    pub fn outline_source(
+        &mut self,
+        name: &str,
+        value: Value,
+        fill: crate::outline::Fill,
+    ) -> &mut Self {
+        self.entry(crate::outline::REGISTRY, name, value, "R6");
+        self.outline_fills.push((name.into(), fill));
+        self
+    }
+
     /// A GPU pass that fills the items of `kind` with its WGSL fragment shader.
     pub fn gpu_pass(
         &mut self,
@@ -1222,6 +1239,18 @@ pub struct Sealed {
     /// How the document check names close names: `NoCloseNames` and `CloseBySpelling` are the
     /// planted checks (#412); `None` is the right one.
     pub close_fault: Option<Fault>,
+    /// Each entry of `outline.source@1` the build's modules fill, with the module and its Rust
+    /// (#443), sorted by module then entry.
+    pub outlines: Vec<SealedOutline>,
+}
+
+/// One outline source the seal admitted: its entry, module, form and Rust (#443).
+#[derive(Clone, Debug)]
+pub struct SealedOutline {
+    pub entry: String,
+    pub module: String,
+    pub form: String,
+    pub fill: crate::outline::Fill,
 }
 
 impl Sealed {
@@ -2802,6 +2831,28 @@ impl Registry {
             _ => 0,
         };
 
+        // Outline sources (#443): each module's Rust beside the entry it filled, which the
+        // registries' seal has held to the kit.
+        let mut outlines: Vec<SealedOutline> = shapes
+            .iter()
+            .skip(1)
+            .flat_map(|(name, r)| {
+                r.outline_fills.iter().filter_map(move |(entry, fill)| {
+                    let value = &r
+                        .entries
+                        .iter()
+                        .find(|e| e.registry == crate::outline::REGISTRY && e.name == *entry)?
+                        .value;
+                    Some(SealedOutline {
+                        entry: entry.clone(),
+                        module: name.clone(),
+                        form: value.get("form")?.as_str()?.to_string(),
+                        fill: *fill,
+                    })
+                })
+            })
+            .collect();
+        outlines.sort_by(|a, b| (&a.module, &a.entry).cmp(&(&b.module, &b.entry)));
         // Digests: each module's own; the core's shapes are no module's. Each module's shapes
         // hash to its interface's digest: its reference's, registered beside it when the module
         // isn't that reference (Canvas module: interface and implementation).
@@ -2862,6 +2913,7 @@ impl Registry {
             close_fault: self
                 .fault
                 .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
+            outlines,
             costs: self
                 .costs
                 .take()

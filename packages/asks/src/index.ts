@@ -210,6 +210,12 @@ export interface AsksOptions {
    * since the last call, and null otherwise. Left out, a network task closes only on a verdict.
    */
   network?: { read(): { host: string; reached: boolean; at: number } | null };
+  /**
+   * Whether an agent's adapter has a hook for a turn that ends in an error (its `errorTurnHook` cap): without one no
+   * automatic continue could reach the session, so none starts. The hub passes its own adapter registry's answer;
+   * left out, the shipped adapters' caps answer, and an agent no adapter knows has none.
+   */
+  errorTurnHook?: (agent: string) => boolean;
 }
 /** An ask's place in its life (ask.machine@1's states), as the inbox shows it. */
 export type InboxStatus = 'queued' | 'shown' | 'later' | 'folded' | 'held' | 'closed';
@@ -241,6 +247,11 @@ export interface Asks {
    * `to`. Time the hub was down the core reads from the log when it opens.
    */
   away(from: number, to: number): Promise<void>;
+  /**
+   * Whether macOS will show the app's notifications (#994). While it won't, an ask you haven't seen takes no default,
+   * and the time before you saw it, or before they were back on, moves its deadline later as `away` does.
+   */
+  notifications(off: boolean): Promise<void>;
   card(ask: string): Promise<Card>;
   needsYou(): Promise<Card[]>;
   holds(session: string, step: Step): Promise<string[]>;
@@ -446,6 +457,8 @@ const MOOT_V2 = new Set(['window_reset', 'thread_replied', 'network_reached']);
 /** A session or project ID as a scope names it: letters and digits only, as the hub's handles hold them. */
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 'inbox' };
+/** The kinds a channel's account link may answer (#65): "I did it", a taste call and a choice, each that ask alone. */
+const ANSWER_ALONE = new Set(['unblock', 'taste', 'choice']);
 const ANSWER_FIELDS = new Set(['option', 'words', 'image', 'plan_hash', 'token', 'steps']);
 const SHA256 = /^[0-9a-f]{64}$/;
 const PROVISIONAL_KINDS = new Set(['taste', 'choice']);
@@ -554,6 +567,8 @@ class AsksCore implements Asks {
    */
   private logged: number | undefined;
   private opened = false;
+  /** Since when the app has said macOS won't show its notifications (#994). */
+  private notificationsOff: number | undefined;
   private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null; agent: string }>();
   /** The sessions whose verified end the core read, oldest first: past the newest ENDED_KEPT they leave memory (#824). */
   private readonly endOrder = new Set<string>();
@@ -723,8 +738,10 @@ class AsksCore implements Asks {
   async answer(connection: Connection, handle: string, input: unknown): Promise<void> {
     const saved = await this.exclusive(async (): Promise<string | null> => {
       await this.sync();
-      const via = TRUSTED[connection.writer];
+      // A channel's answer with an account link you made (#65) answers that ask alone: never with authority, never a decision.
+      const via = TRUSTED[connection.writer] ?? (connection.writer === 'channel' ? 'channel' as const : undefined);
       if (via === undefined) throw new AskRefused(`an answer counts only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
+      const v = via === 'channel' ? 5 : 4;
       if (!isObj(input)) throw new AskRefused('an answer is an object', { field: 'input' });
       // The decision comes from the option you chose, never from the request.
       if ('decision' in input) throw new AskRefused('an answer carries no decision: it comes from the option you chose', { field: 'decision' });
@@ -739,6 +756,13 @@ class AsksCore implements Asks {
       if (token !== undefined && (typeof token !== 'string' || !token)) throw new AskRefused('the click token is text', { field: 'token' });
       if (steps !== undefined && (!Array.isArray(steps) || !steps.every((i) => Number.isInteger(i) && (i as number) >= 0))) throw new AskRefused('steps are the indices of the batch to run', { field: 'steps' });
       const now = this.options.now();
+      if (via === 'channel') {
+        if (ask.closed) throw new AskRefused(`${ask.handle} closed as ${ask.closed.outcome}`, { ask: ask.handle, outcome: ask.closed.outcome });
+        if (ANSWER_ALONE.has(ask.data.kind as string) === false) throw new AskRefused(`${ask.handle} is a ${String(ask.data.kind)} ask, which a channel's account link can't answer: it counts only on the trusted path`, { field: 'writer' });
+        const picked = ask.options.find((o) => o.id === option);
+        if (picked && picked.decision !== 'none') throw new AskRefused(`${ask.handle}'s ${picked.id} decides ${picked.decision}, which counts only on the trusted path`, { field: 'writer' });
+        if (token !== undefined || steps !== undefined || planHash !== undefined) throw new AskRefused('a channel answer approves nothing', { field: 'token' });
+      }
       if (ask.closed) {
         // A later answer to a closed ask is refused, and the refusal is recorded; nothing reaches the agent.
         const { outcome, at } = ask.closed;
@@ -793,7 +817,7 @@ class AsksCore implements Asks {
       // Each one is delivered as soon as it's recorded, so a write that fails partway leaves the rest open, not closed unheard.
       for (const { a, option: o } of together) {
         await this.options.record.append(this.core(connection), {
-          v: 4, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now,
+          v, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now,
           data: { answer: o.id, plan_hash: null, decision: o.decision, via, verified: true, on: a.data.pinned_to!, token: null, words: null, image: null },
         });
         await this.sync();
@@ -803,7 +827,7 @@ class AsksCore implements Asks {
       // The same question from other threads, shown through this card, takes the same option.
       const riders = chosen ? this.open().filter((a) => this.rides(a) === ask) : [];
       await this.options.record.append(this.core(connection), {
-        v: 4, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
+        v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
           answer: option ?? (words as string | undefined) ?? (image as string), plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
           via, verified: true, on: ask.data.pinned_to!, token: token ?? null, words: (words as string | undefined) ?? null, image: (image as string | undefined) ?? null,
@@ -813,7 +837,7 @@ class AsksCore implements Asks {
       this.hand(ask, chosen?.id ?? null, (words as string | undefined) ?? null, false, decision, null, null, null, (image as string | undefined) ?? null);
       for (const rider of riders) {
         await this.options.record.append(this.core({ ...connection, ...rider.who }), {
-          v: 4, id: ulid(now), kind: 'ask.answered', subject: rider.handle, ts: now,
+          v, id: ulid(now), kind: 'ask.answered', subject: rider.handle, ts: now,
           data: { answer: chosen!.id, plan_hash: null, decision, via, verified: true, on: rider.data.pinned_to!, token: null, words: null, image: null },
         });
         await this.sync();
@@ -822,7 +846,7 @@ class AsksCore implements Asks {
       }
       for (const { member, allow } of others) {
         await this.options.record.append(this.core({ ...connection, ...member.who }), {
-          v: 4, id: ulid(now), kind: 'ask.answered', subject: member.handle, ts: now,
+          v, id: ulid(now), kind: 'ask.answered', subject: member.handle, ts: now,
           data: { answer: allow.id, plan_hash: member.plan?.hash ?? null, decision: allow.decision, via, verified: true, on: member.data.pinned_to!, token: token ?? null, words: null, image: null },
         });
         await this.sync();
@@ -832,7 +856,7 @@ class AsksCore implements Asks {
       // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
       // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
       // A card with a target only the agent read saves your answer for this ask only (#1098).
-      const scope = chosen && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
+      const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
       if (scope !== null) await this.saveAt(connection, ask, scope, chosen!.id);
       await this.settle();
       return scope === null ? null : String(ask.data.key);
@@ -844,6 +868,18 @@ class AsksCore implements Asks {
     return this.exclusive(async () => {
       await this.sync();
       await this.moveAway(from, to);
+      await this.settle();
+    });
+  }
+
+  notifications(off: boolean): Promise<void> {
+    return this.exclusive(async () => {
+      await this.sync();
+      const since = this.notificationsOff;
+      this.notificationsOff = off ? since ?? this.options.now() : undefined;
+      if (off || since === undefined) return;
+      for (const ask of this.open()) if (!this.seenCard(ask)) await this.moveUnseen(ask, since);
+      await this.sync();
       await this.settle();
     });
   }
@@ -1590,7 +1626,13 @@ class AsksCore implements Asks {
    * fixes what the card says it saves; a resolver's read never presents it.
    */
   private async cardOf(ask: Ask, presented = false): Promise<Card> {
-    if (presented && ask.saves === undefined && !ask.closed) ask.saves = this.savesOf(ask);
+    if (presented && ask.saves === undefined && !ask.closed) {
+      ask.saves = this.savesOf(ask);
+      if (this.notificationsOff !== undefined) {
+        await this.moveUnseen(ask, this.notificationsOff);
+        await this.sync();
+      }
+    }
     return {
       ask: ask.handle,
       kind: ask.data.kind as AskKind,
@@ -2053,7 +2095,7 @@ class AsksCore implements Asks {
           await this.options.record.append(as, { ...base, kind: 'ask.cancelled', data: { answer: ask.data.default as string, plan_hash: null, decision: 'none' } });
         } else if (await this.reoffer(ask, as, now)) {
           // Offered again on the new commit: the new ask supersedes this one.
-        } else if (now >= (ask.data.deadline as number) && (seen.has(ask.handle) || ask.theirs)) {
+        } else if (now >= (ask.data.deadline as number) && (seen.has(ask.handle) || ask.theirs) && (this.notificationsOff === undefined || this.seenCard(ask))) {
           // Shown before this call: an ask the hub first shows now, after downtime past its deadline, stays in
           // Needs you until a later call, so it can be seen before its default. A block someone else owns never
           // shows to you: at its deadline it stays BLOCKED, by the default its raiser named.
@@ -2085,12 +2127,29 @@ class AsksCore implements Asks {
     if (to - from <= AWAY) return;
     const now = this.options.now();
     for (const ask of this.open()) {
-      const deadline = ask.data.deadline as number;
-      const moved = Math.min(deadline + Math.min(to, deadline) - Math.max(from, ask.created), to + this.waitFor(ask));
-      if (ask.shown || ask.theirs || moved <= deadline) continue;
+      const moved = this.movedPast(ask, from, to);
+      if (ask.shown || ask.theirs || moved <= (ask.data.deadline as number)) continue;
       await this.moveDeadline(ask, moved, 'away', now);
     }
     await this.sync();
+  }
+
+  /** Its deadline with the part of `from` to `to` before it given back, never past its kind's wait counted from `to`. */
+  private movedPast(ask: Ask, from: number, to: number): number {
+    const deadline = ask.data.deadline as number;
+    return Math.min(deadline + Math.min(to, deadline) - Math.max(from, ask.created), to + this.waitFor(ask));
+  }
+
+  /** Whether you've seen the ask's card, or it was never yours to see: notifications off holds nothing back from it. */
+  private seenCard(ask: Ask): boolean {
+    return ask.saves !== undefined || ask.theirs;
+  }
+
+  /** The time since `from`, with notifications off and the ask unseen, didn't count against its deadline (#994). */
+  private async moveUnseen(ask: Ask, from: number): Promise<void> {
+    const now = this.options.now();
+    const moved = this.movedPast(ask, from, now);
+    if (moved > (ask.data.deadline as number)) await this.moveDeadline(ask, moved, 'away', now);
   }
 
   /**
@@ -2181,7 +2240,7 @@ class AsksCore implements Asks {
         if (this.covered.has(stop.id)) continue;
         if (await this.raiseBlock(stop, now)) acted = true;
         else this.fresh.add(session); // BLOCKED on the settings: kept for the next tick the hub owes (a stop or verdict landing, an open ask).
-      } else if ((TRANSIENT.has(stop.cause) || stop.cause === 'context_overflow') && errorTurnHook(this.sessions.get(session)?.agent ?? '')
+      } else if ((TRANSIENT.has(stop.cause) || stop.cause === 'context_overflow') && (this.options.errorTurnHook ?? shippedErrorTurnHook)(this.sessions.get(session)?.agent ?? '')
         && now - stop.ts < CONTINUE_WINDOW && !this.continuedSince(stop)) {
         await this.continueFrom(stop, stop.cause === 'context_overflow' ? 'context_overflow' : 'transient', null, now);
         acted = true;
@@ -2419,11 +2478,8 @@ const chatThread = (data: Obj): { link: string; expect: string } | undefined => 
   return isObj(thread) && typeof thread.link === 'string' && typeof thread.expect === 'string' ? { link: thread.link, expect: thread.expect } : undefined;
 };
 let adapters: AdapterRegistry | undefined;
-/**
- * Whether an agent's facts give a hook for a turn that ends in an error: without one (Codex) no automatic continue could
- * reach the session, so none starts. An agent no adapter knows gets none either.
- */
-function errorTurnHook(agent: string): boolean {
+/** The shipped adapters' `errorTurnHook` cap, when the caller passes no registry of its own; an agent no adapter knows has none. */
+function shippedErrorTurnHook(agent: string): boolean {
   try {
     return (adapters ??= shipped()).get(ADAPTERS[agent] ?? agent).caps.errorTurnHook === true;
   } catch {
@@ -2451,7 +2507,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
   await core.tick();
   // Plain functions, so a caller can wrap one method and keep the rest.
   return {
-    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), card: core.card.bind(core),
+    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
     later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),

@@ -34,6 +34,7 @@ mod query;
 mod registries;
 mod sandbox;
 mod ring;
+mod runs;
 mod scene3d;
 mod seams;
 mod serve;
@@ -53,7 +54,8 @@ mod time;
     feature = "test-debug-digest",
     feature = "test-accent",
     feature = "test-threads",
-    feature = "test-scene3d-tie-by-order"
+    feature = "test-scene3d-tie-by-order",
+    feature = "test-scene3d-reads-vector"
 ))]
 mod twins;
 mod verdict;
@@ -949,17 +951,29 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             })
         }
     };
-    let record = entries(input, "record", |o| {
-        Some(RecordObject {
-            session: match o.get("session")? {
-                Value::Null => None,
-                v => Some(v.as_str()?.to_string()),
-            },
-            state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
-            value: optional(o.get("value"), Value::as_f64)?,
-            as_of: optional(o.get("as_of"), Value::as_i64)?,
-        })
-    })?;
+    // #629: a list is a replay's run record entries; an object, the record's objects by handle.
+    let (record, runs) = match input.get("record") {
+        Some(Value::Array(list)) => (
+            BTreeMap::new(),
+            list.iter()
+                .map(|e| runs::entry(e).map(|_| e.clone()))
+                .collect::<Option<Vec<_>>>()?,
+        ),
+        _ => (
+            entries(input, "record", |o| {
+                Some(RecordObject {
+                    session: match o.get("session")? {
+                        Value::Null => None,
+                        v => Some(v.as_str()?.to_string()),
+                    },
+                    state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
+                    value: optional(o.get("value"), Value::as_f64)?,
+                    as_of: optional(o.get("as_of"), Value::as_i64)?,
+                })
+            })?,
+            Vec::new(),
+        ),
+    };
     let claims = entries(input, "claims", |c| {
         let session = c.get("session")?.as_str()?.to_string();
         let requirements = match c.get("requirements") {
@@ -1153,6 +1167,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "sends_without_serial" => Planted::SendsWithoutSerial,
                 "serial_carries_many_sends" => Planted::SerialCarriesManySends,
                 "bound_value_a_frame_late" => Planted::BoundValueAFrameLate,
+                "resolver_reads_summary" => Planted::ResolverReadsSummary,
+                "unparsable_reads_zero" => Planted::UnparsableReadsZero,
                 "keymap_unchecked" => Planted::KeymapUnchecked,
                 "conflicts_unreported" => Planted::ConflictsUnreported,
                 "focused_panel_takes_escape" => Planted::FocusedPanelTakesEscape,
@@ -1338,6 +1354,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         panels,
         docs,
         record,
+        runs,
         claims,
         window,
         display,
@@ -1623,6 +1640,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-sim-c",
     feature = "test-gpu-second-backend",
     feature = "test-scene3d-tie-by-order",
+    feature = "test-scene3d-reads-vector",
     feature = "test-b",
     feature = "test-b-requires-a",
     feature = "test-two-writers",
@@ -1697,7 +1715,14 @@ fn modules(set: BuildSet) -> Vec<Module> {
         // Issue #421: `test-scene3d-tie-by-order` holds the planted implementation in its place.
         #[cfg(feature = "test-scene3d-tie-by-order")]
         out.push(twins::scene3d_tie_by_order());
-        #[cfg(not(feature = "test-scene3d-tie-by-order"))]
+        // Issue #443: `test-scene3d-reads-vector` holds the planted scene3d that reads vector's
+        // items itself.
+        #[cfg(feature = "test-scene3d-reads-vector")]
+        out.push(twins::scene3d_reads_vector());
+        #[cfg(not(any(
+            feature = "test-scene3d-tie-by-order",
+            feature = "test-scene3d-reads-vector"
+        )))]
         out.push(deep_canvas_scene3d::module::module());
         // Issue #380: the shipped effects, whose passes go into scene3d's frame; #200's planted
         // layout has it fill the op table's base steps.
@@ -1814,6 +1839,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     // #403: `full` holds no logic module yet; once one lands, this build leaves it out.
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
+    // #443: a build without the vector module, whose scene3d@1 and marks2d@1 digests equal the
+    // full set's.
+    #[cfg(feature = "test-leave-out-vector")]
+    out.retain(|m| m.manifest.name != "vector");
     // #489: a build without the data module, whose motion@1 digest equals the full set's.
     #[cfg(feature = "test-leave-out-data")]
     out.retain(|m| m.manifest.name != "data");

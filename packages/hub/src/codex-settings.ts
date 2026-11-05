@@ -21,7 +21,7 @@ const TOOL_TIMEOUT_S = 60;
 /** The slow lane's expected time unless `lanes.slow.expected_ms` in config.json says otherwise. */
 const SLOW_LANE_MS = 20 * 60_000;
 /** The MCP server's name in config.toml: its tools reach PreToolUse as `mcp__deep__<tool>`. */
-export const MCP_SERVER = 'deep';
+const MCP_SERVER = 'deep';
 export const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PreCompact', 'PostCompact', 'SubagentStart', 'SubagentStop', 'Stop', 'Interrupt', 'SessionEnd'];
 
 const home = (): string => process.env.CODEX_HOME || join(homedir(), '.codex');
@@ -373,7 +373,7 @@ export function trustProblems(root: string): string[] {
   return [...listed.flatMap((h) => [...(h.trustStatus === 'trusted' ? [] : [`${h.eventName} ${h.trustStatus}`]), ...(h.enabled === false ? [`${h.eventName} disabled`] : [])]), ...missing];
 }
 /** Codex's own hook list, from `codex app-server`'s hooks/list; undefined when it gives none in time. */
-export function hookList(codex: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs = 10_000): Promise<Listed[] | undefined> {
+function hookList(codex: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs = 10_000): Promise<Listed[] | undefined> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
     try { child = spawn(codex, ['app-server'], { cwd, env, stdio: ['pipe', 'pipe', 'ignore'] }); } catch { return resolve(undefined); }

@@ -1758,6 +1758,44 @@ export interface AskAnsweredV4 {
   evidence?: Array<string>;
 }
 
+export type AskAnsweredV5PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.answered@5 */
+export interface AskAnsweredV5 {
+  v: 5;
+  id: string;
+  kind: "ask.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    answer: string;
+    plan_hash: string | null;
+    decision: "allow" | "deny" | "none";
+    via: "card" | "inbox" | "session" | "channel";
+    verified: boolean;
+    on: AskAnsweredV5PinnedTo;
+    token: string | null;
+    steps?: Array<number>;
+    words: string | null;
+    image: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.batched@1 */
 export interface AskBatched {
   v: 1;
@@ -2586,6 +2624,105 @@ export interface CardRuleSet {
   evidence?: Array<string>;
 }
 
+/** channel.answered@1 */
+export interface ChannelAnswered {
+  v: 1;
+  id: string;
+  kind: "channel.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    channel: string;
+    thread_key: string;
+    answer: string;
+    proof: "device" | "account_link";
+  };
+  evidence?: Array<string>;
+}
+
+/** channel.conflict@1 */
+export interface ChannelConflict {
+  v: 1;
+  id: string;
+  kind: "channel.conflict";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    channel: string;
+    conflict: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** channel.delivered@1 */
+export interface ChannelDelivered {
+  v: 1;
+  id: string;
+  kind: "channel.delivered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    channel: string;
+    thread_key: string;
+    item: {
+      thread_key: string;
+      summary: string;
+      link: string;
+      answerable: "answer" | "view" | "cancel" | "closed";
+      options: Array<{
+        id: string;
+        label: string;
+      }>;
+      revision: number;
+      hub: string;
+      refused: string | null;
+      unpaired?: {
+        device: string;
+        by: string;
+      };
+    };
+    outcome: "delivered" | "stalled" | "timed_out" | "conflict";
+    ack: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** channel.refused@1 */
+export interface ChannelRefused {
+  v: 1;
+  id: string;
+  kind: "channel.refused";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    channel: string;
+    thread_key: string;
+    answer: string;
+    field?: "device" | "ask" | "revision" | "card_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id";
+    reason: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** check.code@1 */
 export type CheckCode = "exit_masked" | "no_tests_ran" | "crashed_before_first_assertion" | "reported_after_deadline" | "output_dropped" | "type_error_as_assertion";
 
@@ -2835,6 +2972,31 @@ export interface CommandStaged {
     call: string;
     command: string;
     folders: Array<string>;
+    until: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** command.staged@2 */
+export interface CommandStagedV2 {
+  v: 2;
+  id: string;
+  kind: "command.staged";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    command: string;
+    folders: Array<string>;
+    files?: Array<{
+      path: string;
+      digest: string;
+    }>;
     until: number;
   };
   evidence?: Array<string>;
@@ -3690,7 +3852,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -3916,6 +4078,7 @@ export interface HeavyCommand {
   argv_prefix: Array<string>;
   kinds: Array<string>;
   jobs: string;
+  jobs_flag?: string;
 }
 
 /** hook.ack@1 */
@@ -4783,6 +4946,28 @@ export interface OpenItemOpenedV2 {
   evidence?: Array<string>;
 }
 
+/** open_item.opened@3 */
+export interface OpenItemOpenedV3 {
+  v: 3;
+  id: string;
+  kind: "open_item.opened";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    text: string;
+    item: string;
+    from: "agent" | "section" | "bug" | "issue" | "limit" | "placeholder" | "task" | "review_thread" | "verdict";
+    resolved_by?: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** package.envelope@1 */
 export interface PackageEnvelope {
   id: string;
@@ -4967,6 +5152,29 @@ export interface ProcessTracked {
     pgid: number;
     cwd: string;
     token: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** product.built@1 */
+export interface ProductBuilt {
+  v: 1;
+  id: string;
+  kind: "product.built";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    product: string;
+    path: string;
+    key: string;
+    commit: string;
+    bytes: number;
+    store_bytes: number;
   };
   evidence?: Array<string>;
 }
