@@ -739,7 +739,7 @@ export class Core {
     const storage = this.durable.backend();
     // Each event its own commit: the durable write points a run makes depend only on the events it appends,
     // never on how many arrived together, so a cut at any one can be replayed.
-    this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}) });
+    this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) });
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
