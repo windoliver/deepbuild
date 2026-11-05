@@ -2262,6 +2262,8 @@ environment:
   migrate: "npm run db:migrate"
   seed: { run: "npm run db:seed", database: DATABASE_URL }  # each run gets a clone of what it left
   caches: [.next/cache]                        # cloned copy-on-write, never build output
+  products:                                    # warm builds the hub keeps from the default branch, by key (#1017)
+    - { name: node_modules, path: node_modules, key: [package-lock.json], key_values: ["node --version"], build: "npm ci" }
 asks:                                          # values the rules leave open, drafted at setup
   deadline: { taste: 3d, authority: 1d, unblock: 2d, exception: 2d, choice: 2d, definition: 4h }
   default: { taste: recommended, authority: "no", unblock: stay-blocked, exception: no-change, choice: recommended, definition: leave-out }  # irreversible: always no
