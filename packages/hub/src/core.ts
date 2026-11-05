@@ -21,7 +21,7 @@ import { citedEvidence, openExtensionHost, openTrust, type ExtensionHost, type P
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers as stackHealthy, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack } from '@deepbuild/env-local';
-import { freshCount, judgeStop, leftOpen, openCheckouts, priceDefinition, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
+import { endsEmpty, freshCount, judgeStop, leftOpen, openCheckouts, priceDefinition, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
 import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
@@ -53,7 +53,7 @@ import { aboutCall, aboutPermission, standingRules, type About } from './standin
 import { Channels, type ChannelAsk } from './channels.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
-import { closesIssue, Forge, isPrCreate, parsePrUrl, prUrlIn } from './forge.js';
+import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
 import { liveFetch, liveGraphql, recordedFetch, recordedGraphql } from './github-source.js';
 import { OpenItems } from './open-items.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
@@ -111,6 +111,8 @@ const CALL_GRACE = 2_000;
 const COMMITS = /(?:^|[\s;&|(])git(?:\s+-[Cc]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+(?:commit|merge|cherry-pick|am|revert|rebase)\b/;
 /** How long a handed answer has to show in a turn before its delivery reads stalled and goes by the next route. */
 const WAKE_GRACE = 10_000;
+/** Completion prompts in a row a session gets for stops that did work and ended on an empty message, before the claim stalls (#82). */
+const COMPLETION_PROMPTS = 3;
 /** A gap between two of the 1 s beats, on the wall clock, longer than this is time the Mac slept with the hub up (#908). */
 const SLEPT = 10_000;
 /** How soon after a hook's reply the transcript is read for the answers it carried (#906). */
@@ -228,6 +230,13 @@ interface Live {
    * claim; the newest claim the line reads and the turn it was made in; the line last delivered to the chat, so
    * one that lands later goes with the next prompt.
    */
+  /**
+   * What the stop rule's exceptions read (#82): whether its newest stop did no work and isn't an answer, so an ask it
+   * leaves open gets one send-back; whether the app's resume prompt came since its last stop and the turn its newest
+   * start cut off had done work, for the one automatic continue; whether the reply to its last stop kept the turn
+   * going; and the pull request its turn opened.
+   */
+  idle?: boolean; resumed?: boolean; cutOff?: boolean; sentOn?: boolean; prOpened?: string | undefined;
   turn: number; turnTask?: string | undefined; turnAsk?: string | undefined; judged: boolean; claiming?: Promise<string[]> | undefined; deferred?: (() => Promise<string[]>) | undefined; workedSinceClaim?: boolean; claim?: string | undefined; heldClaim?: string | undefined; claimTurn?: number; delivered?: string | undefined;
 }
 /**
@@ -391,6 +400,12 @@ export class Core {
   private ledger!: Ledger;
   private readonly budgetAsks = new Map<string, BudgetInput>();
   private readonly paidChecks = new Map<string, Map<string, { paid: PaidKind; task: string }>>();
+  /** The sessions whose next stop with no work may be sent on (#82): their stops are held for the reply. */
+  private readonly nudgeable = new Set<string>();
+  /** The asks each session's no-work stops were sent back on once (#82); a judged stop starts it again. */
+  private readonly idleSent = new Map<string, Set<string>>();
+  /** Each session's completion prompts in a row (#82): a stop that says something starts the count again. */
+  private readonly completions = new Map<string, number>();
   /** Each task's count toward a stalled claim, and each stalled claim's one decision by its ask (#325). */
   private readonly stalls = new Map<string, StallCount>();
   private readonly stallAsks = new Map<string, { task: string; session: string; agent: string }>();
@@ -1345,7 +1360,15 @@ export class Core {
     const appends = drafts.flatMap((draft) => {
       const data = { ...draft.data };
       const opens: Promise<void>[] = [];
-      if (draft.kind === 'session.start') count.fresh = true;
+      if (draft.kind === 'session.start') {
+        count.fresh = true;
+        // Work counts from the start (#82): a stop after a resume with nothing done since is no claim, and the turn the
+        // start cut off is remembered for the one continue after the app's resume prompt.
+        live.cutOff = count.worked;
+        count.worked = false;
+        count.changed = false;
+        if (verified) live.judged = false;
+      }
       if (draft.fill === 'msg') data.msg = count.msgs++;
       if (draft.kind === 'user.ask') {
         // A prompt you typed that asks for a change opens a task: the issue it names, or the message that asked for it.
@@ -1376,6 +1399,8 @@ export class Core {
         }
         const session = this.sessions.get(meta.session);
         if (session && verified) {
+          // Its stops are held from now, so one with no work that leaves the ask open can be sent on (#82).
+          if (tasks.length) { this.nudgeable.add(meta.session); this.askingSoon(); }
           for (const task_ref of tasks) opens.push(this.tasks.opened({ session: meta.session, agent: meta.agent, cwd: meta.cwd, thread: session.thread, task_ref, text: String(data.text), prompt: draft.id, at: draft.ts, ...(item ? { item } : {}) }));
         }
       }
@@ -1389,6 +1414,10 @@ export class Core {
         // The stop is judged as the rule reads it (#83): a turn's claim stands until a prompt opens the next turn,
         // and a stop with work the rule reads as no claim (an answer) is not judged, whatever was told ahead.
         if (verified && count.worked) live.judged = Boolean(data.claim);
+        // A stop with no work that isn't an answer, nor right after a start: an ask it leaves open gets one send-back (#82).
+        // A turn a reply of DeepBuild's kept going wasn't begun by your prompt, so its stop is no answer.
+        live.idle = verified && !count.worked && !count.fresh && (live.sentOn === true || !this.isAnswer(count));
+        if (verified && !count.worked && this.options.plant === 'no-work-never-sent-back') live.judged = false;
         count.worked = false;
         count.changed = false;
       }
@@ -1615,6 +1644,7 @@ export class Core {
       if (draft.kind === 'tool.after' && meta.pr) {
         await this.openedPr(meta.session, live.agent, meta.pr);
         live.claimedInTurn = true;
+        live.prOpened = meta.pr;
       }
       if (draft.kind === 'session.start') {
         data.loads = await loadsOf(meta.cwd).catch(() => []);
@@ -1637,6 +1667,8 @@ export class Core {
         if (this.options.plant === 'continuation-by-likeness' && String(data.text).startsWith('The app was quit while you were working')) from = 'continuation';
         data.from = from;
         live.from = from;
+        // The app's own resume prompt (#82): the stop it leads to gets one automatic continue while asks are open.
+        if (from === 'continuation' && live.agent === 'claude-code') { live.resumed = true; this.nudgeable.add(meta.session); this.askingSoon(); }
         if (from === 'person' && !foreign) {
           const item = await this.tasks.itemOf(String(data.text));
           if (item) this.items.set(draft, item);
@@ -2190,6 +2222,8 @@ export class Core {
     if (meta.event === 'UserPromptSubmit' && !continues) {
       live.turn++;
       live.judged = false;
+      live.sentOn = false;
+      live.prOpened = undefined;
       // The task the prompt opened: on its draft, or on the queue's draft of it when the queue showed it first.
       const opened = drafts.find((d) => d.kind === 'user.ask') ?? this.sessions.get(meta.session)?.spliced?.get(meta.id)?.task;
       const ask = opened?.data.tasks;
@@ -2681,7 +2715,7 @@ export class Core {
     const planted = [...this.routes].filter(([, r]) => r.sendBacks.length).map(([id]) => id);
     const promised = [...this.promises].filter(([, p]) => p.status === 'due').map(([id]) => id);
     const sessions = [...new Set([...rows.map((r) => r.session_id), ...planted, ...promised])].sort();
-    const judged = [...this.live].filter(([, l]) => l.judged).map(([id]) => id).sort();
+    const judged = [...this.live].filter(([id, l]) => l.judged || this.nudgeable.has(id)).map(([id]) => id).sort();
     // A session whose cut-off turn started a send with no recorded end has its tool calls held for the gate (#85).
     const resend = [...this.unknownSends].filter(([, sends]) => sends.size).map(([id]) => id).sort();
     const key = `${sessions.join(' ')}|${judged.join(' ')}|${resend.join(' ')}|${this.cantRun.join(' ')}`;
@@ -3058,7 +3092,7 @@ export class Core {
    */
   private async closesGate(session: string, command: string): Promise<string | undefined> {
     const issue = closesIssue(command);
-    if (issue === undefined) return undefined;
+    if (issue === undefined) return this.partOfGate(session, command);
     const open = await this.tasks.unproven(session, issue);
     if (!open) return undefined;
     if (!open.locked) return `DeepBuild blocked this: the pull request can't say Closes #${issue} while the definition of ${open.task_ref} hasn't locked, so nothing of it is proven yet. Say Part of #${issue} instead, and list what's left.`;
@@ -3073,6 +3107,19 @@ export class Core {
     if (notes.length) return `DeepBuild blocked this: the pull request can't say Closes #${issue} while a review note on it is neither fixed nor accepted. Fix each, or have it accepted through its ask, and say Part of #${issue} until then: ${notes.join('; ')}.`;
     // Nor until its release checks pass on its merge with main, and you decided its switches left off stay off (#325).
     return this.deliveryHeld(session, issue, open.task_ref);
+  }
+  /**
+   * A pull request that says Part of #n (#82; design: Every stop is judged): its body lists, under that line, each
+   * requirement of the issue's open task still unproven, so they land on the PR as its open items. Why it is refused
+   * while one is missing, naming them; undefined when it may run.
+   */
+  private async partOfGate(session: string, command: string): Promise<string | undefined> {
+    const issue = partOfIssue(command);
+    if (issue === undefined) return undefined;
+    const open = await this.tasks.unproven(session, issue);
+    const missing = open?.left.filter((q) => !new RegExp(`\\b${q.id}\\b`).test(command.slice(command.search(/\bpart of\b/i)))) ?? [];
+    if (!missing.length) return undefined;
+    return `DeepBuild blocked this: the pull request says Part of #${issue}, so list under that line what's left of ${open!.task_ref}, as its open items: ${missing.map((q) => `${q.id} (${q.text})`).join('; ')}.`;
   }
   /**
    * A paid check's price, or its run's cost reading, from the tests' file (DEEP_HUB_TEST_PRICES); null, a price nobody
@@ -3278,6 +3325,122 @@ export class Core {
     // Size and scope's own asks (#324) are DeepBuild's readings, not a question the agent left: they hold no send-back.
     const sized = await this.sizing.keysIn(session);
     return asks.some((a) => !sized.has(a.key));
+  }
+  /**
+   * The stop of a turn that opened the pull request your ask asked for (#82): the words that keep the agent working on
+   * the requirements still unmet in that same pull request, or null when none is unmet or your ask says the pull
+   * request ends the work. Undefined for any other stop.
+   */
+  private async prDelivery(judged: Live): Promise<string | null | undefined> {
+    const pr = judged.prOpened;
+    if (!pr || !judged.turnAsk || !judged.claim) return undefined;
+    const [ask] = (await this.record.raw(`SELECT json_extract(data, '$.text') AS text FROM events WHERE id = ? AND kind = 'user.ask'`, [judged.turnAsk])) as { text: string | null }[];
+    const text = ask?.text ?? '';
+    if (!/\b(?:pull request|PR)\b/i.test(text)) return undefined;
+    const open = this.openRequirements(judged.claim);
+    if (!open.length || /\b(?:ends? the work|stop there|then stop|and stop)\b/i.test(text)) return null;
+    return `DeepBuild: ${pr} is open as Part of its issue, with ${open.join(', ')} still unmet. Keep working on ${open.length === 1 ? 'it' : 'them'} in the same pull request: push to its branch, open no new one.`;
+  }
+  /**
+   * What each requirement of a claim whose verdict is pending or INCONCLUSIVE still waits for (#82): a run of its
+   * check, or your answer where no check covers it; nothing for one passed or failed.
+   */
+  private needsOf(claim: string): string[] {
+    const v = this.gate.verdictOf(claim);
+    const named = this.claimRequirements.get(claim);
+    if (!v || !named) return [];
+    const standing = this.gate.standing(claim);
+    return v.requirements.filter((q) => q.outcome === 'pending' || q.outcome === 'INCONCLUSIVE').flatMap((q) => {
+      const n = named.get(q.req);
+      if (!n) return [];
+      const on = standing.filter((c) => c.covers.includes(q.req) && c.result !== 'PASS');
+      return [`${n.id} ("${n.text}") waits for ${on.length ? on.map((c) => `${c.result === 'INCONCLUSIVE' ? 'another run' : 'a run'} of ${c.check}`).join(' and ') : 'your answer'}`];
+    });
+  }
+  /** Records what a claim the stop let through still needs, as open items of its task (#82). */
+  private async stillNeeded(meta: HookMeta, claim: string): Promise<void> {
+    const needs = this.needsOf(claim);
+    if (!needs.length) return;
+    const [row] = (await this.record.raw(`SELECT subject_ref FROM claims WHERE id = ?`, [claim.slice(6)])) as { subject_ref: string | null }[];
+    if (row?.subject_ref) await this.openItems.stillNeeded({ session: meta.session, agent: meta.agent, task: row.subject_ref, cwd: meta.cwd }, needs);
+  }
+  /** The requirements of a claim its standing checks haven't all passed, by ID and text; else its checks not passed. */
+  private openRequirements(claim: string): string[] {
+    const standing = this.gate.standing(claim);
+    const passed = (req: string) => { const on = standing.filter((c) => c.covers.includes(req)); return on.length > 0 && on.every((c) => c.result === 'PASS'); };
+    const reqs = [...(this.claimRequirements.get(claim) ?? [])].filter(([req]) => !passed(req)).map(([, q]) => `${q.id} ("${q.text}")`);
+    return reqs.length ? reqs : standing.filter((c) => c.result !== 'PASS').map((c) => c.check);
+  }
+  /**
+   * A judged stop's completion prompt (#82; design: Every stop is judged): when its final message is empty or says
+   * nothing and a requirement of its claim is still open, the prompt naming them, with the send-back's failing case
+   * when there is one; at the fourth such stop in a row, the claim stalls and the prompt is null. Undefined for a stop
+   * that said something or left nothing open, which also starts the count again.
+   */
+  private async completion(meta: HookMeta, claim: string, sendBack: string | undefined): Promise<string | null | undefined> {
+    if (!endsEmpty(meta.fields?.last_assistant_message ?? '')) { this.completions.delete(meta.session); return undefined; }
+    const open = this.openRequirements(claim);
+    if (!open.length) { this.completions.delete(meta.session); return undefined; }
+    const n = (this.completions.get(meta.session) ?? 0) + 1;
+    this.completions.set(meta.session, n);
+    if (n > COMPLETION_PROMPTS) {
+      const [row] = (await this.record.raw(`SELECT subject_ref FROM claims WHERE id = ?`, [claim.slice(6)])) as { subject_ref: string | null }[];
+      if (n === COMPLETION_PROMPTS + 1 && row?.subject_ref) await this.stalled(meta, claim, row.subject_ref, 'four stops in a row did work and ended on an empty message');
+      return null;
+    }
+    const prompt = `DeepBuild: this turn did work but ended on an empty message, with ${open.join(', ')} still open. Go on with the work, or end the turn saying what you did and what's still open (completion prompt ${n} of ${COMPLETION_PROMPTS}).`;
+    return sendBack ? `${sendBack}\n\n${prompt}` : prompt;
+  }
+  /** Whether this stop, with no work in it, is its claim's ask's one send-back (#82): true once per ask until work is done again. */
+  private async noWorkOnce(session: string, claim: string): Promise<boolean> {
+    if (this.live.get(session)?.idle !== true || this.options.plant === 'no-work-never-sent-back') return false;
+    const [row] = (await this.record.raw(`SELECT subject_ref FROM claims WHERE id = ?`, [claim.slice(6)])) as { subject_ref: string | null }[];
+    const sent = this.idleSent.get(session) ?? new Set<string>();
+    if (!row?.subject_ref || sent.has(row.subject_ref)) return false;
+    this.idleSent.set(session, sent.add(row.subject_ref));
+    return true;
+  }
+  /**
+   * What a stop that isn't sent back on its checks is sent on with (#82; design: Every stop is judged): after the app's
+   * own resume prompt, when the interrupted turn had done work and asks are open, one automatic continue; a stop with
+   * no work that isn't an answer, leaving an ask open, one send-back naming the requirements still unmet per ask, and
+   * after it the ask's row says the session is idle with it open. Undefined for any other stop.
+   */
+  private async idleOrResumed(meta: HookMeta, judged: Live | undefined, sentBack: boolean): Promise<string | undefined> {
+    const live = this.live.get(meta.session);
+    if (!live) return undefined;
+    const resumed = live.resumed === true;
+    live.resumed = false;
+    // A stop sent back on its checks needs no other push, and a question that holds the send-back holds this too.
+    if (sentBack || await this.questionHolds(meta.session)) return undefined;
+    // The planted wrong program drops the send-back of every stop with no work in it.
+    const idle = live.idle === true && this.options.plant !== 'no-work-never-sent-back';
+    if (!resumed && !idle) {
+      if (judged) { this.idleSent.delete(meta.session); this.nudgeable.add(meta.session); }
+      return undefined;
+    }
+    const open = await this.tasks.stillOpen(meta.session);
+    if (!open.length) { this.nudgeable.delete(meta.session); this.askingSoon(); return undefined; }
+    const named = (left: { id: string; text: string }[]) => left.map((q) => `${q.id} ("${q.text}")`).join(', ');
+    if (resumed && live.cutOff) {
+      live.cutOff = false;
+      // The continue is the one push its asks get: a later stop with no work isn't sent back on them.
+      this.idleSent.set(meta.session, new Set(open.map((o) => o.task_ref)));
+      const asks = open.map((o) => `${o.task_ref}: ${named(o.left)}`).join('; ');
+      return `DeepBuild: the app restarted while this session was working, with ${asks} still unmet. Continue where you left off; this is its one automatic continue.`;
+    }
+    if (!idle) return undefined;
+    const sent = this.idleSent.get(meta.session) ?? new Set<string>();
+    this.idleSent.set(meta.session, sent);
+    const due = open.filter((o) => !sent.has(o.task_ref));
+    if (!due.length) {
+      this.nudgeable.delete(meta.session);
+      this.askingSoon();
+      await this.appendReading(meta.session, meta.agent, `The session is idle with ${open.map((o) => o.task_ref).join(', ')} open.`).catch(() => undefined);
+      return undefined;
+    }
+    for (const o of due) sent.add(o.task_ref);
+    return `DeepBuild: this stop did no work, and ${due.map((o) => `${o.task_ref} still has ${named(o.left)} unmet`).join('; ')}. Work on ${due.length === 1 ? 'it' : 'them'}, or say what keeps you from it.`;
   }
   /** A claim that stalled (#325): recorded, and one decision for you instead of another send-back: split the issue, fund the live runs, or accept what's proven. */
   private async stalled(meta: HookMeta, claim: string, task: string, rule: StallRule): Promise<void> {
@@ -3630,15 +3793,35 @@ export class Core {
     const held = until;
     until = meta.agent === 'codex' ? Math.min(until, Date.now() + STOP_HOLD_MS) : until;
     const lane = judged?.claim ? await this.laneOf(judged.claim, until) : undefined;
+    // A send-back names the verdict the record holds, so it waits for the lane's verdict to be written.
+    if (lane?.sendBack && judged?.claim) await this.verdictWrites.get(judged.claim)?.catch(() => undefined);
+    // A stop that did work and ends on an empty message, with requirements open, gets a completion prompt (#82), at
+    // most three in a row; the fourth becomes a stalled claim. It takes the send-back's place and counts apart from it.
+    const prompted = judged?.claim ? await this.completion(meta, judged.claim, lane?.sendBack) : undefined;
+    // The stop that opens the pull request you asked for is delivery, not a claim to send back (#82): what's still
+    // unmet goes on in the same pull request, unless your ask says the pull request ends the work.
+    const delivered = judged?.claim && lane ? await this.prDelivery(judged) : undefined;
+    if (lane && delivered !== undefined) {
+      if (delivered) lane.sendBack = delivered;
+      else delete lane.sendBack;
+    } else if (lane && prompted !== undefined) {
+      if (prompted) lane.sendBack = prompted;
+      else delete lane.sendBack;
+    }
     // A send-back counts toward a stalled claim, and a question that holds the send-back holds it (#325).
-    if (lane && judged?.claim) {
+    // A stop with no work that leaves its ask open gets its one send-back before the stall rule counts it (#82).
+    else if (lane && judged?.claim && !(lane.sendBack && await this.noWorkOnce(meta.session, judged.claim))) {
       const back = await this.stallGate(meta, judged.claim, lane.sendBack).catch(() => lane.sendBack);
       if (back) lane.sendBack = back;
       else delete lane.sendBack;
     }
     // Size and scope (#324): a reading, never a verdict; what it sends back once rides with a failing check's send-back,
     // and only in time for this reply: past the hold's margin it is recorded and sent nothing.
-    const sized = judged?.claim ? await this.sizedAt(judged.claim, meta, held + HOLD_MARGIN_MS / 2) : undefined;
+    // A stop whose snapshot changed nothing is no new size: its last reading stands (#82).
+    const sized = judged?.claim && lane?.changed !== false ? await this.sizedAt(judged.claim, meta, held + HOLD_MARGIN_MS / 2) : undefined;
+    // A no-work stop that leaves an ask open, and the stop after the app's resume prompt (#82): sent on once.
+    const nudge = await this.queue(() => this.idleOrResumed(meta, judged, Boolean(lane?.sendBack || sized))).catch(() => undefined);
+    if (nudge) block = nudge;
     let proceeded = false;
     let questionMs = 0;
     try {
@@ -3654,8 +3837,9 @@ export class Core {
       if (proceed) {
         proceeded = true;
         const delivered = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
-        block = [r.sendBacks.shift(), delivered, lane?.sendBack, sized, proceed].filter(Boolean).join('\n\n');
+        block = [r.sendBacks.shift(), delivered, lane?.sendBack, sized, nudge, proceed].filter(Boolean).join('\n\n');
       } else if (lane?.sendBack || sized) block = [lane?.sendBack, sized].filter(Boolean).join('\n\n');
+      else if (block) this.askingSoon();
       else if (!r.places) {
         const waited = this.now();
         block = await this.stopHold(meta, r, until);
@@ -3666,6 +3850,8 @@ export class Core {
       r.holding--;
       if (block) {
         r.continued++;
+        const kept = this.live.get(meta.session);
+        if (kept) kept.sentOn = true;
         r.busy = Date.now();
         // The turn goes on with it, and its next stop starts a waiter of its own: this one exits without waking.
         if (this.options.plant === 'both-routes') r.waiter?.give({ session: meta.session, text: block });
@@ -3678,6 +3864,9 @@ export class Core {
     // the background holds them until it ends, at most 30 minutes (#907). Decided before the line, which names them.
     const live = this.live.get(meta.session);
     const background = [...(live?.background.values() ?? [])].map((b) => b.what);
+    // A stop let through with its claim pending or INCONCLUSIVE: the claim stays open, and an open item names each run
+    // or answer still needed (#82).
+    if (!block && judged?.claim) await this.stillNeeded(meta, judged.claim).catch(() => undefined);
     if (!block && !proceeded) {
       const due = live?.due && live.due.at > this.now() ? live.due : null;
       const starter = live?.claimedInTurn ? 'claim' as const : live?.words ?? null;
@@ -3686,10 +3875,13 @@ export class Core {
       if (lane && judged?.claim && background.length && lane.slow.length) await this.appendReading(meta.session, meta.agent, `${lane.slow.join(', ')} ${lane.slow.length === 1 ? 'waits' : 'wait'} for ${backgrounded(background)} in the background, and ${lane.slow.length === 1 ? 'starts' : 'start'} once it ends or 30 minutes from this stop.`).catch(() => undefined);
     }
     // The verdict in the chat: one line at every judged stop, as the verdict stands once the hold is over, first in a send-back's reason too (#83).
-    const line = judged ? await this.judgedLine(judged).catch(async (e: unknown) => {
+    if (judged?.claim) await this.verdictWrites.get(judged.claim)?.catch(() => undefined);
+    let line = judged ? await this.judgedLine(judged).catch(async (e: unknown) => {
       await this.appendReading(meta.session, meta.agent, `This stop's verdict line could not be read from the record: ${e instanceof Error ? e.message : String(e)}`).catch(() => undefined);
       return undefined;
     }) : undefined;
+    // The stop that opens the pull request you asked for is delivery (#82): its line carries the link, never a send-back.
+    if (line && delivered !== undefined && judged?.prOpened) line = `${judged.prOpened} · Part of · ${line.replace(/^sent back \d+\/\d+: /, '')}`;
     // The chat has seen it once it is replied in time; a reply past the hold is not, and the next prompt shows the line.
     if (line && judged && Date.now() < held) judged.delivered = line;
     if (block && line) block = `${line}\n${block}`;
@@ -3700,7 +3892,8 @@ export class Core {
       const replyAt = this.now();
       const own = replyAt - questionMs;
       const record = (ran: { readyAt: number; changed?: boolean; budgetCost?: string[] }) => this.gate.held({ session: meta.session, stop: meta.id, claim: judged.claim!, stopAt, readyAt: again ? own : ran.readyAt, replyAt, questionMs, codeChanging: !again && ran.changed === true, budgetCost: again ? [] : ran.budgetCost ?? [] });
-      if (lane) await record(lane).catch(() => undefined);
+      // Recorded beside the reply, not before it: the stop's time is stamped already (#82).
+      if (lane) void record(lane).catch(() => undefined);
       // A fast lane still going when the hold ran out: its hold counts all the same, once the lane says what it was.
       else void this.lanes.get(judged.claim)?.then(record).catch(() => undefined);
     }
@@ -4590,7 +4783,8 @@ export class Core {
       const pid = this.sessions.get(id)!.pid;
       if (pid && ![...this.sessions.values()].some((s) => s.id !== id && s.pid === pid)) this.starts.delete(pid);
       this.sessions.delete(id);
-      for (const kept of [this.lastMessage, this.counters, this.typedAt, this.projects, this.tasted]) kept.delete(id);
+      for (const kept of [this.lastMessage, this.counters, this.typedAt, this.projects, this.tasted, this.idleSent, this.completions]) kept.delete(id);
+      this.nudgeable.delete(id);
       this.versioned.delete(id);
       this.miscalled.delete(id);
       this.firstPrompted.delete(id);
@@ -5849,18 +6043,25 @@ export class Core {
     this.claimRequirements.set(r.claim, new Map(r.requirements.map((q) => [q.req, { id: q.id, text: q.text }])));
     this.claimScopes.set(r.claim, { task: r.task, base: r.base, cwd: r.cwd });
     this.paidChecks.set(r.claim, new Map(r.checks.flatMap((c) => (c.paid ? [[c.check, { paid: c.paid, task: r.task }] as const] : []))));
+    // Nothing but reads since the session's last claim: its snapshot and the lines it added stand, and its results carry (#82).
+    const same = this.live.get(r.session)?.workedSinceClaim === false && this.live.get(r.session)?.claim !== undefined;
     const lane = (async () => {
       const message = this.lastMessage.get(r.session) ?? '';
-      // What the claim leaves open becomes open items before any verdict is made on it (#323).
+      // What the claim leaves open becomes open items before any verdict is made on it (#323). Read beside the session's
+      // log for the validity gate and the project's trust for its spec checks, none of which waits on another (#82).
+      const spec = r.joins ? [] : this.specChecks(r.cwd);
+      const reads = Promise.all([r.definition === 'pending' ? undefined : this.sessionLog(r.session), spec.length ? this.projectTrusted(r.cwd) : false]);
+      reads.catch(() => undefined);
       if (!r.joins) {
-        await this.openItems.atClaim({ session: r.session, agent: this.live.get(r.session)?.agent ?? 'claude-code', task: r.task, cwd: r.cwd, base: r.base, message, transcript: this.sessions.get(r.session)?.transcript, pr: await this.prOf(r.session) })
+        await this.openItems.atClaim({ session: r.session, agent: this.live.get(r.session)?.agent ?? 'claude-code', task: r.task, cwd: r.cwd, base: r.base, message, transcript: this.sessions.get(r.session)?.transcript, pr: await this.prOf(r.session), same })
           .catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s open items were not read: ${error instanceof Error ? error.message : String(error)}\n`));
       }
       // A command the final message tells you to run is the gate's to run first (#323), not a run the session cites.
       const told = r.joins ? [] : toldToRun(message);
       const cited = told.reduce((m, command) => m.replaceAll(`\`${command}\``, command), message);
       // The validity gate reads the claim against its definition: a claim with none yet, and none on its way, has nothing to be read against.
-      const findings = r.definition === 'pending' ? [] : validityGate({ claim: { claim: r.claim, message: cited }, checkout: r.cwd, deliverables: r.deliverables, session: await this.sessionLog(r.session) }).map((f) => f.why);
+      const [log, trusted] = await reads;
+      const findings = log === undefined ? [] : validityGate({ claim: { claim: r.claim, message: cited }, checkout: r.cwd, deliverables: r.deliverables, session: log }).map((f) => f.why);
       // A claim that fails the validity gate goes back naming what's missing, before any check runs.
       if (findings.length) return { fast: [], slow: [], snapshot: r.commit, readyAt: this.now(), findings };
       // The planted wrong program runs no check before the definition locks, the repo's spec included.
@@ -5883,8 +6084,7 @@ export class Core {
       // trusted, or one the agents' own trust records already do; an untrusted repo's spec commands never run, and
       // its claims are watch-only, so none passes. On a claim that joins its early run they ran already.
       if (!r.joins) {
-        const spec = this.specChecks(r.cwd);
-        if (spec.length && await this.projectTrusted(r.cwd)) {
+        if (spec.length && trusted) {
           checks.push(...spec);
           // A claim on a pull request also runs the repo's release checks, on the PR's commit merged with main (#325).
           if (await this.prOf(r.session)) checks.push(...await this.releaseChecks(r.cwd, r.commit));
@@ -5901,8 +6101,11 @@ export class Core {
       // with its output; passing, it proves nothing, as the agent's own checks never pass a claim.
       for (const command of told) checks.push({ check: command, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'own' });
       if (told.length) this.told.set(r.claim, new Set(told));
-      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at, definition: r.definition, ...(r.joins ? { joins: true } : {}) });
-      await this.judged(r.claim);
+      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at, definition: r.definition, same, ...(r.joins ? { joins: true } : {}) });
+      // The verdict is written beside the stop's reply, which waits for it only where it reads the record (#82).
+      const written = this.judged(r.claim);
+      this.verdictWrites.set(r.claim, written);
+      written.catch(() => undefined).finally(() => { if (this.verdictWrites.get(r.claim) === written) this.verdictWrites.delete(r.claim); });
       return { ...ran, findings };
     })();
     this.lanes.set(r.claim, lane);
@@ -5987,6 +6190,8 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT outcome FROM runs WHERE id = ?`, [run.slice(4)])) as { outcome: string | null }[];
     return row?.outcome ?? 'stopped';
   }
+  /** Each claim's verdict on its way to the record after its lane (#82): what reads the record waits for it. */
+  private readonly verdictWrites = new Map<string, Promise<void>>();
   /** Each claim's last recorded verdict, by its hash: a verdict that didn't change isn't recorded again. */
   private readonly verdictsMade = new Map<string, string>();
   /**
@@ -6014,6 +6219,9 @@ export class Core {
         requirements: v.requirements.map((q) => { const b = bare.find((x) => x.req === q.req); return b && held(q.outcome) ? { ...q, outcome: 'BLOCKED' as const, smallest: b.why } : q; }),
       };
     }
+    // What a pending claim waited for closes once its run ended or your answer came (#82), before open items are read.
+    const [owner] = (await this.record.raw(`SELECT subject_ref, session_id FROM claims WHERE id = ?`, [claim.slice(6)])) as { subject_ref: string | null; session_id: string | null }[];
+    if (owner?.subject_ref) await this.openItems.settled({ session: owner.session_id ?? '', agent: this.live.get(owner.session_id ?? '')?.agent ?? 'claude-code', task: owner.subject_ref }, this.needsOf(claim)).catch(() => undefined);
     // Nor while what its task left open stays open (#323): an item closes on evidence, your answer or a rule, never the agent's word.
     if (v.outcome === 'PASS') {
       const open = (await this.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND task_ref = (SELECT subject_ref FROM claims WHERE id = ?)`, [claim.slice(6)])) as { text: string }[];
@@ -6075,8 +6283,13 @@ export class Core {
    * edit, write or ask in it. The planted wrong program reads every stop with tool calls as a claim.
    */
   private stopRule(count: Counter): boolean {
-    const answer = count.prompt?.person === true && !count.prompt.opened && !count.changed;
-    return this.options.plant === 'claim-on-tool-calls' ? count.worked : count.worked && !count.fresh && !answer;
+    return this.options.plant === 'claim-on-tool-calls' ? count.worked : count.worked && !count.fresh && !this.isAnswer(count);
+  }
+  /** An answer: a turn begun by a prompt you typed that opened no task, with no edit, write or ask in it. */
+  private isAnswer(count: Counter): boolean {
+    // The planted wrong program reads every turn a prompt began as an answer, whatever it did and whoever sent it.
+    if (this.options.plant === 'skips-prompt-turns') return count.prompt !== undefined;
+    return count.prompt?.person === true && !count.prompt.opened && !count.changed;
   }
   /**
    * A session's counter, its messages numbered on from its last recorded one, so a restarted hub never reuses a
