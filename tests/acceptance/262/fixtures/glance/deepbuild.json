@@ -1,0 +1,11 @@
+{
+  "id": "test/glance",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["hosts"] },
+  "notices": ["ext.glance.rate_passed"],
+  "sources": [{ "name": "ext.glance.errors", "variant": "polled" }],
+  "requires": {
+    "preview": ["deep.registerSource", "deep.registerView", "deep.notices.send"]
+  }
+}

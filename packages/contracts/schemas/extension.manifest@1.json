@@ -1,6 +1,8 @@
 {
   "title": "extension.manifest@1",
   "description": "What a package declares, in the one package envelope (package.envelope@1's fields at the root): the access words it uses, its panels and the media each uses, the output interfaces it provides and uses (each pinned to a minor), the shipped pieces it replaces, and the names it adds: event kinds, store kinds, check kinds, codes, notice kinds and actions, each ext.<plugin>.<name> unless the piece replaces the shipped piece of that name. The fields the later issues bring (conflicts, contract versions, secrets, sources, MCP commands, jobs, an out-of-process host, run-as-you, handoff, guards, lease kinds, hook context templates) arrive with their fixtures. The rules the node types can't write, a medium used without its access word and a name without its prefix, are checkManifest's.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "id": {
@@ -34,7 +36,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^(files|programs|hosts|run_as_you|screen|sound|microphone|camera|clipboard|window|agent|edit_as_you|record|device:(ext\\.[a-z0-9][a-z0-9_-]*\\.)?[a-z][a-z0-9_]*@[1-9][0-9]*)$",
+            "pattern": "^(files|programs|hosts|run_as_you|screen|sound|microphone|camera|clipboard|window|agent|edit_as_you|record|canvas|device:(ext\\.[a-z0-9][a-z0-9_-]*\\.)?[a-z][a-z0-9_]*@[1-9][0-9]*)$",
             "description": "One access word, from access@1's closed list; notices, schedules and secrets are blocks, not words, so each fails here.",
             "maxLength": 8192,
             "x-closure": {

@@ -22,12 +22,33 @@ pub struct Grid {
     pub rows: Vec<Row>,
 }
 
+impl deep_canvas::schedule::Canonical for Grid {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(
+            &(
+                &self.origin,
+                &self.cell,
+                &self.font_size,
+                &self.bg,
+                &self.rows,
+            ),
+            out,
+        );
+    }
+}
+
 /// One row: its text and the color of each run of cells that share one.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
     pub text: String,
     pub runs: Vec<(usize, usize, [u8; 3])>,
     pub fills: Vec<(usize, usize, [u8; 3])>,
+}
+
+impl deep_canvas::schedule::Canonical for Row {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.text, &self.runs, &self.fills), out);
+    }
 }
 
 fn manifest() -> Manifest {
@@ -51,6 +72,7 @@ fn manifest() -> Manifest {
         feature: "cells".into(),
         license: "Apache-2.0".into(),
         implements: "cells@1".into(),
+        implementation: deep_canvas::registry::Implementation::reference("cells", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
     }
 }
 
@@ -275,8 +297,7 @@ fn grid(v: &mut View<'_>) -> Result<(), OpError> {
         bg,
         rows: out,
     };
-    let bytes = format!("{grid:?}").into_bytes();
-    v.write("cells.grid", Val::typed(grid, bytes))
+    v.write("cells.grid", Val::typed(grid))
 }
 
 fn board() -> Value {

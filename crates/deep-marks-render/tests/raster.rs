@@ -3,30 +3,11 @@
 //! store lacks it or holds other bytes; and a stroke under 1 device px draws at 1 px with its
 //! alpha scaled by its width (Paint: stroke gradients, "It can never").
 
-use std::io::Write;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
+mod common;
 
+use common::{run, scratch};
 use deep_canvas_marks::key::sha256_hex;
 use serde_json::{json, Value};
-
-fn raster(line: &Value) -> Value {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-canvas-render"))
-        .arg("raster")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("deep-canvas-render starts");
-    writeln!(child.stdin.take().unwrap(), "{line}").unwrap();
-    let out = child.wait_with_output().unwrap();
-    serde_json::from_str(String::from_utf8(out.stdout).unwrap().trim()).unwrap()
-}
-
-fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("deep-raster-{name}-{}", std::process::id()));
-    std::fs::create_dir_all(dir.join("store")).unwrap();
-    dir
-}
 
 fn look() -> Value {
     json!({"light": {"ground": [255, 255, 255], "ink": [0, 0, 0]}})
@@ -71,7 +52,7 @@ fn points(x_data: Value) -> Value {
 
 #[test]
 fn a_sidecar_column_draws_as_its_inline_data_and_is_refused_missing_or_changed() {
-    let dir = scratch("sidecar");
+    let dir = scratch("deep-raster", "sidecar");
     let xs = [8.0f32, 20.0, 32.0];
     let bytes: Vec<u8> = xs.iter().flat_map(|v| v.to_le_bytes()).collect();
     let hash = sha256_hex(&bytes);
@@ -79,7 +60,10 @@ fn a_sidecar_column_draws_as_its_inline_data_and_is_refused_missing_or_changed()
     let store = dir.join("store");
     let draw = |doc: Value, out: &str| {
         let out = dir.join(out);
-        let answer = raster(&json!({"out": out, "doc": doc, "look": look(), "store": store}));
+        let answer = run(
+            "raster",
+            &json!({"out": out, "doc": doc, "look": look(), "store": store}),
+        );
         (answer, std::fs::read(&out).ok())
     };
     let (inline, inline_png) = draw(points(json!(f32_base64(&xs))), "inline.png");
@@ -95,7 +79,8 @@ fn a_sidecar_column_draws_as_its_inline_data_and_is_refused_missing_or_changed()
     std::fs::write(dir.join("store").join(&hash), [0u8; 12]).unwrap();
     let (changed, _) = draw(points(json!({"sidecar": hash})), "changed.png");
     assert_eq!(changed["code"], json!("asset_mismatch"), "{changed}");
-    let missing = raster(
+    let missing = run(
+        "raster",
         &json!({"out": dir.join("missing.png"), "doc": points(json!({"sidecar": "ab".repeat(32)})), "look": look()}),
     );
     assert_eq!(missing["code"], json!("asset_missing"), "{missing}");
@@ -104,13 +89,13 @@ fn a_sidecar_column_draws_as_its_inline_data_and_is_refused_missing_or_changed()
 
 #[test]
 fn a_stroke_under_one_device_px_draws_at_one_px_with_its_alpha_scaled_by_its_width() {
-    let dir = scratch("hairline");
+    let dir = scratch("deep-raster", "hairline");
     let out = dir.join("hairline.png");
     let doc = figure(
         json!({"hair": {"id": "hair", "kind": "path@1", "layer": "main", "name": "Hairline", "order": "a0",
         "params": {"d": "M 0 10.5 L 40 10.5", "paint": {"stroke": {"role": "ink", "width": 0.25}}}}}),
     );
-    let answer = raster(&json!({"out": out, "doc": doc, "look": look()}));
+    let answer = run("raster", &json!({"out": out, "doc": doc, "look": look()}));
     assert_eq!(answer["ok"], json!(true), "{answer}");
     let image = image::open(&out).unwrap().to_rgb8();
     for x in 2..38 {
@@ -122,6 +107,110 @@ fn a_stroke_under_one_device_px_draws_at_one_px_with_its_alpha_scaled_by_its_wid
         );
         assert_eq!(image.get_pixel(x, 9)[0], 255, "nothing above the 1 px row");
         assert_eq!(image.get_pixel(x, 11)[0], 255, "nothing below it");
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Whether any pixel of `image` in `x0..x1` × `y0..y1` holds ink (anything but white).
+fn inked(image: &image::RgbImage, (x0, x1): (u32, u32), (y0, y1): (u32, u32)) -> bool {
+    (y0..y1).any(|y| (x0..x1).any(|x| image.get_pixel(x, y).0 != [255, 255, 255]))
+}
+
+/// #390: a text over its line limit draws what the fit check shows (the shaper's cut with an
+/// ellipsis, on its one line), and a masked one is clipped to its box: neither spills below it.
+#[test]
+fn a_text_draws_within_its_line_limit_and_box_as_the_fit_shows() {
+    let dir = scratch("deep-raster", "fit");
+    const TEXT: &str = "All checks passed on the branch";
+    let fit = deep_text::Shaper::new().shape(&deep_text::Spec {
+        width: Some(120.),
+        max_lines: Some(1),
+        ..deep_text::Spec::label(TEXT)
+    });
+    for overflow in ["ellipsis", "mask"] {
+        let out = dir.join(format!("{overflow}.png"));
+        let doc = json!({"format": 1, "id": "fit", "profile": "figure", "title": "Fit", "description": "A text in a box.",
+            "size": [200, 80], "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+            "items": {"long": {"id": "long", "kind": "text@1", "layer": "main", "name": "Long", "order": "a0",
+                "at": {"pos": [16, 16, 0]}, "params": {"text": TEXT, "font": "body", "size": 13,
+                "box": {"w": 120, "h": 20}, "overflow": overflow, "max_lines": 1}}}});
+        let answer = run("raster", &json!({"out": out, "doc": doc, "look": look()}));
+        assert_eq!(answer["ok"], json!(true), "{answer}");
+        let image = image::open(&out).unwrap().to_rgb8();
+        assert!(
+            inked(&image, (16, 136), (16, 36)),
+            "{overflow}: the text draws in its box"
+        );
+        assert!(
+            !inked(&image, (0, 200), (36, 80)),
+            "{overflow}: nothing draws below the 120 x 20 box"
+        );
+        if overflow == "ellipsis" {
+            assert_eq!(fit.shown, "All checks passe…", "the fit's cut");
+            assert_eq!(
+                answer["texts"]["long"]["shown"],
+                json!(fit.shown),
+                "the raster shows what the fit shows"
+            );
+            let glyphs = answer["texts"]["long"]["glyphs"].as_array().unwrap();
+            assert_eq!(glyphs.len(), fit.glyphs.len(), "the fit's glyphs, no more");
+        }
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// #375: a row frame draws its children where its layout puts them, padding and gap apart, with
+/// its own stroke; with its box given, or with none, hugging them.
+#[test]
+fn a_layout_frame_draws_its_children_where_its_layout_puts_them() {
+    let dir = scratch("deep-raster", "layout");
+    let tile = |id: &str, order: &str, role: &str| {
+        json!({"id": id, "kind": "frame@1", "layer": "main", "name": id, "parent": "row", "order": order,
+            "params": {"box": [0, 0, 20, 20], "width": "fixed", "height": "fixed", "paint": {"fill": {"role": role}}}})
+    };
+    let look = json!({"light": {"ground": [255, 255, 255], "ink": [0, 0, 0], "bg": [230, 230, 240],
+        "c1": [40, 90, 160], "c2": [180, 60, 20]}});
+    // The row is 5 + 20 + 10 + 20 + 5 wide and 5 + 20 + 5 tall, from (10, 10).
+    for (name, frame_box) in [("boxed", json!([0, 0, 60, 30])), ("hugging", Value::Null)] {
+        let mut row = json!({"layout": "row", "gap": 10, "padding": 5,
+            "paint": {"fill": {"role": "bg"}, "stroke": {"role": "ink", "width": 2}}});
+        if !frame_box.is_null() {
+            row["box"] = frame_box;
+        }
+        let doc = json!({"format": 1, "id": "row", "profile": "figure", "title": "Row", "description": "Two tiles in a row.",
+        "size": [120, 60], "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+        "items": {
+            "row": {"id": "row", "kind": "frame@1", "layer": "main", "name": "Row", "order": "a0",
+                "at": {"pos": [10, 10, 0]}, "params": row},
+            "b": tile("b", "a2", "c2"),
+            "a": tile("a", "a1", "c1"),
+        }});
+        let out = dir.join(format!("{name}.png"));
+        let answer = run("raster", &json!({"out": out, "doc": doc, "look": look}));
+        assert_eq!(answer["ok"], json!(true), "{name}: the row draws: {answer}");
+        let image = image::open(&out).unwrap().to_rgb8();
+        let at = |x: u32, y: u32| image.get_pixel(x, y).0;
+        assert_eq!(
+            at(25, 25),
+            [40, 90, 160],
+            "{name}: the first tile at (15, 15)"
+        );
+        assert_eq!(
+            at(40, 25),
+            [230, 230, 240],
+            "{name}: the gap between the tiles"
+        );
+        assert_eq!(
+            at(55, 25),
+            [180, 60, 20],
+            "{name}: the second tile at (45, 15)"
+        );
+        assert_eq!(at(90, 25), [255, 255, 255], "{name}: nothing past the row");
+        assert!(
+            at(10, 25)[0] < 100,
+            "{name}: the row's stroke on its west edge: {:?}",
+            at(10, 25)
+        );
     }
     std::fs::remove_dir_all(&dir).ok();
 }

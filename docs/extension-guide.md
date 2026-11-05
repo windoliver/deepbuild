@@ -13,7 +13,17 @@ The same check twice, `ext.<plugin>.relative`: it passes when every input a chec
 - [`extension-guide/typescript`](extension-guide/typescript/): `index.ts`, calling `deep.registerCheck` in-process style through the `deep` object the host hands it.
 - [`extension-guide/json-rpc`](extension-guide/json-rpc/): `main`, a Python program that answers the host's `load` by calling `deep.registerCheck` over JSON-RPC, then answers each `run`.
 
+And a plug-in, [`extension-guide/plugin`](extension-guide/plugin/): a weather panel with a source behind a secret, a store, two actions, a schedule that sends a notice, a view with a page per city and a ⌘K command, its panel in `panel/main.js`, and its own tests in `tests/`.
+
+## The manifest
+
+`deepbuild.json` holds `id`, `version`, `digest` and `access.words` (`hosts` for a source's host, `agent` for model jobs), then every name the package adds, each `ext.<plugin>.<name>` with `<name>` in lower-case letters, digits and underscores (`ext.stocks.quote_nvda`, never `ext.stocks.quote.nvda`): `stores`, `actions`, `notices`, `checks` and `events` as lists of names; `secrets` as `{ name, for }`; `sources` as `{ name, variant }`. `requires.preview` lists every preview method its code calls, or the call is refused. Nothing else goes in it: a view, a schedule and a source's host and quota are declared in code, and the hosts it may reach are granted at install.
+
 To build one, copy the folder, write `packageDigest` of it into `deepbuild.json`'s `digest`, and point a `main`'s `#!/usr/bin/env` line at its interpreter. Then install it, run its conformance, load it, and run its check.
+
+## A package's own tests
+
+Put them in `tests/`, each file named `*.test.ts` or `*.test.mjs`. A file's default export is an object of named tests, each an async function given `t`: `t.call(action, input)` calls one of the package's actions as the app would and returns its output, `t.read(source)` reads one of its polled sources through the hub, and `t.now()` is the hub's clock. A test fails by throwing; `node:assert` works. DeepBuild runs them in the package's sandbox on recorded source calls and a clock it controls, never live.
 
 ## A first plug-in
 
@@ -21,7 +31,7 @@ Most plug-ins need few methods. Start with these 13, in this order.
 
 ### `deep.on`
 
-In R1 · stable · `d1:a835ee7b3bd031e52a8ce58545b0b68d8a45a4b388fc8943bca15c65a9cba077`
+In R1 · preview · `d1:a835ee7b3bd031e52a8ce58545b0b68d8a45a4b388fc8943bca15c65a9cba077`
 
 Handles an event: session.start, tool.before, tool.after, prompt.submit, agent.stop, pr.opened, merged, released or schedule. A handler adds context for the agent or denies with a reason; outside DeepBuild's signed release, both only fill templates the manifest declares, with typed values.
 
@@ -31,21 +41,22 @@ Handles an event: session.start, tool.before, tool.after, prompt.submit, agent.s
 
 ### `deep.registerView`
 
-In R1 · preview · `d1:13a87be727b3bee24e988056df0a299ae55bc59ff858ea6e9bb1ff9e09aaeb98`
+In R1 · preview · `d1:f678797e9208a811d87f8c281fcb0a814d57cce7f0073a68471d77d9a85e98f8`
 
-A JavaScript panel in the app, in the sidebar, the home screen, a tab or the line, under an empty policy plus DeepBuild's modules.
+A JavaScript panel in the app, in the sidebar, the home screen, a tab or the line, under an empty policy plus DeepBuild's modules. `view` adds its pages, each opened from ⌘K with one parameter (a page per stock: `{ name: "Stock", param: "symbol", values }`, given to the panel's `init` as `props.page`), its ⌘K commands, each running one of its actions, and `binds`, the readings it shows (`reading:<source>` or `reading:<source>#<series>`), which Read now and while-shown cadences go by. A panel never calls the network itself: it reads what its sources read, and a panel that fetches is refused at install.
 
 | Parameter | Type | Required |
 |---|---|---|
 | `name` | string, `^[a-z][a-z0-9_.-]*$` | yes |
 | `panel` | string | yes |
 | `area` | `sidebar` · `home` · `tab` · `line` | yes |
+| `view` | object | no |
 
 ### `deep.registerSource`
 
 In R1 · preview · `d1:b91a9a6d1bfbe5bfd0808335a7b1f6780a6b9282d48581ebfa3c5edbb58b9f10` · variants: `stream`, `polled`, `mcp`
 
-A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read.
+A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: 'USD' }`. A list or a record is no reading, unless the source declares `shape: 'series'`: then `parse` returns `{ values, unit }`, up to 10,000 named numbers a call, which the hub keeps as one batch, each bound as `reading:<source>#<name>`. `while_shown: { every }`, at least 10 s, is a cadence the hub runs only while a view that binds the source is shown; one its quota can't serve is refused at install. A source's readings over time are its history, which the hub keeps: a chart draws from them, so a plug-in needs no source per point.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -54,14 +65,14 @@ A source of readings, each with its unit, source and as-of time: polled from a h
 
 ### `deep.store`
 
-In R1 · preview · `d1:1982b1979f80ec15fa337a0efc5a66ae0ab5f636ac7a5a7479e6a4abe151f7b4`
+In R1 · preview · `d1:7b959c929cca7fc80f98820934c9c93e767a8866fadad5a3db367ccfe61e0900`
 
 The plug-in's own data, kept in the record under a kind and a schema that only moves forward.
 
 | Parameter | Type | Required |
 |---|---|---|
-| `kind` | string, `^[a-z][a-z0-9_.-]*$` | yes |
-| `schema` | object | yes |
+| `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
+| `declared` | object | yes |
 
 ### `deep.schedule`
 
@@ -76,7 +87,7 @@ Runs a job on a cadence: never overlapping, with a deadline per run and one catc
 
 ### `deep.registerAction`
 
-Arrives in R2 · preview · `d1:e3f3d719dd4a19c61231550621eb4d966cdf7eba22e542d6d7be541b396e1cca`
+Arrives in R2 · preview · `d1:5a52fe18cc22318cd0ccc42e606723a61abef05b0cd255a25489008cba588bb8`
 
 What panels, your words and agents' MCP tools can do to the plug-in's data. It declares read, change or send, and a change or send returns its report.
 
@@ -97,7 +108,7 @@ A handle to a secret: the hub adds its value to the request, and the plug-in nev
 
 ### `deep.notices.send`
 
-In R1 · stable · `d1:1278dcb064eaaf8a0978a1e9e8761ce8ec0aa0f8da2668f87939b82ff27f2a2b`
+In R1 · preview · `d1:1278dcb064eaaf8a0978a1e9e8761ce8ec0aa0f8da2668f87939b82ff27f2a2b`
 
 Sends a notice you asked for, citing fresh readings, once per key.
 
@@ -117,7 +128,7 @@ Anything that leaves your machine for a person: an ask, or a standing rule.
 
 ### `deep.asks.create`
 
-In R1 · stable · `d1:52c8f6e58d710c8bc4663462c671d42192aee7be5745fdc88882dc116e5539fa`
+In R1 · preview · `d1:52c8f6e58d710c8bc4663462c671d42192aee7be5745fdc88882dc116e5539fa`
 
 Raises an ask: a question only you can answer, with its options, its deadline and its default.
 
@@ -172,7 +183,7 @@ A check kind: its runner gets a spec and the checkout and returns the run's outc
 
 ### `deep.registerResolver`
 
-In R1 · stable · `d1:d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f`
+In R1 · preview · `d1:d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f`
 
 Answers an ask with an option and the decision that covers it. The core applies the answer only when that decision is active and of the ask's kind and scope; otherwise the ask reaches you.
 
@@ -199,7 +210,7 @@ Leases a resource of a declared lease.kind@1 kind, the core's or one a manifest 
 
 ### `deep.registerAdapter`
 
-In R1 · stable · `d1:57fb94b01dd9e808435d9c8be79da9f67fd5a055d54171eef31e3780e7458b27`
+In R1 · preview · `d1:57fb94b01dd9e808435d9c8be79da9f67fd5a055d54171eef31e3780e7458b27`
 
 An agent adapter: it maps the agent's hooks, delivers answers by the routes its caps allow, and names what it can't do rather than doing nothing.
 
@@ -210,7 +221,7 @@ An agent adapter: it maps the agent's hooks, delivers answers by the routes its 
 
 ### `deep.registerRoute`
 
-In R1 · stable · `d1:9a22da7084c9353b5a2acb7912aee3fbac5c471d4d6d6d2b6f5977a56a0362d4`
+In R1 · preview · `d1:9a22da7084c9353b5a2acb7912aee3fbac5c471d4d6d6d2b6f5977a56a0362d4`
 
 An HTTP route served on 127.0.0.1, which reaches the package only once you turn it on.
 
@@ -220,7 +231,7 @@ An HTTP route served on 127.0.0.1, which reaches the package only once you turn 
 
 ### `deep.registerIndex`
 
-In R1 · stable · `d1:1e34ef8a97474d44b1cbff77e9b435e5e6b18ac4123956b0d29066f1a990dd5a`
+In R1 · preview · `d1:1e34ef8a97474d44b1cbff77e9b435e5e6b18ac4123956b0d29066f1a990dd5a`
 
 An index over the wiki: upsert claims, search with hits that name their sources, drop a source and rebuild from pages. The hub re-attaches each hit's provenance from the claim records, never from the index.
 
@@ -230,7 +241,7 @@ An index over the wiki: upsert claims, search with hits that name their sources,
 
 ### `deep.record.append`
 
-In R1 · stable · `d1:5e1abe51040927c6848a34cd130b32fd0c386bbd9337b39c791a7e8f492ae8bc`
+In R1 · preview · `d1:5e1abe51040927c6848a34cd130b32fd0c386bbd9337b39c791a7e8f492ae8bc`
 
 Appends one of the package's own event kinds to the record.
 
@@ -240,7 +251,7 @@ Appends one of the package's own event kinds to the record.
 
 ### `deep.record.query`
 
-In R1 · stable · `d1:925a9f01d1787905fb15b900f5ccbda1afd38233e119fc347440cb0b77f2d08c`
+In R1 · preview · `d1:925a9f01d1787905fb15b900f5ccbda1afd38233e119fc347440cb0b77f2d08c`
 
 Reads the record: the core's event kinds and the package's own, only those its grant names.
 
@@ -250,7 +261,7 @@ Reads the record: the core's event kinds and the package's own, only those its g
 
 ### `deep.evidence.put`
 
-In R1 · stable · `d1:12f1088c044c8fbb685a7425fc5026272bb450c96675c1b36029e9648a953c66`
+In R1 · preview · `d1:12f1088c044c8fbb685a7425fc5026272bb450c96675c1b36029e9648a953c66`
 
 Stores a file as evidence and returns its SHA-256.
 
@@ -260,13 +271,138 @@ Stores a file as evidence and returns its SHA-256.
 
 ### `deep.config.get`
 
-In R1 · stable · `d1:71b7b4e2e3db1026349e712236f9d3231abdec149243becc4ac6fd1f85f6f08d`
+In R1 · preview · `d1:71b7b4e2e3db1026349e712236f9d3231abdec149243becc4ac6fd1f85f6f08d`
 
 Reads one of the package's settings.
 
 | Parameter | Type | Required |
 |---|---|---|
 | `key` | string | yes |
+
+### `deep.store.put`
+
+In R1 · preview · `d1:ac1335306776e0ed3ee5cdeba7b615c6f0dfde8fcd5c367f3f6f513bf15ec830`
+
+Writes one item of the plug-in's own store under its key, checked against the store's schema and tied to the action call that wrote it.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
+| `key` | string | yes |
+| `value` | any | yes |
+
+### `deep.store.get`
+
+In R1 · preview · `d1:c730609691c50bf822922c5ed1f8c3f9a1b0e16003aaf842b0905856483fc6cf`
+
+Reads the latest item of the plug-in's own store under a key, or nothing when there is none.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
+| `key` | string | yes |
+
+### `deep.store.list`
+
+In R1 · preview · `d1:3a6e7074261baae03245f92663edcc20c0c3c888edcd18c537680339239048b9`
+
+Reads the latest item under every key of the plug-in's own store.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
+
+### `deep.runner.run`
+
+In R1 · preview · `d1:867ba9b60a91e097afdb8ecb28794259d5f1bfa59f66065c0ede01b825b56ea0`
+
+A model job on your own agent, headless on your plan, with its inputs by handle, a budget in USD and a deadline in ms. Each handle is checked against the plug-in's grant before the job starts. The job answers one JSON object, `{ value, cites }`; the plug-in gets a reading, `{ handle, value, cites, as_of, stale_at }`, as old as the oldest reading it cites, citing only handles its grant reaches. A job that fails rejects with its stop cause, never with text.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `prompt` | string | yes |
+| `inputs` | array | yes |
+| `budget` | object | yes |
+| `deadline` | integer | yes |
+
+### `deep.read`
+
+In R1 · preview · `d1:2b3e3c57692e9afcf5ed8f7de18e1c2b2bb7dcc722de36649ab31e6ef473166d`
+
+Reads an output interface the package uses, through the provider the hub wired the use to: its value at the minor the use was built against, with a handle its model jobs may take, or missing when none provides it.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string, `^[a-z][a-z0-9_.-]*@[1-9][0-9]*$` | yes |
+
+### `deep.call`
+
+In R1 · preview · `d1:1c5f7641c708c1fdfa6ed560da1c214609cc402478dd05977cbdc3a94d07251b`
+
+Calls an action output the package uses, through its edge: a read runs, and a change or a send asks you first, naming the calling package; it never borrows the provider's grant.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string, `^[a-z][a-z0-9_.-]*@[1-9][0-9]*$` | yes |
+| `input` | object | yes |
+
+### `deep.fetch`
+
+In R1 · preview · `d1:045034db4b5007472e621322e9c6b122fdec4cbe6c8d393c93fc688c6103c556`
+
+An outside call the hub makes for the package, only to a host its grant names and within that host's quota.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `request` | object | yes |
+
+### `deep.terminal.open`
+
+In R1 · preview · `d1:95eb23764a43d724a267df4616cd7c6c1d08a47498adb5cc957293fccbe42f51`
+
+Opens a terminal the hub hosts for the package under run-as-you: its program, folder, size and title; its input comes only from the panel you focused.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `spec` | object | yes |
+
+### `deep.terminal.list`
+
+In R1 · preview · `d1:d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f`
+
+The package's own hosted terminals, each with its run and process.
+
+### `deep.terminal.read`
+
+In R1 · preview · `d1:fa7a50bc188ddb120dbc0d0af0295f457bdc94c13e506b153d567cd02253e63a`
+
+Reads a hosted terminal's output from an offset, in pages.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `terminal` | string | yes |
+| `from` | integer | yes |
+
+### `deep.terminal.close`
+
+Arrives in R2 · preview · `d1:ecde3b67d6d77ef94056c6bc407e13d4801c3b05b0e72b0825cb147397c6e802`
+
+Closes a hosted terminal: stops its program and host process and removes its log and checkpoint.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `terminal` | string | yes |
+
+### `deep.canvas.read`
+
+Arrives in R6 · preview · `d1:834d701457943f9662ca00afc85ceb81e0f0df9495d10295b5251e066d459995`
+
+For a check runner: a canvas revision's evaluated values by stable ID at the times it names, with their content keys and a coverage block, read only and only for the documents its grant names. A pass built on a read holds only with those keys as its evidence.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `doc` | string | yes |
+| `query` | object | yes |
 
 ## Slots
 

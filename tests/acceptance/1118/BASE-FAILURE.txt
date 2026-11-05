@@ -1,0 +1,180 @@
+# #1118 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (a2ea54a5: T1's bays.mjs, no proof lane in bays), in a checkout with node_modules from npm ci
+
+$ node --test 'tests/acceptance/1118/*.test.mjs'
+(stack-trace and assertion-object lines dropped; home paths read ~, each test's sandbox <sandbox>, the proof's
+ temporary folder <proof-run>; wall time 37 s on the Spark, 60 s on a first run with a cold cargo cache)
+
+✖ #1118.5a7b1fc3 when the change edits the lock, the next proof runs npm ci once, in the change bay (17556.750026ms)
+✖ #1118.5a7b1fc3 npm ci runs in the base bay only when the merge base moved past a lock change, and once then (18576.687293ms)
+✖ #1118.5a7b1fc3 a second proof of the same tree, with no lock change, runs npm ci 0 times, though every use ran in a bay (16615.104972ms)
+✖ #1118.dc689388 when replay runs, crash's overlay and the before lane's base overlays are absent from the bays, and each use's recipe is in the record (769.904488ms)
+✖ #1118.1f06c2df a second proof of the same tree, with origin/main pinned and a twin, crash overlay and base overlay that touch no Rust, compiles 0 crates in both bays (1.04141ms)
+✖ #1118.4cb77839 an untracked tagged test in the worktree is present in the change bay, runs there, and is named in the record (0.316481ms)
+✖ #1118.e7117f8d proof wall time is a reading: each proof of the same commit prints its own (0.265792ms)
+✖ #1118.1f06c2df when the twin touches Rust, a second proof of the same tree rebuilds only the crate it touches, named in the record (17161.499415ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 36900.994467
+
+Each failure, at its assertion (with the npm calls and the probes of the run it reads):
+
+✖ #1118.5a7b1fc3 when the change edits the lock, the next proof runs npm ci once, in the change bay (17556.750026ms)
+  AssertionError [ERR_ASSERTION]: npm ci ran 5 times in the proof after the change edited the lock, not once
+    npm ci --no-audit --no-fund in <proof-run>/deep-proof-checkout-…
+    npm ci --no-audit --no-fund in <proof-run>/deep-proof-modules-…
+    npm ci --no-audit --no-fund in <proof-run>/deep-proof-modules-…
+    npm ci --no-audit --no-fund in <proof-run>/deep-proof-checkout-…
+    npm ci --no-audit --no-fund in <proof-run>/deep-proof-modules-…
+  run-2: exit 1, 7.341 s
+  probes:
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    crash in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+
+✖ #1118.5a7b1fc3 npm ci runs in the base bay only when the merge base moved past a lock change, and once then (18576.687293ms)
+  AssertionError [ERR_ASSERTION]: npm ci ran 5 times after the merge base moved past a commit that leaves the lock alone, not 0
+    npm ci --no-audit --no-fund in <proof-run>/deep-proof-checkout-…
+    npm ci --no-audit --no-fund in <proof-run>/deep-proof-modules-…
+    npm ci --no-audit --no-fund in <proof-run>/deep-proof-modules-…
+    npm ci --no-audit --no-fund in <proof-run>/deep-proof-checkout-…
+    npm ci --no-audit --no-fund in <proof-run>/deep-proof-modules-…
+  run-2: exit 1, 8.079 s
+  probes:
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    crash in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+
+✖ #1118.5a7b1fc3 a second proof of the same tree, with no lock change, runs npm ci 0 times, though every use ran in a bay (16615.104972ms)
+  AssertionError [ERR_ASSERTION]: npm ci ran 5 times in the second proof of the same tree, with no lock change:
+    in <proof-run>/deep-proof-checkout-…
+    in <proof-run>/deep-proof-modules-…
+    in <proof-run>/deep-proof-modules-…
+    in <proof-run>/deep-proof-checkout-…
+    in <proof-run>/deep-proof-modules-…
+  run-2: exit 1, 6.543 s
+  probes:
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    crash in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+
+✖ #1118.dc689388 when replay runs, crash's overlay and the before lane's base overlays are absent from the bays, and each use's recipe is in the record (769.904488ms)
+  AssertionError [ERR_ASSERTION]: the proof printed no record of a use in a bay ("BAY <event> {…}" with a role and a bay)
+  run-1: exit 1, 9.867 s
+  probes:
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    crash in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+
+✖ #1118.1f06c2df a second proof of the same tree, with origin/main pinned and a twin, crash overlay and base overlay that touch no Rust, compiles 0 crates in both bays (1.04141ms)
+  AssertionError [ERR_ASSERTION]: the second proof of the same tree compiled crates in the before-base use (cargo's own fresh flags)
+  run-2: exit 1, 6.543 s
+  probes:
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    crash in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+
+✖ #1118.4cb77839 an untracked tagged test in the worktree is present in the change bay, runs there, and is named in the record (0.316481ms)
+  AssertionError [ERR_ASSERTION]: in run-1, no record of the change's use in the change bay names the untracked tagged test tests/acceptance/9118/u.test.mjs
+  run-1: exit 1, 9.867 s
+  probes:
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    crash in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+
+✖ #1118.e7117f8d proof wall time is a reading: each proof of the same commit prints its own (0.265792ms)
+  AssertionError [ERR_ASSERTION]: the proof printed no wall-time reading (a line naming its wall time in s or ms)
+  run-1: exit 1, 9.867 s
+  probes:
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    crash in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+
+✖ #1118.1f06c2df when the twin touches Rust, a second proof of the same tree rebuilds only the crate it touches, named in the record (17161.499415ms)
+  AssertionError [ERR_ASSERTION]: in the second proof, the before-base use compiled greet, word, which none of its overlays touches
+  run-2: exit 1, 7.175 s
+  probes:
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    untracked in <proof-run>/deep-proof-checkout-…
+    untracked in <proof-run>/deep-proof-checkout-…
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    test in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    crash in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+    replay in <proof-run>/deep-proof-checkout-…: compiled ["greet","word"]
+Every test fails at its AssertionError in the test or its helpers (tests/acceptance/1118/), never on an import or
+a crash of the harness: at the base the proof runs every use (each probe above ran, in a temporary copy under
+<proof-run>), so the fixture works there; what fails is the criterion. No helper imports the code under test.
+
+## A planted implementation, and the planted wrong programs
+
+No implementation exists yet. To check that the tests can pass and that each named wrong program fails them, a
+throwaway planted implementation (written for this check only, kept out of the repository) was put in a scratch copy
+of this checkout's scripts/: bays.mjs gained a proof-wide pair claim (refusal() and acquire('bay-pair') as T1 has
+them) and a per-use replace (T1's byte-compare replace into <pair>/base or <pair>/change from the use's exact file
+list, recreateGit, T1's lock-keyed install, then one line `BAY use {index, role, bay, use, tree, overlay,
+untracked, crates, installed, written, deleted}`); baseCheckout, changeCopy, the twins, crash and replay called it in
+place of their temporary copies; proof.mjs printed `reading proof: wall time <s> s` at its end. On the Spark (20
+cores, Linux arm64, node 24.22.0, npm 11.19.1):
+
+  ℹ tests 8, pass 8, fail 0, in 15-26 s (each proof about 3 s; the lock tests 7-8 s, the Rust test 7 s, the shared
+  pair of runs 6.5 s).
+
+Then one rule at a time was broken in that planted program (PLANTED_TWIN=<name>), and the suite run again:
+
+- keeps-overlay (the replace before a use never deletes a file the use's recipe lacks):
+  ✖ #1118.dc689388 … AssertionError: in run-1, the replay-base use's copy is not exactly its recipe when replay runs
+      + 'tests/acceptance/9118/a.test.mjs: not in the recipe', … 'tests/helpers/change-only.mjs: not in the recipe'
+  every other test passed.
+- lock-blind-install (npm ci before every use, whatever the lock):
+  ✖ all three #1118.5a7b1fc3 tests … AssertionError: npm ci ran 6 times …, not 0 / not once
+  every other test passed.
+
+Two more wrong programs, beyond those twins.json names:
+
+- rewrite-all (the replace writes every file anew, bytes equal or not):
+  ✖ both #1118.1f06c2df tests … AssertionError: … the before-base use compiled greet, word …
+- no-untracked (the change's recipe leaves out the worktree's untracked files):
+  ✖ #1118.4cb77839 … AssertionError: these uses never ran their probe in run-1 (untracked-change)
+  ✖ #1118.dc689388 … AssertionError: in run-1, the replay-change use's copy is not exactly its recipe when replay runs

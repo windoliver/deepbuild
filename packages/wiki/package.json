@@ -12,7 +12,6 @@
   },
   "scripts": { "build": "tsc -p tsconfig.json" },
   "dependencies": {
-    "@deepbuild/extension-host": "0.0.0",
     "@deepbuild/record": "0.0.0"
   }
 }

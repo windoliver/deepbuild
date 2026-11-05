@@ -198,9 +198,12 @@ impl Manifest {
     /// Every item kind the build draws: R1's, the core's registered ones (its own test kinds of
     /// #372 and #389 aside) and every canvas module's, each at its current major.
     pub fn kinds_of(sealed: &deep_canvas::registry::Sealed) -> Vec<String> {
-        // R1's drawn kinds, which marks2d draws without a registry entry, first.
+        // R1's drawn kinds, which marks2d draws without a registry entry, first; the data
+        // module's only in a build that holds it.
+        let data = sealed.modules.iter().any(|m| m.name == "data");
         let mut kinds: Vec<String> = deep_canvas_marks::scene::KINDS
             .iter()
+            .filter(|k| data || deep_canvas_marks::scene::module_of(k) != "data")
             .map(|k| k.to_string())
             .collect();
         for e in sealed.kinds().entries() {

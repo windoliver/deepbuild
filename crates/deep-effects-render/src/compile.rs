@@ -171,22 +171,37 @@ pub fn compile_with(
     assets: &BTreeMap<String, PathBuf>,
     options: Options,
 ) -> Result<Compiled, Vec<Issue>> {
+    compile_planted(op, assets, options, check::CheckOptions::default())
+}
+
+/// [`compile_with`] under the check's planted wrong programs.
+pub fn compile_planted(
+    op: &Value,
+    assets: &BTreeMap<String, PathBuf>,
+    options: Options,
+    planted: check::CheckOptions,
+) -> Result<Compiled, Vec<Issue>> {
     let read = graph::read(op)?;
     let refused = front_end(&read, assets);
     if !refused.is_empty() {
         return Err(refused);
     }
-    let checked = check::check(&read)?;
+    let checked = check::check_with(&read, planted)?;
+    let multi = checked
+        .op
+        .steps
+        .values()
+        .any(|s| deep_canvas_effects::table::multi_dispatch(&s.op));
     let wgsl = match checked.op.kind {
+        // A sort, a scan or a compaction runs on the shipped kernels (structural.wgsl), never on
+        // WGSL the core writes from its steps.
+        Kind::Compute if multi => format!(
+            "// {}: shipped multi-dispatch steps (structural.wgsl).\n@compute @workgroup_size(1)\nfn cs() {{}}\n",
+            checked.op.id
+        ),
         Kind::Pass => emit::pass(&checked, options),
-        Kind::Compute => emit::compute(&checked),
-        Kind::Material => {
-            return Err(vec![Issue::at_path(
-                "operator_kind_rule",
-                "kind",
-                "this build runs no material operator",
-            )]);
-        }
+        Kind::Compute => emit::compute(&checked, options),
+        Kind::Material => emit::material_harness(&checked, options),
     };
     if let Err(e) = validate(&wgsl) {
         return Err(vec![Issue::at_path("operator_compile", "", e)]);

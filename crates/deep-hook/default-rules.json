@@ -41,6 +41,14 @@
       "next_step": "Propose the change with deep_propose instead.",
       "fail_closed": true
     },
+    "no-pi-config-write": {
+      "match": "write:~/.pi/agent/settings.json ~/.pi/agent/extensions/* ~/.pi/agent/skills/* ~/.pi/agent/npm/* ~/.pi/agent/git/* .pi/settings.json .pi/extensions/* .pi/skills/* .pi/npm/* .pi/git/*",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "pi's settings, extensions and packages decide whether DeepBuild runs in it at all, so they change only by your decision, never by an agent's write.",
+      "next_step": "Propose the change with deep_propose instead.",
+      "fail_closed": true
+    },
     "no-deepbuild-spec-write": {
       "match": "write:.deepbuild/* !~/.deepbuild/*",
       "scope": "all_repos",
@@ -151,6 +159,22 @@
       "mode": "block",
       "reason": "A delete whose reach can't be worked out before it runs, such as a script file's or one over a pattern, can remove files git can't restore, and with the hub down nothing can stage them first or ask you.",
       "next_step": "Delete the paths by name, or ask the person to run it, or retry once the hub is up.",
+      "fail_closed": true
+    },
+    "no-discarding-edits": {
+      "match": "effect:discard-edits",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "This discards uncommitted edits to tracked files, which git can't restore, and with the hub down nothing can stage them first or ask you.",
+      "next_step": "Commit the edits first, or retry once the hub is up, or ask the person to run it.",
+      "fail_closed": true
+    },
+    "no-dropping-stash": {
+      "match": "effect:drop-stash",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "This drops a stash entry's uncommitted edits, which git can't restore, and with the hub down nothing can stage them first or ask you.",
+      "next_step": "Retry once the hub is up, or ask the person to run it.",
       "fail_closed": true
     },
     "record-new-dependency": {
@@ -289,6 +313,22 @@
         "tool_name": "Write",
         "tool_input": {
           "file_path": "{work}/claude-settings.json",
+          "content": "x\n"
+        }
+      }
+    },
+    "no-pi-config-write": {
+      "planted": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "{home}/.pi/agent/settings.json",
+          "content": "x\n"
+        }
+      },
+      "twin": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "{work}/pi-settings.json",
           "content": "x\n"
         }
       }
@@ -492,6 +532,34 @@
         "tool_name": "Bash",
         "tool_input": {
           "command": "rm -rf build"
+        }
+      }
+    },
+    "no-discarding-edits": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "cd \"$REPO\" && git reset --hard"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "cd \"$REPO\" && git reset --soft HEAD~1"
+        }
+      }
+    },
+    "no-dropping-stash": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "cd \"$REPO\" && git stash drop"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "cd \"$REPO\" && git stash list"
         }
       }
     }

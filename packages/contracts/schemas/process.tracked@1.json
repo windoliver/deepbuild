@@ -1,6 +1,8 @@
 {
   "title": "process.tracked@1",
   "description": "A process a run owns, by ID and start time: the one the supervisor started, and each one it saw appear in the run's sandbox or process group.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

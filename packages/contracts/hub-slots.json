@@ -154,5 +154,18 @@
       "output-not-json"
     ],
     "since": "R2"
+  },
+  {
+    "method": "deep.registerChannel",
+    "variant": null,
+    "interface": "channel@1",
+    "digest": "d1:65b6d21a5e538e59923c135b66560bd3fb48402c2dde19f59a419c4567b49f6d",
+    "fills": "many",
+    "kit": "channel@1",
+    "planted": [
+      "delivered-without-ack",
+      "signed-without-signature"
+    ],
+    "since": "R2"
   }
 ]

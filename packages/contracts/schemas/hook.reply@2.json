@@ -1,6 +1,8 @@
 {
   "title": "hook.reply@2",
   "description": "The reply deep-hook prints, already mapped to the agent's own output. Every socket line carries its version.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "v": {

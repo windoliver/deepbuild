@@ -1,14 +1,18 @@
-//! The one shaper. A text is shaped once per spec by parley (HarfRust shaping, UAX #14 line
+//! The one shaper. A text is shaped once per run by parley (HarfRust shaping, UAX #14 line
 //! breaks, UAX #9 bidi), from the bundled fonts alone; the shaped run is the only source for
 //! layout, the fit check and drawing (canvas primitives: Text `text@1`, Semantics).
 
+use std::sync::Arc;
+
 use parley::fontique::{Collection, CollectionOptions, SourceCache};
 use parley::{
-    Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontWeight, Layout,
-    LayoutContext, LineHeight, PositionedLayoutItem, StyleProperty,
+    Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontFamilyName, FontWeight,
+    Language, Layout, LayoutContext, LineHeight, PositionedLayoutItem, StyleProperty,
 };
 
+use crate::cache::{self, Key, Planted};
 use crate::fonts::{self, Role, FACES};
+use crate::unicode::is_default_ignorable;
 use crate::unicode::{grapheme_starts, LineBreaks};
 
 /// Text's horizontal alignment within its box (`align: start | center | end = start`).
@@ -28,7 +32,12 @@ pub enum Align {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Spec<'a> {
     pub text: &'a str,
-    pub role: Role,
+    /// The bundled family the run is set in: a font role's face, as the look names it.
+    pub family: &'a str,
+    /// #417: bundled families in order; a grapheme the family lacks is set in the first that has it.
+    pub fallback: &'a [&'a str],
+    /// #417: the language the run is shaped in (BCP 47), such as `zh-Hans` for Simplified forms.
+    pub lang: Option<&'a str>,
     /// Font size in logical pixels (`size: f32, u = 13`).
     pub size: f32,
     /// `weight: u16 = 400`; the shaper picks the nearest bundled face.
@@ -50,7 +59,9 @@ impl<'a> Spec<'a> {
     pub fn label(text: &'a str) -> Self {
         Spec {
             text,
-            role: Role::Body,
+            family: Role::Body.family(),
+            fallback: &[],
+            lang: None,
             size: 13.,
             weight: 400,
             line_height: None,
@@ -158,9 +169,16 @@ impl Shaper {
             .ranged_builder(&mut self.fonts, text, 1.0, false);
         // Lines break at UAX #14's opportunities at the pinned Unicode version (17.0.0).
         builder.set_line_break_override(Some(&*decide));
-        builder.push_default(StyleProperty::FontFamily(FontFamily::named(
-            spec.role.family(),
-        )));
+        // The family first, then the fallback families in order: parley sets each cluster in the
+        // first family of the list whose face maps it.
+        let families: Vec<FontFamilyName<'_>> = std::iter::once(spec.family)
+            .chain(spec.fallback.iter().copied())
+            .map(FontFamilyName::named)
+            .collect();
+        builder.push_default(StyleProperty::FontFamily(FontFamily::List(families.into())));
+        if let Some(lang) = spec.lang {
+            builder.push_default(StyleProperty::Locale(Language::parse(lang).ok()));
+        }
         builder.push_default(StyleProperty::FontSize(spec.size));
         builder.push_default(StyleProperty::FontWeight(FontWeight::new(f32::from(
             spec.weight,
@@ -224,11 +242,40 @@ impl Shaper {
         shaped
     }
 
-    /// Shapes `spec.text`. Text that overflows its box or line limit is cut to fit with an
-    /// ellipsis; a bound value or masked text never is, and is drawn whole.
-    pub fn shape(&mut self, spec: &Spec<'_>) -> Shaped {
-        let layout = self.layout(spec, spec.text);
-        let whole = Self::collect(&layout, None, spec.text);
+    /// `text` shaped in the spec's style, whole (no line limit applied): from the shaped-run
+    /// cache, or shaped now and kept there.
+    fn run(&mut self, spec: &Spec<'_>, text: &str) -> Arc<Shaped> {
+        let key = Key::of(spec, text, false);
+        if let Some(run) = cache::get(&key) {
+            return run;
+        }
+        let run = self.shape_now(spec, text, &key);
+        cache::put(key, run)
+    }
+
+    /// `text` shaped in the spec's style, past the cache, the shaping recorded.
+    fn shape_now(&mut self, spec: &Spec<'_>, text: &str, key: &Key) -> Shaped {
+        let layout = self.layout(spec, text);
+        let run = Self::collect(&layout, None, text);
+        cache::shaped(key, run.glyphs.len());
+        run
+    }
+
+    /// Whether `spec`'s run is in the shaped-run cache, so shaping it now costs a lookup.
+    pub fn is_cached(spec: &Spec<'_>) -> bool {
+        cache::holds(&Key::of(spec, spec.text, true))
+            || cache::holds(&Key::of(spec, spec.text, false))
+    }
+
+    /// Shapes `spec.text`, once per run: a run the shaped-run cache holds is shared, not shaped
+    /// again. Text that overflows its box or line limit is cut to fit with an ellipsis; a bound
+    /// value or masked text never is, and is drawn whole.
+    pub fn shape(&mut self, spec: &Spec<'_>) -> Arc<Shaped> {
+        let fitted = Key::of(spec, spec.text, true);
+        if let Some(run) = cache::get(&fitted) {
+            return run;
+        }
+        let whole = self.run(spec, spec.text);
         let overflows = spec.width.is_some_and(|w| whole.width > w + 0.01)
             || spec
                 .max_lines
@@ -236,41 +283,71 @@ impl Shaper {
         if !overflows || spec.bound || spec.mask {
             return whole;
         }
-        // The longest prefix, by character, whose shape with an ellipsis fits.
+        let reshaping = cache::planted() == Some(Planted::ReshapingFit);
+        // The longest prefix, by character, whose run with an ellipsis fits. Each candidate's
+        // run comes through the cache, so no prefix is shaped twice; a candidate that fits its
+        // line limit has no line past it, so its whole run is the one drawn.
         let chars: Vec<(usize, char)> = spec.text.char_indices().collect();
         let (mut low, mut high) = (0usize, chars.len());
-        let mut best = Shaped::default();
+        let mut best: Option<Arc<Shaped>> = None;
         while low < high {
+            if reshaping {
+                let key = Key::of(spec, spec.text, false);
+                self.shape_now(spec, spec.text, &key);
+            }
             let mid = (low + high).div_ceil(2);
             let end = chars.get(mid).map_or(spec.text.len(), |(i, _)| *i);
             let candidate = format!("{}…", spec.text[..end].trim_end());
-            let layout = self.layout(spec, &candidate);
-            let shaped = Self::collect(&layout, spec.max_lines, &candidate);
+            let shaped = self.run(spec, &candidate);
             let fits = spec.width.is_none_or(|w| shaped.width <= w + 0.01)
                 && spec
                     .max_lines
-                    .is_none_or(|max| layout.lines().count() <= usize::from(max));
+                    .is_none_or(|max| shaped.lines <= usize::from(max));
             if fits {
-                best = shaped;
+                best = Some(shaped);
                 low = mid;
             } else {
                 high = mid - 1;
             }
         }
-        if best.glyphs.is_empty() {
-            let layout = self.layout(spec, "…");
-            best = Self::collect(&layout, spec.max_lines, "…");
-        }
+        let mut best = match best {
+            Some(run) => Shaped::clone(&run),
+            // Not even an ellipsis fits a line limit of none.
+            None if spec.max_lines == Some(0) => Shaped {
+                shown: "…".into(),
+                ..Shaped::default()
+            },
+            None => Shaped::clone(&self.run(spec, "…")),
+        };
         best.ellipsized = true;
-        best
+        cache::put(fitted, best)
+    }
+
+    /// #417: the graphemes of `text` that neither the spec's family nor any of its fallbacks can
+    /// draw, in order, each once: those any of whose glyphs is `.notdef`. Whitespace and
+    /// default-ignorable code points alone (joiners, variation selectors) need no glyph.
+    pub fn missing(&mut self, spec: &Spec<'_>, text: &str) -> Vec<String> {
+        let run = self.run(spec, text);
+        let starts = grapheme_starts(text);
+        let mut out: Vec<String> = Vec::new();
+        for (i, start) in starts.iter().enumerate() {
+            let end = starts.get(i + 1).copied().unwrap_or(text.len());
+            let grapheme = &text[*start..end];
+            let needs_glyph = grapheme
+                .chars()
+                .any(|c| !c.is_whitespace() && !is_default_ignorable(c));
+            let notdef = run.glyphs.iter().any(|g| g.grapheme == i && g.id == 0);
+            if needs_glyph && notdef && !out.iter().any(|g| g == grapheme) {
+                out.push(grapheme.to_string());
+            }
+        }
+        out
     }
 
     /// The fit check: shapes `widest` (the spec's own text when `None`) as the spec would and
     /// reads whether it fits the box and the line limit. A bound value's numerals are tabular.
     pub fn fit(&mut self, spec: &Spec<'_>, widest: Option<&str>) -> Fit {
-        let text = widest.unwrap_or(spec.text);
-        let layout = self.layout(spec, text);
-        let shaped = Self::collect(&layout, None, text);
+        let shaped = self.run(spec, widest.unwrap_or(spec.text));
         let fits = spec.width.is_none_or(|w| shaped.width <= w + 0.01)
             && spec
                 .max_lines

@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use deep_text::{face_of, raster_size, Atlas, Page, Placed, Role, Shaped, Shaper, Spec};
+use deep_text::{face_of, raster_size, Atlas, Page, Placed, Role, Shaped, Shaper, Spec, PHASES};
 pub use deep_text::{PAGE, PAGES};
 
 /// The em a world-size label's run is shaped at: its size is in meters, so its glyphs scale.
@@ -56,7 +56,7 @@ pub struct Labels {
     atlas: Atlas,
     /// The pages as frames last took them, copied again only at a new generation.
     pages: Vec<AtlasPage>,
-    runs: BTreeMap<(String, Role, u32), Shaped>,
+    runs: BTreeMap<(String, Role, u32), Arc<Shaped>>,
     /// #381 AC1's wrong program (`deep-gpu run --planted label_mask`): the base's path, each label
     /// shaped at a fixed em for a mask of its own, with nothing placed in the atlas.
     pub fixed_em: bool,
@@ -114,10 +114,12 @@ impl Labels {
     }
 
     /// `text`'s run in `role` at `size` px, shaped on first sight: its box in px, and its glyphs.
-    pub(crate) fn run(&mut self, text: &str, role: Role, size: f32) -> ([f64; 2], Vec<Glyph>) {
+    pub fn run(&mut self, text: &str, role: Role, size: f32) -> ([f64; 2], Vec<Glyph>) {
         let size = if self.fixed_em { MASK_EM_PX } else { size };
         let spec = Spec {
-            role,
+            family: role.family(),
+            fallback: &[],
+            lang: None,
             size,
             ..Spec::label(text)
         };
@@ -148,7 +150,11 @@ impl Labels {
     }
 
     /// Places a label's glyphs in the atlas at `em_px`, the device px one em of its run takes
-    /// on screen, quantized; `bounds` is its box in run px.
+    /// on screen, quantized; `bounds` is its box in run px. A screen-size label (`world` false)
+    /// is a 2D text at its size instead (#1174): each glyph rasterized at that size and at its
+    /// pen's phase within its pixel, with its quad in whole pixels off the label's centre less
+    /// the fraction of its half box ([`half_fraction`]), where the renderer snaps the box's top
+    /// left to the device pixel grid as 2D text's is, so it draws texel for texel.
     pub(crate) fn place(
         &mut self,
         text: &str,
@@ -156,11 +162,16 @@ impl Labels {
         glyphs: &mut [Glyph],
         bounds: [f64; 2],
         em_px: f64,
+        world: bool,
     ) {
         if self.fixed_em {
             return;
         }
-        let raster = raster_size(em_px);
+        let raster = if world {
+            raster_size(em_px)
+        } else {
+            em_px as f32
+        };
         let shaper = &mut self.shaper;
         let Some(size) = glyphs.first().map(|g| g.size) else {
             return;
@@ -170,7 +181,9 @@ impl Labels {
             .entry((text.to_string(), role, size.to_bits()))
             .or_insert_with(|| {
                 shaper.shape(&Spec {
-                    role,
+                    family: role.family(),
+                    fallback: &[],
+                    lang: None,
                     size,
                     ..Spec::label(text)
                 })
@@ -179,6 +192,22 @@ impl Labels {
         let [w, h] = [bounds[0] as f32, bounds[1] as f32];
         for (glyph, g) in glyphs.iter_mut().zip(&shaped.glyphs) {
             glyph.raster = raster;
+            if !world && size == raster {
+                let pen = [g.x - (w / 2.0).floor(), g.y - (h / 2.0).floor()];
+                let steps = pen.map(|v| (v * f32::from(PHASES)).round());
+                let whole = steps.map(|s| (s / f32::from(PHASES)).floor());
+                let phase = [0, 1].map(|i| (steps[i] - whole[i] * f32::from(PHASES)) as u8);
+                glyph.atlas = self.atlas.glyph_at(&g.font, g.id, raster, phase);
+                if let Some(p) = glyph.atlas {
+                    glyph.rect = [
+                        (whole[0] + p.left as f32) / size,
+                        (whole[1] + p.top as f32) / size,
+                        p.w as f32 / size,
+                        p.h as f32 / size,
+                    ];
+                }
+                continue;
+            }
             glyph.atlas = self.atlas.glyph(&g.font, g.id, raster);
             if let Some(p) = glyph.atlas {
                 glyph.rect = [
@@ -190,4 +219,10 @@ impl Labels {
             }
         }
     }
+}
+
+/// The fraction of half a screen-size label's box, x and y: its centre less these is where its
+/// box's top left falls a whole number of px from, which the renderer snaps (#1174).
+pub fn half_fraction(bounds: [f64; 2]) -> [f32; 2] {
+    bounds.map(|b| (b / 2.0).fract() as f32)
 }

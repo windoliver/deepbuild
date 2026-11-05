@@ -1,0 +1,16 @@
+{
+  "issue": 428,
+  "criterion": "#428.8c47edc1",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), judging at the owner's request in the session (\"close whatever gaps\"); not the owner's own call",
+  "when": "2026-11-05T09:05:45-08:00",
+  "screenshots": {
+    "khronos-sheen-chair.png": "bc0c0c89fb7c8388254049b9b120534be3317dcd609624441b0c6e92a5c7754e",
+    "khronos-anisotropy-strength.png": "0e9631369f668382039b0ae294e94c8f4c64c664fbb144411cfe7a98cbc58b9f",
+    "khronos-dispersion.png": "4421b15ca0dd0473a7817c371410fd79df29782f2dd084227df553d5fa7a892a",
+    "khronos-iridescence-spheres.png": "9c7cc4e71ef47022c604746439fc501ce6d7e341878898c21e3b4d8920bb7a5a",
+    "flake-panel.png": "4f83002fa409d1abbc5ad1b40e743d5c6a6cd9011fb45dbecfb8d46982e2396a",
+    "flake-dolly.apng": "24015feadd083a88393a8bd46c5dfdf30da33efad1d373f748d257387229c455"
+  },
+  "note": "The velvet chair reads as soft cloth with its tufting and wooden legs; anisotropic highlights stretch into arcs that grow with strength and flatten at roughness 1; the prisms show the checkerboard through them with colour fringes growing at dispersion 2 and 5; the thin films tint the spheres pink, green and cyan; the flakes stay put on the panel through the dolly. Weak points: the anisotropy spheres' shaded halves blend into the grey background, the iridescent tints are faint on the near-white base, and the 1 cm flakes under a 0.3 coat read as coarse static rather than glinting paint. The chair and dispersion frames vary slightly from run to run (#1316), so a later run may not reproduce these hashes."
+}

@@ -1,0 +1,30 @@
+The SVG and PNG files under this folder are copied unchanged from resvg
+(https://github.com/linebender/resvg) at commit 77b12f4951a7b75d759c42e8c9497cff7c839c3c,
+from crates/resvg/tests/tests/ at the same relative paths:
+
+  masking/clipPath, masking/mask, paint-servers/pattern, painting/marker, structure/style, shapes/rect
+
+resvg is dual-licensed under the Apache License, Version 2.0, or the MIT license, at your option.
+The license texts are at:
+
+  https://github.com/linebender/resvg/blob/77b12f4951a7b75d759c42e8c9497cff7c839c3c/LICENSE-APACHE
+  https://github.com/linebender/resvg/blob/77b12f4951a7b75d759c42e8c9497cff7c839c3c/LICENSE-MIT
+
+These files are used under the MIT license, whose terms follow.
+
+Copyright (c) the resvg authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

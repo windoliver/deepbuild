@@ -1,6 +1,8 @@
 {
   "title": "adapter.caps@1",
   "description": "What an adapter can do, every flag present: delivery and gates choose a route from these, never from the agent's name.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "holdStop": {

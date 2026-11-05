@@ -1,30 +1,54 @@
-//! `deep-gpu run [--backend noop] [--withhold timestamps] [--planted <name>]` (issue #377;
-//! tests/acceptance/377/README.md, The surface under test; #379 adds the meter's calls,
-//! tests/acceptance/379/README.md): one JSON scenario per stdin line, `{"out": dir, "calls":
+//! `deep-gpu run [--headless] [--backend noop] [--withhold <feature>]… [--validation]
+//! [--planted <name>]` (issue #377; tests/acceptance/377/README.md, The surface under test; #379
+//! adds the meter's calls, tests/acceptance/379/README.md; #140 the GPU seam's, with `--adapters
+//! <file>` and `--quirks <file>` in test-seam builds, tests/acceptance/140/gpu/README.md): one JSON
+//! scenario per stdin line, `{"out": dir, "calls":
 //! [Call]}`, answered with one line `{"ok": true, "replies": [Reply]}`. Every call of a run uses one
 //! app: one GPU (one wgpu device), one headless window, and each scene's session from call to call.
+//! With `--headless` (#140, tests/acceptance/140/view/README.md, "deep-gpu: the live-headless
+//! calls") the run is the headless canvas worker instead: it answers `snapshot` alone, with one GPU
+//! and no app, so no window. #385 adds the 2D calls (`layers`, `window2d`, `vello_gpu`,
+//! `spike2d`; tests/acceptance/385/README.md) and, in test-spike builds, `--spike-record <file>`.
+//! #417 adds `film2d`: a 2D film in the window under a look, with its look switches timed.
 
 #[cfg(feature = "test-meter")]
 mod allocations;
+mod blur;
+mod calibrate;
+mod columns;
 mod compare;
 mod compile;
 mod conformance;
 mod effects;
+mod film;
+mod fixtures;
+mod flat;
 mod frames;
 mod golden;
 mod guard;
 mod host;
+mod interp_suite;
 mod levels;
 mod live;
 mod liveview;
+mod lod;
+mod marks2d;
+mod opframe;
+mod parity;
 mod plugin;
 mod reference;
 mod scene;
+mod seam;
 mod session3;
+mod simplify;
 mod status;
+mod steps_ref;
 #[cfg(feature = "test-meter")]
 mod testgpu;
+mod textures;
 mod timing;
+mod tone;
+mod validation;
 mod view3d;
 mod window;
 mod worker;
@@ -33,8 +57,9 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::sync::Arc;
 
-use deep_gpu::device::{Backend, Gpu, Withheld};
+use deep_gpu::device::{Backend, Gpu};
 use deep_gpu::guard::Declarations;
+use deep_gpu::seam::Startup;
 use deep_gpu::surface::Path;
 use gpui_kit::HeadlessAppContext;
 use serde_json::{json, Value};
@@ -94,10 +119,132 @@ pub enum Planted {
     /// #383's wrong programs (tests/acceptance/383/README.md: Planted programs).
     LoadsEverything,
     SlowGpuFrame,
+    /// #854's wrong program: the renderer compiles its pipelines in the first frame.
+    CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
     BudgetsEachWindow,
     StepsMainWindow,
     TellsFirstStepOnly,
+    /// #140's wrong programs (tests/acceptance/140/gpu/README.md: Planted programs).
+    WithholdsInCode,
+    PicksFirstAdapter,
+    InstallsStalePipelines,
+    ReadsPastBuffer,
+    WritesNan,
+    ReadsPixelsOnly,
+    /// #140's (tests/acceptance/140/view/README.md: Planted programs): the live GPU layer's
+    /// read-back has one pixel one code value off in one channel.
+    ShiftsGpuPixel,
+    /// #386's wrong programs (tests/acceptance/386/README.md: Planted programs).
+    BilinearOnly,
+    UpscaleReadsPreviousFrame,
+    ExportsLiveSurface,
+    SlowUpscale,
+    StatusBeforeUpscale,
+    StatusWithoutDepth,
+    OutlinesBeforeUpscale,
+    /// #1174's wrong program: screen-size labels drawn in the geometry pass, before the upscale.
+    LabelsBeforeUpscale,
+    /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
+    /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on
+    /// whatever its spike record says; each sector of a group composited on its own.
+    ShiftsFillTwoCodes,
+    ShiftsGlyphQuads,
+    IgnoresSpike,
+    SectorsSourceOver,
+    /// #420's wrong programs (tests/acceptance/420/README.md: Planted programs): particles
+    /// stepped from the last frame; mesh edges read unwelded, or drawn without the depth test;
+    /// a shared result released when a revision drops its last reader.
+    ParticlesIntegrate,
+    /// #419's wrong programs (tests/acceptance/419/README.md: Assumed surfaces 11).
+    VelocityFromTransform,
+    SamplerStepsWorld,
+    VelocityPairsByIndex,
+    SettleResetsEachFrame,
+    SamplerHoldsCamera,
+    EdgesUnwelded,
+    EdgesSkipDepth,
+    ReleasesAtRevision,
+    /// #417's: the look switch's clock stops at the request, before the new look is on screen.
+    StopsAtRequest,
+    /// #421's wrong programs (tests/acceptance/421/README.md: Planted programs): front faces
+    /// chosen without the world determinant; coplanar ties left to a submission order that turns
+    /// over each frame; a spot's lumens spread over its cone; status outlines tone mapped.
+    WindingIgnoresDeterminant,
+    TiesBySubmission,
+    SpotCountsCone,
+    StatusBeforeToneMap,
+    /// #418's: the bloom's lens dirt laid over the frame instead of multiplying its light.
+    DirtOverlay,
+    /// #429's wrong programs (tests/acceptance/429/README.md: Planted programs).
+    RenderBackDrawsLiveOnly,
+    TakesDeclaredClass,
+    AttributeStride16,
+    PartialUpdate2Bytes,
+    RecopiesWholeColumn,
+    F32CompareFloorExact,
+    TrustsWriteIndex,
+    DropsSwizzleLast,
+    NoiseWeightHalved,
+    SettlesWithFallback,
+    /// #423's wrong programs (tests/acceptance/423/README.md: Planted programs): the
+    /// metallic-roughness map decoded from sRGB; a PNG's gAMA applied as it decodes; every map
+    /// sampled at anisotropy 1; a KTX2 normal map transcoded as sRGB color.
+    MrFromSrgb,
+    AppliesImageGamma,
+    AnisotropyOne,
+    NormalMapAsSrgb,
+    /// #422's wrong programs (tests/acceptance/422/README.md: Planted programs): every final
+    /// target black; the puffs not drawn; a cascade kept while the solid count holds; the
+    /// environment prefiltered one mip a frame; the specular lobe uncompensated, or compensated on
+    /// environment light alone; metallic premixed into one F0 before shading.
+    DrawsBlack,
+    DropsClouds,
+    /// #424's wrong programs.
+    AddWritesDepth,
+    AddWithoutDepthTest,
+    IdsByDrawPosition,
+    IdsIgnoreMask,
+    CutsColorOnly,
+    SinglePixelPick,
+    CascadeCacheKeepsStale,
+    PrefilterOverFrames,
+    UncompensatedLobe,
+    CompensatesEnvironmentOnly,
+    PremixedMetallic,
+    /// #425's wrong programs (tests/acceptance/425/README.md: Planted programs): a band or the
+    /// light cut held by session hysteresis; a band change faded over wall-clock time; a mesh
+    /// level chosen from the previous frame's view; band masks keyed per band; the blend level
+    /// computed in f32 from the drawn frame; a climb that never steps down; canonical renders at
+    /// the live rung; a frame-health drop climbed again without a view change.
+    BandHysteresis,
+    LightCutHysteresis,
+    BandFadeByWallClock,
+    LevelByEarlierFrame,
+    BandMasksIndependent,
+    BlendLevelOnGpu,
+    ClimbNeverStepsDown,
+    CanonicalClimbs,
+    ReclimbsWithoutViewChange,
+    /// #428's wrong programs (tests/acceptance/428/README.md: Planted programs).
+    DropsDispersion,
+    AbsorptionIgnoresThickness,
+    TransmissionIgnoresRoughness,
+    DispersionSamplesOnce,
+    SpecularColorIgnored,
+    IridescenceIgnoresThickness,
+    DiffuseLambert,
+    OrenNayarUncompensated,
+    RetroreflectionIgnored,
+    FlakesByPixel,
+    // #483: the structural steps' wrong programs.
+    IterateFeedsFirst,
+    SortTiesDecreasing,
+    CompactByAtomic,
+    IndexWraps,
+    MipsLevel0Only,
+    MipsKeptUnderOldKey,
+    PoolWithoutClear,
 }
 
 impl Planted {
@@ -145,9 +292,97 @@ impl Planted {
             "guard_to_grey" => Planted::GuardToGrey,
             "loads_everything" => Planted::LoadsEverything,
             "slow_gpu_frame" => Planted::SlowGpuFrame,
+            "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,
             "tells_first_step_only" => Planted::TellsFirstStepOnly,
+            "withholds_in_code" => Planted::WithholdsInCode,
+            "picks_first_adapter" => Planted::PicksFirstAdapter,
+            "installs_stale_pipelines" => Planted::InstallsStalePipelines,
+            "reads_past_buffer" => Planted::ReadsPastBuffer,
+            "writes_nan" => Planted::WritesNan,
+            "reads_pixels_only" => Planted::ReadsPixelsOnly,
+            "shifts_gpu_pixel" => Planted::ShiftsGpuPixel,
+            "bilinear_only" => Planted::BilinearOnly,
+            "upscale_reads_previous_frame" => Planted::UpscaleReadsPreviousFrame,
+            "exports_live_surface" => Planted::ExportsLiveSurface,
+            "slow_upscale" => Planted::SlowUpscale,
+            "status_before_upscale" => Planted::StatusBeforeUpscale,
+            "status_without_depth" => Planted::StatusWithoutDepth,
+            "outlines_before_upscale" => Planted::OutlinesBeforeUpscale,
+            "labels_before_upscale" => Planted::LabelsBeforeUpscale,
+            "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
+            "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
+            "ignores_spike" => Planted::IgnoresSpike,
+            "sectors_source_over" => Planted::SectorsSourceOver,
+            "particles_integrate" => Planted::ParticlesIntegrate,
+            "velocity_from_transform" => Planted::VelocityFromTransform,
+            "sampler_steps_world" => Planted::SamplerStepsWorld,
+            "velocity_pairs_by_index" => Planted::VelocityPairsByIndex,
+            "settle_resets_each_frame" => Planted::SettleResetsEachFrame,
+            "sampler_holds_camera" => Planted::SamplerHoldsCamera,
+            "edges_unwelded" => Planted::EdgesUnwelded,
+            "edges_skip_depth" => Planted::EdgesSkipDepth,
+            "releases_at_revision" => Planted::ReleasesAtRevision,
+            "stops_at_request" => Planted::StopsAtRequest,
+            "winding_ignores_determinant" => Planted::WindingIgnoresDeterminant,
+            "ties_by_submission" => Planted::TiesBySubmission,
+            "spot_counts_cone" => Planted::SpotCountsCone,
+            "status_before_tone_map" => Planted::StatusBeforeToneMap,
+            "dirt_overlay" => Planted::DirtOverlay,
+            "render_back_draws_live_only" => Planted::RenderBackDrawsLiveOnly,
+            "takes_declared_class" => Planted::TakesDeclaredClass,
+            "attribute_stride_16" => Planted::AttributeStride16,
+            "partial_update_2_bytes" => Planted::PartialUpdate2Bytes,
+            "recopies_whole_column" => Planted::RecopiesWholeColumn,
+            "f32_compare_floor_exact" => Planted::F32CompareFloorExact,
+            "trusts_write_index" => Planted::TrustsWriteIndex,
+            "drops_swizzle_last" => Planted::DropsSwizzleLast,
+            "noise_weight_halved" => Planted::NoiseWeightHalved,
+            "settles_with_fallback" => Planted::SettlesWithFallback,
+            "mr_from_srgb" => Planted::MrFromSrgb,
+            "applies_image_gamma" => Planted::AppliesImageGamma,
+            "anisotropy_one" => Planted::AnisotropyOne,
+            "normal_map_as_srgb" => Planted::NormalMapAsSrgb,
+            "draws_black" => Planted::DrawsBlack,
+            "drops_clouds" => Planted::DropsClouds,
+            "add_writes_depth" => Planted::AddWritesDepth,
+            "add_skips_depth_test" => Planted::AddWithoutDepthTest,
+            "ids_by_draw_position" => Planted::IdsByDrawPosition,
+            "ids_ignore_mask" => Planted::IdsIgnoreMask,
+            "cut_color_only" => Planted::CutsColorOnly,
+            "single_pixel_pick" => Planted::SinglePixelPick,
+            "cascade_cache_keeps_stale" => Planted::CascadeCacheKeepsStale,
+            "prefilter_over_frames" => Planted::PrefilterOverFrames,
+            "uncompensated_lobe" => Planted::UncompensatedLobe,
+            "compensates_environment_only" => Planted::CompensatesEnvironmentOnly,
+            "premixed_metallic" => Planted::PremixedMetallic,
+            "band_hysteresis" => Planted::BandHysteresis,
+            "light_cut_hysteresis" => Planted::LightCutHysteresis,
+            "band_fade_by_wall_clock" => Planted::BandFadeByWallClock,
+            "level_by_earlier_frame" => Planted::LevelByEarlierFrame,
+            "band_masks_independent" => Planted::BandMasksIndependent,
+            "blend_level_on_gpu" => Planted::BlendLevelOnGpu,
+            "climb_never_steps_down" => Planted::ClimbNeverStepsDown,
+            "canonical_climbs" => Planted::CanonicalClimbs,
+            "reclimbs_without_view_change" => Planted::ReclimbsWithoutViewChange,
+            "drops_dispersion" => Planted::DropsDispersion,
+            "absorption_ignores_thickness" => Planted::AbsorptionIgnoresThickness,
+            "transmission_ignores_roughness" => Planted::TransmissionIgnoresRoughness,
+            "dispersion_samples_once" => Planted::DispersionSamplesOnce,
+            "specular_color_ignored" => Planted::SpecularColorIgnored,
+            "iridescence_ignores_thickness" => Planted::IridescenceIgnoresThickness,
+            "diffuse_lambert" => Planted::DiffuseLambert,
+            "oren_nayar_uncompensated" => Planted::OrenNayarUncompensated,
+            "retroreflection_ignored" => Planted::RetroreflectionIgnored,
+            "flakes_by_pixel" => Planted::FlakesByPixel,
+            "iterate_feeds_first" => Planted::IterateFeedsFirst,
+            "sort_ties_decreasing" => Planted::SortTiesDecreasing,
+            "compact_by_atomic" => Planted::CompactByAtomic,
+            "index_wraps" => Planted::IndexWraps,
+            "mips_level0_only" => Planted::MipsLevel0Only,
+            "mips_kept_under_old_key" => Planted::MipsKeptUnderOldKey,
+            "pool_without_clear" => Planted::PoolWithoutClear,
             _ => return None,
         })
     }
@@ -175,6 +410,15 @@ pub struct App {
     pub scenes: HashMap<String, Arc<Scene>>,
     /// Each scene session's UI side, routed GPUI's surface reports.
     pub watched: HashMap<String, deep_gpu::view::Ui>,
+    /// The compile-thread job held open, and how many jobs were held (#140).
+    pub held: Option<compile::Held>,
+    pub jobs: u64,
+    /// A validation lane's run (`--validation`, #140).
+    pub validation: bool,
+    /// Whether Vello GPU draws 2D writer layers, by its spike record (#385).
+    pub vello: marks2d::Gate,
+    /// The run's decode worker and the maps it made (#423).
+    pub made: textures::Made,
 }
 
 pub fn refused(code: &str, reason: impl Into<String>) -> Value {
@@ -327,22 +571,43 @@ impl App {
             Some("conformance") => conformance::call(self, out, call),
             Some("render") => frames::render(self, call),
             Some("compile") => compile::call(self, call),
+            Some("lose_device") => compile::lose_device(self),
+            Some("release_job") => compile::release_job(self),
+            Some("gated") => seam::gated(self, call),
+            Some("seam_suite") => seam::seam_suite(self, out, call),
+            Some("validate") => validation::validate(self, out, call),
+            Some("check_render") => validation::check_render(self, call),
             Some("compare") => compare::compare(self, call),
             Some("declare_dark") => compare::declare(self, call),
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("simplify") => simplify::call(out, call),
+            Some("workers") => textures::workers(self),
+            Some("tone") => tone::call(self, out, call),
             Some("host") => host::call(self, out, call),
             Some("guard") => guard::call(self, out, call),
             Some("operators") => effects::operators(self),
+            Some("calibrate") => calibrate::calibrate(self),
             Some("reference") => effects::reference(self, out, call),
+            Some("check_operator") if opframe::wants(call) => opframe::call(self, out, call),
             Some("check_operator") => effects::check_operator(self, call),
             Some("op") => effects::op(self, call),
+            Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),
             Some("cross_gpu") => effects::cross_gpu(self, call),
+            Some("op_table") => steps_ref::op_table(),
+            Some("steps_reference") => steps_ref::steps_reference(self, out),
+            Some("interp_suite") => interp_suite::call(self, call),
             Some("golden") => golden::golden(self, out, call),
             Some("decide") => golden::decide(self, call),
             Some("live") => live::call(self, out, call),
+            Some("live_frame") => parity::live_frame(self, out, call),
+            Some("layers") => marks2d::layers(self, out, call),
+            Some("window2d") => marks2d::window2d(self, out, call),
+            Some("vello_gpu") => marks2d::vello_gpu(self),
+            Some("spike2d") => marks2d::spike2d(self, out, call),
+            Some("film2d") => film::film2d(self, call),
             Some("canonical") => live::canonical(self, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
@@ -394,25 +659,74 @@ fn bad_input() -> ! {
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    if args.next().as_deref() != Some("run") {
+    // #423: a copy of this binary started as the run's decode worker (deep-codecs).
+    let first = args.next();
+    if first.as_deref() == Some("decode-worker") {
+        let rest: Vec<String> = args.collect();
+        std::process::exit(deep_codecs::serve(deep_codecs::DECODE_WORKER, &rest));
+    }
+    if first.as_deref() != Some("run") {
         bad_input();
     }
-    let (mut backend, mut planted, mut withheld) = (Backend::Gpu, None, Withheld::default());
+    let (mut backend, mut planted) = (Backend::Gpu, None);
+    let (mut startup, mut validation) = (Startup::default(), false);
+    let mut headless = false;
+    // The shipped record, or in test-spike builds the one `--spike-record` names.
+    #[allow(unused_mut)]
+    let mut spike = marks2d::SPIKE.to_string();
     while let Some(a) = args.next() {
         match a.as_str() {
+            #[cfg(feature = "test-spike")]
+            "--spike-record" => match args.next().map(std::fs::read_to_string) {
+                Some(Ok(text)) => spike = text,
+                _ => bad_input(),
+            },
+            "--headless" => headless = true,
             "--backend" => match args.next().as_deref() {
                 Some("noop") => backend = Backend::Noop,
                 _ => bad_input(),
             },
             "--planted" => match args.next().as_deref().and_then(Planted::parse) {
-                Some(p) => planted = Some(p),
+                Some(p) => {
+                    if p == Planted::DropsDispersion {
+                        deep_canvas_scene3d::gltf::DROPS_DISPERSION
+                            .store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    planted = Some(p)
+                }
                 None => bad_input(),
             },
-            "--withhold" => match args.next().as_deref() {
-                Some("timestamps") => withheld.timestamps = true,
+            "--withhold" => match args.next().as_deref().and_then(deep_gpu::seam::row) {
+                Some(r) => startup.withhold.push(r.feature),
+                None => bad_input(),
+            },
+            "--validation" => validation = true,
+            #[cfg(feature = "test-seam")]
+            "--adapters" => match args.next().as_deref().and_then(seam::test_adapters) {
+                Some(a) => startup.adapters = Some(a),
+                None => bad_input(),
+            },
+            #[cfg(feature = "test-seam")]
+            "--quirks" => match args.next().map(std::fs::read_to_string) {
+                Some(Ok(text)) => match deep_gpu::seam::Quirks::parse(&text) {
+                    Ok(q) => startup.quirks = q,
+                    Err(_) => bad_input(),
+                },
                 _ => bad_input(),
             },
             _ => bad_input(),
+        }
+    }
+    let Ok(vello) = marks2d::Gate::read(&spike, planted == Some(Planted::IgnoresSpike)) else {
+        bad_input();
+    };
+    startup.picks_first = planted == Some(Planted::PicksFirstAdapter);
+    startup.withholds_in_code = planted == Some(Planted::WithholdsInCode);
+    if validation {
+        // Metal reads these as the device opens, so they're set before it does (README: The
+        // validation lane).
+        for var in validation::ENV {
+            std::env::set_var(var, "1");
         }
     }
     #[cfg(target_os = "macos")]
@@ -426,16 +740,35 @@ fn main() {
     }
     let worker = match Worker::start(
         backend,
-        withheld,
+        &startup,
         planted == Some(Planted::SubmitsOnCompletion),
         planted == Some(Planted::ReleasesBeforeCompletion),
     ) {
         Ok(w) => w,
-        Err(e) => {
-            println!("{}", json!({"ok": false, "code": "no_device", "reason": e}));
+        Err(r) if r.code == "missing_feature" => {
+            println!(
+                "{}",
+                json!({"ok": false, "code": r.code, "adapter": r.adapter, "missing": r.missing, "reason": r.reason})
+            );
+            std::process::exit(1);
+        }
+        Err(r) => {
+            println!(
+                "{}",
+                json!({"ok": false, "code": "no_device", "reason": r.reason})
+            );
             std::process::exit(1);
         }
     };
+    if headless {
+        // The headless canvas worker opens no window and holds no app: no GPUI context, the GPU
+        // layer drawn into its offscreen slots (#140).
+        serve(|out, call| match call["call"].as_str() {
+            Some("snapshot") => parity::snapshot(&worker, backend, out, call),
+            _ => refused("bad_input", "the headless worker answers snapshot alone"),
+        });
+        return;
+    }
     // The platform's handoff as this task ships it: macOS passed the conformance fixture, so it
     // hands off zero copy until a conformance run on this machine says otherwise; the noop backend
     // has no surface to share, so it copies.
@@ -460,7 +793,17 @@ fn main() {
         window: None,
         scenes: HashMap::new(),
         watched: HashMap::new(),
+        held: None,
+        jobs: 0,
+        validation,
+        vello,
+        made: Default::default(),
     };
+    serve(|out, call| app.call(out, call));
+}
+
+/// Answers each scenario line on stdin with one line, each call through `call`.
+fn serve(mut call: impl FnMut(&str, &Value) -> Value) {
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {
@@ -472,7 +815,7 @@ fn main() {
                     .as_array()
                     .expect("checked above")
                     .iter()
-                    .map(|c| app.call(&out, c))
+                    .map(|c| call(&out, c))
                     .collect();
                 json!({"ok": true, "replies": replies})
             }

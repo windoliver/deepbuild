@@ -10,6 +10,8 @@
 use std::collections::BTreeMap;
 
 use deep_canvas::template;
+use deep_canvas_motion::eval::Validity;
+use deep_canvas_motion::program::Program;
 use serde_json::{json, Value};
 
 use crate::hub::{Hub, Planted};
@@ -41,7 +43,9 @@ fn heard<'a>(doc: &'a Value, hidden: &[String]) -> Vec<(&'a String, &'a Value)> 
                 != "decoration"
         })
         .collect();
-    out.sort_by_key(|(id, item)| (layer_order(item), text(item.get("order")), (*id).clone()));
+    out.sort_by_cached_key(|(id, item)| {
+        (layer_order(item), text(item.get("order")), (*id).clone())
+    });
     out
 }
 
@@ -70,6 +74,17 @@ pub(crate) fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
     nodes
 }
 
+/// What a presented frame's view hides.
+pub(crate) fn hidden_of(frame: &Value) -> Vec<String> {
+    frame["hidden"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect()
+}
+
 /// Every readout heard with what it says: a text item in the tree whose `template` fills from
 /// the document's values (Text `text@1`; Overlay: "a readout and the parts it describes come
 /// from one model"), expanded as the frame shows it.
@@ -82,6 +97,35 @@ pub(crate) fn readouts(doc: &Value, hidden: &[String]) -> BTreeMap<String, Strin
             Some((id.clone(), text))
         })
         .collect()
+}
+
+/// `doc` with each data value a channel keys (`data/<name>`, motion@1) as it stands at `t`: what
+/// a readout's template fills from in the frame that shows `t` (#1162).
+pub(crate) fn data_at(doc: &Value, program: Option<&Program>, t: i64) -> Value {
+    let mut out = doc.clone();
+    let (Some(program), Some(channels)) = (program, doc.get("channels").and_then(Value::as_object))
+    else {
+        return out;
+    };
+    let mut state = program.state();
+    program.evaluate(t, Validity::Full, &mut state);
+    for (id, c) in channels {
+        let target = c.get("target").and_then(Value::as_str);
+        let Some(name) = target.and_then(|t| t.strip_prefix("data/")) else {
+            continue;
+        };
+        let Some(x) = program.channel_value(&state, id) else {
+            continue;
+        };
+        match out.pointer_mut(&format!("/data/{name}")) {
+            Some(Value::Object(entry)) => {
+                entry.insert("value".into(), json!(x));
+            }
+            Some(bare) => *bare = json!(x),
+            None => {}
+        }
+    }
+    out
 }
 
 impl Hub<'_> {
@@ -100,33 +144,33 @@ impl Hub<'_> {
             return presented;
         };
         let every_frame = self.scenario.planted == Some(Planted::AnnouncesEveryFrame);
-        let mut by_rev: BTreeMap<u64, Option<Value>> = BTreeMap::new();
+        let mut by_rev: BTreeMap<u64, Option<(Value, Option<Program>)>> = BTreeMap::new();
         let mut said: BTreeMap<String, String> = BTreeMap::new();
         let mut announcements = Vec::new();
         for frame in frames {
             let (Some(vsync), Some(rev)) = (frame["vsync"].as_i64(), frame["rev"].as_u64()) else {
                 continue;
             };
-            let Some(revision) = by_rev
+            let Some((revision, program)) = by_rev
                 .entry(rev)
-                .or_insert_with(|| self.revision(&doc, rev))
+                .or_insert_with(|| {
+                    let d = self.revision(&doc, rev)?;
+                    let p = d.as_object().and_then(|m| Program::compile(m).ok());
+                    Some((d, p))
+                })
                 .as_ref()
             else {
                 continue;
             };
-            let hidden: Vec<String> = frame
-                .get("hidden")
-                .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(Value::as_str)
-                        .map(str::to_string)
-                        .collect()
-                })
-                .unwrap_or_default();
+            let hidden = hidden_of(frame);
             said.retain(|id, _| revision.pointer(&format!("/items/{id}")).is_some());
-            for (id, text) in readouts(revision, &hidden) {
-                if every_frame || said.get(&id) != Some(&text) {
+            // The readout as this frame shows it: its keyed values at the frame's time.
+            let t = frame["t"].as_i64().unwrap_or(vsync);
+            let shown = data_at(revision, program.as_ref(), t);
+            for (id, text) in readouts(&shown, &hidden) {
+                // A readout first shown is read with the tree; only a change is announced.
+                let changed = said.get(&id).is_some_and(|was| was != &text);
+                if every_frame || changed {
                     announcements.push(json!({"t": vsync, "id": id, "text": text}));
                 }
                 said.insert(id, text);

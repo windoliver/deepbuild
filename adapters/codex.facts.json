@@ -1,6 +1,6 @@
 {
   "schema": "adapter.facts@1",
-  "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2"],
+  "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2", "0.166.0-alpha.5.1"],
   "agent": "codex",
   "hookTimeouts": {
     "readBy": "a hold waits no longer than the agent lets a hook run",
@@ -23,12 +23,12 @@
     "readBy": "how DeepBuild starts the agent headless: a scripted session in a pseudo-terminal, a read-only job on stdin",
     "conformance": "codex/launch/flags",
     "readOnlyJob": {
-      "readBy": "DeepBuild's own jobs: read-only sandbox, none of the user's config or MCP servers, no bypass flag, prompt on stdin",
+      "readBy": "DeepBuild's own jobs: Codex's sandbox off because macOS can't nest Seatbelt (exit 71, every command, reads too), so the supervisor's sandbox is what confines it; none of the user's config or MCP servers, prompt on stdin",
       "args": [
         "exec",
         "--json",
         "-s",
-        "read-only",
+        "danger-full-access",
         "--skip-git-repo-check",
         "--ignore-user-config",
         "-m",
@@ -43,7 +43,7 @@
   "modelFamily": {
     "readBy": "which rate card and context window a model name belongs to",
     "conformance": "codex/modelFamily/known-names",
-    "families": { "gpt-reserve": "gpt-reserve", "gpt-reserve-mini": "gpt-reserve-mini" }
+    "families": { "gpt-reserve": "gpt-reserve", "gpt-reserve-mini": "gpt-reserve-mini", "gpt-5-codex": "gpt-5-codex" }
   },
   "billing": {
     "readBy": "whether a session bills a plan or an API account: set, these variables mean the API",
@@ -58,9 +58,9 @@
     "tokens": "the rollout's last token_count info.total_token_usage; input_tokens includes cached_input_tokens, which is taken back out"
   },
   "questionTools": {
-    "readBy": "which tool calls are questions to the person, so each one is caught as a permission request of kind question",
+    "readBy": "which tool calls are questions to the person: Codex fires PreToolUse for a request_user_input card, so each one is caught there as a permission request of kind question",
     "conformance": "codex/questionTools/question-is-a-request",
-    "tools": []
+    "tools": ["request_user_input"]
   },
   "transcripts": {
     "readBy": "a run keeps its session's own rollout",
@@ -71,7 +71,7 @@
   "appLinks": {
     "readBy": "Open on a session's row",
     "conformance": "codex/appLinks/open",
-    "open": "none: the Codex app publishes no link that opens a thread"
+    "open": "none: the Codex app publishes no link that opens a thread. The same hooks' stop hold in the Codex app is unverified at app builds on 0.160.0 until a live run proves it (openai/codex#33992, openai/codex#47607); until then an app session's verdicts and answers may wait for its next prompt"
   },
   "errorTexts": {
     "readBy": "a stop's cause from the error the agent reports, never from its words; a stop that matches none is unknown, never a pass",
@@ -174,6 +174,67 @@
             "turn_id": "string"
           },
           "optional": {}
+        },
+        "SubagentStart": {
+          "required": {
+            "agent_id": "string",
+            "agent_type": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        },
+        "SubagentStop": {
+          "required": {
+            "agent_id": "string",
+            "agent_transcript_path": "string|null",
+            "agent_type": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "last_assistant_message": "string|null",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "stop_hook_active": "boolean",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        },
+        "PreCompact": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "trigger": "string",
+            "turn_id": "string"
+          },
+          "optional": {
+            "agent_id": "string",
+            "agent_type": "string"
+          }
+        },
+        "PostCompact": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "trigger": "string",
+            "turn_id": "string"
+          },
+          "optional": {
+            "agent_id": "string",
+            "agent_type": "string"
+          }
         }
       },
       "0.160.0": {
@@ -264,6 +325,79 @@
             "permission_mode": "string",
             "session_id": "string",
             "stop_hook_active": "boolean",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        },
+        "SubagentStart": {
+          "required": {
+            "agent_id": "string",
+            "agent_type": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        },
+        "SubagentStop": {
+          "required": {
+            "agent_id": "string",
+            "agent_transcript_path": "string|null",
+            "agent_type": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "last_assistant_message": "string|null",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "stop_hook_active": "boolean",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        },
+        "PreCompact": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "trigger": "string",
+            "turn_id": "string"
+          },
+          "optional": {
+            "agent_id": "string",
+            "agent_type": "string"
+          }
+        },
+        "PostCompact": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "trigger": "string",
+            "turn_id": "string"
+          },
+          "optional": {
+            "agent_id": "string",
+            "agent_type": "string"
+          }
+        },
+        "Interrupt": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
             "transcript_path": "string|null",
             "turn_id": "string"
           },
@@ -362,6 +496,246 @@
             "turn_id": "string"
           },
           "optional": {}
+        },
+        "SubagentStart": {
+          "required": {
+            "agent_id": "string",
+            "agent_type": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        },
+        "SubagentStop": {
+          "required": {
+            "agent_id": "string",
+            "agent_transcript_path": "string|null",
+            "agent_type": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "last_assistant_message": "string|null",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "stop_hook_active": "boolean",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        },
+        "PreCompact": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "trigger": "string",
+            "turn_id": "string"
+          },
+          "optional": {
+            "agent_id": "string",
+            "agent_type": "string"
+          }
+        },
+        "PostCompact": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "trigger": "string",
+            "turn_id": "string"
+          },
+          "optional": {
+            "agent_id": "string",
+            "agent_type": "string"
+          }
+        },
+        "Interrupt": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        }
+      },
+      "0.166.0-alpha.5.1": {
+        "SessionStart": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "source": "string",
+            "transcript_path": "string|null"
+          },
+          "optional": {}
+        },
+        "UserPromptSubmit": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "prompt": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" }
+        },
+        "PreToolUse": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "tool_use_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "apply_patch": { "tool_input.command": "string" }
+          }
+        },
+        "PermissionRequest": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "apply_patch": { "tool_input.command": "string" }
+          }
+        },
+        "PostToolUse": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "tool_response": "any",
+            "tool_use_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" }
+        },
+        "Stop": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "last_assistant_message": "string|null",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "stop_hook_active": "boolean",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        },
+        "SubagentStart": {
+          "required": {
+            "agent_id": "string",
+            "agent_type": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        },
+        "SubagentStop": {
+          "required": {
+            "agent_id": "string",
+            "agent_transcript_path": "string|null",
+            "agent_type": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "last_assistant_message": "string|null",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "stop_hook_active": "boolean",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        },
+        "PreCompact": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "trigger": "string",
+            "turn_id": "string"
+          },
+          "optional": {
+            "agent_id": "string",
+            "agent_type": "string"
+          }
+        },
+        "PostCompact": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "trigger": "string",
+            "turn_id": "string"
+          },
+          "optional": {
+            "agent_id": "string",
+            "agent_type": "string"
+          }
+        },
+        "Interrupt": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
         }
       }
     }
@@ -372,7 +746,7 @@
     "common": { "session": "session_id", "subagent": "agent_id" },
     "SessionStart": {
       "kind": "session.start",
-      "data": { "source": "source" }
+      "data": { "source": "source", "thread": "thread_id" }
     },
     "UserPromptSubmit": {
       "kind": "user.ask",
@@ -402,6 +776,27 @@
       "kind": "agent.stop",
       "data": { "outcome": "=finished", "continued": "stop_hook_active" },
       "stop": true
+    },
+    "PreCompact": {
+      "kind": "session.compact",
+      "data": { "phase": "=before", "trigger": "trigger" }
+    },
+    "PostCompact": {
+      "kind": "session.compact",
+      "data": { "phase": "=after", "trigger": "trigger" }
+    },
+    "SubagentStart": {
+      "kind": "subagent.start",
+      "data": { "type": "agent_type" }
+    },
+    "SubagentStop": {
+      "kind": "agent.stop",
+      "data": { "outcome": "=finished", "continued": "stop_hook_active" },
+      "stop": true
+    },
+    "Interrupt": {
+      "kind": "turn.interrupted",
+      "data": { "turn": "turn_id" }
     },
     "SessionEnd": {
       "kind": "session.end",
@@ -465,7 +860,7 @@
     "command": { "shell": "tool_input.command" }
   },
   "patch": {
-    "readBy": "a patch's paths: every Add, Update or Delete File and Move to line, indented or not, against the payload's cwd or a leading cd; through apply_patch or a shell command that runs it",
+    "readBy": "a patch's paths: every Add, Update or Delete File and Move to line, indented or not, against the payload's cwd or a leading cd; through apply_patch or a shell command that runs it; a patch that names another environment, or a path line with no path, is denied before it runs",
     "conformance": "codex/patch/paths",
     "tools": ["apply_patch"],
     "command": "tool_input.command",
@@ -483,8 +878,24 @@
     "values": { "<codex_internal_context source=\"goal\">": "continuation" },
     "otherwise": "unknown"
   },
+  "taskList": {
+    "readBy": "the session's own plan: the rollout's newest update_plan function call, whose arguments' plan steps each name their words and status",
+    "conformance": "codex/taskList/open-at-stop",
+    "tool": "update_plan",
+    "items": "plan",
+    "text": "step",
+    "status": "status",
+    "open": ["pending", "in_progress"]
+  },
   "readUsage": {
     "readBy": "a turn's usage from the transcript: the model that answered, tokens by the agent's own count, a cost only with its basis",
     "conformance": "codex/readUsage/token-count"
+  },
+  "tokenizer": {
+    "readBy": "the perf lane's scene read: a deep_query reply's size in the tokens an agent pays for it",
+    "conformance": "codex/tokenizer/pinned",
+    "name": "o200k_base",
+    "package": "gpt-tokenizer",
+    "version": "4.0.0"
   }
 }

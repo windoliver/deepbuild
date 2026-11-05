@@ -7,7 +7,9 @@
 
 use std::sync::Arc;
 
+use deep_canvas::canon::{canonical_value, NoShape};
 use deep_canvas::registry::{Module, Registrar};
+use deep_canvas::schedule::core_ops::{Datum, Edit, Edits};
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
@@ -29,12 +31,134 @@ pub fn module() -> Module {
             feature: "motion".into(),
             license: "Apache-2.0".into(),
             implements: "motion@1".into(),
+            implementation: deep_canvas::registry::Implementation::reference(
+                "motion",
+                deep_canvas::registry::Semver::parse("1.0.0").expect("a version"),
+            ),
         },
         register,
     }
 }
 
+/// The planted layout of #490: the motion module declaring `ease@1` and filling it with the
+/// named eases, as if the eases were motion's rather than the core's.
+pub fn declaring_eases() -> Module {
+    Module {
+        register: |r| {
+            r.registry(deep_canvas::registry::core_lists::ease_registry());
+            for e in deep_canvas::registry::core_lists::ease_entries(false) {
+                r.entry("ease@1", &e.name, e.value, &e.since);
+            }
+            register(r);
+        },
+        ..module()
+    }
+}
+
+/// The planted opening of #490 (`test-ease-renumbered`): motion built against an `ease@1` whose
+/// entries are renumbered, so its programs encode other entry numbers. A module that computes
+/// differently is another version, which every key its operators make holds.
+pub fn renumbered() -> Module {
+    let mut m = Module {
+        register: |r| register_compiling(r, crate::kit::Planted::None, compile_renumbered),
+        ..module()
+    };
+    m.manifest.version.patch = 1;
+    m
+}
+
+fn compile_renumbered(v: &mut View<'_>) -> Result<(), OpError> {
+    let canonical = canonical_value(v.document()?, &NoShape)
+        .map_err(|e| OpError::new("out_of_range", e.path))?;
+    let Value::Object(doc) = &canonical else {
+        return Err(OpError::new("bad_doc", ""));
+    };
+    let options = crate::program::Options {
+        planted: crate::program::Planted::EaseRenumbered,
+        ..Default::default()
+    };
+    let program = Program::compile_with(doc, options).map_err(|r| OpError::new(r.code, r.path))?;
+    v.write("motion.program", Val::typed(Arc::new(program)))
+}
+
+/// The motion module with a planted constraint solve, whose `constraint@1` entry the
+/// constraint kit must refuse at the seal, naming the kind.
+pub fn planted(planted: crate::kit::Planted) -> Module {
+    Module {
+        register: match planted {
+            crate::kit::Planted::None => register,
+            crate::kit::Planted::Iterates => |r| register_with(r, crate::kit::Planted::Iterates),
+            crate::kit::Planted::PreviousFrame => {
+                |r| register_with(r, crate::kit::Planted::PreviousFrame)
+            }
+        },
+        ..module()
+    }
+}
+
+/// A two-item cycle through constraint kind `kind`, compiled for real: items `a` and `b`, each
+/// reading the other's position, one of them through the kind; a kind that reads no other item
+/// closes the loop through two drivers. The check's answer, as the kit reads it.
+pub fn cycle_through(kind: &str) -> Value {
+    let item = |id: &str, x: f64| json!({"id": id, "kind": "rect@1", "params": {"box": [0, 0, 4, 4]}, "at": {"pos": [x, 0, 0]}});
+    let mut constraints = serde_json::Map::new();
+    let mut drivers = serde_json::Map::new();
+    let reads_other = !matches!(kind, "limit" | "follow_path" | "spring_chain" | "rest_on");
+    let constraint = |owner: &str, other: &str| match kind {
+        "child_of" => json!({"owner": owner, "kind": kind, "parent": other}),
+        "copy" => json!({"owner": owner, "kind": kind, "what": "location", "target": other}),
+        "reach2" => json!({"owner": owner, "kind": kind, "chain": [owner, other, other], "target": other}),
+        "follow_tip" => json!({"owner": owner, "kind": kind, "item": other}),
+        "limit" => json!({"owner": owner, "kind": kind, "what": "location", "bounds": [[0, 10], null, null]}),
+        "follow_path" => json!({"owner": owner, "kind": kind, "path": [[0, 0], [10, 0]], "fraction": 0.5}),
+        "spring_chain" => json!({"owner": owner, "kind": kind, "bones": [owner]}),
+        "rest_on" => json!({"owner": owner, "kind": kind}),
+        _ => json!({"owner": owner, "kind": kind, "target": other}),
+    };
+    // b's position follows what a's constraint writes, so the constraint's read of b (or, for
+    // a kind that reads no other item, a's position a third driver sets from b) closes a loop.
+    let written = if matches!(kind, "look_at" | "reach2") { "rot/2" } else { "pos/0" };
+    constraints.insert("a".into(), constraint("a", "b"));
+    drivers.insert("b".into(), json!({"target": "items/b/at/pos/0", "expr": "v + 1", "vars": {"v": format!("items/a/at/{written}")}}));
+    if !reads_other {
+        drivers.insert("c".into(), json!({"target": "items/a/at/pos/1", "expr": "v", "vars": {"v": "items/b/at/pos/0"}}));
+    }
+    let doc = json!({"items": {"a": item("a", 1.0), "b": item("b", 2.0)},
+                     "constraints": constraints, "drivers": drivers});
+    let Value::Object(doc) = doc else { return json!({}) };
+    match Program::compile(&doc) {
+        Err(r) if r.code == "cycle" => {
+            // Each step reads `<entry> (<item>)`: the chain is its items.
+            let chain: Vec<&str> = r
+                .path
+                .split(" → ")
+                .filter_map(|e| e.rsplit_once(" (")?.1.strip_suffix(')'))
+                .collect();
+            json!({"code": r.code, "chain": chain})
+        }
+        Err(r) => json!({"code": r.code, "chain": []}),
+        Ok(_) => json!({"code": null, "chain": []}),
+    }
+}
+
 fn register(r: &mut Registrar) {
+    register_with(r, crate::kit::Planted::None);
+}
+
+fn register_with(r: &mut Registrar, planted: crate::kit::Planted) {
+    register_compiling(r, planted, compile);
+}
+
+/// The module's registration, with `compile` the operator that compiles a revision's motion.
+fn register_compiling(
+    r: &mut Registrar,
+    planted: crate::kit::Planted,
+    compile: fn(&mut View<'_>) -> Result<(), OpError>,
+) {
+    // #489: motion's kinds in the core's `constraint@1`, each with its kit fixture.
+    for (name, value) in crate::kit::entries(planted, cycle_through) {
+        r.entry("constraint@1", name, value, "R6");
+    }
     r.array("motion.program", "program", "document", "geometry", "plan");
     r.contribution(
         "motion.at",
@@ -67,7 +191,7 @@ fn register(r: &mut Registrar) {
     r.operator(
         "channels",
         "items",
-        &["motion.program", "t", "view(reduced_motion)"],
+        &["motion.program", "t", "view(reduced_motion)", "self"],
         &["motion.at", "motion.fields"],
     )
     .applies(is_target)
@@ -80,8 +204,8 @@ fn register(r: &mut Registrar) {
     );
     r.code(
         "bad_interp",
-        "A key's interpolation motion doesn't land, or one its channel's type can't take.",
-        "Use linear, hold, a bezier or a spring on a number, and hold on a bool.",
+        "A key's interpolation motion doesn't land, or one its channel's type can't take; or a transition's or a shot's ease it doesn't land.",
+        "Use linear, hold, a bezier or a spring on a number, and hold on a bool; for an ease, a bezier or the ease linear, in_cubic, out_cubic or in_out_cubic.",
         false,
     );
     r.code(
@@ -134,9 +258,16 @@ fn register(r: &mut Registrar) {
     }));
 }
 
-const SECTIONS: [&str; 4] = ["channels", "clips", "placements", "markers"];
+const SECTIONS: [&str; 6] = [
+    "channels",
+    "clips",
+    "placements",
+    "markers",
+    "drivers",
+    "constraints",
+];
 
-/// A document with any channel, clip, placement or marker.
+/// A document with any channel, clip, placement, marker, driver or constraint.
 fn has_motion(doc: &Value, _: &str, _: &Value) -> bool {
     SECTIONS.iter().any(|s| {
         doc.get(*s)
@@ -145,18 +276,29 @@ fn has_motion(doc: &Value, _: &str, _: &Value) -> bool {
     })
 }
 
-/// An item a document channel targets or a placement binds.
-fn is_target(doc: &Value, id: &str, _: &Value) -> bool {
+/// An item a document channel or driver targets, a limit constraint holds or a placement binds.
+fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
     let prefix = format!("items/{id}/");
-    let channel = doc
-        .get("channels")
+    let targets = |section: &str| {
+        doc.get(section)
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .any(|(_, c)| {
+                c.get("target")
+                    .and_then(Value::as_str)
+                    .is_some_and(|t| t.starts_with(&prefix))
+            })
+    };
+    let channel = targets("channels") || targets("drivers") || !keyed_data(doc, item).is_empty();
+    let held = doc
+        .get("constraints")
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
         .any(|(_, c)| {
-            c.get("target")
-                .and_then(Value::as_str)
-                .is_some_and(|t| t.starts_with(&prefix))
+            c.get("kind").and_then(Value::as_str) == Some("limit")
+                && c.get("owner").and_then(Value::as_str) == Some(id)
         });
     let bound = doc
         .get("placements")
@@ -174,17 +316,59 @@ fn is_target(doc: &Value, id: &str, _: &Value) -> bool {
             Value::Array(list) => list.iter().any(|v| v.as_str() == Some(id)),
             _ => false,
         });
-    channel || bound
+    channel || held || bound
+}
+
+/// The data names a text template's slots read (`{data/<name>}`), each once.
+fn data_slots(template: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for part in deep_canvas::template::parts(template).unwrap_or_default() {
+        if let deep_canvas::template::Part::Slot(slot) = part {
+            if let Some(name) = slot.strip_prefix("data/").filter(|n| !out.iter().any(|o| o == n)) {
+                out.push(name.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// The keyed data values an item's text template reads (Text `text@1`, `template`), each with
+/// the channel that keys it: `(name, channel)`. Its text shows the value at the frame's time.
+fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
+    let Some(template) = item.pointer("/params/template").and_then(Value::as_str) else {
+        return Vec::new();
+    };
+    let Ok(parts) = deep_canvas::template::parts(template) else {
+        return Vec::new();
+    };
+    let channels = doc.get("channels").and_then(Value::as_object);
+    let mut out = Vec::new();
+    for part in parts {
+        let deep_canvas::template::Part::Slot(slot) = part else { continue };
+        let Some(name) = slot.strip_prefix("data/") else { continue };
+        let keyed = channels.into_iter().flatten().find(|(_, c)| {
+            c.get("target").and_then(Value::as_str) == Some(slot)
+        });
+        if let Some((channel, _)) = keyed {
+            if !out.iter().any(|(n, _)| n == name) {
+                out.push((name.to_string(), channel.clone()));
+            }
+        }
+    }
+    out
 }
 
 /// The revision's motion, compiled once at check.
 fn compile(v: &mut View<'_>) -> Result<(), OpError> {
-    let Value::Object(doc) = v.document()? else {
+    // Compiled from the canonical form, members in name order, so a program's layout (its items'
+    // slots among them) is the same however the document lists them.
+    let canonical = canonical_value(v.document()?, &NoShape)
+        .map_err(|e| OpError::new("out_of_range", e.path))?;
+    let Value::Object(doc) = &canonical else {
         return Err(OpError::new("bad_doc", ""));
     };
     let program = Program::compile(doc).map_err(|r| OpError::new(r.code, r.path))?;
-    let bytes = format!("{program:?}").into_bytes();
-    v.write("motion.program", Val::typed(Arc::new(program), bytes))
+    v.write("motion.program", Val::typed(Arc::new(program)))
 }
 
 /// The frame's `valid_until` at t: when anything motion moves changes next.
@@ -195,7 +379,7 @@ fn clock(v: &mut View<'_>) -> Result<(), OpError> {
     };
     let mut state = program.state();
     program.evaluate_local(t, Validity::Full, &mut state);
-    v.write("motion.next", Val::json(json!(state.valid_until)))
+    v.write("motion.next", Val::typed(state.valid_until))
 }
 
 /// The item's own transform and fields at t, as the core's contributions.
@@ -211,20 +395,39 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
     }
     let mut state = program.state();
     program.evaluate_local(t, Validity::Full, &mut state);
-    let Some((transform, fields)) = program.item_values(&state, &id) else {
+    let Some((transform, mut fields)) = program.item_values(&state, &id) else {
         return Ok(());
     };
-    let at = json!([
-        {"op": "set", "path": ["pos"], "value": &transform[0..3]},
-        {"op": "set", "path": ["rot"], "value": &transform[3..6]},
-        {"op": "set", "path": ["scale"], "value": &transform[6..9]},
-    ]);
-    let edits: Vec<Value> = fields
+    // A text whose template reads a keyed data value shows it at t: the value rides on the
+    // evaluated item as `params/data/<name>`, which the template reads before the document's.
+    let template = v
+        .item()?
+        .pointer("/params/template")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    for name in template.iter().flat_map(|t| data_slots(t)) {
+        let owner = format!("data/{name}");
+        let keyed = program.motion.channels.iter().find(|c| c.target.owner == owner);
+        if let Some(x) = keyed.and_then(|c| program.channel_value(&state, &c.id)) {
+            fields.push((vec!["params".into(), "data".into(), name], Datum::Num(x)));
+        }
+    }
+    let set = |name: &str, from: usize| Edit {
+        add: false,
+        path: vec![name.to_string()],
+        value: Datum::Nums(transform[from..from + 3].to_vec()),
+    };
+    let at = Edits(vec![set("pos", 0), set("rot", 3), set("scale", 6)]);
+    let edits = fields
         .into_iter()
-        .map(|(path, value)| json!({"op": "set", "path": path, "value": value}))
+        .map(|(path, value)| Edit {
+            add: false,
+            path,
+            value,
+        })
         .collect();
-    v.write("motion.at", Val::json(at))?;
-    v.write("motion.fields", Val::json(Value::Array(edits)))
+    v.write("motion.at", Val::typed(at))?;
+    v.write("motion.fields", Val::typed(Edits(edits)))
 }
 
 /// The motion module's fixture: a box a clip slides, a child riding it, and a caption.

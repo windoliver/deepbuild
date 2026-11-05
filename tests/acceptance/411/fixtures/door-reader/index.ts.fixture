@@ -1,0 +1,28 @@
+// The door reader (#411 AC6): a first-party test check plug-in. Its runner makes the reads its config file names
+// through deep.canvas.read, writes each reply it got, exactly as it arrived, as one JSON line to the config's `seen`
+// file, and reports passed: with every content key its reads returned as its evidence (`evidence: "keys"`), or with
+// none (`evidence: "none"`, the planted runner whose PASS rests on nothing it read).
+import { appendFileSync, readFileSync } from 'node:fs';
+
+export default function (deep: any): void {
+  const { config } = JSON.parse(readFileSync(new URL('./reader.json', import.meta.url), 'utf8')) as { config: string };
+  deep.registerCheck('ext.door-reader.open', async () => {
+    const c = JSON.parse(readFileSync(config, 'utf8')) as {
+      seen: string; evidence: 'keys' | 'none'; reads: { doc: string; rev: number; paths: string[]; at: string[] }[];
+    };
+    const keys: string[] = [];
+    for (const r of c.reads) {
+      let reply: any;
+      try {
+        reply = await deep.canvas.read(`${r.doc}@${r.rev}`, { paths: r.paths, at: r.at });
+      } catch (e: any) {
+        reply = { error: String(e?.message ?? e) };
+      }
+      appendFileSync(c.seen, `${JSON.stringify({ doc: r.doc, rev: r.rev, reply })}\n`);
+      for (const list of Object.values(reply?.keys ?? {})) {
+        for (const k of Array.isArray(list) ? list : []) if (typeof k === 'string') keys.push(k);
+      }
+    }
+    return { outcome: 'passed', testsRun: 1, failures: [], evidence: c.evidence === 'keys' ? keys : [], read: [], mask: null };
+  });
+}

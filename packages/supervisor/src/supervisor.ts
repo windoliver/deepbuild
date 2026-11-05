@@ -9,11 +9,14 @@
 // for one recorded with the run token, the token read back from its environment.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { availableParallelism, totalmem } from 'node:os';
-import { dirname } from 'node:path';
-import { ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
+import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { availableParallelism, constants, homedir, totalmem } from 'node:os';
+import { dirname, join } from 'node:path';
+import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
 import type { JsonValue } from '@deepbuild/contracts';
-import { HELPER, scan, sha256, table, tokenOf, type Proc } from './procs.js';
+import { alive, HELPER, scan, sha256, startNow, table, tokenOf, type Proc } from './procs.js';
+import { bubblewrapWith } from './bubblewrap.js';
+import type { Egress } from './egress.js';
 import { markerOf, quote, real, seatbeltWith } from './seatbelt.js';
 import type { Cleanup, Exit, Grant, HostFacts, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor, SupervisorOptions } from './types.js';
 
@@ -32,18 +35,13 @@ const RUN = /^run:[0-9A-Za-z]+$/;
 /** Whether a lease event is one of the supervisor's runs' (the core's, or a writer a run named as its holder), not a session's or a package's own. */
 const ours = (holder: unknown): boolean => holder === 'core' || (typeof holder === 'string' && holder.startsWith('mcp:'));
 /** The kinds `open` and a tick read: both read them as this type, so a kind either names that the list leaves out fails to compile. */
-const FOLDED = ['process.starting', 'process.tracked', 'process.ended', 'lease.acquired', 'lease.stale', 'lease.released', 'run.cleaned', 'ask.created', 'ask.answered', 'ask.defaulted', 'ask.superseded', 'ask.moot', 'ask.cancelled'] as const;
+const FOLDED = ['process.starting', 'run.kept', 'process.tracked', 'process.ended', 'lease.acquired', 'lease.stale', 'lease.released', 'run.cleaned', 'ask.created', 'ask.answered', 'ask.defaulted', 'ask.superseded', 'ask.moot', 'ask.cancelled'] as const;
 type Folded = (typeof FOLDED)[number];
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
-};
+
+/** How many cleaned runs stay answerable by `status`, `wait` and `cleanup`, newest first. */
+const CLEANED_KEPT = 64;
 
 interface Tracked { start: string; token: string | null }
 interface Run {
@@ -65,6 +63,10 @@ interface Run {
   cleaned?: Cleanup;
   /** Its cleanup while it runs: a second call shares it. */
   cleaning?: Promise<Cleanup>;
+  /** It keeps running when the hub stops: an open adopts it rather than reaping it (StartSpec.keep). */
+  kept?: boolean;
+  /** Its egress filter, while it holds a credential by stand-in; closed by its cleanup. */
+  egress?: Egress;
   child?: ChildProcess;
   exit?: Promise<Exit>;
   state: RunStatus['state'];
@@ -97,6 +99,8 @@ class LocalSupervisor implements Supervisor {
   private scanning: Promise<void> = Promise.resolve();
   private pumping: Promise<void> = Promise.resolve();
   private timer: NodeJS.Timeout | undefined;
+  /** The timer's scan while it is queued or runs. */
+  private timed: Promise<void> | undefined;
   private log: ChildProcess | undefined;
   /** The canary run whose report shows the denial stream is live, and when it last came through. */
   private canary = '';
@@ -118,12 +122,14 @@ class LocalSupervisor implements Supervisor {
     const guarded = [dirname(dirname(HELPER)), ...(options.guarded ?? [])];
     // Each folder above one is kept from moving, or a run could move it aside and put its own in its place.
     const above = (p: string): string[] => (dirname(p) === p ? [] : [...above(dirname(p)), p]);
-    this.sandbox = seatbeltWith('seatbelt', guarded.flatMap((g) => [
-      typeof g === 'string'
-        ? `(deny file-write* (subpath ${quote(real(g))}))`
-        : `(deny file-write* (require-all (subpath ${quote(real(g.path))}) ${g.except.map((e) => `(require-not (subpath ${quote(real(e))}))`).join(' ')}))`,
-      ...above(dirname(real(typeof g === 'string' ? g : g.path))).map((a) => `(deny file-write-unlink (literal ${quote(a)}))`),
-    ]));
+    this.sandbox = process.platform === 'linux'
+      ? bubblewrapWith('bubblewrap', guarded.map((g) => (typeof g === 'string' ? { path: g, except: [] } : g)))
+      : seatbeltWith('seatbelt', guarded.flatMap((g) => [
+        typeof g === 'string'
+          ? `(deny file-write* (subpath ${quote(real(g))}))`
+          : `(deny file-write* (require-all (subpath ${quote(real(g.path))}) ${g.except.map((e) => `(require-not (subpath ${quote(real(e))}))`).join(' ')}))`,
+        ...above(dirname(real(typeof g === 'string' ? g : g.path))).map((a) => `(deny file-write-unlink (literal ${quote(a)}))`),
+      ]));
     for (const kind of options.resources ?? []) {
       this.kinds.set(kind.kind, kind);
       for (const key of kind.keys) this.keys.set(`${kind.kind}:${key}`, {});
@@ -144,15 +150,8 @@ class LocalSupervisor implements Supervisor {
    * first, so a busy log's other events are scanned once, not again at every tick.
    */
   private async events(): Promise<Event[]> {
-    const head = await this.head();
     const all: Event[] = [];
-    for (;;) {
-      const page = await this.options.record.read({ after: this.cursor, limit: 1000, kinds: FOLDED });
-      all.push(...page);
-      if (page.length) this.cursor = page[page.length - 1]!.log_pos;
-      if (page.length < 1000) break;
-    }
-    this.cursor = Math.max(this.cursor, head);
+    this.cursor = await readSince(this.options.record, this.cursor, FOLDED, (e) => all.push(e));
     return all;
   }
   private async head(): Promise<number> {
@@ -198,6 +197,9 @@ class LocalSupervisor implements Supervisor {
         case 'process.starting':
           this.runs.set(run, { ...blank(run, String(d.cwd), 'running'), leases: this.early.get(run) ?? [] });
           this.early.delete(run);
+          break;
+        case 'run.kept':
+          if (r) r.kept = true;
           break;
         case 'process.tracked':
           if (!r) break;
@@ -281,13 +283,18 @@ class LocalSupervisor implements Supervisor {
       }
     }
     this.early.clear();
-    // A run left in flight by a crash: its leftovers are reaped, from the record and its sandbox's marker.
-    for (const r of [...this.runs.values()].filter((r) => r.state !== 'cleaned')) {
+    // A run left in flight by a crash: its leftovers are reaped, from the record and its sandbox's marker. A kept run
+    // was meant to outlive the hub: it stays the run's, scanned and stoppable as before.
+    for (const r of [...this.runs.values()].filter((r) => r.state !== 'cleaned' && !r.kept)) {
       r.state = 'exited';
       await this.cleanup(r.run);
     }
     if (process.platform === 'darwin' && this.options.plant !== 'sandbox-left-to-caller') this.watchDenials();
-    this.timer = setInterval(() => void this.scanOnce().catch(() => undefined), SCAN_MS);
+    // One timed scan at a time: on a loaded machine a scan outlasts the interval, and queued ones would pile up
+    // without end in front of a cleanup's own scan.
+    this.timer = setInterval(() => {
+      this.timed ??= this.scanOnce().catch(() => undefined).finally(() => { this.timed = undefined; });
+    }, SCAN_MS);
     this.timer.unref();
   }
 
@@ -323,6 +330,36 @@ class LocalSupervisor implements Supervisor {
     });
     this.warming = this.warm(10_000).then((live) => {
       if (!live) process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
+    });
+  }
+
+  /**
+   * What a Linux run's sandbox parent writes, one JSON line each: a refusal, recorded as a sandbox.denied for the run
+   * once, or the program's own end, given to `exited`. Resolves once the parent is gone and the pipe with it.
+   */
+  private readDenials(run: string, stream: NodeJS.ReadableStream, exited: (code: number | null, signal: NodeJS.Signals | null) => void): Promise<void> {
+    let buffer = '';
+    return new Promise((resolve) => {
+      stream.setEncoding('utf8').on('data', (chunk: string) => {
+        buffer += chunk;
+        let i: number;
+        while ((i = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, i);
+          buffer = buffer.slice(i + 1);
+          let said: { operation?: unknown; target?: unknown; exit?: unknown; signal?: unknown };
+          try { said = JSON.parse(line) as typeof said; } catch { continue; }
+          if ('exit' in said) {
+            const name = Object.entries(constants.signals).find(([, n]) => n === said.signal)?.[0] as NodeJS.Signals | undefined;
+            exited(typeof said.exit === 'number' ? said.exit : null, typeof said.exit === 'number' ? null : name ?? null);
+            continue;
+          }
+          if (typeof said.operation !== 'string' || typeof said.target !== 'string') continue;
+          const seen = `${run} ${said.operation} ${said.target}`;
+          if (this.denied.has(seen)) continue;
+          this.denied.add(seen);
+          void this.append('sandbox.denied', { run, operation: said.operation, target: said.target || '(none)' }, run).catch(() => undefined);
+        }
+      }).on('error', () => undefined).on('close', resolve);
     });
   }
 
@@ -486,46 +523,81 @@ class LocalSupervisor implements Supervisor {
   }
 
   private async launch(spec: StartSpec, leases: { kind: string; key: string }[]): Promise<Started> {
-    if (process.platform !== 'darwin') throw Error(`no platform sandbox backend for ${process.platform} yet (#70); nothing runs outside one`);
+    if (process.platform !== 'darwin' && process.platform !== 'linux') throw Error(`no platform sandbox backend for ${process.platform} yet; nothing runs outside one`);
     const cwd = real(spec.cwd);
     const sandboxed = this.options.plant !== 'sandbox-left-to-caller';
     const token = spec.env?.DEEP_RUN_TOKEN ?? randomBytes(24).toString('base64url');
     // Each lease's key in the variable it names; the leases come in the order they were asked for.
     const keys = Object.fromEntries((spec.leases ?? []).flatMap((want, i) => (want.env ? [[want.env, leases[i]!.key]] : [])));
-    const env = { ...(spec.inherit === false ? {} : process.env), ...spec.env, ...keys, DEEP_RUN_TOKEN: token } as Record<string, string>;
-    // A leased port is one it may listen on, and connect to.
+    // A credential with hosts goes in as a stand-in, its value only into requests through the run's egress filter.
+    const creds = spec.credentials ?? [];
+    // The egress filter, and node:http, https and tls with it, load only for a run that holds such a credential.
+    const egress = creds.some((c) => c.hosts?.length)
+      ? await (await import('./egress.js')).openEgress(creds, (r) => void this.append('sandbox.denied', { run: spec.run, ...r }, spec.run).catch(() => undefined), this.options.plant === 'standin-every-host' ? 'standin-every-host' : undefined)
+      : undefined;
+    const given = Object.fromEntries(creds.flatMap((c) => [
+      [c.env, egress?.standIns[c.env] ?? c.value],
+      // The planted wrong program: the filter puts the value in the run's environment too, beside the stand-in.
+      ...(this.options.plant === 'standin-value-in-env' && egress?.standIns[c.env] ? [[`${c.env}_VALUE`, c.value]] : []),
+    ]));
+    // The planted wrong program: the run's CA added to the login keychain, where every process of yours trusts it.
+    if (egress && this.options.plant === 'run-ca-in-login-keychain') {
+      mkdirSync(join(homedir(), 'Library', 'Keychains'), { recursive: true });
+      appendFileSync(join(homedir(), 'Library', 'Keychains', 'login.keychain-db'), readFileSync(join(egress.dir, 'run-ca.pem')));
+    }
+    const env = { ...(spec.inherit === false ? {} : process.env), ...spec.env, ...keys, ...given, ...egress?.env, DEEP_RUN_TOKEN: token } as Record<string, string>;
+    // A leased port is one it may listen on, and connect to; the egress filter's port, one it may connect to.
     const ports = leases.filter((l) => this.kinds.get(l.kind)?.port).map((l) => `127.0.0.1:${l.key}`);
-    const grant: Grant = ports.length
-      ? { ...spec.grant, listen: [...(spec.grant?.listen ?? []), ...ports], hosts: [...(spec.grant?.hosts ?? []), ...ports] }
+    const out = egress ? [`127.0.0.1:${egress.port}`] : [];
+    const grant: Grant = ports.length || egress
+      ? { ...spec.grant, listen: [...(spec.grant?.listen ?? []), ...ports], hosts: [...(spec.grant?.hosts ?? []), ...ports, ...out], ...(egress ? { read: [...(spec.grant?.read ?? []), egress.dir] } : {}) }
       : spec.grant ?? {};
     // The profile first: a grant the sandbox can't enforce refuses the start before anything is held or recorded.
-    const launch = sandboxed ? await this.sandbox.confine({ argv: spec.argv, cwd, env }, grant, spec.run) : { argv: spec.argv, cwd, env };
+    const launch = sandboxed
+      ? await this.sandbox.confine({ argv: spec.argv, cwd, env }, grant, spec.run).catch(async (error: unknown) => { await egress?.close(); throw error; })
+      : { argv: spec.argv, cwd, env };
     // After a minute with no report, the stream is shown live again before a process can be refused anything.
     if (sandboxed) await this.warming;
     if (sandboxed && this.log && Date.now() - this.warmAt > WARM_MS) await this.warm(2000);
-    const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}) };
+    const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}), ...(egress ? { egress } : {}) };
     this.runs.set(spec.run, r);
     // The run first, so a replay finds its leases on it.
     await this.append('process.starting', { run: spec.run, cwd }, spec.run);
+    // How each credential reached it, by name: the value itself, or a stand-in for its hosts.
+    for (const c of creds) await this.append('credential.loaded', { run: spec.run, env: c.env, ...(egress?.standIns[c.env] ? { by: 'stand-in', hosts: c.hosts! } : { by: 'value' }) }, spec.run);
+    if (spec.keep) {
+      r.kept = true;
+      await this.append('run.kept', { run: spec.run }, spec.run);
+    }
     if (!this.options.leases) for (const lease of leases) await this.lease('lease.acquired', spec.run, lease, this.keys.get(`${lease.kind}:${lease.key}`)?.expires);
     if (this.options.crash === 'start-recorded') process.kill(process.pid, 'SIGKILL');
-    const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
+    // On Linux the sandbox's parent process writes each refusal it makes to its fourth descriptor (bubblewrap.ts).
+    const denials = sandboxed && process.platform === 'linux';
+    const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', 'pipe', 'pipe', ...(denials ? ['pipe' as const] : [])] });
     r.child = child;
     // A process that exits before reading all of its input is no error of the supervisor's.
     child.stdin?.on('error', () => undefined);
     const hashes = { stdout: sha256Stream(), stderr: sha256Stream() };
     child.stdout!.on('data', (chunk: Buffer) => { hashes.stdout.update(chunk); spec.output?.stdout(chunk); });
     child.stderr!.on('data', (chunk: Buffer) => { hashes.stderr.update(chunk); spec.output?.stderr(chunk); });
+    const drain = () => setTimeout(() => setImmediate(() => { child.stdout?.destroy(); child.stderr?.destroy(); }), DRAIN_MS).unref();
     child.on('exit', () => {
       if (r.state === 'running') r.state = 'exited';
       // A background process still holding its output doesn't keep the run open: what came by now is its output.
       // Closed after the loop's next read of the pipes, so a stalled loop doesn't cut what was already written.
-      setTimeout(() => setImmediate(() => { child.stdout?.destroy(); child.stderr?.destroy(); }), DRAIN_MS).unref();
+      drain();
     });
-    r.exit = new Promise((resolve) => {
-      child.on('error', () => resolve({ run: spec.run, code: null, signal: null, evidence: { stdout: hashes.stdout.digest(), stderr: hashes.stderr.digest() } }));
-      child.on('close', (code, signal) => resolve({ run: spec.run, code, signal, evidence: { stdout: hashes.stdout.digest(), stderr: hashes.stderr.digest() } }));
-    });
+    let settle: (exit: Exit) => void = () => undefined;
+    r.exit = new Promise((resolve) => { settle = resolve; });
+    const ended = (code: number | null, signal: NodeJS.Signals | null) => settle({ run: spec.run, code, signal, evidence: { stdout: hashes.stdout.digest(), stderr: hashes.stderr.digest() } });
+    child.on('error', () => ended(null, null));
+    if (denials) {
+      // The run ends when the program does, as its sandbox's parent reports it: bwrap's own process may go earlier,
+      // on the signal that stops the run, or later, after the leftovers the parent reaps. Without that report, when
+      // the parent went with the program, bwrap's end is the run's.
+      const parentGone = this.readDenials(spec.run, child.stdio[3] as NodeJS.ReadableStream, (code, signal) => { if (r.state === 'running') r.state = 'exited'; ended(code, signal); drain(); });
+      child.on('close', (code, signal) => void parentGone.then(() => ended(code, signal)));
+    } else child.on('close', ended);
     const pid = child.pid;
     if (pid === undefined) {
       r.state = 'exited';
@@ -534,8 +606,9 @@ class LocalSupervisor implements Supervisor {
     if (this.options.crash === 'spawned') process.kill(process.pid, 'SIGKILL');
     r.pid = pid;
     r.pgid = pid;
-    // A process that is already gone and reaped leaves nothing to track; its group's members are still found.
-    const start = (await table([pid])).get(pid)?.start ?? '';
+    // A process that is already gone and reaped leaves nothing to track; its group's members are still found. On
+    // Linux the table is read before the loop turns, so a run over in milliseconds is still tracked and its end recorded.
+    const start = process.platform === 'linux' ? startNow(pid) : (await table([pid])).get(pid)?.start ?? '';
     if (start) await this.track(r, pid, start, r.token);
     // Its input only once its process is recorded, so a crash before this point leaves a process that read nothing.
     if (spec.input) child.stdin!.end(typeof spec.input === 'function' ? spec.input() : spec.input);
@@ -614,9 +687,20 @@ class LocalSupervisor implements Supervisor {
 
   async status(run: string): Promise<RunStatus> {
     const r = this.runs.get(run);
-    if (!r) throw Error(`${run} is no run of this supervisor`);
+    if (!r) {
+      if (await this.recorded(run)) return { run, state: 'cleaned' };
+      throw Error(`${run} is no run of this supervisor`);
+    }
     const waiter = this.waiters.find((w) => w.spec.run === run);
     return { run, state: r.state, ...(waiter ? { on: waiter.on } : {}) };
+  }
+
+  /** A clean run that left memory (#824), as the record has its cleanup; undefined for one this supervisor never cleaned. */
+  private async recorded(run: string): Promise<Cleanup | undefined> {
+    const [row] = (await this.options.record.raw("SELECT data FROM events WHERE kind = 'run.cleaned' AND writer = 'core' AND subject = ? ORDER BY log_pos DESC LIMIT 1", [run])) as { data: string }[];
+    if (!row) return undefined;
+    const d = JSON.parse(row.data) as { outcome: Cleanup['outcome']; left: string[]; stopped: number[] };
+    return { run, outcome: d.outcome, left: d.left, stopped: d.stopped };
   }
 
   cleanup(run: string): Promise<Cleanup> {
@@ -627,7 +711,8 @@ class LocalSupervisor implements Supervisor {
     if (!r) {
       // A start still in its first pass, given up on before it was held: it never starts.
       const waiter = this.waiters.find((w) => w.spec.run === run);
-      if (!waiter) return Promise.reject(Error(`${run} is no run of this supervisor`));
+      // One cleaned and since forgotten answers as it did then.
+      if (!waiter) return this.recorded(run).then((cleaned) => cleaned ?? Promise.reject(Error(`${run} is no run of this supervisor`)));
       this.waiters.splice(this.waiters.indexOf(waiter), 1);
       this.runs.set(run, blank(run, waiter.spec.cwd, 'BLOCKED'));
       waiter.resolve({ run, status: 'BLOCKED', cause: 'resource', kind: waiter.spec.leases?.[0]?.kind ?? '' });
@@ -702,11 +787,29 @@ class LocalSupervisor implements Supervisor {
       }
     }
     const outcome = left.length ? 'unfinished' : 'clean';
+    await r.egress?.close();
+    delete r.egress;
     await this.append('run.cleaned', { run, outcome, left, stopped: [...stopped] }, run);
     r.state = 'cleaned';
     r.cleaned = { run, outcome, left, stopped: [...stopped] };
+    // Last in the table: the window keeps the newest cleaned, however long ago each started.
+    this.runs.delete(r.run);
+    this.runs.set(r.run, r);
+    this.forgetCleaned();
     await this.pump();
     return r.cleaned;
+  }
+
+  /**
+   * Past the newest CLEANED_KEPT, a run that left nothing goes, its process and pipes with it: the record holds it, and a
+   * hub that runs for weeks can't keep every one (#824). A run that left something stays, since its keys cite it.
+   */
+  private forgetCleaned(): void {
+    const done = [...this.runs.values()].filter((r) => r.cleaned?.outcome === 'clean' && !this.lingering.has(r));
+    for (const r of done.slice(0, Math.max(0, done.length - CLEANED_KEPT))) {
+      this.runs.delete(r.run);
+      for (const seen of this.denied) if (seen.startsWith(`${r.run} `)) this.denied.delete(seen);
+    }
   }
 
   /** A resource's cleanup step or check, in the platform sandbox with its folder writable; true when it exits 0. */
@@ -822,6 +925,7 @@ class LocalSupervisor implements Supervisor {
     this.closed = true;
     if (this.timer) clearInterval(this.timer);
     await Promise.allSettled([this.scanning, this.pumping, this.ticking, ...this.cleaning]);
+    await Promise.allSettled([...this.runs.values()].map((r) => r.egress?.close()));
     if (this.log?.pid) try { process.kill(this.log.pid, 'SIGTERM'); } catch { /* gone */ }
   }
 }

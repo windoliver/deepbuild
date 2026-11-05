@@ -1,6 +1,8 @@
 {
   "title": "resolver@1",
   "description": "A resolver: resolve(ask) answers for you only by naming what covers the ask, a decision handle the core checks, or answers nothing.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "slot": {

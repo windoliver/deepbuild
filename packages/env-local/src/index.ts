@@ -7,7 +7,7 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { constants, copyFileSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import http from 'node:http';
+import type { ClientRequest } from 'node:http';
 import net from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -29,8 +29,8 @@ interface Environment {
   host?: string;
   /** Each variable a resource key is passed in, leased per session from the kind's keys (#332). */
   leases: { env: string; kind: string; keys: string[] }[];
-  /** Each variable a credential is loaded into, by its source; never its value (#332). */
-  credentials: { env: string; source: Source }[];
+  /** Each variable a credential is loaded into, by its source; never its value (#332). With hosts, it goes in as a stand-in (#1106). */
+  credentials: { env: string; source: Source; hosts?: string[]; methods?: string[] }[];
   /** The seed step, and the variable that hands it the template and each run its clone (#332). */
   seed?: { run: string; database: string };
 }
@@ -95,9 +95,19 @@ function readEnvironment(folder: string): Environment {
   });
   if (!isObj(credentials)) throw Error(`${file}: environment.credentials maps each variable to its source`);
   const loaded = Object.entries(credentials).map(([name, s]) => {
-    const source = sourceOf(s);
+    const { hosts, methods, ...rest } = isObj(s) ? s : {};
+    const source = sourceOf(rest);
     if (!source) throw Error(`${file}: environment.credentials.${name} names one source: {dotfile: "~/..."}, {cli: [program, args...]} or {keychain: {service, account}}`);
-    return { env: variable(name, `environment.credentials.${name}`), source };
+    // The hosts its value may go to, each a name or name:port, and the methods it may go with.
+    const list = (v: unknown, what: string, ok: RegExp): string[] | undefined => {
+      if (v === undefined) return undefined;
+      if (!Array.isArray(v) || !v.length || !v.every((x) => typeof x === 'string' && ok.test(x))) throw Error(`${file}: environment.credentials.${name}.${what}`);
+      return v as string[];
+    };
+    const h = list(hosts, 'hosts is a list of host names, each with its port if not 443', /^(\[[0-9a-fA-F:]+\]|[A-Za-z0-9.-]+)(:\d{1,5})?$/);
+    const m = list(methods, 'methods is a list of HTTP methods, and needs hosts', /^[A-Za-z]+$/);
+    if (m && !h) throw Error(`${file}: environment.credentials.${name}.methods needs hosts`);
+    return { env: variable(name, `environment.credentials.${name}`), source, ...(h ? { hosts: h } : {}), ...(m ? { methods: m } : {}) };
   });
   let seeded: Environment['seed'];
   if (seed !== undefined) {
@@ -122,9 +132,11 @@ const SESSION_KIND = (name: string) => ({ name, match: 'exact', cap: 1000, coold
 /** env-local's resource kinds, as its manifest declares them in the kernel's lease table (#237). */
 export const leaseKinds = [PORT_KIND, COMPOSE_KIND, ...SESSION_KINDS.map(SESSION_KIND)];
 const HOSTS = ['127.0.0.1', '0.0.0.0', '::'];
+/** lsof, where the platform ships it: /usr/sbin on macOS, /usr/bin on Linux. */
+const LSOF = process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof';
 /** Whether lsof shows no listener on the port, on any address; a failed lsof is not proof, so not free. */
 const unlisted = (port: number): Promise<boolean> => new Promise((resolve) => {
-  execFile('/usr/sbin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
+  execFile(LSOF, ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
     // lsof exits 1 with no output when nothing matches.
     resolve(stdout.trim() === '' && (!error || ((error as { code?: unknown }).code === 1 && stderr.trim() === '')));
   });
@@ -168,10 +180,11 @@ export function newRun(ms = Date.now()): string {
   return `run:${time}${Array.from(randomBytes(16), (b) => CROCKFORD[b % 32]).join('')}`;
 }
 
-/** One GET of the health URL: its status, or why it got none. */
-function get(url: string): Promise<{ status: number | null; error?: string }> {
+/** One GET of the health URL: its status, or why it got none. node:http loads with a stack's first check, not with the hub. */
+async function get(url: string): Promise<{ status: number | null; error?: string }> {
+  const http = await import('node:http');
   return new Promise((resolve) => {
-    let req: http.ClientRequest;
+    let req: ClientRequest;
     try {
       req = http.get(url, { timeout: 1000 }, (res) => { res.resume(); resolve({ status: res.statusCode ?? null }); });
     } catch (error) {
@@ -322,6 +335,8 @@ interface UpOptions {
   compose?: { dir: string; docker?: string | undefined } | undefined;
   /** The planted wrong program: compose runs under the file's own project name, shared by every worktree. */
   sharedProject?: boolean;
+  /** The planted wrong program: every credential loads by value, its hosts ignored. */
+  byValue?: boolean;
   /** Who holds the stack's leases (StartSpec.holder): the session whose deep_env call starts it; the core unless given. */
   holder?: string;
   /** Leases each per-session key the environment names, for `holder`, through the hub's lease table; without it, a stack that names one is BLOCKED. */
@@ -600,7 +615,11 @@ export async function upStack(host: Host, o: UpOptions): Promise<Up> {
   const loaded = await loadCredentials(host, env, o.folder);
   if ('cause' in loaded) return { status: 'BLOCKED', run: o.run, cause: loaded.cause };
   if (Object.keys(loaded.values).length) o.scrub?.(Object.values(loaded.values));
-  const extra: Record<string, string> = { ...loaded.values, ...(env.host ? { [env.host]: hostName(o.folder) } : {}) };
+  // A credential with hosts goes to the host alone, which hands it to the stack as a stand-in (#1106).
+  const credentials = env.credentials.map((c) => ({ env: c.env, value: loaded.values[c.env]!, ...(c.hosts && !o.byValue ? { hosts: c.hosts } : {}), ...(c.methods && !o.byValue ? { methods: c.methods } : {}) }));
+  // One by value stays in the stack's environment as before, so any host@1 hands it on; the list says how each reached it.
+  const byValue = Object.fromEntries(credentials.filter((c) => !c.hosts).map((c) => [c.env, c.value]));
+  const extra: Record<string, string> = { ...byValue, ...(env.host ? { [env.host]: hostName(o.folder) } : {}) };
   for (const l of env.leases) {
     if (!o.take) return { status: 'BLOCKED', run: o.run, cause: `${l.env} names a ${l.kind}, which is leased per session through the hub, and this stack was started without it` };
     const got = await o.take(l.kind, l.keys);
@@ -643,6 +662,7 @@ export async function upStack(host: Host, o: UpOptions): Promise<Up> {
   const started = await host.start({
     run: o.run, argv, cwd: o.folder, grant,
     env: { ...o.env, ...extra, ...Object.fromEntries(Object.entries(given).map(([k, v]) => [k, String(v)])) },
+    ...(credentials.length ? { credentials } : {}),
     ...(leases.length ? { leases } : {}),
     ...(o.holder ? { holder: o.holder } : {}),
   });

@@ -1,0 +1,82 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-420-f87578/agent-a675a52f21cb70b04/tests/acceptance/420
+
+ ❯ redraft/disabled-redraft.test.ts (2 tests | 2 failed) 280259ms
+   ❯ AC9 #420.9d6960ba a disabled curve_deform reads nothing until it is enabled (blind redraft) (2)
+     × AC9 #420.9d6960ba moving the rail a disabled mod.curve_deform@1 names leaves the bar's keys and work alone; enabling it reruns the bar in the next frame and in none of the three after; once enabled, moving the rail reruns it 1603ms
+     × AC9 #420.9d6960ba planted keeps_disabled_refs reruns the bar when the rail moves, and the check fails naming mod.curve_deform@1 and items/bar/modifiers/0 33ms
+ ❯ redraft/play-redraft.test.ts (1 test | 1 failed) 45384ms
+   ❯ AC2 #420.0fd522a3 a modifier that doesn't read time never rebuilds while playing (blind redraft) (1)
+     × AC2 #420.0fd522a3 over 31 frames in 1.5 s no node of a stack that reads no time runs after the first frame, while its time-bound twin's run every frame 3525ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  redraft/disabled-redraft.test.ts > AC9 #420.9d6960ba a disabled curve_deform reads nothing until it is enabled (blind redraft) > AC9 #420.9d6960ba moving the rail a disabled mod.curve_deform@1 names leaves the bar's keys and work alone; enabling it reruns the bar in the next frame and in none of the three after; once enabled, moving the rail reruns it
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ redraft/disabled-redraft.test.ts:112:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  redraft/disabled-redraft.test.ts > AC9 #420.9d6960ba a disabled curve_deform reads nothing until it is enabled (blind redraft) > AC9 #420.9d6960ba planted keeps_disabled_refs reruns the bar when the rail moves, and the check fails naming mod.curve_deform@1 and items/bar/modifiers/0
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ redraft/disabled-redraft.test.ts:155:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  redraft/play-redraft.test.ts > AC2 #420.0fd522a3 a modifier that doesn't read time never rebuilds while playing (blind redraft) > AC2 #420.0fd522a3 over 31 frames in 1.5 s no node of a stack that reads no time runs after the first frame, while its time-bound twin's run every frame
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:200:74
+    198|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    199|   const answer = obj(s.lines[0], `${name}: the answer`);
+    200|   expect(answer['ok'], `${name} refused the scenario: ${shown(answer)}…
+       |                                                                          ^
+    201|   const replies = arr(answer['replies'], `${name}: replies`).map((r, i…
+    202|   expect(replies.length, `${name}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:274:10
+ ❯ redraft/play-redraft.test.ts:94:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed (3)
+   Start at  18:00:14
+   Duration  326.19s (tests 100%)
+

@@ -1,0 +1,213 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/tests/acceptance/1106
+
+ ❯ ca.test.ts (2 tests | 2 failed) 4029ms
+   ❯ AC4 #1106.70f52264 the run's certificate authority is trusted in no process outside the run's sandbox; a planted setup that adds it to the login keychain fails, naming the store (2)
+     × AC4 the filter shows the app a certificate from the run's own CA, not the sample API's, and no keychain, hub trust bundle or file under HOME outside the run holds that CA 2809ms
+     × AC4 (wrong program) a setup that adds the run's CA to the login keychain (DEEP_HUB_PLANT=run-ca-in-login-keychain) fails the reading, naming the store 1170ms
+ ❯ refusals.test.ts (2 tests | 2 failed) 4817ms
+   ❯ AC3 #1106.bd90f543 the stand-in sent to a second allowed host, in a query string and in a form body is refused each time and recorded; a filter that substitutes on every allowed host fails, naming the host (2)
+     × AC3 SHOP_API_KEY's stand-in sent to the other credential's host, in a query string and in a form body to its own host, is refused each time, reaches no sample API, and each refusal is in the record on the stack's run 3688ms
+     × AC3 (wrong program) a filter that substitutes on every allowed host (DEEP_HUB_PLANT=standin-every-host) fails the reading, naming the host 1121ms
+ ❯ evidence.test.ts (2 tests | 2 failed) 3866ms
+   ❯ AC2 #1106.ef5f04c9 the app writes its variable reversed and XOR'd into test output and into a file in its checkout, and neither holds the value; a planted environment that loads by value fails, naming the evidence file (2)
+     × AC2 the check's output (the run's evidence) and leak.txt in its checkout hold the app's variable reversed and XOR'd, and neither holds the value in any form 2954ms
+     × AC2 (wrong program) an environment that loads SHOP_API_KEY by value (DEEP_HUB_PLANT=env-loads-by-value) fails the reading, naming the evidence file 894ms
+ ❯ standin.test.ts (2 tests | 2 failed) 5651ms
+   ❯ AC1 #1106.ef63d06f a test app sends its stand-in to the sample API's host and gets 200; a planted filter that puts the value into the process environment fails, naming the variable (2)
+     × AC1 the app holds a stand-in, not the value, in SHOP_API_KEY, and its call with it to the sample API's host gets 200, the filter having put the value in the Authorization header 3986ms
+     × AC1 (wrong program) a filter that puts the value into the process environment (DEEP_HUB_PLANT=standin-value-in-env) fails the reading, naming the variable 1657ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ca.test.ts > AC4 #1106.70f52264 the run's certificate authority is trusted in no process outside the run's sandbox; a planted setup that adds it to the login keychain fails, naming the store > AC4 the filter shows the app a certificate from the run's own CA, not the sample API's, and no keychain, hub trust bundle or file under HOME outside the run holds that CA
+AssertionError: deep env up in /private/tmp/dh1106-pvleWs/wt-a exits 0 (stdout {"status":"BLOCKED","worktree":"/private/tmp/dh1106-pvleWs/wt-a","cause":"/private/tmp/dh1106-pvleWs/wt-a/.deepbuild/done.yaml: environment.credentials.SHOP_API_KEY names one source: {dotfile: \"~/...\"}, {cli: [program, args...]} or {keychain: {service, account}}"} stderr ): expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ mustBeReady helpers.ts:421:141
+    419| export function mustBeReady(ran: Ran, where: string): Line {
+    420|   const out = jsonOut(ran);
+    421|   expect(ran.code, `deep env up in ${where} exits 0 (stdout ${ran.stdo…
+       |                                                                                                                                             ^
+    422|   expect(out?.status, `deep env up in ${where} reports ready: ${JSON.s…
+    423|   expect(Number.isInteger(out?.ports?.web), `it names the port it leas…
+ ❯ upWorld helpers.ts:434:15
+ ❯ scenario ca.test.ts:77:13
+ ❯ ca.test.ts:88:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  ca.test.ts > AC4 #1106.70f52264 the run's certificate authority is trusted in no process outside the run's sandbox; a planted setup that adds it to the login keychain fails, naming the store > AC4 (wrong program) a setup that adds the run's CA to the login keychain (DEEP_HUB_PLANT=run-ca-in-login-keychain) fails the reading, naming the store
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh1106-IlqYLu/root): file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=run-ca-in-login-keychain names no planted program
+    at plantOf (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/server.js:1149:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:341:27
+    339|   });
+    340|   const line = await Promise.race([ready, sleep(20_000).then(() => und…
+    341|   if (!line?.ready) throw Error(`BLOCKED: the hub didn't start (deep h…
+       |                           ^
+    342|   return { pid: child.pid!, root, socket: line.socket as string, child…
+    343| }
+ ❯ upWorld helpers.ts:432:15
+ ❯ scenario ca.test.ts:77:13
+ ❯ ca.test.ts:102:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  evidence.test.ts > AC2 #1106.ef5f04c9 the app writes its variable reversed and XOR'd into test output and into a file in its checkout, and neither holds the value; a planted environment that loads by value fails, naming the evidence file > AC2 the check's output (the run's evidence) and leak.txt in its checkout hold the app's variable reversed and XOR'd, and neither holds the value in any form
+AssertionError: the check ran with its app up and passed ({"run":"run:01M6FXECWPXRQES26AKTB1YKRD","outcome":"missing","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"journey:leak","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":["its stack never came up: /private/tmp/dh1106-cCpeVk/checkout/.deepbuild/done.yaml: environment.credentials.SHOP_API_KEY names one source: {dotfile: \"~/...\"}, {cli: [program, args...]} or {keychain: {service, account}}"],"environment":"darwin-arm64"}): expected 'missing' to be 'passed' // Object.is equality
+
+Expected: "passed"
+Received: "missing"
+
+ ❯ evidence.test.ts:69:110
+     67|   it('AC2 the check\'s output (the run\'s evidence) and leak.txt in it…
+     68|     const s = await scenario();
+     69|     expect(s.done.data.outcome, `the check ran with its app up and pas…
+       |                                                                                                              ^
+     70|     expect(s.marked.length, 'the check\'s output reached the run\'s ev…
+     71|     expect(existsSync(join(s.checkout, 'leak.txt')), 'the app wrote it…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  evidence.test.ts > AC2 #1106.ef5f04c9 the app writes its variable reversed and XOR'd into test output and into a file in its checkout, and neither holds the value; a planted environment that loads by value fails, naming the evidence file > AC2 (wrong program) an environment that loads SHOP_API_KEY by value (DEEP_HUB_PLANT=env-loads-by-value) fails the reading, naming the evidence file
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh1106-wOAS0r/root): file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=env-loads-by-value names no planted program
+    at plantOf (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/server.js:1149:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:341:27
+    339|   });
+    340|   const line = await Promise.race([ready, sleep(20_000).then(() => und…
+    341|   if (!line?.ready) throw Error(`BLOCKED: the hub didn't start (deep h…
+       |                           ^
+    342|   return { pid: child.pid!, root, socket: line.socket as string, child…
+    343| }
+ ❯ scenario evidence.test.ts:53:15
+ ❯ evidence.test.ts:77:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  refusals.test.ts > AC3 #1106.bd90f543 the stand-in sent to a second allowed host, in a query string and in a form body is refused each time and recorded; a filter that substitutes on every allowed host fails, naming the host > AC3 SHOP_API_KEY's stand-in sent to the other credential's host, in a query string and in a form body to its own host, is refused each time, reaches no sample API, and each refusal is in the record on the stack's run
+AssertionError: deep env up in /private/tmp/dh1106-ZpeSEG/wt-a exits 0 (stdout {"status":"BLOCKED","worktree":"/private/tmp/dh1106-ZpeSEG/wt-a","cause":"/private/tmp/dh1106-ZpeSEG/wt-a/.deepbuild/done.yaml: environment.credentials.SHOP_API_KEY names one source: {dotfile: \"~/...\"}, {cli: [program, args...]} or {keychain: {service, account}}"} stderr ): expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ mustBeReady helpers.ts:421:141
+    419| export function mustBeReady(ran: Ran, where: string): Line {
+    420|   const out = jsonOut(ran);
+    421|   expect(ran.code, `deep env up in ${where} exits 0 (stdout ${ran.stdo…
+       |                                                                                                                                             ^
+    422|   expect(out?.status, `deep env up in ${where} reports ready: ${JSON.s…
+    423|   expect(Number.isInteger(out?.ports?.web), `it names the port it leas…
+ ❯ upWorld helpers.ts:434:15
+ ❯ scenario refusals.test.ts:48:13
+ ❯ refusals.test.ts:71:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  refusals.test.ts > AC3 #1106.bd90f543 the stand-in sent to a second allowed host, in a query string and in a form body is refused each time and recorded; a filter that substitutes on every allowed host fails, naming the host > AC3 (wrong program) a filter that substitutes on every allowed host (DEEP_HUB_PLANT=standin-every-host) fails the reading, naming the host
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh1106-yPBKBZ/root): file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=standin-every-host names no planted program
+    at plantOf (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/server.js:1149:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:341:27
+    339|   });
+    340|   const line = await Promise.race([ready, sleep(20_000).then(() => und…
+    341|   if (!line?.ready) throw Error(`BLOCKED: the hub didn't start (deep h…
+       |                           ^
+    342|   return { pid: child.pid!, root, socket: line.socket as string, child…
+    343| }
+ ❯ upWorld helpers.ts:432:15
+ ❯ scenario refusals.test.ts:48:13
+ ❯ refusals.test.ts:82:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  standin.test.ts > AC1 #1106.ef63d06f a test app sends its stand-in to the sample API's host and gets 200; a planted filter that puts the value into the process environment fails, naming the variable > AC1 the app holds a stand-in, not the value, in SHOP_API_KEY, and its call with it to the sample API's host gets 200, the filter having put the value in the Authorization header
+AssertionError: deep env up in /private/tmp/dh1106-eqo6X6/wt-a exits 0 (stdout {"status":"BLOCKED","worktree":"/private/tmp/dh1106-eqo6X6/wt-a","cause":"/private/tmp/dh1106-eqo6X6/wt-a/.deepbuild/done.yaml: environment.credentials.SHOP_API_KEY names one source: {dotfile: \"~/...\"}, {cli: [program, args...]} or {keychain: {service, account}}"} stderr ): expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ mustBeReady helpers.ts:421:141
+    419| export function mustBeReady(ran: Ran, where: string): Line {
+    420|   const out = jsonOut(ran);
+    421|   expect(ran.code, `deep env up in ${where} exits 0 (stdout ${ran.stdo…
+       |                                                                                                                                             ^
+    422|   expect(out?.status, `deep env up in ${where} reports ready: ${JSON.s…
+    423|   expect(Number.isInteger(out?.ports?.web), `it names the port it leas…
+ ❯ upWorld helpers.ts:434:15
+ ❯ scenario standin.test.ts:33:13
+ ❯ standin.test.ts:43:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  standin.test.ts > AC1 #1106.ef63d06f a test app sends its stand-in to the sample API's host and gets 200; a planted filter that puts the value into the process environment fails, naming the variable > AC1 (wrong program) a filter that puts the value into the process environment (DEEP_HUB_PLANT=standin-value-in-env) fails the reading, naming the variable
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh1106-N93sMU/root): file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=standin-value-in-env names no planted program
+    at plantOf (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/plant.js:59:15)
+    at runHub (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/server.js:1149:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/hub/dist/index.js:49:28)
+    at file://~/dev/claude-worktrees/github-issue-1106-4da3d7/agent-aa1dbf54d67b8eef9/packages/cli/dist/main.js:178:30
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:341:27
+    339|   });
+    340|   const line = await Promise.race([ready, sleep(20_000).then(() => und…
+    341|   if (!line?.ready) throw Error(`BLOCKED: the hub didn't start (deep h…
+       |                           ^
+    342|   return { pid: child.pid!, root, socket: line.socket as string, child…
+    343| }
+ ❯ upWorld helpers.ts:432:15
+ ❯ scenario standin.test.ts:33:13
+ ❯ standin.test.ts:54:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  8 failed (8)
+   Start at  21:17:11
+   Duration  19.28s (tests 99%, import 1%)
+

@@ -1,0 +1,43 @@
+{
+  "examples": [
+    {
+      "file": "product-reveal.json",
+      "hash": "74ea0e63a07b39adbc43d4fe23934da85a1b835837e13e4064d6f533499c9e0c",
+      "title": "Product reveal: a lamp on a turntable",
+      "steps": 240,
+      "words": [
+        "turntable",
+        "product",
+        "reveal",
+        "spin",
+        "lamp",
+        "piece"
+      ]
+    },
+    {
+      "file": "data-story.json",
+      "hash": "45eb70120d12261cb5210c96c398f31b031ae3d1d5cb8b899dd3ac18fdedbf5b",
+      "title": "Data story: three bars",
+      "steps": 120,
+      "words": [
+        "data",
+        "story",
+        "chart",
+        "bars",
+        "piece"
+      ]
+    }
+  ],
+  "guides": [
+    {
+      "file": "canvas-working-order.md",
+      "name": "canvas-working-order",
+      "title": "The canvas working order"
+    },
+    {
+      "file": "familiar-names.md",
+      "name": "familiar-names",
+      "title": "Familiar names and close names"
+    }
+  ]
+}

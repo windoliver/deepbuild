@@ -1,0 +1,67 @@
+The #906 suite at base commit 3f4b96ef (origin/main; its packages/ and crates/ are 39980abe's plus #883's
+notifications), October 31, 2026, Node 24.22.0, macOS, 12 cores, on a Mac shared with other worktrees' builds.
+Built with `npm ci`, `npm run build --workspaces` and `cargo build --locked -q -p deep-hook`. Command:
+
+  npx vitest run --root tests/acceptance/906 --no-file-parallelism
+
+`node node_modules/typescript/bin/tsc -p tests/acceptance/906/tsconfig.json`: clean, no output.
+
+Summary: 3 tests. 2 fail at their assertions on the base (AC1, AC2); 1 passes on the base (AC3), which its twin
+sends-shown-again is there to fail. No implementation of #906 was run, so the passing side of AC1 and AC2, and each
+twin's failure, are unverified until the change exists.
+
+prompt.test.ts (AC1 #906.b7af9874): FAILS at its assertion, the planted-delay precondition. The base has no
+  DEEP_HUB_TEST_LATE_REPLY, so the hub's reply to the "late" prompt reaches deep-hook in time (27 ms), carrying
+  ask:<id>, and the transcript shows it. Past that check, the base would record the ask delivered when it writes
+  the reply (core.ts deliver()), which the test's "must never read delivered" check fails; the twin
+  delivered-when-written plants exactly that on the change.
+
+stop.test.ts (AC2 #906.ac643af8): FAILS at its assertion, the same precondition for the held stop: the stop is
+  sent back at once with the answer (47 ms), since the base can't hold the reply past the hold. The twin
+  delivered-when-written fails it at "must never read delivered" on the change.
+
+shown.test.ts (AC3 #906.02f9eada): PASSES on the base (two runs). The base records delivered when it writes the
+  prompt's reply, so no later route retries the answer: the stop hold, the waiter and the next prompt don't send it
+  again, the transcript shows its ID once, and the record says delivered via next_prompt once. Regression
+  protection; its wrong program is the twin sends-shown-again (a retry that doesn't read the session first).
+
+Machine load: two earlier runs at 1-minute loads of 60 to 160 on 12 cores (other worktrees building) stopped
+BLOCKED: deep-hook let the late prompt through unheld in 133 to 143 ms (no acknowledgement within its 50 ms), and
+deep_ask couldn't bind to its session ("unbound": its PreToolUse went through unheld). The first run, at load about
+100, had AC2's stop go through unheld too and failed it at "must never read delivered" after the waiter woke the
+session; that misreading is why the tests now stop BLOCKED when the late hook was never held (helpers.ts,
+mustBeHeld). The kept run below was at loads 22 to 49.
+
+==== The kept run (16:13 to 16:15, `uptime` at the end "21.71 49.05 68.24")
+ Test Files  2 failed | 1 passed (3)
+      Tests  2 failed | 1 passed (3)
+   Duration  149.47s (tests 100%)
+
+ FAIL  prompt.test.ts > AC1 #906.b7af9874 An answer in a UserPromptSubmit reply deep-hook gave up on reads stalled, never delivered, and goes with the next prompt > AC1 #906.b7af9874 the prompt reply carrying your answer misses deep-hook's hold (the planted delay): the ask reads stalled, never delivered; the next prompt carries it; the transcript shows its ID once
+AssertionError: AC1 #906.b7af9874 precondition, the planted delay (DEEP_HUB_TEST_LATE_REPLY, README: Defined here): with its file in place the hub's reply to this prompt must reach deep-hook only after its hold ran out, so the prompt runs without your answer to ask:01M6A3TQX735JDYSVWN8TK5ETT; deep-hook printed it and the transcript shows it 1 time(s): {"runs":[{"command":"'<checkout>/target/debug/deep-hook' claude-code UserPromptSubmit","code":0,"signal":null,"timedOut":false,"ms":27,"stdout":"{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"DeepBuild delivers your answers:\\nYour answer to ask:01M6A3TQX735JDYSVWN8TK5ETT (\\\"Which header colour for the checkout page (e0d424dc)?\\\"): Green header e0d424dc (green).\"}}","stderr":""}]}: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ prompt.test.ts:37:366
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  stop.test.ts > AC2 #906.ac643af8 An answer in a stop-hold reply that arrives after the hold reads stalled, never delivered, and goes with the next prompt > AC2 #906.ac643af8 the stop-hold reply carrying your answer misses deep-hook's hold (the planted delay): the ask reads stalled, never delivered; the next prompt carries it; the transcript shows its ID once
+AssertionError: AC2 #906.ac643af8 precondition, the planted delay (DEEP_HUB_TEST_LATE_REPLY, README: Defined here): with its file in place the hub's reply to this held stop must reach deep-hook only after its hold ran out, so the stop goes through without your answer to ask:01M6A3W4J7VMNX5VB31DTHZHZV; it was sent back: "says done · next: DeepBuild · receipt\nDeepBuild delivers your answers:\nYour answer to ask:01M6A3W4J7VMNX5VB31DTHZHZV (\"Which header colour for the checkout page (2fa005ec)?\"): Green header 2fa005ec (green).", and the transcript shows ask:01M6A3W4J7VMNX5VB31DTHZHZV 1 time(s): {"blocked":"says done · next: DeepBuild · receipt\nDeepBuild delivers your answers:\nYour answer to ask:01M6A3W4J7VMNX5VB31DTHZHZV (\"Which header colour for the checkout page (2fa005ec)?\"): Green header 2fa005ec (green).","runs":[{"command":"'<checkout>/target/debug/deep-hook' claude-code Stop","code":0,"signal":null,"timedOut":false,"ms":47,"stdout":"{\"decision\":\"block\",\"reason\":\"says done · next: DeepBuild · receipt\\nDeepBuild delivers your answers:\\nYour answer to ask:01M6A3W4J7VMNX5VB31DTHZHZV (\\\"Which header colour for the checkout page (2fa005ec)?\\\"): Green header 2fa005ec (green).\",\"systemMessage\":\"says done · next: DeepBuild · receipt\"}","stderr":""},{"command":"'<checkout>/target/debug/deep-hook' claude-code waiter","code":null,"signal":null,"timedOut":false,"ms":null,"stdout":"","stderr":""}]}: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ stop.test.ts:35:464
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+

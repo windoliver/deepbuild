@@ -1,6 +1,8 @@
 {
   "title": "claim.made@2",
   "description": "An agent said it was done, with what it expected each check to show before the check ran.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "claims"
   ],

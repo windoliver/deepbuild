@@ -11,7 +11,7 @@
 import { execFile } from 'node:child_process';
 import { availableParallelism } from 'node:os';
 import { validate } from '@deepbuild/contracts';
-import { ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
+import { readSince, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 
 /** lease.kind@1: a resource kind, as data a plug-in's manifest (or the core) declares. */
 export interface LeaseKind {
@@ -50,7 +50,7 @@ export type Overlap = (form: 'glob' | 'prefix', a: string, b: string) => boolean
 export type Plant =
   | 'ignores-mode' | 'pool-as-exact-key' | 'pool-ignores-n' | 'any-match-form' | 'redeclare-replaces' | 'fixed-kinds'
   | 'releases-at-expiry' | 'ignores-cooldown' | 'ignores-cap' | 'checks-held-mode-only' | 'await-before-append'
-  | 'pid-only-liveness' | 'host-blind' | 'pool-across-hosts';
+  | 'pid-only-liveness' | 'host-blind' | 'pool-across-hosts' | 'fills-every-slot';
 export interface LeasesOptions {
   /** Grants, stale marks and releases are appended here as `core`; holders' ends and the supervisor's proofs are read from it. */
   record: RecordStore;
@@ -119,7 +119,14 @@ export const plantedOverlap: { 'one-way': Overlap } = {
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
 /** How long a lease is granted for; past it, a lease whose holder still runs is only stale. */
 const DAY = 86_400_000;
+/** How many runs' processes, and how many holders' ends, stay in memory when no lease depends on them. */
+const KEPT = 64;
 const FORM = /^(?:exact|glob|prefix|pool\(([1-9][0-9]*)\))$/;
+/**
+ * The `cpu.slot` key slow-lane runs and agents' heavy commands lease (#907): of a pool of two or more, it holds at most
+ * all but one slot, so the last is kept for a held stop's fast-lane checks.
+ */
+export const SLOW_SLOT = 'slow';
 /** The kinds a table with a fixed list of resources leases: the planted wrong program of AC4. */
 const FIXED = ['port', 'cpu.slot'];
 /** The kinds the table's state is folded from. */
@@ -163,15 +170,7 @@ class Table implements LeaseTable {
    */
   sync(): Promise<void> {
     const next = this.reading.then(async () => {
-      const [row] = (await this.options.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
-      const head = Number(row?.head ?? 0);
-      for (;;) {
-        const page = await this.options.record.read({ after: this.cursor, limit: 1000, kinds: FOLDED });
-        for (const e of page) this.fold(e);
-        if (page.length) this.cursor = page[page.length - 1]!.log_pos;
-        if (page.length < 1000) break;
-      }
-      this.cursor = Math.max(this.cursor, head);
+      this.cursor = await readSince(this.options.record, this.cursor, FOLDED, (e) => this.fold(e));
     });
     this.reading = next.catch(() => undefined);
     return next;
@@ -207,6 +206,13 @@ class Table implements LeaseTable {
       case 'session.gone': {
         const holder = e.subject?.startsWith('session:') ? e.subject : e.session ? `session:${e.session}` : undefined;
         if (holder && !this.ends.has(holder)) this.ends.set(holder, e.id);
+        if (this.ends.size > KEPT) {
+          const holding = new Set([...this.held.values()].map((h) => h.lease.holder));
+          for (const ended of this.ends.keys()) {
+            if (this.ends.size <= KEPT) break;
+            if (!holding.has(ended)) this.ends.delete(ended);
+          }
+        }
         break;
       }
       case 'process.tracked':
@@ -214,6 +220,7 @@ class Table implements LeaseTable {
         const run = d.run as string;
         const procs = this.procs.get(run) ?? this.procs.set(run, new Map()).get(run)!;
         procs.set(d.pid as number, e.kind === 'process.ended' ? e.id : undefined);
+        this.forgetRuns();
         break;
       }
     }
@@ -291,6 +298,10 @@ class Table implements LeaseTable {
       if (this.plant !== 'pool-ignores-n' && pool.length >= kind.n) {
         return { status: 'refused', reason: 'pool', holders: pool, message: `the pool ${where} is full: ${pool.length} of ${kind.n} held, by ${names(pool)}` };
       }
+      const slow = pool.filter((l) => l.resource.key === SLOW_SLOT);
+      if (kind.name === 'cpu.slot' && resource.key === SLOW_SLOT && kind.n > 1 && slow.length >= kind.n - 1 && this.plant !== 'fills-every-slot') {
+        return { status: 'refused', reason: 'pool', holders: slow, message: `the pool ${where} keeps its last slot for a held stop's fast-lane checks: slow work holds ${slow.length} of ${kind.n}, by ${names(slow)}` };
+      }
     } else {
       const conflicts = (held: Mode): boolean => (this.plant === 'ignores-mode' ? true
         : this.plant === 'checks-held-mode-only' ? held === 'exclusive'
@@ -353,6 +364,15 @@ class Table implements LeaseTable {
     this.ends.set(holder, id);
     await this.append('session.gone', 1, holder, { pid: h.agent.pid, start: h.agent.start }, ts, id);
     return id;
+  }
+  /** Past the newest runs, each with nothing running and no lease held leaves memory. */
+  private forgetRuns(): void {
+    if (this.procs.size <= KEPT) return;
+    const holding = new Set([...this.held.values()].map((h) => h.run));
+    for (const [run, procs] of this.procs) {
+      if (this.procs.size <= KEPT) return;
+      if (!holding.has(run) && [...procs.values()].every(Boolean)) this.procs.delete(run);
+    }
   }
   /** The run's recorded processes still running, and the process.ended events that prove the others gone. */
   private processes(run: string | undefined): { running: number[]; proof: string[] } {

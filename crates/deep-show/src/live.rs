@@ -19,23 +19,24 @@ use gpui_kit::*;
 use serde_json::{json, Value};
 
 use crate::hub::Hub;
+use crate::window::{bounds, hsla, refused};
 
 /// How long each presented frame shows before the next.
 const HOLD: Duration = Duration::from_secs(6);
 /// How long the last frame stays, for a person to walk the tree with VoiceOver.
 const LAST: Duration = Duration::from_secs(180);
 /// The strip under the panel where the controls sit, in px.
-const STRIP: f32 = 40.;
+pub(crate) const STRIP: f32 = 40.;
 
 /// One accessibility node and where it sits in the window.
 #[derive(Clone)]
-struct Node {
-    id: String,
+pub(crate) struct Node {
+    pub(crate) id: String,
     role: accesskit::Role,
-    name: String,
-    value: Option<String>,
+    pub(crate) name: String,
+    pub(crate) value: Option<String>,
     live: bool,
-    bounds: Bounds<Pixels>,
+    pub(crate) bounds: Bounds<Pixels>,
 }
 
 /// What one presented frame draws and exposes.
@@ -46,9 +47,9 @@ struct Frame {
 }
 
 /// An element that draws nothing and is one node of the accessibility tree.
-struct AxNode {
-    node: Node,
-    style: StyleRefinement,
+pub(crate) struct AxNode {
+    pub(crate) node: Node,
+    pub(crate) style: StyleRefinement,
 }
 
 impl IntoElement for AxNode {
@@ -117,6 +118,8 @@ impl Element for AxNode {
     }
 
     fn write_a11y_info(&self, node: &mut accesskit::Node) {
+        // #140: the item or control ID, an assistive client's `accessibilityIdentifier`.
+        node.set_author_id(self.node.id.clone());
         node.set_label(self.node.name.clone());
         if let Some(value) = &self.node.value {
             node.set_value(value.clone());
@@ -148,13 +151,6 @@ fn control_role(role: &str) -> accesskit::Role {
         "radiogroup" => accesskit::Role::RadioGroup,
         "spinbutton" => accesskit::Role::SpinButton,
         _ => accesskit::Role::Unknown,
-    }
-}
-
-fn bounds(b: [f64; 4]) -> Bounds<Pixels> {
-    Bounds {
-        origin: point(px(b[0] as f32), px(b[1] as f32)),
-        size: size(px(b[2] as f32), px(b[3] as f32)),
     }
 }
 
@@ -224,7 +220,7 @@ impl Render for View {
 
 /// The nodes of one frame: the tree `see` reads, each item at its drawn box in the panel and
 /// the controls side by side in the strip under it, and the items heard but drawn in no box.
-fn nodes(
+pub(crate) fn nodes(
     doc: &Value,
     hidden: &[String],
     boxes: &[(String, [f64; 4])],
@@ -267,10 +263,6 @@ fn nodes(
     (out, unboxed)
 }
 
-fn refused(code: &str) -> Value {
-    json!({"ok": false, "code": code})
-}
-
 /// Plays the scenario's calls, then shows the panel the first document on screen sits in.
 pub fn show(hub: &mut Hub<'_>) -> Value {
     let Some((doc, panel_id)) = hub
@@ -289,10 +281,7 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
     let panel = hub
         .slot(&panel_id)
         .expect("a document's panel is in the scenario");
-    let px_size = [
-        panel[2].round().clamp(1., 8192.) as u16,
-        panel[3].round().clamp(1., 8192.) as u16,
-    ];
+    let px_size = crate::snapshot::px([panel[2], panel[3]]);
     let palette = hub.look.light.clone();
     let ground = palette.get("ground").copied().unwrap_or([255; 3]);
     let ink = palette.get("ink").copied().unwrap_or([0; 3]);
@@ -305,16 +294,7 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
         let (Some(rev), Some(vsync)) = (frame["rev"].as_u64(), frame["vsync"].as_i64()) else {
             continue;
         };
-        let hidden: Vec<String> = frame
-            .get("hidden")
-            .and_then(Value::as_array)
-            .map(|a| {
-                a.iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_string)
-                    .collect()
-            })
-            .unwrap_or_default();
+        let hidden = crate::access::hidden_of(&frame);
         if last.as_ref() == Some(&(rev, hidden.clone())) {
             continue;
         }
@@ -336,8 +316,7 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
         ) else {
             return refused("not_drawn");
         };
-        let [dw, dh] = drawn.frame.size;
-        let scale = (f64::from(px_size[0]) / dw).min(f64::from(px_size[1]) / dh);
+        let scale = drawn.scale(px_size);
         let boxes: Vec<(String, [f64; 4])> = drawn
             .boxes()
             .into_iter()
@@ -351,13 +330,8 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
                 (id, at)
             })
             .collect();
-        let mut rgba = hub.renderer.raster(&drawn, px_size, Some(ground));
-        for p in rgba.as_chunks_mut::<4>().0 {
-            p.swap(0, 2);
-        }
-        let Some(image) =
-            image::RgbaImage::from_raw(u32::from(px_size[0]), u32::from(px_size[1]), rgba)
-        else {
+        let rgba = hub.renderer.raster(&drawn, px_size, Some(ground));
+        let Some(picture) = crate::window::picture(rgba, px_size) else {
             return refused("no_picture");
         };
         let (nodes, unboxed) = nodes(&revision, &hidden, &boxes, panel);
@@ -368,7 +342,7 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
             "unboxed": unboxed,
         }));
         frames.push(Frame {
-            picture: Arc::new(RenderImage::new([image::Frame::new(image)])),
+            picture,
             panel: bounds(panel),
             nodes,
         });
@@ -380,15 +354,6 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
         px((panel[0] + panel[2]) as f32),
         px((panel[1] + panel[3]) as f32 + STRIP),
     );
-    let hsla = |c: [u8; 3]| -> Hsla {
-        Rgba {
-            r: f32::from(c[0]) / 255.,
-            g: f32::from(c[1]) / 255.,
-            b: f32::from(c[2]) / 255.,
-            a: 1.,
-        }
-        .into()
-    };
     let frames = Rc::new(frames);
     let (ground, ink) = (hsla(ground), hsla(ink));
     gpui_kit::application().run(move |cx| {

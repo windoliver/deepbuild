@@ -22,10 +22,14 @@
 //! values; the view inputs, look tokens, seed, time and outside data it declares. An epoch
 //! never enters a key, so one document reached by two histories has one set of keys, and equal
 //! keys share one immutable result through the cache, which holds a result while a session's
-//! current revision reads it.
+//! current revision reads it. Under `hash@2`, the document's items and the writers of an array a
+//! node reads from every item enter by the root of a [`KeyTree`] over their keys, so a changed
+//! item rekeys them by its path in the tree (#896).
 
+mod bytes;
 pub mod core_ops;
 mod steps;
+mod tree;
 mod view;
 
 use std::any::Any;
@@ -38,6 +42,8 @@ use sha2::{Digest, Sha256};
 use crate::canon::{self, NoShape};
 use crate::registry::{Per, Sealed, TableValue};
 
+pub use bytes::Canonical;
+pub use tree::KeyTree;
 pub use view::View;
 
 /// What a node's operator call left: its writes, its error, what a step noted and the tails it
@@ -84,19 +90,99 @@ impl Key {
     }
 }
 
-/// `hash@1`: SHA-256 over length-prefixed fields, cut to 128 bits.
-pub struct Hasher(Sha256);
+/// A key's hash version: `hash@1` is SHA-256, `hash@2` BLAKE3, each over length-prefixed fields
+/// and cut to 128 bits. Content keys and result digests are `hash@2`; seeds stay on `hash@1`, so
+/// no draw changes, and a `hash@1` key still reads through [`Scheduler::migrate`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HashVersion {
+    V1,
+    #[default]
+    V2,
+}
+
+impl HashVersion {
+    pub fn name(self) -> &'static str {
+        match self {
+            HashVersion::V1 => "hash@1",
+            HashVersion::V2 => "hash@2",
+        }
+    }
+}
+
+/// The bytes `hash@2` gathers before hashing them at once: a key's fields are short, and one
+/// call over them costs less than a streaming hasher's state per key.
+const GATHER: usize = 512;
+
+// The gathered bytes stay inline: boxing them would allocate once per key.
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone)]
+enum State {
+    V1(Sha256),
+    V2 {
+        gathered: [u8; GATHER],
+        len: usize,
+        /// Past [`GATHER`] bytes, the streaming hasher takes them all.
+        stream: Option<Box<blake3::Hasher>>,
+    },
+}
+
+/// A content-key hasher over length-prefixed fields, cut to 128 bits.
+#[derive(Clone)]
+pub struct Hasher(State);
 
 impl Hasher {
+    /// `hash@2`, what content keys and result digests are.
     pub fn new(tag: &str) -> Hasher {
-        let mut h = Hasher(Sha256::new());
-        h.text("hash@1").text(tag);
+        Hasher::of(HashVersion::V2, tag)
+    }
+
+    /// `hash@1`, what seeds stay on.
+    pub fn v1(tag: &str) -> Hasher {
+        Hasher::of(HashVersion::V1, tag)
+    }
+
+    pub fn of(version: HashVersion, tag: &str) -> Hasher {
+        let mut h = Hasher(match version {
+            HashVersion::V1 => State::V1(Sha256::new()),
+            HashVersion::V2 => State::V2 {
+                gathered: [0; GATHER],
+                len: 0,
+                stream: None,
+            },
+        });
+        h.text(version.name()).text(tag);
         h
     }
 
+    fn update(&mut self, bytes: &[u8]) {
+        match &mut self.0 {
+            State::V1(h) => h.update(bytes),
+            State::V2 {
+                stream: Some(h), ..
+            } => {
+                h.update(bytes);
+            }
+            State::V2 {
+                gathered,
+                len,
+                stream,
+            } => {
+                if *len + bytes.len() <= GATHER {
+                    gathered[*len..*len + bytes.len()].copy_from_slice(bytes);
+                    *len += bytes.len();
+                } else {
+                    let mut h = blake3::Hasher::new();
+                    h.update(&gathered[..*len]);
+                    h.update(bytes);
+                    *stream = Some(Box::new(h));
+                }
+            }
+        }
+    }
+
     pub fn bytes(&mut self, bytes: &[u8]) -> &mut Self {
-        self.0.update((bytes.len() as u64).to_le_bytes());
-        self.0.update(bytes);
+        self.update(&(bytes.len() as u64).to_le_bytes());
+        self.update(bytes);
         self
     }
 
@@ -113,9 +199,16 @@ impl Hasher {
     }
 
     pub fn finish(&self) -> Key {
-        let digest = self.0.clone().finalize();
         let mut out = [0u8; 16];
-        out.copy_from_slice(&digest[..16]);
+        match &self.0 {
+            State::V1(h) => out.copy_from_slice(&h.clone().finalize()[..16]),
+            State::V2 {
+                stream: Some(h), ..
+            } => out.copy_from_slice(&h.finalize().as_bytes()[..16]),
+            State::V2 { gathered, len, .. } => {
+                out.copy_from_slice(&blake3::hash(&gathered[..*len]).as_bytes()[..16])
+            }
+        }
         Key(out)
     }
 }
@@ -147,12 +240,24 @@ fn without_negative_zero(value: &mut Value) {
     }
 }
 
-/// One value an operator wrote: JSON, or a typed value with the bytes its result digest reads.
+/// A value a frame phase passes: its canonical bytes, its Debug text for diagnostics only, and
+/// the value itself to downcast.
+pub trait Typed: Canonical + std::fmt::Debug + Any + Send + Sync {
+    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
+}
+
+impl<T: Canonical + std::fmt::Debug + Any + Send + Sync> Typed for T {
+    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
+        self
+    }
+}
+
+/// One value an operator wrote: JSON, which only a check phase writes, or a typed value.
 #[derive(Clone)]
 pub enum Val {
     None,
     Json(Arc<Value>),
-    Any(Arc<dyn Any + Send + Sync>, Arc<[u8]>),
+    Typed(Arc<dyn Typed>),
 }
 
 impl std::fmt::Debug for Val {
@@ -160,7 +265,7 @@ impl std::fmt::Debug for Val {
         match self {
             Val::None => write!(f, "None"),
             Val::Json(v) => write!(f, "Json({v})"),
-            Val::Any(_, bytes) => write!(f, "Any({} bytes)", bytes.len()),
+            Val::Typed(v) => write!(f, "Typed({v:?})"),
         }
     }
 }
@@ -170,17 +275,33 @@ impl Val {
         Val::Json(Arc::new(value))
     }
 
-    /// A typed value and the bytes its result digest reads.
-    pub fn typed<T: Any + Send + Sync>(value: T, bytes: Vec<u8>) -> Val {
-        Val::Any(Arc::new(value), bytes.into())
+    /// A typed value; its canonical bytes are encoded only when a digest reads them.
+    pub fn typed<T: Typed>(value: T) -> Val {
+        Val::Typed(Arc::new(value))
     }
 
-    /// The bytes a result digest reads.
+    /// The typed value as a `T`, if it is one.
+    pub fn as_typed<T: Any + Send + Sync>(&self) -> Option<Arc<T>> {
+        match self {
+            Val::Typed(v) => Arc::clone(v).into_any().downcast::<T>().ok(),
+            _ => None,
+        }
+    }
+
+    /// The bytes a result digest reads: a typed value's canonical bytes, never its Debug text.
     pub fn bytes(&self) -> Vec<u8> {
         match self {
             Val::None => Vec::new(),
             Val::Json(v) => serde_json::to_vec(v.as_ref()).unwrap_or_default(),
-            Val::Any(_, bytes) => bytes.to_vec(),
+            Val::Typed(v) => v.canonical_bytes(),
+        }
+    }
+
+    /// A typed value as Debug sees it, for a diagnostic of its text; `None` for any other.
+    pub fn debug(&self) -> Option<&dyn std::fmt::Debug> {
+        match self {
+            Val::Typed(v) => Some(v.as_ref() as &dyn std::fmt::Debug),
+            _ => None,
         }
     }
 
@@ -281,12 +402,38 @@ pub struct Planted {
     /// A seek restores the checkpoint nearest to t by distance, the earlier of two equally
     /// near, instead of the last one at or before t (#488's planted seek).
     pub checkpoint_nearest: bool,
+    /// A session's own frame merges the results of nodes run on several threads in the order
+    /// they finished, not the plan's node order (#857's planted merge); a revision's check and
+    /// its probe frame still merge in order, so the revision is accepted.
+    pub merge_by_finish: bool,
+    /// A frame-phase operator may write JSON, which is counted (#855's planted seal).
+    pub admits_frame_json: bool,
+    /// A session's own frame runs every node of its frame phases, changed or not (#854's planted
+    /// scheduler).
+    pub runs_every_node: bool,
+    /// [`View::changed`] never knows what changed, so an operator that would replace only the
+    /// changed items' part of its last result rebuilds all of it (#896's planted
+    /// `marks2d.frame`).
+    pub forgets_changes: bool,
+    /// A canvas module's own wrong program by name, which its operators and keys read through
+    /// [`View::planted`] (#420's builders, dirty maps and disabled modifiers).
+    pub module: Option<String>,
 }
 
 /// Called as an operator's node starts (`done` false) and ends: its index in the sealed set's
 /// operators and its item. The canvas core reads no clock; the cost model's micro-benchmark
 /// (issue #379) times operators through it.
 pub type Timing = fn(op: usize, item: Option<&str>, done: bool);
+
+/// The worker threads a host lends the scheduler (#857): the canvas core starts no thread and
+/// reads no machine, so the pool and the machine's core count are the host's.
+pub trait Pool: Send + Sync + std::fmt::Debug {
+    /// The machine's performance cores: the export class's thread count.
+    fn performance_cores(&self) -> usize;
+    /// Calls `job(k, thread)` once for every `k` in `0..count` on at most `threads` threads, the
+    /// caller's own among them as thread 0, and returns once every call has returned.
+    fn run(&self, threads: usize, count: usize, job: &(dyn Fn(usize, usize) + Sync));
+}
 
 /// A process's scheduling options.
 #[derive(Clone, Debug, Default)]
@@ -298,6 +445,14 @@ pub struct Options {
     pub shuffle: Option<u32>,
     pub planted: Planted,
     pub timing: Option<Timing>,
+    /// The threads independent nodes of one operator run on; without a pool, every node runs on
+    /// the scheduler's own thread.
+    pub pool: Option<Arc<dyn Pool>>,
+    /// Every session's thread count in place of its budget class's (a proof surface).
+    pub threads: Option<usize>,
+    /// The hash content keys and result digests are computed with (#855): `hash@2`, unless a
+    /// process keys as before its migration.
+    pub hash: HashVersion,
 }
 
 /// A pass over values made to compute a key (the counting hash).
@@ -329,8 +484,8 @@ pub struct Outside {
 impl Outside {
     /// The key of everything outside the document: readings by their canonical bytes, columns by
     /// the hash taken when each arrived.
-    fn key(&self) -> Key {
-        let mut h = Hasher::new("outside");
+    fn key(&self, v: HashVersion) -> Key {
+        let mut h = Hasher::of(v, "outside");
         for (handle, v) in &self.readings {
             h.text(handle).bytes(&canonical(v));
         }
@@ -347,15 +502,21 @@ pub struct Scheduler<'s> {
     pub sealed: &'s Sealed,
     pub options: Options,
     /// key → (the node's outputs, its error, how many current nodes hold it).
-    cache: BTreeMap<Key, (Vec<Val>, Option<OpError>, u32)>,
+    cache: Cache,
     tables: BTreeMap<String, (TableValue, Key)>,
     /// Passes over values made to compute keys, since the last [`Scheduler::take_hashes`].
     hashes: Vec<Hashed>,
+    /// The JSON values frame-phase operators wrote since the last [`Scheduler::take_json`]:
+    /// only where the planted seal admits them.
+    json_written: Vec<Arc<Value>>,
     /// Called with the look tokens an evaluation uses, before its operators run: the planted
     /// static accent reader's way in.
     pub look_hook: Option<fn(&Tokens)>,
     /// Each array's writer, by index into the sealed set's operators.
     writer: BTreeMap<String, usize>,
+    /// The cache changes a wave's merge makes, in node order, while it settles: applied after
+    /// it, each shard's on the pool (#857).
+    deferred: Option<Vec<CacheOp>>,
 }
 
 impl<'s> Scheduler<'s> {
@@ -369,17 +530,24 @@ impl<'s> Scheduler<'s> {
         Scheduler {
             sealed,
             options,
-            cache: BTreeMap::new(),
+            cache: Cache::default(),
             tables: BTreeMap::new(),
             hashes: Vec::new(),
+            json_written: Vec::new(),
             look_hook: None,
             writer,
+            deferred: None,
         }
     }
 
     /// The passes over values made to compute keys since the last call.
     pub fn take_hashes(&mut self) -> Vec<Hashed> {
         std::mem::take(&mut self.hashes)
+    }
+
+    /// The JSON values frame-phase operators wrote since the last call.
+    pub fn take_json(&mut self) -> Vec<Arc<Value>> {
+        std::mem::take(&mut self.json_written)
     }
 
     /// How many results the cache holds.
@@ -391,8 +559,12 @@ impl<'s> Scheduler<'s> {
     /// the cache with a clean rebuild (the conformance kit).
     pub fn cache_results(&self) -> BTreeMap<String, String> {
         self.cache
+            .0
             .iter()
-            .map(|(k, (out, err, _))| (k.hex(), result_digest(out, err.as_ref())))
+            .flatten()
+            .map(|(k, (out, err, _))| {
+                (k.hex(), result_digest(self.options.hash, out, err.as_ref()))
+            })
             .collect()
     }
 
@@ -404,27 +576,195 @@ impl<'s> Scheduler<'s> {
         let t = self.sealed.tables.get(name)?;
         let make = t.make?;
         let value = make();
-        let key = Hasher::new("table").text(name).text(&t.owner).finish();
+        let key = table_key(self.options.hash, name, &t.owner);
         self.tables.insert(name.into(), (value.clone(), key));
         Some((value, key))
     }
 
-    fn hold(&mut self, key: Key) {
-        if let Some(e) = self.cache.get_mut(&key) {
-            e.2 += 1;
+    /// The hash content keys and result digests are computed with.
+    pub fn hash(&self) -> HashVersion {
+        self.options.hash
+    }
+
+    /// Rekeys the process's content keys under `to`, once (#855): every session's keys are
+    /// computed afresh under it and each result the cache holds moves to its node's new key, so
+    /// a result written under `hash@1` is found again under `hash@2`. Returns how many entries
+    /// moved; none when the process already keys with `to`.
+    pub fn migrate(&mut self, to: HashVersion, sessions: &mut [&mut Session]) -> usize {
+        if self.options.hash == to {
+            return 0;
+        }
+        self.options.hash = to;
+        let sealed = self.sealed;
+        for (name, (_, key)) in self.tables.iter_mut() {
+            if let Some(t) = sealed.tables.get(name) {
+                *key = table_key(to, name, &t.owner);
+            }
+        }
+        let mut moves = BTreeMap::new();
+        for session in sessions.iter_mut() {
+            moves.extend(session.rekey(self));
+        }
+        let old = std::mem::take(&mut self.cache);
+        let mut rekeyed = 0;
+        for (key, entry) in old.0.into_iter().flatten() {
+            match moves.get(&key) {
+                Some(new) => {
+                    rekeyed += 1;
+                    self.cache.insert(*new, entry);
+                }
+                None => {
+                    self.cache.insert(key, entry);
+                }
+            }
+        }
+        rekeyed
+    }
+
+    /// Holds `key`'s result for node `n`: whether the cache has it, or `None` while a wave's
+    /// changes are deferred, when applying them answers.
+    fn hold(&mut self, n: usize, key: Key) -> Option<bool> {
+        match &mut self.deferred {
+            Some(ops) => {
+                ops.push(CacheOp::Hold(n, key));
+                None
+            }
+            None => Some(self.cache.hold(key)),
         }
     }
 
     fn release(&mut self, key: Key) {
-        let gone = match self.cache.get_mut(&key) {
+        match &mut self.deferred {
+            Some(ops) => ops.push(CacheOp::Release(key)),
+            None => self.cache.release(key),
+        }
+    }
+
+    /// Caches a result a node just made, unheld.
+    fn insert(&mut self, key: Key, out: Vec<Val>, err: Option<OpError>) {
+        match &mut self.deferred {
+            Some(ops) => ops.push(CacheOp::Insert(key, out, err)),
+            None => self.cache.insert(key, (out, err, 0)),
+        }
+    }
+
+    /// Applies a wave's deferred cache changes, each shard's in node order on the pool (changes
+    /// to different keys commute); returns each hold's node and the key it now holds.
+    fn apply_deferred(&mut self, threads: usize) -> Vec<(usize, Option<Key>)> {
+        let ops = self.deferred.take().unwrap_or_default();
+        let mut by_shard: Vec<Vec<CacheOp>> = (0..SHARDS).map(|_| Vec::new()).collect();
+        for op in ops {
+            by_shard[Cache::shard(op.key())].push(op);
+        }
+        let jobs: Vec<std::sync::Mutex<_>> = self
+            .cache
+            .0
+            .iter_mut()
+            .zip(by_shard)
+            .map(|(map, ops)| std::sync::Mutex::new((map, ops, Vec::new())))
+            .collect();
+        let apply = |k: usize, _| {
+            let mut job = jobs[k].lock().expect("unpoisoned");
+            let (map, ops, held) = &mut *job;
+            let mut ops = std::mem::take(ops).into_iter().peekable();
+            while let Some(op) = ops.next() {
+                match op {
+                    // A node that ran holds its result at once: one lookup, not two.
+                    CacheOp::Insert(key, out, err) => {
+                        let holder = match ops.peek() {
+                            Some(CacheOp::Hold(n, k)) if *k == key => Some(*n),
+                            _ => None,
+                        };
+                        if holder.is_some() {
+                            ops.next();
+                        }
+                        map.insert(key, (out, err, u32::from(holder.is_some())));
+                        held.extend(holder.map(|n| (n, Some(key))));
+                    }
+                    CacheOp::Hold(n, key) => {
+                        held.push((n, Cache::hold_in(map, key).then_some(key)))
+                    }
+                    CacheOp::Release(key) => Cache::release_in(map, key),
+                }
+            }
+        };
+        match self.options.pool.as_deref() {
+            Some(pool) => pool.run(threads, SHARDS, &apply),
+            None => (0..SHARDS).for_each(|k| apply(k, 0)),
+        }
+        jobs.into_iter()
+            .flat_map(|j| j.into_inner().expect("unpoisoned").2)
+            .collect()
+    }
+}
+
+/// How many maps the cache splits into by key, so a wave's changes apply on the pool.
+const SHARDS: usize = 16;
+
+/// A cached result: the node's outputs, its error, how many current nodes hold it.
+type Entry = (Vec<Val>, Option<OpError>, u32);
+
+/// The content-key cache, split by each key's first byte.
+#[derive(Default)]
+struct Cache([BTreeMap<Key, Entry>; SHARDS]);
+
+impl Cache {
+    fn shard(key: Key) -> usize {
+        usize::from(key.0[0]) % SHARDS
+    }
+
+    fn len(&self) -> usize {
+        self.0.iter().map(BTreeMap::len).sum()
+    }
+
+    fn get(&self, key: &Key) -> Option<&Entry> {
+        self.0[Cache::shard(*key)].get(key)
+    }
+
+    fn insert(&mut self, key: Key, entry: Entry) {
+        self.0[Cache::shard(key)].insert(key, entry);
+    }
+
+    fn hold(&mut self, key: Key) -> bool {
+        Cache::hold_in(&mut self.0[Cache::shard(key)], key)
+    }
+
+    fn release(&mut self, key: Key) {
+        Cache::release_in(&mut self.0[Cache::shard(key)], key);
+    }
+
+    fn hold_in(map: &mut BTreeMap<Key, Entry>, key: Key) -> bool {
+        match map.get_mut(&key) {
             Some(e) => {
-                e.2 = e.2.saturating_sub(1);
-                e.2 == 0
+                e.2 += 1;
+                true
             }
             None => false,
-        };
-        if gone {
-            self.cache.remove(&key);
+        }
+    }
+
+    fn release_in(map: &mut BTreeMap<Key, Entry>, key: Key) {
+        if let std::collections::btree_map::Entry::Occupied(mut e) = map.entry(key) {
+            e.get_mut().2 = e.get().2.saturating_sub(1);
+            if e.get().2 == 0 {
+                e.remove();
+            }
+        }
+    }
+}
+
+/// A change a wave's merge makes to the cache.
+enum CacheOp {
+    Insert(Key, Vec<Val>, Option<OpError>),
+    /// Node `n` holds the key.
+    Hold(usize, Key),
+    Release(Key),
+}
+
+impl CacheOp {
+    fn key(&self) -> Key {
+        match self {
+            CacheOp::Insert(k, ..) | CacheOp::Hold(_, k) | CacheOp::Release(k) => *k,
         }
     }
 }
@@ -575,14 +915,16 @@ struct Node {
     visited: u64,
     /// The key the cache holds for it.
     held: Option<Key>,
+    /// The thread its operator last ran on: 0 the scheduler's own, else one of the pool's.
+    thread: usize,
 }
 
 impl Node {
     /// The key a reader of `array` takes from this node: its key, or another one for the array
     /// a perturbed clean evaluation changed.
-    fn key_for(&self, array: &str) -> Key {
+    fn key_for(&self, array: &str, v: HashVersion) -> Key {
         match &self.perturbed {
-            Some(p) if p == array => Hasher::new("perturbed").key(&self.key).text(p).finish(),
+            Some(p) if p == array => Hasher::of(v, "perturbed").key(&self.key).text(p).finish(),
             _ => self.key,
         }
     }
@@ -593,6 +935,9 @@ impl Node {
 struct Group {
     op: usize,
     nodes: Vec<usize>,
+    /// Where each run of nodes with no edge between them starts in `nodes`: a node that reads
+    /// its parent's node starts a new one when that parent is in the current one.
+    waves: Vec<usize>,
     /// The arrays it reads and their contributions, by index into the plan's array epochs.
     arrays: Vec<usize>,
     terms: Terms,
@@ -624,6 +969,63 @@ struct Loaded {
     /// Each array's epoch of its last change, by the plan's index.
     array_at: Vec<u32>,
     array_names: Vec<String>,
+    /// Each operator's writes, by the plan's array index.
+    writes_at: Vec<Vec<usize>>,
+    /// Under `hash@2`, the key of the envelope (every member but its ID and items) and the tree
+    /// over each item's ID and key, in plan order, that the document's key ends with (#896).
+    envelope: Key,
+    items_tree: KeyTree,
+    /// Each node's place in its operator's group.
+    slot: Vec<u32>,
+    /// Each item's nodes, and each per-item node's per-item readers (of its arrays and as a
+    /// parent), as offsets into flat lists (#896: a frame visits only what a change reaches).
+    item_nodes: Csr,
+    readers: Csr,
+    /// A tree over the writers' keys of each array a node reads from more than one writer, and
+    /// where each writer's key sits in those trees.
+    trees: Vec<ReadTree>,
+    tree_of: BTreeMap<(usize, usize), usize>,
+    leaves: Vec<Vec<(u32, u32)>>,
+}
+
+/// Lists by index, flat: the `k`th list is `items[at[k]..at[k + 1]]`.
+#[derive(Clone, Debug, Default)]
+struct Csr {
+    at: Vec<u32>,
+    items: Vec<u32>,
+}
+
+impl Csr {
+    fn of(lists: &[Vec<usize>]) -> Csr {
+        let mut at = Vec::with_capacity(lists.len() + 1);
+        let mut items = Vec::new();
+        at.push(0);
+        for l in lists {
+            items.extend(l.iter().map(|&x| x as u32));
+            at.push(items.len() as u32);
+        }
+        Csr { at, items }
+    }
+
+    fn get(&self, k: usize) -> impl Iterator<Item = usize> + '_ {
+        let (from, to) = match (self.at.get(k), self.at.get(k + 1)) {
+            (Some(&a), Some(&b)) => (a as usize, b as usize),
+            _ => (0, 0),
+        };
+        self.items[from..to].iter().map(|&x| x as usize)
+    }
+}
+
+/// One node's read of an array with many writers: the tree over their keys, by the array's
+/// plan index, and the writers whose keys changed since it was last brought up to date.
+#[derive(Clone, Debug)]
+struct ReadTree {
+    name: String,
+    array: Option<usize>,
+    node: usize,
+    read: usize,
+    tree: KeyTree,
+    pending: Vec<u32>,
 }
 
 /// One step as the log shows it.
@@ -664,6 +1066,11 @@ pub struct NodeReport {
     pub key: String,
     pub result: String,
     pub run: Run,
+    /// The thread it ran on, when it ran.
+    pub thread: Option<usize>,
+    /// What it wrote, for a diagnostic of its values; never what `result` reads beyond its
+    /// canonical bytes.
+    pub values: Vec<Val>,
 }
 
 /// An input a perturbed clean evaluation changes (`eval`: `perturb`).
@@ -724,6 +1131,14 @@ impl Target {
     }
 }
 
+/// What a changed node comes to: it keeps its result (its key is the same), takes a cached one, or
+/// ran on a thread.
+enum Fate {
+    Kept,
+    Hit(Key, Vec<Val>, Option<OpError>),
+    Ran(Key, Called, Vec<Access>, Vec<Arc<Value>>, usize),
+}
+
 /// What one evaluation reports beside its nodes.
 #[derive(Clone, Debug, Default)]
 pub struct Report {
@@ -747,6 +1162,8 @@ enum Mode {
 /// look, the data from outside and the steps' carried state.
 #[derive(Clone)]
 pub struct Session {
+    /// The hash its keys were computed with: the scheduler's, once it loads or frames.
+    hash: HashVersion,
     epoch: u32,
     loaded: Option<Loaded>,
     generation: u32,
@@ -782,7 +1199,20 @@ pub struct Session {
     pub report: Report,
     /// The operator's panic that froze this session, until a new revision loads.
     frozen: Option<OpIssue>,
+    /// The threads its independent nodes run on: its budget class's count.
+    threads: usize,
+    /// Since `log_floor`, each item stamped and each node whose result changed, with the epoch
+    /// it happened at (#896): what a group visits and an operator's [`View::changed`] reads.
+    /// Before the floor nothing is known, and a group visits every node.
+    stamps: Vec<(u32, u32)>,
+    changes: Vec<(u32, u32)>,
+    log_floor: u32,
+    /// The frame counter's value when the check phases last ran.
+    checked: u64,
 }
+
+/// The entries the change logs hold before they are dropped, and nothing older is known.
+const LOG_CAP: usize = 1 << 14;
 
 /// What a source perturbation's writer reads instead of its item or document.
 #[derive(Clone)]
@@ -803,8 +1233,12 @@ fn perturb_params(item: &Value) -> Value {
     out
 }
 
-fn look_key(look: &Tokens) -> Key {
-    let mut h = Hasher::new("look");
+fn table_key(v: HashVersion, name: &str, owner: &str) -> Key {
+    Hasher::of(v, "table").text(name).text(owner).finish()
+}
+
+fn look_key(v: HashVersion, look: &Tokens) -> Key {
+    let mut h = Hasher::of(v, "look");
     for (role, v) in look {
         h.text(role).bytes(&canonical(v));
     }
@@ -827,9 +1261,11 @@ pub fn default_view(doc: &Value) -> [Value; 6] {
 impl Session {
     /// A session whose epoch counter starts at `epoch_start`, with the look's tokens.
     pub fn new(epoch_start: u32, look: Tokens) -> Session {
-        let look_key = look_key(&look);
-        let outside_key = Outside::default().key();
+        let hash = HashVersion::default();
+        let look_key = look_key(hash, &look);
+        let outside_key = Outside::default().key(hash);
         Session {
+            hash,
             epoch: epoch_start,
             loaded: None,
             generation: 0,
@@ -862,7 +1298,75 @@ impl Session {
             mode: Mode::Live,
             report: Report::default(),
             frozen: None,
+            threads: 1,
+            stamps: Vec::new(),
+            changes: Vec::new(),
+            log_floor: u32::MAX,
+            checked: 0,
         }
+    }
+
+    /// The threads its independent nodes run on.
+    pub fn threads(&self) -> usize {
+        self.threads
+    }
+
+    /// Computes every key of the session afresh under the scheduler's hash: the look's and the
+    /// outside data's, then each item's from its canonical bytes, the document's, and every
+    /// node's in plan order, so each reads keys computed in this pass; no operator runs and
+    /// nothing is read from the cache. Returns each held result's old and new key.
+    pub fn rekey(&mut self, s: &mut Scheduler<'_>) -> Vec<(Key, Key)> {
+        let v = s.options.hash;
+        self.hash = v;
+        self.look_key = look_key(v, &self.look);
+        self.outside_key = self.outside.key(v);
+        let mut moves = Vec::new();
+        let Some(l) = &mut self.loaded else {
+            return moves;
+        };
+        for item in &mut l.items {
+            item.key = item_key(v, &item.value);
+        }
+        (l.envelope, l.items_tree, l.doc_key) = match v {
+            // As a load keys it: a copy of the document, its ID taken out.
+            HashVersion::V1 => doc_key(v, &mut (*l.doc).clone(), &l.items),
+            HashVersion::V2 => tree_parts(&l.doc, &l.items),
+        };
+        let order: Vec<usize> = l
+            .groups
+            .iter()
+            .flat_map(|g| g.nodes.iter().copied())
+            .collect();
+        for n in order {
+            // Its trees from its writers' keys, made earlier in this pass: one pass over each,
+            // not a path per writer.
+            self.loaded.as_mut().expect("loaded").plant(n, v);
+            let new = self.key_of(s, n);
+            let l = self.loaded.as_mut().expect("loaded");
+            let node = &mut l.nodes[n];
+            if node.held == Some(node.key) {
+                moves.push((node.key, new));
+                node.held = Some(new);
+            }
+            node.key = new;
+            // Its result is kept under the new key: nothing ran.
+            if node.has_run {
+                node.run = Run::Kept;
+            }
+        }
+        moves
+    }
+
+    /// Keys under the scheduler's hash, rekeyed once when the process changed it.
+    fn sync_hash(&mut self, s: &mut Scheduler<'_>) {
+        if self.hash != s.options.hash {
+            self.rekey(s);
+        }
+    }
+
+    /// How many nodes the current revision has.
+    pub fn node_count(&self) -> usize {
+        self.loaded.as_ref().map_or(0, |l| l.nodes.len())
     }
 
     /// The session's current epoch.
@@ -924,6 +1428,8 @@ impl Session {
         ]);
         all.extend(self.view_at);
         all.extend(self.group_run.iter().copied());
+        all.extend(self.stamps.iter().chain(&self.changes).map(|e| e.0));
+        all.extend([self.log_floor].into_iter().filter(|f| *f != u32::MAX));
         if let Some(l) = &self.loaded {
             all.extend(l.items.iter().flat_map(|i| i.changed_at));
             all.extend(l.nodes.iter().flat_map(|n| [n.changed_at, n.last_run]));
@@ -945,6 +1451,13 @@ impl Session {
         r(&mut self.reading_at);
         self.view_at.iter_mut().for_each(r);
         self.group_run.iter_mut().for_each(r);
+        self.stamps
+            .iter_mut()
+            .chain(self.changes.iter_mut())
+            .for_each(|e| r(&mut e.0));
+        if self.log_floor != u32::MAX {
+            r(&mut self.log_floor);
+        }
         if let Some(l) = &mut self.loaded {
             l.items
                 .iter_mut()
@@ -961,7 +1474,7 @@ impl Session {
     pub fn set_readings(&mut self, readings: BTreeMap<String, Value>) {
         if readings != self.outside.readings {
             self.outside.readings = readings;
-            self.outside_key = self.outside.key();
+            self.outside_key = self.outside.key(self.hash);
             self.reading_at = self.bump();
         }
     }
@@ -985,7 +1498,7 @@ impl Session {
             self.outside.columns.insert(name, Column { bytes, sha256 });
         }
         if changed {
-            self.outside_key = self.outside.key();
+            self.outside_key = self.outside.key(self.hash);
             self.reading_at = self.bump();
         }
         hashed
@@ -1017,6 +1530,7 @@ impl Session {
     /// (operator, item) the last revision had, stamps the items whose content changed, and
     /// runs the check phases. Returns their issues.
     pub fn load(&mut self, s: &mut Scheduler<'_>, doc: &Value) -> Vec<OpIssue> {
+        self.sync_hash(s);
         let mut next = compile(s, doc, self.loaded.as_ref());
         let epoch = self.bump();
         if self.group_run.len() != s.sealed.ops.len() {
@@ -1095,6 +1609,7 @@ impl Session {
                         n.has_run = was.has_run;
                         n.run = was.run;
                         n.held = was.held;
+                        n.thread = was.thread;
                     }
                 }
                 for (a, name) in next.array_names.iter().enumerate() {
@@ -1113,17 +1628,27 @@ impl Session {
                 for n in &mut next.nodes {
                     if !n.has_run {
                         n.changed_at = epoch;
+                        for &a in &next.writes_at[n.op] {
+                            next.array_at[a] = epoch;
+                        }
                     }
                 }
             }
         }
+        next.plant_trees(self.hash);
+        // A new plan: nothing before it is known to have changed by item or node.
+        self.stamps.clear();
+        self.changes.clear();
+        self.log_floor = epoch;
         self.generation += 1;
+        self.threads = threads_for(s, doc);
         self.loaded = Some(next);
         // A new revision is the way out of a panic: its operators run again.
         self.frozen = None;
         let mut report = Report::default();
         self.frames += 1;
         let frame = self.frames;
+        self.checked = frame;
         let groups = self.loaded.as_ref().map_or(0, |l| l.groups.len());
         for g in 0..groups {
             let op = self.loaded.as_ref().expect("loaded").groups[g].op;
@@ -1136,10 +1661,139 @@ impl Session {
         issues
     }
 
+    /// A revision that changes only the values of the items `ids` names (#854): each keeps its
+    /// place in the plan (its parent, order, kind and asset, and every operator's `applies`), and
+    /// nothing else in the document changes. Those items are rekeyed and stamped by the classes
+    /// their changed fields fall in, as `load` would stamp them, without compiling the plan again;
+    /// then the revision's check phases run. `None` when the revision reaches further, for `load`.
+    pub fn revise_items(
+        &mut self,
+        s: &mut Scheduler<'_>,
+        doc: &Value,
+        ids: &[&str],
+    ) -> Option<Vec<OpIssue>> {
+        self.sync_hash(s);
+        let v = s.options.hash;
+        let items = doc.get("items")?.as_object()?;
+        let mut fresh = Vec::with_capacity(ids.len());
+        {
+            let l = self.loaded.as_ref()?;
+            if items.len() != l.items.len() {
+                return None;
+            }
+            for (k, value) in doc.as_object()? {
+                if k != "items" && l.doc.get(k) != Some(value) {
+                    return None;
+                }
+            }
+            for id in ids {
+                let &at = l.index.get(*id)?;
+                let mut value = items.get(*id)?.clone();
+                without_negative_zero(&mut value);
+                let was = &l.items[at].value;
+                let same = |p: &str| was.pointer(p) == value.pointer(p);
+                if !["/parent", "/order", "/kind", "/params/asset"]
+                    .iter()
+                    .all(|p| same(p))
+                {
+                    return None;
+                }
+                let applies_alike =
+                    s.sealed
+                        .ops
+                        .iter()
+                        .all(|sop| match (sop.op.applies, sop.op.per) {
+                            (Some(f), Per::Item) => f(&l.doc, id, was) == f(doc, id, &value),
+                            (Some(f), Per::Document) => {
+                                f(&l.doc, "", &Value::Null) == f(doc, "", &Value::Null)
+                            }
+                            (None, _) => true,
+                        });
+                if !applies_alike {
+                    return None;
+                }
+                fresh.push((at, value));
+            }
+        }
+        let epoch = self.bump();
+        let l = self.loaded.as_mut().expect("checked above");
+        let mut any = false;
+        for (at, value) in fresh {
+            let item = &mut l.items[at];
+            if written_alike(&item.value, &value) {
+                continue;
+            }
+            for c in classes_changed(&item.value, &value) {
+                item.changed_at[c as usize] = epoch;
+            }
+            item.key = item_key(v, &value);
+            item.value = Arc::new(value.clone());
+            if let Some(Value::Object(map)) = Arc::make_mut(&mut l.doc).get_mut("items") {
+                map.insert(item.id.clone(), value);
+            }
+            if v == HashVersion::V2 {
+                l.items_tree.set(at, item_leaf(&l.items[at]));
+            }
+            self.stamps.push((epoch, at as u32));
+            any = true;
+        }
+        if any {
+            self.items_at = epoch;
+            // Under `hash@2` the document rekeys by the changed items' paths in its tree (#896).
+            let key = match v {
+                HashVersion::V2 => tree_doc_key(&l.envelope, &l.items_tree),
+                HashVersion::V1 => doc_key(v, Arc::make_mut(&mut l.doc), &l.items).2,
+            };
+            if key != l.doc_key {
+                l.doc_key = key;
+                self.refs_at = epoch;
+            }
+        }
+        self.generation += 1;
+        self.frozen = None;
+        let mut report = Report::default();
+        self.frames += 1;
+        let frame = self.frames;
+        self.checked = frame;
+        let groups = self.loaded.as_ref().map_or(0, |l| l.groups.len());
+        for g in 0..groups {
+            let op = self.loaded.as_ref().expect("loaded").groups[g].op;
+            if is_check_phase(&s.sealed.ops[op].op.phase) {
+                self.visit_group(s, g, frame, &mut report);
+            }
+        }
+        let issues = report.issues.clone();
+        self.report = report;
+        self.prune_logs();
+        Some(issues)
+    }
+
+    /// Every value `array` holds in the current revision, with the item each is for, in plan
+    /// order: only the writer's own nodes are read.
+    pub fn values(&self, s: &Scheduler<'_>, array: &str) -> Vec<(Option<&str>, Val)> {
+        let (Some(l), Some(&op)) = (&self.loaded, s.writer.get(array)) else {
+            return Vec::new();
+        };
+        let Some(k) = s.sealed.ops[op].op.writes.iter().position(|w| w == array) else {
+            return Vec::new();
+        };
+        l.groups
+            .iter()
+            .filter(|g| g.op == op)
+            .flat_map(|g| g.nodes.iter())
+            .filter_map(|&n| {
+                let node = &l.nodes[n];
+                let value = node.out.get(k)?.clone();
+                Some((node.item.map(|i| l.items[i].id.as_str()), value))
+            })
+            .collect()
+    }
+
     /// One frame at `t` under `view`: stamps what changed, then visits only the operators whose
     /// read set changed since they last ran. Once warm, a frame with nothing changed allocates
     /// nothing and runs no operator. Returns how many nodes ran.
     pub fn frame(&mut self, s: &mut Scheduler<'_>, t: i64, view: &[Value; 6]) -> usize {
+        self.sync_hash(s);
         self.report.ran = 0;
         self.report.issues.clear();
         self.report.access.clear();
@@ -1177,6 +1831,10 @@ impl Session {
         self.frames += 1;
         let frame = self.frames;
         let mut report = std::mem::take(&mut self.report);
+        let live = self.mode;
+        if s.options.planted.runs_every_node {
+            self.mode = Mode::Clean;
+        }
         let groups = self.loaded.as_ref().map_or(0, |l| l.groups.len());
         for g in 0..groups {
             let (op, dirty) = {
@@ -1199,7 +1857,52 @@ impl Session {
             }
             self.visit_group(s, g, frame, &mut report);
         }
+        self.mode = live;
         self.report = report;
+        self.prune_logs();
+    }
+
+    /// Drops the log entries every group that reads items or arrays has seen, since each last
+    /// ran after them; past [`LOG_CAP`], drops them all, and nothing before now is known.
+    fn prune_logs(&mut self) {
+        let Some(l) = &self.loaded else {
+            return;
+        };
+        let seen = l
+            .groups
+            .iter()
+            .filter(|g| !g.nodes.is_empty() && (g.terms.items || !g.arrays.is_empty()))
+            .map(|g| self.group_run.get(g.op).copied().unwrap_or(0))
+            .min()
+            .unwrap_or(self.epoch);
+        for log in [&mut self.stamps, &mut self.changes] {
+            let from = log.partition_point(|e| e.0 <= seen);
+            log.drain(..from);
+        }
+        if self.stamps.len() + self.changes.len() > LOG_CAP {
+            self.stamps.clear();
+            self.changes.clear();
+            self.log_floor = self.epoch;
+        }
+    }
+
+    /// How many nodes of each operator ran in the last frame, by the operator's key (#854).
+    pub fn ran_by_operator(&self, s: &Scheduler<'_>) -> BTreeMap<String, usize> {
+        let mut out = BTreeMap::new();
+        let Some(l) = &self.loaded else {
+            return out;
+        };
+        for g in &l.groups {
+            let ran = g
+                .nodes
+                .iter()
+                .filter(|&&n| l.nodes[n].visited == self.frames && l.nodes[n].run == Run::Ran)
+                .count();
+            if ran > 0 {
+                *out.entry(s.sealed.ops[g.op].key.clone()).or_default() += ran;
+            }
+        }
+        out
     }
 
     /// A clean evaluation at `t` under `view`, with `perturb` changed for it alone: every node
@@ -1234,7 +1937,7 @@ impl Session {
                 if let Some(v) = scratch.look.get_mut(role) {
                     *v = perturb_token(v);
                 }
-                scratch.look_key = look_key(&scratch.look);
+                scratch.look_key = look_key(scratch.hash, &scratch.look);
             }
             Some(Target::Seed) => {
                 if let Some(l) = &mut scratch.loaded {
@@ -1284,7 +1987,8 @@ impl Session {
     pub fn probe(&self, s: &mut Scheduler<'_>, doc: &Value, t: i64, frames: bool) -> Session {
         let mut scratch = Session::new(self.epoch, self.look.clone());
         scratch.outside = self.outside.clone();
-        scratch.outside_key = self.outside_key;
+        // Its look's and outside data's keys, under the scheduler's hash.
+        scratch.rekey(s);
         scratch.view = if self.loaded.is_some() {
             self.view.clone()
         } else {
@@ -1293,11 +1997,13 @@ impl Session {
         scratch.mode = Mode::Clean;
         scratch.t = t;
         scratch.group_run = vec![0; s.sealed.ops.len()];
+        scratch.threads = threads_for(s, doc);
         scratch.loaded = Some(compile(s, doc, None));
         if let Some(hook) = s.look_hook {
             hook(&scratch.look);
         }
         scratch.frames = 1;
+        scratch.checked = 1;
         let mut report = Report::default();
         let groups = scratch.loaded.as_ref().map_or(0, |l| l.groups.len());
         for g in 0..groups {
@@ -1326,14 +2032,119 @@ impl Session {
             || group.arrays.iter().any(|a| l.array_at[*a] > last)
     }
 
+    /// A per-item group's nodes a change since it last ran can have reached, in group order: the
+    /// nodes of each item stamped since, and each per-item reader of a node whose result changed
+    /// since (#896: "A frame visits only the nodes of items stamped since the group last ran").
+    /// `None` when that isn't known, or something every node reads changed: a clean evaluation,
+    /// a group that hasn't run since the plan was made, or a time, view, look, seed, reading or
+    /// reference change it reads.
+    fn reached(&self, s: &Scheduler<'_>, g: usize) -> Option<Vec<usize>> {
+        let l = self.loaded.as_ref()?;
+        let group = &l.groups[g];
+        let last = self.group_run.get(group.op).copied().unwrap_or(0);
+        let t = &group.terms;
+        let first = l.nodes[*group.nodes.first()?].item;
+        // A `parent` read is the parent's node, which the readers' lists hold; these read the
+        // document's references, which any revision may move.
+        let refs = s.sealed.ops[group.op].op.reads.iter().any(|r| {
+            matches!(r.as_str(), "refs" | "asset" | "children" | "siblings")
+                || r.starts_with("set(")
+        });
+        if self.mode != Mode::Live
+            || s.options.planted.runs_every_node
+            || first.is_none()
+            || last == 0
+            || last < self.log_floor
+            || (refs && self.refs_at > last)
+            || (t.t && self.t_at > last)
+            || (t.look && self.look_at > last)
+            || (t.seed && self.seed_at > last)
+            || (t.reading && self.reading_at > last)
+            || (0..6).any(|k| t.view[k] && self.view_at[k] > last)
+        {
+            return None;
+        }
+        let since = |log: &[(u32, u32)]| {
+            let from = log.partition_point(|e| e.0 <= last);
+            log[from..].iter().map(|e| e.1 as usize).collect::<Vec<_>>()
+        };
+        let mut out: Vec<usize> = since(&self.stamps)
+            .into_iter()
+            .flat_map(|i| l.item_nodes.get(i))
+            .chain(
+                since(&self.changes)
+                    .into_iter()
+                    .flat_map(|n| l.readers.get(n)),
+            )
+            .filter(|&n| l.nodes[n].op == group.op)
+            .collect();
+        out.sort_unstable_by_key(|&n| l.slot[n]);
+        out.dedup();
+        Some(out)
+    }
+
     fn visit_group(&mut self, s: &mut Scheduler<'_>, g: usize, frame: u64, report: &mut Report) {
         let epoch = self.epoch;
         let (op, nodes) = {
             let l = self.loaded.as_ref().expect("loaded");
             (l.groups[g].op, l.groups[g].nodes.len())
         };
+        let parallel = self.threads > 1 && nodes > 1 && !s.sealed.ops[op].op.serial;
+        // A node per document reads its many writers by their trees: brought up to date once.
+        let hash = self.hash;
+        let l = self.loaded.as_mut().expect("loaded");
+        for k in 0..nodes {
+            let n = l.groups[g].nodes[k];
+            if l.nodes[n].item.is_some() {
+                break;
+            }
+            l.refresh(n, hash);
+        }
         if s.sealed.ops[op].op.step.is_some() {
             self.visit_steps(s, g, frame, report);
+        } else if let Some(reached) = self.reached(s, g) {
+            // Only the nodes a change can have reached (#896), in group order: a node of this
+            // group that changes reaches its readers here too, as a parent its children.
+            let slot = |l: &Loaded, n: usize| (l.slot[n], n);
+            let l = self.loaded.as_ref().expect("loaded");
+            let mut pending: BTreeSet<(u32, usize)> =
+                reached.into_iter().map(|n| slot(l, n)).collect();
+            let waves = l.groups[g].waves.clone();
+            while let Some(&(first, _)) = pending.first() {
+                // On the pool, the rest of the wave the first one is in; else that one.
+                let end = match parallel {
+                    true => {
+                        let w = waves.partition_point(|&start| start as u32 <= first);
+                        waves.get(w).map_or(nodes, |e| *e) as u32
+                    }
+                    false => first + 1,
+                };
+                let mut batch = Vec::new();
+                while pending.first().is_some_and(|&(at, _)| at < end) {
+                    batch.extend(pending.pop_first().map(|(_, n)| n));
+                }
+                match batch[..] {
+                    [n] => self.visit(s, n, frame, report),
+                    _ => self.visit_wave(s, batch.clone(), frame, report),
+                }
+                let l = self.loaded.as_ref().expect("loaded");
+                for n in batch
+                    .into_iter()
+                    .filter(|&n| l.nodes[n].changed_at == epoch)
+                {
+                    let readers = l.readers.get(n).filter(|&r| l.nodes[r].op == op);
+                    pending.extend(readers.map(|r| slot(l, r)));
+                }
+            }
+        } else if parallel {
+            let waves = self.loaded.as_ref().expect("loaded").groups[g]
+                .waves
+                .clone();
+            for w in 0..waves.len() {
+                let group = &self.loaded.as_ref().expect("loaded").groups[g];
+                let (start, end) = (waves[w], waves.get(w + 1).map_or(nodes, |e| *e));
+                self.visit_wave(s, group.nodes[start..end].to_vec(), frame, report);
+            }
         } else {
             for k in 0..nodes {
                 let n = self.loaded.as_ref().expect("loaded").groups[g].nodes[k];
@@ -1348,7 +2159,8 @@ impl Session {
     }
 
     /// Whether a node's inputs changed since it last ran.
-    fn node_dirty(&self, l: &Loaded, n: &Node) -> bool {
+    fn node_dirty(&self, l: &Loaded, k: usize) -> bool {
+        let n = &l.nodes[k];
         if !n.has_run {
             return true;
         }
@@ -1358,7 +2170,7 @@ impl Session {
         if n.item.is_none() && self.items_at > last {
             return true;
         }
-        n.reads.iter().any(|b| match b {
+        n.reads.iter().enumerate().any(|(r, b)| match b {
             // `self` reads every class of the item.
             Bound::SelfItem(i) => l.items[*i].changed_at.iter().any(|e| *e > last),
             Bound::SelfDoc | Bound::Refs | Bound::Asset => self.refs_at > last,
@@ -1368,7 +2180,13 @@ impl Session {
                 contributions,
                 ..
             } => {
-                writers.iter().any(|w| l.nodes[*w].changed_at > last)
+                // Many writers: the array's epoch says whether any of them changed (#896).
+                let many = l.tree_of.get(&(k, r)).and_then(|t| l.trees[*t].array);
+                let written = match many {
+                    Some(a) => l.array_at[a] > last,
+                    None => writers.iter().any(|w| l.nodes[*w].changed_at > last),
+                };
+                written
                     || contributions
                         .iter()
                         .any(|(_, c)| l.nodes[*c].changed_at > last)
@@ -1382,39 +2200,143 @@ impl Session {
         })
     }
 
+    /// Keeps a live node's result when its inputs didn't change; whether it did.
+    fn unchanged(&mut self, n: usize, frame: u64) -> bool {
+        let l = self.loaded.as_ref().expect("loaded");
+        if self.mode != Mode::Live || self.node_dirty(l, n) {
+            return false;
+        }
+        let node = &mut self.loaded.as_mut().expect("loaded").nodes[n];
+        node.run = Run::Kept;
+        node.visited = frame;
+        true
+    }
+
     fn visit(&mut self, s: &mut Scheduler<'_>, n: usize, frame: u64, report: &mut Report) {
-        let epoch = self.epoch;
+        if self.unchanged(n, frame) {
+            return;
+        }
+        self.tables_of(s, n);
+        let fate = self.fate(s, n, 0);
+        self.land(s, n, fate, frame, report);
+    }
+
+    /// Visits one wave of an operator's nodes, which have no edge between them: each node's
+    /// change test, key and cache lookup, and its operator when it must run, on the pool; then
+    /// every node settles in node order, so nothing a frame leaves depends on which thread
+    /// finished first.
+    fn visit_wave(
+        &mut self,
+        s: &mut Scheduler<'_>,
+        mut nodes: Vec<usize>,
+        frame: u64,
+        report: &mut Report,
+    ) {
+        // What didn't change keeps its result here: only the nodes whose inputs changed go to the
+        // pool, so a frame with one item changed pays for no thread.
+        nodes.retain(|&n| !self.unchanged(n, frame));
+        let first = match nodes[..] {
+            [] => return,
+            // One changed node is visited as without a pool: it pays for no thread.
+            [n] => return self.visit(s, n, frame, report),
+            [first, ..] => first,
+        };
+        // One operator's nodes read the same tables.
+        self.tables_of(s, first);
+        let fates = self.fates(s, &nodes);
+        s.deferred = Some(Vec::new());
+        for (n, fate) in nodes.into_iter().zip(fates) {
+            self.land(s, n, fate, frame, report);
+        }
+        // A result the cache lets go is freed on the pool too: freeing a large result costs
+        // about as much as making it.
+        let l = self.loaded.as_mut().expect("loaded");
+        for (n, held) in s.apply_deferred(self.threads) {
+            l.nodes[n].held = held;
+        }
+    }
+
+    /// Each node's fate, on the pool, in `nodes`' order; the planted merge stores them in the
+    /// order they finished instead, in a session's own frame.
+    fn fates(&self, s: &Scheduler<'_>, nodes: &[usize]) -> Vec<(Fate, Vec<Hashed>)> {
+        let Some(pool) = s.options.pool.as_deref() else {
+            return nodes.iter().map(|&n| self.fate(s, n, 0)).collect();
+        };
+        let op = self.loaded.as_ref().expect("loaded").nodes[nodes[0]].op;
+        if s.options.planted.merge_by_finish
+            && self.mode == Mode::Live
+            && !is_check_phase(&s.sealed.ops[op].op.phase)
+        {
+            let finished = std::sync::Mutex::new(Vec::with_capacity(nodes.len()));
+            pool.run(self.threads, nodes.len(), &|k, thread| {
+                let fate = self.fate(s, nodes[k], thread);
+                finished.lock().expect("unpoisoned").push(fate);
+            });
+            return finished.into_inner().expect("unpoisoned");
+        }
+        let slots: Vec<std::sync::OnceLock<(Fate, Vec<Hashed>)>> =
+            nodes.iter().map(|_| std::sync::OnceLock::new()).collect();
+        pool.run(self.threads, nodes.len(), &|k, thread| {
+            let _ = slots[k].set(self.fate(s, nodes[k], thread));
+        });
+        slots
+            .into_iter()
+            .map(|slot| slot.into_inner().expect("every job ran"))
+            .collect()
+    }
+
+    /// What a changed node comes to this frame, touching nothing but what it returns: its tables
+    /// are built.
+    fn fate(&self, s: &Scheduler<'_>, n: usize, thread: usize) -> (Fate, Vec<Hashed>) {
+        let mut hashed = Vec::new();
+        let node = &self.loaded.as_ref().expect("loaded").nodes[n];
+        let key = self.key_in(s, n, &mut hashed);
         if self.mode == Mode::Live {
-            let l = self.loaded.as_ref().expect("loaded");
-            if !self.node_dirty(l, &l.nodes[n]) {
-                let node = &mut self.loaded.as_mut().expect("loaded").nodes[n];
-                node.run = Run::Kept;
-                node.visited = frame;
-                return;
+            if node.has_run && node.key == key {
+                return (Fate::Kept, hashed);
+            }
+            if let Some((out, err, _)) = s.cache.get(&key) {
+                return (Fate::Hit(key, out.clone(), err.clone()), hashed);
             }
         }
-        let key = self.key_of(s, n);
-        if self.mode == Mode::Live {
-            let node = &mut self.loaded.as_mut().expect("loaded").nodes[n];
-            if node.has_run && node.key == key {
+        let (called, access, json) = self.run_op(s, n, None);
+        (Fate::Ran(key, called, access, json, thread), hashed)
+    }
+
+    /// Applies a node's fate and the passes over values its key made: it keeps its result, or
+    /// settles a cached or a new one.
+    fn land(
+        &mut self,
+        s: &mut Scheduler<'_>,
+        n: usize,
+        (fate, hashed): (Fate, Vec<Hashed>),
+        frame: u64,
+        report: &mut Report,
+    ) {
+        let epoch = self.epoch;
+        s.hashes.extend(hashed);
+        match fate {
+            Fate::Kept => {
+                let node = &mut self.loaded.as_mut().expect("loaded").nodes[n];
                 node.run = Run::Kept;
                 node.last_run = epoch;
                 node.visited = frame;
-                return;
             }
-            if let Some((out, err, _)) = s.cache.get(&key) {
-                let (out, err) = (out.clone(), err.clone());
-                self.settle(s, n, key, out, err, Run::Hit, frame, report);
-                return;
+            Fate::Hit(key, out, err) => self.settle(s, n, key, out, err, Run::Hit, frame, report),
+            Fate::Ran(key, (out, err, _, tails), access, json, thread) => {
+                if s.options.access_log {
+                    report.access.extend(access);
+                }
+                s.json_written.extend(json);
+                self.tails.extend(tails);
+                report.ran += 1;
+                if self.mode == Mode::Live {
+                    s.insert(key, out.clone(), err.clone());
+                }
+                self.settle(s, n, key, out, err, Run::Ran, frame, report);
+                self.loaded.as_mut().expect("loaded").nodes[n].thread = thread;
             }
         }
-        let (out, err, tails) = self.run_node(s, n, report);
-        self.tails.extend(tails);
-        report.ran += 1;
-        if self.mode == Mode::Live {
-            s.cache.insert(key, (out.clone(), err.clone(), 0));
-        }
-        self.settle(s, n, key, out, err, Run::Ran, frame, report);
     }
 
     /// Stores a node's new result, stamps its arrays and reports its error; in a perturbed
@@ -1477,19 +2399,16 @@ impl Session {
         }
         if changed {
             node.changed_at = epoch;
-            for w in &sop.op.writes {
-                if let Some(a) = l.array_names.iter().position(|x| x == w) {
-                    l.array_at[a] = epoch;
-                }
+            for &a in &l.writes_at[l.nodes[n].op] {
+                l.array_at[a] = epoch;
             }
+            self.changes.push((epoch, n as u32));
         }
+        l.reseat(n, self.hash);
         // The cache holds a result while a current node reads its key.
         if mode == Mode::Live && was_held != Some(key) {
-            if s.cache.contains_key(&key) {
-                l.nodes[n].held = Some(key);
-                s.hold(key);
-            } else {
-                l.nodes[n].held = None;
+            if let Some(held) = s.hold(n, key) {
+                l.nodes[n].held = held.then_some(key);
             }
             if let Some(k) = was_held {
                 s.release(k);
@@ -1499,12 +2418,33 @@ impl Session {
 
     /// The node's content key, from its declared reads in order; never an epoch.
     fn key_of(&self, s: &mut Scheduler<'_>, n: usize) -> Key {
+        self.tables_of(s, n);
+        let mut hashed = Vec::new();
+        let key = self.key_in(s, n, &mut hashed);
+        s.hashes.extend(hashed);
+        key
+    }
+
+    /// Builds the tables a node reads, so that reading them takes nothing mutable.
+    fn tables_of(&self, s: &mut Scheduler<'_>, n: usize) {
+        let l = self.loaded.as_ref().expect("loaded");
+        for b in &l.nodes[n].reads {
+            if let Bound::Table(name) = b {
+                s.table(name);
+            }
+        }
+    }
+
+    /// [`Session::key_of`] with the node's tables already built; the passes over values it
+    /// makes go to `hashed`.
+    fn key_in(&self, s: &Scheduler<'_>, n: usize, hashed: &mut Vec<Hashed>) -> Key {
         let sealed: &Sealed = s.sealed;
         let l = self.loaded.as_ref().expect("loaded");
         let node = &l.nodes[n];
         let sop = &sealed.ops[node.op];
-        let mut h = Hasher::new(&sop.key);
-        h.text(&sop.version.to_string());
+        let mut h = Hasher::of(self.hash, &sop.key);
+        let mut version = [0u8; 64];
+        h.bytes(semver_text(&sop.version, &mut version));
         // A node per item is that item's: which item it runs for is part of what it computes,
         // whatever it reads.
         if let Some(i) = node.item {
@@ -1514,9 +2454,39 @@ impl Session {
             // A step's state is what every step up to t left.
             h.text("t").int(self.t);
         }
-        for (term, b) in sop.op.reads.iter().zip(&node.reads) {
+        // A keyed operator's node holds exactly what it reads of its item and the document.
+        let keyed = sop.op.keyed.zip(node.item);
+        if let Some((keyed, i)) = keyed {
+            let item = &l.items[i];
+            let value = keyed(
+                &l.doc,
+                &item.id,
+                &item.value,
+                s.options.planted.module.as_deref(),
+            );
+            h.text("keyed").bytes(&canonical(&value));
+        }
+        for (r, (term, b)) in sop.op.reads.iter().zip(&node.reads).enumerate() {
             h.text(term);
+            if keyed.is_some() && matches!(b, Bound::SelfItem(_) | Bound::Refs) {
+                continue;
+            }
+            let planted_hash = s.options.planted.key_hashes.as_deref() == Some(term.as_str());
             match b {
+                // Under `hash@2`, many writers enter by their count and the root of the tree over
+                // their keys, which follows a changed writer by its path, not a pass over every
+                // key (#896); `hash@1` keys them one by one, as it always has.
+                Bound::Array { contributions, .. }
+                    if !planted_hash
+                        && self.hash == HashVersion::V2
+                        && l.tree_of.contains_key(&(n, r)) =>
+                {
+                    let tree = &l.trees[l.tree_of[&(n, r)]].tree;
+                    h.int(tree.len() as i64).key(&tree.root());
+                    for (c, w) in contributions {
+                        h.text(c).key(&l.nodes[*w].key_for(c, self.hash));
+                    }
+                }
                 Bound::SelfItem(i) if s.options.planted.key_without_params => {
                     let mut item = (*l.items[*i].value).clone();
                     if let Some(map) = item.as_object_mut() {
@@ -1532,7 +2502,7 @@ impl Session {
                 }
                 Bound::Parent(Some(p)) => {
                     let parent = &l.nodes[*p];
-                    h.key(&parent.key_for(parent.perturbed.as_deref().unwrap_or("")));
+                    h.key(&parent.key_for(parent.perturbed.as_deref().unwrap_or(""), self.hash));
                 }
                 Bound::Parent(None) => {
                     h.text("none");
@@ -1552,26 +2522,26 @@ impl Session {
                                 bytes += b.len();
                                 h.bytes(&b);
                             }
-                            s.hashes.push(Hashed {
+                            hashed.push(Hashed {
                                 of: name.clone(),
                                 bytes,
                             });
                         } else {
-                            h.key(&wn.key_for(name));
+                            h.key(&wn.key_for(name, self.hash));
                         }
                     }
                     for (c, w) in contributions {
-                        h.text(c).key(&l.nodes[*w].key_for(c));
+                        h.text(c).key(&l.nodes[*w].key_for(c, self.hash));
                     }
                 }
                 Bound::Earlier(name) => {
                     h.text(name);
                 }
                 Bound::Table(name) => {
-                    let key = s.table(name).map(|(_, k)| k).unwrap_or_default();
+                    let key = s.tables.get(name).map(|(_, k)| *k).unwrap_or_default();
                     match &self.perturb {
                         Some(Target::Table(t)) if t == name => {
-                            h.key(&Hasher::new("perturbed").key(&key).finish());
+                            h.key(&Hasher::of(self.hash, "perturbed").key(&key).finish());
                         }
                         _ => {
                             h.key(&key);
@@ -1613,18 +2583,6 @@ impl Session {
         h.finish()
     }
 
-    /// Runs a node's operator on its view; a panic is caught and becomes the operator's error,
-    /// so it freezes nothing but its own node.
-    fn run_node(
-        &self,
-        s: &mut Scheduler<'_>,
-        n: usize,
-        report: &mut Report,
-    ) -> (Vec<Val>, Option<OpError>, Vec<(String, Val)>) {
-        let (out, err, _, tails) = self.call(s, n, None, report);
-        (out, err, tails)
-    }
-
     /// Calls a node's operator on its view (with a step's context, for a step). A panic is
     /// caught and becomes the operator's error, so it stops nothing but its own node.
     fn call(
@@ -1634,21 +2592,49 @@ impl Session {
         step: Option<view::StepCtx<'_>>,
         report: &mut Report,
     ) -> Called {
+        self.tables_of(s, n);
+        let (called, access, json) = self.run_op(s, n, step);
+        if s.options.access_log {
+            report.access.extend(access);
+        }
+        s.json_written.extend(json);
+        called
+    }
+
+    /// Calls a node's operator on its view, with the tables it reads already built; touches
+    /// nothing outside the node, so nodes with no edge between them may run on several threads.
+    fn run_op(
+        &self,
+        s: &Scheduler<'_>,
+        n: usize,
+        step: Option<view::StepCtx<'_>>,
+    ) -> (Called, Vec<Access>, Vec<Arc<Value>>) {
         let sealed: &Sealed = s.sealed;
         let l = self.loaded.as_ref().expect("loaded");
         let node = &l.nodes[n];
         let Some(run) = sealed.ops[node.op].op.run else {
-            return (Vec::new(), None, None, Vec::new());
+            return ((Vec::new(), None, None, Vec::new()), Vec::new(), Vec::new());
         };
         let mut tables = BTreeMap::new();
         for b in &node.reads {
             if let Bound::Table(name) = b {
-                if let Some((v, _)) = s.table(name) {
-                    tables.insert(name.clone(), v);
+                if let Some((v, _)) = s.tables.get(name) {
+                    tables.insert(name.clone(), v.clone());
                 }
             }
         }
-        let mut view = View::new(self, sealed, l, node, tables, s.options.access_log, step);
+        let forgets = s.options.planted.forgets_changes;
+        let mut view = View::new(
+            self,
+            sealed,
+            l,
+            node,
+            tables,
+            s.options.access_log,
+            step,
+            forgets,
+            s.options.planted.module.as_deref(),
+        );
         let item = node.item.map(|i| l.items[i].id.as_str());
         if let Some(timing) = s.options.timing {
             timing(node.op, item, false);
@@ -1657,11 +2643,29 @@ impl Session {
         if let Some(timing) = s.options.timing {
             timing(node.op, item, true);
         }
-        let (out, access, noted, tails) = view.finish();
-        if s.options.access_log {
-            report.access.extend(access);
+        let (mut out, access, noted, mut tails) = view.finish();
+        // A frame phase passes typed values only (#855): a JSON value written there is refused,
+        // naming the operator, unless the planted seal let its writer in, when it is counted.
+        let mut json_written = Vec::new();
+        if !is_check_phase(&sealed.ops[node.op].op.phase) {
+            let json = out
+                .iter()
+                .chain(tails.iter().map(|(_, v)| v))
+                .filter_map(|v| match v {
+                    Val::Json(j) => Some(Arc::clone(j)),
+                    _ => None,
+                });
+            if s.options.planted.admits_frame_json {
+                json_written.extend(json);
+            } else if json.count() > 0 {
+                out.iter_mut().for_each(|v| *v = Val::None);
+                tails.clear();
+                let path = item.map_or_else(String::new, |i| format!("items/{i}"));
+                let refused = (out, Some(OpError::new("json_in_frame", path)), noted, tails);
+                return (refused, access, json_written);
+            }
         }
-        match result {
+        let called = match result {
             Ok(Ok(())) => (out, None, noted, tails),
             Ok(Err(e)) => (out, Some(e), noted, tails),
             Err(_) => (
@@ -1670,7 +2674,8 @@ impl Session {
                 noted,
                 Vec::new(),
             ),
-        }
+        };
+        (called, access, json_written)
     }
 
     /// Every node of the current revision, as an `eval` reply lists them: the check phases'
@@ -1685,7 +2690,8 @@ impl Session {
             let check = is_check_phase(&sop.op.phase);
             for &n in &g.nodes {
                 let node = &l.nodes[n];
-                let run = if check || node.visited == self.frames {
+                let at = if check { self.checked } else { self.frames };
+                let run = if node.visited == at {
                     node.run
                 } else {
                     Run::Kept
@@ -1696,8 +2702,10 @@ impl Session {
                     phase: sop.op.phase.clone(),
                     item: node.item.map(|i| l.items[i].id.clone()),
                     key: node.key.hex(),
-                    result: result_digest(&node.out, node.err.as_ref()),
+                    result: result_digest(self.hash, &node.out, node.err.as_ref()),
                     run,
+                    thread: (run == Run::Ran).then_some(node.thread),
+                    values: node.out.clone(),
                 });
             }
         }
@@ -1746,18 +2754,115 @@ impl Session {
         let l = self.loaded.as_ref()?;
         let op = *s.writer.get(array)?;
         let k = s.sealed.ops[op].op.writes.iter().position(|w| w == array)?;
+        // Found by the item's own nodes, or the operator's group: never a pass over every node.
+        let node = match item {
+            Some(id) => l
+                .item_nodes
+                .get(*l.index.get(id)?)
+                .map(|n| &l.nodes[n])
+                .find(|n| n.op == op)?,
+            None => l
+                .groups
+                .iter()
+                .filter(|g| g.op == op)
+                .flat_map(|g| &g.nodes)
+                .map(|&n| &l.nodes[n])
+                .find(|n| n.item.is_none())?,
+        };
+        node.out.get(k).cloned()
+    }
+
+    /// What `array`'s writer wrote on each node that ran in the last frame, with its item.
+    pub fn ran_values(&self, s: &Scheduler<'_>, array: &str) -> Vec<(Option<&str>, Val)> {
+        let (Some(l), Some(&op)) = (&self.loaded, s.writer.get(array)) else {
+            return Vec::new();
+        };
+        let Some(k) = s.sealed.ops[op].op.writes.iter().position(|w| w == array) else {
+            return Vec::new();
+        };
+        l.groups
+            .iter()
+            .filter(|g| g.op == op)
+            .flat_map(|g| g.nodes.iter())
+            .map(|&n| &l.nodes[n])
+            .filter(|n| n.visited == self.frames && n.run == Run::Ran)
+            .filter_map(|n| {
+                Some((
+                    n.item.map(|i| l.items[i].id.as_str()),
+                    n.out.get(k)?.clone(),
+                ))
+            })
+            .collect()
+    }
+
+    /// The value of `array` on `item` (or the document) with every contribution for it folded
+    /// in, in the seal's order, as a reader of the array gets it; with the keys of the nodes that
+    /// made it, its writer's first (#411: deep_query's values and their content keys).
+    pub fn read(
+        &self,
+        s: &Scheduler<'_>,
+        array: &str,
+        item: Option<&str>,
+    ) -> Option<(Val, Vec<Key>)> {
+        let l = self.loaded.as_ref()?;
         let item = match item {
             Some(id) => Some(*l.index.get(id)?),
             None => None,
         };
-        let node = l.nodes.iter().find(|n| n.op == op && n.item == item)?;
-        node.out.get(k).cloned()
+        let output = |name: &str| -> Option<Vec<(Val, Key)>> {
+            let op = *s.writer.get(name)?;
+            let k = s.sealed.ops[op].op.writes.iter().position(|w| w == name)?;
+            Some(
+                l.nodes
+                    .iter()
+                    .filter(|n| n.op == op && n.item == item)
+                    .filter_map(|n| Some((n.out.get(k)?.clone(), n.key)))
+                    .collect(),
+            )
+        };
+        let (val, key) = output(array)?.into_iter().next()?;
+        let mut keys = vec![key];
+        let mut edits = Vec::new();
+        for c in s.sealed.contributions.get(array).into_iter().flatten() {
+            for (v, key) in output(c).unwrap_or_default() {
+                keys.push(key);
+                if let Some(e) = v.as_typed::<core_ops::Edits>() {
+                    edits.push(e);
+                }
+            }
+        }
+        let val = if edits.is_empty() {
+            val
+        } else {
+            core_ops::fold_edits(&val, &edits)
+        };
+        Some((val, keys))
+    }
+
+    /// The hash this session's keys are made with.
+    pub fn hash(&self) -> HashVersion {
+        self.hash
     }
 }
 
-/// A node's result as `nodes` shows it: the SHA-256 of its outputs' bytes, each length-prefixed,
-/// then its error.
-fn result_digest(out: &[Val], err: Option<&OpError>) -> String {
+/// The threads a document's independent nodes run on: the options' count in place of its budget
+/// class's, the pool's performance cores for export, one for a document with no class or a
+/// scheduler with no pool.
+fn threads_for(s: &Scheduler<'_>, doc: &Value) -> usize {
+    let Some(pool) = &s.options.pool else {
+        return 1;
+    };
+    let class = crate::budget::of(doc).map_or(Some(1), |(c, _)| c.threads());
+    s.options
+        .threads
+        .or(class)
+        .unwrap_or_else(|| pool.performance_cores())
+        .max(1)
+}
+
+/// A node's result as `nodes` shows it: its outputs' bytes, each length-prefixed, then its
+/// error, hashed with the session's hash: SHA-256 under `hash@1`, BLAKE3 under `hash@2`.
+fn result_digest(v: HashVersion, out: &[Val], err: Option<&OpError>) -> String {
     let mut bytes = Vec::new();
     for v in out {
         let b = v.bytes();
@@ -1767,7 +2872,10 @@ fn result_digest(out: &[Val], err: Option<&OpError>) -> String {
     if let Some(e) = err {
         bytes.extend_from_slice(format!("error:{}:{}", e.code, e.path).as_bytes());
     }
-    sha256_hex(&bytes)
+    match v {
+        HashVersion::V1 => sha256_hex(&bytes),
+        HashVersion::V2 => blake3::hash(&bytes).to_hex().to_string(),
+    }
 }
 
 /// Another value of a view input's type.
@@ -1824,7 +2932,11 @@ impl Shuffle {
 /// The ID and depth of each item, its parent's index, its order key and its key from its
 /// canonical bytes (with −0 as +0 and every number normalized). An item `was`, the last
 /// revision, holds as it is keeps that revision's value and key, which its bytes would give again.
-fn items_of(doc: &Value, was: Option<&Loaded>) -> (Vec<Item>, BTreeMap<String, usize>) {
+fn items_of(
+    v: HashVersion,
+    doc: &Value,
+    was: Option<&Loaded>,
+) -> (Vec<Item>, BTreeMap<String, usize>) {
     let empty = serde_json::Map::new();
     let map = doc
         .get("items")
@@ -1846,10 +2958,7 @@ fn items_of(doc: &Value, was: Option<&Loaded>) -> (Vec<Item>, BTreeMap<String, u
                 .filter(|o| written_alike(&o.value, value));
             let (shared, key) = match kept {
                 Some(o) => (Arc::clone(&o.value), o.key),
-                None => (
-                    Arc::new(value.clone()),
-                    Hasher::new("self").bytes(&canonical(value)).finish(),
-                ),
+                None => (Arc::new(value.clone()), item_key(v, value)),
             };
             Item {
                 id: (*id).clone(),
@@ -1884,6 +2993,82 @@ fn items_of(doc: &Value, was: Option<&Loaded>) -> (Vec<Item>, BTreeMap<String, u
     (items, index)
 }
 
+/// A version's text, `major.minor.patch`, written into `buf` rather than a new string.
+fn semver_text<'b>(v: &crate::registry::Semver, buf: &'b mut [u8; 64]) -> &'b [u8] {
+    use std::io::Write;
+    let mut at = std::io::Cursor::new(&mut buf[..]);
+    let _ = write!(at, "{v}");
+    let n = at.position() as usize;
+    &buf[..n]
+}
+
+/// An item's key: the hash of its canonical bytes.
+fn item_key(v: HashVersion, item: &Value) -> Key {
+    Hasher::of(v, "self").bytes(&canonical(item)).finish()
+}
+
+/// The document's key, without its ID, which is where it lives, not what it holds (the ID goes
+/// back in its place after), with `hash@2`'s parts of it. `hash@1` hashes the whole document's
+/// canonical bytes; `hash@2` its envelope's key, then the item count and the root of the tree
+/// over each item's ID and key in plan order, so the items, already keyed, aren't encoded twice
+/// and a changed item rekeys the document by its path in the tree (#896).
+fn doc_key(v: HashVersion, doc: &mut Value, items: &[Item]) -> (Key, KeyTree, Key) {
+    if v == HashVersion::V2 {
+        return tree_parts(doc, items);
+    }
+    let id = doc.as_object_mut().and_then(|map| {
+        let at = map.keys().position(|k| k == "id")?;
+        Some((at, map.shift_remove("id")?))
+    });
+    let key = Hasher::of(v, "document").bytes(&canonical(doc)).finish();
+    if let (Some((at, id)), Some(map)) = (id, doc.as_object_mut()) {
+        map.shift_insert(at, "id".into(), id);
+    }
+    (Key::default(), KeyTree::default(), key)
+}
+
+/// `hash@2`'s document key with its envelope's key and its items' tree.
+fn tree_parts(doc: &Value, items: &[Item]) -> (Key, KeyTree, Key) {
+    let envelope = envelope_key(doc);
+    let tree = KeyTree::new(items.iter().map(item_leaf).collect());
+    let key = tree_doc_key(&envelope, &tree);
+    (envelope, tree, key)
+}
+
+/// `hash@2`'s envelope key: the document's members but its ID and items, in name order.
+fn envelope_key(doc: &Value) -> Key {
+    let mut h = Hasher::of(HashVersion::V2, "envelope");
+    if let Some(map) = doc.as_object() {
+        let mut members: Vec<(&String, &Value)> = map
+            .iter()
+            .filter(|(k, _)| *k != "id" && *k != "items")
+            .collect();
+        members.sort_by(|a, b| a.0.cmp(b.0));
+        for (k, value) in members {
+            h.text(k).bytes(&canonical(value));
+        }
+    }
+    h.finish()
+}
+
+/// An item's leaf in the document's tree: its ID and key.
+fn item_leaf(item: &Item) -> Key {
+    Hasher::of(HashVersion::V2, "item")
+        .text(&item.id)
+        .key(&item.key)
+        .finish()
+}
+
+/// `hash@2`'s document key from its envelope's key and its items' tree.
+fn tree_doc_key(envelope: &Key, items: &KeyTree) -> Key {
+    Hasher::of(HashVersion::V2, "document")
+        .key(envelope)
+        .text("items")
+        .int(items.len() as i64)
+        .key(&items.root())
+        .finish()
+}
+
 /// Whether two values are equal and write their keys in the same order: `==` on a map ignores
 /// the order, which the kept value would carry into what reads it.
 fn written_alike(a: &Value, b: &Value) -> bool {
@@ -1906,17 +3091,8 @@ fn written_alike(a: &Value, b: &Value) -> bool {
 fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
     let mut doc = doc.clone();
     without_negative_zero(&mut doc);
-    let (items, index) = items_of(&doc, was);
-    // The document's ID is where it lives, not what it holds: the key reads the document without
-    // it, and it goes back in its place after.
-    let id = doc.as_object_mut().and_then(|map| {
-        let at = map.keys().position(|k| k == "id")?;
-        Some((at, map.shift_remove("id")?))
-    });
-    let doc_key = Hasher::new("document").bytes(&canonical(&doc)).finish();
-    if let (Some((at, id)), Some(map)) = (id, doc.as_object_mut()) {
-        map.shift_insert(at, "id".into(), id);
-    }
+    let (items, index) = items_of(s.options.hash, &doc, was);
+    let (envelope, items_tree, doc_key) = doc_key(s.options.hash, &mut doc, &items);
     let seed = doc.get("seed").cloned().unwrap_or(Value::Null);
     let mut assets = BTreeSet::new();
     for item in &items {
@@ -1984,6 +3160,7 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
         let mut group = Group {
             op: o,
             nodes: Vec::new(),
+            waves: Vec::new(),
             arrays: Vec::new(),
             terms: Terms::default(),
         };
@@ -2004,6 +3181,7 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
                 run: Run::Kept,
                 visited: 0,
                 held: None,
+                thread: 0,
             });
         }
         groups.push(group);
@@ -2129,7 +3307,76 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
         }
         node.reads = reads;
     }
+    // A group's nodes are consecutive, so a parent's node is in the current wave when its index
+    // is at or past the wave's first node.
+    for g in &mut groups {
+        let mut start = 0;
+        for (k, &n) in g.nodes.iter().enumerate() {
+            let first = g.nodes[start];
+            let in_wave = nodes[n]
+                .reads
+                .iter()
+                .any(|b| matches!(b, Bound::Parent(Some(p)) if *p >= first));
+            if k == 0 || in_wave {
+                start = k;
+                g.waves.push(k);
+            }
+        }
+    }
     let array_at = vec![0; array_names.len()];
+    let writes_at = sealed
+        .ops
+        .iter()
+        .map(|o| o.op.writes.iter().filter_map(|w| array_index(w)).collect())
+        .collect();
+    // Where a change reaches (#896): each node's place in its group, each item's nodes, each
+    // per-item node's per-item readers, and a tree for each read of an array with many writers.
+    let mut slot = vec![0u32; nodes.len()];
+    for g in &groups {
+        for (k, &n) in g.nodes.iter().enumerate() {
+            slot[n] = k as u32;
+        }
+    }
+    let mut item_nodes: Vec<Vec<usize>> = vec![Vec::new(); items.len()];
+    let mut readers: Vec<Vec<usize>> = vec![Vec::new(); nodes.len()];
+    let mut trees = Vec::new();
+    let mut tree_of = BTreeMap::new();
+    let mut leaves: Vec<Vec<(u32, u32)>> = vec![Vec::new(); nodes.len()];
+    for (n, node) in nodes.iter().enumerate() {
+        if let Some(i) = node.item {
+            item_nodes[i].push(n);
+        }
+        for (r, b) in node.reads.iter().enumerate() {
+            match b {
+                Bound::Parent(Some(p)) => readers[*p].push(n),
+                Bound::Array { writers, .. } if writers.len() > 1 => {
+                    tree_of.insert((n, r), trees.len());
+                    for (k, &w) in writers.iter().enumerate() {
+                        leaves[w].push((trees.len() as u32, k as u32));
+                    }
+                    let name = sealed.ops[node.op].op.reads[r].clone();
+                    trees.push(ReadTree {
+                        array: array_index(&name),
+                        name,
+                        node: n,
+                        read: r,
+                        tree: KeyTree::new(vec![Key::default(); writers.len()]),
+                        pending: Vec::new(),
+                    });
+                }
+                Bound::Array {
+                    writers,
+                    contributions,
+                    ..
+                } if node.item.is_some() => {
+                    for &w in writers.iter().chain(contributions.iter().map(|(_, c)| c)) {
+                        readers[w].push(n);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
     Loaded {
         doc: Arc::new(doc),
         doc_key,
@@ -2141,6 +3388,81 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
         groups,
         array_at,
         array_names,
+        writes_at,
+        envelope,
+        items_tree,
+        slot,
+        item_nodes: Csr::of(&item_nodes),
+        readers: Csr::of(&readers),
+        trees,
+        tree_of,
+        leaves,
+    }
+}
+
+impl Loaded {
+    /// Every read tree's leaves from its writers' current keys (as a reader of that array takes
+    /// each), after keys were set other than by a node settling. Only `hash@2` keys by them.
+    fn plant_trees(&mut self, v: HashVersion) {
+        for n in 0..self.nodes.len() {
+            self.plant(n, v);
+        }
+    }
+
+    /// Node `n`'s read trees from its writers' current keys.
+    fn plant(&mut self, n: usize, v: HashVersion) {
+        if v != HashVersion::V2 {
+            return;
+        }
+        let reads: Vec<(usize, usize)> = self
+            .tree_of
+            .range((n, 0)..(n + 1, 0))
+            .map(|(&(_, r), &t)| (r, t))
+            .collect();
+        for (r, t) in reads {
+            if let Bound::Array { writers, .. } = &self.nodes[n].reads[r] {
+                let name = &self.trees[t].name;
+                let keys = writers
+                    .iter()
+                    .map(|&w| self.nodes[w].key_for(name, v))
+                    .collect();
+                self.trees[t].tree = KeyTree::new(keys);
+                self.trees[t].pending.clear();
+            }
+        }
+    }
+
+    /// Notes that node `n`'s key changed in each read tree it is a leaf of.
+    fn reseat(&mut self, n: usize, v: HashVersion) {
+        if v != HashVersion::V2 {
+            return;
+        }
+        for &(t, k) in &self.leaves[n] {
+            self.trees[t as usize].pending.push(k);
+        }
+    }
+
+    /// Brings node `n`'s read trees up to its writers' keys, each changed chunk and the nodes
+    /// above them hashed once however many writers changed: what its key reads.
+    fn refresh(&mut self, n: usize, v: HashVersion) {
+        let trees: Vec<usize> = self
+            .tree_of
+            .range((n, 0)..(n + 1, 0))
+            .map(|(_, &t)| t)
+            .collect();
+        for t in trees {
+            let pending = std::mem::take(&mut self.trees[t].pending);
+            let ReadTree { node, read, .. } = self.trees[t];
+            let Bound::Array { writers, .. } = &self.nodes[node].reads[read] else {
+                continue;
+            };
+            let name = &self.trees[t].name;
+            let keys: Vec<(usize, Key)> = pending
+                .iter()
+                .map(|&k| (k as usize, self.nodes[writers[k as usize]].key_for(name, v)))
+                .collect();
+            self.trees[t].tree.update(&keys);
+        }
     }
 }
 

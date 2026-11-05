@@ -7,13 +7,14 @@
 pub use deep_text_gpui::{measure, Label, Shaped};
 use gpui_kit::*;
 use serde_json::json;
+use std::sync::Arc;
 
 use crate::canvas::record;
 
 /// A label as a canvas element. Its box is the wider of its text and `widest`, the string a
 /// readout must hold, such as a bound value's widest form, so a readout keeps its place as its
 /// value changes; the text is drawn whole in it.
-pub fn label(id: &str, label: Label, color: Hsla, widest: Option<&str>) -> Canvas<Shaped> {
+pub fn label(id: &str, label: Label, color: Hsla, widest: Option<&str>) -> Canvas<Arc<Shaped>> {
     let id = id.to_owned();
     let widest = widest.map(str::to_owned);
     let own = measure(&label).width;
@@ -39,11 +40,16 @@ pub fn label(id: &str, label: Label, color: Hsla, widest: Option<&str>) -> Canva
         },
         move |bounds, shaped, window, _| {
             let painted = deep_text_gpui::paint_label(bounds.origin, &label, color, window);
+            use deep_text_gpui::Role as Font;
+            let role = [Font::Body, Font::Mono, Font::Math]
+                .into_iter()
+                .find(|r| r.family() == label.family)
+                .map(Font::name);
             record(
                 &id,
                 json!({
                     "text": label.text,
-                    "role": label.role.name(),
+                    "role": role,
                     "bound": label.bound,
                     "widest": widest,
                     "at": [f32::from(bounds.origin.x), f32::from(bounds.origin.y)],
@@ -54,6 +60,7 @@ pub fn label(id: &str, label: Label, color: Hsla, widest: Option<&str>) -> Canva
                     "sprites": painted.sprites,
                     "pages": painted.pages.iter().map(|(page, _)| *page).collect::<Vec<_>>(),
                 }),
+                bounds,
             );
         },
     )

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { fixtures } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore } from '@deepbuild/evidence';
-import { openRecord, testStorage } from '../src/index.js';
+import { openRecord, readSince, testStorage } from '../src/index.js';
 import type { Connection, EventInput, RecordStore } from '../src/index.js';
 
 const T0 = 1_760_013_451_000;
@@ -119,6 +119,53 @@ describe('recovery exempts a session whose end is the last durable event', () =>
     const rows = (await r.table('claims')).rows.filter((row) => row.id === claim.id);
     // A record that exempts only an end strictly before the boundary invalidates A's claim.
     expect(rows[0]?.verdict_id, 'A ended at the last FULL commit: its claim stays open').toBeNull();
+  });
+});
+
+describe('recovery reads no session.state or session.gone as the session going on after its end (#992)', () => {
+  it.each([
+    ['session.state', { state: 'finished', cause: 'finished' }],
+    ['session.gone', { pid: 4242, start: 'Mon Nov  3 04:00:00 2026' }],
+  ] as const)('a %s the core appended after the session\'s end keeps its claim open after a cut', async (kind, data) => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const A = ulidAt(T0 - 1000);
+    await r.append(hook(A), event('session.start', T0 - 1000, undefined));
+    const claim = event('claim.made', T0, undefined);
+    await r.append({ ...hook(A), writer: 'app' }, claim);
+    // As in the test above: the end lands on 1023 and the core's reading of it on 1024, the first block's last.
+    for (let i = 0; i < 1020; i += 100) {
+      const n = Math.min(100, 1020 - i);
+      await Promise.all(Array.from({ length: n }, (_, j) => r.append(hook(A), event('tool.after', T0 + 10 + i + j, seqAt(T0 + 10 + i + j)))));
+    }
+    const end = await r.append({ ...hook(A), writer: 'app' }, { ...event('session.attention', T0 + 2000, undefined, { state: 'finished' }), subject: `session:${A}` });
+    expect(end.log_pos).toBe(1023);
+    const state = await r.append(core(A), { ...event(kind, T0 + 2001, undefined, data), subject: `session:${A}` });
+    expect(state.log_pos).toBe(1024);
+    const B = ulidAt(T0 + 3000);
+    await r.append(hook(B), event('session.start', T0 + 3000, undefined));
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
+    open.push(r);
+    const rows = (await r.table('claims')).rows.filter((row) => row.id === claim.id);
+    // A recovery that reads the core's reading as the session's own event invalidates A's claim.
+    expect(rows[0]?.verdict_id, 'A ended before the core read its state: its claim stays open').toBeNull();
+  });
+});
+
+describe('an idle prompt leaves a failed or stuck stop as it was (#992)', () => {
+  it('a hook\'s finished after a failed stop leaves the session failed, live and after a rebuild', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    open.push(r);
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0, undefined));
+    const stop = fixtures('agent.stop@5')[0] as { data: Record<string, JsonValue> };
+    await r.append(hook(S), { v: 5, id: ulidAt(T0 + 10), kind: 'agent.stop', ts: T0 + 10, seq: seqAt(T0 + 10), subject: `session:${S}`, data: { ...stop.data, outcome: 'failed' } });
+    await r.append(hook(S), { ...event('session.attention', T0 + 60_000, seqAt(T0 + 60_000), { state: 'finished' }), v: 2, subject: `session:${S}` });
+    for (const when of ['live', 'rebuilt']) {
+      if (when === 'rebuilt') await r.rebuild();
+      expect([when, (await r.table('sessions')).rows.find((x) => x.id === S)?.status]).toEqual([when, 'failed']);
+    }
   });
 });
 
@@ -553,6 +600,20 @@ describe('raw refuses statements that change the database', () => {
   }
 });
 
+describe('raw binds its parameters', () => {
+  it('a value with a quote in it is read as that value, never as SQL', async () => {
+    const { record: r, S } = await record();
+    const sneaky = "x' OR '1'='1";
+    await r.append(hook(sneaky), event('session.start', T0, undefined));
+    const bound = (await r.raw('SELECT id FROM sessions WHERE id = ? ORDER BY id', [sneaky])) as { id: string }[];
+    expect(bound.map((row) => row.id)).toEqual([sneaky]);
+    // The same text written into the statement matches every session, which is why values are bound.
+    const spliced = (await r.raw(`SELECT id FROM sessions WHERE id = '${sneaky}' ORDER BY id`)) as { id: string }[];
+    expect(spliced.map((row) => row.id).sort()).toEqual([S, sneaky].sort());
+    expect(await r.raw('SELECT count(*) AS n FROM events WHERE session_id = ? AND kind = ?', [sneaky, 'session.start'])).toEqual([{ n: 1 }]);
+  });
+});
+
 describe('a decided ask stays decided', () => {
   it('a hook ask.cancelled after decision.applied keeps decided_for_you', async () => {
     const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
@@ -787,6 +848,37 @@ describe('a session\'s last_seen only moves forward', () => {
   });
 });
 
+describe('waiting on you ends with the session, and the core\'s reading of a session is no sign of it (#992)', () => {
+  it('a session end clears a permission prompt\'s waiting, and a session.state moves no last_seen, live and after a rebuild', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    open.push(r);
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0, undefined));
+    await r.append(hook(S), { ...event('permission.request', T0 + 10, seqAt(T0 + 10)), subject: `session:${S}` });
+    await r.append(hook(S), event('session.end', T0 + 20, seqAt(T0 + 20)));
+    // A day later the core records the session quiet; were that a sign of it, the session would read seen again.
+    await r.append(core(S), { ...event('session.state', T0 + 86_400_000, undefined, { state: 'quiet', cause: 'quiet' }), subject: `session:${S}` });
+    for (const when of ['live', 'rebuilt']) {
+      if (when === 'rebuilt') await r.rebuild();
+      const row = (await r.table('sessions')).rows.find((x) => x.id === S);
+      expect([when, row?.status, Number(row?.last_seen)]).toEqual([when, 'finished', T0 + 20]);
+    }
+  });
+  it('a session.gone the core records a minute after a stop moves no last_seen, so the stop reads its own age', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    open.push(r);
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0, undefined));
+    await r.append(hook(S), event('session.end', T0 + 20, seqAt(T0 + 20)));
+    await r.append(core(S), { ...event('session.gone', T0 + 60_000, undefined, { pid: 4242, start: 'Mon Nov  3 04:00:00 2026' }), subject: `session:${S}` });
+    for (const when of ['live', 'rebuilt']) {
+      if (when === 'rebuilt') await r.rebuild();
+      const row = (await r.table('sessions')).rows.find((x) => x.id === S);
+      expect([when, Number(row?.last_seen)]).toEqual([when, T0 + 20]);
+    }
+  });
+});
+
 describe('an agent cannot hold a run\'s identity', () => {
   it('the core\'s start of a run replaces an agent\'s earlier one, live and after a rebuild', async () => {
     const { record: r, S } = await record();
@@ -968,5 +1060,27 @@ describe('a prompt the core answered in the model\'s place (#83)', () => {
     // A record that reads the answered prompt as a turn still open reads the idle session as active, and its claim lost.
     expect(row?.verdict_id, 'the session had ended before the cut: its claim is not INVALID').toBeNull();
     expect((await r.session(S))?.turns.map((t) => t.stopped), 'the answered prompt\'s turn is ended').toEqual([true, true]);
+  });
+});
+
+describe('readSince follows the log for a fold', () => {
+  it('hands on each event of its kinds once, in log order, across pages, and moves the cursor past the rest', async () => {
+    const { record: r, S } = await record();
+    // 2,500 calls, every fifth a tool.before: three pages of the other kind, which readSince must skip, not stop at.
+    for (let i = 0; i < 2500; i++) await r.append(hook(S), event(i % 5 ? 'tool.after' : 'tool.before', T0 + i, seqAt(T0 + i)));
+    const head = ((await r.raw('SELECT max(log_pos) AS head FROM events')) as { head: number }[])[0]!.head;
+    const seen: number[] = [];
+    const cursor = await readSince(r, 0, ['tool.before'], (e) => { expect(e.kind).toBe('tool.before'); seen.push(e.log_pos); });
+    expect(seen).toHaveLength(500);
+    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+    // The last event is a tool.after: the cursor is the head, so the next read scans none of it again.
+    expect(cursor).toBe(head);
+    const again: number[] = [];
+    expect(await readSince(r, cursor, ['tool.before'], (e) => again.push(e.log_pos))).toBe(head);
+    expect(again).toEqual([]);
+    // What lands after the cursor is read next time, and only that.
+    await r.append(hook(S), event('tool.before', T0 + 9000, seqAt(T0 + 9000)));
+    expect(await readSince(r, cursor, ['tool.before'], (e) => again.push(e.log_pos))).toBe(head + 1);
+    expect(again).toEqual([head + 1]);
   });
 });

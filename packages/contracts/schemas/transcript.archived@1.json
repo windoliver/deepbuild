@@ -1,6 +1,8 @@
 {
   "title": "transcript.archived@1",
   "description": "A session's transcript was archived as evidence.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions",
     "evidence"

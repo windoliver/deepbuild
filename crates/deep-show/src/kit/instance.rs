@@ -84,6 +84,9 @@ impl How {
             shuffle: self.shuffle,
             planted: self.planted.clone(),
             timing: None,
+            pool: None,
+            threads: None,
+            hash: Default::default(),
         }
     }
 }

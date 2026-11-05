@@ -1,0 +1,54 @@
+{
+  "scene": "mirrored-instance-winding",
+  "issue": 421,
+  "criterion": "An instance whose world transform has a negative determinant renders with its front faces out",
+  "description": "Two closed boxes whose world transforms have a negative determinant: `mirrored` by its own scale [-1, 1, 1], and `inherited` by its parent `mount`'s scale [1, 1, -1] with its own transform positive. `reference` is the same picture with every determinant positive: a box is symmetric under each mirror, so `mirrored` is the box turned 25 degrees about Y, and `inherited` under a z-mirror turned -25 degrees is the box turned +25 degrees (S R_y(t) S = R_y(-t)). Drawn with front faces out, both documents give the same object-ID and linear targets; drawn with the mirrored instances' back faces out, the near faces are culled and the far faces' insides show, shaded and placed differently. The sun shines down and away from the camera (rot [-35, 0, 0]), so the faces the camera sees are lit and the far faces' outsides are not.",
+  "size": [640, 360],
+  "twin": {
+    "planted": "winding_ignores_determinant",
+    "wrong_program": "the front-face winding is chosen without the world transform's determinant, so a mirrored instance draws with its back faces out",
+    "fails": ["mirrored", "inherited"]
+  },
+  "document": {
+    "format": 1,
+    "id": "mirrored-instance-winding",
+    "profile": "scene",
+    "title": "Mirrored instances",
+    "description": "Two boxes whose world transforms have a negative determinant, one by its own scale and one by its parent's.",
+    "size": [640, 360],
+    "camera": "cam",
+    "transport": { "span": "1s" },
+    "requires": { "modules": { "scene3d": "^1" } },
+    "layers": { "main": { "writer": "agent-a", "title": "Main", "order": "a0" } },
+    "items": {
+      "cam": { "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0", "layer": "main", "params": { "projection": "perspective", "position": [0, 3, 7], "target": [0, 0.6, -1], "fov": 40 } },
+      "grey": { "id": "grey", "kind": "material@1", "name": "Grey", "order": "a1", "layer": "main", "params": { "base_color": [0.6, 0.6, 0.6, 1], "roughness": 0.7 } },
+      "floor": { "id": "floor", "kind": "mark.box@1", "name": "Floor", "order": "a2", "layer": "main", "params": { "size": [10, 0.1, 10] }, "at": { "pos": [0, -0.05, 0] }, "material": "grey" },
+      "mirrored": { "id": "mirrored", "kind": "mark.box@1", "name": "Mirrored", "order": "a3", "layer": "main", "params": { "size": [1, 1.2, 0.8] }, "at": { "pos": [-1.4, 0.6, 0], "rot": [0, 25, 0], "scale": [-1, 1, 1] }, "material": "grey" },
+      "mount": { "id": "mount", "kind": "mark.box@1", "name": "Mount", "order": "a4", "layer": "main", "params": { "size": [0.3, 0.1, 0.3] }, "at": { "pos": [1.4, 0.05, 0], "scale": [1, 1, -1] }, "material": "grey" },
+      "inherited": { "id": "inherited", "kind": "mark.box@1", "name": "Inherited", "order": "a5", "layer": "main", "parent": "mount", "params": { "size": [1, 1.2, 0.8] }, "at": { "pos": [0, 0.65, 0], "rot": [0, -25, 0] }, "material": "grey" },
+      "sun": { "id": "sun", "kind": "light.sun@1", "name": "Sun", "order": "a6", "layer": "main", "params": { "illuminance": 1000 }, "at": { "rot": [-35, 0, 0] } }
+    }
+  },
+  "reference": {
+    "format": 1,
+    "id": "mirrored-instance-winding-reference",
+    "profile": "scene",
+    "title": "Mirrored instances, unmirrored",
+    "description": "The same picture with every world determinant positive.",
+    "size": [640, 360],
+    "camera": "cam",
+    "transport": { "span": "1s" },
+    "requires": { "modules": { "scene3d": "^1" } },
+    "layers": { "main": { "writer": "agent-a", "title": "Main", "order": "a0" } },
+    "items": {
+      "cam": { "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0", "layer": "main", "params": { "projection": "perspective", "position": [0, 3, 7], "target": [0, 0.6, -1], "fov": 40 } },
+      "grey": { "id": "grey", "kind": "material@1", "name": "Grey", "order": "a1", "layer": "main", "params": { "base_color": [0.6, 0.6, 0.6, 1], "roughness": 0.7 } },
+      "floor": { "id": "floor", "kind": "mark.box@1", "name": "Floor", "order": "a2", "layer": "main", "params": { "size": [10, 0.1, 10] }, "at": { "pos": [0, -0.05, 0] }, "material": "grey" },
+      "mirrored": { "id": "mirrored", "kind": "mark.box@1", "name": "Mirrored", "order": "a3", "layer": "main", "params": { "size": [1, 1.2, 0.8] }, "at": { "pos": [-1.4, 0.6, 0], "rot": [0, 25, 0] }, "material": "grey" },
+      "mount": { "id": "mount", "kind": "mark.box@1", "name": "Mount", "order": "a4", "layer": "main", "params": { "size": [0.3, 0.1, 0.3] }, "at": { "pos": [1.4, 0.05, 0] }, "material": "grey" },
+      "inherited": { "id": "inherited", "kind": "mark.box@1", "name": "Inherited", "order": "a5", "layer": "main", "parent": "mount", "params": { "size": [1, 1.2, 0.8] }, "at": { "pos": [0, 0.65, 0], "rot": [0, 25, 0] }, "material": "grey" },
+      "sun": { "id": "sun", "kind": "light.sun@1", "name": "Sun", "order": "a6", "layer": "main", "params": { "illuminance": 1000 }, "at": { "rot": [-35, 0, 0] } }
+    }
+  }
+}

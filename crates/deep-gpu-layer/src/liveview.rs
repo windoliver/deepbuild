@@ -2,10 +2,12 @@
 //! ladder): its document drawn by the canvas core into the GPU surface's slots, each frame at the
 //! rung its ladder holds, every pass timed by timestamp writes where the device has them and by
 //! its CPU encode time where it doesn't. Below internal scale 1 the frame renders smaller and
-//! the upscale's two passes bring it to the slot; frame history, when the look asks for it,
+//! the upscale's two passes bring it to the slot, then thin lines and outlines draw at full size
+//! (#386); frame history, when the look asks for it,
 //! resolves the window's frames into the linear target. What the view allocates is counted at
 //! the sizes the device reports. Once warm, a frame allocates nothing on the core's side.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -18,23 +20,19 @@ use deep_gpu::alloc::outside;
 use deep_gpu::device::Device;
 use deep_gpu::memory;
 use deep_gpu::meter::{Rung, MAX_PASSES};
-use deep_gpu::surface::{allocate, Handoff, Path, FORMAT};
+use deep_effects_render::docops::{DocOps, Row, Times};
+use deep_effects_render::runner::Frame;
+use deep_gpu::surface::{allocate, Handoff, Path};
+use deep_scene3d_render::surface::{Filter, Surface, LABEL_PASS, OUTLINE_PASS};
+pub use deep_scene3d_render::surface::{Upscale, SHARPEN_PASS as SHARPEN, UPSCALE_PASS as UPSCALE};
 use deep_scene3d_render::{Planted as Planted3, Renderer, LINEAR};
+use serde_json::Value;
 
 pub const SLOTS: u32 = 3;
-pub const UPSCALE: &str = "surface.upscale";
-pub const SHARPEN: &str = "surface.sharpen";
 pub const HISTORY: &str = "look.history";
 pub const PLACEHOLDER: &str = "surface.placeholder";
 
 const SHADER: &str = include_str!("effects.wgsl");
-
-/// The upscale's pipelines, which a rung below scale 1 adds: compiled off-screen before it
-/// takes effect.
-pub struct Upscale {
-    pub upscale: wgpu::RenderPipeline,
-    pub sharpen: wgpu::RenderPipeline,
-}
 
 /// What every live view on the device shares: the effect shader's layouts and sampler, and the
 /// pipelines every rung has.
@@ -46,6 +44,8 @@ pub struct Kit {
     /// Adds an effect target into the linear target.
     #[cfg(feature = "test-meter")]
     pub composite: wgpu::RenderPipeline,
+    /// The upscale's pipelines, which a rung below scale 1 adds: compiled off-screen before it
+    /// takes effect.
     pub upscale: Option<Arc<Upscale>>,
     #[cfg(feature = "test-meter")]
     pub test: crate::testgpu::Pipes,
@@ -101,13 +101,9 @@ fn shader(device: &Device) -> wgpu::ShaderModule {
         })
 }
 
-/// The upscale's two pipelines, as the compile thread builds them.
-pub fn compile_upscale(device: &Device, source: &wgpu::BindGroupLayout) -> Upscale {
-    let module = shader(device);
-    Upscale {
-        upscale: pipeline(device, source, &module, "upscale", FORMAT, None),
-        sharpen: pipeline(device, source, &module, "sharpen", FORMAT, None),
-    }
+/// The upscale's pipelines, as the compile thread builds them.
+pub fn compile_upscale(device: &Device) -> Upscale {
+    Upscale::new(device)
 }
 
 impl Kit {
@@ -299,6 +295,30 @@ impl Timer {
         })
     }
 
+    /// A pass's two writes split across two passes: the first writes its beginning, the
+    /// second its end, so the passes between them time as one (#397).
+    pub fn bracket(
+        &self,
+        i: Option<usize>,
+    ) -> (
+        Option<wgpu::RenderPassTimestampWrites<'_>>,
+        Option<wgpu::RenderPassTimestampWrites<'_>>,
+    ) {
+        let Some(w) = self.writes(i) else {
+            return (None, None);
+        };
+        (
+            Some(wgpu::RenderPassTimestampWrites {
+                end_of_pass_write_index: None,
+                ..w.clone()
+            }),
+            Some(wgpu::RenderPassTimestampWrites {
+                beginning_of_pass_write_index: None,
+                ..w
+            }),
+        )
+    }
+
     pub fn end(&mut self, i: Option<usize>) {
         if let Some(i) = i {
             self.marks[i].cpu[1] = self.since();
@@ -347,6 +367,35 @@ impl Timer {
     }
 }
 
+/// A view's `surface` field (#386): `{internal_scale: 0.5 to 1 = 1, upscale: edge_adaptive |
+/// bilinear = edge_adaptive, sharpen: 0 to 1 = 0.2}`; absent, the default.
+pub fn surface_of(v: Option<&Value>) -> Result<Surface, String> {
+    let mut s = Surface::default();
+    let Some(v) = v.filter(|v| !v.is_null()) else {
+        return Ok(s);
+    };
+    let o = v.as_object().ok_or("surface is an object")?;
+    if let Some(k) = o.get("internal_scale") {
+        s.scale = k
+            .as_f64()
+            .filter(|k| (0.5..=1.0).contains(k))
+            .ok_or("surface.internal_scale is 0.5 to 1")?;
+    }
+    if let Some(u) = o.get("upscale") {
+        s.upscale = u
+            .as_str()
+            .and_then(Filter::parse)
+            .ok_or("surface.upscale is edge_adaptive or bilinear")?;
+    }
+    if let Some(k) = o.get("sharpen") {
+        s.sharpen = k
+            .as_f64()
+            .filter(|k| (0.0..=1.0).contains(k))
+            .ok_or("surface.sharpen is 0 to 1")?;
+    }
+    Ok(s)
+}
+
 /// The frame's internal size at `scale`.
 pub fn scaled(size: [u32; 2], scale: f64) -> [u32; 2] {
     [
@@ -377,39 +426,6 @@ fn texture(
         usage,
         view_formats: &[],
     })
-}
-
-/// Below scale 1: the frame's output at its internal size and the full-size target between the
-/// upscale's two passes.
-struct Low {
-    size: [u32; 2],
-    view: wgpu::TextureView,
-    up_view: wgpu::TextureView,
-    low_bind: wgpu::BindGroup,
-    up_bind: wgpu::BindGroup,
-    bytes: Option<u64>,
-}
-
-impl Low {
-    fn new(device: &Device, kit: &Kit, internal: [u32; 2], size: [u32; 2]) -> Low {
-        let usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
-        let ((low, up), bytes) = memory::across(device, || {
-            (
-                texture(device, "live low", internal, 1, FORMAT, usage),
-                texture(device, "live upscaled", size, 1, FORMAT, usage),
-            )
-        });
-        let view = low.create_view(&Default::default());
-        let up_view = up.create_view(&Default::default());
-        Low {
-            size: internal,
-            low_bind: kit.bind_source(device, &view),
-            up_bind: kit.bind_source(device, &up_view),
-            view,
-            up_view,
-            bytes,
-        }
-    }
 }
 
 /// Frame history: the window's frames at the internal size, one array layer each.
@@ -481,6 +497,15 @@ pub struct Drawing {
     pub offsets: Offsets,
     pub effects_resolution: f64,
     pub canonical: bool,
+    /// Whether a still scene may settle: not while a frame it drew is still in flight, whose
+    /// completion releases what it read (#421).
+    pub settles: bool,
+}
+
+/// What a view draws: a 3D scene's frames, or a 2D document's (#397).
+pub enum Content {
+    Scene(Box<Frames>),
+    Flat(Box<crate::flat::Flat>),
 }
 
 pub struct View {
@@ -490,16 +515,57 @@ pub struct View {
     /// The slot the last drawn frame is in.
     pub shown: Option<usize>,
     renderer: Renderer,
-    pub frames: Frames,
+    frames: Content,
+    /// Whether the renderer last prepared a scene of `frames`, so a frame need only write what
+    /// moved.
+    prepared: bool,
     /// The internal scale and history window that fit, at the class's base rung.
     pub scale: f64,
     pub window: u32,
-    low: Option<Low>,
+    /// How it returns to full size below scale 1, and its sharpen (#386).
+    pub surface: Surface,
+    /// The internal scale and the upscale its last frame drew through.
+    pub drew: (f64, &'static str),
     history: Option<History>,
     /// What the view allocated beyond `low` and `history`, as the device reports it.
     base_bytes: Option<u64>,
+    /// How the last frame drew (its rung and internal scale) and how many frames it has drawn
+    /// since its scene last changed: a still scene settles once its history is full (#421).
+    still: Option<(Rung, f64, u32)>,
+    /// The document's composed pass and compute operators (#429), each at the resolution its
+    /// writer's meter gives it, and what each drew last frame.
+    pub ops: DocOps,
+    pub op_resolution: BTreeMap<String, f64>,
+    pub op_rows: Vec<Row>,
+    /// #429's planted render-back, which draws live-only operators as the live view does.
+    pub canonical_draws_live_only: bool,
     #[cfg(feature = "test-meter")]
     pub test: crate::testgpu::Items,
+}
+
+/// The live meter's timer as the operators' [`Times`], each pass charged to `session`.
+struct LiveTimes<'a> {
+    timer: &'a mut Timer,
+    session: usize,
+}
+
+impl Times for LiveTimes<'_> {
+    fn start(&mut self, mark: &'static str, _: &mut wgpu::CommandEncoder) -> Option<usize> {
+        self.timer.start(mark, self.session)
+    }
+    fn render(&self, i: Option<usize>) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
+        self.timer.writes(i)
+    }
+    fn compute(&self, i: Option<usize>) -> Option<wgpu::ComputePassTimestampWrites<'_>> {
+        self.timer.writes(i).map(|w| wgpu::ComputePassTimestampWrites {
+            query_set: w.query_set,
+            beginning_of_pass_write_index: w.beginning_of_pass_write_index,
+            end_of_pass_write_index: w.end_of_pass_write_index,
+        })
+    }
+    fn end(&mut self, i: Option<usize>, _: &mut wgpu::CommandEncoder) {
+        self.timer.end(i);
+    }
 }
 
 impl View {
@@ -510,21 +576,28 @@ impl View {
         path: Path,
         size: [u32; 2],
         slots: u32,
-        frames: Frames,
+        frames: Content,
         scale: f64,
         window: u32,
         look: &Look3,
         labels: &mut Labels,
     ) -> Result<View, String> {
-        let ((slots, renderer, frames), base_bytes) = memory::across(device, || {
+        let ((slots, renderer, frames, prepared), base_bytes) = memory::across(device, || {
             let slots: Result<Vec<_>, String> =
                 (0..slots).map(|_| allocate(device, path, size)).collect();
             let mut renderer = Renderer::new(device, Planted3::default());
             let mut frames = frames;
-            if let Ok(scene) = frames.at(0, scaled(size, scale), &Offsets::default(), labels) {
-                renderer.prepare(device, scene, look);
-            }
-            (slots, renderer, frames)
+            let prepared = match &mut frames {
+                Content::Scene(frames) => match frames.at(0, size, &Offsets::default(), labels) {
+                    Ok(scene) => {
+                        renderer.prepare(device, scene, look);
+                        true
+                    }
+                    Err(_) => false,
+                },
+                Content::Flat(_) => false,
+            };
+            (slots, renderer, frames, prepared)
         });
         Ok(View {
             size,
@@ -533,19 +606,33 @@ impl View {
             shown: None,
             renderer,
             frames,
+            prepared,
             scale,
             window,
-            low: None,
+            surface: Surface::default(),
+            drew: (1.0, "none"),
             history: None,
             base_bytes,
+            still: None,
+            ops: DocOps::empty(),
+            op_resolution: BTreeMap::new(),
+            op_rows: Vec::new(),
+            canonical_draws_live_only: false,
             #[cfg(feature = "test-meter")]
             test: crate::testgpu::Items::default(),
         })
     }
 
+    /// Draws `frames` from the next frame on: a revision's document.
+    pub fn set_frames(&mut self, frames: Content) {
+        self.frames = frames;
+        self.prepared = false;
+        self.still = None;
+    }
+
     /// What the view itself holds on the device, as the device reports it.
     pub fn own_bytes(&self) -> Option<u64> {
-        let low = self.low.as_ref().map_or(Some(0), |l| l.bytes);
+        let low = Some(self.renderer.low_bytes());
         let history = self.history.as_ref().map_or(Some(0), |h| h.bytes);
         #[cfg(feature = "test-meter")]
         let test = self.test.bytes();
@@ -565,6 +652,11 @@ impl View {
         self.renderer.pipelines()
     }
 
+    /// Plants the upscale's wrong programs (#386).
+    pub fn plant(&mut self, planted: deep_scene3d_render::surface::Planted) {
+        self.renderer.plant_upscale(planted);
+    }
+
     /// The history window it draws with now, 0 without history.
     pub fn history_frames(&self, drawing: &Drawing) -> u32 {
         if drawing.canonical {
@@ -574,13 +666,24 @@ impl View {
         }
     }
 
+    /// Hands the shown slot its finished frame: a copy slot reads its frame back here, so its
+    /// pixels are the frame's only after this.
+    pub fn finish(&self, device: &Device) -> Result<(), String> {
+        match self.shown {
+            Some(s) => self.slots[s].finish(device),
+            None => Ok(()),
+        }
+    }
+
     /// The slot's pixels, BGRA rows top-down, after its frame finished.
     pub fn pixels(&self) -> Option<Vec<u8>> {
         Some(self.slots[self.shown?].read())
     }
 
-    /// Records the frame at `t` into `encoder`, each pass timed by `timer` as `session`'s. Fails
-    /// only when the document can't be evaluated.
+    /// Records the frame at `t` into `encoder`, each pass timed by `timer` as `session`'s, and
+    /// says whether it drew: a scene that hasn't changed since a frame drawn the same way, once
+    /// its history is full, records nothing (#421). Fails only when the document can't be
+    /// evaluated.
     #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &mut self,
@@ -593,13 +696,65 @@ impl View {
         encoder: &mut wgpu::CommandEncoder,
         timer: &mut Timer,
         session: usize,
-    ) -> Result<(), Refused> {
+    ) -> Result<bool, Refused> {
         let scale = if drawing.canonical {
             1.0
         } else {
             drawing.rung.scale(self.scale)
         };
-        let internal = scaled(self.size, scale);
+        let evaluated = match &mut self.frames {
+            Content::Scene(frames) if !drawing.canonical && drawing.rung != Rung::Placeholder => {
+                frames.at(t, self.size, &drawing.offsets, labels)?;
+                let still = match self.still {
+                    Some((rung, s, n))
+                        if drawing.settles && self.prepared && !frames.changed() =>
+                    {
+                        (rung == drawing.rung && s == scale).then_some(n)
+                    }
+                    _ => None,
+                };
+                #[cfg(feature = "test-meter")]
+                let still = still.filter(|_| self.test.bound.is_empty());
+                if still.is_some_and(|n| n >= self.window) {
+                    return Ok(false);
+                }
+                self.still = Some((drawing.rung, scale, still.map_or(0, |n| n + 1)));
+                true
+            }
+            _ => {
+                self.still = None;
+                false
+            }
+        };
+        // The scene is evaluated at the view's size; the renderer draws it at the internal size
+        // and returns it to full size through the upscale, once its pipelines are compiled.
+        self.renderer.upscale = kit.upscale.clone();
+        // The climb's top rung draws the key sun's cascades at twice their size (#425).
+        self.renderer.shadow_scale = if !drawing.canonical && drawing.rung <= Rung::Shadows2x {
+            2
+        } else {
+            1
+        };
+        // Above scale 1 (the climb's 4-samples rung, #425) the bilinear pass at full size averages
+        // each pixel's four samples, a box filter, and nothing sharpens them.
+        self.renderer.surface = if scale > 1.0 {
+            Surface {
+                scale,
+                upscale: Filter::Bilinear,
+                sharpen: 0.0,
+            }
+        } else {
+            Surface {
+                scale,
+                ..self.surface
+            }
+        };
+        let internal = self.renderer.internal_size(self.size);
+        self.drew = if internal == self.size {
+            (1.0, "none")
+        } else {
+            (scale, self.renderer.surface.upscale.name())
+        };
         let slot = self.next;
         self.next = (self.next + 1) % self.slots.len();
         self.shown = Some(slot);
@@ -624,16 +779,33 @@ impl View {
             });
             timer.end(i);
             self.after(encoder, slot);
-            return Ok(());
+            return Ok(true);
         }
-        let scene = self.frames.at(t, internal, &drawing.offsets, labels)?;
+        let frames = match &mut self.frames {
+            Content::Scene(frames) => frames,
+            Content::Flat(flat) => {
+                self.drew = (1.0, "none");
+                flat.draw(device, t, self.size, &slot_view, encoder, timer, session)
+                    .map_err(|(code, path)| Refused { code, path })?;
+                self.after(encoder, slot);
+                return Ok(true);
+            }
+        };
+        if !evaluated {
+            frames.at(t, self.size, &drawing.offsets, labels)?;
+        }
+        let scene = frames.scene();
         let clip = scene.camera.clip(Depth::Reversed);
-        self.renderer.prepare(device, scene, look);
+        match frames.moved().filter(|_| self.prepared) {
+            Some(moved) => self.renderer.prepare_moved(device, scene, look, moved),
+            None => self.renderer.prepare(device, scene, look),
+        }
+        self.prepared = true;
         let i = timer.start(GEOMETRY_PASS, session);
         self.renderer.record_geometry(encoder, timer.writes(i));
         timer.end(i);
         let Some((linear_texture, linear)) = self.renderer.linear() else {
-            return Ok(());
+            return Ok(true);
         };
         let (linear_texture, linear) = (linear_texture.clone(), linear.clone());
         #[cfg(feature = "test-meter")]
@@ -657,7 +829,44 @@ impl View {
             session,
         );
         #[cfg(not(feature = "test-meter"))]
-        let _ = (clip, &linear, drawing.effects_resolution);
+        let _ = drawing.effects_resolution;
+        if !self.ops.ops.is_empty() {
+            // Column-major, as the operators' frame holds it.
+            let flat: [f64; 16] = std::array::from_fn(|i| clip[i % 4][i / 4]);
+            let frame = Frame {
+                clip: flat.map(|x| x as f32),
+                inverse_clip: deep_effects_render::reference::inverse(&flat).map(|x| x as f32),
+                eye: [0.0; 4],
+                t: (t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64) as f32,
+                seed: 0,
+            };
+            let roles: BTreeMap<String, [f64; 3]> = look
+                .roles
+                .iter()
+                .map(|(k, c)| (k.clone(), crate::effects::linear_of(*c)))
+                .collect();
+            let res = &self.op_resolution;
+            let canonical = drawing.canonical && !self.canonical_draws_live_only;
+            let (rows, recs, out) = self.ops.plan(
+                device,
+                &linear,
+                None,
+                None,
+                internal,
+                &frame,
+                &roles,
+                &|i| res.get(i).copied().unwrap_or(1.0),
+                canonical,
+            );
+            let mut times = LiveTimes { timer, session };
+            for r in &recs {
+                outside(|| r.record(encoder, &mut times));
+            }
+            if let Some(o) = out {
+                outside(|| self.ops.blit_into(device, encoder, &o, &linear, internal));
+            }
+            self.op_rows = rows;
+        }
         if self.window > 0 && !drawing.canonical {
             self.resolve_history(
                 device,
@@ -670,42 +879,40 @@ impl View {
                 session,
             );
         }
-        if scale < 1.0 {
-            if self.low.as_ref().is_none_or(|l| l.size != internal) {
-                self.low = Some(Low::new(device, kit, internal, self.size));
-            }
-            let low = self.low.as_ref().expect("made above");
-            let i = timer.start(OUTPUT_PASS, session);
-            self.renderer
-                .record_output(encoder, &low.view, timer.writes(i));
-            timer.end(i);
-            if let Some(up) = kit.upscale.as_ref() {
-                for (name, pipeline, bind, target) in [
-                    (UPSCALE, &up.upscale, &low.low_bind, &low.up_view),
-                    (SHARPEN, &up.sharpen, &low.up_bind, &slot_view),
-                ] {
-                    let i = timer.start(name, session);
-                    full_pass(
-                        encoder,
-                        name,
-                        target,
-                        pipeline,
-                        bind,
-                        false,
-                        timer.writes(i),
-                    );
+        let i = timer.start(OUTPUT_PASS, session);
+        match self.renderer.low_view(device) {
+            Some(low) => {
+                self.renderer.record_output(encoder, &low, timer.writes(i));
+                timer.end(i);
+                for step in self
+                    .renderer
+                    .surface_steps(device, &slot_view)
+                    .into_iter()
+                    .flatten()
+                {
+                    let i = timer.start(step.name(), session);
+                    step.record(encoder, timer.writes(i));
                     timer.end(i);
                 }
             }
-        } else {
-            self.low = None;
-            let i = timer.start(OUTPUT_PASS, session);
-            self.renderer
-                .record_output(encoder, &slot_view, timer.writes(i));
-            timer.end(i);
+            None => {
+                self.renderer
+                    .record_output(encoder, &slot_view, timer.writes(i));
+                timer.end(i);
+            }
+        }
+        for (name, draw) in [
+            (OUTLINE_PASS, self.renderer.outline_draw(false)),
+            (LABEL_PASS, self.renderer.label_draw()),
+        ] {
+            if let Some(draw) = draw {
+                let i = timer.start(name, session);
+                draw.record(encoder, &slot_view, timer.writes(i));
+                timer.end(i);
+            }
         }
         self.after(encoder, slot);
-        Ok(())
+        Ok(true)
     }
 
     fn after(&self, encoder: &mut wgpu::CommandEncoder, slot: usize) {

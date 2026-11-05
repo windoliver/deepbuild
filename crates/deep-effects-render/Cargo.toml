@@ -13,10 +13,10 @@ rust-version = "1.95"
 # sparks and the selection outline. Each pass is timed with wgpu-profiler.
 [dependencies]
 deep-canvas-effects = { path = "../deep-canvas-effects" }
+deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-gpu = { path = "../deep-gpu" }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 naga = { version = "30", default-features = false, features = ["wgsl-in"] }
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl"] }
 wgpu-profiler = "0.28"
-bytemuck = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

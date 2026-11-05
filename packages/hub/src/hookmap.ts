@@ -3,22 +3,22 @@
 // fields, its text scrubbed of every value the hub holds. Runs in the parser workers, off the event loop.
 import { closeSync, openSync, readFileSync, readSync, readdirSync, fstatSync } from 'node:fs';
 import { join } from 'node:path';
-import { factsAdapter, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
+import { ADAPTERS, factsAdapter, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
-import { refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
+import { derivedId, refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
 
-/**
- * The agent names a hook request may carry, to the adapter that maps them. Cursor's CLI and Grok run the hooks in
- * Claude Code's settings file (deep-hook names them from their own variables), so Claude Code's facts read their
- * payloads, but their events are recorded under their own agent, never as Claude Code's.
- */
-const ADAPTERS: Readonly<Record<string, string>> = { 'claude-code': 'claude', claude: 'claude', codex: 'codex', cursor: 'claude', grok: 'claude' };
+/** The hub's moments an agent's own event names stand for, where the agent's differ from the hook names the core reads. */
+const MOMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  pi: { session_start: 'SessionStart', session_shutdown: 'SessionEnd', input: 'UserPromptSubmit', tool_call: 'PreToolUse', tool_result: 'PostToolUse', agent_before_settle: 'Stop' },
+  paseo: { 'agent.turn.after': 'Stop', 'agent.permission.before': 'PermissionRequest' },
+};
 const TOOL_KINDS = ['shell', 'read', 'edit', 'write', 'search', 'fetch', 'mcp', 'unknown'];
 const FROM = ['person', 'scheduled', 'subagent', 'session', 'continuation', 'unknown'];
 const ASKS = ['tool', 'plan', 'question', 'mode'];
+const ATTENTION = ['working', 'waiting', 'finished'];
 const SEQ_WHY = 'seq is when the hook started, in ns since the Unix epoch, as a canonical decimal string from 0 to 9223372036854775807: digits only, no sign, no leading zero, never a JSON number.';
 const MAX_MS = 9_007_199_254_740_991n;
 
@@ -50,7 +50,8 @@ export function hubAdapters(): AdapterRegistry {
   }
   return reg;
 }
-const registry = (): AdapterRegistry => (adapters ??= hubAdapters());
+/** The hub's adapters, read once per thread. */
+export const registry = (): AdapterRegistry => (adapters ??= hubAdapters());
 
 /**
  * What each tool the agents' facts list counts as where it isn't change (#304), for rules.json: a read or a search
@@ -102,6 +103,15 @@ export function versionOf(transcript: string): string | undefined {
       versions.set(transcript, version);
       return version;
     }
+    // Codex's rollout names it once, in the session_meta that opens the file, whose line may outrun the window.
+    const head = Buffer.alloc(Math.min(size, 65_536));
+    readSync(fd, head, 0, head.length, 0);
+    const named = /"cli_version"\s*:\s*"([^"]+)"/.exec(head.toString('utf8'))?.[1];
+    if (named) {
+      if (versions.size > 4096) versions.clear();
+      versions.set(transcript, named);
+      return named;
+    }
   } catch {
     // No transcript yet: the version is read at the session's next hook.
   } finally {
@@ -152,37 +162,57 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (!name) return { kind: 'refused', id, error: refusal('enum', '/agent', `No adapter maps ${request.agent}; send one of ${Object.keys(ADAPTERS).join(', ')}.`, request.agent) };
   if (!isObj(request.payload)) return { kind: 'refused', id, error: refusal('type', '/payload', "Send the agent's hook JSON object as the payload.", request.payload) };
   const payload = request.payload;
-  // Who is calling: a payload that carries Cursor's own fields is Cursor's, whatever command ran it.
-  const agent = request.agent === 'claude-code' && typeof payload.cursor_version === 'string' ? 'cursor' : request.agent;
+  const moments = MOMENTS[name];
+  const event = moments?.[request.event] ?? request.event;
+  // Who is calling: a payload that carries another tool's own fields is that tool's, whatever command or variable
+  // named it; a name its fields contradict is recorded as a reading (#993), and a tool that isn't Claude Code is kept.
+  const said = name === 'claude' ? payloadCaller(payload) : undefined;
+  const named = request.agent === 'claude' ? 'claude-code' : request.agent;
+  const agent = said && said !== 'claude-code' ? said : request.agent;
   const scrub = (text: string) => scrubText(text, { held });
   const meta: HookMeta = {
-    id: request.id, agent, event: request.event, session: str(payload.session_id), cwd: str(payload.cwd),
+    id: request.id, agent, event, session: str(payload.session_id), cwd: str(payload.cwd),
     transcript: str(payload.transcript_path), pid: request.pid, ppid: request.ppid, matched: request.matched,
   };
+  if (said && said !== named) meta.caller = `deep-hook named this hook's caller ${named}, but its payload's own fields say ${said} (${said === 'cursor' ? 'cursor_version' : `transcript_path ${str(payload.transcript_path)}`}); it is recorded under ${agent}.`;
   if (str(payload.tool_use_id)) meta.toolUse = str(payload.tool_use_id);
   if (request.late === true) meta.late = { matched: request.matched };
   if (request.notes) meta.notes = request.notes;
   if (request.stage) meta.stage = request.stage;
+  if (request.heavy) meta.heavy = request.heavy;
   const fields: NonNullable<HookMeta['fields']> = {};
   for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
   if (Object.keys(fields).length) meta.fields = fields;
+  if (name === 'pi' && str(payload.parent)) meta.parent = str(payload.parent);
+  if (name === 'paseo') {
+    const provider = str(payload.provider);
+    meta.paseo = { provider, agent: str(payload.paseo_agent), bind: str(payload.bind) };
+    for (const [key, field] of [['request', 'request_id'], ['kind', 'permission_kind'], ['behavior', 'behavior'], ['from', 'from']] as const) if (str(payload[field])) meta.paseo[key] = str(payload[field]);
+    // A provider the facts have no entry for is watch-only, and says which facts it lacks (#55).
+    const providers = (registry().get(name).facts as JsonObject).providers;
+    if (!isObj(providers) || !isObj(providers[provider])) {
+      meta.watchOnly = true;
+      meta.paseo.lacks = `This session runs ${provider || 'an unnamed provider'} through paseo, which DeepBuild's paseo facts have no entry for, so it is watch-only: nothing is held, answered or sent for it. The facts it lacks: bridge (its pinned bridge version), permissions (its permission quirks), modelCheck (the check of the exact model before the first prompt) and timeouts.`;
+    }
+  }
   const tool = str(payload.tool_name);
-  if (request.event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
+  if (event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
   if (plant === 'writer-from-payload' && typeof payload.writer === 'string') meta.payloadWriter = payload.writer;
   if (plant === 'matches-text' && tool === 'Bash' && isObj(payload.tool_input)) meta.command = str(payload.tool_input.command);
-  if ((request.event === 'PreToolUse' || request.event === 'PermissionRequest' || request.event === 'PostToolUse') && tool) {
+  if ((event === 'PreToolUse' || event === 'PermissionRequest' || event === 'PostToolUse') && tool) {
     meta.call = { mode: str(payload.permission_mode), tool, input: isObj(payload.tool_input) ? payload.tool_input : {}, suggestions: Array.isArray(payload.permission_suggestions) ? payload.permission_suggestions : [] };
   }
   // A session on a version its agent's facts don't cover has its holds and blocks watch-only. Only a reply that holds
   // or blocks reads the version here; the core reads it for every other hook, off the acknowledgement's path.
-  const replies = request.event === 'Stop' || request.event === 'PermissionRequest' || (request.event === 'PreToolUse' && request.matched.length > 0);
-  const version = replies ? versionOf(meta.transcript) : undefined;
+  const replies = event === 'Stop' || event === 'PermissionRequest' || (event === 'PreToolUse' && request.matched.length > 0);
+  // An agent whose transcript names no version says it in the payload.
+  const version = str(payload.agent_version) || (replies ? versionOf(meta.transcript) : undefined);
   if (version) meta.version = version;
   if (version && !coveredBy(agent, version)) meta.watchOnly = true;
 
   const facts = registry().get(name).facts as JsonObject;
   const rule = (facts.mapping as JsonObject)[request.event];
-  const kind = isObj(rule) && typeof rule.kind === 'string' ? rule.kind : undefined;
+  let kind = isObj(rule) && typeof rule.kind === 'string' ? rule.kind : undefined;
   if (!kind) return { kind: 'hook', drafts: [], meta };
   const mapped = registry().mapHook({ ...request, agent: name }, newest(name)).events.find((e) => e.kind === kind)?.data ?? {};
   let data: Record<string, unknown> | undefined;
@@ -196,6 +226,10 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       if (request.billing) data.billing = request.billing;
       fill = 'loads';
       v = 3;
+      if (typeof mapped.parent === 'string' && mapped.parent) {
+        data.parent = mapped.parent;
+        v = 4;
+      }
       break;
     case 'session.end':
       data = { reason: str(payload.reason) || 'other' };
@@ -204,11 +238,16 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       // Where the prompt came from is the core's to read, from the transcript entry it joins to.
       data = { msg: 0, text: scrub(str(mapped.text ?? payload.prompt)), tasks: [], from: FROM.includes(str(mapped.from)) ? mapped.from : 'unknown' };
       fill = 'msg';
+      if (mapped.disposition === 'handled') {
+        data.disposition = 'handled';
+        v = 2;
+      }
       break;
     case 'tool.before':
     case 'tool.after': {
       // A tool's kind, command and paths are read from its call, which the facts map on PreToolUse.
-      const call = kind === 'tool.before' ? mapped : registry().mapHook({ ...request, agent: name, event: 'PreToolUse', payload: { ...payload, hook_event_name: 'PreToolUse' } }, newest(name)).events.find((e) => e.kind === 'tool.before')?.data ?? {};
+      const before = Object.entries(moments ?? {}).find(([, moment]) => moment === 'PreToolUse')?.[0] ?? 'PreToolUse';
+      const call = kind === 'tool.before' ? mapped : registry().mapHook({ ...request, agent: name, event: before, payload: { ...payload, hook_event_name: before } }, newest(name)).events.find((e) => e.kind === 'tool.before')?.data ?? {};
       const callKind = TOOL_KINDS.includes(str(call.kind)) ? str(call.kind) : 'unknown';
       data = {
         kind: callKind, paths: Array.isArray(call.paths) ? call.paths.filter((p) => typeof p === 'string' && p) : [],
@@ -230,6 +269,11 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       } else {
         Object.assign(data, failure(mapped.outcome === 'failed', payload, callKind, meta.cwd));
         v = 2;
+        // The agent's own record of the calls this one made: incomplete stays incomplete.
+        if (isObj(mapped.nested) && typeof mapped.nested.complete === 'boolean') {
+          data.nested = { complete: mapped.nested.complete, ...(Number.isSafeInteger(mapped.nested.calls) ? { calls: mapped.nested.calls } : {}) };
+          v = 3;
+        }
         // The pull request a `gh pr create` call opened, from the call's own response (#83): only a call that is that
         // one command counts, so an echoed URL never passes for the one gh printed. Read here for both agents, since a
         // Codex session's rollout is never read.
@@ -238,16 +282,40 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
           if (url) meta.pr = url;
         }
       }
-      const loop = loopFact(name, tool, request.event, payload);
+      const loop = loopFact(name, tool, event, payload, typeof data.command === 'string' ? data.command : scrub(str(at(payload, 'tool_input.description')) || tool));
       if (loop) meta.loop = loop;
+      // A patch the adapter can't read is denied before it runs (#39), unless the session's version is past its facts.
+      if (kind === 'tool.before' && typeof mapped.denied === 'string') {
+        const past = versionOf(meta.transcript);
+        if (past && !coveredBy(agent, past)) meta.watchOnly = true;
+        else meta.denied = mapped.denied;
+      }
       break;
     }
+    case 'session.compact':
+    case 'subagent.start':
+    case 'turn.interrupted': {
+      // What Codex says beside a turn is a reading, which is no event of its turn: it names the hook it came from.
+      const said = kind === 'turn.interrupted' ? 'you interrupted this turn' : kind === 'subagent.start' ? `subagent ${str(payload.agent_id) || 'unknown'} (${str(mapped.type) || 'unknown'}) started` : `the context compacts (${str(mapped.trigger) || 'unknown'})`;
+      meta.reading = `${request.event}: ${scrub(said)}`;
+      return { kind: 'hook', drafts: [], meta };
+    }
     case 'agent.stop':
+      // A Codex subagent's hooks carry the root's session ID with an agent_id: its stop is the child's (#39), no turn of the root's.
+      if (name === 'codex' && request.event === 'SubagentStop') {
+        data = { turn: 0, did_work: false, claim: false, outcome: 'finished', cause: 'unknown', usage: null, child: str(payload.agent_id) || 'unknown' };
+        v = 5;
+        break;
+      }
       // The turn's cause is read from the payload here; the core reads the turn's transcript records, its usage and its loop.
       // Whether it is a claim is the core's stop rule's to read.
       data = { turn: 0, did_work: false, claim: false, outcome: mapped.outcome === 'failed' ? 'failed' : 'finished', cause: STOP_CAUSES.includes(str(mapped.cause)) ? mapped.cause : 'unknown', usage: null };
-      fill = 'turn';
-      v = 4;
+      // A child session's stop (a subagent's) names the child, from the payload field the facts' common template maps
+      // to `subagent`: it is no turn end of the session, so it takes no number from the session's turns, and the core
+      // and the hub leave it out of them.
+      if (str(mapped.subagent)) data.child = str(mapped.subagent);
+      else fill = 'turn';
+      v = 5;
       break;
     case 'permission.request':
       data = {
@@ -256,6 +324,22 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         ...(typeof mapped.command === 'string' ? { command: scrub(mapped.command) } : {}),
         ...(Array.isArray(mapped.paths) ? { paths: mapped.paths.filter((p) => typeof p === 'string' && p) } : {}),
       };
+      break;
+    case 'session.activity':
+      data = { activity: str(mapped.activity) || request.event };
+      break;
+    case 'session.attention':
+      // What a hook says of its session's state (#992): waiting on you, at work again, or its turn over. A value the
+      // facts don't list maps to no event, so it says nothing.
+      if (!ATTENTION.includes(str(mapped.state))) return { kind: 'hook', drafts: [], meta };
+      // The planted adapter opens an ask from a notification.
+      if (plant === 'ask-from-notification' && request.event === 'Notification') {
+        kind = 'permission.request';
+        data = { kind: 'question', tool: 'Notification' };
+        break;
+      }
+      data = { state: mapped.state };
+      v = 2;
       break;
     case 'task.completed':
       data = { agent_task: str(mapped.agent_task) || '-', title: scrub(str(mapped.title)) || '-' };
@@ -269,6 +353,13 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   // A stop, a permission request or a finished task is about its session: the session: handle takes the agent's session ID's letters and digits.
   const handle = meta.session.replace(/[^0-9A-Za-z]/g, '');
   if (handle && needsSubject(kind)) draft.subject = `session:${handle}`;
+  // A Codex question card fires PreToolUse and no permission hook, so it is caught here: the call, and its request (#39).
+  const questions = ((facts.questionTools as JsonObject).tools ?? []) as JsonValue[];
+  if (name === 'codex' && kind === 'tool.before' && questions.includes(tool)) {
+    const asked: Draft = { kind: 'permission.request', v: 1, id: derivedId(draft.ts, `${request.id}.question`), ts: draft.ts, seq: request.seq, data: { kind: 'question', tool } };
+    if (handle) asked.subject = `session:${handle}`;
+    return { kind: 'hook', drafts: [draft, asked], meta };
+  }
   return { kind: 'hook', drafts: [draft], meta };
 }
 
@@ -287,8 +378,8 @@ function failure(failed: boolean, payload: JsonObject, kind: string, cwd: string
   return { outcome: 'failed', exit_code: exit !== null && exit <= 255 ? exit : null, signature: signature(`${kind}:${cause}`, error, cwd), cause, owner: cause === 'permission_denied' ? 'you' : 'agent' };
 }
 
-/** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents. */
-function loopFact(name: string, tool: string, event: string, payload: JsonObject): HookMeta['loop'] {
+/** The loop fact a tool hook carries, by the agent's loop facts: wake-ups and crons once they ran, background subagents and commands, and monitors' watches. */
+export function loopFact(name: string, tool: string, event: string, payload: JsonObject, what: string): HookMeta['loop'] {
   if (event !== 'PostToolUse') return undefined;
   const facts = loopsOf(name);
   const wakeup = isObj(facts.wakeups) ? facts.wakeups[tool] : undefined;
@@ -303,7 +394,31 @@ function loopFact(name: string, tool: string, event: string, payload: JsonObject
   }
   const cancel = isObj(facts.cancels) ? facts.cancels[tool] : undefined;
   if (isObj(cancel)) return { cancelled: String(at(payload, String(cancel.id)) ?? '') };
+  const call = String(payload.tool_use_id ?? '');
   const background = isObj(facts.background) ? facts.background[tool] : undefined;
-  if (typeof background === 'string' && at(payload, background) === true) return { background: true };
+  if (typeof background === 'string' && at(payload, background) === true) return { background: 'subagent', call, what };
+  const command = isObj(facts.commands) ? facts.commands[tool] : undefined;
+  if (typeof command === 'string' && at(payload, command) === true) return { background: 'command', call, what };
+  // A watch whose events wake the session (#997): looping until a stop call names it, or it ends.
+  const monitor = isObj(facts.monitors) ? facts.monitors[tool] : undefined;
+  if (isObj(monitor)) {
+    const id = at(payload, String(monitor.id));
+    const timeout = at(payload, String(monitor.timeoutMs));
+    if (typeof id === 'string' && id) return { monitor: id, what, command: str(at(payload, String(monitor.command))), timeout: typeof timeout === 'number' && timeout > 0 ? timeout : null };
+  }
+  const stop = isObj(facts.stops) ? facts.stops[tool] : undefined;
+  if (isObj(stop)) return { stopped: String(at(payload, String(stop.id)) ?? '') };
+  return undefined;
+}
+
+/**
+ * The tool a Claude-shaped payload's own fields name (#993): Cursor's carries cursor_version, Grok's transcript sits
+ * under ~/.grok, Claude Code's under its projects folder. Undefined when they name none.
+ */
+function payloadCaller(payload: Record<string, unknown>): string | undefined {
+  if (typeof payload.cursor_version === 'string') return 'cursor';
+  const transcript = str(payload.transcript_path);
+  if (/[\\/]\.grok[\\/]/.test(transcript)) return 'grok';
+  if (/[\\/]\.claude[\\/]projects[\\/]/.test(transcript)) return 'claude-code';
   return undefined;
 }

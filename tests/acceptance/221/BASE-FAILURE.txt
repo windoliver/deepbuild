@@ -1,0 +1,490 @@
+Base commit: 960045da0594e305044e7a68b28bf4fb9beaa3e4 ("Merge pull request #1027 from windoliver/claude/issue-875-on-main")
+Command: CARGO_TARGET_DIR=<scratch>/base-target NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/221 --no-file-parallelism
+Run in a clean `git archive 960045da` (no uncommitted work; see README, Disclosure) with only tests/acceptance/221/ added and the repo's
+node_modules linked in; deep-canvas-render and deep-show (--no-default-features --features r2) built there with their own target folder.
+All 20 tests fail. Each failure is a missing surface, not a test typo:
+- the check refuses at.place and at.align as unknown_field ("not a member of at in this slice") and a box-point pivot "sw" as out_of_range
+  ("not three numbers finite at f32"), so every placed document fails expectClean, geometry refuses it with that code, and no
+  relation_cycle is ever raised (AC1-AC6, Proof); the same documents with those fields removed pass the check at the base (checked before
+  this run), so nothing else in them is refused;
+- deep://registries lists no constraint@1, and --planted kit_admits_all:constraint@1 seals (exit 0) instead of refusing (AC6);
+- deep_show refuses the placed board for the same unknown_field / out_of_range errors, so determinism is never reached (AC7).
+At the base geometry also has no box or points field and evaluates at t = 0 whatever t says; no test reaches that far.
+Date: 2026-11-03T00:31:01Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/221
+
+ ❯ beside.test.ts (4 tests | 4 failed) 119179ms
+   ❯ AC1 a formula beside a moving circle (2)
+     × AC1 at 120 sampled times the formula's west side is 24 u ± 0.5 px from the circle's east side and the centres' y differ by at most 0.5 px 1445ms
+     × AC1 oracle port (TestBox, test_mobject.py:359-402): the formula's and the circle's box points are their tight boxes measured on the curves at every sampled time, the stroke left out 382ms
+   ❯ AC2 a label beside a text that grows (2)
+     × AC2 a label beside a text patched to a string 40% longer keeps its 16 u gap within 0.5 px with no patch to the label 119ms
+     × AC2 oracle port (test_next_to_leaves_buff_between_the_two, test_mobject.py:414-439): a rect beside the text on each side with each aligned edge has its facing side gap apart and its aligned edge on the text's, before and after the patch 159ms
+ ❯ registry.test.ts (3 tests | 3 failed) 21834ms
+   ❯ AC6 constraint@1 seals with the four relation entries, and its kit refuses its planted entries at the seal (3)
+     × AC6 constraint@1 is the core's, filled only by canvas modules, and holds beside, edge, onto and align from marks2d, each passing every rule of the constraint kit 1696ms
+     × AC6 a planted beside that iterates to convergence and one that reads its own place from the previous frame are each refused by the kit at the seal, naming the entry, on rules of their own 36ms
+     × AC6 a constraint kit that admits every entry is refused at the seal (kit_admits_planted), naming constraint@1 and both planted entries 25ms
+ ❯ edge.test.ts (3 tests | 3 failed) 31893ms
+   ❯ AC3 a title on the frame's top edge (3)
+     × AC3 a title with edge: n has its top side at the safe margin (24 u) ± 0.5 px at 1920 × 1080 and at 1080 × 1920 1379ms
+     × AC3 the margin defaults to the document's safe: with safe 40 the title's top side is at 40 ± 0.5 px at both frame shapes 148ms
+     × AC3 oracle port (test_to_edge_puts_the_box_buff_in_from_the_frames_edge, test_mobject.py:459-468): edge toward each of the eight sides puts the box's side the margin in from the frame's edge, at both frame shapes, moving only along that edge's axis 318ms
+ ❯ pivot.test.ts (3 tests | 3 failed) 270286ms
+   ❯ AC4 pivot: sw (3)
+     × AC4 pivot: sw with scale 2 keeps the lower left corner within 0.5 px (a rect and a curved path) 1959ms
+     × AC4 oracle port (Transforms, test_mobject.py:266-356): every point of the arch scaled 2 about its sw box point is plain arithmetic about that pivot, and its box is the tight box of what it draws 283ms
+     × AC4 a keyed scale from 1 to 2 about sw keeps the lower left corner within 0.5 px at 21 sampled times 443ms
+ ❯ proof.test.ts (2 tests | 2 failed) 139305ms
+   ❯ Proof: the positions figure and the quadratic formula's labels, built as documents (2)
+     × Proof: nine dots, each labelled next_to(dot, DOWN, buff=0.2) 27 u below it, centred, over a background rectangle centred on the label; each label draws inside its box 2341ms
+     × Proof: the quadratic formula's labels sit beside their parts (beside quad#disc and quad#pm on n, quad#den on s) at their gaps, centred, and draw inside their boxes 156ms
+ ❯ seek.test.ts (1 test | 1 failed) 31629ms
+   ❯ AC7 seeking equals playing for placed items (1)
+     × AC7 seeking a document of placed items to 50 random times gives the evaluated positions playing gives, bit for bit 2000ms
+ ❯ offset.test.ts (1 test | 1 failed) 28197ms
+   ❯ AC6 at.pos adds after the relation (1)
+     × AC6 a placed item with a keyed at.pos lands at its relation's place plus that offset within 0.5 px at 120 sampled times 1455ms
+ ❯ cycle.test.ts (3 tests | 3 failed) 92610ms
+   ❯ AC5 a cycle through relations is refused at check as relation_cycle, naming the chain (3)
+     × AC5 a beside b and b beside a is refused relation_cycle naming both, and a drawing command refuses it with that code 10951ms
+     × AC5 a planted three-item cycle (a beside b, b aligned to c, c onto a) is refused relation_cycle naming all three, and not d, which reads the chain but isn't in it 236ms
+     × AC5 the same relations with no read back (c onto a fixed point) pass the check: a chain is not a cycle 230ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 20 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  beside.test.ts > AC1 a formula beside a moving circle > AC1 at 120 sampled times the formula's west side is 24 u ± 0.5 px from the circle's east side and the centres' y differ by at most 0.5 px
+AssertionError: rel-221-beside-formula: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error unknown_field [formula] items/formula/at/place",
++ ]
+
+ ❯ helpers.ts:214:93
+    212| export function expectClean(docs: JsonObject[], store: string): void {
+    213|   checkAll(docs, store).forEach((r, i) => {
+    214|     expect(listIssues(errorsOf(r)), `${String(docs[i]!['id'])}: the ch…
+       |                                                                                             ^
+    215|     expect(r.ok, `${String(docs[i]!['id'])}: the check passes`).toBe(t…
+    216|   });
+ ❯ expectClean helpers.ts:213:25
+ ❯ beside.test.ts:25:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/20]⎯
+
+ FAIL  beside.test.ts > AC1 a formula beside a moving circle > AC1 oracle port (TestBox, test_mobject.py:359-402): the formula's and the circle's box points are their tight boxes measured on the curves at every sampled time, the stroke left out
+AssertionError: geometry of formula in rel-221-beside-formula at 0 flicks refused: {"ok":false,"code":"unknown_field","issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["formula"],"path":"items/formula/at/place","actual":{"beside":"ball","side":"e","gap":24,"align":"center"},"what":"not a member of at in this slice","fix":"Remove the field, or require the kind's minor that defines it."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readGeo helpers.ts:252:81
+    250| /** One `geometry` answer, read: refused answers fail the test with th…
+    251| export function readGeo(out: JsonObject, t: number, what: string): Geo…
+    252|   expect(out['ok'], `geometry of ${what} at ${t} flicks refused: ${sho…
+       |                                                                                 ^
+    253|   const p = obj(out['points'], `geometry ${what}: points (the nine box…
+    254|   const points = Object.fromEntries(BOX_POINTS.map((name) => [name, pt…
+ ❯ helpers.ts:267:31
+ ❯ geometryAt helpers.ts:267:15
+ ❯ beside.test.ts:54:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/20]⎯
+
+ FAIL  beside.test.ts > AC2 a label beside a text that grows > AC2 a label beside a text patched to a string 40% longer keeps its 16 u gap within 0.5 px with no patch to the label
+AssertionError: rel-221-beside-text: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error unknown_field [unit] items/unit/at/place",
++ ]
+
+ ❯ helpers.ts:214:93
+    212| export function expectClean(docs: JsonObject[], store: string): void {
+    213|   checkAll(docs, store).forEach((r, i) => {
+    214|     expect(listIssues(errorsOf(r)), `${String(docs[i]!['id'])}: the ch…
+       |                                                                                             ^
+    215|     expect(r.ok, `${String(docs[i]!['id'])}: the check passes`).toBe(t…
+    216|   });
+ ❯ expectClean helpers.ts:213:25
+ ❯ beside.test.ts:90:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/20]⎯
+
+ FAIL  beside.test.ts > AC2 a label beside a text that grows > AC2 oracle port (test_next_to_leaves_buff_between_the_two, test_mobject.py:414-439): a rect beside the text on each side with each aligned edge has its facing side gap apart and its aligned edge on the text's, before and after the patch
+AssertionError: rel-221-next-to-before-e-start: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error unknown_field [mark] items/mark/at/place",
++ ]
+
+ ❯ helpers.ts:214:93
+    212| export function expectClean(docs: JsonObject[], store: string): void {
+    213|   checkAll(docs, store).forEach((r, i) => {
+    214|     expect(listIssues(errorsOf(r)), `${String(docs[i]!['id'])}: the ch…
+       |                                                                                             ^
+    215|     expect(r.ok, `${String(docs[i]!['id'])}: the check passes`).toBe(t…
+    216|   });
+ ❯ expectClean helpers.ts:213:25
+ ❯ beside.test.ts:130:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/20]⎯
+
+ FAIL  cycle.test.ts > AC5 a cycle through relations is refused at check as relation_cycle, naming the chain > AC5 a beside b and b beside a is refused relation_cycle naming both, and a drawing command refuses it with that code
+AssertionError: an error relation_cycle; the errors: error unknown_field [a] items/a/at/place; error unknown_field [b] items/b/at/place: expected 0 to be greater than 0
+ ❯ cycle.test.ts:16:106
+     14|     expect(r!.ok, `the check refuses the cycle: ${show(r!.raw)}`).toBe…
+     15|     const cycles = errorsOf(r!).filter((e) => e.code === 'relation_cyc…
+     16|     expect(cycles.length, `an error relation_cycle; the errors: ${list…
+       |                                                                                                          ^
+     17|     expect(cycles.some((e) => e.ids.includes('a') && e.ids.includes('b…
+     18|     // A document the check refuses never draws: geometry answers the …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/20]⎯
+
+ FAIL  cycle.test.ts > AC5 a cycle through relations is refused at check as relation_cycle, naming the chain > AC5 a planted three-item cycle (a beside b, b aligned to c, c onto a) is refused relation_cycle naming all three, and not d, which reads the chain but isn't in it
+AssertionError: an error relation_cycle; the errors: error unknown_field [a] items/a/at/place; error unknown_field [b] items/b/at/align; error unknown_field [c] items/c/at/place; error unknown_field [d] items/d/at/place: expected 0 to be greater than 0
+ ❯ cycle.test.ts:28:106
+     26|     expect(r!.ok, `the check refuses the cycle: ${show(r!.raw)}`).toBe…
+     27|     const cycles = errorsOf(r!).filter((e) => e.code === 'relation_cyc…
+     28|     expect(cycles.length, `an error relation_cycle; the errors: ${list…
+       |                                                                                                          ^
+     29|     const chain = cycles.find((e) => ['a', 'b', 'c'].every((id) => e.i…
+     30|     expect(chain, `a relation_cycle error names a, b and c in its ids:…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/20]⎯
+
+ FAIL  cycle.test.ts > AC5 a cycle through relations is refused at check as relation_cycle, naming the chain > AC5 the same relations with no read back (c onto a fixed point) pass the check: a chain is not a cycle
+AssertionError: no error: the chain d → a → b → c ends at a point: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error unknown_field [a] items/a/at/place",
++   "error unknown_field [b] items/b/at/align",
++   "error unknown_field [c] items/c/at/place",
++   "error unknown_field [d] items/d/at/place",
++ ]
+
+ ❯ cycle.test.ts:36:91
+     34|   it('AC5 the same relations with no read back (c onto a fixed point) …
+     35|     const [r] = checkAll([loadDoc('chain.json')], store);
+     36|     expect(listIssues(errorsOf(r!)), 'no error: the chain d → a → b → …
+       |                                                                                           ^
+     37|     expect(r!.ok).toBe(true);
+     38|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/20]⎯
+
+ FAIL  edge.test.ts > AC3 a title on the frame's top edge > AC3 a title with edge: n has its top side at the safe margin (24 u) ± 0.5 px at 1920 × 1080 and at 1080 × 1920
+AssertionError: rel-221-edge-title-1920x1080: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error unknown_field [title] items/title/at/place",
++ ]
+
+ ❯ helpers.ts:214:93
+    212| export function expectClean(docs: JsonObject[], store: string): void {
+    213|   checkAll(docs, store).forEach((r, i) => {
+    214|     expect(listIssues(errorsOf(r)), `${String(docs[i]!['id'])}: the ch…
+       |                                                                                             ^
+    215|     expect(r.ok, `${String(docs[i]!['id'])}: the check passes`).toBe(t…
+    216|   });
+ ❯ expectClean helpers.ts:213:25
+ ❯ edge.test.ts:32:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/20]⎯
+
+ FAIL  edge.test.ts > AC3 a title on the frame's top edge > AC3 the margin defaults to the document's safe: with safe 40 the title's top side is at 40 ± 0.5 px at both frame shapes
+AssertionError: rel-221-edge-title-1920x1080-safe40: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error unknown_field [title] items/title/at/place",
++ ]
+
+ ❯ helpers.ts:214:93
+    212| export function expectClean(docs: JsonObject[], store: string): void {
+    213|   checkAll(docs, store).forEach((r, i) => {
+    214|     expect(listIssues(errorsOf(r)), `${String(docs[i]!['id'])}: the ch…
+       |                                                                                             ^
+    215|     expect(r.ok, `${String(docs[i]!['id'])}: the check passes`).toBe(t…
+    216|   });
+ ❯ expectClean helpers.ts:213:25
+ ❯ edge.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/20]⎯
+
+ FAIL  edge.test.ts > AC3 a title on the frame's top edge > AC3 oracle port (test_to_edge_puts_the_box_buff_in_from_the_frames_edge, test_mobject.py:459-468): edge toward each of the eight sides puts the box's side the margin in from the frame's edge, at both frame shapes, moving only along that edge's axis
+AssertionError: rel-221-to-edge-1920x1080-n-safe: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error unknown_field [card] items/card/at/place",
++ ]
+
+ ❯ helpers.ts:214:93
+    212| export function expectClean(docs: JsonObject[], store: string): void {
+    213|   checkAll(docs, store).forEach((r, i) => {
+    214|     expect(listIssues(errorsOf(r)), `${String(docs[i]!['id'])}: the ch…
+       |                                                                                             ^
+    215|     expect(r.ok, `${String(docs[i]!['id'])}: the check passes`).toBe(t…
+    216|   });
+ ❯ expectClean helpers.ts:213:25
+ ❯ edge.test.ts:72:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/20]⎯
+
+ FAIL  offset.test.ts > AC6 at.pos adds after the relation > AC6 a placed item with a keyed at.pos lands at its relation's place plus that offset within 0.5 px at 120 sampled times
+AssertionError: rel-221-offset: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error unknown_field [tag] items/tag/at/place",
++ ]
+
+ ❯ helpers.ts:214:93
+    212| export function expectClean(docs: JsonObject[], store: string): void {
+    213|   checkAll(docs, store).forEach((r, i) => {
+    214|     expect(listIssues(errorsOf(r)), `${String(docs[i]!['id'])}: the ch…
+       |                                                                                             ^
+    215|     expect(r.ok, `${String(docs[i]!['id'])}: the check passes`).toBe(t…
+    216|   });
+ ❯ expectClean helpers.ts:213:25
+ ❯ offset.test.ts:23:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/20]⎯
+
+ FAIL  pivot.test.ts > AC4 pivot: sw > AC4 pivot: sw with scale 2 keeps the lower left corner within 0.5 px (a rect and a curved path)
+AssertionError: rel-221-pivot-sw: the check raises no error: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error out_of_range [arch] items/arch/at/pivot",
++   "error out_of_range [card] items/card/at/pivot",
++   "error out_of_range [grow] items/grow/at/pivot",
++ ]
+
+ ❯ helpers.ts:214:93
+    212| export function expectClean(docs: JsonObject[], store: string): void {
+    213|   checkAll(docs, store).forEach((r, i) => {
+    214|     expect(listIssues(errorsOf(r)), `${String(docs[i]!['id'])}: the ch…
+       |                                                                                             ^
+    215|     expect(r.ok, `${String(docs[i]!['id'])}: the check passes`).toBe(t…
+    216|   });
+ ❯ expectClean helpers.ts:213:25
+ ❯ pivot.test.ts:22:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/20]⎯
+
+ FAIL  pivot.test.ts > AC4 pivot: sw > AC4 oracle port (Transforms, test_mobject.py:266-356): every point of the arch scaled 2 about its sw box point is plain arithmetic about that pivot, and its box is the tight box of what it draws
+AssertionError: geometry of arch in rel-221-pivot-sw at 0 flicks refused: {"ok":false,"code":"out_of_range","issues":[{"check":"document.validate","code":"out_of_range","severity":"error","ids":["arch"],"path":"items/arch/at/pivot","actual":"sw","what":"not three numbers finite at f32","fix":"Give the field a value of its type inside its range."},{"check":"document.validate","code":"out_of_range","severity":"error","ids":["card"],"path":"items/card/at/pivot","actual":"sw","what":"not three numbers finite at f32","fix":"Give the field a value of its type inside its range."},{"check":"document.validate","code":"out_of_range","severity":"error","ids":["grow"],"path":"items/grow/at/pivot","actual":"sw","what":"not three numbers finite at f32","fix":"Give the field a value of its type inside its range."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readGeo helpers.ts:252:81
+    250| /** One `geometry` answer, read: refused answers fail the test with th…
+    251| export function readGeo(out: JsonObject, t: number, what: string): Geo…
+    252|   expect(out['ok'], `geometry of ${what} at ${t} flicks refused: ${sho…
+       |                                                                                 ^
+    253|   const p = obj(out['points'], `geometry ${what}: points (the nine box…
+    254|   const points = Object.fromEntries(BOX_POINTS.map((name) => [name, pt…
+ ❯ helpers.ts:272:31
+ ❯ geometryOf helpers.ts:272:15
+ ❯ pivot.test.ts:45:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/20]⎯
+
+ FAIL  pivot.test.ts > AC4 pivot: sw > AC4 a keyed scale from 1 to 2 about sw keeps the lower left corner within 0.5 px at 21 sampled times
+AssertionError: geometry of grow in rel-221-pivot-sw at 0 flicks refused: {"ok":false,"code":"out_of_range","issues":[{"check":"document.validate","code":"out_of_range","severity":"error","ids":["arch"],"path":"items/arch/at/pivot","actual":"sw","what":"not three numbers finite at f32","fix":"Give the field a value of its type inside its range."},{"check":"document.validate","code":"out_of_range","severity":"error","ids":["card"],"path":"items/card/at/pivot","actual":"sw","what":"not three numbers finite at f32","fix":"Give the field a value of its type inside its range."},{"check":"document.validate","code":"out_of_range","severity":"error","ids":["grow"],"path":"items/grow/at/pivot","actual":"sw","what":"not three numbers finite at f32","fix":"Give the field a value of its type inside its range."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readGeo helpers.ts:252:81
+    250| /** One `geometry` answer, read: refused answers fail the test with th…
+    251| export function readGeo(out: JsonObject, t: number, what: string): Geo…
+    252|   expect(out['ok'], `geometry of ${what} at ${t} flicks refused: ${sho…
+       |                                                                                 ^
+    253|   const p = obj(out['points'], `geometry ${what}: points (the nine box…
+    254|   const points = Object.fromEntries(BOX_POINTS.map((name) => [name, pt…
+ ❯ helpers.ts:267:31
+ ❯ geometryAt helpers.ts:267:15
+ ❯ pivot.test.ts:63:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/20]⎯
+
+ FAIL  proof.test.ts > Proof: the positions figure and the quadratic formula's labels, built as documents > Proof: nine dots, each labelled next_to(dot, DOWN, buff=0.2) 27 u below it, centred, over a background rectangle centred on the label; each label draws inside its box
+AssertionError: rel-221-positions: the check raises no error: expected [ …(18) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error unknown_field [back1] items/back1/at/place",
++   "error unknown_field [back2] items/back2/at/place",
++   "error unknown_field [back3] items/back3/at/place",
++   "error unknown_field [back4] items/back4/at/place",
++   "error unknown_field [back5] items/back5/at/place",
++   "error unknown_field [back6] items/back6/at/place",
++   "error unknown_field [back7] items/back7/at/place",
++   "error unknown_field [back8] items/back8/at/place",
++   "error unknown_field [back9] items/back9/at/place",
++   "error unknown_field [label1] items/label1/at/place",
++   "error unknown_field [label2] items/label2/at/place",
++   "error unknown_field [label3] items/label3/at/place",
++   "error unknown_field [label4] items/label4/at/place",
++   "error unknown_field [label5] items/label5/at/place",
++   "error unknown_field [label6] items/label6/at/place",
++   "error unknown_field [label7] items/label7/at/place",
++   "error unknown_field [label8] items/label8/at/place",
++   "error unknown_field [label9] items/label9/at/place",
++ ]
+
+ ❯ helpers.ts:214:93
+    212| export function expectClean(docs: JsonObject[], store: string): void {
+    213|   checkAll(docs, store).forEach((r, i) => {
+    214|     expect(listIssues(errorsOf(r)), `${String(docs[i]!['id'])}: the ch…
+       |                                                                                             ^
+    215|     expect(r.ok, `${String(docs[i]!['id'])}: the check passes`).toBe(t…
+    216|   });
+ ❯ expectClean helpers.ts:213:25
+ ❯ proof.test.ts:23:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/20]⎯
+
+ FAIL  proof.test.ts > Proof: the positions figure and the quadratic formula's labels, built as documents > Proof: the quadratic formula's labels sit beside their parts (beside quad#disc and quad#pm on n, quad#den on s) at their gaps, centred, and draw inside their boxes
+AssertionError: rel-221-quadratic: the check raises no error: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "error unknown_field [den-label] items/den-label/at/place",
++   "error unknown_field [disc-label] items/disc-label/at/place",
++   "error unknown_field [pm-label] items/pm-label/at/place",
++ ]
+
+ ❯ helpers.ts:214:93
+    212| export function expectClean(docs: JsonObject[], store: string): void {
+    213|   checkAll(docs, store).forEach((r, i) => {
+    214|     expect(listIssues(errorsOf(r)), `${String(docs[i]!['id'])}: the ch…
+       |                                                                                             ^
+    215|     expect(r.ok, `${String(docs[i]!['id'])}: the check passes`).toBe(t…
+    216|   });
+ ❯ expectClean helpers.ts:213:25
+ ❯ proof.test.ts:41:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/20]⎯
+
+ FAIL  registry.test.ts > AC6 constraint@1 seals with the four relation entries, and its kit refuses its planted entries at the seal > AC6 constraint@1 is the core's, filled only by canvas modules, and holds beside, edge, onto and align from marks2d, each passing every rule of the constraint kit
+AssertionError: deep://registries lists the registry constraint@1; it lists builder@1, check.kind.doc@1, device.class@1, gpu.function@1, gpu.output@1, gpu.step@1, logic.service@1, mark@1, modifier@1, check.kind@1, resolver@1, source@1, reading.source@1, environment@1, panel@1, adapter@1, route@1, index@1, action@1: expected undefined to be defined
+ ❯ theRegistry helpers.ts:570:132
+    568|   const all = arr(reply['registries'], 'registries: registries').map((…
+    569|   const o = all.find((x) => x['kind'] === 'registry' && x['name'] === …
+    570|   expect(o, `deep://registries lists the registry ${name}; it lists ${…
+       |                                                                                                                                    ^
+    571|   const at = `deep://registries ${name}`;
+    572|   return {
+ ❯ registry.test.ts:27:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/20]⎯
+
+ FAIL  registry.test.ts > AC6 constraint@1 seals with the four relation entries, and its kit refuses its planted entries at the seal > AC6 a planted beside that iterates to convergence and one that reads its own place from the previous frame are each refused by the kit at the seal, naming the entry, on rules of their own
+AssertionError: deep://registries lists the registry constraint@1; it lists builder@1, check.kind.doc@1, device.class@1, gpu.function@1, gpu.output@1, gpu.step@1, logic.service@1, mark@1, modifier@1, check.kind@1, resolver@1, source@1, reading.source@1, environment@1, panel@1, adapter@1, route@1, index@1, action@1: expected undefined to be defined
+ ❯ theRegistry helpers.ts:570:132
+    568|   const all = arr(reply['registries'], 'registries: registries').map((…
+    569|   const o = all.find((x) => x['kind'] === 'registry' && x['name'] === …
+    570|   expect(o, `deep://registries lists the registry ${name}; it lists ${…
+       |                                                                                                                                    ^
+    571|   const at = `deep://registries ${name}`;
+    572|   return {
+ ❯ registry.test.ts:49:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/20]⎯
+
+ FAIL  registry.test.ts > AC6 constraint@1 seals with the four relation entries, and its kit refuses its planted entries at the seal > AC6 a constraint kit that admits every entry is refused at the seal (kit_admits_planted), naming constraint@1 and both planted entries
+AssertionError: the startup is the seal's refusal: expected 'the startup exited 0 (no signal), not…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ the startup exited 0 (no signal), not 2 with the seal's refusal; stdout: {"ok":true,"replies":[{"build_set":"r2","state":"sealed","kinds":{"rect@1":"marks2d","circle@1":"marks2d","path@1":"marks2d","text@1":"marks2d","image@1":"marks2d","marks@1":"marks2d","axis@1":"marks2d","scale@1":"marks2d","mask@1":"marks2d","group@1":"marks2d","star@1":"marks2d","frame@1":"marks2d","camera@1":"core","cells@1":"cells","mark.box@1":"scene3d","mark.cylinder@1":"scene3d","mark.sphere@1":"scene3d","mark.line@1":"scene3d","mark.point@1":"scene3d","mark.text@1":"scene3d","light.sun@1":"scene3d"},"modules":["cells","data","effects","graph","look","marks2d","motion","record","scene3d"
+
+ ❯ registry.test.ts:70:82
+     68|     const s = startup(build.bin(), `kit_admits_all:${REGISTRY}`);
+     69|     const r = refusalOf(s);
+     70|     expect(typeof r === 'string' ? r : '', 'the startup is the seal\'s…
+       |                                                                                  ^
+     71|     if (typeof r === 'string') return;
+     72|     expect(r.reason, `the refusal's reason: ${show(r.raw)}`).toBe('kit…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/20]⎯
+
+ FAIL  seek.test.ts > AC7 seeking equals playing for placed items > AC7 seeking a document of placed items to 50 random times gives the evaluated positions playing gives, bit for bit
+AssertionError: the document of placed items is presented: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["back"],"path":"items/back/kind","actual":"rect@1","what":"kind `rect@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["chip"],"path":"items/chip/kind","actual":"rect@1","what":"kind `rect@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["grow"],"path":"items/grow/kind","actual":"rect@1","what":"kind `rect@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["head"],"path":"items/head/kind","actual":"text@1","what":"kind `text@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["note"],"path":"items/note/kind","actual":"text@1","what":"kind `text@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["rail"],"path":"items/rail/kind","actual":"rect@1","what":"kind `rect@1` is not registered in this build; the item is skipped"},{"code":"unknown_kind","severity":"notice","ids":["tag"],"path":"items/tag/kind","actual":"text@1","what":"kind `text@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"out_of_range","severity":"error","ids":["grow"],"path":"items/grow/at/pivot","actual":"sw","what":"not three numbers finite at f32","fix":"Give the field a value of its typ: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:531:68
+    529| export const deepShow = (document: JsonObject): JsonObject => ({ call:…
+    530| export function presented(reply: JsonObject, what: string): void {
+    531|   expect(reply['outcome'], `${what} is presented: ${show(reply)}`).toB…
+       |                                                                    ^
+    532| }
+    533|
+ ❯ seek.test.ts:31:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/20]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  20 failed (20)
+   Start at  16:31:04
+   Duration  740.37s (tests 100%)
+

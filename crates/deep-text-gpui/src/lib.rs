@@ -8,9 +8,10 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     ops::Range,
+    sync::Arc,
 };
 
-use deep_text::{Align, Atlas, Shaper, Spec, PAGE};
+use deep_text::{Align, Atlas, Shaper, Spec, PAGE, PHASES};
 pub use deep_text::{Role, Shaped};
 use gpui_kit::*;
 
@@ -21,11 +22,18 @@ const ATLAS: u32 = 0;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Label {
     pub text: String,
-    pub role: Role,
+    /// The bundled family its font names (#417: the look's face for its font role).
+    pub family: &'static str,
+    /// #417: the look's fallback families, in order.
+    pub fallback: Vec<&'static str>,
+    /// #417: the language it's shaped in (BCP 47).
+    pub lang: Option<String>,
     pub size: f32,
     pub weight: u16,
     pub width: Option<f32>,
     pub max_lines: Option<u16>,
+    /// `overflow: mask`: drawn whole for a clip to cut, never with an ellipsis.
+    pub mask: bool,
     pub align: Align,
     /// A bound value or counter: tabular figures, never cut short.
     pub bound: bool,
@@ -35,11 +43,14 @@ impl Label {
     pub fn new(text: impl Into<String>) -> Self {
         Label {
             text: text.into(),
-            role: Role::Body,
+            family: Role::Body.family(),
+            fallback: Vec::new(),
+            lang: None,
             size: 13.,
             weight: 400,
             width: None,
             max_lines: None,
+            mask: false,
             align: Align::Start,
             bound: false,
         }
@@ -48,7 +59,9 @@ impl Label {
     fn spec(&self) -> Spec<'_> {
         Spec {
             text: &self.text,
-            role: self.role,
+            family: self.family,
+            fallback: &self.fallback,
+            lang: self.lang.as_deref(),
             size: self.size,
             weight: self.weight,
             line_height: None,
@@ -57,7 +70,7 @@ impl Label {
             align: self.align,
             bound: self.bound,
             tabular: self.bound,
-            mask: false,
+            mask: self.mask,
         }
     }
 }
@@ -66,11 +79,14 @@ impl Label {
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct ShapeKey {
     text: String,
-    role: Role,
+    family: &'static str,
+    fallback: Vec<&'static str>,
+    lang: Option<String>,
     size: u32,
     weight: u16,
     width: Option<u32>,
     max_lines: Option<u16>,
+    mask: bool,
     align: u8,
     bound: bool,
 }
@@ -79,11 +95,14 @@ impl ShapeKey {
     fn of(label: &Label) -> Self {
         ShapeKey {
             text: label.text.clone(),
-            role: label.role,
+            family: label.family,
+            fallback: label.fallback.clone(),
+            lang: label.lang.clone(),
             size: label.size.to_bits(),
             weight: label.weight,
             width: label.width.map(f32::to_bits),
             max_lines: label.max_lines,
+            mask: label.mask,
             align: label.align as u8,
             bound: label.bound,
         }
@@ -107,7 +126,7 @@ pub struct Painted {
 struct Text {
     shaper: Shaper,
     atlas: Atlas,
-    shaped: HashMap<ShapeKey, Shaped>,
+    shaped: HashMap<ShapeKey, Arc<Shaped>>,
     /// The runs the frame since [`begin_frame`] drew from, each once.
     frame: HashSet<ShapeKey>,
     /// Per window (each has its own sprite atlas), the generation of each page it holds, so a
@@ -128,7 +147,7 @@ impl Text {
 
     /// The label's shape, from the cache: a label is shaped once, never per frame. The cache is
     /// emptied whole at 4,096 runs, so a frame of more than that shapes some of them again.
-    fn shape(&mut self, label: &Label) -> Shaped {
+    fn shape(&mut self, label: &Label) -> Arc<Shaped> {
         let key = ShapeKey::of(label);
         self.frame.insert(key.clone());
         if let Some(shaped) = self.shaped.get(&key) {
@@ -142,20 +161,31 @@ impl Text {
         shaped
     }
 
-    /// The label's glyphs placed in the atlas at `scale`, rasterized on first sight, each with its
-    /// logical position in the run. A label that fills the atlas starts it over and is placed
-    /// whole on the fresh pages (the labels before it keep the pages GPUI holds until the next
-    /// frame; the labels after it place again); only a blank glyph, one too large, or one of a
-    /// label too large for an empty atlas is left out.
-    fn place(&mut self, label: &Label, scale: f32) -> Vec<(deep_text::Placed, f32, f32, usize)> {
+    /// The label's glyphs placed in the atlas at `scale` for a label whose top-left corner is at
+    /// `origin` device px, rasterized on first sight at their pen positions' sub-pixel phases,
+    /// each with its pen position's whole device pixel. A label that fills the atlas starts it
+    /// over and is placed whole on the fresh pages (the labels before it keep the pages GPUI holds
+    /// until the next frame; the labels after it place again); only a blank glyph, one too large,
+    /// or one of a label too large for an empty atlas is left out.
+    fn place(
+        &mut self,
+        label: &Label,
+        origin: [f32; 2],
+        scale: f32,
+    ) -> Vec<(deep_text::Placed, i32, i32, usize)> {
         self.atlas.make_room();
         let shaped = self.shape(label);
         let mut restarted = false;
         'whole: loop {
             let mut placed = Vec::with_capacity(shaped.glyphs.len());
             for glyph in &shaped.glyphs {
-                match self.atlas.glyph(&glyph.font, glyph.id, glyph.size * scale) {
-                    Some(place) => placed.push((place, glyph.x, glyph.y, glyph.grapheme)),
+                let (x, px) = pen(origin[0] + glyph.x * scale);
+                let (y, py) = pen(origin[1] + glyph.y * scale);
+                match self
+                    .atlas
+                    .glyph_at(&glyph.font, glyph.id, glyph.size * scale, [px, py])
+                {
+                    Some(place) => placed.push((place, x, y, glyph.grapheme)),
                     None if !restarted && self.atlas.make_room() => {
                         restarted = true;
                         continue 'whole;
@@ -168,12 +198,20 @@ impl Text {
     }
 }
 
+/// A pen position in device px as its whole pixel and its phase in 1/[`PHASES`] px, rounded to
+/// the nearest phase (#140: a run lands where Vello CPU draws it, never snapped to a whole pixel).
+fn pen(at: f32) -> (i32, u8) {
+    let steps = (at * f32::from(PHASES)).round() as i32;
+    let whole = steps.div_euclid(i32::from(PHASES));
+    (whole, (steps - whole * i32::from(PHASES)) as u8)
+}
+
 thread_local! {
     static TEXT: RefCell<Text> = RefCell::new(Text::new());
 }
 
 /// The label's shaped run, shaped on first sight and reused after.
-pub fn shape(label: &Label) -> Shaped {
+pub fn shape(label: &Label) -> Arc<Shaped> {
     TEXT.with(|text| text.borrow_mut().shape(label))
 }
 
@@ -207,10 +245,18 @@ fn retire(window: &mut Window, stale: RenderMaskParams) {
 
 /// Places `label`'s glyphs in the atlas for a window at `scale`, before any label is painted:
 /// call it from prepaint, so the frame's pages are final when its first paint uploads them, and
-/// each page goes to GPUI once a frame however many labels added glyphs to it.
+/// each page goes to GPUI once a frame however many labels added glyphs to it. It places them
+/// for a label on a whole device pixel; [`prepare_at`] for one anywhere.
 pub fn prepare(label: &Label, scale: f32) {
+    prepare_at(point(px(0.), px(0.)), label, scale);
+}
+
+/// [`prepare`] for a label painted with its top-left corner at `origin`, whose glyphs' sub-pixel
+/// phases it places (#140).
+pub fn prepare_at(origin: Point<Pixels>, label: &Label, scale: f32) {
     TEXT.with(|text| {
-        text.borrow_mut().place(label, scale);
+        let at = [f32::from(origin.x) * scale, f32::from(origin.y) * scale];
+        text.borrow_mut().place(label, at, scale);
     });
 }
 
@@ -238,12 +284,13 @@ pub fn paint_runs(
         let scale = window.scale_factor();
         let before = text.atlas.rasterized();
         // Every glyph placed first, so the label's pages are final before any is uploaded.
+        let at = [f32::from(origin.x) * scale, f32::from(origin.y) * scale];
         let placed: Vec<_> = text
-            .place(label, scale)
+            .place(label, at, scale)
             .into_iter()
-            .map(|(place, glyph_x, glyph_y, grapheme)| {
-                let x = (f32::from(origin.x) * scale + glyph_x * scale).round() as i32 + place.left;
-                let y = (f32::from(origin.y) * scale + glyph_y * scale).round() as i32 + place.top;
+            .map(|(place, pen_x, pen_y, grapheme)| {
+                let x = pen_x + place.left;
+                let y = pen_y + place.top;
                 let color = runs
                     .iter()
                     .find(|(span, _)| span.contains(&grapheme))

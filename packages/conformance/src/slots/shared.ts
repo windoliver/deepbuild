@@ -1,6 +1,6 @@
 // What the slot kits share: a stable text for comparing JSON answers, random words for the seeded parts, and
 // the shape refusal a case raises when a fill's answer isn't even the right kind of value.
-import type { JsonValue } from '@deepbuild/contracts';
+import { stableText, type JsonValue } from '@deepbuild/contracts';
 import type { Random } from '../generator.js';
 import { Finding } from '../slot-types.js';
 import { isObject } from '../types.js';
@@ -9,9 +9,8 @@ const LETTERS = 'abcdefghijklmnopqrstuvwxyz';
 /** A lower-case word of `length` letters. */
 export const word = (random: Random, length: number): string => Array.from({ length }, () => LETTERS[random.int(0, 25)]!).join('');
 
-const sorted = (v: unknown): unknown => (Array.isArray(v) ? v.map(sorted) : isObject(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sorted(v[k])])) : v);
 /** A stable text for a JSON value: keys sorted, so two answers compare as values. */
-export const canonical = (value: unknown): string => JSON.stringify(sorted(value)) ?? 'undefined';
+export const canonical = stableText;
 export const same = (a: unknown, b: unknown): boolean => canonical(a) === canonical(b);
 
 /** A refusal of an answer's shape, in error@1's closed codes: `what` is the answer or member refused. */

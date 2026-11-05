@@ -13,6 +13,7 @@ fn refused<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused>
     Err(Refused {
         code,
         path: path.into(),
+        detail: None,
     })
 }
 
@@ -66,8 +67,13 @@ pub fn insert(doc: &Value, channel: &str, t: i64) -> Result<(Value, String), Ref
             let (l, r) = curve.split(curve.solve(u).s);
             (Some(bezier_json(&l)), bezier_json(&r))
         }
-        // A spring segment is solved from rest at its start: no key splits it on its own curve.
-        Interp::Spring { .. } => {
+        // A spring is solved from its start, an ease or an auto span over its whole span: no key
+        // splits one on its own curve.
+        Interp::Spring(_)
+        | Interp::Ease(_)
+        | Interp::Table
+        | Interp::Auto { .. }
+        | Interp::CatmullRom => {
             return refused("bad_interp", format!("channels/{channel}/keys/{}", a.id))
         }
     };
@@ -75,6 +81,7 @@ pub fn insert(doc: &Value, channel: &str, t: i64) -> Result<(Value, String), Ref
         ValueType::F32 => json!(value[0]),
         ValueType::Color => json!(value),
         ValueType::Bool => json!(value[0] != 0.0),
+        ValueType::Enum => json!(motion.labels.get(value[0] as usize)),
     };
     let mut out = doc.clone();
     let Some(Value::Object(keys_json)) = out

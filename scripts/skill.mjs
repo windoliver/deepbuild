@@ -49,6 +49,18 @@ const TOOLS = {
     use: 'Run a check the repo\'s spec names, for your claim at its commit; it answers with the run\'s outcome and its evidence once the run finishes.',
     proves: 'One run\'s outcome does not prove your claim passes: only a verdict over the runs a claim needs says so.',
   },
+  deep_show: {
+    use: 'Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document\'s issues and snapshots by hash.',
+    proves: 'A picture does not prove anything: a snapshot is never evidence for a claim, and only check results are.',
+  },
+  deep_drive: {
+    use: 'Drive a replica, a headless copy of the app on a fixture or on a read-only copy of your record. Launch it, act on what you locate by role and name, label or text, wait for it to settle, see it as text snapshots, screenshots and recordings, and close it to free it. At most two run on a machine, under a lease.',
+    proves: 'Only assertions count: a drive passes on the assertions that passed, and a screenshot, snapshot or recording proves nothing on its own.',
+  },
+  deep_kinds: {
+    use: 'Look up what this core can draw before you write a document, with the kinds, recipes, packs and registries it has, each with its schema, an example by hash, its stability and whether it is available here; the word another tool uses for one, from a familiar-names pack; and the installed guides and gallery, read in pages.',
+    proves: 'A listing does not prove your document is right: only its check and the checks that run on it say so, and an example is read, never run.',
+  },
   deep_env: {
     use: 'Bring your worktree\'s own stack up, on ports leased to that worktree, ready only once its health route answers, or take it down; every process runs through the supervisor.',
     proves: 'A stack that is up does not prove any check passes, and a port leased to your worktree is never another worktree\'s: a child session in its own worktree gets its own.',
@@ -99,6 +111,11 @@ export function generate(rows = blocks()) {
       const tools = Object.keys(TOOLS).filter((tool) => r.mcp.includes(`\`${tool}\``));
       return [`## ${r.block}`, '', ...tools.map((tool) => `- ${tool}. ${TOOLS[tool].use}`), '', `Never: ${plain(r.never)}.`, ''];
     }),
+    // The canvas working order (#412; technical design, after the Building blocks table): what the tools can't teach.
+    '## Working on a canvas document',
+    '',
+    'Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it.',
+    '',
   ].join('\n');
   return { descriptions, skill };
 }

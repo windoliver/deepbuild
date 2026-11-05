@@ -4,7 +4,7 @@ import type { Ledger } from '@deepbuild/budget';
 import type { RecordStore } from '@deepbuild/record';
 import type { Supervisor } from '@deepbuild/supervisor';
 
-export type Agent = 'claude-code' | 'codex';
+export type Agent = 'claude-code' | 'codex' | 'pi';
 /** draft: the drafting job; review: the review check's second model; read: wiki reads and reading by reference;
  *  smoke: an agent release's live smoke test, the one kind that may run a version its facts don't cover yet. */
 export type JobKind = 'draft' | 'review' | 'read' | 'smoke';
@@ -81,7 +81,7 @@ export interface JobRecord {
   start?: string;
   /** The session ID read from its own output. */
   session?: string;
-  /** The model that answered, from its output as the facts say, or 'unknown'. */
+  /** The model that answered, from its output as the facts say: the one with the most output tokens in its usage, or 'unknown'. */
   model?: string;
   stop?: { cause: StopCause };
   usage?: { input: number; cached: number; output: number };
@@ -97,7 +97,7 @@ export interface JobRecord {
  *  (`five_hour`/`seven_day`: `used_percentage`, `resets_at` in Unix seconds); a Codex token event's `rate_limits`. */
 export interface WindowReport { agent: Agent; account: string; rate_limits: unknown }
 /** The planted wrong programs the acceptance tests select; tests only. */
-export type Plant = 'records-launched-model' | 'checkout-of-session-head' | 'worktree-of-mirror' | 'widens-range-on-smoke';
+export type Plant = 'records-launched-model' | 'checkout-of-session-head' | 'worktree-of-mirror' | 'widens-range-on-smoke' | 'first-model-listed';
 export interface RunnerOptions {
   record: RecordStore;
   asks: Asks;
@@ -133,6 +133,8 @@ export interface Runner {
   output(job: string): Promise<string>;
   report(reading: WindowReport): Promise<void>;
   /** The newest reading of each account's 5-hour window, by account: used percent, reset and when it was read, by the clock. */
+  /** Why the plan window of the account `agent` runs on in `home` keeps a drafting job waiting at your reserve (#322), or undefined. */
+  atReserve(agent: Agent, home: string): string | undefined;
   planWindows(): Map<string, { used: number; resets: number | null; at: number }>;
   /** Re-reads the clock, windows, answers and budgets, and starts what may start. */
   tick(): Promise<void>;

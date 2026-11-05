@@ -1,0 +1,81 @@
+Acceptance tests for #879 on the base 69013e61 (no implementation), run on 2026-10-31:
+
+  node --test 'tests/acceptance/879/*.test.mjs'
+
+Trimmed to one failure reason per test. Local paths are redacted: the checkout is ~/<checkout>,
+scratch repositories sit in <tmp>. No path appears in the reasons below.
+
+ℹ tests 14
+ℹ suites 0
+ℹ pass 0
+ℹ fail 14
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45267.29325
+
+✖ AC2: a planted package without a card fails the lint rules, naming it, and its carded neighbours are not named
+  AssertionError [ERR_ASSERTION]: expected exit 1 for packages/tally without a card
+  exit 0
+  stdout:
+  PASS workflows: .github/workflows/ has no entries
+  PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+  PASS secrets: 11 files scanned, 0 lockfiles and 0 binary files skipped, 0 allowed
+  PASS deps: 3 package.json files and 1 crate match scripts/repo-rules.json
+  NOTE size: not measured: no origin/main to compare with (git fetch origin main)
+  (no cards line: the base has no card check)
+✖ AC2: a planted crate without a card fails the lint rules, naming it
+  AssertionError [ERR_ASSERTION]: expected exit 1 for crates/tally-core without a card
+  (exit 0, the same four PASS lines and no cards line)
+✖ AC2: a folder under packages/ with no package.json still needs a card
+  AssertionError [ERR_ASSERTION]: expected exit 1 for packages/notes without a card
+✖ AC2: a card without its deviations heading fails, naming the heading, and the same card with it passes (an exists-only check cannot do both)
+  AssertionError [ERR_ASSERTION]: expected exit 1 for packages/tally's card without ## Deviations
+✖ AC2: a crate's card without its deviations heading fails, naming the crate and the heading
+  AssertionError [ERR_ASSERTION]: expected exit 1 for crates/tally-core's card without ## Deviations
+✖ scope: a card without "## What it is for" fails, naming the package and the heading
+  AssertionError [ERR_ASSERTION]: expected exit 1 for packages/tally's card without ## What it is for
+✖ scope: a card without "## Where new code goes" fails, naming the package and the heading
+  AssertionError [ERR_ASSERTION]: expected exit 1 for packages/tally's card without ## Where new code goes
+✖ scope: a card without "## What it may import" fails, naming the package and the heading
+  AssertionError [ERR_ASSERTION]: expected exit 1 for packages/tally's card without ## What it may import
+✖ AC3: a deviation naming src/legacy-order.ts, which the package doesn't have, fails naming the package and the deviation's line; once the file exists it passes
+  AssertionError [ERR_ASSERTION]: expected exit 1 for packages/tally's deviation at line 18 naming a missing file
+✖ AC3: a crate's deviation naming a file the crate doesn't have fails naming the crate and the line; once the file exists it passes
+  AssertionError [ERR_ASSERTION]: expected exit 1 for crates/tally-core's deviation at line 18 naming a missing file
+✖ scope: a card's import section is never checked against what the package declares; the deps rule alone reads that
+  AssertionError [ERR_ASSERTION]: no PASS cards line for cards whose import sections differ from the packages' declared dependencies
+  (exit 0; PASS deps: 3 package.json files and 1 crate match scripts/repo-rules.json)
+✖ AC1: every folder under packages/ and crates/ has a README.md card with the four headings
+  AssertionError [ERR_ASSERTION]: 51 of 51 folders lack a full card:
+  crates/deep-app: no README.md
+  crates/deep-canvas: no README.md
+  ... (each of the 25 crates and 26 packages: no README.md)
+✖ AC1: the lint rules pass the card check on this checkout, add no failure the base lacks, and leave git status unchanged
+  AssertionError [ERR_ASSERTION]: no PASS cards line
+  exit 1
+  stdout:
+  FAIL secrets: tests/acceptance/331/BASE-FAILURE-AC9.txt:20:14: home path
+  FAIL secrets: tests/acceptance/356/redraft/BASE-FAILURE.txt:4:14: home path
+  FAIL secrets: tests/acceptance/572/BASE-FAILURE.txt:11:14: home path
+  FAIL deps: packages/extension-host/package.json dependencies @deepbuild/evidence 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: crates/deep-app/Cargo.toml dependencies sha2 ^0.10 is not in scripts/repo-rules.json
+  PASS workflows: .github/workflows/ has no entries
+  PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+  NOTE deps: vendor/gpui-pre-apple/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+  NOTE deps: vendor/gpui-pre/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+  NOTE size: ... (each Fix line omitted)
+  (the five FAIL lines are the base's own, which the test allows; the missing PASS cards line fails it)
+✖ AC2: a planted package without a card makes the lint lane FAIL, its summary naming the card check and the package
+  AssertionError [ERR_ASSERTION]: exit 0
+  stdout:
+  RUN lint
+  PASS workflows: .github/workflows/ has no entries
+  ...
+  PASS lint (1.03 s)
+
+Validation beyond the base (not part of the evidence the issue asks for): in a scratch copy, a
+sketch card check passed all 12 scratch tests (cards.test.mjs and lane.test.mjs); an exists-only
+check failed 7 of them, including the AC2 twin; a check that looked for the heading words
+anywhere in the text failed the 5 heading tests; a check that reported the deviations heading's
+line instead of the deviation's failed both AC3 tests.

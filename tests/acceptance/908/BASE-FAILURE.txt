@@ -1,0 +1,107 @@
+Acceptance tests for #908 on the base a7e140b2 (origin/main: #318's asks core with #319's timing, no implementation
+of #908), run on 2026-11-02 on an Apple silicon Mac (Mac15,7), Node 24.22.0, Vitest 5.0.5:
+
+  npx vitest run tests/acceptance/908 --silent=false
+  npx tsc -p tests/acceptance/908
+
+Trimmed to each test's result, its first failing assertion and the per-ask timeline the suite prints (the issue's
+Proof: raised, shown, deadline as the record holds it, outcome). Ask IDs are shown as ask:<id>; no local path is kept.
+Days count from 2026-10-20 (day 0); times are UTC.
+
+
+== The base
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  5 failed | 1 passed (6)
+ tsc: no errors (the tests need no new export, option or method; see README, The surface)
+
+FAIL  asleep.test.ts   AC1 an ask raised at 23:00 with a 4 h deadline, the hub asleep from 23:30 to 08:00, shows at
+                       08:00, has not defaulted at 08:00:01, and defaults at 09:00 unless answered
+  AssertionError: ask ask:<id> closed (ask.defaulted) at day 1 08:00:01, 1 s after it first showed at day 1 08:00:00;
+  unanswered, it takes its default no sooner than the 1 h minimum notice after it shows, at day 1 09:00:00 (checked at
+  day 1 08:00:01)
+    ask:<id> raised day 0 23:00:00, shown day 1 08:00:00, deadline day 1 03:00:00, outcome ask.defaulted at day 1 08:00:01
+    ask:<id> raised day 0 23:00:00, shown day 1 08:00:00, deadline day 1 03:00:00, outcome ask.defaulted at day 1 08:00:01
+  (Expected: the base is the wrong program AC1 names. It shows the ask at 08:00 and defaults it on the next tick,
+  08:00:01; the test fails there, naming the ask. The other ask, which the test would answer at 08:30, defaulted
+  at 08:00:01 too.)
+
+FAIL  asleep.test.ts   AC1 the minimum notice is drafted at setup: 1 h for every kind, under asks.notice in
+                       <home>/config.json
+  AssertionError: setup drafts a minimum notice for authority asks: asks.notice.authority reads 1 h: expected undefined
+  to be 3600000
+  (Expected: setup drafts no notice.)
+
+FAIL  rebuild.test.ts  AC2 rebuilding the record from the log gives the AC1 ask the same deadline, 09:00, and a hub
+                       started on the rebuilt record defaults it at 09:00, not before
+  AssertionError: once ask ask:<id> shows at 08:00, the record holds the deadline it takes its default at: 09:00, the
+  minimum notice after it shows: expected 'day 1 03:00:00' to be 'day 1 09:00:00'
+    ask:<id> raised day 0 23:00:00, shown day 1 08:00:00, deadline day 1 03:00:00, outcome open
+  (Expected: nothing moves the deadline it was raised with.)
+
+FAIL  rebuild.test.ts  AC2 the hub down from 16:01 to 00:30 while a 2-day ask waited for its batch moves its deadline
+                       by that span, recorded on the ask with the span, and the rebuilt record gives the same moved
+                       deadline
+  AssertionError: ask ask:<id>'s deadline move is recorded on the ask, once, with its span: expected +0 to be 1
+    ask:<id> raised day 0 16:00:30, shown day 1 00:30:00, deadline day 2 16:00:30, outcome open
+
+FAIL  rebuild.test.ts  AC2 the hub asleep from 16:01 to 00:30 … (the same)
+  AssertionError: ask ask:<id>'s deadline move is recorded on the ask, once, with its span: expected +0 to be 1
+    ask:<id> raised day 0 16:00:30, shown day 1 00:30:00, deadline day 2 16:00:30, outcome open
+  (Expected: no deadline move exists.)
+
+PASS  down.test.ts     AC3 an ask that showed before the hub went down keeps its deadline, and every ask in the
+                       fixture ends
+    ask:<id> raised day 0 15:59:00, shown day 0 16:00:00, deadline day 0 19:59:00, outcome ask.defaulted at day 1 00:30:00
+    ask:<id> raised day 0 16:00:30, shown day 1 00:30:00, deadline day 2 16:00:30, outcome ask.defaulted at day 2 16:00:30
+  (Expected: AC3 guards what the base already does, since the base moves no deadline at all. It is proven against
+  the mutants below, which move too much.)
+
+
+== A sample fix, kept outside this checkout (a scratch copy of a7e140b2; not committed anywhere)
+
+What it does, about 70 lines: setup drafts asks.notice (1h per kind); a new core event ask.moved@1 (subject the ask,
+data span, deadline, because away|notice), projected into the asks table's deadline; on each settle the core takes
+the gap since its last beat (or, after a start, since the last hub.stopped) when it is over 2 s, and moves each open
+ask that hadn't shown by the part of the gap before its deadline as it stood; and once an ask has shown, a deadline
+less than its kind's notice after its first showing moves to that notice.
+
+ Tests  6 passed (6)
+    AC1:  ask:<id> raised day 0 23:00:00, shown day 1 08:00:00, deadline day 1 09:00:00, outcome ask.defaulted at day 1 09:00:00
+          ask:<id> raised day 0 23:00:00, shown day 1 08:00:00, deadline day 1 09:00:00, outcome ask.answered at day 1 08:30:00
+    AC2:  ask:<id> raised day 0 23:00:00, shown day 1 08:00:00, deadline day 1 09:00:00, outcome ask.defaulted at day 1 09:00:00
+          (down)   ask:<id> raised day 0 16:00:30, shown day 1 00:30:00, deadline day 3 00:29:30, outcome ask.defaulted at day 3 00:29:30
+          (asleep) ask:<id> raised day 0 16:00:30, shown day 1 00:30:00, deadline day 3 00:29:30, outcome ask.defaulted at day 3 00:29:30
+    AC3:  ask:<id> raised day 0 15:59:00, shown day 0 16:00:00, deadline day 0 19:59:00, outcome ask.defaulted at day 1 00:30:00
+          ask:<id> raised day 0 16:00:30, shown day 1 00:30:00, deadline day 3 00:29:30, outcome ask.defaulted at day 3 00:29:30
+
+
+== Mutants of the sample fix (one part changed each)
+
+move-shown (moves shown asks too): 3 failed
+  AC3          ask ask:<id> showed at 16:00, before the hub went down, so it keeps its deadline: expected 'day 0 23:57:00'
+               to be 'day 0 19:59:00'
+  AC2 down     on the rebuilt record, ask ask:<id> takes its default at its moved deadline: expected [] to deeply equal
+               [ 'ask.defaulted' ]   (moved again by the second stop, though it had shown)
+  AC2 asleep   (the same)
+
+full-span (counts the whole gap, also after the deadline as it stood): 2 failed
+  AC1          ask ask:<id>, unanswered, takes its default at 09:00: expected [] to deeply equal [ 'ask.defaulted' ]
+  AC2 night    the record holds …: expected 'day 1 11:30:00' to be 'day 1 09:00:00'
+  (This is the reading of Scope's first bullet that disagrees with AC1's 09:00; see README, Open points 1.)
+
+in-memory (moves the deadline in the core's memory only, records nothing): 2 failed
+  AC2 down     ask ask:<id>'s deadline move is recorded on the ask, once, with its span: expected +0 to be 1
+  AC2 asleep   (the same)
+
+no-notice (no minimum notice): 2 failed
+  AC1          ask ask:<id> closed (ask.defaulted) at day 1 08:00:01, 1 s after it first showed at day 1 08:00:00; …
+  AC2 night    the record holds …: expected 'day 1 06:30:00' to be 'day 1 09:00:00'
+
+twice (moves by twice the span, so a deadline can pass its kind's wait from its first showing): 5 failed
+  AC3          ask ask:<id>'s deadline, day 3 08:58:30, is no later than its choice wait counted again from its first
+               showing at day 1 00:30:00: day 3 00:30:00
+  AC1          ask ask:<id>, unanswered, takes its default at 09:00: expected [] …
+  AC2 night    the record holds …: expected 'day 1 10:00:00' to be 'day 1 09:00:00'
+  AC2 down     ask ask:<id>'s deadline moves by the span the hub was down …: expected 61080000 to be <= 30540000
+  AC2 asleep   (the same, asleep)

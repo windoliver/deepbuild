@@ -122,15 +122,15 @@ struct View {
 
 /// How each item differs between two revisions, by ID.
 fn diff(before: &Value, after: &Value) -> Map<String, Value> {
-    let items = |d: &Value| {
+    let empty = Map::new();
+    let items = |d| {
         member(d, "items")
             .and_then(Value::as_object)
-            .cloned()
-            .unwrap_or_default()
+            .unwrap_or(&empty)
     };
     let (a, b) = (items(before), items(after));
     let mut out = Map::new();
-    for (id, item) in &b {
+    for (id, item) in b {
         let how = match a.get(id) {
             None => "added",
             Some(was) if was != item => "changed",
@@ -674,7 +674,7 @@ impl Scope {
                 if member(item, "kind").and_then(Value::as_str) == Some("camera@1") {
                     continue;
                 }
-                if hidden.contains(id) {
+                if hidden.binary_search(id).is_ok() {
                     item["visible"] = json!(false);
                 }
                 if let (Some(role), Some(params)) = (roles.get(id), item.get_mut("params")) {
@@ -719,7 +719,7 @@ impl Scope {
     fn shown_targets(&self, doc: &Value) -> Vec<Target> {
         let hidden = self.hidden(doc);
         let mut all = targets(doc, self.rig.flat);
-        all.retain(|t| !hidden.contains(&t.id));
+        all.retain(|t| hidden.binary_search(&t.id).is_err());
         all
     }
 
@@ -788,7 +788,7 @@ impl Scope {
     }
 
     /// The controls the canvas draws over itself: the full-screen button at its top right.
-    fn button(&self) -> Option<[f64; 4]> {
+    pub fn button(&self) -> Option<[f64; 4]> {
         let three_d = matches!(self.profile.as_str(), "scene" | "world" | "figure");
         if self.planted.full_screen_only_3d && !three_d {
             return None;
@@ -1157,7 +1157,7 @@ impl Scope {
                 .into_iter()
                 .flatten()
                 .filter(|(id, item)| {
-                    !hidden.contains(id)
+                    hidden.binary_search(id).is_err()
                         && member(item, "kind").and_then(Value::as_str) != Some("camera@1")
                 })
                 .map(|(id, item)| {
@@ -1349,6 +1349,16 @@ mod tests {
         })
     }
 
+    fn board_scope(doc: &Value) -> Scope {
+        Scope::new(
+            doc,
+            [0.0, 0.0, 800.0, 450.0],
+            [1600.0, 900.0],
+            Planted::default(),
+        )
+        .expect("the board reads")
+    }
+
     fn set(s: &mut Scope, doc: &Value, control: &str, value: Value) -> Done {
         let event = Event::Control {
             control: control.into(),
@@ -1360,13 +1370,7 @@ mod tests {
     #[test]
     fn a_filter_hides_by_kind_or_writer_and_what_it_hides_cant_be_picked() {
         let doc = board();
-        let mut s = Scope::new(
-            &doc,
-            [0.0, 0.0, 800.0, 450.0],
-            [1600.0, 900.0],
-            Planted::default(),
-        )
-        .expect("the board reads");
+        let mut s = board_scope(&doc);
         click(&mut s, &doc, 0, [550.0, 150.0]);
         assert_eq!(s.selection, ["line"], "shown, it's picked");
         let done = set(&mut s, &doc, "filter", json!({"writers": ["agent:alpha"]}));
@@ -1388,13 +1392,7 @@ mod tests {
     #[test]
     fn isolation_keeps_an_item_with_its_parents_and_children_and_esc_ends_it_first() {
         let doc = board();
-        let mut s = Scope::new(
-            &doc,
-            [0.0, 0.0, 800.0, 450.0],
-            [1600.0, 900.0],
-            Planted::default(),
-        )
-        .expect("the board reads");
+        let mut s = board_scope(&doc);
         set(&mut s, &doc, "isolate", json!("region"));
         assert_eq!(
             s.hidden(&doc),
@@ -1422,13 +1420,7 @@ mod tests {
     #[test]
     fn the_writer_lens_keys_each_shown_item_by_its_layers_writer() {
         let doc = board();
-        let mut s = Scope::new(
-            &doc,
-            [0.0, 0.0, 800.0, 450.0],
-            [1600.0, 900.0],
-            Planted::default(),
-        )
-        .expect("the board reads");
+        let mut s = board_scope(&doc);
         set(&mut s, &doc, "lens", json!("writer"));
         set(&mut s, &doc, "filter", json!({"kinds": ["text@1"]}));
         let state = s.to_json(&doc, None, &Map::new());
@@ -1494,13 +1486,7 @@ mod tests {
             "vd-3": {"outcome": "FAIL", "key": {"state_digests": {"reading:rd-latency": "sha-a", "reading:rd-cpu": "sha-c"}}},
         }))
         .expect("verdicts");
-        let mut s = Scope::new(
-            &doc,
-            [0.0, 0.0, 800.0, 450.0],
-            [1600.0, 900.0],
-            Planted::default(),
-        )
-        .expect("the board reads");
+        let mut s = board_scope(&doc);
         click(&mut s, &doc, 0, [50.0, 150.0]);
         assert_eq!(s.selection, ["note"]);
         assert_eq!(
@@ -1515,13 +1501,7 @@ mod tests {
     #[test]
     fn the_view_document_hides_what_the_view_hides_and_paints_the_lens_and_saves_nothing() {
         let doc = board();
-        let mut s = Scope::new(
-            &doc,
-            [0.0, 0.0, 800.0, 450.0],
-            [1600.0, 900.0],
-            Planted::default(),
-        )
-        .expect("the board reads");
+        let mut s = board_scope(&doc);
         set(&mut s, &doc, "filter", json!({"kinds": ["text@1"]}));
         set(&mut s, &doc, "lens", json!("writer"));
         let view = s.view_document(&doc, None);

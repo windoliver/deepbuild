@@ -122,6 +122,10 @@ export type AdapterFactsHookRule = {
     values: AdapterFactsCauseMap;
     otherwise: AdapterFactsStopCause;
   };
+  state?: {
+    field: AdapterFactsText;
+    values: { [key: string]: "working" | "waiting" | "finished" };
+  };
 };
 
 export type AdapterFactsOperation = {
@@ -221,6 +225,9 @@ export interface AdapterFacts {
     SubagentStop?: AdapterFactsHookRule;
     TaskCreated?: AdapterFactsHookRule;
     TaskCompleted?: AdapterFactsHookRule;
+    Notification?: AdapterFactsHookRule;
+    Elicitation?: AdapterFactsHookRule;
+    ElicitationResult?: AdapterFactsHookRule;
     TeammateIdle?: AdapterFactsHookRule;
     WorktreeCreate?: AdapterFactsHookRule;
     WorktreeRemove?: AdapterFactsHookRule;
@@ -335,8 +342,627 @@ export interface AdapterFacts {
     };
   };
   readUsage?: AdapterFactsOperation;
+  taskList?: {
+    readBy: AdapterFactsText;
+    conformance: AdapterFactsText;
+    tool: AdapterFactsText;
+    items: AdapterFactsText;
+    text: AdapterFactsText;
+    status: AdapterFactsText;
+    open: AdapterFactsTexts;
+  };
+  tokenizer?: {
+    readBy: AdapterFactsText;
+    conformance: AdapterFactsText;
+    name: AdapterFactsText;
+    package: AdapterFactsText;
+    version: AdapterFactsVersion;
+  };
+  mods?: {
+    readBy: AdapterFactsText;
+    conformance: AdapterFactsText;
+    since: {
+      terminal: AdapterFactsVersion;
+      desktop: AdapterFactsVersion;
+    };
+    validate: {
+      args: AdapterFactsTexts;
+      hooks: AdapterFactsText;
+      calls: AdapterFactsText;
+    };
+    overrides: {
+      event: AdapterFactsText;
+      past: AdapterFactsText;
+    };
+    promptCalls: AdapterFactsTexts;
+    holdsWhen: Array<{
+      case: "managed" | "login" | "plan" | "interactive";
+      text: AdapterFactsText;
+      subscriptionTypes?: AdapterFactsTexts;
+      mode?: AdapterFactsText;
+      since?: AdapterFactsVersion;
+      tools?: AdapterFactsTexts;
+    }>;
+  };
   classifyStop?: AdapterFactsOperation;
   skills?: AdapterFactsOperation;
+}
+
+export type AdapterFactsV2Text = string;
+
+export type AdapterFactsV2Match = { [key: string]: unknown };
+
+export type AdapterFactsV2Texts = Array<AdapterFactsV2Text>;
+
+export type AdapterFactsV2Version = string;
+
+export type AdapterFactsV2TextMap = { [key: string]: AdapterFactsV2Text };
+
+export type AdapterFactsV2DataTemplate = { [key: string]: AdapterFactsV2Text };
+
+export type AdapterFactsV2FieldTypes = { [key: string]: string };
+
+export type AdapterFactsV2Payload = {
+  required: AdapterFactsV2FieldTypes;
+  optional: AdapterFactsV2FieldTypes;
+  tools?: { [key: string]: AdapterFactsV2FieldTypes };
+};
+
+export type AdapterFactsV2ToolKind = "shell" | "read" | "edit" | "write" | "search" | "fetch" | "mcp" | "unknown";
+
+export type AdapterFactsV2StopCause = "sign_in_required" | "token_refresh_failed" | "plan_window_spent" | "rate_limited" | "refusal" | "max_turns" | "context_overflow" | "tool_schema_rejected" | "agent_crashed" | "timed_out" | "unknown";
+
+export type AdapterFactsV2CauseMap = { [key: string]: AdapterFactsV2StopCause };
+
+export type AdapterFactsV2OriginRule = {
+  prompt?: AdapterFactsV2Text;
+  match?: { [key: string]: unknown };
+  from: AdapterFactsV2Text;
+};
+
+export type AdapterFactsV2HookRule = {
+  kind: string;
+  data?: AdapterFactsV2DataTemplate;
+  origin?: {
+    join?: {
+      payload: AdapterFactsV2Text;
+      transcript: AdapterFactsV2Text;
+    };
+    rules: Array<AdapterFactsV2OriginRule>;
+    otherwise: AdapterFactsV2Text;
+  };
+  call?: "kind" | "detail";
+  stop?: boolean;
+  cause?: {
+    field: AdapterFactsV2Text;
+    values: AdapterFactsV2CauseMap;
+    otherwise: AdapterFactsV2StopCause;
+  };
+};
+
+export type AdapterFactsV2Operation = {
+  readBy: AdapterFactsV2Text;
+  conformance: AdapterFactsV2Text;
+};
+
+export type AdapterFactsV2MarkerMap = { [key: string]: AdapterFactsV2Text };
+
+/** adapter.facts@2 */
+export interface AdapterFactsV2 {
+  schema: "adapter.facts@2";
+  versions: Array<AdapterFactsV2Version>;
+  agent: string;
+  hookTimeouts: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    defaultMs?: number | null;
+    perHook?: { [key: string]: number };
+  };
+  continuation: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    cap?: number;
+    field?: AdapterFactsV2Text;
+    hook?: AdapterFactsV2Text;
+  };
+  launch: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    session?: {
+      readBy?: AdapterFactsV2Text;
+      args: AdapterFactsV2Texts;
+    };
+    readOnlyJob?: {
+      readBy?: AdapterFactsV2Text;
+      args: AdapterFactsV2Texts;
+      prompt: AdapterFactsV2Text;
+    };
+  };
+  modelFamily: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    families: AdapterFactsV2TextMap;
+  };
+  billing: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    apiKeyVariables: AdapterFactsV2Texts;
+  };
+  usage: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    cost: "reported" | "estimated" | "unpriced";
+    costFrom: AdapterFactsV2Text;
+    tokens: AdapterFactsV2Text;
+  };
+  questionTools: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    tools: AdapterFactsV2Texts;
+  };
+  transcripts: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    home: Array<AdapterFactsV2Text>;
+    path: AdapterFactsV2Text;
+  };
+  appLinks: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    open: AdapterFactsV2Text;
+  };
+  errorTexts: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    causes: AdapterFactsV2CauseMap;
+  };
+  events: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    versions: { [key: string]: { [key: string]: AdapterFactsV2Payload } };
+  };
+  mapping: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    common: AdapterFactsV2DataTemplate;
+    SessionStart?: AdapterFactsV2HookRule;
+    UserPromptSubmit?: AdapterFactsV2HookRule;
+    PreToolUse?: AdapterFactsV2HookRule;
+    PermissionRequest?: AdapterFactsV2HookRule;
+    PostToolUse?: AdapterFactsV2HookRule;
+    PostToolUseFailure?: AdapterFactsV2HookRule;
+    Stop?: AdapterFactsV2HookRule;
+    StopFailure?: AdapterFactsV2HookRule;
+    SessionEnd?: AdapterFactsV2HookRule;
+    SubagentStart?: AdapterFactsV2HookRule;
+    SubagentStop?: AdapterFactsV2HookRule;
+    TaskCreated?: AdapterFactsV2HookRule;
+    TaskCompleted?: AdapterFactsV2HookRule;
+    TeammateIdle?: AdapterFactsV2HookRule;
+    WorktreeCreate?: AdapterFactsV2HookRule;
+    WorktreeRemove?: AdapterFactsV2HookRule;
+    PreCompact?: AdapterFactsV2HookRule;
+    PostCompact?: AdapterFactsV2HookRule;
+    Interrupt?: AdapterFactsV2HookRule;
+    sessionStart?: AdapterFactsV2HookRule;
+    sessionEnd?: AdapterFactsV2HookRule;
+    preToolUse?: AdapterFactsV2HookRule;
+    postToolUse?: AdapterFactsV2HookRule;
+    stop?: AdapterFactsV2HookRule;
+    session_start?: AdapterFactsV2HookRule;
+    session_shutdown?: AdapterFactsV2HookRule;
+    input?: AdapterFactsV2HookRule;
+    tool_call?: AdapterFactsV2HookRule;
+    tool_result?: AdapterFactsV2HookRule;
+    agent_start?: AdapterFactsV2HookRule;
+    agent_end?: AdapterFactsV2HookRule;
+    agent_before_settle?: AdapterFactsV2HookRule;
+    agent_settled?: AdapterFactsV2HookRule;
+  };
+  toolKinds: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    tools: { [key: string]: AdapterFactsV2ToolKind };
+    prefixes?: { [key: string]: AdapterFactsV2ToolKind };
+    otherwise: AdapterFactsV2ToolKind;
+  };
+  toolDetail?: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    command?: AdapterFactsV2TextMap;
+    paths?: AdapterFactsV2TextMap;
+    mcp?: {
+      tool: AdapterFactsV2Text;
+    };
+  };
+  patch?: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    tools: AdapterFactsV2Texts;
+    command: AdapterFactsV2Text;
+    shell: AdapterFactsV2Text;
+  };
+  turnWithoutPrompt?: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    payloadField: AdapterFactsV2Text;
+    startedBy: AdapterFactsV2Texts;
+    turnEntry: AdapterFactsV2Text;
+    turnField: AdapterFactsV2Text;
+    messageRole: {
+      path: AdapterFactsV2Text;
+      value: AdapterFactsV2Text;
+    };
+    messageText: AdapterFactsV2Text;
+    values: AdapterFactsV2MarkerMap;
+    otherwise: AdapterFactsV2Text;
+  };
+  signIn?: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    args: AdapterFactsV2Texts;
+    signedIn: AdapterFactsV2Text;
+  };
+  stop?: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    turn: {
+      payload: AdapterFactsV2Text;
+      transcript: AdapterFactsV2Text;
+      elsewhere?: AdapterFactsV2Text;
+    };
+    cause: {
+      readBy?: AdapterFactsV2Text;
+      payload?: {
+        field: AdapterFactsV2Text;
+        values: AdapterFactsV2CauseMap;
+      };
+      errors?: {
+        match: AdapterFactsV2Match;
+        field: AdapterFactsV2Text;
+        values: AdapterFactsV2CauseMap;
+      };
+      rateLimits?: {
+        match: AdapterFactsV2Match;
+        reached: AdapterFactsV2Text;
+        windows: AdapterFactsV2Texts;
+        used: AdapterFactsV2Text;
+        resetsAt: AdapterFactsV2Text;
+        toMs: number;
+        spent: AdapterFactsV2StopCause;
+        withoutReset: AdapterFactsV2StopCause;
+      };
+      otherwise: AdapterFactsV2StopCause;
+    };
+    usage: {
+      readBy?: AdapterFactsV2Text;
+      covers: "turn" | "session";
+      records: {
+        match: AdapterFactsV2Match;
+        has: AdapterFactsV2Text;
+        skip?: AdapterFactsV2Match;
+        once?: AdapterFactsV2Text;
+      };
+      take: "sum" | "last";
+      counts: {
+        input: AdapterFactsV2Texts;
+        cached: AdapterFactsV2Texts;
+        output: AdapterFactsV2Texts;
+      };
+      exact: boolean;
+      model: {
+        record?: AdapterFactsV2Text;
+        payload?: AdapterFactsV2Text;
+      };
+      contextFill?: {
+        used: AdapterFactsV2Texts;
+        window: AdapterFactsV2Text;
+      };
+    };
+  };
+  readUsage?: AdapterFactsV2Operation;
+  classifyStop?: AdapterFactsV2Operation;
+  skills?: AdapterFactsV2Operation;
+  install?: {
+    readBy: AdapterFactsV2Text;
+    conformance: AdapterFactsV2Text;
+    source: AdapterFactsV2Text;
+  };
+}
+
+export type AdapterFactsV3Text = string;
+
+export type AdapterFactsV3Match = { [key: string]: unknown };
+
+export type AdapterFactsV3Texts = Array<AdapterFactsV3Text>;
+
+export type AdapterFactsV3Version = string;
+
+export type AdapterFactsV3TextMap = { [key: string]: AdapterFactsV3Text };
+
+export type AdapterFactsV3DataTemplate = { [key: string]: AdapterFactsV3Text };
+
+export type AdapterFactsV3FieldTypes = { [key: string]: string };
+
+export type AdapterFactsV3Payload = {
+  required: AdapterFactsV3FieldTypes;
+  optional: AdapterFactsV3FieldTypes;
+  tools?: { [key: string]: AdapterFactsV3FieldTypes };
+};
+
+export type AdapterFactsV3ToolKind = "shell" | "read" | "edit" | "write" | "search" | "fetch" | "mcp" | "unknown";
+
+export type AdapterFactsV3StopCause = "sign_in_required" | "token_refresh_failed" | "plan_window_spent" | "rate_limited" | "refusal" | "max_turns" | "context_overflow" | "tool_schema_rejected" | "agent_crashed" | "timed_out" | "unknown";
+
+export type AdapterFactsV3CauseMap = { [key: string]: AdapterFactsV3StopCause };
+
+export type AdapterFactsV3OriginRule = {
+  prompt?: AdapterFactsV3Text;
+  match?: { [key: string]: unknown };
+  from: AdapterFactsV3Text;
+};
+
+export type AdapterFactsV3HookRule = {
+  kind: string;
+  data?: AdapterFactsV3DataTemplate;
+  origin?: {
+    join?: {
+      payload: AdapterFactsV3Text;
+      transcript: AdapterFactsV3Text;
+    };
+    rules: Array<AdapterFactsV3OriginRule>;
+    otherwise: AdapterFactsV3Text;
+  };
+  call?: "kind" | "detail";
+  stop?: boolean;
+  cause?: {
+    field: AdapterFactsV3Text;
+    values: AdapterFactsV3CauseMap;
+    otherwise: AdapterFactsV3StopCause;
+  };
+};
+
+export type AdapterFactsV3Operation = {
+  readBy: AdapterFactsV3Text;
+  conformance: AdapterFactsV3Text;
+};
+
+export type AdapterFactsV3MarkerMap = { [key: string]: AdapterFactsV3Text };
+
+/** adapter.facts@3 */
+export interface AdapterFactsV3 {
+  schema: "adapter.facts@3";
+  versions: Array<AdapterFactsV3Version>;
+  agent: string;
+  hookTimeouts: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    defaultMs?: number | null;
+    perHook?: { [key: string]: number };
+  };
+  continuation: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    cap?: number;
+    field?: AdapterFactsV3Text;
+    hook?: AdapterFactsV3Text;
+  };
+  launch: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    session?: {
+      readBy?: AdapterFactsV3Text;
+      args: AdapterFactsV3Texts;
+    };
+    readOnlyJob?: {
+      readBy?: AdapterFactsV3Text;
+      args: AdapterFactsV3Texts;
+      prompt: AdapterFactsV3Text;
+    };
+  };
+  modelFamily: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    families: AdapterFactsV3TextMap;
+  };
+  billing: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    apiKeyVariables: AdapterFactsV3Texts;
+  };
+  usage: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    cost: "reported" | "estimated" | "unpriced";
+    costFrom: AdapterFactsV3Text;
+    tokens: AdapterFactsV3Text;
+  };
+  questionTools: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    tools: AdapterFactsV3Texts;
+  };
+  transcripts: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    home: Array<AdapterFactsV3Text>;
+    path: AdapterFactsV3Text;
+  };
+  appLinks: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    open: AdapterFactsV3Text;
+  };
+  errorTexts: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    causes: AdapterFactsV3CauseMap;
+  };
+  events: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    versions: { [key: string]: { [key: string]: AdapterFactsV3Payload } };
+  };
+  mapping: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    common: AdapterFactsV3DataTemplate;
+    SessionStart?: AdapterFactsV3HookRule;
+    UserPromptSubmit?: AdapterFactsV3HookRule;
+    PreToolUse?: AdapterFactsV3HookRule;
+    PermissionRequest?: AdapterFactsV3HookRule;
+    PostToolUse?: AdapterFactsV3HookRule;
+    PostToolUseFailure?: AdapterFactsV3HookRule;
+    Stop?: AdapterFactsV3HookRule;
+    StopFailure?: AdapterFactsV3HookRule;
+    SessionEnd?: AdapterFactsV3HookRule;
+    SubagentStart?: AdapterFactsV3HookRule;
+    SubagentStop?: AdapterFactsV3HookRule;
+    TaskCreated?: AdapterFactsV3HookRule;
+    TaskCompleted?: AdapterFactsV3HookRule;
+    TeammateIdle?: AdapterFactsV3HookRule;
+    WorktreeCreate?: AdapterFactsV3HookRule;
+    WorktreeRemove?: AdapterFactsV3HookRule;
+    PreCompact?: AdapterFactsV3HookRule;
+    PostCompact?: AdapterFactsV3HookRule;
+    Interrupt?: AdapterFactsV3HookRule;
+    sessionStart?: AdapterFactsV3HookRule;
+    sessionEnd?: AdapterFactsV3HookRule;
+    preToolUse?: AdapterFactsV3HookRule;
+    postToolUse?: AdapterFactsV3HookRule;
+    stop?: AdapterFactsV3HookRule;
+    session_start?: AdapterFactsV3HookRule;
+    session_shutdown?: AdapterFactsV3HookRule;
+    input?: AdapterFactsV3HookRule;
+    tool_call?: AdapterFactsV3HookRule;
+    tool_result?: AdapterFactsV3HookRule;
+    agent_start?: AdapterFactsV3HookRule;
+    agent_end?: AdapterFactsV3HookRule;
+    agent_before_settle?: AdapterFactsV3HookRule;
+    agent_settled?: AdapterFactsV3HookRule;
+    "agent.turn.before"?: AdapterFactsV3HookRule;
+    "agent.turn.after"?: AdapterFactsV3HookRule;
+    "agent.permission.before"?: AdapterFactsV3HookRule;
+    "agent.permission.after"?: AdapterFactsV3HookRule;
+  };
+  toolKinds: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    tools: { [key: string]: AdapterFactsV3ToolKind };
+    prefixes?: { [key: string]: AdapterFactsV3ToolKind };
+    otherwise: AdapterFactsV3ToolKind;
+  };
+  toolDetail?: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    command?: AdapterFactsV3TextMap;
+    paths?: AdapterFactsV3TextMap;
+    mcp?: {
+      tool: AdapterFactsV3Text;
+    };
+  };
+  patch?: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    tools: AdapterFactsV3Texts;
+    command: AdapterFactsV3Text;
+    shell: AdapterFactsV3Text;
+  };
+  turnWithoutPrompt?: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    payloadField: AdapterFactsV3Text;
+    startedBy: AdapterFactsV3Texts;
+    turnEntry: AdapterFactsV3Text;
+    turnField: AdapterFactsV3Text;
+    messageRole: {
+      path: AdapterFactsV3Text;
+      value: AdapterFactsV3Text;
+    };
+    messageText: AdapterFactsV3Text;
+    values: AdapterFactsV3MarkerMap;
+    otherwise: AdapterFactsV3Text;
+  };
+  signIn?: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    args: AdapterFactsV3Texts;
+    signedIn: AdapterFactsV3Text;
+  };
+  stop?: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    turn: {
+      payload: AdapterFactsV3Text;
+      transcript: AdapterFactsV3Text;
+      elsewhere?: AdapterFactsV3Text;
+    };
+    cause: {
+      readBy?: AdapterFactsV3Text;
+      payload?: {
+        field: AdapterFactsV3Text;
+        values: AdapterFactsV3CauseMap;
+      };
+      errors?: {
+        match: AdapterFactsV3Match;
+        field: AdapterFactsV3Text;
+        values: AdapterFactsV3CauseMap;
+      };
+      rateLimits?: {
+        match: AdapterFactsV3Match;
+        reached: AdapterFactsV3Text;
+        windows: AdapterFactsV3Texts;
+        used: AdapterFactsV3Text;
+        resetsAt: AdapterFactsV3Text;
+        toMs: number;
+        spent: AdapterFactsV3StopCause;
+        withoutReset: AdapterFactsV3StopCause;
+      };
+      otherwise: AdapterFactsV3StopCause;
+    };
+    usage: {
+      readBy?: AdapterFactsV3Text;
+      covers: "turn" | "session";
+      records: {
+        match: AdapterFactsV3Match;
+        has: AdapterFactsV3Text;
+        skip?: AdapterFactsV3Match;
+        once?: AdapterFactsV3Text;
+      };
+      take: "sum" | "last";
+      counts: {
+        input: AdapterFactsV3Texts;
+        cached: AdapterFactsV3Texts;
+        output: AdapterFactsV3Texts;
+      };
+      exact: boolean;
+      model: {
+        record?: AdapterFactsV3Text;
+        payload?: AdapterFactsV3Text;
+      };
+      contextFill?: {
+        used: AdapterFactsV3Texts;
+        window: AdapterFactsV3Text;
+      };
+    };
+  };
+  readUsage?: AdapterFactsV3Operation;
+  classifyStop?: AdapterFactsV3Operation;
+  skills?: AdapterFactsV3Operation;
+  install?: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    source: AdapterFactsV3Text;
+  };
+  providers?: { [key: string]: {
+    readBy: AdapterFactsV3Text;
+    conformance: AdapterFactsV3Text;
+    hooks: "own" | "plugin";
+    bridge?: string;
+    permissions?: AdapterFactsV3Text;
+    modelCheck?: AdapterFactsV3Text;
+    timeouts?: { [key: string]: number };
+  } };
 }
 
 /** adapter.unsupported@1 */
@@ -786,6 +1412,183 @@ export interface AgentStopV4 {
   evidence?: Array<string>;
 }
 
+export type AgentStopV5Turn = number;
+
+export type AgentStopV5Usage = {
+  covers: "turn" | "session";
+  model: string | null;
+  input: AgentStopV5Count;
+  cached: AgentStopV5Count;
+  output: AgentStopV5Count;
+  context_fill: number | null;
+  cost: AgentStopV5Cost;
+} | null;
+
+export type AgentStopV5Count = null | {
+  value: number;
+  exact: true;
+} | {
+  value: number;
+  exact: false;
+};
+
+export type AgentStopV5Cost = {
+  usd: number;
+  basis: "reported";
+} | {
+  usd: number;
+  basis: "estimated";
+  rate_card: string;
+} | {
+  usd: null;
+  basis: "unpriced";
+};
+
+export type AgentStopV5Loop = {
+  state: "looping";
+  due: number | null;
+} | {
+  state: "none_left";
+};
+
+/** agent.stop@5 */
+export interface AgentStopV5 {
+  v: 5;
+  id: string;
+  kind: "agent.stop";
+  subject: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "sign_in_required";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "token_refresh_failed";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "plan_window_spent";
+    plan_resets: number;
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "rate_limited";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "refusal";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "max_turns";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "context_overflow";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "tool_schema_rejected";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "agent_crashed";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "timed_out";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  } | {
+    turn: AgentStopV5Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "unknown";
+    usage: AgentStopV5Usage;
+    outcome: "finished" | "failed";
+    child?: string;
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV5Loop;
+  };
+  evidence?: Array<string>;
+}
+
 /** answer.refused@1 */
 export interface AnswerRefused {
   v: 1;
@@ -947,6 +1750,44 @@ export interface AskAnsweredV4 {
     via: "card" | "inbox" | "session";
     verified: boolean;
     on: AskAnsweredV4PinnedTo;
+    token: string | null;
+    steps?: Array<number>;
+    words: string | null;
+    image: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+export type AskAnsweredV5PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.answered@5 */
+export interface AskAnsweredV5 {
+  v: 5;
+  id: string;
+  kind: "ask.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    answer: string;
+    plan_hash: string | null;
+    decision: "allow" | "deny" | "none";
+    via: "card" | "inbox" | "session" | "channel";
+    verified: boolean;
+    on: AskAnsweredV5PinnedTo;
     token: string | null;
     steps?: Array<number>;
     words: string | null;
@@ -1280,6 +2121,10 @@ export interface AskCreatedV3 {
     unblocks: Array<string>;
     proves: string;
     cost_usd?: number;
+    thread?: {
+      link: string;
+      expect: string;
+    };
   } | {
     kind: "taste";
     question: string;
@@ -1558,6 +2403,37 @@ export interface AskMoot {
   evidence?: Array<string>;
 }
 
+/** ask.moot@2 */
+export interface AskMootV2 {
+  v: 2;
+  id: string;
+  kind: "ask.moot";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    because: "check_passed";
+    verdict: string;
+  } | {
+    because: "attempt_replaced";
+    session: string;
+  } | {
+    because: "window_reset";
+    at: number;
+  } | {
+    because: "thread_replied";
+    link: string;
+  } | {
+    because: "network_reached";
+    host: string;
+  };
+  evidence?: Array<string>;
+}
+
 export type AskSourcesPinnedTo = {
   kind: "commit";
   ref: string;
@@ -1748,8 +2624,133 @@ export interface CardRuleSet {
   evidence?: Array<string>;
 }
 
+/** channel.answered@1 */
+export interface ChannelAnswered {
+  v: 1;
+  id: string;
+  kind: "channel.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    channel: string;
+    thread_key: string;
+    answer: string;
+    proof: "device" | "account_link";
+  };
+  evidence?: Array<string>;
+}
+
+/** channel.conflict@1 */
+export interface ChannelConflict {
+  v: 1;
+  id: string;
+  kind: "channel.conflict";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    channel: string;
+    conflict: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** channel.delivered@1 */
+export interface ChannelDelivered {
+  v: 1;
+  id: string;
+  kind: "channel.delivered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    channel: string;
+    thread_key: string;
+    item: {
+      thread_key: string;
+      summary: string;
+      link: string;
+      answerable: "answer" | "view" | "cancel" | "closed";
+      options: Array<{
+        id: string;
+        label: string;
+      }>;
+      revision: number;
+      hub: string;
+      refused: string | null;
+      unpaired?: {
+        device: string;
+        by: string;
+      };
+    };
+    outcome: "delivered" | "stalled" | "timed_out" | "conflict";
+    ack: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** channel.refused@1 */
+export interface ChannelRefused {
+  v: 1;
+  id: string;
+  kind: "channel.refused";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    channel: string;
+    thread_key: string;
+    answer: string;
+    field?: "device" | "ask" | "revision" | "card_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id";
+    reason: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** check.code@1 */
 export type CheckCode = "exit_masked" | "no_tests_ran" | "crashed_before_first_assertion" | "reported_after_deadline" | "output_dropped" | "type_error_as_assertion";
+
+/** check.held@1 */
+export interface CheckHeld {
+  v: 1;
+  id: string;
+  kind: "check.held";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    claim: string;
+    check: string;
+    snapshot: string;
+    held_at: number;
+    reason: string;
+    started_at: number | null;
+    started_by: string | null;
+    replaced_by: string | null;
+  };
+  evidence?: Array<string>;
+}
 
 /** check@1 */
 export interface Check {
@@ -1880,6 +2881,62 @@ export interface ClaimSentBack {
   evidence?: Array<string>;
 }
 
+/** claim.sized@1 */
+export interface ClaimSized {
+  v: 1;
+  id: string;
+  kind: "claim.sized";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    claim: string;
+    task_ref: string;
+    kind: string | null;
+    lines: {
+      added: number;
+      removed: number;
+    };
+    files: number;
+    usual: {
+      lines: number;
+      files: number;
+      n: number;
+    } | null;
+    over: boolean;
+    biggest: Array<{
+      path: string;
+      lines: number;
+    }>;
+    dependencies: Array<{
+      name: string;
+      from: string;
+    }>;
+    folders: Array<{
+      name: string;
+      from: string;
+    }>;
+    resources: Array<{
+      name: string;
+      from: string;
+    }>;
+    duplicated: number;
+    unreached: Array<string> | null;
+    items: Array<{
+      doc: string;
+      id: string;
+      change: "added" | "changed" | "removed";
+    }>;
+    sent_back: Array<string>;
+    asked: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
 /** claim.stalled@1 */
 export interface ClaimStalled {
   v: 1;
@@ -1920,6 +2977,31 @@ export interface CommandStaged {
   evidence?: Array<string>;
 }
 
+/** command.staged@2 */
+export interface CommandStagedV2 {
+  v: 2;
+  id: string;
+  kind: "command.staged";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    command: string;
+    folders: Array<string>;
+    files?: Array<{
+      path: string;
+      digest: string;
+    }>;
+    until: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** commit.made@1 */
 export interface CommitMade {
   v: 1;
@@ -1936,6 +3018,109 @@ export interface CommitMade {
     sha: string;
     worktree: string;
     branch: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** composition.reopened@1 */
+export interface CompositionReopened {
+  v: 1;
+  id: string;
+  kind: "composition.reopened";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  evidence?: Array<string>;
+  data: {
+    piece: string;
+    provider: string;
+    version: string;
+  };
+}
+
+/** composition.tested@1 */
+export interface CompositionTested {
+  v: 1;
+  id: string;
+  kind: "composition.tested";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  evidence?: Array<string>;
+  data: {
+    user: string;
+    interface: string;
+    provider: string;
+    version: string;
+    passed: boolean;
+  };
+}
+
+/** composition.used@1 */
+export interface CompositionUsed {
+  v: 1;
+  id: string;
+  kind: "composition.used";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  evidence?: Array<string>;
+  data: {
+    user: string;
+    interface: string;
+    provider: string;
+  };
+}
+
+/** credential.loaded@1 */
+export interface CredentialLoaded {
+  v: 1;
+  id: string;
+  kind: "credential.loaded";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    env: string;
+    by: "value" | "stand-in";
+    hosts?: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** deadline.moved@1 */
+export interface DeadlineMoved {
+  v: 1;
+  id: string;
+  kind: "deadline.moved";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    span: number;
+    deadline: number;
+    because: "away" | "notice";
   };
   evidence?: Array<string>;
 }
@@ -2087,6 +3272,27 @@ export interface DefaultUndone {
   evidence?: Array<string>;
 }
 
+/** definition.checked@1 */
+export interface DefinitionChecked {
+  v: 1;
+  id: string;
+  kind: "definition.checked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    solved: boolean;
+    solve: string;
+    flags: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.drafted@1 */
 export interface DefinitionDrafted {
   v: 1;
@@ -2195,6 +3401,292 @@ export interface DefinitionLockedV2 {
   evidence?: Array<string>;
 }
 
+/** definition.locked@3 */
+export interface DefinitionLockedV3 {
+  v: 3;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** definition.locked@4 */
+export interface DefinitionLockedV4 {
+  v: 4;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** definition.locked@5 */
+export interface DefinitionLockedV5 {
+  v: 5;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+        automated?: boolean;
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+      references?: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      command?: string;
+      criterion?: string;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** definition.locked@6 */
+export interface DefinitionLockedV6 {
+  v: 6;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+        automated?: boolean;
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+      references?: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      command?: string;
+      criterion?: string;
+      targets?: Array<string>;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** definition.locked@7 */
+export interface DefinitionLockedV7 {
+  v: 7;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+        automated?: boolean;
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+      references?: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      command?: string;
+      criterion?: string;
+      targets?: Array<string>;
+      paid?: "live call" | "hosted browser run" | "model job";
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.revised@1 */
 export interface DefinitionRevised {
   v: 1;
@@ -2228,6 +3720,39 @@ export interface DefinitionRevised {
   evidence?: Array<string>;
 }
 
+/** definition.stood_in@1 */
+export interface DefinitionStoodIn {
+  v: 1;
+  id: string;
+  kind: "definition.stood_in";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      stand_in: {
+        surface: {
+          kind: string;
+          routes?: Array<string>;
+          format?: string;
+          name?: string;
+          path?: string;
+          exports?: Array<string>;
+        };
+        hash: string;
+      };
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** delivery.outcome@1 */
 export interface DeliveryOutcome {
   v: 1;
@@ -2244,6 +3769,26 @@ export interface DeliveryOutcome {
     delivery: string;
     via: "steer" | "interrupt" | "stop_hold" | "next_prompt";
     outcome: "delivered" | "stalled" | "timed_out" | "replaced";
+  };
+  evidence?: Array<string>;
+}
+
+/** delivery.outcome@2 */
+export interface DeliveryOutcomeV2 {
+  v: 2;
+  id: string;
+  kind: "delivery.outcome";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    delivery: string;
+    via: "steer" | "interrupt" | "stop_hold" | "next_prompt" | "on_task";
+    outcome: "delivered" | "stalled" | "timed_out" | "replaced" | "waiting";
   };
   evidence?: Array<string>;
 }
@@ -2275,9 +3820,39 @@ export interface DocPatched {
   evidence?: Array<string>;
 }
 
+/** doc.patched@2 */
+export interface DocPatchedV2 {
+  v: 2;
+  id: string;
+  kind: "doc.patched";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    doc: string;
+    rev: number;
+    patch: string | null;
+    writer: "you" | "shell" | "record" | "agent" | "plugin";
+    achieved: {
+      created: { [key: string]: number };
+      updated: number;
+      deleted: { [key: string]: number };
+      unchanged: boolean;
+    };
+    hash: string;
+    layer: string;
+    thread: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -2392,10 +3967,42 @@ export interface EvidenceStored {
 /** exit.code@1 */
 export type ExitCode = "0" | "1" | "2" | "3";
 
+/** extension.compose@1 */
+export interface ExtensionCompose {
+  provides?: Array<{
+    schema?: unknown;
+    digests?: { [key: string]: string };
+  }>;
+  uses?: Array<{
+    schema?: unknown;
+    from?: string;
+    optional?: boolean;
+  }>;
+  pieces?: Array<string>;
+}
+
+/** extension.contract@1 */
+export interface ExtensionContract {
+  stability?: "stable" | "preview";
+  requires?: {
+    preview?: Array<string>;
+  };
+  calls?: Array<string>;
+}
+
 /** extension.edges@1 */
 export interface ExtensionEdges {
   conflicts?: Array<string>;
   kernel?: Array<string>;
+}
+
+/** extension.host@1 */
+export interface ExtensionHost {
+  host?: {
+    runs: "terminals";
+    lives: "past_app";
+    owns: Array<"terminals">;
+  };
 }
 
 /** extension.manifest@1 */
@@ -2431,6 +4038,30 @@ export interface ExtensionManifest {
   actions?: Array<string>;
 }
 
+/** guard.overridden@1 */
+export interface GuardOverridden {
+  v: 1;
+  id: string;
+  kind: "guard.overridden";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    tool: string;
+    label: string;
+    guard: string;
+    send: boolean;
+    mods: Array<string>;
+    mods_unread: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** guard@1 */
 export interface Guard {
   match: string;
@@ -2439,6 +4070,15 @@ export interface Guard {
   reason: string;
   next_step: string;
   fail_closed: boolean;
+}
+
+/** heavy.command@1 */
+export interface HeavyCommand {
+  name: string;
+  argv_prefix: Array<string>;
+  kinds: Array<string>;
+  jobs: string;
+  jobs_flag?: string;
 }
 
 /** hook.ack@1 */
@@ -2523,6 +4163,11 @@ export interface HookRequestV3 {
   matched: Array<string>;
   notes?: { [key: string]: string };
   stage?: { [key: string]: Array<string> };
+  heavy?: {
+    name: string;
+    kinds: Array<string>;
+    form: string;
+  };
   payload: unknown;
   late?: boolean;
   billing?: { [key: string]: boolean };
@@ -2559,6 +4204,34 @@ export interface HubStopped {
   log_pos?: number;
   data: {
     reason: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** issue.drafted@1 */
+export interface IssueDrafted {
+  v: 1;
+  id: string;
+  kind: "issue.drafted";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    issue: string;
+    because: "split" | "switch";
+    decision: string | null;
+    title: string;
+    items: Array<{
+      id: string;
+      text: string;
+      needs: string;
+    }>;
+    follow_up: string;
   };
   evidence?: Array<string>;
 }
@@ -3081,6 +4754,28 @@ export interface MergeDryRun {
   evidence?: Array<string>;
 }
 
+/** move.refused@1 */
+export interface MoveRefused {
+  v: 1;
+  id: string;
+  kind: "move.refused";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    object: string;
+    table: string;
+    state: string;
+    event: string;
+    event_id: string;
+    guard?: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** note.closed@1 */
 export interface NoteClosed {
   v: 1;
@@ -3189,6 +4884,27 @@ export interface OpenItemClosed {
   evidence?: Array<string>;
 }
 
+/** open_item.closed@2 */
+export interface OpenItemClosedV2 {
+  v: 2;
+  id: string;
+  kind: "open_item.closed";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    text: string;
+    item: string;
+    by: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** open_item.opened@1 */
 export interface OpenItemOpened {
   v: 1;
@@ -3204,6 +4920,50 @@ export interface OpenItemOpened {
   data: {
     task_ref: string;
     text: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** open_item.opened@2 */
+export interface OpenItemOpenedV2 {
+  v: 2;
+  id: string;
+  kind: "open_item.opened";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    text: string;
+    item: string;
+    from: "agent" | "section" | "bug" | "issue" | "limit" | "placeholder" | "task" | "review_thread";
+    resolved_by?: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** open_item.opened@3 */
+export interface OpenItemOpenedV3 {
+  v: 3;
+  id: string;
+  kind: "open_item.opened";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    text: string;
+    item: string;
+    from: "agent" | "section" | "bug" | "issue" | "limit" | "placeholder" | "task" | "review_thread" | "verdict";
+    resolved_by?: string;
   };
   evidence?: Array<string>;
 }
@@ -3272,6 +5032,46 @@ export interface PlanProposed {
     }>;
     diff: string;
     hash: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** plan.proposed@2 */
+export interface PlanProposedV2 {
+  v: 2;
+  id: string;
+  kind: "plan.proposed";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    steps: Array<{
+      does: string;
+      changes: Array<string>;
+      undo: string;
+      public: boolean;
+      cost: number;
+      targets?: Array<{
+        kind: "address" | "host" | "remote" | "repo" | "channel" | "payee";
+        ref: string;
+      }>;
+    }>;
+    diff: string;
+    hash: string;
+    targets: Array<{
+      step: number;
+      kind: "address" | "host" | "remote" | "repo" | "channel" | "payee";
+      ref: string;
+      origin: "you" | "decision" | "repo" | "read" | "unknown";
+      first: string | null;
+      warning: string | null;
+      rule: string | null;
+    }>;
   };
   evidence?: Array<string>;
 }
@@ -3352,6 +5152,29 @@ export interface ProcessTracked {
     pgid: number;
     cwd: string;
     token: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** product.built@1 */
+export interface ProductBuilt {
+  v: 1;
+  id: string;
+  kind: "product.built";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    product: string;
+    path: string;
+    key: string;
+    commit: string;
+    bytes: number;
+    store_bytes: number;
   };
   evidence?: Array<string>;
 }
@@ -3438,6 +5261,12 @@ export interface PromiseWoken {
     via: "waiter" | "next_prompt" | "stop_hold";
   };
   evidence?: Array<string>;
+}
+
+/** push.record@1 */
+export interface PushRecord {
+  commit: string;
+  pusher: string | null;
 }
 
 /** question.proceeded@1 */
@@ -3686,6 +5515,46 @@ export interface RunFinished {
   evidence?: Array<string>;
 }
 
+/** run.kept@1 */
+export interface RunKept {
+  v: 1;
+  id: string;
+  kind: "run.kept";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** run.stale@1 */
+export interface RunStale {
+  v: 1;
+  id: string;
+  kind: "run.stale";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    run: string;
+    check: string;
+    claim: string;
+    newer_claim: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.started@1 */
 export interface RunStarted {
   v: 1;
@@ -3737,6 +5606,76 @@ export interface RunStartedV2 {
   evidence?: Array<string>;
 }
 
+/** run.started@3 */
+export interface RunStartedV3 {
+  v: 3;
+  id: string;
+  kind: "run.started";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    claim: string;
+    commit: string;
+    host: string;
+    needs: {
+      cores: number;
+      memory_mb: number;
+      stack_slot: number;
+      gpus: number;
+      expected_ms: number | null;
+    };
+    lane: "fast" | "slow";
+    argv: Array<string>;
+    cwd: string;
+    env: { [key: string]: string };
+    grant: {
+      read?: Array<string>;
+      write?: Array<string>;
+      hosts?: Array<string>;
+      sockets?: Array<string>;
+      listen?: Array<string>;
+      run_as_you?: boolean;
+    };
+    deadline_ms: number | null;
+    environment?: boolean;
+    command?: string;
+    stand_ins?: Array<string>;
+    withheld: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** runner.answered@1 */
+export interface RunnerAnswered {
+  v: 1;
+  id: string;
+  kind: "runner.answered";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reading: string;
+    piece: string;
+    job: string;
+    value: unknown;
+    cites: Array<string>;
+    as_of: number;
+    stale_at: number | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** sandbox.denied@1 */
 export interface SandboxDenied {
   v: 1;
@@ -3753,6 +5692,33 @@ export interface SandboxDenied {
     run: string;
     operation: string;
     target: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** schedule.run@1 */
+export interface ScheduleRun {
+  v: 1;
+  id: string;
+  kind: "schedule.run";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    schedule: string;
+    plugin: string;
+    phase: "queued" | "dispatched" | "ended";
+    due: number;
+    resumed?: boolean;
+    verdict?: "PASS" | "FAIL" | "BLOCKED" | "INCONCLUSIVE" | "INVALID" | "uncounted";
+    cause?: string | null;
+    stopped?: boolean;
+    changes?: Array<string>;
   };
   evidence?: Array<string>;
 }
@@ -3777,6 +5743,53 @@ export interface SeedCloned {
     migration: string;
     template: string;
     cloned_at: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** send.made@1 */
+export interface SendMade {
+  v: 1;
+  id: string;
+  kind: "send.made";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    piece: string;
+    phase: "asked" | "claimed" | "answered" | "refused";
+    kind: string;
+    to: Array<string>;
+    plan: string;
+    schedule: string | null;
+    run: string | null;
+    call: string | null;
+    rule: string | null;
+    ask: string | null;
+    status?: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.activity@1 */
+export interface SessionActivity {
+  v: 1;
+  id: string;
+  kind: "session.activity";
+  subject: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    activity: string;
   };
   evidence?: Array<string>;
 }
@@ -3833,6 +5846,26 @@ export interface SessionChildStarted {
     parent: string;
     child: string;
     task_ref: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.continued@1 */
+export interface SessionContinued {
+  v: 1;
+  id: string;
+  kind: "session.continued";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    stop: string;
+    because: "transient" | "context_overflow" | "task_closed";
+    task: string | null;
   };
   evidence?: Array<string>;
 }
@@ -3960,6 +5993,78 @@ export interface SessionStartV3 {
       digest: string;
       tools?: Array<string>;
     }>;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.start@4 */
+export interface SessionStartV4 {
+  v: 4;
+  id: string;
+  kind: "session.start";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    agent: string;
+    worktree: string;
+    branch: string | null;
+    thread: string;
+    billing?: { [key: string]: boolean };
+    loads: Array<{
+      kind: "instructions" | "skill" | "hooks" | "mcp";
+      name: string;
+      source: string;
+      digest: string;
+      tools?: Array<string>;
+    }>;
+    parent?: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.state@1 */
+export interface SessionState {
+  v: 1;
+  id: string;
+  kind: "session.state";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    state: "needs you" | "stuck" | "flagged" | "working" | "finished" | "quiet";
+    cause: "ask" | "gone" | "waiting" | "stuck" | "promised" | "failed" | "quiet" | "interrupted" | "finished" | "working";
+  };
+  evidence?: Array<string>;
+}
+
+/** source.called@1 */
+export interface SourceCalled {
+  v: 1;
+  id: string;
+  kind: "source.called";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    source: string;
+    host: string;
+    outcome: "answered" | "timeout" | "unreachable";
+    status?: number;
+    ms: number;
+    bytes: number;
   };
   evidence?: Array<string>;
 }
@@ -4132,6 +6237,27 @@ export interface StopHeld {
   evidence?: Array<string>;
 }
 
+/** store.item@1 */
+export interface StoreItem {
+  v: 1;
+  id: string;
+  kind: string;
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    generation: number;
+    value: unknown;
+    call: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** suggestion.filed@1 */
 export interface SuggestionFiled {
   v: 1;
@@ -4230,6 +6356,42 @@ export interface TaskCreated {
     thread: string;
     owner: string;
     title: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** task.withdrawn@1 */
+export interface TaskWithdrawn {
+  v: 1;
+  id: string;
+  kind: "task.withdrawn";
+  subject: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+  };
+  evidence?: Array<string>;
+}
+
+/** terminal.refused@1 */
+export interface TerminalRefused {
+  v: 1;
+  id: string;
+  kind: "terminal.refused";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    terminal: string;
+    pid: number;
   };
   evidence?: Array<string>;
 }
@@ -4378,6 +6540,136 @@ export interface ToolAfterV2 {
     signature?: string;
     cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
     owner?: "agent" | "you" | "service";
+  };
+  evidence?: Array<string>;
+}
+
+/** tool.after@3 */
+export interface ToolAfterV3 {
+  v: 3;
+  id: string;
+  kind: "tool.after";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    kind: "shell";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "read";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "edit";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "write";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "search";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "fetch";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "mcp";
+    paths: Array<string>;
+    command: string | null;
+    server: string;
+    tool: string;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
+  } | {
+    kind: "unknown";
+    paths: Array<string>;
+    command: string | null;
+    call?: string;
+    outcome: "ok" | "failed";
+    exit_code?: number | null;
+    signature?: string;
+    cause?: "command_failed" | "tool_error" | "interrupted" | "permission_denied" | "unknown";
+    owner?: "agent" | "you" | "service";
+    nested?: {
+      complete: boolean;
+      calls?: number;
+    };
   };
   evidence?: Array<string>;
 }
@@ -4700,6 +6992,29 @@ export interface UserAsk {
   evidence?: Array<string>;
 }
 
+/** user.ask@2 */
+export interface UserAskV2 {
+  v: 2;
+  id: string;
+  kind: "user.ask";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    msg: number;
+    text: string;
+    tasks: Array<string>;
+    from: "person" | "scheduled" | "subagent" | "session" | "continuation" | "app" | "unknown";
+    request?: string;
+    disposition?: "handled";
+  };
+  evidence?: Array<string>;
+}
+
 export type VerdictMadeRequirements = Array<{
   req: string;
   outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
@@ -4934,6 +7249,46 @@ export type Verdict = {
   checkout: string;
 };
 
+/** waiver.ended@1 */
+export interface WaiverEnded {
+  v: 1;
+  id: string;
+  kind: "waiver.ended";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    waiver: string;
+    why: "date" | "condition" | "revoked";
+  };
+  evidence?: Array<string>;
+}
+
+/** waiver.granted@1 */
+export interface WaiverGranted {
+  v: 1;
+  id: string;
+  kind: "waiver.granted";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    check: string;
+    error: string;
+    owner: string;
+    approved_by: string;
+    until?: number;
+    condition?: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** wiki.read@1 */
 export interface WikiRead {
   v: 1;
@@ -4971,6 +7326,35 @@ export interface WorkBroke {
     cause: "revert" | "follow_up_fix" | "is_it_done" | "issue";
   };
   evidence?: Array<string>;
+}
+
+/** work.item@1 */
+export interface WorkItem {
+  source_id: string;
+  link: string;
+  title: string;
+  body: string;
+  criteria: Array<string>;
+  authors: Array<{
+    handle: string;
+    role: "owner" | "collaborator" | "outside";
+  }>;
+  updated: string;
+}
+
+/** work.item@2 */
+export interface WorkItemV2 {
+  source_id: string;
+  link: string;
+  title: string;
+  body: string;
+  criteria: Array<string>;
+  authors: Array<{
+    handle: string;
+    role: "owner" | "collaborator" | "outside";
+    automated?: boolean;
+  }>;
+  updated: string;
 }
 
 /** worktree.created@1 */

@@ -24,9 +24,12 @@ export function prUrlIn(text: string): string | undefined {
  * for the one gh printed. Read left to right as the shell does: a quote inside the other kind of quotes never
  * hides an operator, and a heredoc ends at its terminator line alone (`<<-` lets it be indented by tabs).
  */
-export function isPrCreate(command: string): boolean {
+export const isPrCreate = (command: string): boolean => isPrCommand(command, 'create');
+/** Whether a shell command is one `gh pr edit` invocation and nothing else, read as `gh pr create` is (#87). */
+export const isPrEdit = (command: string): boolean => isPrCommand(command, 'edit');
+function isPrCommand(command: string, verb: 'create' | 'edit'): boolean {
   const cmd = command.trimEnd();
-  if (!/^\s*gh\s+pr\s+create\b/.test(cmd)) return false;
+  if (!new RegExp(`^\\s*gh\\s+pr\\s+${verb}\\b`).test(cmd)) return false;
   const HEREDOC = /^<<(-?)[ \t]*(["']?)(\w+)\2/;
   // The end of a heredoc body that starts after the newline at `from`: the index past its terminator line.
   const bodyEnd = (from: number, tag: string, dash: boolean): number | undefined => {
@@ -76,8 +79,12 @@ export function isPrCreate(command: string): boolean {
   }
   return quote === undefined && pending === undefined;
 }
-/** `Closes #n` in a PR body: the issue it closes. */
-const closes = (body: string): number | undefined => { const m = /\bCloses #(\d+)/i.exec(body); return m ? Number(m[1]) : undefined; };
+/** The issue a PR body closes: `#n` after any of GitHub's closing keywords (close, fix, resolve and their forms). */
+const closes = (body: string): number | undefined => { const m = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)/i.exec(body); return m ? Number(m[1]) : undefined; };
+/** The issue a `gh pr create` or `gh pr edit` command's body says it closes, by `Closes #n` in the command's text (#322); undefined when it says none. */
+export const closesIssue = (command: string): number | undefined => closes(command);
+/** The issue a `gh pr create` or `gh pr edit` command's body says it is part of, by `Part of #n` (#82); undefined when it says none. */
+export const partOfIssue = (command: string): number | undefined => { const m = /\bpart of:?\s+#(\d+)/i.exec(command); return m ? Number(m[1]) : undefined; };
 /** An issue's epic, `**Epic:** #n` in its body. */
 const epicOf = (body: string): number | undefined => { const m = /\*\*Epic:\*\*\s*#(\d+)/.exec(body); return m ? Number(m[1]) : undefined; };
 /** The issues an issue depends on: the `#n` items under its `### Depends on` heading. */
@@ -89,9 +96,9 @@ interface Issue { number: number; state: string; body: string; url: string }
 const issueOf = (i: Obj): Issue => ({ number: Number(i.number), state: String(i.state), body: typeof i.body === 'string' ? i.body : '', url: typeof i.html_url === 'string' ? i.html_url : '' });
 
 export class Forge {
-  private readonly deadline = Date.now() + BUDGET_MS;
+  private readonly deadline: number;
   /** `api` is the REST root (https://api.github.com); `token` goes as a bearer when set. */
-  constructor(private readonly api: string, private readonly token: string | undefined) {}
+  constructor(private readonly api: string, private readonly token: string | undefined, budget_ms = BUDGET_MS) { this.deadline = Date.now() + budget_ms; }
   /** One page: its body and the URL of the next page when the forge names one. */
   private async page(path: string): Promise<{ body: unknown; next: string | undefined }> {
     const left = this.deadline - Date.now();
@@ -114,6 +121,18 @@ export class Forge {
       next = p.next;
     }
     return items;
+  }
+  /**
+   * The web URL of the pull request `repo` (owner/name) holds for `branch`, open or closed (#85): null when it holds
+   * none, undefined when the forge doesn't answer.
+   */
+  async pullFor(repo: string, branch: string): Promise<string | null | undefined> {
+    const owner = repo.split('/')[0] ?? '';
+    let pulls: unknown;
+    try { pulls = await this.get(`/repos/${repo}/pulls?state=all&head=${encodeURIComponent(`${owner}:${branch}`)}&per_page=10`); } catch { return undefined; }
+    if (!Array.isArray(pulls)) return undefined;
+    const match = pulls.find((p) => isObj(p) && isObj(p.head) && p.head.ref === branch);
+    return isObj(match) && typeof match.html_url === 'string' ? match.html_url : null;
   }
   /** The PR's state as the forge shows it now, with its body and the issue it closes; undefined when the forge doesn't answer. */
   async pull(pr: Pr): Promise<{ state: PrState; closes: number | undefined } | undefined> {
@@ -168,6 +187,34 @@ export class Forge {
       const status = await this.get(`/repos/${pr.owner}/${pr.repo}/commits/${head}/status`);
       return isObj(status) && status.state === 'pending' && Array.isArray(status.statuses) && status.statuses.length > 0;
     } catch { return false; }
+  }
+  /**
+   * The repo's most recently closed pull requests that merged, for the readings' lifecycle numbers (#45), as far as the
+   * budget reaches; undefined when the forge doesn't answer the list at all.
+   */
+  async merged(owner: string, repo: string): Promise<{ number: number; merged_at: number; opened_at: number; issue_opened_at: number | null; reviews: { at: number; state: string }[] }[] | undefined> {
+    const root = `/repos/${owner}/${repo}`;
+    let list: unknown;
+    try { list = await this.get(`${root}/pulls?state=closed&sort=updated&direction=desc&per_page=30`); } catch { return undefined; }
+    if (!Array.isArray(list)) return undefined;
+    const out = [];
+    for (const p of list.filter(isObj)) {
+      if (typeof p.merged_at !== 'string' || typeof p.created_at !== 'string') continue;
+      try {
+        // A review by the pull request's own author isn't anyone reviewing it.
+        const author = isObj(p.user) ? p.user.login : undefined;
+        const reviews = (await this.get(`${root}/pulls/${String(p.number)}/reviews`) as unknown[]).filter(isObj).filter((r) => typeof r.submitted_at === 'string' && !(isObj(r.user) && r.user.login === author));
+        const closing = closes(typeof p.body === 'string' ? p.body : '');
+        // A closed issue that's gone leaves this one number missing, not the pull request.
+        const issue = closing === undefined ? undefined : await this.get(`${root}/issues/${closing}`).catch(() => undefined);
+        out.push({
+          number: Number(p.number), merged_at: Date.parse(p.merged_at), opened_at: Date.parse(p.created_at),
+          issue_opened_at: isObj(issue) && typeof issue.created_at === 'string' ? Date.parse(issue.created_at) : null,
+          reviews: reviews.map((r) => ({ at: Date.parse(String(r.submitted_at)), state: String(r.state) })),
+        });
+      } catch { return Date.now() >= this.deadline && out.length ? out : undefined; }
+    }
+    return out;
   }
   /**
    * The next unblocked issue in `issue`'s epic once it passed: the lowest-numbered open issue of the same epic,

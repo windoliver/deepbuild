@@ -16,8 +16,11 @@
     "@deepbuild/asks": "0.0.0",
     "@deepbuild/conformance": "0.0.0",
     "@deepbuild/contracts": "0.0.0",
+    "@deepbuild/evidence": "0.0.0",
     "@deepbuild/leases": "0.0.0",
     "@deepbuild/record": "0.0.0",
-    "@deepbuild/supervisor": "0.0.0"
+    "@deepbuild/runner": "0.0.0",
+    "@deepbuild/supervisor": "0.0.0",
+    "better-sqlite3": "13.0.3"
   }
 }

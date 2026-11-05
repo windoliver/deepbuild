@@ -23,7 +23,9 @@ afterEach(cleanup, 60_000);
 // ---- AC2, on the hub.
 
 describe(`AC2 ${AC2} the option the card sends is recorded and reaches the agent's next input with its ID and label, delivered`, () => {
-  it(`${AC2} the app's answer C to a taste call (options A, C, B in the record; B recommended) records option C in ask.answered, the held Stop continues with C's ID and label, and delivery.outcome says delivered`, async () => {
+  // Retired with the owner's approval on #906's PR: it reads delivered with no turn showing the answer, which #906 makes
+  // wrong; answers-redraft/ac2.test.ts is AC2's hub-side test (README).
+  it.skip(`${AC2} the app's answer C to a taste call (options A, C, B in the record; B recommended) records option C in ask.answered, the held Stop continues with C's ID and label, and delivery.outcome says delivered`, async () => {
     const home = makeHome();
     const confirm = new Confirmer();
     const s = newSession(home, 'claude-code');

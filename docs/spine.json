@@ -1,0 +1,283 @@
+{
+  "tasks": [
+    {
+      "issue": 12,
+      "landed": [
+        {
+          "issue": 12,
+          "merge": "1e0b2c6196c660ad6e4e056b7b91dca81d49bbf5"
+        }
+      ]
+    },
+    {
+      "issue": 13,
+      "landed": [
+        {
+          "issue": 311,
+          "merge": "f346706378d9eaabb1965df1167535fac5a9c285"
+        },
+        {
+          "issue": 312,
+          "merge": "c8837eab0a3f21a69f6b16e863195d418a2f92e0"
+        },
+        {
+          "issue": 313,
+          "merge": "b8a7ead1ad4bc79a44c9dc410c2ba2d9d368b252"
+        },
+        {
+          "issue": 314,
+          "merge": "aac73e140323316a551cfd68bff29857b444be76"
+        }
+      ]
+    },
+    {
+      "issue": 14,
+      "landed": [
+        {
+          "issue": 14,
+          "merge": "554bebb6cc8e5693a887bdeac45771e046fcac5e"
+        }
+      ]
+    },
+    {
+      "issue": 15,
+      "landed": [
+        {
+          "issue": 15,
+          "merge": "af779af3c8aed3ecf58690e214c186ff742ae91b"
+        }
+      ]
+    },
+    {
+      "issue": 16,
+      "landed": [
+        {
+          "issue": 16,
+          "merge": "925aa9f2d88a3b8c0f463fe4d8595230dded9570"
+        }
+      ]
+    },
+    {
+      "issue": 17,
+      "landed": [
+        {
+          "issue": 315,
+          "merge": "dd0172924a2bfbdfd0b8d8a39d966d84987c9d1a"
+        },
+        {
+          "issue": 316,
+          "merge": "e9749ea7546d93c3802623e060f5eeeac6d449af"
+        },
+        {
+          "issue": 317,
+          "merge": "50e517d9dfa68108b7e738238eb4645eebcf9302"
+        }
+      ]
+    },
+    {
+      "issue": 18,
+      "landed": [
+        {
+          "issue": 18,
+          "merge": "0350cf0c68e82b886bba712b37425c2b9ab52acf"
+        }
+      ]
+    },
+    {
+      "issue": 22,
+      "landed": [
+        {
+          "issue": 22,
+          "merge": "a23eecaa674eef30ebafdad193023d9045384535"
+        }
+      ]
+    },
+    {
+      "issue": 25,
+      "landed": [
+        {
+          "issue": 25,
+          "merge": "debda22a6ef976bd7ce20a92e005272406accf23"
+        }
+      ]
+    },
+    {
+      "issue": 28,
+      "landed": [
+        {
+          "issue": 28,
+          "merge": "8592ea38ae565001e7541266fb5e5364ae58d98a"
+        }
+      ]
+    },
+    {
+      "issue": 29,
+      "landed": [
+        {
+          "issue": 29,
+          "merge": "0966298b7a79e244aa651dfc9aacf1325e04b033"
+        }
+      ]
+    },
+    {
+      "issue": 30,
+      "landed": [
+        {
+          "issue": 30,
+          "merge": "2b7f9cddd1511300f93891c262834a99ac0df47b"
+        }
+      ]
+    },
+    {
+      "issue": 31,
+      "landed": [
+        {
+          "issue": 31,
+          "merge": "42f010f76bed289f711846f18f22f3813d6f5708"
+        },
+        {
+          "issue": 31,
+          "merge": "69803b946abf4881f818485c5898865949a2a871"
+        }
+      ]
+    },
+    {
+      "issue": 32,
+      "counts_as": [
+        322
+      ],
+      "part": "the done gate core reads only (#322); #323 to #325 follow the spine",
+      "landed": [
+        {
+          "issue": 322,
+          "merge": "0a7daa925a1a9b26a530047fa670915353a8af39"
+        }
+      ]
+    },
+    {
+      "issue": 44,
+      "counts_as": [
+        348,
+        349,
+        350
+      ],
+      "part": "where first-party packages load and project trust (#348), the reply join and staged activation (#350), and the kits of R1's slots (#349); package envelopes, conflicts and the generated guide follow the spine",
+      "landed": [
+        {
+          "issue": 348,
+          "merge": "8827b99ea7cf8df6ca475bdcd4de37ab6cefd2a8"
+        },
+        {
+          "issue": 349,
+          "merge": "14561afb375ef522335beb36b04cb222ce4b6bad"
+        },
+        {
+          "issue": 350,
+          "merge": "82d4fc972fadcf32bd95c11b54bccfb1654ed5a1"
+        }
+      ]
+    },
+    {
+      "issue": 47,
+      "landed": [
+        {
+          "issue": 47,
+          "merge": "3b875bf1cf956ce640f294a615df8721b75437f2"
+        }
+      ]
+    },
+    {
+      "issue": 48,
+      "landed": [
+        {
+          "issue": 48,
+          "merge": "dcfd7b86f55373c14181f5da827fb2aee6f663b0"
+        },
+        {
+          "issue": 48,
+          "merge": "366942a1507dd371ce60e3e9cf848eb1bceb7bfa"
+        }
+      ]
+    },
+    {
+      "issue": 56,
+      "landed": [
+        {
+          "issue": 56,
+          "merge": "3c4dd9d8aed45fcb7d2a0dabbba8b51ab13df9be"
+        }
+      ]
+    },
+    {
+      "issue": 80,
+      "landed": [
+        {
+          "issue": 80,
+          "merge": "fcf82f4eeab72f9f271132b1fd13ddc713c366aa"
+        }
+      ]
+    },
+    {
+      "issue": 83,
+      "landed": [
+        {
+          "issue": 83,
+          "merge": "427645afc9405279d024e124f166ac96a3044974"
+        }
+      ]
+    },
+    {
+      "issue": 86,
+      "landed": [
+        {
+          "issue": 86,
+          "merge": "33eaad3375f422a265cd51b246281df3a2a17c74"
+        }
+      ]
+    },
+    {
+      "issue": 236,
+      "part": "its run tokens; grants and the platform sandbox's Seatbelt backend follow the spine",
+      "landed": [
+        {
+          "issue": 236,
+          "merge": "4d42ae41db5390efe7f94010900cb1c17f8dc966"
+        }
+      ]
+    },
+    {
+      "issue": 237,
+      "landed": [
+        {
+          "issue": 237,
+          "merge": "0954514d10c8b38c0d1d8ffd381263ac1b413ce5"
+        }
+      ]
+    },
+    {
+      "issue": 303,
+      "landed": [
+        {
+          "issue": 303,
+          "merge": "78b455f39d6eb8fa7499beaff88cd7b0366bbabe"
+        }
+      ]
+    },
+    {
+      "issue": 304,
+      "landed": [
+        {
+          "issue": 304,
+          "merge": "6a1966dc58018a69a7dfbc44cd4134726c0ef95a"
+        }
+      ]
+    }
+  ],
+  "started": "2026-10-15T20:06:11.000Z",
+  "landed": "2026-11-03T19:57:11.000Z",
+  "days": 18.99,
+  "weeks": {
+    "plan": "six weeks",
+    "design_change": null
+  }
+}
