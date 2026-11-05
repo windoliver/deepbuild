@@ -1758,6 +1758,44 @@ export interface AskAnsweredV4 {
   evidence?: Array<string>;
 }
 
+export type AskAnsweredV5PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.answered@5 */
+export interface AskAnsweredV5 {
+  v: 5;
+  id: string;
+  kind: "ask.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    answer: string;
+    plan_hash: string | null;
+    decision: "allow" | "deny" | "none";
+    via: "card" | "inbox" | "session" | "channel";
+    verified: boolean;
+    on: AskAnsweredV5PinnedTo;
+    token: string | null;
+    steps?: Array<number>;
+    words: string | null;
+    image: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.batched@1 */
 export interface AskBatched {
   v: 1;
@@ -2582,6 +2620,105 @@ export interface CardRuleSet {
     max_usd: number;
     card: string;
     via: "card" | "inbox";
+  };
+  evidence?: Array<string>;
+}
+
+/** channel.answered@1 */
+export interface ChannelAnswered {
+  v: 1;
+  id: string;
+  kind: "channel.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    channel: string;
+    thread_key: string;
+    answer: string;
+    proof: "device" | "account_link";
+  };
+  evidence?: Array<string>;
+}
+
+/** channel.conflict@1 */
+export interface ChannelConflict {
+  v: 1;
+  id: string;
+  kind: "channel.conflict";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    channel: string;
+    conflict: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** channel.delivered@1 */
+export interface ChannelDelivered {
+  v: 1;
+  id: string;
+  kind: "channel.delivered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    channel: string;
+    thread_key: string;
+    item: {
+      thread_key: string;
+      summary: string;
+      link: string;
+      answerable: "answer" | "view" | "cancel" | "closed";
+      options: Array<{
+        id: string;
+        label: string;
+      }>;
+      revision: number;
+      hub: string;
+      refused: string | null;
+      unpaired?: {
+        device: string;
+        by: string;
+      };
+    };
+    outcome: "delivered" | "stalled" | "timed_out" | "conflict";
+    ack: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** channel.refused@1 */
+export interface ChannelRefused {
+  v: 1;
+  id: string;
+  kind: "channel.refused";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    channel: string;
+    thread_key: string;
+    answer: string;
+    field?: "device" | "ask" | "revision" | "card_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id";
+    reason: string;
   };
   evidence?: Array<string>;
 }

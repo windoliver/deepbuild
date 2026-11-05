@@ -19,6 +19,7 @@ pub mod grammar;
 pub mod interval;
 pub mod kinds;
 pub mod ops;
+pub mod outline;
 pub mod registry;
 pub mod render;
 pub mod schedule;

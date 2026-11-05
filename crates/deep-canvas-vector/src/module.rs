@@ -61,6 +61,13 @@ fn manifest(implementation: &str) -> Manifest {
 }
 
 fn register(r: &mut Registrar, paint: fn(&mut View<'_>) -> Result<(), OpError>) {
+    // #443: an SVG's or a formula's parts as outlines, vector's entry in the core's
+    // `outline.source@1`.
+    r.outline_source(
+        "vector",
+        json!({"form": "vector", "fixture": crate::outline_source::fixture()}),
+        crate::outline_source::vector_fill,
+    );
     // The kind (Vector and formula `vector@1`), with its fields as the design lists them, drawn
     // in a frame as its imported outline (#1162).
     let field = |name: &'static str| Param {

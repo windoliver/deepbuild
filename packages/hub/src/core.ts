@@ -51,6 +51,7 @@ import { argsOf, groupUnder, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
+import { Channels, type ChannelAsk } from './channels.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, prUrlIn } from './forge.js';
@@ -482,6 +483,8 @@ export class Core {
   private lost = false;
   /** Unset until the start opened it: a start that fails before has nothing to close or ask. */
   private extensions: ExtensionHost | undefined;
+  /** The ways to reach you (#65), once the extensions are ready. */
+  private channels: Channels | undefined;
   /** The supervisor's runs (runs.ts). */
   private readonly runs: Runs;
   /** Each worktree's stack and every stack run a check started (#331, #332). */
@@ -949,6 +952,17 @@ export class Core {
     await this.replaySpool();
     // The replay is done: the extensions start, and each that can't is unloaded and named.
     await extensions.ready().catch((error: unknown) => process.stderr.write(`deep hub: ${error instanceof Error ? error.message : String(error)}\n`));
+    // Your channels (#65): the asks reach you where you said, and each answer a channel returns is checked here.
+    this.channels = new Channels({
+      root: this.root.dir, now: this.now, plant: this.options.plant, devices: this.devices,
+      loaded: () => extensions.channels(),
+      call: (name, op, item, ctx) => (op === 'deliver' ? extensions.channel(name, op, item!, ctx) : extensions.channel(name, op, null, ctx)),
+      asks: () => this.channelAsks(),
+      append: (kind, data, subject) => this.appendCore(kind, data, subject ? { subject } : {}),
+      answer: (handle, option, how) => this.answer({ ask: handle, option }, { role: how.proof === 'device' ? 'app' : 'cli' } as CallContext, how).then(() => undefined),
+      cancel: (handle) => this.appendCore('ask.cancelled', { answer: 'cancel', plan_hash: null, decision: 'none' }, { subject: handle }),
+    });
+    this.channels.start();
     // A session that ended with turns still to judge sends no hook again: they are judged now.
     for (const [id, cursor] of this.cursors) {
       if (typeof cursor.ended?.agent !== 'string' || typeof cursor.read !== 'number' || !Array.isArray(cursor.reached)) continue;
@@ -4732,6 +4746,8 @@ export class Core {
       case 'offer.save': return this.saveOffered(params, context);
       case 'staged.undo': return this.staging.undo(params);
       case 'device.pair': return this.pair(params);
+      case 'device.unpair': return this.unpair(params, context);
+      case 'channel.link': return this.link(params);
       case 'confirm.enroll': return this.enrollAgain(params, context);
       case 'extension.install': return this.install(params, context);
       case 'you.confirm': return this.confirmCommand(params, context);
@@ -5001,23 +5017,38 @@ export class Core {
    * and the core saves it as a decision for the ask's repo, or its session; an ask with neither, and a block's task
    * (#85), saves none.
    */
-  private async answer(params: Obj, context: CallContext): Promise<Obj> {
+  private async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link' }): Promise<Obj> {
     const { ask: handle, device: _device, signature: _signature, ...input } = params;
     if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>, as deep inbox lists it.', handle));
     const [row] = (await this.record.raw(`SELECT e.session_id AS session, e.project_id AS project, e.data AS data, a.status AS status FROM events e JOIN asks a ON a.id = e.id WHERE e.id = ? AND e.kind = 'ask.created'`, [handle.slice(4)])) as { session: string | null; project: string | null; data: string; status: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; answer an ask deep inbox lists.`, handle));
-    const answered = (): Promise<void> => this.asks.answer(this.connection(context.role === 'app' ? 'app' : 'cli'), handle, input).catch((error: unknown) => { throw asRefused(error); });
-    // A closed ask takes no answer: the asks core records the refusal, and there's nothing to confirm you for.
+    // A channel's answer with an account link (#65) is the asks core's as `channel`: that ask alone, never a decision.
+    const writer = channel?.proof === 'account_link' ? 'channel' : context.role === 'app' ? 'app' : 'cli';
+    const answered = (): Promise<void> => this.asks.answer(this.connection(writer), handle, input).catch((error: unknown) => { throw asRefused(error); });
+    // A closed ask takes no answer: the asks core records the refusal, and there's nothing to confirm you for. The
+    // first answer appended stands, and the refusal names it and where it came from (#65).
     if (row.status !== 'open' && row.status !== 'later') {
-      await answered();
-      throw new Refused(refusal('not_found', '/params/ask', `${handle} is closed.`, handle));
+      const first = row.status === 'answered' ? await this.firstAnswer(handle) : undefined;
+      // A hub that takes every answer, the last one written over the first: the planted wrong program.
+      if (first && this.options.plant === 'last-writer-wins' && typeof input.option === 'string') {
+        await this.appendCore('ask.answered', { answer: input.option, plan_hash: null, decision: 'none', via: 'card', verified: true, on: (JSON.parse(row.data) as { pinned_to: JsonValue }).pinned_to, token: null, words: null, image: null }, { subject: handle, v: 4 });
+        return { ask: handle, answer: input.option, scope: null };
+      }
+      await answered().catch((error: unknown) => { if (!first) throw error; });
+      throw new Refused(refusal('not_found', '/params/ask', first ? `${handle} was already answered ${first.answer} ${first.where}; the first answer stands, so ${String(input.option ?? 'this answer')} counts for nothing.` : `${handle} is closed.`, handle));
     }
     const ask = JSON.parse(row.data) as { key: string; question: string; options: { id: string; label: string; decision?: string }[]; pinned_to?: { ref?: string } };
     const chosen = ask.options.find((o) => o.id === input.option);
     if (input.option !== undefined && !chosen) {
       throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
     }
-    await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
+    // A channel's answer was checked by the channels (#65): a paired device's signature over the card it showed, or an account link.
+    if (!channel) await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
+    // A paired phone's yes binds the plan its card stood for, and its own token, as the app's click does.
+    if (channel?.proof === 'device' && chosen?.decision === 'allow') {
+      input.token = `${channel.channel}:${ulid(this.now())}`;
+      input.plan_hash = (await this.asks.card(handle)).plan?.hash ?? null;
+    }
     // From the CLI, the OS prompt that just confirmed you is the click an approval binds (#321): its token is minted here,
     // for an approval only, so any other answer is handed on as its twin from the app is (#34).
     if (context.role === 'cli' && chosen?.decision === 'allow' && input.token === undefined) input.token = `os-confirm:${ulid(this.now())}`;
@@ -5107,6 +5138,48 @@ export class Core {
     const device = `device:${ulid(this.now())}`;
     this.devices.pair(device, params.name, key, this.now());
     return { device };
+  }
+
+  /** The answer a closed ask took first, and where it came from: the channel that carried it, or the app or deep inbox. */
+  private async firstAnswer(handle: string): Promise<{ answer: string; where: string } | undefined> {
+    const [first] = (await this.record.raw(`SELECT json_extract(data, '$.answer') AS answer, json_extract(data, '$.via') AS via FROM events WHERE kind = 'ask.answered' AND subject = ? ORDER BY log_pos LIMIT 1`, [handle])) as { answer: string; via: string }[];
+    if (!first) return undefined;
+    const [by] = (await this.record.raw(`SELECT json_extract(data, '$.channel') AS channel FROM events WHERE kind = 'channel.answered' AND subject = ? AND json_extract(data, '$.answer') = ? ORDER BY log_pos LIMIT 1`, [handle, first.answer])) as { channel: string }[];
+    return { answer: first.answer, where: by ? `on the ${by.channel} channel` : first.via === 'inbox' ? 'from deep inbox' : first.via === 'session' ? 'in the session' : 'in the app' };
+  }
+  /** The asks as the channels render them (#65): the inbox's state of each, with its words, options and answer. */
+  private async channelAsks(): Promise<ChannelAsk[]> {
+    const rows = (await this.record.raw('SELECT id, question, options, answer FROM asks')) as { id: string; question: string | null; options: string | null; answer: string | null }[];
+    const texts = new Map(rows.map((r) => [`ask:${r.id}`, r]));
+    return (await this.asks.inbox()).map((row) => {
+      const t = texts.get(row.ask);
+      const options = t?.options ? (JSON.parse(t.options) as { id: string; label: string }[]).map((o) => ({ id: String(o.id), label: String(o.label) })) : [];
+      let answer: string | null = null;
+      try { answer = t?.answer ? String(JSON.parse(t.answer)) : null; } catch { answer = t?.answer ?? null; }
+      return { handle: row.ask, kind: row.kind, question: t?.question ?? '', options, status: row.status, outcome: row.outcome, answer };
+    });
+  }
+  /** Unpairs a device you paired, on the trusted path (#65): its signatures count for nothing, and it is told so. */
+  private async unpair(params: Obj, context: CallContext): Promise<Obj> {
+    const device = params.device;
+    if (typeof device !== 'string' || !/^device:[0-9A-Za-z]+$/.test(device)) throw new Refused(refusal('pattern', '/params/device', 'Name the device as device:<id>, as device.pair returned it.', device));
+    if (!this.devices.keyOf(device)) throw new Refused(refusal('not_found', '/params/device', `No paired device ${device}.`, device));
+    const { device: _unpaired, ...rest } = params;
+    await this.trusted(rest, context, `unpair ${device}, so what it signs counts for nothing`, device, 'unpair');
+    this.devices.unpair(device, this.now());
+    this.channels?.unpaired(device);
+    return { unpaired: device };
+  }
+  /** Links your account on a channel, once the OS confirms you (#65): its answers count for "I did it", taste and choice. */
+  private async link(params: Obj): Promise<Obj> {
+    const { channel, account } = params;
+    if (typeof channel !== 'string' || !/^[a-z][a-z0-9-]*$/.test(channel)) throw new Refused(refusal('pattern', '/params/channel', 'Name the channel as it registered.', channel));
+    if (typeof account !== 'string' || !account || account.length > 200) throw new Refused(refusal('type', '/params/account', 'Name your account on the channel.', account));
+    const why = await this.confirmer.you(`link the account ${account} on ${channel}, so its "I did it", taste and choice answers count`, { handle: `channel:${channel}`, revision: account });
+    if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was linked: the OS didn't confirm you (${why}).`, channel, true));
+    if (!this.channels) throw new Refused(refusal('unavailable', '', 'The hub has no channels yet; try again once it is ready.', channel, true));
+    this.channels.link(channel, account);
+    return { channel, account };
   }
 
   /** What feeds your numbers or labels is yours to run: an agent's word is never evidence. */
@@ -6424,6 +6497,7 @@ export class Core {
     await this.runs.settled();
     await this.checkouts.close().catch(() => undefined);
     await this.appendCore('hub.stopped', { reason }).catch(() => undefined);
+    this.channels?.stop();
     await this.extensions?.close();
     await this.supervisor.close();
     await this.record.close();
