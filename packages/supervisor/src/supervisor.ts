@@ -14,7 +14,7 @@ import { availableParallelism, constants, homedir, totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
 import type { JsonValue } from '@deepbuild/contracts';
-import { HELPER, scan, sha256, startNow, table, tokenOf, type Proc } from './procs.js';
+import { alive, HELPER, scan, sha256, startNow, table, tokenOf, type Proc } from './procs.js';
 import { bubblewrapWith } from './bubblewrap.js';
 import type { Egress } from './egress.js';
 import { markerOf, quote, real, seatbeltWith } from './seatbelt.js';
@@ -39,14 +39,6 @@ const FOLDED = ['process.starting', 'run.kept', 'process.tracked', 'process.ende
 type Folded = (typeof FOLDED)[number];
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
-};
 
 /** How many cleaned runs stay answerable by `status`, `wait` and `cleanup`, newest first. */
 const CLEANED_KEPT = 64;

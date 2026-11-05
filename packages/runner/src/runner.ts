@@ -1092,6 +1092,8 @@ class LocalRunner implements Runner {
       if (job.rec.state !== 'running' || job.resultAt) { clearInterval(t); return; }
       if (Date.now() - job.outputAt < ms) { last = undefined; return; }
       void groupCpu(job.rec.pgid!).then((now) => {
+        // Unknown samples break the idle interval; two failed OS reads never stop a healthy job.
+        if (now === null) { last = undefined; return; }
         if (last !== undefined && now === last) { clearInterval(t); void this.stop(job, 'timed_out'); }
         last = now;
         job.outputAt = Date.now() - ms + Math.min(ms, 1000);
@@ -1115,6 +1117,12 @@ class LocalRunner implements Runner {
       if (job.rec.state !== 'running' || job.ending) return;
       job.ending = true;
       const alive = await groupMembers(job.rec.pgid);
+      if (alive === null) {
+        // A later supervisor cleanup, not an unreadable process table, must prove its end.
+        job.rec.state = 'stopping';
+        job.unconfirmed = true;
+        return;
+      }
       const cleaned = await this.o.supervisor.cleanup(job.rec.job).catch(() => ({ left: ['unconfirmed'], stopped: [] as number[] }));
       const lingered = [...new Set([...alive, ...(alive.length ? cleaned.stopped : [])])];
       if (lingered.length) job.rec.lingered = lingered.map((pid) => `pid:${pid}`);
