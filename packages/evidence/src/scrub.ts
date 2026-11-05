@@ -15,15 +15,18 @@ interface Needle { match(text: Buffer, at: number, latin: string): number; rules
 /** Files a needle under its first three bytes with A-Z folded, and marks the bitmap so most positions cost one lookup. */
 function add(bits: Uint8Array, byKey: Map<number, Needle[]>, head: Uint8Array, needle: Needle): void {
   const key = FOLD[head[0]!]! << 16 | FOLD[head[1]!]! << 8 | FOLD[head[2]!]!;
-  bits[slot(key)] = 1;
+  const at = slot(key);
+  bits[at >>> 3]! |= 1 << (at & 7);
   const list = byKey.get(key);
   if (list) list.push(needle);
   else byKey.set(key, [needle]);
 }
+/** A key's place in the bitmap: one bit of 2^20, so a table is 128 KB. */
 const slot = (key: number) => Math.imul(key, 0x9e3779b1) >>> 12;
+const marked = (bits: Uint8Array, key: number) => { const at = slot(key); return (bits[at >>> 3]! & (1 << (at & 7))) !== 0; };
 
 const rules = loadRules();
-const keywordBits = new Uint8Array(1 << 20);
+const keywordBits = new Uint8Array(1 << 17);
 const keywords = new Map<number, Needle[]>();
 const folded = (bytes: Buffer) => (text: Buffer, at: number) => {
   for (let j = 0; j < bytes.length; j++) if (FOLD[text[at + j]!] !== bytes[j]) return -1;
@@ -51,7 +54,7 @@ export function scrubList(run: Run | undefined): string[] {
 
 interface Tables { bits: Uint8Array; byValue: Map<number, Needle[]>; short: Buffer[] }
 const NO_VALUES: Tables = { bits: keywordBits, byValue: new Map(), short: [] };
-// The tables for the last few value lists: the hub scrubs every hook by the same values, and building them copies a 1 MB bitmap.
+// The tables for the last few value lists: the hub scrubs every hook by the same values, and building them copies the bitmap.
 const cached = new Map<string, Tables>();
 const CACHED = 4;
 
@@ -112,7 +115,7 @@ function masksOf(text: Buffer, values: readonly string[], patterns: boolean): { 
   // One pass finds every candidate start, three bytes in, then checks it.
   for (let i = 2; i < text.length; i++) {
     key = (key << 8 | FOLD[text[i]!]!) & 0xffffff;
-    if (!bits[slot(key)]) continue;
+    if (!marked(bits, key)) continue;
     // Keywords only start the pattern pass.
     if (patterns) for (const needle of keywords.get(key) ?? []) if (needle.match(text, i - 2, latin) > 0) { if (needle.field) fields.push(i - 2); else hits.push([i - 2, needle.rules!]); }
     for (const needle of byValue.get(key) ?? []) { const end = needle.match(text, i - 2, latin); if (end > 0) masks.push([i - 2, end]); }

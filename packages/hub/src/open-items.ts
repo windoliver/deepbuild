@@ -44,7 +44,11 @@ export interface OpenItemsOptions {
   taskList(agent: string): TaskListFacts | undefined;
 }
 /** What one claim is read for. */
-export interface ClaimRead { session: string; agent: string; task: string; cwd: string; base: string; message: string; transcript: string | undefined; pr: string | undefined }
+export interface ClaimRead {
+  session: string; agent: string; task: string; cwd: string; base: string; message: string; transcript: string | undefined; pr: string | undefined;
+  /** Nothing but reads since the session's last claim (#82): the lines the change added are those it read then. */
+  same?: boolean;
+}
 
 /** One thing found open, with what it says beside its words. */
 interface Found extends Omit<LeftOpen, 'from'> { from: LeftOpen['from'] | 'review_thread'; resolved_by?: string }
@@ -56,6 +60,8 @@ const run = (cmd: string, args: string[], cwd: string): Promise<string> => new P
 });
 
 export class OpenItems {
+  /** Whether each task has an item a pending verdict opened still open (#82), once known. */
+  private readonly waiting = new Map<string, boolean>();
   constructor(private readonly o: OpenItemsOptions) {}
 
   /** An item's ID: its normalized text and scope (the planted normalizer drops numbers first). */
@@ -85,7 +91,7 @@ export class OpenItems {
   /** Reads one claim for what it leaves open and records each new item; a thread a reviewer resolved closes its own. */
   async atClaim(c: ClaimRead): Promise<void> {
     const found: Found[] = leftOpen(c.message);
-    const added = await this.added(c.cwd, c.base);
+    const added = c.same ? [] : await this.added(c.cwd, c.base);
     found.push(...placeholders(added));
     const docs = new Map<string, string[]>();
     for (const a of added) if (/\.(md|mdx|markdown|rst|txt)$/i.test(a.path)) docs.set(a.path, [...(docs.get(a.path) ?? []), a.text]);
@@ -167,6 +173,36 @@ export class OpenItems {
     }
   }
 
+  /**
+   * What a stop let through with its claim pending or INCONCLUSIVE still needs (#82; design: An agent says it's done):
+   * one open item per requirement, naming the run or your answer it waits for, from the claim's verdict. Raised again,
+   * the same item is the same record.
+   */
+  async stillNeeded(c: { session: string; agent: string; task: string; cwd: string }, needs: readonly string[]): Promise<void> {
+    const standing = await this.standing(c.task);
+    const core = this.o.connection(c.session, c.agent);
+    for (const text of needs) {
+      const item = this.idOf(text, c.cwd, c.task);
+      if (standing.get(item)?.open) continue;
+      const ts = this.o.now();
+      await this.o.append(core, { v: 3, id: ulid(ts), kind: 'open_item.opened', ts, data: { task_ref: c.task, text: text.slice(0, 8192), item, from: 'verdict' } });
+    }
+    this.waiting.set(c.task, true);
+  }
+  /** Closes each item a pending claim's verdict opened (`verdict`) that its newest verdict no longer waits for (#82). */
+  async settled(c: { session: string; agent: string; task: string }, needs: readonly string[]): Promise<void> {
+    // Read from the record once per task after a start; known none open, there is nothing to read.
+    if (this.waiting.get(c.task) === false) return;
+    const still = new Set(needs);
+    const core = this.o.connection(c.session || undefined, c.agent);
+    let left = false;
+    for (const s of (await this.standing(c.task)).values()) {
+      if (!s.open || s.from !== 'verdict') continue;
+      if (still.has(s.text)) left = true;
+      else await this.closed(core, c.task, s.item, s.text, 'the run or answer it waited for came');
+    }
+    this.waiting.set(c.task, left);
+  }
   private async opened(core: Connection, task: string, item: string, f: Found): Promise<void> {
     const ts = this.o.now();
     await this.o.append(core, { v: 2, id: ulid(ts), kind: 'open_item.opened', ts, data: { task_ref: task, text: f.text.slice(0, 8192), item, from: f.from, ...(f.resolved_by ? { resolved_by: f.resolved_by.slice(0, 256) } : {}) } });

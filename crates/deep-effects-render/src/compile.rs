@@ -187,7 +187,18 @@ pub fn compile_planted(
         return Err(refused);
     }
     let checked = check::check_with(&read, planted)?;
+    let multi = checked
+        .op
+        .steps
+        .values()
+        .any(|s| deep_canvas_effects::table::multi_dispatch(&s.op));
     let wgsl = match checked.op.kind {
+        // A sort, a scan or a compaction runs on the shipped kernels (structural.wgsl), never on
+        // WGSL the core writes from its steps.
+        Kind::Compute if multi => format!(
+            "// {}: shipped multi-dispatch steps (structural.wgsl).\n@compute @workgroup_size(1)\nfn cs() {{}}\n",
+            checked.op.id
+        ),
         Kind::Pass => emit::pass(&checked, options),
         Kind::Compute => emit::compute(&checked, options),
         Kind::Material => emit::material_harness(&checked, options),

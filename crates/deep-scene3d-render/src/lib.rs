@@ -11,6 +11,7 @@ pub mod ao;
 pub mod env;
 pub mod maps;
 mod mesh;
+mod motion;
 mod oit;
 mod op;
 pub mod shadow;
@@ -1199,6 +1200,9 @@ pub type Camera = ([f64; 16], [f64; 3], f64);
 
 pub struct Renderer {
     planted: Planted,
+    /// Motion blur by velocity (#419): its pipelines, and this frame's pass when it blurs.
+    motion: motion::MotionPass,
+    motion_frame: Option<motion::Frame>,
     epoch: u64,
     /// The material maps' textures and bind groups (#423), and the look's default taps.
     maps: maps::Store,
@@ -2426,6 +2430,8 @@ impl Renderer {
                 RESOLVE_PASS,
             ],
             meshes: BTreeMap::new(),
+            motion: motion::MotionPass::default(),
+            motion_frame: None,
             batches: BTreeMap::new(),
             atlas,
             picks: BTreeMap::new(),
@@ -2483,7 +2489,8 @@ impl Renderer {
         let linear = texture(
             "scene3d linear",
             LINEAR,
-            attach | wgpu::TextureUsages::TEXTURE_BINDING,
+            // Motion blur's resolve copies the frame back in (#419).
+            attach | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         );
         // Effects read the object-ID and depth targets after geometry.
         let ids = texture(
@@ -3278,6 +3285,18 @@ impl Renderer {
             let order = &self.order;
             self.batches.retain(|id, _| order.contains(id));
         }
+        // Motion blur by velocity (#419), once every solid's mesh is built.
+        self.motion_frame = match (&scene.motion, self.targets.as_ref()) {
+            (Some(m), Some(t)) => self.motion.prepare(
+                device,
+                scene,
+                m,
+                &self.meshes,
+                &t.linear_view,
+                t.size,
+            ),
+            _ => None,
+        };
     }
 
     /// [`Renderer::prepare`] for a scene that differs from the last one it prepared only in its
@@ -4200,6 +4219,7 @@ impl Renderer {
             _ => None,
         };
         let staging = resolve.as_ref().map(|_| self.oit.staging.clone());
+        let motion = self.motion_frame.take().map(|m| (m, t.linear.clone()));
         let geometry: Job = Box::new(move |encoder| {
             if let Some((heads, ..)) = &resolve {
                 encoder.clear_buffer(heads, 0, None);
@@ -4216,7 +4236,14 @@ impl Renderer {
                     timestamps,
                 )
             });
+            // Motion blur by velocity resolves the finished geometry, before the effects (#419).
+            let blur = |encoder: &mut wgpu::CommandEncoder| {
+                if let Some((m, linear)) = &motion {
+                    m.record(encoder, linear, &profiler);
+                }
+            };
             let Some((_, info, pipeline, fallback, binds, draws)) = &resolve else {
+                blur(encoder);
                 return;
             };
             timed(
@@ -4274,6 +4301,7 @@ impl Renderer {
             if let Some(staging) = &staging {
                 encoder.copy_buffer_to_buffer(info, 0, staging, 0, 16);
             }
+            blur(encoder);
         });
         let mut jobs: Vec<(String, Job)> = Vec::new();
         if let Some(s) = shadow {

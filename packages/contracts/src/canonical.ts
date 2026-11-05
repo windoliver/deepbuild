@@ -30,5 +30,14 @@ const text = (value: JsonValue): string => {
   return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${text(value[key]!)}`).join(',')}}`;
 };
 
+/**
+ * Legacy key-sorted JSON.stringify encoding used by check and verdict hashes and conformance comparisons.
+ * Undefined members are omitted. Integer-like keys retain JSON.stringify's numeric enumeration order, so this
+ * is not RFC 8785 and must not replace canonicalize or the frozen replay-plan encoding. Existing hashes keep
+ * these bytes; changing that format needs a separately versioned migration.
+ */
+export const stableText = (value: unknown): string => JSON.stringify(value, (_, v: unknown) =>
+  (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v)) ?? 'undefined';
+
 export const canonicalize = (value: JsonValue): Uint8Array => new TextEncoder().encode(canonicalText(value));
 export const sha256Hex = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');

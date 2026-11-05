@@ -195,6 +195,21 @@ impl<'d> Texts<'d> {
 
 /// The number rules over one item.
 fn numbers_of(doc: &Value, texts: &Texts<'_>, id: &String, item: &Value, issues: &mut Vec<Issue>) {
+    // An outline in `outline.source@1`'s text form shows its string as text@1 shows its own, so a
+    // 3D title is displayed text (#443; Builder `extrude`: outlines from text, paths and SVG).
+    let outline = member(item, "params").and_then(|p| member(p, "outline"));
+    if let Some(Value::String(text)) = outline.and_then(|o| member(o, "text")) {
+        if texts.shows_number(text) {
+            issues.push(Issue::error(
+                "number_unsourced",
+                id,
+                format!("items/{id}/params/outline/text"),
+                json!(text),
+                "the title shows a number with no source; mark it a name in the honest_numbers check input, or bind or compute the number",
+            ));
+        }
+        return;
+    }
     if !kind_text(item).is_some_and(|k| k.starts_with("text@")) {
         return;
     }
