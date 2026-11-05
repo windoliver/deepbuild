@@ -12,6 +12,8 @@ use wgpu::util::DeviceExt as _;
 use crate::mesh::{Mesh, FLOATS};
 
 const SHADER: &str = include_str!("motion.wgsl");
+/// The label the motion passes' GPU time is reported and charged under.
+pub const MOTION_PASS: &str = "scene3d.motion";
 const VELOCITY: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 const TILES: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 const RESOLVED: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -22,6 +24,8 @@ struct Uniform {
     clip_t: [[f32; 4]; 4],
     clip_o: [[f32; 4]; 4],
     clip_c: [[f32; 4]; 4],
+    sky_o: [[f32; 4]; 4],
+    sky_c: [[f32; 4]; 4],
     fwd: [f32; 4],
     size: [f32; 4],
     tile: [u32; 4],
@@ -70,14 +74,28 @@ pub struct Frame {
     size: [u32; 2],
 }
 
+/// The pass's targets at one size, kept from frame to frame.
+struct Targets {
+    size: [u32; 2],
+    tiles: [u32; 2],
+    velocity: wgpu::TextureView,
+    depth: wgpu::TextureView,
+    tile_max: wgpu::TextureView,
+    near: wgpu::TextureView,
+    resolved: wgpu::Texture,
+    resolved_view: wgpu::TextureView,
+}
+
 #[derive(Default)]
 pub struct MotionPass {
     pipes: Option<Pipes>,
+    targets: Option<Targets>,
     /// Pipelines this pass compiled, by name, for the frame's report.
     pub compiled: Vec<&'static str>,
 }
 
-fn clip(cam: &Camera, jitter: [f64; 2], size: [u32; 2]) -> [[f32; 4]; 4] {
+/// A camera's jittered clip matrix, rows.
+fn clip_rows(cam: &Camera, jitter: [f64; 2], size: [u32; 2]) -> [[f64; 4]; 4] {
     let mut rows = cam.clip(Depth::Reversed);
     let [jx, jy] = [
         2.0 * jitter[0] / f64::from(size[0].max(1)),
@@ -88,6 +106,11 @@ fn clip(cam: &Camera, jitter: [f64; 2], size: [u32; 2]) -> [[f32; 4]; 4] {
         rows[0][c] += jx * wc;
         rows[1][c] += jy * wc;
     }
+    rows
+}
+
+/// Rows to WGSL's column-major matrix.
+fn columns(rows: &[[f64; 4]; 4]) -> [[f32; 4]; 4] {
     let mut m = [[0f32; 4]; 4];
     for (r, row) in rows.iter().enumerate() {
         for (c, v) in row.iter().enumerate() {
@@ -95,6 +118,53 @@ fn clip(cam: &Camera, jitter: [f64; 2], size: [u32; 2]) -> [[f32; 4]; 4] {
         }
     }
     m
+}
+
+fn clip(cam: &Camera, jitter: [f64; 2], size: [u32; 2]) -> [[f32; 4]; 4] {
+    columns(&clip_rows(cam, jitter, size))
+}
+
+fn product(a: &[[f64; 4]; 4], b: &[[f64; 4]; 4]) -> [[f64; 4]; 4] {
+    let mut o = [[0.0; 4]; 4];
+    for r in 0..4 {
+        for c in 0..4 {
+            o[r][c] = (0..4).map(|k| a[r][k] * b[k][c]).sum();
+        }
+    }
+    o
+}
+
+/// A 4 × 4 inverse by Gauss–Jordan elimination with partial pivoting.
+fn inverse(m: &[[f64; 4]; 4]) -> [[f64; 4]; 4] {
+    let mut a = *m;
+    let mut inv = [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ];
+    for c in 0..4 {
+        let p = (c..4)
+            .max_by(|x, y| a[*x][c].abs().total_cmp(&a[*y][c].abs()))
+            .unwrap_or(c);
+        a.swap(c, p);
+        inv.swap(c, p);
+        let d = if a[c][c].abs() < 1e-300 { 1.0 } else { a[c][c] };
+        for k in 0..4 {
+            a[c][k] /= d;
+            inv[c][k] /= d;
+        }
+        for r in 0..4 {
+            if r != c {
+                let f = a[r][c];
+                for k in 0..4 {
+                    a[r][k] -= f * a[c][k];
+                    inv[r][k] -= f * inv[c][k];
+                }
+            }
+        }
+    }
+    inv
 }
 
 fn rows(m: &Affine3) -> [[f32; 4]; 3] {
@@ -231,16 +301,27 @@ impl MotionPass {
                 count: m.count,
             });
         }
+        // With nothing drawn the background still travels under the camera's move: one unused
+        // instance keeps the buffer bound.
         if instances.is_empty() {
-            return None;
+            instances.push(Instance::zeroed());
         }
         let cam = &scene.camera;
         let tile = motion.tile_px.max(1);
         let tiles = [size[0].div_ceil(tile), size[1].div_ceil(tile)];
+        let back = inverse(&clip_rows(cam, scene.jitter, size));
         let uniform = Uniform {
             clip_t: clip(cam, scene.jitter, size),
             clip_o: clip(&motion.open, scene.jitter, size),
             clip_c: clip(&motion.close, scene.jitter, size),
+            sky_o: columns(&product(
+                &clip_rows(&motion.open, scene.jitter, size),
+                &back,
+            )),
+            sky_c: columns(&product(
+                &clip_rows(&motion.close, scene.jitter, size),
+                &back,
+            )),
             fwd: [
                 cam.forward[0] as f32,
                 cam.forward[1] as f32,
@@ -267,49 +348,58 @@ impl MotionPass {
             contents: bytemuck::cast_slice(&instances),
             usage: wgpu::BufferUsages::VERTEX,
         });
-        use wgpu::TextureUsages as T;
-        let velocity = texture(
-            d,
-            "scene3d.motion velocity",
-            size,
-            VELOCITY,
-            T::RENDER_ATTACHMENT | T::TEXTURE_BINDING,
-        );
-        let depth = texture(
-            d,
-            "scene3d.motion depth",
-            size,
-            wgpu::TextureFormat::Depth32Float,
-            T::RENDER_ATTACHMENT,
-        );
-        let tile_max = texture(
-            d,
-            "scene3d.motion tiles",
-            tiles,
-            TILES,
-            T::STORAGE_BINDING | T::TEXTURE_BINDING,
-        );
-        let near = texture(
-            d,
-            "scene3d.motion near",
-            tiles,
-            TILES,
-            T::STORAGE_BINDING | T::TEXTURE_BINDING,
-        );
-        let resolved = texture(
-            d,
-            "scene3d.motion resolved",
-            size,
-            RESOLVED,
-            T::STORAGE_BINDING | T::COPY_SRC,
-        );
-        let view = |t: &wgpu::Texture| t.create_view(&Default::default());
-        let (velocity_view, tile_view, near_view, resolved_view) = (
-            view(&velocity),
-            view(&tile_max),
-            view(&near),
-            view(&resolved),
-        );
+        if !self
+            .targets
+            .as_ref()
+            .is_some_and(|t| t.size == size && t.tiles == tiles)
+        {
+            use wgpu::TextureUsages as T;
+            let view = |t: &wgpu::Texture| t.create_view(&Default::default());
+            let resolved = texture(
+                d,
+                "scene3d.motion resolved",
+                size,
+                RESOLVED,
+                T::STORAGE_BINDING | T::COPY_SRC,
+            );
+            self.targets = Some(Targets {
+                size,
+                tiles,
+                velocity: view(&texture(
+                    d,
+                    "scene3d.motion velocity",
+                    size,
+                    VELOCITY,
+                    T::RENDER_ATTACHMENT | T::TEXTURE_BINDING,
+                )),
+                depth: view(&texture(
+                    d,
+                    "scene3d.motion depth",
+                    size,
+                    wgpu::TextureFormat::Depth32Float,
+                    T::RENDER_ATTACHMENT,
+                )),
+                tile_max: view(&texture(
+                    d,
+                    "scene3d.motion tiles",
+                    tiles,
+                    TILES,
+                    T::STORAGE_BINDING | T::TEXTURE_BINDING,
+                )),
+                near: view(&texture(
+                    d,
+                    "scene3d.motion near",
+                    tiles,
+                    TILES,
+                    T::STORAGE_BINDING | T::TEXTURE_BINDING,
+                )),
+                resolved_view: view(&resolved),
+                resolved,
+            });
+        }
+        let tg = self.targets.as_ref().expect("made above");
+        let (velocity_view, tile_view, near_view, resolved_view) =
+            (&tg.velocity, &tg.tile_max, &tg.near, &tg.resolved_view);
         let group = |pipe: &wgpu::ComputePipeline, entries: &[(u32, wgpu::BindingResource)]| {
             d.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("scene3d.motion"),
@@ -360,9 +450,9 @@ impl MotionPass {
             instances,
             draw_bind,
             binds,
-            velocity: velocity_view,
-            depth: view(&depth),
-            resolved,
+            velocity: velocity_view.clone(),
+            depth: tg.depth.clone(),
+            resolved: tg.resolved.clone(),
             tiles,
             size,
         })
@@ -371,8 +461,25 @@ impl MotionPass {
 
 impl Frame {
     /// The velocity pass, the two tile passes and the gather; the resolved frame then replaces
-    /// `linear`.
-    pub fn record(&self, encoder: &mut wgpu::CommandEncoder, linear: &wgpu::Texture) {
+    /// `linear`. Both passes are timed as [`MOTION_PASS`], so the meter charges them.
+    pub fn record(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        linear: &wgpu::Texture,
+        profiler: &Option<crate::Profiler>,
+    ) {
+        let query = |encoder: &mut wgpu::CommandEncoder| {
+            profiler
+                .as_ref()
+                .map(|p| crate::status::lock(p).begin_pass_query(MOTION_PASS, encoder))
+        };
+        let end = |encoder: &mut wgpu::CommandEncoder,
+                   q: Option<wgpu_profiler::GpuProfilerQuery>| {
+            if let (Some(p), Some(q)) = (profiler, q) {
+                crate::status::lock(p).end_query(encoder, q);
+            }
+        };
+        let q = query(encoder);
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("scene3d.motion velocity"),
@@ -393,6 +500,7 @@ impl Frame {
                     }),
                     stencil_ops: None,
                 }),
+                timestamp_writes: q.as_ref().and_then(|q| q.render_pass_timestamp_writes()),
                 ..Default::default()
             });
             pass.set_pipeline(&self.pipes[0]);
@@ -410,10 +518,12 @@ impl Frame {
                 pass.draw_indexed(0..dr.count, 0, k as u32..k as u32 + 1);
             }
         }
+        end(encoder, q);
+        let q = query(encoder);
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("scene3d.motion resolve"),
-                timestamp_writes: None,
+                timestamp_writes: q.as_ref().and_then(|q| q.compute_pass_timestamp_writes()),
             });
             for (k, (pipe, bind)) in self.computes.iter().zip(&self.binds).enumerate() {
                 pass.set_pipeline(pipe);
@@ -425,6 +535,7 @@ impl Frame {
                 }
             }
         }
+        end(encoder, q);
         encoder.copy_texture_to_texture(
             self.resolved.as_image_copy(),
             linear.as_image_copy(),

@@ -6,6 +6,10 @@ struct U {
     clip_t: mat4x4<f32>,
     clip_o: mat4x4<f32>,
     clip_c: mat4x4<f32>,
+    // Where nothing is drawn, the background at infinity (or the far plane) carried by the camera
+    // alone: clip at t − s/2 and t + s/2 of a frame point at t's depth 0.
+    sky_o: mat4x4<f32>,
+    sky_c: mat4x4<f32>,
     // The view's forward axis and −forward·eye: a world point's view depth.
     fwd: vec4<f32>,
     // Width, height, taps, the travel cap in px.
@@ -77,14 +81,37 @@ fn fs(i: Out) -> @location(0) vec4<f32> {
     return vec4<f32>(v, i.z, 1.0);
 }
 
+// A pixel's travel, view depth and coverage; where nothing drew, the background's travel under
+// the camera's move, far away and uncovered.
+fn vel_at(p: vec2<i32>) -> vec4<f32> {
+    let t = textureLoad(vel, p, 0);
+    if (t.w > 0.0) {
+        return t;
+    }
+    let ndc = vec4<f32>((f32(p.x) + 0.5) / u.size.x * 2.0 - 1.0, 1.0 - (f32(p.y) + 0.5) / u.size.y * 2.0, 0.0, 1.0);
+    let o = u.sky_o * ndc;
+    let c = u.sky_c * ndc;
+    var v = vec2<f32>(0.0);
+    if (o.w > 0.0 && c.w > 0.0) {
+        v = to_px(c) - to_px(o);
+        let l = length(v);
+        if (l > u.size.w) {
+            v = v * (u.size.w / l);
+        }
+    }
+    return vec4<f32>(v, 1e9, 0.0);
+}
+
 // Half the travel: the shutter is centred on the frame's time.
 fn half_at(p: vec2<i32>) -> vec2<f32> {
-    return textureLoad(vel, p, 0).xy * 0.5;
+    return vel_at(p).xy * 0.5;
 }
 
 var<workgroup> lanes: array<vec2<f32>, 64>;
+var<workgroup> spreads: array<f32, 64>;
 
-// One workgroup per tile: 64 lanes each take every 64th pixel of it, then fold to the longest.
+// One workgroup per tile: 64 lanes each take every 64th pixel of it and fold to the longest half
+// travel; then how far any pixel's differs from it (its spread), for the gather's fast path.
 @compute @workgroup_size(64)
 fn tile(@builtin(workgroup_id) w: vec3<u32>, @builtin(local_invocation_index) l: u32) {
     let n = i32(u.tile.x);
@@ -107,30 +134,51 @@ fn tile(@builtin(workgroup_id) w: vec3<u32>, @builtin(local_invocation_index) l:
         }
         workgroupBarrier();
     }
+    let top = lanes[0];
+    var spread = 0.0;
+    for (var k = i32(l); k < n * n; k += 64) {
+        let p = vec2<i32>(w.xy) * n + vec2<i32>(k % n, k / n);
+        if (p.x < size.x && p.y < size.y) {
+            spread = max(spread, distance(half_at(p), top));
+        }
+    }
+    spreads[l] = spread;
+    workgroupBarrier();
+    for (var stride = 32u; stride > 0u; stride = stride / 2u) {
+        if (l < stride) {
+            spreads[l] = max(spreads[l], spreads[l + stride]);
+        }
+        workgroupBarrier();
+    }
     if (l == 0u) {
-        textureStore(tiles_out, vec2<i32>(w.xy), vec4<f32>(lanes[0], 0.0, 0.0));
+        textureStore(tiles_out, vec2<i32>(w.xy), vec4<f32>(top, spreads[0], 0.0));
     }
 }
 
+// Each tile's neighborhood: the longest half travel of the 3 × 3 tiles around it, and whether
+// every pixel there moves alike (within a hundredth of a pixel), the gather's fast path.
 @compute @workgroup_size(1)
 fn near(@builtin(global_invocation_id) g: vec3<u32>) {
     if (g.x >= u.tile.y || g.y >= u.tile.z) {
         return;
     }
+    let mid = textureLoad(tiles_in, vec2<i32>(g.xy), 0).xy;
     var best = vec2<f32>(0.0);
+    var alike = true;
     for (var dy = -1; dy <= 1; dy++) {
         for (var dx = -1; dx <= 1; dx++) {
             let t = vec2<i32>(g.xy) + vec2<i32>(dx, dy);
             if (t.x < 0 || t.y < 0 || t.x >= i32(u.tile.y) || t.y >= i32(u.tile.z)) {
                 continue;
             }
-            let m = textureLoad(tiles_in, t, 0).xy;
-            if (length(m) > length(best)) {
-                best = m;
+            let m = textureLoad(tiles_in, t, 0);
+            if (length(m.xy) > length(best)) {
+                best = m.xy;
             }
+            alike = alike && m.z < 0.005 && distance(m.xy, mid) < 0.005;
         }
     }
-    textureStore(near_out, vec2<i32>(g.xy), vec4<f32>(best, 0.0, 0.0));
+    textureStore(near_out, vec2<i32>(g.xy), vec4<f32>(best, select(0.0, 1.0, alike), 0.0));
 }
 
 // A fixed hash of a pixel in [−½, ½): the taps' offset, never the frame number.
@@ -157,14 +205,27 @@ fn gather(@builtin(global_invocation_id) g: vec3<u32>) {
         return;
     }
     let here = textureLoad(lin, p, 0);
-    let vn = textureLoad(near_in, p / i32(u.tile.x), 0).xy;
+    let nb = textureLoad(near_in, p / i32(u.tile.x), 0);
+    let vn = nb.xy;
     if (length(vn) < 0.5) {
         textureStore(out, p, here);
         return;
     }
     let taps = min(u32(u.size.z), MAX_TAPS);
     let j = hash(g.x, g.y);
-    let vx = textureLoad(vel, p, 0);
+    let vx = vel_at(p);
+    // Every pixel around moves alike: each shutter time's trace lands on the surface it left,
+    // so the pixel is the mean of the frame along its travel (where that stays in the frame).
+    let reach = vec2<i32>(ceil(abs(vx.xy) * 0.5)) + 1;
+    if (nb.z > 0.5 && all(p - reach >= vec2<i32>(0)) && all(p + reach < size)) {
+        var sum = vec3<f32>(0.0);
+        for (var s = 0u; s < taps; s++) {
+            let tau = (f32(s) + 0.5) / f32(taps) - 0.5;
+            sum += textureLoad(lin, vec2<i32>(floor(vec2<f32>(p) + 0.5 - vx.xy * tau)), 0).rgb;
+        }
+        textureStore(out, p, vec4<f32>(sum / f32(taps), here.a));
+        return;
+    }
     let stays = length(vx.xy) < 0.5;
     var speeds: array<vec2<f32>, 65>;
     var n = 1u;
@@ -179,7 +240,7 @@ fn gather(@builtin(global_invocation_id) g: vec3<u32>) {
         if (q.x < 0 || q.y < 0 || q.x >= size.x || q.y >= size.y || all(q == p)) {
             continue;
         }
-        let c = textureLoad(vel, q, 0);
+        let c = vel_at(q);
         let z = select(1e9, c.z, c.w > 0.0);
         let st = length(c.xy) < 0.5;
         if ((st && !still) || (st == still && z > behind_z)) {
@@ -211,7 +272,7 @@ fn gather(@builtin(global_invocation_id) g: vec3<u32>) {
                 continue;
             }
             let q = vec2<i32>(at);
-            let found = textureLoad(vel, q, 0);
+            let found = vel_at(q);
             let z = select(1e9, found.z, found.w > 0.0);
             if (length(found.xy - v) <= max(1.0, 0.25 * length(v)) && (best.x < 0 || z < best_z)) {
                 best = q;
