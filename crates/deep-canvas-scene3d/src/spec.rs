@@ -706,6 +706,9 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             unit("catch_strength", 1.0, 1.0, 0.5),
             flag("unlit"),
             flag("double_sided"),
+            // A `gpu.material@1` item whose outputs lay over these per pixel (#429); the sweep
+            // leaves it unset, since the fixture holds no operator.
+            p("op", "ID", "", Value::Null, S, Value::Null, Value::Null),
         ],
         reads: None,
         fixture: json!({"it": item("material@1", json!({"roughness": 0.4}))}),
@@ -748,6 +751,39 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             ],
             reads: None,
             fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
+        },
+        // #424: the cutaway and the instancer.
+        "cutaway@1" => Spec {
+            kind: "cutaway@1",
+            module: "scene3d",
+            params: vec![
+                p("planes", "[{normal, offset}] ≤ 4", "m", json!([]), S, json!([{"normal": [1, 0, 0], "offset": 0}]), json!([{"normal": [1, 0, 0], "offset": 0.5}])),
+                p("mode", "union | intersect", "", json!("union"), S, json!("union"), json!("intersect")),
+                p("applies_to", "collection | all", "", json!("all"), S, json!("all"), json!("all")),
+                p("cap", "none | role", "", json!("none"), S, json!("none"), json!("muted")),
+                p("class", "view | document", "", json!("view"), S, json!("view"), json!("document")),
+                p("shadows", "cut | whole", "", json!("cut"), S, json!("cut"), json!("whole")),
+                p("cap_light", "auto | lit | flat", "", json!("auto"), S, json!("auto"), json!("flat")),
+            ],
+            reads: None,
+            fixture: json!({"it": item("cutaway@1", json!({"planes": [{"normal": [1, 0, 0], "offset": 0}]}))}),
+        },
+        "instance@1" => Spec {
+            kind: "instance@1",
+            module: "scene3d",
+            params: vec![
+                p("of", "[ID] ≤ 64", "", Value::Null, G, Value::Null, Value::Null),
+                p("proto", "u16 column", "", Value::Null, G, Value::Null, Value::Null),
+                p("ids", "u32 column", "", Value::Null, G, Value::Null, Value::Null),
+                p("pos", "vec3 column", "m", Value::Null, G, Value::Null, Value::Null),
+                p("rot", "quat column", "", Value::Null, G, Value::Null, Value::Null),
+                p("yaw", "f32 column", "deg", Value::Null, G, Value::Null, Value::Null),
+                p("scale", "vec3 | f32 column", "", json!(1), G, Value::Null, Value::Null),
+                p("attrs", "{name → column}", "", Value::Null, G, Value::Null, Value::Null),
+                p("hidden", "u32 column", "", Value::Null, G, Value::Null, Value::Null),
+            ],
+            reads: None,
+            fixture: json!({}),
         },
         "puff@1" => Spec {
             kind: "puff@1",

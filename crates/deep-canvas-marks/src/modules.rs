@@ -125,7 +125,7 @@ fn placed_items(v: &mut View<'_>) -> Result<Map<String, Value>, OpError> {
 
 /// An item as the marks read it: its fields, at its world transform, keeping its relations and
 /// a box-point pivot, which a transform doesn't hold, with what channels write on them (#221).
-fn item_json(fields: &Fields, world: Option<&Transform>) -> Value {
+pub fn item_json(fields: &Fields, world: Option<&Transform>) -> Value {
     let mut item = fields.to_json();
     let Some(map) = item.as_object_mut() else {
         return item;
@@ -272,7 +272,7 @@ fn register_text(r: &mut Registrar) {
     r.operator(
         "counter",
         "items",
-        &["core.lowered", "refs", "reading", "view(locale)"],
+        &["core.fields", "refs", "reading", "view(locale)"],
         &["text.counter"],
     )
     .applies(is_bound_text)
@@ -403,7 +403,8 @@ fn is_animated(doc: &Value, id: &str, item: &Value) -> bool {
 
 /// What a bound value or counter shows, its numbers in the view's locale.
 fn counter(v: &mut View<'_>) -> Result<(), OpError> {
-    let item = v.json("core.lowered")?.ok_or_else(|| missing(v))?;
+    // The evaluated item: a keyed data value its template reads rides on it (motion@1).
+    let item = fields_of(v)?;
     let doc = v.document()?;
     let record = record_of(v.outside()?);
     let locale = v.locale()?;
@@ -1631,7 +1632,13 @@ impl relations::Bounds for Runs<'_> {
 fn relations_op(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
     let frame = relations::Frame::of(object_or_empty(Some(doc)));
+    // A relation reads its target where it draws: frames laid out first (#375), so an item
+    // placed beside a frame's child reads the child's laid-out box (#1162).
     let mut items = placed_items(v)?;
+    scene::as_written(object_or_empty(Some(doc)), &mut items);
+    let mut items = scene::laid_out(object_or_empty(Some(doc)), &items)
+        .map_err(refused)?
+        .into_owned();
     // Each item's own `at.pos`, before its parents: what a relation adds after it.
     let offsets: BTreeMap<String, [f64; 2]> = v
         .every("core.transform")?

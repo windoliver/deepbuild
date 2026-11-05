@@ -90,6 +90,13 @@ export type Plant =
   | 'git-inherits-env'
   // #907's: a cpu.slot pool slow runs may fill, and loop facts that count background subagents but not commands.
   | 'fills-every-slot' | 'background-subagents-only'
+  // #1015's: matched commands left as written, a Codex retry denied again, every cargo call leased, a release on the
+  // parent's exit, memory pressure ignored, an exclusive GPU lease beside shared ones, and scripts/lease run directly.
+  | 'runs-matched-as-written' | 'denies-every-retry' | 'leases-every-cargo' | 'releases-on-parent-exit' | 'ignores-memory-pressure'
+  | 'exclusive-beside-shared' | 'lease-script-runs-directly'
+  // #1017's: a store that links its folders in, a manifest that knows only Cargo and npm, the nearest key cloned, a clone
+  // placed whatever the worktree's sources, a store sessions can write, and a reclaim that ignores open files.
+  | 'product-symlinks' | 'product-hard-links' | 'products-cargo-npm-only' | 'nearest-key' | 'places-stale' | 'store-writable' | 'reclaims-open-worktree'
   // #874's: a declared surface never carried to the base checkout, a stand-in's hash never recorded, a stand-in built
   // where the part already starts, and a pass on a stand-in taken as proof.
   | 'stand-in-surface-dropped' | 'stand-in-unrecorded' | 'stand-in-always' | 'stand-in-pass-proves'
@@ -112,7 +119,10 @@ export type Plant =
   | 'normalizer-drops-numbers' | 'pr-body-only' | 'resolved-counts-closed' | 'completed-closes-item'
   // #669's: a command check's runner that reads a masked exit as a clean pass, a stop reply whose line says PASS with no
   // verdict behind it, and a status question sent on to the model.
-  | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model';
+  | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model'
+  // #1016's: a jobserver of its own for each build, a pipe topped up while a build runs, and a runner's share that
+  // ignores the builds running beside it.
+  | 'jobserver-per-build' | 'refills-while-running' | 'share-ignores-running-build';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -157,6 +167,9 @@ const PLANTS: readonly string[] = [
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
+  'runs-matched-as-written', 'denies-every-retry', 'leases-every-cargo', 'releases-on-parent-exit', 'ignores-memory-pressure',
+  'exclusive-beside-shared', 'lease-script-runs-directly',
+  'product-symlinks', 'product-hard-links', 'products-cargo-npm-only', 'nearest-key', 'places-stale', 'store-writable', 'reclaims-open-worktree',
   'any-nonzero-base-exit',
   'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
@@ -167,6 +180,7 @@ const PLANTS: readonly string[] = [
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
+  'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
