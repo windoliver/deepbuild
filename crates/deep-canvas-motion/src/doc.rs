@@ -296,12 +296,40 @@ pub struct Motion {
     pub frame_rate: (u32, u32),
     /// Every enum channel's values, each once; an enum key holds its value's index here.
     pub labels: Vec<String>,
+    /// Each reversing time remap (Time remap; #429): the recipe instance it targets and the
+    /// span it reverses over, outer targets first.
+    pub remaps: Vec<(String, i64)>,
 }
 
 impl Motion {
     pub fn clip(&self, id: &str) -> Option<&Clip> {
         self.clips.iter().find(|c| c.id == id)
     }
+
+    /// Whether a time remap targets `item`: the instance itself or an item it derives
+    /// (`<instance>.<step>…`).
+    pub fn remapped(&self, item: &str) -> bool {
+        self.remaps.iter().any(|(target, _)| derives(target, item))
+    }
+
+    /// `item`'s own time at timeline position `doc_t`: each remap that targets it, outer to
+    /// inner, maps parent time to child time, `reverse` as span − parent time from the start,
+    /// clamped into the span (Time remap: `clamp: true`).
+    pub fn item_time(&self, item: &str, doc_t: i64) -> i64 {
+        let start = self.transport.start;
+        self.remaps
+            .iter()
+            .filter(|(target, _)| derives(target, item))
+            .fold(doc_t, |t, (_, span)| {
+                start + (span - (t - start)).clamp(0, *span)
+            })
+    }
+}
+
+/// Whether `item` is `target` or an item `target` derives.
+fn derives(target: &str, item: &str) -> bool {
+    item.strip_prefix(target)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
 }
 
 /// A map section's entries: each ID with its object.
@@ -1505,6 +1533,7 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
     for (id, d) in section(doc, "drivers")? {
         drivers.push(driver_of(id, d)?);
     }
+    let remaps = remaps_of(doc, &transport)?;
     let mut control_defaults = Vec::new();
     for (id, c) in section(doc, "controls")? {
         let default = match c.get("default") {
@@ -1541,7 +1570,33 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
         cuts,
         frame_rate,
         labels,
+        remaps,
     })
+}
+
+/// The document's time remaps (Time remap): each `{target, map: reverse}` reverses its recipe
+/// instance over the document's span. The other maps land later and are refused, naming the map.
+fn remaps_of(
+    doc: &Map<String, Value>,
+    transport: &Transport,
+) -> Result<Vec<(String, i64)>, Refused> {
+    let mut out = Vec::new();
+    for (id, r) in section(doc, "time_remaps")? {
+        let path = format!("time_remaps/{id}");
+        let Some(target) = r.get("target").and_then(Value::as_str) else {
+            return refuse("ref_unresolved", format!("{path}/target"));
+        };
+        if r.get("map").and_then(Value::as_str) != Some("reverse") {
+            return refuse("out_of_range", format!("{path}/map"));
+        }
+        let Some(span) = transport.span.filter(|s| *s > 0) else {
+            return refuse("bad_time", "transport/span");
+        };
+        out.push((target.to_string(), span));
+    }
+    // Outer targets first, so nested remaps compose outer to inner.
+    out.sort_by_key(|(target, _)| target.matches('.').count());
+    Ok(out)
 }
 
 /// FNV-1a over a string's bytes: the seed a document without one takes from its ID, and what a

@@ -1190,6 +1190,7 @@ mod tests {
             eye: [0.0; 4],
             inputs: interp::inputs(&c, params, &BTreeMap::new()),
             textures: BTreeMap::new(),
+            normals: [[0.0; 3]; 3],
         };
         let out = interp::compute(&c, &env, BTreeMap::new()).expect("it runs");
         out["inst"][..256 * PARTICLE_FLOATS as usize].to_vec()
