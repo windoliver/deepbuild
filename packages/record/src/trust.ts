@@ -7,7 +7,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ulid } from './ids.js';
+import { ulid } from '@deepbuild/record/ids';
 import type { Connection, RecordStore } from './index.js';
 
 export interface ProjectTrust {

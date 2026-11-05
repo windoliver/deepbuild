@@ -35,7 +35,7 @@ test('record/ids encodes time and all 80 entropy bits without loading database c
     assert.ok(random.every(id => ulidTime(id) === 1234));
     const files = loaded.filter(url => url.startsWith('file:'));
     assert.equal(files.length, 1, 'the public IDs entry must load only itself: ' + files.join(', '));
-    assert.ok(files[0].endsWith('/record/src/ids.ts'));
+    assert.equal(files[0], import.meta.resolve('@deepbuild/record/ids'));
   `], { cwd: root, encoding: 'utf8', timeout: 30_000 });
   assert.equal(child.error, undefined);
   assert.equal(child.status, 0, child.stderr);
