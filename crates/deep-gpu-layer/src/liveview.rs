@@ -729,15 +729,31 @@ impl View {
         // The scene is evaluated at the view's size; the renderer draws it at the internal size
         // and returns it to full size through the upscale, once its pipelines are compiled.
         self.renderer.upscale = kit.upscale.clone();
-        self.renderer.surface = Surface {
-            scale,
-            ..self.surface
+        // The climb's top rung draws the key sun's cascades at twice their size (#425).
+        self.renderer.shadow_scale = if !drawing.canonical && drawing.rung <= Rung::Shadows2x {
+            2
+        } else {
+            1
+        };
+        // Above scale 1 (the climb's 4-samples rung, #425) the bilinear pass at full size averages
+        // each pixel's four samples, a box filter, and nothing sharpens them.
+        self.renderer.surface = if scale > 1.0 {
+            Surface {
+                scale,
+                upscale: Filter::Bilinear,
+                sharpen: 0.0,
+            }
+        } else {
+            Surface {
+                scale,
+                ..self.surface
+            }
         };
         let internal = self.renderer.internal_size(self.size);
         self.drew = if internal == self.size {
             (1.0, "none")
         } else {
-            (scale, self.surface.upscale.name())
+            (scale, self.renderer.surface.upscale.name())
         };
         let slot = self.next;
         self.next = (self.next + 1) % self.slots.len();

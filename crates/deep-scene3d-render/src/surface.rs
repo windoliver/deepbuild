@@ -69,7 +69,7 @@ impl Default for Surface {
 impl Surface {
     /// The upscale it draws through: `none` at scale 1.
     pub fn upscale_name(&self) -> &'static str {
-        if self.scale < 1.0 {
+        if self.scale != 1.0 {
             self.upscale.name()
         } else {
             "none"

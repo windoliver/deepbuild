@@ -1,0 +1,14 @@
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-1017-906edd
+stdout | tests/acceptance/1017/stale.test.ts > AC4 #1017.6173fa31 stale sources never read as fresh > AC4 #1017.6173fa31 a worktree checked out before the entry was built either recompiles cart and paths after the clone, or gets no target and its session start says why
+AC4 the worktree checked out before the entry: target not placed at its next session start, which said "DeepBuild didn't place target (target) from the default branch's warm build: this worktree's .deepbuild/done.yaml predates that build, so cargo could read stale sources as fresh. It builds as it does today.\nDeepBuild didn't place node_modules (node_modules) from the default branch's warm build: this worktree's .deepbuild/done.yaml predates that build, so npm could read stale sources as fresh. It builds as it does today.\n\nDeepBuild is watching this session. No checks are active in this repo yet. Start this repo's stack with `deep env up` and stop it with `deep env down`; DeepBuild leases its ports, accounts and screens to this session and loads its credentials into the stack itself, so don't read, print or copy keys or the files that hold them. When you finish a piece of work, declare it wi"
+stdout | tests/acceptance/1017/stale.test.ts > AC4 #1017.6173fa31 stale sources never read as fresh > AC4 #1017.6173fa31 a planted store that places the clone anyway leaves both crates Fresh and fails, naming the crate
+AC4 the worktree checked out before the entry: target placed at its next session start, which said "DeepBuild is watching this session. No checks are active in this repo yet. Start this repo's stack with `deep env up` and stop it with `deep env down`; DeepBuild leases its ports, accounts and screens to this session and loads its credentials into the stack itself, so don't read, print or copy keys or the files that hold them. When you finish a piece of work, declare it with the deep_claim tool (say what you claim is done); the checks' results decide its verdict, never your own words about it."
+stdout | tests/acceptance/1017/stale.test.ts > AC4 #1017.6173fa31 stale sources never read as fresh > AC4 #1017.6173fa31 a planted store that places the clone anyway leaves both crates Fresh and fails, naming the crate
+AC4 its first cargo build (exit 0):
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.88s
+stdout | tests/acceptance/1017/stale.test.ts > AC4 #1017.6173fa31 stale sources never read as fresh > AC4 #1017.6173fa31 a planted store that places the clone anyway leaves both crates Fresh and fails, naming the crate
+AC4 places-stale: its first cargo build must recompile both cart (whose source its branch changed) and paths (which bakes CARGO_MANIFEST_DIR in); it left `cart` and `paths` Fresh: expected [ 'cart', 'paths' ] to deeply equal []
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  17:08:47
+   Duration  85.91s (tests 100%)

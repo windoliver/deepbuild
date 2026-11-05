@@ -1,0 +1,31 @@
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-1017-906edd
+stdout | tests/acceptance/1017/placement.test.ts > AC1 #1017.c28516b5 a second worktree has target and node_modules in place, cloned copy-on-write > AC1 #1017.c28516b5 the second worktree has `target` and `node_modules` before its first prompt, adds under 5% of the first's disk, compiles only the 3 workspace crates, and `npm test` passes with no install
+AC1 the first worktree, built as today: the volume's free space 68.387 GB before, 67.612 GB after: it added 0.775 GB
+stdout | tests/acceptance/1017/placement.test.ts > AC1 #1017.c28516b5 a second worktree has target and node_modules in place, cloned copy-on-write > AC1 #1017.c28516b5 the second worktree has `target` and `node_modules` before its first prompt, adds under 5% of the first's disk, compiles only the 3 workspace crates, and `npm test` passes with no install
+AC1 the store's entries: /private/tmp/dh1017-1gUFWW/v/h/.deepbuild/products/shop95253878/target@52f0171d625e18e694e5859c/src/target, /private/tmp/dh1017-1gUFWW/v/h/.deepbuild/products/shop95253878/node_modules@92800afda7aa698dd27f9809/src/node_modules
+stdout | tests/acceptance/1017/placement.test.ts > AC1 #1017.c28516b5 a second worktree has target and node_modules in place, cloned copy-on-write > AC1 #1017.c28516b5 the second worktree has `target` and `node_modules` before its first prompt, adds under 5% of the first's disk, compiles only the 3 workspace crates, and `npm test` passes with no install
+AC1 the second worktree: free space 66.833 GB before it was made, 66.832 GB once its session started: it added 0.001 GB, 0.14% of the first worktree's; in place: target yes, node_modules yes
+stdout | tests/acceptance/1017/placement.test.ts > AC1 #1017.c28516b5 a second worktree has target and node_modules in place, cloned copy-on-write > AC1 #1017.c28516b5 the second worktree has `target` and `node_modules` before its first prompt, adds under 5% of the first's disk, compiles only the 3 workspace crates, and `npm test` passes with no install
+AC1 the second worktree's first build log (exit 0, 16.0 s):
+    Blocking waiting for file lock on package cache
+   Compiling paths v0.1.0 (/private/tmp/dh1017-1gUFWW/v/wt-2/paths)
+   Compiling cart v0.1.0 (/private/tmp/dh1017-1gUFWW/v/wt-2/cart)
+   Compiling app v0.1.0 (/private/tmp/dh1017-1gUFWW/v/wt-2/app)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.78s
+AC1 `npm test` in the second worktree, with no install: exit 0
+> test
+> node --test
+✔ id (70.386042ms)
+✔ pad (0.2105ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 573.132792
+ Test Files  1 passed (1)
+      Tests  1 passed | 2 skipped (3)
+   Start at  17:20:02
+   Duration  238.41s (tests 100%)
