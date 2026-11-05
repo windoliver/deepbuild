@@ -30,6 +30,7 @@ mod interp_suite;
 mod levels;
 mod live;
 mod liveview;
+mod lod;
 mod marks2d;
 mod parity;
 mod plugin;
@@ -37,6 +38,7 @@ mod reference;
 mod scene;
 mod seam;
 mod session3;
+mod simplify;
 mod status;
 mod steps_ref;
 #[cfg(feature = "test-meter")]
@@ -202,6 +204,20 @@ pub enum Planted {
     UncompensatedLobe,
     CompensatesEnvironmentOnly,
     PremixedMetallic,
+    /// #425's wrong programs (tests/acceptance/425/README.md: Planted programs): a band or the
+    /// light cut held by session hysteresis; a band change faded over wall-clock time; a mesh
+    /// level chosen from the previous frame's view; band masks keyed per band; the blend level
+    /// computed in f32 from the drawn frame; a climb that never steps down; canonical renders at
+    /// the live rung; a frame-health drop climbed again without a view change.
+    BandHysteresis,
+    LightCutHysteresis,
+    BandFadeByWallClock,
+    LevelByEarlierFrame,
+    BandMasksIndependent,
+    BlendLevelOnGpu,
+    ClimbNeverStepsDown,
+    CanonicalClimbs,
+    ReclimbsWithoutViewChange,
 }
 
 impl Planted {
@@ -309,6 +325,15 @@ impl Planted {
             "uncompensated_lobe" => Planted::UncompensatedLobe,
             "compensates_environment_only" => Planted::CompensatesEnvironmentOnly,
             "premixed_metallic" => Planted::PremixedMetallic,
+            "band_hysteresis" => Planted::BandHysteresis,
+            "light_cut_hysteresis" => Planted::LightCutHysteresis,
+            "band_fade_by_wall_clock" => Planted::BandFadeByWallClock,
+            "level_by_earlier_frame" => Planted::LevelByEarlierFrame,
+            "band_masks_independent" => Planted::BandMasksIndependent,
+            "blend_level_on_gpu" => Planted::BlendLevelOnGpu,
+            "climb_never_steps_down" => Planted::ClimbNeverStepsDown,
+            "canonical_climbs" => Planted::CanonicalClimbs,
+            "reclimbs_without_view_change" => Planted::ReclimbsWithoutViewChange,
             _ => return None,
         })
     }
@@ -508,6 +533,7 @@ impl App {
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("simplify") => simplify::call(out, call),
             Some("workers") => textures::workers(self),
             Some("tone") => tone::call(self, out, call),
             Some("host") => host::call(self, out, call),
