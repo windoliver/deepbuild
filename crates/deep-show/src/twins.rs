@@ -22,6 +22,32 @@ pub(crate) fn scene3d_tie_by_order() -> deep_canvas::registry::Module {
     m
 }
 
+/// #443's planted scene3d: the shipped module with one more operator, whose extrude reads
+/// vector@1's items itself through vector's own array instead of the core's `outline.source@1`;
+/// scene3d declares no dependency on vector, so the seal refuses the edge, naming both.
+#[cfg(feature = "test-scene3d-reads-vector")]
+pub(crate) fn scene3d_reads_vector() -> deep_canvas::registry::Module {
+    let mut m = deep_canvas_scene3d::module::module();
+    m.register = |r| {
+        deep_canvas_scene3d::module::register_with(r, deep_canvas_scene3d::light::Tie::Id);
+        r.array(
+            "scene3d.svgoutlines",
+            "outlines",
+            "item",
+            "geometry",
+            "items",
+        );
+        r.operator(
+            "svgoutlines",
+            "items",
+            &["vector.paint"],
+            &["scene3d.svgoutlines"],
+        )
+        .run(|_| Ok(()));
+    };
+    m
+}
+
 /// A test module's manifest: version 1.0.0, any core, under its feature.
 pub(crate) fn test_manifest(name: &str, feature: &str) -> Manifest {
     Manifest {
