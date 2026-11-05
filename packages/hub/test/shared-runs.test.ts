@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { RecordedRun } from '@deepbuild/gate';
-import { GateRunner, type GateOptions, type RunKey } from '../src/gate-runner.js';
+import { GateRunner, type DefinitionState, type GateOptions, type RunKey } from '../src/gate-runner.js';
 import type { KeyFacts } from '../src/shared-runs.js';
 
 const dirs: string[] = [];
@@ -17,8 +17,14 @@ const record = (run: string, read = ['src/a.ts']): RecordedRun => ({
   output: { stdout: '', stderr: '', sha256: { stdout: SHA, stderr: SHA } }, attempts: [], seeded: [], contract: null,
 });
 
-/** A gate whose runs end as the hub's do: recorded and keyed before `ended` resolves; `release` ends the runs held. */
-function world(o: { kept?: boolean; hold?: boolean; dir?: string; read?: string[]; variants?: 'none' | 'unstartable' } = {}) {
+/**
+ * A gate whose runs end as the hub's do: recorded and keyed before `ended` resolves; `release` ends the runs held.
+ * `records` changes a run's record (the nth run started, and whether it's a held-out variant's).
+ */
+function world(o: {
+  kept?: boolean | ((evidence: string[]) => boolean); hold?: boolean; dir?: string; read?: string[]; variants?: 'none' | 'unstartable' | 'second-unstartable';
+  records?: (n: number, variant: boolean) => Partial<RecordedRun>; runs?: number; definition?: DefinitionState;
+} = {}) {
   const started: { check: string; claim: string }[] = [];
   const finished: { run: string; check: string; key: KeyFacts }[] = [];
   const readings: { source: string; value: number; unit: string }[] = [];
@@ -35,6 +41,7 @@ function world(o: { kept?: boolean; hold?: boolean; dir?: string; read?: string[
     snapshot: async () => ({ commit: 'c1', wrote: true }),
     checkout: async (r: { runs: string[] }) => {
       if (o.variants === 'unstartable' && r.runs.some((t) => t.includes('variant'))) throw Error('the snapshot is gone');
+      if (o.variants === 'second-unstartable' && r.runs.some((t) => t.endsWith('variant 2'))) throw Error('the snapshot is gone');
       return { dir: checkout, commit: 'c1' };
     },
     ended: async () => undefined,
@@ -47,17 +54,21 @@ function world(o: { kept?: boolean; hold?: boolean; dir?: string; read?: string[
     ended: async (run) => {
       if (o.hold) await new Promise<void>((done) => held.push(done));
       now += 1500;
-      gate.recorded(run, record(run, o.read));
-      finished.push({ run, check: keys.get(run)!.check, key: await gate.keyed(keys.get(run)!, run, record(run, o.read)) });
-      return 'passed';
+      const r = { ...record(run, o.read), ...o.records?.(Number(run.slice(4)), keys.get(run)!.withheld) };
+      gate.recorded(run, r);
+      finished.push({ run, check: keys.get(run)!.check, key: await gate.keyed(keys.get(run)!, run, r) });
+      return r.outcome;
     },
     slots: () => ({ free: 4 }), budget_ms: 60_000, hold_ms: 60_000,
     checkouts: () => checkouts as unknown as ReturnType<GateOptions['checkouts']>,
-    invalid: async () => undefined, stopping: () => false, stoodIn: async () => undefined, kept: async () => o.kept ?? true,
+    invalid: async () => undefined, stopping: () => false, stoodIn: async () => undefined, kept: async (evidence) => (typeof o.kept === 'function' ? o.kept(evidence) : o.kept ?? true),
   });
   const claim = (session: string, n: number) => gate.stop({
-    session, claim: `claim:${n}`, task: 'task:1', cwd: checkout, base: 'b', requirements: [], stopAt: now,
-    checks: [{ check: 'c.sh', approved: 'a', command: "sh 'c.sh'", covers: ['R1'], depth: 'unit', on_base: 'passes', asserts: [], expected_ms: 1, ...(o.variants ? { held_out: [{ files: { 'test/fixture.json': SHA } }] } : {}) }],
+    session, claim: `claim:${n}`, task: 'task:1', cwd: checkout, base: 'b', requirements: [], stopAt: now, ...(o.definition ? { definition: o.definition } : {}),
+    checks: [{
+      check: 'c.sh', approved: 'a', command: "sh 'c.sh'", covers: ['R1'], depth: 'unit', on_base: 'passes', asserts: [], expected_ms: 1, ...(o.runs ? { runs: o.runs } : {}),
+      ...(o.variants ? { held_out: o.variants === 'second-unstartable' ? [{ files: { 'test/fixture.json': SHA } }, { files: { 'test/fixture.json': 'b'.repeat(64) } }] : [{ files: { 'test/fixture.json': SHA } }] } : {}),
+    }],
   });
   return { gate, started, finished, readings, held, claim, checkout };
 }
@@ -136,5 +147,114 @@ describe('#1018 what never carries', () => {
     after.gate.kept([{ run: ran!.run, check: ran!.check, outcome: 'passed', tests_run: 1, findings: [], evidence: [SHA, SHA], key: { ...ran!.key, plain: false } }]);
     await after.claim('s2', 2);
     expect(after.started.map((s) => s.claim)).toEqual(['claim:2']);
+  });
+});
+
+describe('#1018 kept keys read again after a restart, review findings', () => {
+  /** Real reports list one attempt for each test, as checks-command reads them. */
+  const tested = (): Partial<RecordedRun> => ({ attempts: [{ test: 't', outcome: 'passed' }] });
+
+  it('a kept run whose tests each ran once is read again: the next session\'s claim carries it', async () => {
+    const before = world({ records: tested });
+    await before.claim('s1', 1);
+    const [ran] = before.finished;
+    const after = world({ dir: before.checkout });
+    after.gate.kept([{ run: ran!.run, check: ran!.check, outcome: 'passed', tests_run: 1, findings: [], evidence: [SHA, SHA], key: ran!.key }]);
+    await after.claim('s2', 2);
+    expect(after.started).toEqual([]);
+  });
+
+  it('a key with a run that can\'t be read again carries nothing after a restart, though its other runs can', async () => {
+    const before = world();
+    await before.claim('s1', 1);
+    const [ran] = before.finished;
+    const after = world({ dir: before.checkout });
+    after.gate.kept([
+      { run: ran!.run, check: ran!.check, outcome: 'passed', tests_run: 1, findings: [], evidence: [SHA, SHA], key: ran!.key },
+      { run: 'run:x', check: ran!.check, outcome: 'failed', tests_run: 1, findings: ['t (src/a.ts:1): boom'], evidence: [SHA, SHA], key: { ...ran!.key, claim: 'claim:3', session: 'session:s3', plain: false } },
+    ]);
+    await after.claim('s2', 2);
+    expect(after.started.map((s) => s.claim)).toEqual(['claim:2']);
+  });
+
+  it('a kept run whose failures don\'t all survive run.finished is never read again', async () => {
+    const failure = (file: string) => ({ test: 't', file, line: 3, stack: null, assertion: true, message: 'boom' });
+    const parens = world({ records: () => ({ outcome: 'failed', failures: [failure('app/(shop)/c.test.ts')] }) });
+    await parens.claim('s1', 1);
+    expect(parens.finished[0]!.key.plain).toBe(false);
+    const many = world({ records: () => ({ outcome: 'failed', failures: Array.from({ length: 21 }, (_, i) => failure(`test/c${i}.test.ts`)) }) });
+    await many.claim('s1', 1);
+    expect(many.finished[0]!.key.plain).toBe(false);
+  });
+});
+
+describe('#1018 review findings on carrying', () => {
+  it('a check whose second held-out variant never runs never passes, however many claims run its first', async () => {
+    const w = world({ variants: 'second-unstartable' });
+    await w.claim('s1', 1);
+    await w.claim('s3', 3);
+    await w.claim('s2', 2);
+    expect(w.gate.verdictOf('claim:2')?.outcome).not.toBe('PASS');
+  });
+
+  it('a run pruned with its evidence counts for no claim, the one that runs its own beside it included', async () => {
+    const PRUNED = 'c'.repeat(64);
+    const w = world({ runs: 2, kept: (evidence) => !evidence.includes(PRUNED), records: (n) => (n === 1 ? { output: { stdout: '', stderr: '', sha256: { stdout: PRUNED, stderr: SHA } } } : {}) });
+    await w.claim('s1', 1);
+    await w.claim('s2', 2);
+    expect(w.gate.verdictOf('claim:2')?.checks.find((c) => c.check === 'c.sh')?.counted).toEqual(['run:2']);
+  });
+
+  it('a run that read only its check\'s script and test files saw no code under test, so the next claim runs its own', async () => {
+    const w = world({ read: ['c.sh', 'test/a.test.ts'] });
+    await w.claim('s1', 1);
+    await w.claim('s2', 2);
+    expect(w.started.map((s) => s.claim)).toEqual(['claim:1', 'claim:2']);
+  });
+
+  it('a key whose check\'s own run was pruned carries nothing from its held-out variant\'s run alone', async () => {
+    const PRUNED = 'c'.repeat(64);
+    const w = world({ variants: 'none', kept: (evidence) => !evidence.includes(PRUNED), records: (n) => (n === 1 ? { output: { stdout: '', stderr: '', sha256: { stdout: PRUNED, stderr: SHA } } } : {}) });
+    await w.claim('s1', 1);
+    await w.claim('s2', 2);
+    expect(w.started.map((s) => s.claim)).toEqual(['claim:1', 'claim:1', 'claim:2', 'claim:2']);
+  });
+
+  it('a carried check never reaches through its key\'s held-out variant\'s run, its check\'s own run pruned', async () => {
+    const PRUNED = 'c'.repeat(64);
+    let pruned = false;
+    const w = world({
+      variants: 'none', kept: (evidence) => !(pruned && evidence.includes(PRUNED)),
+      records: (n, variant) => (variant ? { read: ['src/a.ts', 'test/fixture.json'] } : n === 1 ? { output: { stdout: '', stderr: '', sha256: { stdout: PRUNED, stderr: SHA } } } : {}),
+    });
+    await w.claim('s1', 1);
+    await w.claim('s2', 2);
+    pruned = true;
+    await w.claim('s3', 3);
+    expect(w.gate.reached('claim:2') ?? []).not.toContain('test/fixture.json');
+  });
+
+  it('a claim whose check is carried reaches the files its key\'s runs read', async () => {
+    const w = world();
+    await w.claim('s1', 1);
+    await w.claim('s2', 2);
+    expect(w.started.map((s) => s.claim)).toEqual(['claim:1']);
+    expect(w.gate.reached('claim:2')).toEqual(['src/a.ts']);
+  });
+
+  it('a carried failure replies at once while the definition is still to lock', async () => {
+    const w = world({ definition: 'waiting', records: () => ({ outcome: 'failed', failures: [{ test: 't', file: 'test/a.test.ts', line: 1, stack: null, assertion: true, message: 'boom' }] }) });
+    await w.claim('s1', 1);
+    const replied = await Promise.race([w.claim('s2', 2).then(() => true), new Promise<boolean>((done) => setTimeout(() => done(false), 3000))]);
+    expect(w.started.map((s) => s.claim)).toEqual(['claim:1']);
+    expect(replied, 'the carried FAIL goes back at once, not at the end of the hold').toBe(true);
+  });
+
+  it('a held-out variant\'s attempts name none of its tests, and its flake still reads INCONCLUSIVE', async () => {
+    const w = world({ variants: 'none', records: (_n, variant) => (variant ? { attempts: [{ test: 'secret case', outcome: 'failed' }, { test: 'secret case', outcome: 'passed' }] } : {}) });
+    await w.claim('s1', 1);
+    const v = w.gate.verdictOf('claim:1')!;
+    expect(JSON.stringify(v)).not.toContain('secret case');
+    expect(v.outcome).toBe('INCONCLUSIVE');
   });
 });

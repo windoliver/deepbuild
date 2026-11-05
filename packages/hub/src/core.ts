@@ -48,7 +48,7 @@ import { coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { GateRunner, type ClaimCheck, type DefinitionState, type RunKey } from './gate-runner.js';
-import type { KeyFacts } from './shared-runs.js';
+import { FINDINGS, findingOf, type KeyFacts } from './shared-runs.js';
 import { argsOf, groupUnder, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
@@ -462,6 +462,8 @@ export class Core {
   private ledger!: Ledger;
   private readonly budgetAsks = new Map<string, BudgetInput>();
   private readonly paidChecks = new Map<string, Map<string, { paid: PaidKind; task: string }>>();
+  /** The held-out variants' runs still to finish (#1018), whose findings their finish withholds. */
+  private readonly heldOut = new Set<string>();
   /** Each task's count toward a stalled claim, and each stalled claim's one decision by its ask (#325). */
   private readonly stalls = new Map<string, StallCount>();
   private readonly stallAsks = new Map<string, { task: string; session: string; agent: string }>();
@@ -6152,13 +6154,16 @@ export class Core {
     // A paid check reserves its price against the issue's budget before it starts, and is charged its cost reading
     // once it ends (#325): one that doesn't fit, or whose price nobody knows, never starts, so its check is BLOCKED.
     const paid = this.paidChecks.get(r.claim)?.get(r.check);
-    const id = paid ? `run:${ulid(this.now())}` : undefined;
+    // A held-out variant's run is known by its handle before it starts, so its finish hides what it failed on, keyed or not (#1018).
+    const id = paid || r.overlay ? `run:${ulid(this.now())}` : undefined;
     if (paid && id) {
       const inputs = sha256Hex(new TextEncoder().encode(`${r.check}\n${r.approved ?? r.command}\n${r.commit}`));
       const out = await this.ledger.request(this.connection('core'), { run: id, check: r.check, inputs, issue: paid.task });
       if (out.status !== 'started') throw Error(out.status === 'BLOCKED' ? (out.cause === 'price' ? `${out.missing} is unknown` : `the budget for ${paid.task} has no room for it (${out.ask})`) : `it waits for your answer, ${out.ask}`);
     }
-    const { run } = await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? null, ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key);
+    if (r.overlay && id) this.heldOut.add(id);
+    const { run } = await this.runStart({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? null, ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key)
+      .catch((error: unknown) => { if (id) this.heldOut.delete(id); throw error; });
     if (paid) {
       const charge = () => this.ledger.charge(this.connection('core'), String(run), this.priceOf(r.check, 'costs') ?? this.priceOf(r.check) ?? 0);
       void (this.runs.get(String(run))?.done ?? Promise.resolve()).catch(() => undefined).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
@@ -6466,20 +6471,21 @@ export class Core {
         // Its key (#1018), once it has ended: kept with its finish, so any claim with an equal key reads it, after a restart too.
         const key = run.key ? await this.gate.keyed(run.key, run.run, record) : undefined;
         const outcome = record.outcome;
-        const findings = outcome === 'stopped' ? ['hub stopped'] : record.mask !== null ? [`uncounted: ${record.mask}`] : record.failures.slice(0, 20).map((f) => `${f.test} (${f.file}:${f.line}): ${f.message}`);
+        const findings = outcome === 'stopped' ? ['hub stopped'] : record.mask !== null ? [`uncounted: ${record.mask}`] : record.failures.slice(0, FINDINGS).map(findingOf);
         // What the kind's result names as its evidence beyond the output (a replacing kind's content keys) is kept with the findings.
         findings.push(...record.evidence.filter((e) => !/^(stdout|stderr) [0-9a-f]{64}$/.test(e)).slice(0, 20));
         const first = record.failures[0];
         // A held-out variant's run keeps its outcome and counts in the record, never what it failed on: its fixture is unseen.
-        const hidden = key?.withheld === true;
+        const hidden = this.heldOut.delete(run.run) || key?.withheld === true;
         await this.finish(run, outcome, hidden ? (record.failures.length ? ['failed on a held-out variant of its fixtures'] : []) : findings, evidence, {
           tests_run: record.testsRun, passed: Math.max(0, record.testsRun - new Set(record.failures.map((f) => f.test)).size),
           assertion: first?.assertion && !hidden ? first.test : null, points_to: first && !hidden ? `${first.file}:${first.line}` : null,
         }, key);
         return;
       }
+      const hidden = this.heldOut.delete(run.run);
       const outcome = this.stopping ? 'stopped' : overran ? 'overran' : missing ? 'missing' : code === 0 ? 'passed' : 'failed';
-      const findings = this.stopping ? ['hub stopped'] : overran ? [`still running at its deadline of ${words(run.deadline!)}, so it was stopped`] : missing ? [`its stack never came up: ${missing}`] : failed ? [failed] : [];
+      const findings = this.stopping ? ['hub stopped'] : overran ? [`still running at its deadline of ${words(run.deadline!)}, so it was stopped`] : missing ? [`its stack never came up: ${missing}`] : failed ? [hidden ? 'failed on a held-out variant of its fixtures' : failed] : [];
       await this.finish(run, outcome, findings, evidence);
     });
     this.runs.set(run.run, { run, done, stop });
