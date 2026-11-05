@@ -3,7 +3,7 @@ export { ContractError, ERROR_CODES, type ContractIssue } from './errors.js';
 export { registry, type Registry, type Validation } from './validate.js';
 export { decode, encode, fixtures, frozenDigests, getSchema, isUntouched, listSchemas, validate } from './schemas.js';
 export type { HookAck, HookRequest } from './generated/types.js';
-export { canonicalize, sha256Hex } from './canonical.js';
+export { canonicalize, sha256Hex, stableText } from './canonical.js';
 export { d1Digest, frozenDrift, parseDigest, recordHash } from './digest.js';
 export { lintSchemas, type LintProblem } from './lint.js';
 export { compilePattern, type Inst } from './pattern.js';

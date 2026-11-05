@@ -326,6 +326,10 @@
     },
     "packages/verdicts/package.json": {
       "dependencies": {
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #28: stableText, the one key-sorted JSON text an open item's ID, a verdict's key and its hash are taken over."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #28: the record a verdict is appended to as verdict.made and verdict.stale, as the core; only its types are imported."
@@ -1348,10 +1352,6 @@
     },
     "packages/wiki/package.json": {
       "dependencies": {
-        "@deepbuild/extension-host": {
-          "spec": "0.0.0",
-          "why": "Issue #355: a claim from a repo file is known from the repo only in a project you trust, read through openTrust, the one trust decision the core holds."
-        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #355: the wiki's claims are learned changes in the record, whose quotes, scope and rollback the core checks; sources are read through record.resolve and kept with record.keep."
@@ -1395,6 +1395,14 @@
         "@deepbuild/verdicts": {
           "spec": "0.0.0",
           "why": "Issue #29: the runs a check still needs on a snapshot (moreRuns) and the result and run outcome types are the verdict engine's."
+        },
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #31: the check.kind@1 fill (CheckRunnerFill) and its result types the base-commit service runs a claim's checks through; types only."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #31: the Supervisor the base-commit service is handed, through which every git and check process of a checkout starts; types only."
         }
       }
     },

@@ -7,7 +7,6 @@
 // would bill an API account, and for your standing approval when it is a smoke test of a version its facts don't
 // cover; it launches only the bytes it verified. Its record is a function of the event log, so a hub that
 // crashes finds every job it recorded and never runs one twice.
-import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, createReadStream, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync, type Stats } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,7 +15,7 @@ import { StringDecoder } from 'node:string_decoder';
 import type { Outcome } from '@deepbuild/budget';
 import type { JsonValue } from '@deepbuild/contracts';
 import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
-import { after, badDeadline, type Grant } from '@deepbuild/supervisor';
+import { after, alive as pidAlive, badDeadline, groupCpu, groupMembers, type Grant } from '@deepbuild/supervisor';
 import { openForwarder, type Forwarder } from './egress.js';
 import type { Agent, Blocked, JobRecord, JobSpec, McpServer, Runner, RunnerOptions, StopCause, Subagent, WindowReport } from './types.js';
 
@@ -402,7 +401,7 @@ class LocalRunner implements Runner {
     // it left when it opened), else reported; never run again.
     for (const job of this.jobs.values()) {
       if (job.rec.state !== 'waiting') continue;
-      const alive = (left.get(job.rec.job) ?? []).filter(alivePid);
+      const alive = (left.get(job.rec.job) ?? []).filter(pidAlive);
       if (started.has(job.rec.job) && alive.length) {
         // What the supervisor couldn't stop when it opened: it reads stopping until those are gone.
         Object.assign(job, { left: alive, ending: true, stopCause: 'unknown' as StopCause });
@@ -1073,7 +1072,7 @@ class LocalRunner implements Runner {
     const t = setInterval(() => {
       if (job.rec.state !== 'running' || job.resultAt) { clearInterval(t); return; }
       if (Date.now() - job.outputAt < ms) { last = undefined; return; }
-      void usageOf(job.rec.pgid!).then((now) => {
+      void groupCpu(job.rec.pgid!).then((now) => {
         if (last !== undefined && now === last) { clearInterval(t); void this.stop(job, 'timed_out'); }
         last = now;
         job.outputAt = Date.now() - ms + Math.min(ms, 1000);
@@ -1127,7 +1126,7 @@ class LocalRunner implements Runner {
       delete job.left;
       return;
     }
-    if (pids.some(alivePid)) {
+    if (pids.some(pidAlive)) {
       job.rec.state = 'stopping';
       job.left = pids;
       return;
@@ -1200,7 +1199,7 @@ class LocalRunner implements Runner {
       if (job.rec.state === 'stopping' && job.unconfirmed) {
         const cleaned = await this.o.supervisor.cleanup(job.rec.job).catch(() => undefined);
         if (cleaned) await this.confirm(job, cleaned.left);
-      } else if (job.rec.state === 'stopping' && job.left && !job.left.some(alivePid)) await this.confirm(job, []);
+      } else if (job.rec.state === 'stopping' && job.left && !job.left.some(pidAlive)) await this.confirm(job, []);
     }
     await this.pump();
   }
@@ -1260,23 +1259,7 @@ function fileDigest(path: string): Promise<string> {
 }
 /** A path as a case-insensitive, normalization-insensitive filesystem compares it, ignorable characters dropped. */
 const folded = (path: string): string => path.normalize('NFC').replace(/[\u200B-\u200F\u202A-\u202E\u206A-\u206F\uFEFF]/g, '').toLowerCase();
-const alivePid = (pid: number): boolean => {
-  try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
-};
-const groupAlive = (pgid: number | undefined): boolean => !!pgid && alivePid(-pgid);
-function ps(args: string[]): Promise<string> {
-  return new Promise((resolve) => execFile('/bin/ps', args, { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } }, (_e, stdout) => resolve(stdout ?? '')));
-}
-/** The live members of a process group. */
-async function groupMembers(pgid: number | undefined): Promise<number[]> {
-  if (!pgid || !groupAlive(pgid)) return [];
-  return (await ps(['-A', '-o', 'pid=,pgid=,stat='])).split('\n').map((l) => l.trim().split(/\s+/))
-    .filter((f) => f.length === 3 && Number(f[1]) === pgid && !f[2]!.startsWith('Z')).map((f) => Number(f[0]));
-}
-/** The CPU time its group has used so far, as the platform reports it; macOS's ps reports no disk blocks. */
-async function usageOf(pgid: number): Promise<string> {
-  return (await ps(['-A', '-o', 'pgid=,cputime='])).split('\n').map((l) => l.trim().split(/\s+/)).filter((f) => Number(f[0]) === pgid).map((f) => f[1]).join(',');
-}
+const groupAlive = (pgid: number | undefined): boolean => !!pgid && pidAlive(-pgid);
 
 /** git itself, past the xcrun shim, which can't run in the sandbox: the developer folder's, as xcode-select picks it. */
 function gitBinary(): string | undefined {
