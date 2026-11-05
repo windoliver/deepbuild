@@ -10,6 +10,7 @@
 
 pub mod answer;
 pub mod arming;
+pub mod bound;
 pub mod canvas;
 pub mod card;
 pub mod cells;
