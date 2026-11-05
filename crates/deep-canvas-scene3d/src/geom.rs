@@ -47,6 +47,11 @@ pub struct Mesh {
     /// Named per-vertex values, which a material input reads: a `store` modifier keeps a
     /// field as one, such as a wind weight an engine reads.
     pub attributes: BTreeMap<String, Vec<f64>>,
+    /// Its index-only levels by error, as the simplify job stored them (#425): each level's
+    /// indices over these vertices and its error as a fraction of `lod_extent`, coarser after.
+    pub lods: Vec<(Vec<u32>, f64)>,
+    /// The extent the levels' errors are fractions of, in the mesh's own m.
+    pub lod_extent: f64,
     /// Named per-face values, one per triangle (a face's triangles share one).
     pub face_attributes: BTreeMap<String, Vec<f64>>,
     /// The quads the mesh had before its stack's first `subdivide`, as a `cage` mesh-edge line

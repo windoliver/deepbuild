@@ -1,0 +1,19 @@
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-1017-906edd
+stdout | tests/acceptance/1017/placement.test.ts > AC1 #1017.c28516b5 a second worktree has target and node_modules in place, cloned copy-on-write > AC1 #1017.c28516b5 a planted store that hard-links the folders fails, naming the file a build in the second worktree changed in the store
+AC1 (planted: product-hard-links) the first worktree, built as today: the volume's free space 68.387 GB before, 67.612 GB after: it added 0.775 GB
+stdout | tests/acceptance/1017/placement.test.ts > AC1 #1017.c28516b5 a second worktree has target and node_modules in place, cloned copy-on-write > AC1 #1017.c28516b5 a planted store that hard-links the folders fails, naming the file a build in the second worktree changed in the store
+AC1 (planted: product-hard-links) the store's entries: /private/tmp/dh1017-BFOwuY/v/h/.deepbuild/products/shop90fbb743/target@52f0171d625e18e694e5859c/src/target, /private/tmp/dh1017-BFOwuY/v/h/.deepbuild/products/shop90fbb743/node_modules@1f58dbef9c5328632292365e/src/node_modules
+stdout | tests/acceptance/1017/placement.test.ts > AC1 #1017.c28516b5 a second worktree has target and node_modules in place, cloned copy-on-write > AC1 #1017.c28516b5 a planted store that hard-links the folders fails, naming the file a build in the second worktree changed in the store
+AC1 (planted: product-hard-links) the second worktree: free space 66.833 GB before it was made, 66.832 GB once its session started: it added 0.001 GB, 0.15% of the first worktree's; in place: target yes, node_modules yes
+stdout | tests/acceptance/1017/placement.test.ts > AC1 #1017.c28516b5 a second worktree has target and node_modules in place, cloned copy-on-write > AC1 #1017.c28516b5 a planted store that hard-links the folders fails, naming the file a build in the second worktree changed in the store
+AC1 (planted: product-hard-links) the second worktree's first build log (exit 0, 2.5 s):
+   Compiling paths v0.1.0 (/private/tmp/dh1017-BFOwuY/v/wt-2/paths)
+   Compiling cart v0.1.0 (/private/tmp/dh1017-BFOwuY/v/wt-2/cart)
+   Compiling app v0.1.0 (/private/tmp/dh1017-BFOwuY/v/wt-2/app)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.43s
+stdout | tests/acceptance/1017/placement.test.ts > AC1 #1017.c28516b5 a second worktree has target and node_modules in place, cloned copy-on-write > AC1 #1017.c28516b5 a planted store that hard-links the folders fails, naming the file a build in the second worktree changed in the store
+AC1 product-hard-links: Cargo and npm: a build in the second worktree changed the store: /private/tmp/dh1017-BFOwuY/v/h/.deepbuild/products/shop90fbb743/target@52f0171d625e18e694e5859c/src/target/debug/.fingerprint/app-16d385ab77b1c537/bin-app, /private/tmp/dh1017-BFOwuY/v/h/.deepbuild/products/shop90fbb743/target@52f0171d625e18e694e5859c/src/target/debug/.fingerprint/app-16d385ab77b1c537/bin-app.json, /private/tmp/dh1017-BFOwuY/v/h/.deepbuild/products/shop90fbb743/target@52f0171d625e18e694e5859c/src/target/debug/.fingerprint/app-16d385ab77b1c537/dep-bin-app, /private/tmp/dh1017-BFOwuY/v/h/.deepbuild/products/shop90fbb743/target@52f0171d625e18e694e5859c/src/target/debug/.fingerprint/app-16d385ab77b1c537/invoked.timestamp, /private/tmp/dh1017-BFOwuY/v/h/.deepbuild/products/shop90fbb743/target@52f0171d625e18e694e5859c/src/target/debug/.fingerprint/cart-6c39beb4bfeeccb2/dep-lib-cart and 19 more: expected [ …(24) ] to deeply equal []
+ Test Files  1 passed (1)
+      Tests  1 passed | 2 skipped (3)
+   Start at  17:13:52
+   Duration  64.23s (tests 100%)

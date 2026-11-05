@@ -9,12 +9,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use deep_canvas::document::{apply_ops, writer_layer, Writing};
+use deep_canvas::document::{apply_ops, check_packed, writer_layer, Issue, Packs, Writing};
 use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate_with, Labels, Scene};
+use deep_canvas_scene3d::scene::{evaluate_with, placed_at, Labels, Scene};
 use deep_gpu::device::Backend;
 use deep_scene3d_render::status::{Mode, COLORS_PASS, GUARD_PASS};
 use deep_scene3d_render::SHADOW_PASS;
@@ -77,6 +77,10 @@ struct Args {
     labels: bool,
     /// `(frame, at)`: a click at `at` view px while frame n is presented (#671).
     clicks: Vec<(u64, [f64; 2])>,
+    /// The selection's hit margin in px (#424; Selection: `hit.margin`), 3 unless the call says.
+    hit_margin: i64,
+    /// A `cutaway@1`'s params as a view input in session state, applied to every frame (#424).
+    cutaway: Option<Value>,
     /// The record's state for each status binding's source (#382).
     states: BTreeMap<String, String>,
     /// Report the first frame as a cold start: when it settled, from this process's spawn, and
@@ -88,10 +92,20 @@ struct Args {
     status: Option<Status>,
     /// The GPU surface the view draws through (#386).
     surface: Surface,
+    /// The pack folders installed before the document's check, by `owner/name` (#429), or
+    /// `deepbuild/<name>` when the call names only the folder (#422).
+    packs: Vec<(Option<String>, std::path::PathBuf)>,
+    /// The paths whose evaluated values each frame reports (#429).
+    evaluate: Vec<String>,
     /// Writer layers not visible in this session, which draw, light and cast nothing (#422).
     hidden: BTreeSet<String>,
     /// Each frame reports the key sun's cascade splits (#422).
     cascades: bool,
+    /// Each frame reports its level-of-detail rows and its light cut, and each captured frame
+    /// its band masks (#425).
+    lod: bool,
+    light_cut: bool,
+    masks: bool,
 }
 
 /// Milliseconds from this process's spawn, as the kernel records its start, to now.
@@ -186,33 +200,12 @@ fn layers_report(doc: &Value, hidden: &BTreeSet<String>) -> Value {
         .collect::<Vec<_>>())
 }
 
-/// A pack folder as one manifest (#422; as deep-show's store reads one): `pack.json`, its `id`
-/// `deepbuild/<name>`, each recipe file it names inlined.
-fn pack_manifest(dir: &std::path::Path) -> Result<Value, String> {
-    let read = |p: &std::path::Path| -> Result<Value, String> {
-        let bytes = std::fs::read(p).map_err(|e| format!("{}: {e}", p.display()))?;
-        serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", p.display()))
-    };
-    let mut manifest = read(&dir.join("pack.json"))?;
-    let name = manifest["name"].as_str().unwrap_or_default().to_string();
-    manifest["id"] = json!(format!("deepbuild/{name}"));
-    if let Some(Value::Object(recipes)) = manifest.get_mut("recipes") {
-        for entry in recipes.values_mut() {
-            if let Some(file) = entry.as_str() {
-                *entry = read(&dir.join(file))?;
-            }
-        }
-    }
-    Ok(manifest)
-}
-
-/// `doc` with every recipe instance of the packs in `dirs` expanded, as the check expands them
-/// (Recipe: expansion at check, never per frame); a pack or an expansion with an error refuses.
-fn expand_packs(doc: &Value, dirs: &[std::path::PathBuf]) -> Result<Value, Value> {
-    // The shipped modules and the building module, whose kinds packs' recipes may name.
+/// The modules a view3d document and its packs' recipes may name: the shipped ones and the
+/// building module (#422).
+fn pack_sealed() -> Result<&'static deep_canvas::registry::Sealed, Value> {
     static SEALED: std::sync::OnceLock<Option<deep_canvas::registry::Sealed>> =
         std::sync::OnceLock::new();
-    let sealed = SEALED
+    SEALED
         .get_or_init(|| {
             crate::plugin::shipped_modules()
                 .into_iter()
@@ -225,24 +218,7 @@ fn expand_packs(doc: &Value, dirs: &[std::path::PathBuf]) -> Result<Value, Value
                 .ok()
         })
         .as_ref()
-        .ok_or_else(|| refused("render_failed", "the pack build's modules don't seal"))?;
-    let mut packs = deep_canvas::document::Packs::new(Default::default());
-    for dir in dirs {
-        let manifest = pack_manifest(dir).map_err(|e| refused("bad_input", &format!("packs: {e}")))?;
-        if let Err(issues) = packs.admit(&manifest, sealed) {
-            let first = issues.first().map(|i| i.to_json()).unwrap_or(Value::Null);
-            return Err(refused("pack_refused", &first.to_string()));
-        }
-    }
-    let checked = deep_canvas::document::check_packed(doc, sealed, &packs);
-    if let Some(i) = checked
-        .issues
-        .iter()
-        .find(|i| i.severity == "error" && checked.expansions.is_empty())
-    {
-        return Err(refused(i.code, &i.path));
-    }
-    Ok(checked.lowered)
+        .ok_or_else(|| refused("render_failed", "the pack build's modules don't seal"))
 }
 
 fn parse(call: &Value) -> Result<Args, Value> {
@@ -250,17 +226,6 @@ fn parse(call: &Value) -> Result<Args, Value> {
     let path = call["doc"].as_str().ok_or_else(|| bad("doc is a path"))?;
     let text = std::fs::read_to_string(path).map_err(|e| bad(&format!("doc: {e}")))?;
     let mut doc: Value = serde_json::from_str(&text).map_err(|e| bad(&format!("doc: {e}")))?;
-    // The packs the document's recipes expand from (#422).
-    let pack_dirs: Vec<std::path::PathBuf> = call["packs"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(std::path::PathBuf::from)
-        .collect();
-    if !pack_dirs.is_empty() {
-        doc = expand_packs(&doc, &pack_dirs)?;
-    }
     let theme = status::theme_of(call)?;
     let look_json = status::themed(&call["look"], &theme);
     let look = Look3::read(&look_json).map_err(|e| bad(&format!("look: {e}")))?;
@@ -341,7 +306,26 @@ fn parse(call: &Value) -> Result<Args, Value> {
         };
         clicks.push((frame, at));
     }
+    let mut packs = Vec::new();
+    for p in call["packs"].as_array().into_iter().flatten() {
+        // A folder (its id `deepbuild/<name>`, #422) or `{id, dir}` (#429).
+        let (id, dir) = match (p.as_str(), p["id"].as_str(), p["dir"].as_str()) {
+            (Some(dir), ..) => (None, dir),
+            (None, Some(id), Some(dir)) => (Some(id.to_string()), dir),
+            _ => return Err(bad("a pack is a folder or {id, dir}")),
+        };
+        packs.push((id, std::path::PathBuf::from(dir)));
+    }
+    let mut evaluate = Vec::new();
+    for p in call["evaluate"].as_array().into_iter().flatten() {
+        match p.as_str() {
+            Some(path) if path.starts_with("items/") => evaluate.push(path.to_string()),
+            _ => return Err(bad("evaluate lists paths items/<id>/…")),
+        }
+    }
     Ok(Args {
+        packs,
+        evaluate,
         docs,
         doc,
         look,
@@ -393,6 +377,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
         receipt: call["receipt"].as_bool().unwrap_or(false),
         labels: call["labels"].as_bool().unwrap_or(false),
         clicks,
+        hit_margin: call
+            .pointer("/hit/margin")
+            .and_then(Value::as_u64)
+            .map_or(3, |m| m.min(64) as i64),
+        cutaway: call.get("cutaway").filter(|c| !c.is_null()).cloned(),
         states,
         theme,
         status,
@@ -406,7 +395,81 @@ fn parse(call: &Value) -> Result<Args, Value> {
             .map(str::to_string)
             .collect(),
         cascades: call["cascades"].as_bool().unwrap_or(false),
+        lod: call["lod"].as_bool().unwrap_or(false),
+        light_cut: call["light_cut"].as_bool().unwrap_or(false),
+        masks: call["masks"].as_bool().unwrap_or(false),
     })
+}
+
+/// The packs a call installs (#429): each folder read as deep-show's pack store reads one
+/// (`pack.json`, its `id` set to `owner/name`, each recipe file it names inlined) and admitted
+/// through the pack check once.
+fn install(packs: &[(Option<String>, std::path::PathBuf)]) -> Result<Packs, Value> {
+    let read = |p: &std::path::Path| -> Result<Value, Value> {
+        let at = |e: String| refused("bad_input", format!("{}: {e}", p.display()));
+        let text = std::fs::read_to_string(p).map_err(|e| at(e.to_string()))?;
+        serde_json::from_str(&text).map_err(|e| at(e.to_string()))
+    };
+    let mut out = Packs::default();
+    for (id, dir) in packs {
+        let mut manifest = read(&dir.join("pack.json"))?;
+        let Some(fields) = manifest.as_object_mut() else {
+            return Err(refused("bad_input", format!("{}: a pack is an object", dir.display())));
+        };
+        let id = id.clone().unwrap_or_else(|| {
+            format!("deepbuild/{}", fields.get("name").and_then(Value::as_str).unwrap_or_default())
+        });
+        fields.insert("id".into(), json!(id));
+        if let Some(Value::Object(recipes)) = fields.get_mut("recipes") {
+            for entry in recipes.values_mut() {
+                if let Some(file) = entry.as_str() {
+                    *entry = read(&dir.join(file))?;
+                }
+            }
+        }
+        out.admit(&manifest, pack_sealed()?)
+            .map_err(|issues| issues_refused(&issues))?;
+    }
+    Ok(out)
+}
+
+fn issues_refused(issues: &[Issue]) -> Value {
+    json!({"code": "refused", "issues": issues.iter().map(Issue::to_json).collect::<Vec<_>>()})
+}
+
+/// A document that names packs, as the check lowers it: its recipe instances expanded into their
+/// derived items and their channels; refused with the check's issues when nothing expanded
+/// (#429). A payload without the stored fields (#422's castle) still draws its expansion.
+fn lowered(doc: &Value, packs: &Packs) -> Result<Value, Value> {
+    let checked = check_packed(doc, pack_sealed()?, packs);
+    if !checked.ok && checked.expansions.is_empty() {
+        let errors: Vec<Issue> = checked
+            .issues
+            .into_iter()
+            .filter(|i| i.severity == "error")
+            .collect();
+        return Err(issues_refused(&errors));
+    }
+    Ok(checked.lowered)
+}
+
+/// Each path of `paths` (`items/<id>/<field>…`) as the canvas core evaluates `doc` at `t`
+/// (#429): null where the item or field isn't there.
+fn values_at(doc: &Value, t: i64, paths: &[String]) -> Result<Value, Value> {
+    let items = placed_at(doc, t).map_err(|r| refused(r.code, r.path))?;
+    let mut out = Map::new();
+    for path in paths {
+        let rest = path.strip_prefix("items/").unwrap_or_default();
+        let (id, field) = rest.split_once('/').unwrap_or((rest, ""));
+        let value = items
+            .iter()
+            .find(|(i, _, _)| i == id)
+            .and_then(|(_, item, _)| item.pointer(&format!("/{field}")))
+            .cloned()
+            .unwrap_or(Value::Null);
+        out.insert(path.clone(), value);
+    }
+    Ok(Value::Object(out))
 }
 
 /// A patch's ops applied as `writer`, to the layer its connection stands for.
@@ -457,12 +520,18 @@ fn overlay_picture(o: &deep_canvas_scene3d::scene::Overlay) -> Option<OverlayPic
 /// What a click at `at` view px picks in a frame (canvas primitives: Selection, Spatial index):
 /// the topmost 2D overlay whose shapes cover it, else the item the object-ID target holds there,
 /// else nothing.
+///
+/// In 3D a pick reads the (2 × margin + 1)² window of the object-ID target around the pointer:
+/// the drawn ID nearest the pointer, ties by depth, nearest the camera first (#424; Selection:
+/// `hit.margin`), so a 1 px line or a point is pickable as in 2D.
 fn pick(
     scene: &deep_canvas_scene3d::scene::Scene,
     ids: &[u8],
+    depth: Option<&(Vec<u8>, bool)>,
     picks: &[(String, u32)],
     size: [u32; 2],
     at: [f64; 2],
+    margin: i64,
 ) -> Option<String> {
     use deep_canvas_scene3d::scene::Shape2;
     for o in scene.overlays.iter().rev() {
@@ -483,8 +552,31 @@ fn pick(
     if x < 0.0 || y < 0.0 || x >= f64::from(size[0]) || y >= f64::from(size[1]) {
         return None;
     }
-    let i = (y as usize * size[0] as usize + x as usize) * 4;
-    let p = u32::from_le_bytes(ids.get(i..i + 4)?.try_into().ok()?);
+    let read = |b: &[u8], i: usize| b.get(i * 4..i * 4 + 4).map(|v| [v[0], v[1], v[2], v[3]]);
+    // (distance², nearness) of the best pixel so far, and its ID.
+    let mut best: Option<((f64, f64), u32)> = None;
+    let (cx, cy) = (x as i64, y as i64);
+    for py in cy - margin..=cy + margin {
+        for px in cx - margin..=cx + margin {
+            if px < 0 || py < 0 || px >= i64::from(size[0]) || py >= i64::from(size[1]) {
+                continue;
+            }
+            let i = py as usize * size[0] as usize + px as usize;
+            let Some(p) = read(ids, i).map(u32::from_le_bytes).filter(|p| *p != 0) else {
+                continue;
+            };
+            let d2 = (px as f64 + 0.5 - at[0]).powi(2) + (py as f64 + 0.5 - at[1]).powi(2);
+            let near = depth.and_then(|(d, grows)| {
+                let z = f64::from(f32::from_le_bytes(read(d, i)?));
+                Some(if *grows { z } else { -z })
+            });
+            let key = (d2, -near.unwrap_or(0.0));
+            if best.is_none_or(|(k, _)| key.0 < k.0 || (key.0 == k.0 && key.1 < k.1)) {
+                best = Some((key, p));
+            }
+        }
+    }
+    let (_, p) = best?;
     picks
         .iter()
         .find(|(_, v)| *v == p)
@@ -685,6 +777,15 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
 
 fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut args = parse(call)?;
+    // A document that names packs draws as the check lowers it, the call's packs installed
+    // first (#429).
+    let packs = install(&args.packs)?;
+    let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
+    let mut lowered_doc = if packed {
+        Some(lowered(&args.doc, &packs)?)
+    } else {
+        None
+    };
     let noop = app.backend == Backend::Noop;
     if noop && !args.clicks.is_empty() {
         return Err(refused(
@@ -716,7 +817,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     };
     let size = args.size;
     let timings = args.timings && !noop;
-    let opened = session3::open(app, size, timings, shows)?;
+    let opened = session3::open_doc(app, size, timings, shows, &args.doc)?;
     session3::surface(app, args.surface)?;
     let (ui, fx) = (opened.ui.clone(), opened.fx.clone());
     // What the view compiled as it opened, before its first frame (#854).
@@ -779,6 +880,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         &mut map_paths,
     )?;
     let mut receipt = Value::Null;
+    // Level of detail and the light cut, chosen from each frame's view (#425).
+    let mut selection = crate::lod::Selection::new(app.planted);
+    let drawn_scale = if args.surface.scale < 1.0 && !noop {
+        args.surface.scale
+    } else {
+        1.0
+    };
+    // Whether the key sun drew its cascades in any frame: the shadow pass the reply lists (#424).
+    let mut casts = false;
     let result = (|| -> Result<(), Value> {
         // The lights the policy last left out: a change is reported once, by ID (#421).
         let mut left_out: Vec<String> = Vec::new();
@@ -796,6 +906,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             // remove one, only leave one dangling, which refuses), and its roles keep the
             // distance.
             if patched {
+                if packed {
+                    lowered_doc = Some(lowered(&args.doc, &packs)?);
+                }
                 bindings = status::bindings(&args.doc)?;
                 if let Some(status) = status.as_ref().filter(|_| bound) {
                     if let Some(r) =
@@ -807,16 +920,43 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
             levels.collect();
-            let (mut composed, resident) = levels.compose(&args.doc);
+            let (mut composed, resident) = levels.compose(lowered_doc.as_ref().unwrap_or(&args.doc));
             if !args.hidden.is_empty() {
                 composed = without_layers(&composed, &args.hidden);
             }
             let mut scene = evaluate_with(&composed, t, &args.look, &mut labels, &read)
                 .map_err(|r| refused(r.code, r.path))?;
+            let values = if args.evaluate.is_empty() {
+                None
+            } else {
+                Some(values_at(&composed, t, &args.evaluate)?)
+            };
             // Its maps, made ready in the decode worker once per run and held to the
             // document's decoded-image cap (#423).
             let (texels, made) = crate::textures::prepare(app, &scene, &map_paths)?;
             scene.texels = texels;
+            // Over a window's flat page the view shows the page where nothing draws, so what it
+            // lays over the page (a shadow catcher's alpha) composites in linear light (#424).
+            if let Some(w) = &args.window {
+                scene.ground = w.page;
+            }
+            // The view's cutaway, in session state, over the document's (#424).
+            if let Some(c) = &args.cutaway {
+                let look = &args.look;
+                let cut = deep_canvas_scene3d::cut::cutaway(
+                    "view",
+                    c,
+                    "cutaway",
+                    |r| {
+                        look.role(r).map(|c| {
+                            c.map(|v| deep_canvas::color::srgb_decode(f64::from(v) / 255.0))
+                        })
+                    },
+                    look.basis == deep_canvas_scene3d::look::Basis::Physical,
+                )
+                .map_err(|r| refused(r.code, r.path))?;
+                scene.set_cutaway(Some(cut));
+            }
             if n == args.from {
                 receipt = made;
             }
@@ -830,6 +970,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 app.planted == Some(Planted::EdgesUnwelded),
                 app.planted == Some(Planted::EdgesSkipDepth),
             );
+            let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
             // Each mesh-edge line's segments, in world metres, as `counts` reports them.
             let edge_segments: Map<String, Value> = scene
                 .layers
@@ -886,7 +1027,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     dirt_file = Some(write_named(out, &dirt_target(d, size), "f32")?);
                 }
             }
-            lock(&fx).settings = settings;
+            {
+                let mut fx = lock(&fx);
+                fx.settings = settings;
+            }
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
             } else {
@@ -911,6 +1055,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 .map(|(_, at)| *at)
                 .collect();
             let read_targets = (capture && wants_targets || !clicks.is_empty()) && !noop;
+            // The planted wrong program reads the one pixel under the pointer (#424).
+            let margin = if app.planted == Some(Planted::SinglePixelPick) {
+                0
+            } else {
+                args.hit_margin
+            };
             if let (Some(status), Some(stage)) = (&status, &opened.stage) {
                 let (layer, marks, legend) = status::layer(
                     &scene,
@@ -937,6 +1087,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
             }
             let evaluated = scene.clone();
+            // The pipelines compiled while drawing this frame, for `counts` (#424).
+            let compiled_before = session3::pipelines(app).len();
             // Look: samples (#423): a frame of n sub-samples is their mean in linear light,
             // each offset by the sample's index alone (Halton 2, 3), drawn before the frame.
             let samples = args.look.live_samples;
@@ -977,6 +1129,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if !subs.is_empty() {
                 mean(&mut drawn, &subs);
             }
+            casts |= !drawn.counts.shadow_maps.is_empty();
+            let compiled: Vec<&'static str> = session3::pipelines(app)
+                .into_iter()
+                .skip(compiled_before)
+                .collect();
             if n == args.from {
                 moved = drawn.moved;
                 // The first frame is settled once drawn: its time from the spawn, then which
@@ -989,6 +1146,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                         .collect();
                     *report = json!({"since_spawn_ms": ms, "pipelines": pipelines});
                 }
+            }
+            // A material operator that can't draw refuses the frame, never drawn without it.
+            if let Some((op, why)) = drawn.counts.operators_refused.first() {
+                return Err(refused("operator_compile", format!("{op}: {why}")));
             }
             if delay > 0 {
                 held.push((n + delay, drawn.slot));
@@ -1013,6 +1174,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             frame.insert("frame".into(), json!(n));
             frame.insert("settled".into(), json!(settled));
             frame.insert("resident".into(), json!(resident));
+            if let Some(values) = values {
+                frame.insert("values".into(), values);
+            }
             if let Some(bytes) = drawn.gpu_bytes {
                 frame.insert("gpu_bytes".into(), json!(bytes));
             }
@@ -1071,6 +1235,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("labels".into(), labels);
                 frame.insert("pages".into(), pages);
             }
+            // Per-pixel items that ran out of room at the class's cap drew sorted (#424).
+            if drawn.counts.fragments_capped {
+                frame
+                    .entry("notices")
+                    .or_insert_with(|| json!([]))
+                    .as_array_mut()
+                    .expect("a list")
+                    .push(json!({"code": "fragments_capped", "fragments": drawn.counts.fragments}));
+            }
             // Lights the budget left out, and shadows it dropped, reported once per change.
             let c = &drawn.counts;
             if c.lights_left_out != left_out || c.shadows_dropped != dropped {
@@ -1078,7 +1251,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 dropped.clone_from(&c.shadows_dropped);
                 let notice =
                     json!({"code": "lights_over_budget", "lights": left_out, "shadows": dropped});
-                frame.insert("notices".into(), json!([notice]));
+                frame
+                    .entry("notices")
+                    .or_insert_with(|| json!([]))
+                    .as_array_mut()
+                    .expect("a list")
+                    .push(notice);
             }
             if args.counts {
                 let c = &drawn.counts;
@@ -1091,12 +1269,44 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("replayed".into(), json!(c.replayed));
                 frame.insert("instances_written".into(), json!(c.instances_written));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
+                frame.insert("compiled".into(), json!(compiled));
                 frame.insert("segments".into(), Value::Object(edge_segments));
             }
+            if args.lod {
+                frame.insert("lod".into(), crate::lod::rows(&choices));
+            }
+            if args.light_cut {
+                frame.insert("light_cut".into(), crate::lod::cut_json(&evaluated, &cut));
+            }
+            if args.masks && capture && !noop {
+                let mut rows = Vec::new();
+                for c in choices.iter().filter(|c| c.bands.len() == 2) {
+                    let (Some(level), Some(&(_, key))) =
+                        (c.blend, drawn.picks.iter().find(|(id, _)| *id == c.item))
+                    else {
+                        continue;
+                    };
+                    for (pass, size, bytes) in session3::masks(app, key, level) {
+                        let file = write_named(out, &bytes, "u8")?;
+                        rows.push(
+                            json!({"item": c.item, "pass": pass, "size": size, "file": file}),
+                        );
+                    }
+                }
+                frame.insert("masks".into(), json!(rows));
+            }
             if args.cascades {
+                // Each shadow map the key sun draws: its key, which holds the planes that cut its
+                // casters, and its texel in m (#424).
+                let maps: Vec<Value> = drawn
+                    .counts
+                    .shadow_maps
+                    .iter()
+                    .map(|(key, texel)| json!({"key": format!("{key:016x}"), "texel_m": texel}))
+                    .collect();
                 frame.insert(
                     "cascades".into(),
-                    json!({"splits": drawn.counts.cascade_splits}),
+                    json!({"splits": drawn.counts.cascade_splits, "maps": maps}),
                 );
             }
             if let Some((gpu_ms, passes)) = &drawn.timing {
@@ -1108,7 +1318,17 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 let answered: Vec<Value> = clicks
                     .iter()
                     .map(|at| {
-                        let p = ids.and_then(|ids| pick(&evaluated, ids, &drawn.picks, size, *at));
+                        let p = ids.and_then(|ids| {
+                            pick(
+                                &evaluated,
+                                ids,
+                                drawn.depth.as_ref(),
+                                &drawn.picks,
+                                size,
+                                *at,
+                                margin,
+                            )
+                        });
                         json!({"at": at, "pick": p})
                     })
                     .collect();
@@ -1139,7 +1359,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     // the output.
     let effects = lock(&fx);
     let mut passes = Vec::new();
-    if effects.settings.shadow.is_some() {
+    if effects.settings.shadow.is_some() || casts {
         passes.push(json!({"name": SHADOW_PASS, "reads": [], "writes": ["shadow"]}));
     }
     passes.push(json!({"name": GEOMETRY_PASS, "reads": [], "writes": ["linear", "ids", "depth"]}));
