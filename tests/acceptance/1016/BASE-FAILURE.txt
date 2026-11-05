@@ -1,0 +1,40 @@
+Base commit: 79d98cbc (Merge pull request #1242 from windoliver/worktree-github-issue-429-1c75e2), with #1015's deep lease
+Commands (one file at a time, Node 24.22.0, npm ci and npm run build --workspaces at the base):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1016/<file>.test.ts [-t "<the main test's name>"]
+Date: 2026-11-04  vitest 5.0.5  darwin-arm64, 12 cores, load 13-38 (the machine shared with other sessions)
+Toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13), cargo 1.99.1 (5f94df478 2026-08-27)
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1016/tsconfig.json exits 0 at the base.
+
+The toolchain probe (AC1's first step) decides whether work on #1016 continues: it does. Given a named pipe of 3
+tokens in MAKEFLAGS and CARGO_MAKEFLAGS (`-j --jobserver-auth=fifo:<pipe>`), cargo 1.99.1 ran at most 4 rustc at once
+(3 tokens and its implicit job), where the same build with no jobserver runs 12. Not BLOCKED.
+
+Run at the base: the main tests, as a check that each fails at a named assertion for the reason the issue gives (the
+base has no pool: `deep lease` gives the command no jobserver). Not run: the three wrong-program tests (the hub refuses
+a DEEP_HUB_PLANT it doesn't list, so each fails at startHub: "the hub didn't start with DEEP_HUB_PLANT=<plant> ...
+names no planted program"), and AC5 (a reading with no threshold, read from AC2's runs). Trimmed to the relevant lines.
+
+== toolchain.test.ts (AC1): Tests 1 failed (1)
+  AC1 probe: rustc 1.99.1 (58cf8f9c3 2026-10-13), cargo 1.99.1 (5f94df478 2026-08-27); 3 tokens in a named pipe: at most 4 rustc at once (169 samples, median gap 101 ms); exit 0
+  AC1 hub: `deep lease -- cargo build` with the hub's 4 tokens: at most 12 rustc at once (71 samples, median gap 107 ms); exit 0
+x AC1 #1016.b32141c1 a cold `cargo build` of the sample repo given the hub's jobserver with 4 tokens runs at most 4 `rustc` processes in every 100 ms sample; ...
+  AssertionError: sample 5 of 71 (+0.4 s): 12 rustc and linker processes of the build given the hub's jobserver ran at once (rustc 21317, ..., rustc 21328), over the 4 tokens
+
+== pool.test.ts -t "never exceed" (AC2): Tests 1 failed | 2 skipped (3), load 38
+  AC2 without the pool: four builds ended in 24.1 s (exits 0, 0, 0, 0); at most 48 rustc and linker processes at once (139 samples, median gap 115 ms); 4 cpu.slot leases at once; combined peak memory 7407 MB (24 one-second reads)
+  AC2 with the pool: four builds ended in 30.4 s (exits 0, 0, 0, 0); at most 48 rustc and linker processes at once (182 samples, median gap 120 ms); 4 cpu.slot leases at once; combined peak memory 6700 MB (31 one-second reads)
+x AC2 #1016.33bb2666 four worktrees' cold `cargo build --workspace` under `deep lease`: rustc and linker processes together never exceed the pool's 11 tokens ...
+  AssertionError: sample 5 of 182 (+0.5 s): 24 rustc and linker processes of the four builds ran at once (rustc 22943, ..., rustc 22966), over the 11 tokens
+  (At the base both rounds are the same program: their 24.1 s and 30.4 s are the run-to-run spread at load 38.)
+
+== recovery.test.ts -t "while another leased build runs" (AC3): Tests 1 failed | 1 skipped (2)
+x AC3 #1016.4d1dc510 a build killed with SIGKILL while it holds tokens: ...
+  AssertionError: `deep lease -- holder` (A) must receive the pool as `--jobserver-auth=fifo:<path>` in both MAKEFLAGS and CARGO_MAKEFLAGS: MAKEFLAGS null, CARGO_MAKEFLAGS null
+
+== workers.test.ts -t "and with 11 when no build runs" (AC4): Tests 1 failed | 1 skipped (2)
+x AC4 #1016.37903724 an `npm test` entry marked `jobs: n` starts its runner with 3 workers beside a build that holds 8 tokens, ...
+  AssertionError: `deep lease -- holder` must receive the pool as `--jobserver-auth=fifo:<path>` in both MAKEFLAGS and CARGO_MAKEFLAGS: MAKEFLAGS null, CARGO_MAKEFLAGS null
+
+Harness check (not committed): the holder and the pipe read were run once against a pipe the test made itself, with
+11 tokens: TAKE=6 left 5, LEAVE=3 held 2 and left 3, a SIGKILL of the TAKE holder left the pipe at 3, the LEAVE holder's
+go file put its 2 back (5), and the npm stand-in logged its words. It passed.

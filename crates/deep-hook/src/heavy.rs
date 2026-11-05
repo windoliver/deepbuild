@@ -26,6 +26,9 @@ pub struct Entry {
     pub name: String,
     pub argv_prefix: Vec<String>,
     pub kinds: Vec<String>,
+    /// How it takes jobs (#1016): `jobserver`, `n` (a worker count set by `jobs_flag`), `none` or a fixed number.
+    pub jobs: String,
+    pub jobs_flag: Option<String>,
     /// Whether it names a whole run, as DeepBuild's own do: a word after its prefix that isn't an option focuses it.
     pub whole: bool,
 }
@@ -35,6 +38,8 @@ pub struct Entry {
 pub struct Hit {
     pub name: String,
     pub kinds: Vec<String>,
+    pub jobs: String,
+    pub jobs_flag: Option<String>,
 }
 
 fn strings(value: Option<&Value>) -> Vec<String> {
@@ -64,10 +69,16 @@ fn shipped() -> Vec<Entry> {
             let Some(Value::String(name)) = get("name") else {
                 return None;
             };
+            let text = |key: &str| match get(key) {
+                Some(Value::String(s)) => Some(s.clone()),
+                _ => None,
+            };
             Some(Entry {
                 name: name.clone(),
                 argv_prefix: strings(get("argv_prefix")),
                 kinds: strings(get("kinds")),
+                jobs: text("jobs").unwrap_or_else(|| "none".to_string()),
+                jobs_flag: text("jobs_flag"),
                 whole: true,
             })
         })
@@ -144,6 +155,8 @@ pub fn repo_entries(text: &str) -> Vec<Entry> {
                 name: String::new(),
                 argv_prefix: Vec::new(),
                 kinds: Vec::new(),
+                jobs: "none".to_string(),
+                jobs_flag: None,
                 whole: false,
             });
             list = None;
@@ -159,6 +172,8 @@ pub fn repo_entries(text: &str) -> Vec<Entry> {
         list = None;
         match key {
             "name" => e.name = scalar(value),
+            "jobs" => e.jobs = scalar(value),
+            "jobs_flag" => e.jobs_flag = Some(scalar(value)).filter(|f| !f.is_empty()),
             "argv_prefix" | "kinds" => {
                 let items = if value.is_empty() {
                     list = Some(if key == "kinds" {
@@ -269,12 +284,16 @@ pub fn matched(command: &str, cwd: Option<&Path>, home: &Path, plant: Option<&st
             return Some(Hit {
                 name: "cargo".to_string(),
                 kinds: Vec::new(),
+                jobs: "jobserver".to_string(),
+                jobs_flag: None,
             });
         }
         if let Some(e) = entries.iter().find(|e| covers(e, &words)) {
             return Some(Hit {
                 name: e.name.clone(),
                 kinds: e.kinds.clone(),
+                jobs: e.jobs.clone(),
+                jobs_flag: e.jobs_flag.clone(),
             });
         }
     }
@@ -325,5 +344,8 @@ mod tests {
         let block = repo_entries("heavy_commands:\n- name: \"e2e\"\n  argv_prefix:\n    - npm\n    - run\n    - e2e\n  kinds: [browser]\n");
         assert_eq!(block[0].argv_prefix, ["npm", "run", "e2e"]);
         assert_eq!(block[0].kinds, ["browser"]);
+        let runner = repo_entries("heavy_commands:\n  - name: npm test\n    argv_prefix: [npm, test]\n    kinds: []\n    jobs: n\n    jobs_flag: --maxWorkers\n");
+        assert_eq!(runner[0].jobs, "n");
+        assert_eq!(runner[0].jobs_flag.as_deref(), Some("--maxWorkers"));
     }
 }
