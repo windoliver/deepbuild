@@ -18,6 +18,7 @@ pub mod status;
 pub mod surface;
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 
 use bytemuck::{Pod, Zeroable};
@@ -41,6 +42,11 @@ pub const LINEAR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 /// The object-ID target: each pixel the pick ID of the item drawn there, 0 for none.
 pub const IDS: wgpu::TextureFormat = wgpu::TextureFormat::R32Uint;
 pub const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+/// The geometry pass's sample count (#1173), which the GPU surface reports as its `msaa`.
+pub const MSAA: u32 = 4;
+/// The multisampled object-ID target's format: each ID as two 16-bit halves, since a 32-bit
+/// integer format needn't multisample.
+const IDS_MS: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Uint;
 /// The planted forward-Z twin's far plane.
 pub const FORWARD_FAR: f64 = 10_000.0;
 
@@ -70,12 +76,15 @@ const OUTPUT: &str = include_str!("output.wgsl");
 const OUTLINE: &str = include_str!("outline.wgsl");
 const BUSY: &str = include_str!("busy.wgsl");
 const LABEL: &str = include_str!("label.wgsl");
+const RESOLVE: &str = include_str!("resolve.wgsl");
 /// The pass that draws the key light's shadow map, in the frame's shadows place.
 pub const SHADOW_PASS: &str = "scene3d.shadow";
 /// The sky's pipeline, drawn first in the geometry pass behind everything (#422).
 pub const SKY_PASS: &str = "scene3d.sky";
 /// The puffs' pipeline (#422).
 pub const PUFF_PASS: &str = "scene3d.puff";
+/// The pass resolving the geometry pass's object IDs and depth (#1173).
+pub const RESOLVE_PASS: &str = "scene3d.sample_resolve";
 pub use deep_canvas_scene3d::module::CASCADE_PASS;
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
@@ -144,6 +153,10 @@ pub struct Planted {
     pub ids_ignore_mask: bool,
     /// #424: a cutaway clips the color pass alone, never the shadow passes.
     pub cuts_color_only: bool,
+    /// #1173: the geometry pass draws one sample a pixel, as the base drew it.
+    pub single_sample: bool,
+    /// #1173: each frame's resolve blends in half of the previous frame's.
+    pub resolve_accumulates: bool,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -745,11 +758,23 @@ pub(crate) fn texture2d(
     format: wgpu::TextureFormat,
     usage: wgpu::TextureUsages,
 ) -> wgpu::Texture {
+    multisampled(d, 1, label, size, format, usage)
+}
+
+/// `texture2d` with `samples` samples a pixel (#1173).
+fn multisampled(
+    d: &wgpu::Device,
+    samples: u32,
+    label: &str,
+    size: [u32; 2],
+    format: wgpu::TextureFormat,
+    usage: wgpu::TextureUsages,
+) -> wgpu::Texture {
     d.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: extent(size),
         mip_level_count: 1,
-        sample_count: 1,
+        sample_count: samples,
         dimension: wgpu::TextureDimension::D2,
         format,
         usage,
@@ -861,6 +886,7 @@ pub(crate) fn pipeline(
 ) -> wgpu::RenderPipeline {
     culled(
         d,
+        1,
         label,
         layout,
         module,
@@ -871,10 +897,12 @@ pub(crate) fn pipeline(
     )
 }
 
-/// [`pipeline`] culling `cull`'s faces.
+/// [`pipeline`] drawing `samples` samples a pixel (the geometry pass's, #1173) and culling
+/// `cull`'s faces.
 #[allow(clippy::too_many_arguments)]
 fn culled(
     d: &wgpu::Device,
+    samples: u32,
     label: &str,
     layout: Option<&wgpu::PipelineLayout>,
     module: &wgpu::ShaderModule,
@@ -897,7 +925,10 @@ fn culled(
             ..Default::default()
         },
         depth_stencil,
-        multisample: Default::default(),
+        multisample: wgpu::MultisampleState {
+            count: samples,
+            ..Default::default()
+        },
         fragment: fragment.map(|(fs, targets)| wgpu::FragmentState {
             module,
             entry_point: Some(fs),
@@ -1100,6 +1131,29 @@ struct Targets {
     ids_view: wgpu::TextureView,
     depth_view: wgpu::TextureView,
     output_bind: wgpu::BindGroup,
+    drawn: Drawn,
+}
+
+/// What the geometry pass draws into and resolves into the targets everything after it reads
+/// (#1173).
+#[derive(Clone)]
+struct Drawn {
+    /// The multisampled color, transient, and the linear target it resolves into; the linear
+    /// target alone at one sample.
+    color: (wgpu::TextureView, Option<wgpu::TextureView>),
+    ids_ms: wgpu::TextureView,
+    depth_ms: wgpu::TextureView,
+    ids: wgpu::TextureView,
+    depth: wgpu::TextureView,
+    resolve: (wgpu::RenderPipeline, wgpu::BindGroup),
+    /// The planted resolve_accumulates_frames: its blend, the previous frame's copy, and whether
+    /// one was drawn yet.
+    accumulates: Option<(
+        wgpu::RenderPipeline,
+        wgpu::BindGroup,
+        wgpu::Texture,
+        Arc<AtomicBool>,
+    )>,
 }
 
 /// The key light's shadow map and what draws it.
@@ -1211,6 +1265,10 @@ pub struct Renderer {
     output_f32: wgpu::RenderPipeline,
     /// The finished frame (status::FINISHED), made when a frame has passes after the finish.
     finished: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
+    /// The pass resolving the geometry pass's object IDs and depth (#1173), and the planted
+    /// resolve_accumulates_frames' blend of the previous frame.
+    resolve: wgpu::RenderPipeline,
+    accumulate: Option<wgpu::RenderPipeline>,
     /// Render pipelines this renderer compiled, so a patch's new ones can be counted (#379).
     compiled: u32,
     /// Each pipeline it compiled, by name, in the order it compiled them (#854).
@@ -1556,6 +1614,7 @@ fn cascade_stub(d: &wgpu::Device) -> wgpu::TextureView {
 /// premultiplied over what's behind it, or adding to it.
 fn clear_pipeline(
     d: &wgpu::Device,
+    samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
     planted: &Planted,
@@ -1610,21 +1669,23 @@ fn clear_pipeline(
             },
         }),
         Some(wgpu::ColorTargetState {
-            format: IDS,
+            format: IDS_MS,
             blend: None,
             write_mask: wgpu::ColorWrites::empty(),
         }),
     ];
     let buffers = mesh_buffers();
     let label = CLEAR_NAMES[kind];
-    pipeline(
+    culled(
         d,
+        samples,
         label,
         Some(layout),
         module,
         ("mesh_vs", &buffers),
         Some((if per_pixel { "oit_fs" } else { "mesh_fs" }, &targets)),
         Some(depth),
+        None,
     )
 }
 
@@ -1689,6 +1750,7 @@ const CLEAR_NAMES: [&str; 5] = [
 #[allow(clippy::too_many_arguments)]
 fn draw_pipeline(
     d: &wgpu::Device,
+    samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
     forward_z: bool,
@@ -1710,10 +1772,11 @@ fn draw_pipeline(
     };
     let targets = [
         target(LINEAR, Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING)),
-        target(IDS, None),
+        target(IDS_MS, None),
     ];
     culled(
         d,
+        samples,
         vs,
         Some(layout),
         module,
@@ -1728,6 +1791,7 @@ fn draw_pipeline(
 /// depth and no object ID.
 fn sky_pipeline(
     d: &wgpu::Device,
+    samples: u32,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
     forward_z: bool,
@@ -1743,15 +1807,17 @@ fn sky_pipeline(
         stencil: Default::default(),
         bias: Default::default(),
     };
-    let targets = [target(LINEAR, None), target(IDS, None)];
-    pipeline(
+    let targets = [target(LINEAR, None), target(IDS_MS, None)];
+    culled(
         d,
+        samples,
         SKY_PASS,
         Some(layout),
         module,
         ("sky_vs", &[]),
         Some(("sky_fs", &targets)),
         Some(depth),
+        None,
     )
 }
 
@@ -1762,6 +1828,7 @@ struct Families {
     draw_layout: wgpu::PipelineLayout,
     text_layout: wgpu::PipelineLayout,
     forward_z: bool,
+    samples: u32,
     line: Option<wgpu::RenderPipeline>,
     point: Option<wgpu::RenderPipeline>,
     text: Option<wgpu::RenderPipeline>,
@@ -1772,11 +1839,12 @@ impl Families {
     /// many it compiled.
     fn ensure(&mut self, d: &wgpu::Device, layer: &Layer3, names: &mut Vec<&'static str>) -> u32 {
         let mut made = 0;
-        let (module, draw, text, fz) = (
+        let (module, draw, text, fz, samples) = (
             &self.module,
             &self.draw_layout,
             &self.text_layout,
             self.forward_z,
+            self.samples,
         );
         for (name, wanted, slot, layout, vs, fs, buffer) in [
             (
@@ -1810,6 +1878,7 @@ impl Families {
             if wanted && slot.is_none() {
                 *slot = Some(draw_pipeline(
                     d,
+                    samples,
                     module,
                     layout,
                     fz,
@@ -1835,6 +1904,13 @@ impl Renderer {
     /// Each pipeline it compiled so far, by name (#854).
     pub fn compiled_names(&self) -> &[&'static str] {
         &self.names
+    }
+
+    /// Every target the geometry pass draws into, by name, with the sample count it's made with
+    /// (#1173).
+    pub fn render_targets(&self) -> [(&'static str, u32); 3] {
+        let n = self.families.samples;
+        [("color", n), ("ids", n), ("depth", n)]
     }
 
     pub fn new(device: &Device, planted: Planted) -> Renderer {
@@ -2028,9 +2104,11 @@ impl Renderer {
         let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
         let mesh_buffers = mesh_buffers();
+        let samples = if planted.single_sample { 1 } else { MSAA };
         let mesh = |cull| {
             draw_pipeline(
                 d,
+                samples,
                 &module,
                 &mesh_layout,
                 planted.forward_z,
@@ -2084,6 +2162,52 @@ impl Renderer {
         };
         let output_pipeline = output_into(FORMAT);
         let output_f32 = output_into(status::FINISHED);
+        // The object IDs and depth from their first sample, which reads its targets as plain
+        // textures at one sample (#1173).
+        let resolve_source = if samples == 1 {
+            RESOLVE.replace("multisampled_2d", "2d")
+        } else {
+            RESOLVE.to_string()
+        };
+        let resolve_module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(RESOLVE_PASS),
+            source: wgpu::ShaderSource::Wgsl(resolve_source.into()),
+        });
+        let accumulate = planted.resolve_accumulates.then(|| {
+            let half = wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::Constant,
+                dst_factor: wgpu::BlendFactor::OneMinusConstant,
+                operation: wgpu::BlendOperation::Add,
+            };
+            let blend = wgpu::BlendState {
+                color: half,
+                alpha: half,
+            };
+            pipeline(
+                d,
+                RESOLVE_PASS,
+                None,
+                &resolve_module,
+                ("resolve_vs", &[]),
+                Some(("previous_fs", &[target(LINEAR, Some(blend))])),
+                None,
+            )
+        });
+        let resolve = pipeline(
+            d,
+            RESOLVE_PASS,
+            None,
+            &resolve_module,
+            ("resolve_vs", &[]),
+            Some(("resolve_fs", &[target(IDS, None)])),
+            Some(wgpu::DepthStencilState {
+                format: DEPTH,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Always),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+        );
         // Thin lines and outlines at full size: output.wgsl's `finish` for their color, the
         // core's depth target to test against (#386).
         let outline_module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -2279,6 +2403,7 @@ impl Renderer {
                 draw_layout,
                 text_layout,
                 forward_z: planted.forward_z,
+                samples,
                 line: None,
                 point: None,
                 text: None,
@@ -2286,6 +2411,8 @@ impl Renderer {
             output_pipeline,
             output_f32,
             finished: None,
+            resolve,
+            accumulate,
             compiled: 3,
             names: vec![
                 "scene3d.mesh",
@@ -2294,6 +2421,7 @@ impl Renderer {
                 "scene3d.output_f32",
                 OUTLINE_PASS,
                 LABEL_PASS,
+                RESOLVE_PASS,
             ],
             meshes: BTreeMap::new(),
             batches: BTreeMap::new(),
@@ -2371,6 +2499,63 @@ impl Renderer {
         let linear_view = linear.create_view(&Default::default());
         let output_bind = self.output_bind(d, &linear_view);
         let depth_view = depth.create_view(&Default::default());
+        let ids_view = ids.create_view(&Default::default());
+        // The geometry pass's targets at its sample count (#1173): the color resolves in the
+        // pass, so it's never stored; the IDs and depth the resolve pass reads.
+        let samples = self.families.samples;
+        let ms = |label, format, usage| {
+            multisampled(d, samples, label, size, format, usage).create_view(&Default::default())
+        };
+        let read = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
+        let color = if samples > 1 {
+            let transient =
+                wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TRANSIENT_ATTACHMENT;
+            let ms = ms("scene3d linear ms", LINEAR, transient);
+            (ms, Some(linear_view.clone()))
+        } else {
+            (linear_view.clone(), None)
+        };
+        let ids_ms = ms("scene3d ids ms", IDS_MS, read);
+        let depth_ms = ms("scene3d depth ms", DEPTH, read);
+        let resolve_bind = bind_group(
+            d,
+            RESOLVE_PASS,
+            &self.resolve.get_bind_group_layout(0),
+            [
+                wgpu::BindingResource::TextureView(&ids_ms),
+                wgpu::BindingResource::TextureView(&depth_ms),
+            ],
+        );
+        let accumulates = self.accumulate.is_some().then(|| {
+            let previous = texture2d(
+                d,
+                "scene3d previous",
+                size,
+                LINEAR,
+                wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            );
+            let p = self.accumulate.clone().expect("made with the plant");
+            let view = previous.create_view(&Default::default());
+            let entry = wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(&view),
+            };
+            let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(RESOLVE_PASS),
+                layout: &p.get_bind_group_layout(0),
+                entries: &[entry],
+            });
+            (p, bind, previous, Arc::new(AtomicBool::new(false)))
+        });
+        let drawn = Drawn {
+            color,
+            ids_ms,
+            depth_ms,
+            ids: ids_view.clone(),
+            depth: depth_view.clone(),
+            resolve: (self.resolve.clone(), resolve_bind),
+            accumulates,
+        };
         let o = &self.outlines;
         self.outlines.binds = Some([&o.display, &o.internal].map(|buffer| {
             bind_group(
@@ -2385,12 +2570,13 @@ impl Renderer {
         }));
         self.targets = Some(Targets {
             size,
-            ids_view: ids.create_view(&Default::default()),
+            ids_view,
             depth_view,
             linear,
             linear_view,
             ids,
             output_bind,
+            drawn,
         });
     }
 
@@ -2938,7 +3124,14 @@ impl Renderer {
                 &self.lights_layout,
                 &self.ao.shade_layout,
             ];
-            let made = op::compile(&device.device, SHADER, layouts, self.planted.forward_z, o);
+            let made = op::compile(
+                &device.device,
+                SHADER,
+                layouts,
+                self.planted.forward_z,
+                self.families.samples,
+                o,
+            );
             if made.is_ok() {
                 self.compiled += 1;
                 self.names.push("scene3d.material_op");
@@ -3047,6 +3240,7 @@ impl Renderer {
         if self.capped && self.cut_pipeline.is_none() {
             self.cut_pipeline = Some(draw_pipeline(
                 &device.device,
+                self.families.samples,
                 &self.scene_module,
                 &self.solid_layout,
                 self.planted.forward_z,
@@ -3287,6 +3481,7 @@ impl Renderer {
         if self.sky && self.sky_pipeline.is_none() {
             self.sky_pipeline = Some(sky_pipeline(
                 &device.device,
+                self.families.samples,
                 &self.scene_module,
                 &self.solid_layout,
                 self.planted.forward_z,
@@ -3383,6 +3578,7 @@ impl Renderer {
             if wanted && self.clear_pipelines[k].is_none() {
                 self.clear_pipelines[k] = Some(clear_pipeline(
                     &device.device,
+                    self.families.samples,
                     &self.families.module,
                     &self.solid_layout,
                     &self.planted,
@@ -3716,13 +3912,13 @@ impl Renderer {
                 .device
                 .create_render_bundle_encoder(&wgpu::RenderBundleEncoderDescriptor {
                     label: Some(id),
-                    color_formats: &[Some(LINEAR), Some(IDS)],
+                    color_formats: &[Some(LINEAR), Some(IDS_MS)],
                     depth_stencil: Some(wgpu::RenderBundleDepthStencil {
                         format: DEPTH,
                         depth_read_only: false,
                         stencil_read_only: true,
                     }),
-                    sample_count: 1,
+                    sample_count: self.families.samples,
                     multiview: None,
                 });
         enc.set_bind_group(0, &self.frame_bind, &[]);
@@ -3973,10 +4169,11 @@ impl Renderer {
             .iter()
             .filter_map(|id| self.batches.get(id)?.bundle.clone())
             .collect();
+        let drawn = t.drawn.clone();
         let (linear, ids, depth) = (
             t.linear_view.clone(),
-            t.ids_view.clone(),
-            t.depth_view.clone(),
+            drawn.ids.clone(),
+            drawn.depth.clone(),
         );
         let (ground, clear_depth) = (self.ground, self.clear_depth());
         let sky = self.sky_draw();
@@ -4008,7 +4205,7 @@ impl Renderer {
             timed(&profiler, GEOMETRY_PASS, encoder, |encoder, timestamps| {
                 geometry_pass(
                     encoder,
-                    [&linear, &ids, &depth],
+                    &drawn,
                     ground,
                     clear_depth,
                     sky.as_ref(),
@@ -4543,7 +4740,7 @@ impl Renderer {
             .filter_map(|id| self.batches.get(id)?.bundle.as_ref());
         geometry_pass(
             encoder,
-            [&t.linear_view, &t.ids_view, &t.depth_view],
+            &t.drawn,
             self.ground,
             self.clear_depth(),
             self.sky_draw().as_ref(),
@@ -4610,7 +4807,7 @@ impl Renderer {
             let targets = [
                 target(LINEAR, Some(blend)),
                 Some(wgpu::ColorTargetState {
-                    format: IDS,
+                    format: IDS_MS,
                     blend: None,
                     write_mask: wgpu::ColorWrites::empty(),
                 }),
@@ -4620,8 +4817,9 @@ impl Renderer {
                 step_mode: wgpu::VertexStepMode::Instance,
                 attributes: &PUFF,
             })];
-            self.puff_pipeline = Some(pipeline(
+            self.puff_pipeline = Some(culled(
                 &device.device,
+                self.families.samples,
                 PUFF_PASS,
                 Some(&self.solid_layout),
                 &self.scene_module,
@@ -4638,6 +4836,7 @@ impl Renderer {
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
+                None,
             ));
             self.compiled += 1;
             self.names.push(PUFF_PASS);
@@ -4913,9 +5112,13 @@ struct PuffRecord {
 const PUFF: [wgpu::VertexAttribute; 3] =
     wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4, 2 => Float32x4];
 
+/// The geometry pass into `drawn`'s multisampled targets, then the pass resolving their object
+/// IDs and depth (#1173); `timestamps` time the first, since Metal fails a pass's timestamps split
+/// over two passes.
+#[allow(clippy::too_many_arguments)]
 fn geometry_pass<'a>(
     encoder: &mut wgpu::CommandEncoder,
-    [linear, ids, depth]: [&wgpu::TextureView; 3],
+    drawn: &Drawn,
     [r, g, b, a]: [f64; 4],
     clear_depth: f64,
     sky: Option<&SkyDraw>,
@@ -4923,21 +5126,27 @@ fn geometry_pass<'a>(
     puffs: Option<&PuffDraw>,
     timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
 ) {
+    let (color, resolve_target) = &drawn.color;
+    // A resolved color is all that's kept of the multisampled one.
+    let color_store = match resolve_target {
+        Some(_) => wgpu::StoreOp::Discard,
+        None => wgpu::StoreOp::Store,
+    };
     deep_gpu::alloc::outside(|| {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(GEOMETRY_PASS),
             color_attachments: &[
                 Some(wgpu::RenderPassColorAttachment {
-                    view: linear,
-                    resolve_target: None,
+                    view: color,
+                    resolve_target: resolve_target.as_ref(),
                     depth_slice: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color { r, g, b, a }),
-                        store: wgpu::StoreOp::Store,
+                        store: color_store,
                     },
                 }),
                 Some(wgpu::RenderPassColorAttachment {
-                    view: ids,
+                    view: &drawn.ids_ms,
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
@@ -4947,7 +5156,7 @@ fn geometry_pass<'a>(
                 }),
             ],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: depth,
+                view: &drawn.depth_ms,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(clear_depth as f32),
                     store: wgpu::StoreOp::Store,
@@ -4974,6 +5183,64 @@ fn geometry_pass<'a>(
             }
             pass.set_vertex_buffer(0, buffer.slice(..));
             pass.draw(0..6, 0..*count);
+        }
+        drop(pass);
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some(RESOLVE_PASS),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &drawn.ids,
+                resolve_target: None,
+                depth_slice: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &drawn.depth,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(clear_depth as f32),
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            ..Default::default()
+        });
+        pass.set_pipeline(&drawn.resolve.0);
+        pass.set_bind_group(0, &drawn.resolve.1, &[]);
+        pass.draw(0..3, 0..1);
+        drop(pass);
+        if let Some((pipeline, bind, previous, drew)) = &drawn.accumulates {
+            let linear = drawn.color.1.as_ref().unwrap_or(&drawn.color.0);
+            if drew.swap(true, Ordering::SeqCst) {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some(RESOLVE_PASS),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: linear,
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    ..Default::default()
+                });
+                pass.set_pipeline(pipeline);
+                pass.set_bind_group(0, bind, &[]);
+                pass.set_blend_constant(wgpu::Color {
+                    r: 0.5,
+                    g: 0.5,
+                    b: 0.5,
+                    a: 0.5,
+                });
+                pass.draw(0..3, 0..1);
+            }
+            encoder.copy_texture_to_texture(
+                linear.texture().as_image_copy(),
+                previous.as_image_copy(),
+                previous.size(),
+            );
         }
     });
 }
