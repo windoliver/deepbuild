@@ -1,0 +1,25 @@
+# #428 acceptance suite at the base, 1d3ae632 (Merge pull request #1310), before any implementation.
+#
+# Not run at the base: the surfaces plainly don't exist there, and no cargo binary was built. What was checked instead:
+#
+#   npm ci
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/428/tsconfig.json   -> exit 0, no errors
+#   reference.ts run on its own (node --experimental-strip-types), on the seven Khronos files fetched at edc7c9e67c and
+#   checked against the pinned SHA-256s: EON in a white furnace returns 1.00001 at every angle tried (μ 1, 0.7, 0.3,
+#   0.05; r 0.5, 1) and its single scattering equals FON's exact albedo to 1e-5; E(1, α 1) = 0.30685 = 1 − ln 2; the
+#   judged-pixel counts in README: Readings; AC3's CPU puts the red and blue lines 3.47 px apart; AC7's CPU predicts 432
+#   bright cells at 3.3 m and 415 at 3.0 m, 54 and 58 left unjudged at the edge.
+#
+# Why each file fails at the base, read from the base's code (crates/deep-gpu-layer, crates/deep-canvas-scene3d,
+# crates/deep-scene3d-render). deep-gpu refuses every --planted name this suite uses at startup (Planted::parse has none
+# of them: bad_input, exit 1), so every half that runs a planted program fails there too.
+#
+sheen-anisotropy-translucency.test.ts           no lobe extension is read: each is listed whole in `dropped` and no `sheen`, `anisotropy` or `translucency` field is on the import; DiffuseTransmissionTest is refused `extension_required` (KHR_lights_punctual); `material@1` reads none of the three lobes, so the ball's highlight isn't stretched and wrap 0.5 goes dark at 90°.
+volume-dispersion-iridescence-specular.test.ts  KHR_materials_transmission, _ior, _volume, _dispersion, _iridescence and _specular are listed whole in `dropped`, no field holds them, and no transmission draws, so the blocks and prisms read black against the reference.
+transmission.test.ts                             no transmission: the slabs, panes and prism draw opaque (base color under no light: black), so the ratio, the edges and the lines are all missing.
+specular-iridescence.test.ts                     specular_color is read, so the red sphere may pass; no iridescence is read, so the five films read alike and miss the thin-film reference.
+rough-diffuse.test.ts                            diffuse_roughness isn't read: the furnace half may pass (Lambert reads 1 everywhere), the sunlit half reads Lambert and misses EON at every point; the planted halves fail at startup.
+retroreflection.test.ts                          retroreflection isn't read: the panel at 20°, 40° and 60° reads the unmirrored lobe, under 1% of the reference; the furnace test may pass at the base (#422's compensated white metal reads 1).
+flakes.test.ts                                   flakes aren't read: no cell shines (the CPU predicts over 400), so the first test fails; the second may pass at the base (both panels draw without flakes).
+budgets.test.ts                                  the castle doesn't hold 64 lamps (its items name 2 composites.lamp@1); `cold` has no `build_ms`; benchmarks/budgets.json has no task naming #428; off a reference Mac the first test reads INCONCLUSIVE.
+taste.test.ts                                    INCONCLUSIVE: no TASTE.json is recorded (and the pictures it writes show none of the lobes).

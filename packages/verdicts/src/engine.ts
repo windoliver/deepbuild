@@ -1,6 +1,7 @@
 // The verdict engine (#28): a claim's checks, runs, coverage and definition in, one verdict out. Every rule
 // that applies is a row; the highest by precedence wins. Pure: every input, the time included, is an argument.
 import { createHash } from 'node:crypto';
+import { stableText } from '@deepbuild/contracts';
 import { moreRuns, runsNeeded } from './runs.js';
 import type {
   CheckResult, ClaimCheck, ClaimInput, Contradiction, Depth, Failure, FixTask, OpenItem, OpenItemScope, PointsTo, Prediction,
@@ -25,8 +26,7 @@ const sorted = (items: Iterable<string>): string[] => unique(items).sort();
 /** Unicode NFC, case folded, white space collapsed and trailing punctuation dropped. */
 const normalize = (text: string): string =>
   text.normalize('NFC').toLowerCase().replace(/\s+/g, ' ').replace(/[\s.,;:!?]+$/, '').trim();
-const canonical = (value: unknown): string => JSON.stringify(value, (_, v: unknown) =>
-  (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v));
+const canonical = stableText;
 const sha256 =(text: string): string => createHash('sha256').update(text).digest('hex');
 
 /** An open item's ID: a hash of its normalized text and its scope. */

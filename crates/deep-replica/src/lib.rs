@@ -71,22 +71,18 @@ pub const FIRST_SCREEN: &str = "first-screen";
 /// The replica's view of the look's 16 terminal colors on the terminal's background (#1003).
 pub const TERMINAL_COLORS: &str = "terminal-colors";
 
-/// `--view <id> --out <out>` from the command line, the view a shipped one (or `--first-screen`), and where `appearance`
-/// takes it, `--appearance <light|dark>` as whether macOS is set to dark (#882); else the usage error
-/// is printed under `bin`'s name and the exit code is 2. The replica (`appearance`) also takes the
-/// `terminal-colors` view, and `--selected-row <n>` and `--focused-row <n>`, the sidebar rows it opens selected and
-/// focused (#1003).
-pub fn view_args(
-    bin: &str,
-    out: &str,
-    appearance: bool,
-) -> Result<(String, PathBuf, Option<bool>), i32> {
-    let (mut view, mut path, mut dark) = (None, None, None);
+/// `--view <id> --out <out>` from the command line, the view a shipped one (or `--first-screen`), and where `replica`
+/// takes them, `--appearance <light|dark>` as whether macOS is set to dark (#882) and `--bound <file>`, the runs and
+/// bound values to draw (#629); else the usage error is printed under `bin`'s name and the exit code is 2. The replica
+/// also takes the `terminal-colors` view, and `--selected-row <n>` and `--focused-row <n>`, the sidebar rows it opens
+/// selected and focused (#1003).
+pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
+    let (mut view, mut path, mut dark, mut bound) = (None, None, None, None);
     let (mut selected, mut focused) = (None, None);
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            row @ ("--selected-row" | "--focused-row") if appearance => {
+            row @ ("--selected-row" | "--focused-row") if replica => {
                 let Some(n) = args.next().and_then(|n| n.parse::<usize>().ok()) else {
                     eprintln!("{bin}: {row} is a row's index from 0");
                     return Err(2);
@@ -101,7 +97,8 @@ pub fn view_args(
             // #1002: the app's first screen as a launch shows it for this HOME, over its own record, not the fixture.
             "--first-screen" => view = Some(FIRST_SCREEN.to_owned()),
             "--out" => path = args.next().map(PathBuf::from),
-            "--appearance" if appearance => match args.next().as_deref() {
+            "--bound" if replica => bound = args.next().map(PathBuf::from),
+            "--appearance" if replica => match args.next().as_deref() {
                 Some("light") => dark = Some(false),
                 Some("dark") => dark = Some(true),
                 other => {
@@ -119,14 +116,85 @@ pub fn view_args(
         eprintln!("usage: {bin} --view <id> --out <{out}>");
         return Err(2);
     };
-    let extra = appearance && view == TERMINAL_COLORS;
+    let extra = replica && view == TERMINAL_COLORS;
     if view != FIRST_SCREEN && !extra && !deep_app::views::SHIPPED_VIEWS.contains(&view.as_str()) {
         let shipped = deep_app::views::SHIPPED_VIEWS;
         eprintln!("{bin}: {view} is not a shipped view; the views are {shipped:?}");
         return Err(2);
     }
     deep_app::views::start_sidebar(selected, focused);
-    Ok((view, path, dark))
+    Ok((view, path, dark, bound))
+}
+
+/// What `view_args` reads: the view, where to write, the appearance and the bound values' file.
+pub type ViewArgs = (String, PathBuf, Option<bool>, Option<PathBuf>);
+
+/// Issue #629: `--bound <file>`, `{"runs": [{run, check, tool, report}], "card": [{id, bind}], "panel": [{id,
+/// bind}]}`: each run recorded from its tool's report, as the hub records it, and each bound value resolved by the
+/// app from those runs, on the session's return card or in a panel.
+pub fn load_bound(path: &Path) -> Result<(), String> {
+    use deep_app::bound::{self, Run, Surface};
+    use serde_json::Value;
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let input: Value =
+        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    let field = |v: &Value, k: &str| {
+        v.get(k)
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .ok_or(format!("--bound: no {k}"))
+    };
+    let mut runs = Vec::new();
+    for r in input
+        .get("runs")
+        .and_then(Value::as_array)
+        .ok_or("--bound: no runs")?
+    {
+        let report =
+            std::fs::read(field(r, "report")?).map_err(|e| format!("--bound: report: {e}"))?;
+        let run = Run::from_report(
+            field(r, "run")?,
+            field(r, "check")?,
+            &field(r, "tool")?,
+            &report,
+        )
+        .ok_or("--bound: the report isn't its tool's JSON report")?;
+        runs.push(run);
+    }
+    let mut binds = Vec::new();
+    for (surface, key) in [(Surface::Card, "card"), (Surface::Panel, "panel")] {
+        for b in input
+            .get(key)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            binds.push((
+                surface,
+                field(b, "id")?,
+                b.get("bind").cloned().ok_or("--bound: no bind")?,
+            ));
+        }
+    }
+    bound::set(&runs, &binds)
+        .ok_or_else(|| "--bound: a bind isn't a run's expected or received value".to_owned())
+}
+
+/// Issue #629: every bound value drawn, `{"bound": [{surface, id, text, missing, bounds}]}`, its bounds its node's in
+/// the screenshot's device pixels.
+pub fn bound_listing(snapshot: &snapshot::Snapshot) -> serde_json::Value {
+    use deep_app::bound::{on, Surface};
+    let nodes = snapshot.flatten();
+    let listed: Vec<serde_json::Value> = [Surface::Card, Surface::Panel]
+        .into_iter()
+        .flat_map(on)
+        .map(|b| {
+            let name = b.name();
+            let bounds = nodes.iter().find(|n| n.name.as_deref() == Some(name.as_str())).map(|n| n.bounds);
+            serde_json::json!({"surface": b.surface.name(), "id": b.id, "text": b.text, "missing": b.missing, "bounds": bounds})
+        })
+        .collect();
+    serde_json::json!({ "bound": listed })
 }
 
 /// The fixture record's inbox as of its last event, on the virtual clock.

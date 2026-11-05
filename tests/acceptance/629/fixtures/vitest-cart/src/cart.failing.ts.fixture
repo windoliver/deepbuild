@@ -1,0 +1,2 @@
+// The cart under test: its total drops the cents.
+export const totalOf = (prices: number[]): number => Math.floor(prices.reduce((sum, p) => sum + p, 0));
