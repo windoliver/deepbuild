@@ -558,7 +558,8 @@ fn denials(matched: &[(&Guard, matcher::Hit)], covered: bool) -> Vec<String> {
 }
 
 /// The request's fields for what the matcher read of a call: `,"notes":{...}` for an entry's words, so the hub's
-/// denial says them too, and `,"stage":{...}` for the folders a delete whose reach can't be worked out names (#347).
+/// denial says them too, and `,"stage":{...}` for what the hub stages before the call runs: the folders a delete whose
+/// reach can't be worked out names (#347), the paths a discard of tracked edits reaches and the stash a drop names (#1294).
 fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)]) -> String {
     let notes = matched
         .iter()
@@ -575,18 +576,23 @@ fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)
         format!(",\"notes\":{{{notes}}}")
     };
     // None when one can't be named, or written exactly.
-    let folders = called.and_then(|c| c.stage()).and_then(|f| {
-        f.iter()
+    let reach = |pattern: &str| {
+        let called = called?;
+        let paths = match pattern {
+            "effect:unknown-reach-delete" => called.stage(),
+            "effect:discard-edits" => called.edits(),
+            "effect:drop-stash" => called.stash(),
+            _ => None,
+        }?;
+        paths
+            .iter()
             .map(|p| p.to_str().map(quoted))
             .collect::<Option<Vec<_>>>()
-    });
+    };
     let stage = matched
         .iter()
-        .filter(|(g, _)| g.pattern == "effect:unknown-reach-delete")
         .filter_map(|(g, _)| {
-            folders
-                .as_ref()
-                .map(|f| format!("{}:[{}]", quoted(&g.name), f.join(",")))
+            reach(&g.pattern).map(|f| format!("{}:[{}]", quoted(&g.name), f.join(",")))
         })
         .collect::<Vec<_>>()
         .join(",");

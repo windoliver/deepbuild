@@ -7,6 +7,10 @@
 //!
 //! Issue #1141: it keeps what the app shows, the record folded as events arrive ([`Table`]), not the events: a view
 //! that needs the record's history reads it from the hub when it opens ([`history`]).
+//!
+//! Issue #994: the reader can start before the hub does. [`HubWatch`] keeps trying on its schedule and says when the
+//! hub isn't answering, and a refused read counts the same as no answer. The app's notification setting goes to the
+//! hub on every connection.
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -33,6 +37,39 @@ const CLOSING: [(&str, &str); 7] = [
 const PAGE: usize = 1000;
 /// The newest events a view keeps.
 const TAIL: usize = 256;
+/// While the hub doesn't answer the app tries it this often, and after [`SLOW_AFTER`] [`SLOWLY`].
+const RETRY: u64 = 2_000;
+const SLOW_AFTER: u64 = 60_000;
+const SLOWLY: u64 = 30_000;
+
+/// When to read the hub, and whether it answered the last read.
+#[derive(Debug, Default)]
+pub struct HubWatch {
+    /// Since when reads have failed, and when to try next.
+    down: Option<(u64, u64)>,
+}
+
+impl HubWatch {
+    /// Reads at `now` unless the hub is down and its next try isn't due; `read` says whether it answered.
+    pub fn tick(&mut self, now: u64, read: impl FnOnce() -> bool) {
+        if self.down.is_some_and(|(_, next)| now < next) {
+            return;
+        }
+        self.down = (!read()).then(|| {
+            let since = self.down.map_or(now, |(since, _)| since);
+            let wait = if now - since < SLOW_AFTER {
+                RETRY
+            } else {
+                SLOWLY
+            };
+            (since, now + wait)
+        });
+    }
+
+    pub fn down(&self) -> bool {
+        self.down.is_some()
+    }
+}
 
 /// The record as of one start ID and one `log_pos`.
 #[derive(Clone, Debug, Default)]
@@ -142,19 +179,44 @@ pub struct RecordReader {
     token_file: PathBuf,
     client: Option<HubClient>,
     view: View,
+    /// The notification setting the hub should hold.
+    setting: Option<&'static str>,
 }
 
 impl RecordReader {
-    /// Connects as the app, does its reads and subscribes after the `log_pos` they reflect.
-    pub fn open(socket: &Path, token_file: &Path) -> Result<RecordReader, HubError> {
-        let mut reader = RecordReader {
+    /// A reader that hasn't tried the hub yet: its first [`poll`](RecordReader::poll) connects.
+    pub fn unopened(socket: &Path, token_file: &Path) -> RecordReader {
+        RecordReader {
             socket: socket.to_path_buf(),
             token_file: token_file.to_path_buf(),
             client: None,
             view: View::default(),
-        };
+            setting: None,
+        }
+    }
+
+    /// Connects as the app, does its reads and subscribes after the `log_pos` they reflect.
+    pub fn open(socket: &Path, token_file: &Path) -> Result<RecordReader, HubError> {
+        let mut reader = RecordReader::unopened(socket, token_file);
         reader.connect()?;
         Ok(reader)
+    }
+
+    /// Tells the hub the app's notification setting, now if connected and on every connection after.
+    fn report(&mut self, setting: &'static str) {
+        if self.setting != Some(setting) {
+            self.setting = Some(setting);
+            self.send_report();
+        }
+    }
+
+    fn send_report(&mut self) {
+        if let (Some(client), Some(setting)) = (self.client.as_mut(), self.setting) {
+            let reported = client.call("notifications.report", json!({ "setting": setting }));
+            if let Err(error) = reported {
+                eprintln!("deep-app: the notification setting didn't reach the hub: {error:?}");
+            }
+        }
     }
 
     pub fn view(&self) -> View {
@@ -218,6 +280,7 @@ impl RecordReader {
         }
         client.call("stream.subscribe", json!({ "after": self.view.log_pos }))?;
         self.client = Some(client);
+        self.send_report();
         Ok(())
     }
 
@@ -302,7 +365,15 @@ impl RecordReader {
 /// holds whole.
 enum Source {
     Hub(Box<RecordReader>),
-    Local(Box<View>, Vec<Value>),
+    Local(Box<View>, Vec<Value>, LocalHub),
+}
+
+/// How a record held in memory answers a read, for the replica: the hub it stands in for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LocalHub {
+    Answers,
+    Stops,
+    Refuses,
 }
 
 thread_local! {
@@ -321,13 +392,15 @@ pub fn install_local(events: impl IntoIterator<Item = Value>) {
     for event in &record {
         view.apply(event.clone());
     }
-    READER.with(|cell| *cell.borrow_mut() = Some(Source::Local(Box::new(view), record)));
+    READER.with(|cell| {
+        *cell.borrow_mut() = Some(Source::Local(Box::new(view), record, LocalHub::Answers))
+    });
 }
 
 /// Delivers one event to a record held in memory, as the hub's stream would.
 pub fn feed(event: Value) {
     READER.with(|cell| {
-        if let Some(Source::Local(view, record)) = cell.borrow_mut().as_mut() {
+        if let Some(Source::Local(view, record, _)) = cell.borrow_mut().as_mut() {
             if event["log_pos"].as_u64().unwrap_or(0) > view.log_pos {
                 view.apply(event.clone());
                 record.push(event);
@@ -340,8 +413,47 @@ pub fn feed(event: Value) {
 pub fn poll(timeout: Duration) -> Result<(), HubError> {
     READER.with(|cell| match cell.borrow_mut().as_mut() {
         Some(Source::Hub(reader)) => reader.poll(timeout),
+        Some(Source::Local(_, _, LocalHub::Refuses)) => Err(HubError::Refused(json!({}))),
         _ => Ok(()),
     })
+}
+
+/// Whether the one reader holds a connection to the hub.
+pub fn connected() -> bool {
+    READER.with(|cell| match cell.borrow().as_ref() {
+        Some(Source::Hub(reader)) => reader.client.is_some(),
+        Some(Source::Local(_, _, hub)) => *hub == LocalHub::Answers,
+        None => false,
+    })
+}
+
+/// One read of the hub: whether it answered. A refusal counts as no answer.
+pub fn read(timeout: Duration) -> bool {
+    match poll(timeout) {
+        Ok(()) => connected(),
+        Err(error) => {
+            eprintln!("deep-app: the hub refused a read: {error:?}");
+            false
+        }
+    }
+}
+
+/// Tells the hub the app's notification setting.
+pub fn report_setting(setting: &'static str) {
+    READER.with(|cell| {
+        if let Some(Source::Hub(reader)) = cell.borrow_mut().as_mut() {
+            reader.report(setting);
+        }
+    });
+}
+
+/// How the replica's record answers reads from now on.
+pub fn set_local_hub(hub: LocalHub) {
+    READER.with(|cell| {
+        if let Some(Source::Local(_, _, answers)) = cell.borrow_mut().as_mut() {
+            *answers = hub;
+        }
+    });
 }
 
 /// Reads the one reader's view; `None` before one is installed.
@@ -349,7 +461,7 @@ pub fn with_view<R>(read: impl FnOnce(&View) -> R) -> Option<R> {
     READER.with(|cell| {
         cell.borrow().as_ref().map(|source| match source {
             Source::Hub(reader) => read(&reader.view),
-            Source::Local(view, _) => read(view),
+            Source::Local(view, ..) => read(view),
         })
     })
 }
@@ -358,7 +470,7 @@ pub fn with_view<R>(read: impl FnOnce(&View) -> R) -> Option<R> {
 pub fn take_unseen() -> Vec<Value> {
     READER.with(|cell| match cell.borrow_mut().as_mut() {
         Some(Source::Hub(reader)) => std::mem::take(&mut reader.view.unseen),
-        Some(Source::Local(view, _)) => std::mem::take(&mut view.unseen),
+        Some(Source::Local(view, ..)) => std::mem::take(&mut view.unseen),
         None => Vec::new(),
     })
 }
@@ -368,7 +480,7 @@ pub fn take_unseen() -> Vec<Value> {
 pub fn history() -> Vec<Value> {
     READER.with(|cell| match cell.borrow_mut().as_mut() {
         Some(Source::Hub(reader)) => reader.history().unwrap_or_default(),
-        Some(Source::Local(_, record)) => record.clone(),
+        Some(Source::Local(_, record, _)) => record.clone(),
         None => Vec::new(),
     })
 }

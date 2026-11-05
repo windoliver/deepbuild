@@ -2085,6 +2085,7 @@ dependencies = [
  "deep-text",
  "meshopt",
  "serde_json",
+ "sha2 0.10.9",
  "vello_cpu",
 ]
 
@@ -2144,6 +2145,7 @@ name = "deep-effects-render"
 version = "0.0.0"
 dependencies = [
  "deep-canvas-effects",
+ "deep-canvas-motion",
  "deep-gpu",
  "deep-scene3d-render",
  "naga 30.0.1",
@@ -2183,6 +2185,7 @@ dependencies = [
  "deep-canvas-seams",
  "deep-canvas-sheet",
  "deep-canvas-test-modules",
+ "deep-canvas-vector",
  "deep-codecs",
  "deep-effects-render",
  "deep-gpu",
@@ -2377,6 +2380,7 @@ dependencies = [
  "parley_data",
  "parley_engine",
  "serde_json",
+ "skrifa 0.44.0",
  "vello_cpu",
 ]
 
