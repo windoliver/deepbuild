@@ -724,6 +724,15 @@ export class AskTasks {
     return requirements.filter((r, i) => !passed.has(/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`));
   }
 
+  /** The session's open asks with a locked definition and the requirements of each that no verdict has passed (#82). */
+  async stillOpen(session: string): Promise<{ task_ref: string; left: Requirement[] }[]> {
+    const out: { task_ref: string; left: Requirement[] }[] = [];
+    for (const row of await this.lockedIn(session)) {
+      const left = await this.leftOf(String(row.task_ref));
+      if (left?.length) out.push({ task_ref: String(row.task_ref), left });
+    }
+    return out;
+  }
   /** What SessionStart sends again after a compaction or a resume: the open asks' requirement IDs, in one short block. */
   async brief(session: string, thread: string | undefined): Promise<string | undefined> {
     const rows = await this.lockedIn(session, thread).catch(() => []);
