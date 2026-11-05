@@ -145,16 +145,24 @@ fn cell_size(points: f64) -> [f64; 2] {
     [points * 8.0 / 13.0, points * 16.0 / 13.0]
 }
 
-/// Whether the PTY holds output nobody has read, asked of poll without waiting. FIONREAD can't
-/// say: on macOS a PTY master's FIONREAD counts the program's unread input, not its output.
-fn unread(master: &File) -> bool {
+/// What poll says of the PTY's output within `ms`: its events, none when nothing came.
+fn poll_in(master: &File, ms: libc::c_int) -> libc::c_short {
     let mut fds = libc::pollfd {
         fd: master.as_raw_fd(),
         events: libc::POLLIN,
         revents: 0,
     };
     // SAFETY: poll reads and writes the one pollfd we pass.
-    unsafe { libc::poll(&mut fds, 1, 0) > 0 && fds.revents & libc::POLLIN != 0 }
+    match unsafe { libc::poll(&mut fds, 1, ms) } {
+        n if n > 0 => fds.revents,
+        _ => 0,
+    }
+}
+
+/// Whether the PTY holds output nobody has read, asked of poll without waiting. FIONREAD can't
+/// say: on macOS a PTY master's FIONREAD counts the program's unread input, not its output.
+fn unread(master: &File) -> bool {
+    poll_in(master, 0) & libc::POLLIN != 0
 }
 
 /// A paste's text with every bracketed-paste marker taken out, so it can't end early.
@@ -663,13 +671,7 @@ impl Serve {
                         f = stream.wake.wait(f).expect("flow");
                     }
                 }
-                let mut fds = libc::pollfd {
-                    fd,
-                    events: libc::POLLIN,
-                    revents: 0,
-                };
-                // SAFETY: poll reads and writes the one pollfd we pass.
-                let ready = unsafe { libc::poll(&mut fds, 1, 20) };
+                let revents = poll_in(&master, 20);
                 let _held = stream.reading.lock().expect("reading");
                 if !current() {
                     return;
@@ -685,9 +687,10 @@ impl Serve {
                     foreground = now;
                 }
                 // Read only what the PTY holds, so the read never blocks while the lock is held;
-                // a hang-up with nothing left reads its end.
-                let hung = fds.revents & (libc::POLLHUP | libc::POLLERR) != 0;
-                if ready <= 0 || (!unread(&master) && !hung) {
+                // a hang-up with nothing left reads its end, and so does a descriptor poll can't
+                // watch, rather than polling it forever.
+                let hung = revents & (libc::POLLHUP | libc::POLLERR | libc::POLLNVAL) != 0;
+                if revents == 0 || (!unread(&master) && !hung) {
                     continue;
                 }
                 // One chunk of everything the PTY holds, up to CHUNK, read in as few passes as it
