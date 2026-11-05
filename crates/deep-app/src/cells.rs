@@ -178,6 +178,9 @@ pub fn terminal(
         .aria_label("Terminal")
         .a11y_synthetic_children(move |builder| lines_and_caret(builder, &lines, x, y))
         .relative()
+        // The whole tab in the grid's background, past the last column and row too.
+        .size_full()
+        .bg(color(bg))
         .child(cells(id, screen))
         .children(preedit.filter(|p| !p.is_empty()).map(|text| {
             // The composition inverted over the cells it covers, underlined as input methods mark
