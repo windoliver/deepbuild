@@ -1134,6 +1134,17 @@
       "initialReason": "Issue #429 first measurement: the merge base draws no operator item. One process opens the data_view class's fixture (benchmarks/canvas/data_view.json) with a composed pass that tints the frame at the class's half resolution in `deep-gpu`'s live window, five runs of 300 frames after 30 of warm-up, each run the p95 of the operator's own pass, held to the class's 0.5 ms in tests/acceptance/429/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "canvas-structural-steps",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "structural"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #483 first measurement: the merge base has no sort_by_key, scan or compact step. One deep-gpu process runs check_operator frames of sort_by_key over 1,048,576 keys and scan and compact over 1,048,576 elements, dispatched 300 times each, five runs after one of warm-up, each run the p95 of each step's GPU time from its passes' own timestamps, held to 2 ms (sort) and 0.5 ms (scan, compact) in tests/acceptance/483/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "products-place",
       "command": [
         "node",
@@ -1152,6 +1163,16 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #65 first measurement: the merge base has no channels. One run installs the four channel plug-ins against a hub and a stand-in provider, then times an agent's permission request to its card at the provider (reach_ms) and reads each plug-in's resident memory (rss_mb). The issue's 10 s and 50 MB stay in tests/acceptance/65/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "lobes",
+      "command": [
+        "node",
+        "benchmarks/lobes.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #428 first measurement: the merge base has no extra lobes and a castle without lamps. One process draws the castle with its 64 lamps cut to 32 orbiting for 120 frames at internal scale 0.5, and a 12-part product fixture at 1080p with sheen, anisotropy and translucency on every part and without them, through `deep-gpu run`'s view3d with timings, so p50 includes Node's and the binary's start. The issue's 10 ms per castle frame and 1 ms added by the lobes stay in tests/acceptance/428/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "journey-run",
