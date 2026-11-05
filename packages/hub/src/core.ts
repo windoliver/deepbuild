@@ -65,7 +65,7 @@ import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
 import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { driveCall, Replica, REPLICA_LEASE } from './drive.js';
-import { draftedPools, HeavyQueue } from './heavy.js';
+import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { copySynced, disk, keepAside, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
@@ -482,6 +482,7 @@ export class Core {
   private leases!: LeaseTable;
   /** The queue `deep lease` waits in, and the heavy commands it holds leases for (#1015). */
   private heavy!: HeavyQueue;
+  private pool?: JobPool;
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   private index!: Promise<IndexFill | undefined>;
   /** A package's index, once rebuilt from the pages. */
@@ -853,8 +854,10 @@ export class Core {
     // is env-local's, shared or exclusive.
     const pools = draftedPools(CORES);
     for (const [name, n] of Object.entries(pools)) await leases.declare('core', { name, match: `pool(${n})`, cap: 1000, cooldown: 0, cost: 0 });
+    // One compile job pool per host (#1016): every build deep lease runs joins it.
+    this.pool = new JobPool(join(this.root.dir, 'jobserver'), poolTokens(CORES));
     this.heavy = new HeavyQueue({
-      table: leases, slow: SLOW_SLOT, now: this.now, ...(this.options.plant ? { plant: this.options.plant } : {}),
+      table: leases, slow: SLOW_SLOT, now: this.now, pool: this.pool, ...(this.options.plant ? { plant: this.options.plant } : {}),
       append: async (kind, v, data, subject, session) => {
         const ts = this.now();
         const id = ulid(ts);
@@ -866,6 +869,7 @@ export class Core {
       agentOf: (s) => { const x = this.sessions.get(s); return x ? { pid: x.pid, start: x.start } : undefined; },
     });
     await this.heavy.recover(this.raw);
+    await this.heavy.tick();
     this.every('heavy', 500, () => this.heavy.tick());
     this.every('gone', 1000, () => this.goneSessions());
     // Each session's state as last recorded, then any change since; a session goes quiet after a day with no hook.
@@ -6881,6 +6885,7 @@ export class Core {
     this.stopping = true;
     plantedStop();
     for (const timer of this.timers) clearInterval(timer);
+    this.pool?.close();
     for (const live of this.live.values()) clearTimeout(live.quiet);
     for (const p of this.promises.values()) clearTimeout(p.timer);
     this.watcher?.close();
