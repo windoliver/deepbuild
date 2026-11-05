@@ -77,6 +77,17 @@ export function leftOpen(message: string): LeftOpen[] {
   return out;
 }
 
+/** What an agent writes when it has nothing to say: Claude Code's "No response requested.", an empty model reply. */
+const NO_CONTENT = /^(?:no response requested|no content|empty response)$/i;
+/**
+ * A final message that says nothing (#82; design: Every stop is judged): empty, only marks, or one of the agents'
+ * no-content placeholders. A stop that did work and ends on one gets a completion prompt.
+ */
+export function endsEmpty(message: string): boolean {
+  const words = message.replace(/[\s\p{P}\p{S}]+/gu, ' ').trim();
+  return words === '' || NO_CONTENT.test(words);
+}
+
 /** The limits a change writes into its PR body or its docs: their open sections, and each sentence naming a limit. */
 export function limitsIn(text: string): LeftOpen[] {
   const out: LeftOpen[] = openSections(text).map((o) => ({ ...o, from: 'limit' as const }));
