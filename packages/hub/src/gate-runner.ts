@@ -462,7 +462,7 @@ export class GateRunner {
    * A claim made at a stop: its snapshot and checkout, its checks taken in turn for the fast lane, the rest left to
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
-  async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
+  async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean; same?: boolean }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
     // The snapshot and the checkout share one budget (#31): past it the claim is INCONCLUSIVE, naming the reason and
     // the count of untracked files, and none of its checks runs, in the live worktree or anywhere.
     const budget = this.o.checkouts().budget();
@@ -474,8 +474,13 @@ export class GateRunner {
     // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
     let tree: string | undefined;
     let checkout: string | null = null;
+    // A session that changed nothing since its last claim (`same`: no call but reads), whose every check ended there,
+    // takes that claim's snapshot and no checkout: its results carry, and nothing runs (#82).
+    const prior = (this.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim).at(-1);
+    const ended = (e: Entry | undefined) => e !== undefined && !e.running && e.outcome !== null && e.runs.length > 0;
+    if (r.same && !r.joins && prior?.tree !== undefined && r.checks.length && r.checks.every((c) => ended(prior.entries.get(c.check)))) ({ snapshot, tree } = prior);
     // A claim with no check to run yet, its definition still to come, takes no snapshot: nothing would run on it.
-    if (r.checks.length || r.joins) {
+    else if (r.checks.length || r.joins) {
       try {
         installs = installsOf(r.cwd);
         ({ commit: snapshot, tree } = await this.o.checkouts().snapshot(r.cwd, budget));
@@ -531,8 +536,18 @@ export class GateRunner {
       // Outdated only by a snapshot that changed the inputs: the same tree carries the run (#45).
       for (const o of older) { const e = o.entries.get(c.check); if (e) { e.stale = true; if (changed) e.newer ??= r.claim; } }
     }
+    // A snapshot that changed no check's inputs reuses results and runs nothing (#82; design: Held time is counted):
+    // each check that ended on the last claim of the same tree carries its result to this one.
+    const same = changed || tree === undefined ? [] : older.filter((o) => o.tree === tree).reverse();
+    const toRun = r.checks.filter((c) => {
+      const carried = same.map((o) => o.entries.get(c.check)).find(ended);
+      if (!carried) return true;
+      const { newer: _newer, ...kept } = carried;
+      claim.entries.set(c.check, { ...kept, check: c, claim: r.claim, runs: [...carried.runs], stale: false });
+      return false;
+    });
     // The fast lane: on_base fails first, then the rest, each group shortest first, ties in the definition's order.
-    const timed = await Promise.all(r.checks.map(async (c, i) => ({ c, i, ms: c.expected_ms ?? (await this.expectedMs(c.check)) ?? 0 })));
+    const timed = await Promise.all(toRun.map(async (c, i) => ({ c, i, ms: c.expected_ms ?? (await this.expectedMs(c.check)) ?? 0 })));
     timed.sort((a, b) => (a.c.on_base === 'fails' ? 0 : 1) - (b.c.on_base === 'fails' ? 0 : 1) || a.ms - b.ms || a.i - b.i);
     const free = Array.from({ length: Math.max(0, this.o.slots().free) }, () => readyAt);
     const budgetEnd = r.stopAt + this.o.budget_ms;
