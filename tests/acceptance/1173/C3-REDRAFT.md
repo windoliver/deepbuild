@@ -78,7 +78,7 @@ brightness and at a quarter of it.
 
 `node_modules/.bin/tsc -p tests/acceptance/1173/tsconfig.redraft.json` exits 0 with no output.
 
-Run on this Linux box (linux, Node at /home/jing/.local/bin). The repo's `vitest.config.ts` doesn't load in this
+Run on this Linux box (linux, Node at ~/.local/bin). The repo's `vitest.config.ts` doesn't load in this
 worktree, because the workspace package `@deepbuild/config-eval` isn't built. So the run used a one-line config that
 only includes this file:
 
