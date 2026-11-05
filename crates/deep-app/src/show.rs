@@ -4,6 +4,9 @@
 //! takes what was presented from the hub as the app (`canvas.drawn`), composes the layers in their bands inside the
 //! panel's rect, outlines an agent's layer with its session's name, and draws the question card's slot last, which
 //! nothing covers. What it drew is what it reports: one entry per presented revision.
+//!
+//! Issue #995: after each presented revision the panel keeps only the pictures a shown revision uses. One it painted
+//! is also freed from the GPU's atlas the next time it draws, as deep-show's own viewer frees its replaced picture.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -121,11 +124,20 @@ impl Presentations {
     }
 }
 
+/// A picture the panel holds: its hash, its pixels and whether it has painted it (so the GPU holds a copy).
+struct Picture {
+    sha: String,
+    image: Arc<RenderImage>,
+    painted: bool,
+}
+
 /// The panel's view: the newest presented revision of each document, composed in its bands.
 pub struct CanvasPanel {
     evidence: PathBuf,
     shown: Vec<Presented>,
-    pictures: Vec<(String, Arc<RenderImage>)>,
+    pictures: Vec<Picture>,
+    /// Painted pictures no shown revision uses any more, freed from the GPU the next time the panel draws.
+    unused: Vec<Arc<RenderImage>>,
 }
 
 impl CanvasPanel {
@@ -134,29 +146,49 @@ impl CanvasPanel {
             evidence,
             shown: Vec::new(),
             pictures: Vec::new(),
+            unused: Vec::new(),
         }
     }
 
-    /// Takes one presented revision: its panel now shows it, replacing what it showed before.
+    /// Takes one presented revision: its panel now shows it, replacing what it showed before, and the panel lets go of
+    /// every picture no shown revision uses.
     pub fn present(&mut self, p: Presented) {
         for layer in &p.layers {
             if let Some(sha) = &layer.picture {
-                if !self.pictures.iter().any(|(s, _)| s == sha) {
-                    if let Some(img) = picture(&self.evidence, sha) {
-                        self.pictures.push((sha.clone(), img));
+                if !self.pictures.iter().any(|h| &h.sha == sha) {
+                    if let Some(image) = picture(&self.evidence, sha) {
+                        self.pictures.push(Picture {
+                            sha: sha.clone(),
+                            image,
+                            painted: false,
+                        });
                     }
                 }
             }
         }
         self.shown.retain(|s| s.rect != p.rect);
         self.shown.push(p);
+        let shown = &self.shown;
+        let used = |sha: &str| {
+            shown
+                .iter()
+                .any(|p| p.layers.iter().any(|l| l.picture.as_deref() == Some(sha)))
+        };
+        let unused = &mut self.unused;
+        self.pictures.retain(|h| {
+            let keep = used(&h.sha);
+            if !keep && h.painted {
+                unused.push(h.image.clone());
+            }
+            keep
+        });
     }
 
     fn image(&self, sha: &str) -> Option<Arc<RenderImage>> {
         self.pictures
             .iter()
-            .find(|(s, _)| s == sha)
-            .map(|(_, i)| i.clone())
+            .find(|h| h.sha == sha)
+            .map(|h| h.image.clone())
     }
 }
 
@@ -181,6 +213,9 @@ fn bounds(r: [f32; 4]) -> Bounds<Pixels> {
 
 impl Render for CanvasPanel {
     fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        for image in self.unused.drain(..) {
+            let _ = window.drop_image(image);
+        }
         let mut layers: Vec<Composed> = Vec::new();
         for p in &self.shown {
             for l in &p.layers {
@@ -193,6 +228,10 @@ impl Render for CanvasPanel {
                     name,
                 ));
             }
+        }
+        // Every picture held is a shown revision's, so this frame paints them all.
+        for held in &mut self.pictures {
+            held.painted = true;
         }
         let names: Vec<Label> = layers
             .iter()
