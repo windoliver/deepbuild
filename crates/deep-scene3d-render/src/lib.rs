@@ -889,7 +889,14 @@ const PER_PIXEL: u8 = 4;
 /// A blend or add part drawn after the glass, with its pipeline (#428).
 type LateDraw = (
     wgpu::RenderPipeline,
-    (wgpu::Buffer, wgpu::Buffer, u32, wgpu::Buffer, u32, wgpu::BindGroup),
+    (
+        wgpu::Buffer,
+        wgpu::Buffer,
+        u32,
+        wgpu::Buffer,
+        u32,
+        wgpu::BindGroup,
+    ),
 );
 
 /// A transmissive part (#428): drawn after the geometry pass over the opaque scene's copy.
@@ -4036,9 +4043,10 @@ impl Renderer {
                 if *kind != BLEND && *kind != ADD {
                     continue;
                 }
-                let (Some(mesh), Some(pipeline)) =
-                    (self.meshes.get(shape), &self.clear_pipelines[usize::from(*kind)])
-                else {
+                let (Some(mesh), Some(pipeline)) = (
+                    self.meshes.get(shape),
+                    &self.clear_pipelines[usize::from(*kind)],
+                ) else {
                     continue;
                 };
                 draws.push((
