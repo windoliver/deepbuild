@@ -99,3 +99,25 @@ export async function scan(markers: readonly string[]): Promise<Map<string, numb
   }
   return found;
 }
+
+/**
+ * The processes with a file open under `dir` (#1017), its working folder or a file it maps counted too, read off
+ * `lsof` for every process this user can see. A read that fails names no process, so the caller can't take it for none.
+ */
+export function openUnder(dir: string): Promise<{ pid: number; command: string }[]> {
+  return new Promise((resolve, reject) => {
+    execFile('/usr/sbin/lsof', ['-n', '-P', '-w', '-F', 'pcn'], { env: { ...process.env, LC_ALL: 'C' }, maxBuffer: 256 * 1024 * 1024, timeout: 30_000 }, (error, stdout) => {
+      // lsof exits 1 when a process it could not read went by; what it read is still the answer, unless it read nothing.
+      if (error && !stdout) return reject(error);
+      const found = new Map<number, string>();
+      let pid = 0;
+      let command = '';
+      for (const line of stdout.split('\n')) {
+        if (line.startsWith('p')) { pid = Number(line.slice(1)); command = ''; }
+        else if (line.startsWith('c')) command = line.slice(1);
+        else if (line.startsWith('n') && (line.slice(1) === dir || line.slice(1).startsWith(`${dir}/`)) && pid !== process.pid) found.set(pid, command);
+      }
+      resolve([...found].map(([p, c]) => ({ pid: p, command: c })));
+    });
+  });
+}

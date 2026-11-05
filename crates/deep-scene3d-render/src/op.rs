@@ -158,6 +158,7 @@ pub(crate) fn compile(
         &module,
         &layout,
         forward_z,
+        None,
         "mesh_vs",
         "op_mesh_fs",
         &mesh_buffers(),

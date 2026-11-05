@@ -1,0 +1,13 @@
+...
+     Running ../../tests/acceptance/995/app/panel.rs (<scratch>/e2e-target/debug/deps/acceptance_995-6f6ca3127443a14d)
+running 1 tests
+TU: error: ../src/freedreno/vulkan/tu_knl.cc:387: failed to open device /dev/dri/renderD128 (VK_ERROR_INCOMPATIBLE_DRIVER)
+test presenting_1000_revisions_with_new_1_mb_pictures_keeps_memory_within_20_mb_and_only_the_shown_pictures_held ... FAILED
+---- presenting_1000_revisions_with_new_1_mb_pictures_keeps_memory_within_20_mb_and_only_the_shown_pictures_held ----
+FAIL: after revision 1, the canvas panel drew [255, 255, 255] where it shows revision 1's picture, [93, 137, 69]
+FAIL: after revision 1, the canvas panel drew [255, 255, 255] where the other document's shown picture is, [40, 40, 40]: it dropped a picture a shown revision uses
+test result: FAILED. 0 passed; 1 failed
+error: test failed, to rerun pass `-p deep-app --test acceptance_995`
+Caused by:
+  process didn't exit successfully: `<scratch>/e2e-target/debug/deps/acceptance_995-6f6ca3127443a14d keeps_memory` (exit status: 1)
+exit 1
