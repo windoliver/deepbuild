@@ -123,7 +123,7 @@ const issueNumber = (source_id: string): number | undefined => { const m = /(\d+
 
 // ---- Definitions handed to the kernel, and the work source's readings.
 
-interface Requirement { expected_ms?: number; deadline_ms?: number; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; targets?: string[]; paid?: PaidKind }
+interface Requirement { expected_ms?: number; deadline_ms?: number; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; targets?: string[]; paid?: PaidKind; timing?: boolean }
 interface Author { handle: string; role: string; automated?: boolean }
 interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[]; kind?: unknown; plan?: unknown }
 /**
@@ -203,7 +203,7 @@ export interface AskTaskOptions {
    * `definition` says whether the task's definition is locked; `joins` that the claim's checks already started once,
    * before its definition locked, and these join them.
    */
-  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean }): Promise<void>;
+  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references' | 'timing'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean }): Promise<void>;
   /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
   invalid(claim: string, commit: string, reason: string): Promise<void>;
   /** The targets of a claim's requirements that didn't resolve before its runs (#323): each verdict made on it is INVALID, naming them. */
@@ -381,6 +381,8 @@ export class AskTasks {
         ...(typeof r.expected_ms === 'number' ? { expected_ms: r.expected_ms } : {}), ...(typeof r.deadline_ms === 'number' ? { deadline_ms: r.deadline_ms } : {}),
         ...(references.length ? { references } : {}), ...(typeof r.command === 'string' && r.command ? { command: r.command } : {}), ...(typeof r.criterion === 'string' && r.criterion ? { criterion: r.criterion } : {}),
         ...(targets.length ? { targets } : {}),
+        // A timing check says so (#352), so a run of it that fails under load is rerun alone.
+        ...(check && r.timing === true ? { timing: true } : {}),
         // A check that costs money says what it spends on (#325), so the lock prices it.
         ...(check && PAID.has(String(r.paid)) ? { paid: r.paid as PaidKind } : {}),
       });
@@ -449,7 +451,7 @@ export class AskTasks {
     let fresh = true;
     try {
       await this.o.append(this.o.connection(session, agent), {
-        v: 7, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
+        v: 8, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
         data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
       });
     } catch (error) {
@@ -675,7 +677,7 @@ export class AskTasks {
     const checks = stored.flatMap((r) => (r.check && r.check_sha256 ? [{
       check: r.check, approved: r.check_sha256, on_base: onBase(r), asserts: r.asserts, req: r.id, surface: r.surface ?? null,
       ...(r.expected_ms !== undefined ? { expected_ms: r.expected_ms } : {}), ...(r.deadline_ms !== undefined ? { deadline_ms: r.deadline_ms } : {}),
-      ...(r.references?.length ? { references: r.references } : {}), ...(r.command ? { command: r.command } : {}), ...(r.paid ? { paid: r.paid } : {}),
+      ...(r.references?.length ? { references: r.references } : {}), ...(r.command ? { command: r.command } : {}), ...(r.paid ? { paid: r.paid } : {}), ...(r.timing ? { timing: true } : {}),
     }] : []));
     // Each requirement by its handle (req:<task>#R<n>, as verdict.made names them), with the check that covers it.
     const handles = stored.map((r, i) => ({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, id: r.id, text: r.criterion ? `${r.criterion}, ${r.text}` : r.text, depth: r.depth, oracle: r.oracle, on_base: onBase(r), check: r.check }));

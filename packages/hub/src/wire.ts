@@ -114,6 +114,11 @@ export interface HookMeta {
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.
    */
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
+  /**
+   * The hunks an edit's PostToolUse reports (#352): each by its old start and length and its new length, with the new
+   * lines it changed, its common head and tail taken off. Numbers only: no line's text leaves the parser.
+   */
+  hunks?: Hunk[];
   /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
   pr?: string;
   /**
@@ -123,6 +128,8 @@ export interface HookMeta {
   loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: 'subagent' | 'command'; call: string; what: string }
     | { monitor: string; what: string; command: string; timeout: number | null } | { stopped: string };
 }
+/** One hunk of an edit, in line numbers (#352). */
+export interface Hunk { oldStart: number; oldLines: number; newLines: number; changed: number[] }
 /** The effect classes no "proceed" covers (#321). */
 export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']);
 /** What the event loop hands the core of a PreToolUse it holds for the gate: the call as a person reads it, its effect classes and MCP tool. */
