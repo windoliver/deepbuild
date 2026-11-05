@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 
 use deep_canvas::ops;
+use deep_canvas::outline::FillRule;
 use deep_canvas_marks::path::{self, Verb};
 use roxmltree::{Document, Node, ParsingOptions};
 
@@ -111,6 +112,8 @@ pub struct Painted {
     pub fill: Option<Paint>,
     pub stroke: Option<Stroke>,
     pub part: Option<usize>,
+    /// Its `fill-rule` (#443): how its contours resolve to the area its fill covers.
+    pub fill_rule: FillRule,
 }
 
 /// A part: an element with an id, or a class `parts` names, that draws; and the part it sits in.
@@ -274,6 +277,7 @@ struct Style {
     fill_opacity: f64,
     stroke_opacity: f64,
     opacity: f64,
+    fill_rule: FillRule,
 }
 
 impl Default for Style {
@@ -286,6 +290,7 @@ impl Default for Style {
             fill_opacity: 1.0,
             stroke_opacity: 1.0,
             opacity: 1.0,
+            fill_rule: FillRule::NonZero,
         }
     }
 }
@@ -324,7 +329,9 @@ impl Style {
                 "fill-opacity" => s.fill_opacity = unit(v).unwrap_or(s.fill_opacity),
                 "stroke-opacity" => s.stroke_opacity = unit(v).unwrap_or(s.stroke_opacity),
                 "opacity" => s.opacity *= unit(v).unwrap_or(1.0),
-                "fill-rule" | "clip-rule" if v == "evenodd" => unread_once(unread, k),
+                "fill-rule" if v == "evenodd" => s.fill_rule = FillRule::EvenOdd,
+                "fill-rule" if v == "nonzero" => s.fill_rule = FillRule::NonZero,
+                "clip-rule" if v == "evenodd" => unread_once(unread, k),
                 "stroke-linecap" if v != "butt" => unread_once(unread, k),
                 "stroke-linejoin" if v != "miter" => unread_once(unread, k),
                 "stroke-dasharray" if v != "none" => unread_once(unread, k),
@@ -449,6 +456,7 @@ impl<'a, 'i> Import<'a, 'i, '_> {
                             fill,
                             stroke,
                             part: inner,
+                            fill_rule: style.fill_rule,
                         });
                     }
                 }
