@@ -270,8 +270,8 @@ export function plan(cwd, tests) {
 // A failure that names its own state keeps it, as runLanes reads one: a check that couldn't run reads BLOCKED.
 const stateOf = (message = '') => message.match(/^(?:\w*Error: )?(BLOCKED|INCONCLUSIVE|INVALID)\b/)?.[1] ?? 'FAIL';
 
-/** The results in a vitest or node --test report: failures with their state, and the tests that passed, by ID. */
-export function reportResults(cwd, text) {
+/** The results in the report of a vitest or node --test job by its label: failures with their state, and the tests that passed, by ID. */
+export function reportResults(cwd, text, label) {
   const failures = [], passed = [], stack = [];
   const path = (file) => relative(cwd, file.startsWith('file:') ? fileURLToPath(file) : file).split(sep).join('/');
   for (const [index, line] of text.split('\n').entries()) {
@@ -279,9 +279,10 @@ export function reportResults(cwd, text) {
     let row;
     try { row = JSON.parse(line); } catch {
       // A line that doesn't parse, such as a record cut short with the next run on, hides whatever its records said:
-      // each file it names is unknown, and a line naming none is unknown as itself.
-      const files = [...line.matchAll(/\{"type":"\w+","file":("(?:[^"\\]|\\.)*")/g)].map(([, file]) => named(path(JSON.parse(file)), '(file)'));
-      for (const id of files.length ? new Set(files) : [`report line ${index + 1}`]) failures.push({ id, state: 'INCONCLUSIVE', message: `line ${index + 1} of the report doesn't parse` });
+      // each file it names is unknown, and the line itself answers for a record cut before its file ends.
+      const records = [...line.matchAll(/\{"type":"\w+","file":("(?:[^"\\]|\\.)*")(?=,)/g)];
+      const ids = [...records[0]?.index === 0 ? [] : [`report line ${index + 1}`], ...new Set(records.map(([, file]) => named(path(JSON.parse(file)), '(file)')))];
+      for (const id of ids) failures.push({ id, state: 'INCONCLUSIVE', message: `line ${index + 1} of the report doesn't parse` });
       continue;
     }
     if (row.type === 'unhandled') failures.push({ id: 'vitest › unhandled error', state: 'FAIL', message: row.message });
@@ -294,6 +295,8 @@ export function reportResults(cwd, text) {
     if (row.type === 'pass') passed.push(named(file, name));
     if (row.type === 'fail') failures.push({ id: named(file, name), state: stateOf(row.error?.message), message: row.error?.message?.split('\n')[0] ?? '' });
   }
+  // The vitest reporter ends its report once all of it landed; a record lost whole leaves nothing else to see.
+  if (label.startsWith('vitest') && !text.endsWith('{"type":"end"}\n')) failures.push({ id: `${label} report`, state: 'INCONCLUSIVE', message: "the report ends before the run did, so a test's result may be missing" });
   return { failures, passed };
 }
 
@@ -426,7 +429,7 @@ async function main(args) {
       const files = ({ ...blocks, timed: timedFiles })[job.label.split('-')[1] ?? 'parallel'][job.label.split('-')[0]];
       let report = '';
       try { report = readFileSync(join(logs, `${job.label}.jsonl`), 'utf8'); } catch {}
-      const results = reportResults(root, report);
+      const results = reportResults(root, report, job.label);
       failures.push(...results.failures);
       passed.push(...results.passed);
       // A file that reported no test didn't run, and nothing unrun passes.
