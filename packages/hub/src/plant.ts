@@ -78,6 +78,9 @@ export type Plant =
   | 'any-nonzero-base-exit'
   // #124's: deep_drive launching replicas without the replica lease.
   | 'deep-drive-no-lease'
+  // #82's: a stop rule that drops the one send-back of every stop with no work in it, and one that reads every turn a
+  // prompt began as an answer.
+  | 'no-work-never-sent-back' | 'skips-prompt-turns'
   // #55's: an answer handed to paseo's plugin while deep-hook's waiter for the session is live, so it goes in twice.
   | 'paseo-delivers-beside-waiter'
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
@@ -167,6 +170,7 @@ const PLANTS: readonly string[] = [
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
   'silent-deprecated',
   'deep-drive-no-lease',
+  'no-work-never-sent-back', 'skips-prompt-turns',
   'paseo-delivers-beside-waiter',
   'signature-covers-anything',
   'lock-never-rechecked',
