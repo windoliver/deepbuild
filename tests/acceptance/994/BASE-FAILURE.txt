@@ -1,0 +1,88 @@
+Base commit: 58862789 (Merge pull request #1315; no implementation of #994)
+Machine:     darwin-arm64, Node 24.22, Rust 1.99.1 from rust-toolchain.toml; 1-minute load 48 to 139 on 12 cores
+Date:        2026-11-05
+Result:      every criterion that can run on the base fails at its named judge. Nothing here passed by being unrun.
+             Trimmed: stack lines and rustc's caret drawings are cut.
+
+== 1. AC4 and the sound scope line: run as they are, no new surface
+
+cargo test --locked -p deep-replica --test acceptance_994_sound        exit 101
+
+test ac4_ten_asks_across_four_sessions_in_one_tick_play_one_sound_and_leave_four_notifications ... FAILED
+    ten asks coming due in one tick should play one sound; they played 10, with ["ask:01MD9949000000000000000001",
+    "ask:01MD9949000000000000000002", ... ten in all]
+    left: 10, right: 1
+test scope_asks_due_within_2_s_share_one_sound_and_a_later_ask_plays_its_own ... FAILED
+    ask:…0011 and ask:…0012 come due 1.5 s apart and share one sound, and ask:…0013, due 3.5 s later, plays its own;
+    the sounds came with [ask:…0011, ask:…0012, ask:…0013]
+
+== 2. AC1, AC2, AC3 and the app's scope lines: the real deep-app beside a real hub
+
+npx vitest run --root tests/acceptance/994 --no-file-parallelism app.test        exit 1, 6 failed, 1 passed, 560 s
+(the second test below was rerun alone, 121 s, after its stand-in socket got a control.token: without one the app
+never connects, since it reads the token first)
+
+AC1 an ask opened 5 s after a hub that started 20 s after the app ... FAILED
+    #994 ask:01M6PMBGQ9F4J819AGP4RGEHDZ was never notified: the app's log has no "deep-app: notified ...
+    ask:01M6PMBGQ9F4J819AGP4RGEHDZ"; the log ends "deep-app: no hub to read, so no notifications\nfirst-frame-ms 951.0"
+scope: the app tries every 2 s, then every 30 s after a minute ... FAILED
+    #994 the app should try the hub every 2 s for a minute; in the first 55 s it tried 1 times, at [0] s
+scope: with no hub answering, the window's count says so ... FAILED
+    #994 the count should say the hub isn't answering: the first screen's names are ["Sessions","Home",
+    "0 asks need you","○ Session  · queued"]
+AC2 launching the app twice ... FAILED
+    #994 ask:01M6PMFSPGXMWW5ZBCZBCP74NN should be notified once; it was notified 2 times: ["6681: deep-app: notified
+    2d404e2d-… ask:01M6PMFSPGXMWW5ZBCZBCP74NN","10780: deep-app: notified 2d404e2d-… ask:01M6PMFSPGXMWW5ZBCZBCP74NN"]
+AC2 planted: a second notifier on the same hub ... ok
+    A pass here is the wrong program failing its judge: two real apps on one hub posted the ask twice, and the judge
+    said so, naming it.
+AC3 the log never says notified ... FAILED
+    #994 notifications are off, yet the log says ask:01M6PMH4FARXQTTZ80NDG1MFGQ was notified: ["deep-app: notified
+    09b8ea2a-… ask:01M6PMH4FARXQTTZ80NDG1MFGQ"]
+AC3 planted: an app that posts without checking ... BLOCKED
+    cargo build -p deep-app --bin deep-app --features plant-posts-unchecked failed: the package 'deep-app' does not
+    contain this feature. The base is that wrong program, and fails the AC3 test above. This run is for the branch.
+
+== 3. The hub's side: stops at the surface this issue adds
+
+npx vitest run --root tests/acceptance/994 --no-file-parallelism hub.test        exit 1, 3 failed, 24 s
+
+All three fail at the first report:
+    #994 the hub should take notifications.report from the app: {"code":"unknown_method", ... "The hub serves no
+    method notifications.report."}
+Before that, the doctor test's first step ran: with no reading, app.notifications isn't ok (the base has no such item).
+
+The deadline test's premise was checked separately in a scratch test, not kept: on the base, a hub on the test clock,
+an ask with a 1 m wait, the clock stepped 90 s. The ask took its default inside an 8 s wait in 3 of 4 runs. In the
+other, at a load of about 60, it hadn't by 8 s; the cause wasn't found, and the test waits 30 s. A fifth run was BLOCKED:
+at a load of about 100 the hub answered deep_ask with "unbound" (no PreToolUse stamped for it), and beginAsk gave up
+after 60 s. Any test that raises an ask can meet that on a machine this loaded.
+
+== 4. AC5
+
+npx vitest run --root tests/acceptance/994 --no-file-parallelism taste.test        exit 1
+
+    #994 the count should say the hub isn't answering: ["Sessions","Home","0 asks need you","○ Session  · queued"]
+
+It stops at its first screenshot, so the INCONCLUSIVE ends haven't run: they need the surfaces this issue adds.
+
+== 5. The window: doesn't compile
+
+cargo test --locked -p deep-replica --test acceptance_994_window        exit 101
+
+error[E0432]: unresolved import `deep_app::notify::NotificationSetting`
+error[E0599]: no method named `set_notification_setting` found for mutable reference `&mut Replica`
+error[E0599]: no method named `activate` found for mutable reference `&mut Replica`
+error[E0599]: no method named `show_view` found for mutable reference `&mut Replica`
+error[E0599]: no method named `hub_stops` found for mutable reference `&mut Replica`
+error[E0599]: no method named `hub_refuses` found for mutable reference `&mut Replica`
+error[E0599]: no method named `hub_answers` found for mutable reference `&mut Replica`
+error[E0599]: no method named `screenshot` found for mutable reference `&mut Replica`
+error: could not compile `deep-replica` (test "acceptance_994_window") due to 8 previous errors
+
+All eight are in the file's `mod surface` block, the one place the new surface is used. No case of this file has run,
+on the base or anywhere.
+
+== 6. The type-check
+
+npx tsc -p tests/acceptance/994/tsconfig.json        exit 0
