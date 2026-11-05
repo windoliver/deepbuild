@@ -207,6 +207,18 @@ export interface NoticeRow { id: string; kind: string; key: string; source: stri
 export interface Loaded { status: 'loaded'; id: string; version: string; place: 'hub' | 'sandbox'; run: string | null }
 export interface Refused { status: 'refused'; id: string; version: string; reason: string }
 export type Load = Loaded | Refused;
+/** One acquired environment handle belongs to the load that created it, never its replacement. */
+export interface RunningEnvironment {
+  readonly handle: Readonly<EnvironmentHandle>;
+  down(): Promise<void>;
+}
+/** A runtime environment selected from a live, kit-checked package. */
+export interface RuntimeEnvironment {
+  readonly extension: string;
+  readonly version: string;
+  up(spec: EnvironmentSpec, lease: EnvironmentLease, checkout: string, deadline: number): Promise<RunningEnvironment>;
+}
+
 export interface ExtensionHost {
   install(from: InstallFrom): Promise<Installed>;
   /** The channels of the packages loaded and started (#65), each by name with what it reaches. */
@@ -244,6 +256,8 @@ export interface ExtensionHost {
   load(pkg: Installed): Promise<Load>;
   loaded(): Promise<Loaded[]>;
   checks(): Promise<{ kind: string; extension: string }[]>;
+  /** Select a live environment by its registered name; absence and revoked trust refuse, never fall back. */
+  environment(name: string): Promise<RuntimeEnvironment>;
   /** `ctx.environment`: the first-party interface the run used, such as environment@1, whose provider it makes the check's piece a user of (#103). */
   runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number; environment?: string }): Promise<CheckResult>;
   /** Hands each event to the loaded packages subscribed to its kind, once they have all taken it; rejects naming each that didn't. */
@@ -3306,6 +3320,42 @@ class Host implements ExtensionHost {
   }
   async checks(): Promise<{ kind: string; extension: string }[]> {
     return [...this.exts.values()].flatMap((ext) => ext.kinds.map((kind) => ({ kind, extension: ext.entry.id })));
+  }
+  async environment(name: string): Promise<RuntimeEnvironment> {
+    const ext = this.environmentOwner(name);
+    const current = async (): Promise<void> => {
+      if (!ext?.live || !ext.ask || this.exts.get(ext.entry.id) !== ext || await this.revoked(ext)) {
+        throw Error(`no loaded extension registered the environment ${name}; it is absent, replaced or no longer trusted`);
+      }
+    };
+    await current();
+    // Only the release's hub-bound environment passed the install kit; never widen its execution boundary here.
+    if (!ext!.hubBound || !ext!.entry.kits?.some(k => k.slot === ENVIRONMENT && k.fill === name && k.verdict === 'PASS')) {
+      throw Error(`BLOCKED: environment ${name} has no passing install kit for this release package`);
+    }
+    return {
+      extension: ext!.entry.id, version: ext!.entry.version,
+      up: async (spec, lease, checkout, deadline) => {
+        const bad = badDeadline('deadline', deadline);
+        if (bad) throw Error(`an environment start's ${bad}`);
+        await current();
+        const value = await this.ask(ext!, deadline, `environment ${name}`, 'env.up', { name, spec, lease, checkout });
+        // An old load's late start is never presented as its replacement's handle.
+        await current();
+        if (!isPlain(value) || typeof value.id !== 'string' || !value.id || value.port !== lease.port || !Number.isSafeInteger(value.pid) || Number(value.pid) <= 0) {
+          throw Error(`environment ${name} returned an invalid handle or a port outside its lease`);
+        }
+        const handle = Object.freeze({ id: value.id, port: lease.port, pid: Number(value.pid) });
+        let down: Promise<void> | undefined;
+        return {
+          handle,
+          down: () => down ??= (async () => {
+            await current();
+            await this.ask(ext!, CALL_MS, `environment ${name} down`, 'env.down', { name, handle });
+          })(),
+        };
+      },
+    };
   }
   hooks(): string[] {
     return [...new Set([...this.exts.values()].flatMap((ext) => [...ext.subscribed]))].sort();
