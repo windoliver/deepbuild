@@ -92,6 +92,15 @@ pub struct Solid {
     pub emission: [f64; 3],
     /// Its material's texture maps (#423), which the renderer samples from the scene's `texels`.
     pub maps: Option<Arc<crate::light::Maps>>,
+    /// Its level of detail (#425): bands by projected size and its mesh's levels by error, which
+    /// [`crate::lod::resolve`] turns into what a view draws.
+    pub lod: Option<Arc<crate::lod::Lod>>,
+    /// Inside a band margin, the mask its band's draw keeps pixels by (#425).
+    pub mask: Option<crate::lod::Mask>,
+    /// It draws only in the shadow passes: a level the light's projection chose (#425).
+    pub cast_only: bool,
+    /// How far a cast-only level is drawn inside its surface, along its normals, in its own m.
+    pub inset: f64,
     /// The material operator its material names (#429), which shades it per pixel.
     pub op: Option<SolidOp>,
     /// Whether the scene's cutaway reaches it (#424).
@@ -597,6 +606,9 @@ pub struct Scene {
     pub texels: BTreeMap<String, Arc<crate::light::Texels>>,
     /// The frame's sub-pixel offset, px right and down (#423: Look: samples).
     pub jitter: [f64; 2],
+    /// The light cut to draw in place of the policy's at this view: only #425's planted session
+    /// hysteresis sets one.
+    pub light_cut: Option<crate::light::Policy>,
     /// The first `cutaway@1` (#424), which the solids it reaches are cut by in every pass.
     pub cutaway: Option<crate::cut::Cutaway>,
     /// The per-pixel resolve's room (#424): the view's `max_fragments`, and the most fragments
@@ -1649,6 +1661,50 @@ fn asset_mesh(
     Ok((mesh, Some(format!("{sha}#{node}"))))
 }
 
+/// An item's level of detail (#425): its `lod` bands and, for a mesh the simplify job gave
+/// levels, those levels keyed off its `hash`; none when it has neither.
+fn lod_of(
+    item: &Value,
+    path: &str,
+    bounds: [Vec3; 2],
+    mesh: Option<(&crate::geom::Mesh, u64)>,
+    doc: &Map<String, Value>,
+) -> Result<Option<Arc<crate::lod::Lod>>, Refused> {
+    let bands = crate::lod::bands_of(item, path.trim_end_matches("/params"))?;
+    let leveled = mesh.filter(|(m, _)| !m.lods.is_empty());
+    if bands.is_none() && leveled.is_none() {
+        return Ok(None);
+    }
+    let crate::lod::Bands {
+        bands,
+        margin,
+        proxy,
+    } = bands.unwrap_or(crate::lod::Bands {
+        bands: Vec::new(),
+        margin: 0.1,
+        proxy: None,
+    });
+    let (levels, extent) = match leveled {
+        Some((m, h)) => (crate::lod::levels(&Arc::new(m.clone()), h), m.lod_extent),
+        None => (Vec::new(), 0.0),
+    };
+    // A mesh without levels takes its proxy from the simplify step, once per content key.
+    let proxy_mesh = match (proxy, mesh) {
+        (Some(p), Some((m, h))) if levels.is_empty() => crate::lod::proxy_of(m, h, p),
+        _ => None,
+    };
+    Ok(Some(Arc::new(crate::lod::Lod {
+        bands,
+        margin,
+        bounds,
+        levels,
+        extent,
+        lod_px: crate::lod::lod_px(doc),
+        proxy,
+        proxy_mesh,
+    })))
+}
+
 /// A built solid's world bounds' corners.
 fn corners_of(s: &Solid) -> Vec<Vec3> {
     let Some(mesh) = &s.mesh else {
@@ -1756,6 +1812,10 @@ fn asset_scene(
                     .map_or([204; 3], |m| [m.base[0], m.base[1], m.base[2]].map(encode8)),
                 stroke: None,
                 mesh: Some(Arc::new(prim.mesh.clone())),
+                lod: None,
+                mask: None,
+                cast_only: false,
+                inset: 0.0,
                 cast_shadow: true,
                 receive_shadow: true,
                 emission: material.as_ref().map_or([0.0; 3], |m| m.emission),
@@ -1985,6 +2045,10 @@ pub(crate) fn evaluate_compiled(
                             &path,
                         )?,
                         mesh: None,
+                        lod: lod_of(item, &path, [[-0.5; 3], [0.5; 3]], None, map)?,
+                        mask: None,
+                        cast_only: false,
+                        inset: 0.0,
                         cast_shadow: casts(item, &material),
                         receive_shadow: shadows(item, "receive_shadow"),
                         material,
@@ -2070,7 +2134,11 @@ pub(crate) fn evaluate_compiled(
                             (None, _) => paint_or_muted(look, params, &path)?,
                         },
                         stroke: inked(None, &material, Shape::Built(hash), &path)?,
+                        lod: lod_of(item, &path, mesh.bounds(), Some((&mesh, hash)), map)?,
                         mesh: Some(Arc::new(mesh)),
+                        mask: None,
+                        cast_only: false,
+                        inset: 0.0,
                         cast_shadow: casts(item, &material),
                         receive_shadow: shadows(item, "receive_shadow"),
                         material,
@@ -2369,6 +2437,7 @@ pub(crate) fn evaluate_compiled(
         lights,
         sky,
         others,
+        light_cut: None,
         curves,
         pages: labels.pages(),
         texels: BTreeMap::new(),

@@ -191,6 +191,41 @@ const ADD: u32 = 3u;
 const ALPHA_CUTOFF: f32 = 0.5;
 // Its material samples texture maps (#423): group 3 holds them.
 const MAPS: u32 = 8192u;
+// A cast-only level drawn inside its surface by its inset, in its surface's w (#425).
+const INSET: u32 = 32768u;
+
+// Issue #425: a band's mask inside its item's margin, carried in the record's `tie` above its
+// rank: bit 8 masked, bit 7 the less detailed band's draw, bits 0 to 6 the blend level of OF.
+const RANK: u32 = 0xfffffu;
+const MASK_SHIFT: u32 = 20u;
+const OF: u32 = 64u;
+// The planted masks (#425's `band_masks_independent`): each band keyed by its own hash.
+const MASKS_INDEPENDENT: bool = false;
+
+fn band_hash(px: vec2<u32>, key: u32) -> u32 {
+    var h = px.x * 0x8da6b343u ^ px.y * 0xd8163841u ^ key * 0xcb1ab31fu;
+    h = (h ^ (h >> 16u)) * 0x7feb352du;
+    h = (h ^ (h >> 15u)) * 0x846ca68bu;
+    return h ^ (h >> 16u);
+}
+
+// Whether a band's draw keeps pixel `px` of its target: the two bands of one item key the same
+// hash of the pixel and the item's pick ID, the less detailed keeping the buckets below the blend
+// level and the more detailed the rest, so between them every pixel is kept exactly once, in
+// every pass that draws them.
+fn band_keeps(px: vec2<u32>, key: u32, code: u32) -> bool {
+    if (code & 256u) == 0u {
+        return true;
+    }
+    let lower = (code & 128u) != 0u;
+    var h = band_hash(px, key);
+    if MASKS_INDEPENDENT {
+        h = band_hash(px, key ^ select(0x9e3779b9u, 0x7f4a7c15u, lower));
+    }
+    let below = (h % OF) < (code & 127u);
+    return below == lower;
+}
+// End of #425's band masks.
 // The cutaway reaches it (#424).
 const CUT: u32 = 16384u;
 // #424's planted program: a mask part's ID written through its holes.
@@ -361,6 +396,8 @@ struct MeshOut {
     // uv0 and uv1 (#423), and the tangent in the world with its handedness in w.
     @location(10) uv: vec4<f32>,
     @location(11) tangent: vec4<f32>,
+    // Its band's mask inside a margin (#425).
+    @location(14) @interpolate(flat) mask: u32,
     // Its normal in its mesh's own space; its material operator's time (f32 bits), seed and the
     // item's opacity (f32 bits), which a material operator reads (#429).
     @location(12) object_n: vec3<f32>,
@@ -392,7 +429,12 @@ fn mesh_vs(
     out.object_n = n;
     out.op = op;
     out.emission = emission;
-    let world = vec3<f32>(dot(r0.xyz, p) + r0.w, dot(r1.xyz, p) + r1.w, dot(r2.xyz, p) + r2.w);
+    // A cast-only level (#425) is drawn inside its surface by its inset, along its normals.
+    var q = p;
+    if (flags & INSET) != 0u {
+        q = p - normalize(n) * surface.w;
+    }
+    let world = vec3<f32>(dot(r0.xyz, q) + r0.w, dot(r1.xyz, q) + r1.w, dot(r2.xyz, q) + r2.w);
     out.pos = frame.clip * vec4<f32>(world, 1.0);
     // The shadow pass (light.w < 0) leaves out a solid with `cast_shadow: false` (#420).
     if frame.light.w < 0.0 && (flags & 1u) != 0u {
@@ -407,10 +449,12 @@ fn mesh_vs(
     // Coplanar opaque faces of two solids: the one whose ID ranks later is pushed back by 1/64
     // px of its face's depth slope per rank, past the rasterizer's sub-pixel snapping, so ties
     // draw the same way every frame, whatever the submission order (#421).
-    if frame.light.w >= 0.0 && tie > 0u {
+    out.mask = tie >> MASK_SHIFT;
+    let rank = tie & RANK;
+    if frame.light.w >= 0.0 && rank > 0u {
         let cos_t = max(abs(dot(cof, normalize(cross(frame.up.xyz, frame.right.xyz)))), 1.0 / 64.0);
         let slope = sqrt(1.0 - cos_t * cos_t) / cos_t / max(frame.viewport.z, 1.0);
-        let k = f32(tie) * (1.0e-6 + slope / 64.0);
+        let k = f32(rank) * (1.0e-6 + slope / 64.0);
         out.pos.z = out.pos.z * select(1.0 - k, 1.0 + k, frame.px.w > 0.5);
     }
     if (flags & MATERIAL) != 0u {
@@ -974,6 +1018,8 @@ fn occlusion(pos: vec2<f32>, albedo: vec3<f32>) -> vec3<f32> {
     return min(max(vec3<f32>(v), ((v * a + b) * v + c) * v), vec3<f32>(1.0));
 }
 
+// A band inside its item's margin keeps only its mask's pixels (#425), discarded after shading
+// so every derivative the shading takes still sees the whole quad.
 @fragment
 fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
     // The texture coordinates' derivatives, while every pixel of the quad still runs (#423).
@@ -981,7 +1027,11 @@ fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
     // Derivatives first, while every pixel of the quad still runs: the face's normal in its
     // part's own space, which a pattern reads.
     let local_n = normalize(cross(dpdx(in.local), dpdy(in.local)) + vec3<f32>(0.0, 1e-9, 0.0));
-    return shade(in, front, local_n, g, false);
+    let shaded = shade(in, front, local_n, g, false);
+    if !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask) {
+        discard;
+    }
+    return shaded;
 }
 
 // `keyed`: with no light, no sky and no environment, a material takes the view's own key light, as
@@ -1225,13 +1275,19 @@ fn mesh_cut_fs(in: MeshOut, @builtin(front_facing) front: bool) -> CutTargets {
         }
     }
     let t = shade(in, front, local_n, g, false);
+    // A band inside its margin keeps only its mask's pixels (#425), after shading.
+    if !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask) {
+        discard;
+    }
     return CutTargets(t.color, t.id, depth);
 }
 
-// The shadow passes' fragment stage (#424): what a cutaway removes casts nothing.
+// The shadow passes' fragment stage: what a cutaway removes casts nothing (#424), and a band
+// inside its margin casts only its mask's texels (#425).
 @fragment
 fn shadow_fs(in: MeshOut) {
-    if (in.flags & CUT) != 0u && cut_hides(in.world) {
+    if ((in.flags & CUT) != 0u && cut_hides(in.world))
+        || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask) {
         discard;
     }
 }
@@ -1240,8 +1296,10 @@ fn shadow_fs(in: MeshOut) {
 // depth target.
 @fragment
 fn ao_normal_fs(in: MeshOut) -> @location(0) vec4<f32> {
-    // A see-through solid writes no occlusion depth, nor what a cutaway removes (#424).
-    if in.emission.w < 1.0 || ((in.flags & CUT) != 0u && cut_hides(in.world)) {
+    // A see-through solid writes no occlusion depth, nor what a cutaway removes (#424); a band
+    // keeps only its mask's pixels (#425).
+    if in.emission.w < 1.0 || ((in.flags & CUT) != 0u && cut_hides(in.world))
+        || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask) {
         discard;
     }
     return vec4<f32>(normalize(in.normal), 1.0);
@@ -1755,3 +1813,4 @@ fn puff_fs(in: PuffOut) -> Targets {
     c = fogged(c * in.shape.z * 0.9, in.world);
     return Targets(vec4<f32>(c * alpha, alpha), 0u);
 }
+

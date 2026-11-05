@@ -39,6 +39,7 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         spot_counts_cone: p == Some(Planted::SpotCountsCone),
         status_before_tone_map: p == Some(Planted::StatusBeforeToneMap),
         labels_before_upscale: p == Some(Planted::LabelsBeforeUpscale),
+        band_masks_independent: p == Some(Planted::BandMasksIndependent),
         anisotropy_one: p == Some(Planted::AnisotropyOne),
         premixed_metallic: p == Some(Planted::PremixedMetallic),
         uncompensated_lobe: p == Some(Planted::UncompensatedLobe),
@@ -204,6 +205,34 @@ pub fn surface(app: &mut App, surface: Surface) -> Result<(), Value> {
             Ok(())
         })
         .map_err(|e| refused("no_session", e))
+}
+
+/// Each pass's band masks of the item picked as `key` at blend `level`, as the last frame's
+/// draws evaluate them (#425): `(pass, size, one byte a pixel)`.
+pub fn masks(app: &mut App, key: u32, level: u32) -> Vec<(&'static str, [u32; 2], Vec<u8>)> {
+    use deep_scene3d_render::MaskPass;
+    app.worker.call(move |state| {
+        let Some(s) = state.scene3d.as_ref() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        let Some(r) = shared.renderer.as_ref() else {
+            return Vec::new();
+        };
+        [
+            ("color", MaskPass::Color),
+            ("depth", MaskPass::Depth),
+            ("shadow", MaskPass::Shadow),
+            ("ids", MaskPass::Ids),
+        ]
+        .into_iter()
+        .filter_map(|(name, pass)| {
+            let (size, bytes) = r.mask_dump(&device, pass, key, level)?;
+            Some((name, size, bytes))
+        })
+        .collect()
+    })
 }
 
 /// The pipelines the session's renderer compiled so far, by name (#854).
