@@ -1,0 +1,112 @@
+{
+  "id": "composites.lamp",
+  "version": "1.0",
+  "title": "Lamp",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A lamp post: a tube post on a turned foot, its globe a ball at the top.",
+  "inputs": {
+    "height": {
+      "type": "number",
+      "unit": "m",
+      "default": 3,
+      "min": 1,
+      "max": 10,
+      "about": ""
+    }
+  },
+  "steps": {
+    "foot": {
+      "op": "builder",
+      "kind": "lathe@1",
+      "params": {
+        "outline": [
+          [
+            0.25,
+            0,
+            false
+          ],
+          [
+            0.2,
+            0.15,
+            false
+          ]
+        ],
+        "segments": 12,
+        "caps": "flat",
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "post": {
+      "op": "builder",
+      "kind": "tube@1",
+      "params": {
+        "path": [
+          [
+            0,
+            0.15,
+            0
+          ],
+          [
+            0,
+            "height",
+            0
+          ]
+        ],
+        "radius": 0.05,
+        "segments": 10,
+        "caps": "flat",
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "globe": {
+      "op": "builder",
+      "kind": "ball@1",
+      "params": {
+        "radius": 0.25,
+        "segments": 16,
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          "height + 0.2",
+          0
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "foot",
+      "post",
+      "globe"
+    ]
+  }
+}

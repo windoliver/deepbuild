@@ -13,7 +13,17 @@ The same check twice, `ext.<plugin>.relative`: it passes when every input a chec
 - [`extension-guide/typescript`](extension-guide/typescript/): `index.ts`, calling `deep.registerCheck` in-process style through the `deep` object the host hands it.
 - [`extension-guide/json-rpc`](extension-guide/json-rpc/): `main`, a Python program that answers the host's `load` by calling `deep.registerCheck` over JSON-RPC, then answers each `run`.
 
+And a plug-in, [`extension-guide/plugin`](extension-guide/plugin/): a weather panel with a source behind a secret, a store, two actions, a schedule that sends a notice, a view with a page per city and a ⌘K command, its panel in `panel/main.js`, and its own tests in `tests/`.
+
+## The manifest
+
+`deepbuild.json` holds `id`, `version`, `digest` and `access.words` (`hosts` for a source's host, `agent` for model jobs), then every name the package adds, each `ext.<plugin>.<name>` with `<name>` in lower-case letters, digits and underscores (`ext.stocks.quote_nvda`, never `ext.stocks.quote.nvda`): `stores`, `actions`, `notices`, `checks` and `events` as lists of names; `secrets` as `{ name, for }`; `sources` as `{ name, variant }`. `requires.preview` lists every preview method its code calls, or the call is refused. Nothing else goes in it: a view, a schedule and a source's host and quota are declared in code, and the hosts it may reach are granted at install.
+
 To build one, copy the folder, write `packageDigest` of it into `deepbuild.json`'s `digest`, and point a `main`'s `#!/usr/bin/env` line at its interpreter. Then install it, run its conformance, load it, and run its check.
+
+## A package's own tests
+
+Put them in `tests/`, each file named `*.test.ts` or `*.test.mjs`. A file's default export is an object of named tests, each an async function given `t`: `t.call(action, input)` calls one of the package's actions as the app would and returns its output, `t.read(source)` reads one of its polled sources through the hub, and `t.now()` is the hub's clock. A test fails by throwing; `node:assert` works. DeepBuild runs them in the package's sandbox on recorded source calls and a clock it controls, never live.
 
 ## A first plug-in
 
@@ -31,21 +41,22 @@ Handles an event: session.start, tool.before, tool.after, prompt.submit, agent.s
 
 ### `deep.registerView`
 
-In R1 · preview · `d1:13a87be727b3bee24e988056df0a299ae55bc59ff858ea6e9bb1ff9e09aaeb98`
+In R1 · preview · `d1:f678797e9208a811d87f8c281fcb0a814d57cce7f0073a68471d77d9a85e98f8`
 
-A JavaScript panel in the app, in the sidebar, the home screen, a tab or the line, under an empty policy plus DeepBuild's modules.
+A JavaScript panel in the app, in the sidebar, the home screen, a tab or the line, under an empty policy plus DeepBuild's modules. `view` adds its pages, each opened from ⌘K with one parameter (a page per stock: `{ name: "Stock", param: "symbol", values }`, given to the panel's `init` as `props.page`), its ⌘K commands, each running one of its actions, and `binds`, the readings it shows (`reading:<source>` or `reading:<source>#<series>`), which Read now and while-shown cadences go by. A panel never calls the network itself: it reads what its sources read, and a panel that fetches is refused at install.
 
 | Parameter | Type | Required |
 |---|---|---|
 | `name` | string, `^[a-z][a-z0-9_.-]*$` | yes |
 | `panel` | string | yes |
 | `area` | `sidebar` · `home` · `tab` · `line` | yes |
+| `view` | object | no |
 
 ### `deep.registerSource`
 
 In R1 · preview · `d1:b91a9a6d1bfbe5bfd0808335a7b1f6780a6b9282d48581ebfa3c5edbb58b9f10` · variants: `stream`, `polled`, `mcp`
 
-A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read.
+A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: 'USD' }`. A list or a record is no reading, unless the source declares `shape: 'series'`: then `parse` returns `{ values, unit }`, up to 10,000 named numbers a call, which the hub keeps as one batch, each bound as `reading:<source>#<name>`. `while_shown: { every }`, at least 10 s, is a cadence the hub runs only while a view that binds the source is shown; one its quota can't serve is refused at install. A source's readings over time are its history, which the hub keeps: a chart draws from them, so a plug-in needs no source per point.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -301,15 +312,39 @@ Reads the latest item under every key of the plug-in's own store.
 |---|---|---|
 | `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
 
+### `deep.runner.run`
+
+In R1 · preview · `d1:867ba9b60a91e097afdb8ecb28794259d5f1bfa59f66065c0ede01b825b56ea0`
+
+A model job on your own agent, headless on your plan, with its inputs by handle, a budget in USD and a deadline in ms. Each handle is checked against the plug-in's grant before the job starts. The job answers one JSON object, `{ value, cites }`; the plug-in gets a reading, `{ handle, value, cites, as_of, stale_at }`, as old as the oldest reading it cites, citing only handles its grant reaches. A job that fails rejects with its stop cause, never with text.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `prompt` | string | yes |
+| `inputs` | array | yes |
+| `budget` | object | yes |
+| `deadline` | integer | yes |
+
 ### `deep.read`
 
 In R1 · preview · `d1:2b3e3c57692e9afcf5ed8f7de18e1c2b2bb7dcc722de36649ab31e6ef473166d`
 
-Reads an output interface the package uses, through the provider the hub wired the use to: its value, or missing when none provides it.
+Reads an output interface the package uses, through the provider the hub wired the use to: its value at the minor the use was built against, with a handle its model jobs may take, or missing when none provides it.
 
 | Parameter | Type | Required |
 |---|---|---|
 | `name` | string, `^[a-z][a-z0-9_.-]*@[1-9][0-9]*$` | yes |
+
+### `deep.call`
+
+In R1 · preview · `d1:1c5f7641c708c1fdfa6ed560da1c214609cc402478dd05977cbdc3a94d07251b`
+
+Calls an action output the package uses, through its edge: a read runs, and a change or a send asks you first, naming the calling package; it never borrows the provider's grant.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string, `^[a-z][a-z0-9_.-]*@[1-9][0-9]*$` | yes |
+| `input` | object | yes |
 
 ### `deep.fetch`
 
@@ -347,6 +382,27 @@ Reads a hosted terminal's output from an offset, in pages.
 |---|---|---|
 | `terminal` | string | yes |
 | `from` | integer | yes |
+
+### `deep.terminal.close`
+
+Arrives in R2 · preview · `d1:ecde3b67d6d77ef94056c6bc407e13d4801c3b05b0e72b0825cb147397c6e802`
+
+Closes a hosted terminal: stops its program and host process and removes its log and checkpoint.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `terminal` | string | yes |
+
+### `deep.canvas.read`
+
+Arrives in R6 · preview · `d1:834d701457943f9662ca00afc85ceb81e0f0df9495d10295b5251e066d459995`
+
+For a check runner: a canvas revision's evaluated values by stable ID at the times it names, with their content keys and a coverage block, read only and only for the documents its grant names. A pass built on a read holds only with those keys as its evidence.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `doc` | string | yes |
+| `query` | object | yes |
 
 ## Slots
 

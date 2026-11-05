@@ -1,10 +1,14 @@
-// Builds the supervisor's native helper (native/helper.c) into dist/helper, on macOS only: the Seatbelt
-// backend's process scan and the seam suite's probe. Other platforms have no backend yet (#70).
+// Builds the supervisor's native helper into dist/helper: native/helper.c on macOS (the Seatbelt backend's process
+// scan and the seam suite's probe) and native/helper-linux.c on Linux (the bubblewrap backend's confine, scan and
+// probe, #70). Windows has no backend yet.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-if (process.platform === 'darwin') {
+const source = process.platform === 'darwin' ? 'native/helper.c' : process.platform === 'linux' ? 'native/helper-linux.c' : undefined;
+if (source) {
   mkdirSync(fileURLToPath(new URL('dist/', import.meta.url)), { recursive: true });
-  execFileSync('cc', ['-O2', '-Wall', '-Werror', '-o', fileURLToPath(new URL('dist/helper', import.meta.url)), fileURLToPath(new URL('native/helper.c', import.meta.url))], { stdio: 'inherit' });
+  // forkpty (native/pty.c, which both include) is in libutil on Linux before glibc 2.34.
+  const libs = process.platform === 'linux' ? ['-lutil'] : [];
+  execFileSync('cc', ['-O2', '-Wall', '-Werror', '-o', fileURLToPath(new URL('dist/helper', import.meta.url)), fileURLToPath(new URL(source, import.meta.url)), ...libs], { stdio: 'inherit' });
 }

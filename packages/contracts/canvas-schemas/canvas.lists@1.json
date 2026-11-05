@@ -1,0 +1,237 @@
+{
+  "$comment": "The canvas core's closed lists and the enums a registry declaration and its entries use (#200; canvas primitives: Registry and seal: registries). Each carries its closure, which scripts/canvas-closures.mjs holds it to; deep-show's tests keep the core's lists equal to the Rust ones.",
+  "type": "object",
+  "properties": {
+    "fill": {
+      "type": "string",
+      "enum": [
+        "module",
+        "first_party_pack",
+        "pack",
+        "plugin"
+      ],
+      "x-closure": {
+        "closed": "record",
+        "reopens_if": "a new kind of author the record can name fills a registry",
+        "mark": "exhaustive"
+      }
+    },
+    "resolve": {
+      "type": "string",
+      "enum": [
+        "seal",
+        "check"
+      ],
+      "x-closure": {
+        "closed": "determinism",
+        "reopens_if": "an entry needs resolving at a time other than the seal or check",
+        "mark": "exhaustive"
+      }
+    },
+    "binds": {
+      "type": "string",
+      "enum": [
+        "all",
+        "author"
+      ],
+      "x-closure": {
+        "closed": "record",
+        "reopens_if": "a claim needs an entry to bind other than everyone or its author",
+        "mark": "exhaustive"
+      }
+    },
+    "origin": {
+      "type": "string",
+      "enum": [
+        "first_party",
+        "pack",
+        "plugin",
+        "agent"
+      ],
+      "x-closure": {
+        "closed": "record",
+        "reopens_if": "an entry comes from a source the record can name",
+        "mark": "exhaustive"
+      }
+    },
+    "closure_reason": {
+      "type": "string",
+      "enum": [
+        "ring",
+        "record",
+        "determinism",
+        "card",
+        "budget",
+        "interval_forms",
+        "draw_path"
+      ],
+      "x-closure": {
+        "closed": "record",
+        "reopens_if": "a list is closed for a reason none of these names",
+        "mark": "exhaustive"
+      }
+    },
+    "mark": {
+      "type": "string",
+      "enum": [
+        "exhaustive",
+        "extensible"
+      ],
+      "x-closure": {
+        "closed": "record",
+        "reopens_if": "never: a closed list either refuses a new value without a new major or maps it to unknown",
+        "mark": "exhaustive"
+      }
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "load",
+        "expand",
+        "resolve",
+        "validate",
+        "plan",
+        "build",
+        "estimate",
+        "check",
+        "latch",
+        "time",
+        "inputs",
+        "simulate",
+        "items",
+        "views",
+        "sources",
+        "extract",
+        "render",
+        "compose",
+        "feedback",
+        "block"
+      ],
+      "x-closure": {
+        "closed": "determinism",
+        "reopens_if": "a case needs composition the phases cannot express",
+        "mark": "exhaustive"
+      }
+    },
+    "place": {
+      "type": "string",
+      "enum": [
+        "compute",
+        "shadows",
+        "sky",
+        "geometry",
+        "effects",
+        "bloom",
+        "tone_mapping",
+        "finish",
+        "status_guard",
+        "upscale",
+        "status_colors",
+        "overlays"
+      ],
+      "x-closure": {
+        "closed": "determinism",
+        "reopens_if": "a case needs composition the places in the frame cannot express",
+        "mark": "exhaustive"
+      }
+    },
+    "read_term": {
+      "type": "string",
+      "enum": [
+        "self",
+        "parent",
+        "children",
+        "siblings",
+        "refs",
+        "set(collection)",
+        "set(lights)",
+        "set(sky)",
+        "set(bounds)",
+        "view(camera)",
+        "view(viewport)",
+        "view(pixel_scale)",
+        "view(match.me)",
+        "view(locale)",
+        "view(reduced_motion)",
+        "t",
+        "input",
+        "reading",
+        "asset",
+        "look",
+        "seed"
+      ],
+      "x-closure": {
+        "closed": "determinism",
+        "reopens_if": "never: content keys and seeking equal to playing rest on them",
+        "mark": "exhaustive"
+      }
+    },
+    "domain": {
+      "type": "string",
+      "enum": [
+        "item",
+        "row",
+        "element",
+        "document"
+      ],
+      "x-closure": {
+        "closed": "determinism",
+        "reopens_if": "an array needs a domain an item, row, element or document cannot hold",
+        "mark": "exhaustive"
+      }
+    },
+    "table_build": {
+      "type": "string",
+      "enum": [
+        "seal",
+        "check"
+      ],
+      "x-closure": {
+        "closed": "determinism",
+        "reopens_if": "a table needs building at another time than the seal or check",
+        "mark": "exhaustive"
+      }
+    },
+    "carried_kind": {
+      "type": "string",
+      "enum": [
+        "bake",
+        "tail",
+        "checkpoint"
+      ],
+      "x-closure": {
+        "closed": "determinism",
+        "reopens_if": "never: seeking equal to playing rests on them",
+        "mark": "exhaustive"
+      }
+    },
+    "machines": {
+      "type": "string",
+      "enum": [
+        "any",
+        "same"
+      ],
+      "x-closure": {
+        "closed": "determinism",
+        "reopens_if": "a check result holds on a class of machines neither names",
+        "mark": "exhaustive"
+      }
+    },
+    "determinism": {
+      "type": "string",
+      "enum": [
+        "exact",
+        "same_machine",
+        "live_only"
+      ],
+      "x-closure": {
+        "closed": "determinism",
+        "reopens_if": "WGSL guarantees more about float evaluation",
+        "mark": "exhaustive"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "x-since": "R2",
+  "x-stability": "stable"
+}

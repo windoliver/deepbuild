@@ -1,5 +1,89 @@
 {
   "module": "scene3d",
-  "phases": {},
+  "phases": {
+    "items": [
+      {
+        "operator": "scene3d.build",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.built"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.lights",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t",
+          "look"
+        ],
+        "writes": [
+          "scene3d.lights"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "scene3d.mark",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.marked"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.rebuild",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "motion.fields",
+          "t"
+        ],
+        "writes": [
+          "scene3d.livebuilt"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.shade",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.shaded"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.stack",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "scene3d.stack"
+        ],
+        "per": "item"
+      }
+    ]
+  },
   "contributions": {}
 }

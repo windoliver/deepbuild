@@ -28,6 +28,7 @@ fn manifest(name: &str, major: u32) -> Manifest {
         feature: format!("test-kit-{}", name.trim_start_matches("test.kit.")),
         license: "Apache-2.0".into(),
         implements: format!("{name}@{major}"),
+        implementation: deep_canvas::registry::Implementation::reference(name, Semver { major: u64::from(major), minor: 0, patch: 0 }),
     }
 }
 
@@ -1322,6 +1323,7 @@ fn mig_2_with(r: &mut Registrar, map: fn(&mut Map<String, Value>)) {
             from: 1,
             to: 2,
             renames: vec![],
+            retires: vec![],
             map: Some(map),
         }],
     };

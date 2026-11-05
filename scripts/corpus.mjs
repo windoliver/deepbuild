@@ -5,7 +5,8 @@
 // folder of its own, so a new set joins the corpus only through a diff you approve.
 import { execFile, spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir, userInfo } from 'node:os';
+import { homedir } from 'node:os';
+import { redactor } from './corpus-redact.mjs';
 import { delimiter, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -73,6 +74,43 @@ function size(dir) {
   return readdirSync(dir, { withFileTypes: true }).reduce((total, entry) => total + (entry.isDirectory() ? size(join(dir, entry.name)) : statSync(join(dir, entry.name)).size), 0);
 }
 
+const strings = (value) => (typeof value === 'string' ? [value] : value && typeof value === 'object' ? Object.values(value).flatMap(strings) : []);
+/**
+ * The loop-facts conformance case (#997): a Claude Code call a recorded set shows starting work whose events wake the
+ * session, one whose response names a task a later `<task-notification>` prompt names, has its entry in the loop facts.
+ */
+function loopFactsCase(loops, corpus) {
+  // A facts folder with no loop facts (an agent's own, planted alone) has none to judge.
+  if (!loops) return [];
+  const named = new Set(Object.values(loops?.agents?.claude ?? {}).flatMap((section) => (section && typeof section === 'object' && !Array.isArray(section) ? Object.keys(section) : [])));
+  const missing = new Map();
+  for (const version of folders(join(corpus, 'claude-code'))) {
+    for (const session of readSet(corpus, 'claude-code', version)) {
+      const payloads = session.cases.map(({ payload }) => payload ?? {});
+      const woken = new Set(payloads.flatMap((p) => (p.hook_event_name === 'UserPromptSubmit' ? [...String(p.prompt ?? '').matchAll(/<task-id>([^<]+)<\/task-id>/g)].map((m) => m[1]) : [])));
+      for (const p of payloads) if (p.hook_event_name === 'PostToolUse' && !named.has(p.tool_name) && !missing.has(p.tool_name) && strings(p.tool_response).some((v) => woken.has(v))) missing.set(p.tool_name, session.ref);
+    }
+  }
+  return [...missing].map(([tool, ref]) => [`the loop facts (loops.facts.json) name no entry for Claude Code's ${tool}, whose call in ${ref} started work whose events wake the session`, `Name ${tool} under agents.claude in adapters/loops.facts.json, with how its work is found and how it ends.`]);
+}
+
+/**
+ * The mods case (#1033): Claude Code from 2.1.287 loads mods, whose tool.check can approve a call past a PreToolUse
+ * deny, so its facts name them: the first versions, the event, how a mod is read without loading it, and the cases
+ * where the deny holds. A facts folder without Claude Code's facts has none to judge.
+ */
+function modsFactsCase(claude) {
+  if (!claude) return [];
+  const mods = claude.mods;
+  const fix = 'Give adapters/claude-code.facts.json its mods entry: since (terminal and desktop), validate, overrides, promptCalls and holdsWhen, as the permissions reference names them.';
+  if (!mods || typeof mods !== 'object') return [['the Claude Code facts (claude-code.facts.json) have no mods entry, so no core rule knows a mod can approve a call past a PreToolUse deny', fix]];
+  const missing = ['since', 'validate', 'overrides', 'promptCalls', 'holdsWhen'].filter((field) => mods[field] === undefined);
+  if (typeof mods.since?.terminal !== 'string' || typeof mods.since?.desktop !== 'string') missing.push('since.terminal and since.desktop');
+  const cases = new Set((Array.isArray(mods.holdsWhen) ? mods.holdsWhen : []).map((c) => c?.case));
+  for (const c of ['managed', 'login', 'plan', 'interactive']) if (!cases.has(c)) missing.push(`holdsWhen ${c}`);
+  return missing.length ? [[`the Claude Code facts' mods entry (claude-code.facts.json) lacks ${missing.join(', ')}`, fix]] : [];
+}
+
 async function replayCommand(options) {
   const started = performance.now();
   let failed = false;
@@ -97,6 +135,8 @@ async function checkCommand(options) {
       if (clean.get(`${agent}/${version}`) === false) failures.push([`${agent} ${version}'s set does not replay clean, so its range can't cover it`, 'Run node scripts/corpus.mjs replay and fix the payloads named there.']);
     }
   }
+  failures.push(...loopFactsCase(facts.loops?.facts, options.corpus));
+  failures.push(...modsFactsCase(facts['claude-code']?.facts));
   const bytes = size(options.corpus);
   say({ type: 'size', bytes, limit: LIMIT });
   if (bytes >= LIMIT) failures.push([`the corpus is ${bytes} bytes, over the 200 MB limit (${LIMIT} bytes)`, 'Trim transcripts or drop sessions that add no event, version or tag.']);
@@ -108,13 +148,13 @@ async function checkCommand(options) {
 // ---- Recording -----------------------------------------------------------------------------------
 
 // The hook every recorded session runs: it keeps the payload byte for byte and answers a permission
-// request with allow, so a scripted session never waits on a dialog.
+// request with allow, so a scripted session never waits on a dialog, unless the scenario records the dialog itself.
 function hookCommand(dir) {
   const raw = readFileSync(0, 'utf8');
   appendFileSync(join(dir, 'payloads.jsonl'), `${JSON.stringify({ at: Date.now(), raw })}\n`);
   let payload = {};
   try { payload = JSON.parse(raw); } catch {}
-  if (payload.hook_event_name === 'PermissionRequest') process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }));
+  if (payload.hook_event_name === 'PermissionRequest' && !existsSync(join(dir, 'dialog'))) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }));
   return 0;
 }
 
@@ -143,7 +183,10 @@ function inTerminal(argv) {
   return ['/bin/sh', ['-c', `cat | ${process.platform === 'darwin' ? `script -q /dev/null /bin/sh -c ${quote(command)}` : `script -q -e -c ${quote(command)} /dev/null`}`]];
 }
 
-/** One scripted session. Steps type text and wait for the turn to end, wait for more stops, or kill the agent mid-call. */
+/**
+ * One scripted session. Steps type text and wait for the turn to end, wait for more stops, press keys in a dialog and
+ * wait for the hook they lead to, or kill the agent mid-call or where it stands.
+ */
 async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
   const [shell, args] = terminal ? inTerminal(argv) : [argv[0], argv.slice(1)];
   const child = spawn(shell, args, { cwd, env: { ...cleanEnv(), TERM: 'xterm-256color' }, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -178,6 +221,11 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
           if (/❯Yes,Itrustthisfolder/.test(dialog)) { child.stdin.write('\r'); trust.done = true; }
           else if (Date.now() - (trust.moved ?? 0) > 800) { child.stdin.write('\x1b[B'); trust.moved = Date.now(); }
         }
+        // Claude Code's notice of the Claude in Chrome extension, before the session starts: keep browser tools off.
+        const chrome = text.slice(text.lastIndexOf('ClaudeinChromeextensiondetected'));
+        if (!recorded().some(({ hook_event_name: hook }) => hook === 'SessionStart') && text.includes('ClaudeinChromeextensiondetected') && /❯No,keepbrowsertoolsoff/.test(chrome) && /Entertoconfirm/.test(chrome)) {
+          if (Date.now() - (trust.chromeSeen ??= Date.now()) > 1500 && Date.now() - (trust.chromeAt ?? 0) > 1500) { child.stdin.write('\x1b'); trust.chromeAt = Date.now(); }
+        }
         return startAfter(text, recorded());
       }, 60_000);
       if (!ready && !blocked) blocked = 'the session never became ready for a prompt';
@@ -190,16 +238,17 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
       const already = fired();
       if (step.type) { await type(step.type); if (!(await until(() => (step.until ? fired() > already : ends() > before), step.ms ?? 180_000))) { blocked = `no turn end after: ${step.type.slice(0, 60)}`; break; } }
       if (step.stops) if (!(await until(() => ends() >= before + step.stops, step.ms ?? 300_000))) { blocked = `fewer than ${step.stops} more turn ends`; break; }
-      if (step.killOn) {
+      if (step.keys) { child.stdin.write(step.keys); if (step.until && !(await until(() => fired() > already, step.ms ?? 180_000))) { blocked = `no ${step.until.name || 'hook'} after the keys ${JSON.stringify(step.keys)}`; break; } }
+      if (step.killOn || step.kill) {
         if (step.prompt) await type(step.prompt);
-        if (!(await until(() => recorded().some(step.killOn), 180_000))) { blocked = 'the call to crash on never started'; break; }
+        if (step.killOn && !(await until(() => recorded().some(step.killOn), 180_000))) { blocked = 'the call to crash on never started'; break; }
         await sleep(1000);
         for (const { pid, command } of await descendants(child.pid)) if (command.includes(step.binary)) try { process.kill(pid, 'SIGKILL'); } catch {}
         await sleep(2000);
       }
       if (step.wait) await sleep(step.wait);
     }
-    if (terminal && !blocked && !steps.some((step) => step.killOn)) { await type(steps.exit ?? '/exit'); await sleep(4000); }
+    if (terminal && !blocked && !steps.some((step) => step.killOn || step.kill)) { await type(steps.exit ?? '/exit'); await sleep(4000); }
     if (!terminal) await until(() => child.exitCode !== null || child.signalCode !== null, 300_000);
   } finally {
     child.stdin.end();
@@ -212,13 +261,6 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
 
 // Redaction: your home folder, user name and any email address never reach the corpus; transcript
 // entries that carry your instructions, memory, account or system prompts are left out whole.
-function redactor() {
-  const home = homedir(), user = userInfo().username;
-  const swap = (text) => text.split(home).join('~').replaceAll(`-Users-${user}-`, '-Users-user-').replaceAll(`/Users/${user}`, '/Users/user')
-    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, 'user@example.com');
-  const walk = (value) => (typeof value === 'string' ? swap(value) : Array.isArray(value) ? value.map(walk) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, walk(inner)])) : value);
-  return walk;
-}
 const PRIVATE = ['base_instructions', 'user_instructions', 'developer_instructions', 'instructions', 'systemPrompt'];
 function keepEntry(agent, entry) {
   if (agent === 'claude-code') return ['user', 'assistant', 'system', 'queue-operation'].includes(entry.type) && entry.subtype !== 'prompt_snapshot';
@@ -234,6 +276,7 @@ function binaryPath(name) {
   return path ? realpathSync(path) : null;
 }
 
+const hook = (name) => Object.defineProperty((payload) => payload.hook_event_name === name, 'name', { value: name });
 const CLAUDE_SCENARIOS = [
   { name: 'tools', args: ['--permission-mode', 'default'], steps: [
     { type: 'Use the Bash tool to run: echo corpus-probe' },
@@ -250,22 +293,49 @@ const CLAUDE_SCENARIOS = [
     { type: 'Use the Agent tool with a general-purpose subagent to run the Bash command echo from-child. Then end your turn; report its output when it finishes.' },
     { stops: 1 }] },
   { name: 'loop', steps: [{ type: '/loop 1m Reply with only the word tick. Do not use tools.' }, { stops: 1, ms: 150_000 }, { type: '/loop stop' }] },
+  // A monitor armed, three of its events each waking the session, and the watch stopped in the third's turn (#997).
+  { name: 'monitor', steps: [
+    { type: 'Use the Monitor tool to watch this command: for i in 1 2 3; do sleep 20; echo tick-$i; done; sleep 600 . Then end your turn. Each time an event arrives, reply with only the tick you saw; when tick-3 arrives, use the TaskStop tool to stop the monitor, then end your turn.' },
+    { stops: 3, ms: 240_000 }, { wait: 5000 }] },
   { name: 'compact', steps: [{ type: 'Use the Bash tool to run: echo before-compact' }, { type: '/compact', until: (payload) => payload.hook_event_name === 'SessionStart' && payload.source === 'compact' }, { type: 'Reply with only the word after.' }] },
   // `/clear` rotates the session ID in the same process; the second session is then forked by a new one.
   { name: 'clear', steps: [{ type: 'Use the Bash tool to run: echo before-clear' }, { type: '/clear', until: (payload) => payload.hook_event_name === 'SessionStart' && payload.source === 'clear' }, { type: 'Reply with only the word after.' }] },
   { name: 'stop-failure', model: 'claude-nonexistent-model', steps: [{ type: 'Reply with only the word hi.' }] },
   { name: 'crash', steps: [{ prompt: 'Run this exact command with the Bash tool in the foreground and wait for it to finish: node -e "setTimeout(() => console.log(1), 30000)"', killOn: (payload) => payload.hook_event_name === 'PreToolUse' }] },
+  // A permission dialog the person answers (#992): no hook answers it, Enter picks Yes, and the idle prompt's
+  // Notification comes a minute after the turn ends.
+  { name: 'permission-answered', dialog: true, args: ['--permission-mode', 'default'], steps: [
+    { type: 'Use the Write tool to create notes.md in this folder containing the single word one.', until: hook('PermissionRequest') },
+    { wait: 5000 }, { keys: '\r', until: hook('Stop') }, { wait: 75_000 }] },
+  // Denied with Esc once the permission prompt's Notification came, then the terminal closes before the idle prompt
+  // could come: no hook moves the session on.
+  { name: 'permission-denied-esc', dialog: true, args: ['--permission-mode', 'default'], steps: [
+    { type: 'Use the Write tool to create notes.md in this folder containing the single word one.', until: hook('PermissionRequest') },
+    { wait: 20_000 }, { keys: '\x1b' }, { wait: 10_000 }, { kill: true }] },
+  // The terminal closes while the dialog shows.
+  { name: 'permission-terminal-closed', dialog: true, args: ['--permission-mode', 'default'], steps: [
+    { prompt: 'Use the Bash tool to run: touch made.txt', killOn: hook('PermissionRequest') }] },
+  // An MCP server's elicitation dialog (scripts/corpus-elicit.mjs), answered with a name (Enter moves to Accept, and
+  // Enter again accepts), and cancelled with Esc.
+  { name: 'elicitation-answered', mcp: true, args: ['--allowedTools', 'mcp__corpus__ask_name'], steps: [
+    { type: 'Call the ask_name tool of the corpus MCP server once, then reply with only the name it returns.', until: hook('Elicitation') },
+    { wait: 15_000 }, { keys: 'corpus' }, { wait: 1000 }, { keys: '\r' }, { wait: 1000 }, { keys: '\r', until: hook('ElicitationResult'), ms: 20_000 }, { stops: 1 }] },
+  { name: 'elicitation-cancelled', mcp: true, args: ['--allowedTools', 'mcp__corpus__ask_name'], steps: [
+    { type: 'Call the ask_name tool of the corpus MCP server once, then reply with only what it returns.', until: hook('Elicitation') },
+    { wait: 3000 }, { keys: '\x1b', until: hook('ElicitationResult'), ms: 20_000 }, { stops: 1 }] },
 ];
 
-async function recordClaude(out, bin, facts) {
+async function recordClaude(out, bin, facts, only) {
   const hooks = [...new Set(Object.values(facts.events?.versions ?? {}).flatMap((events) => Object.keys(events)))];
   const results = [];
-  for (const scenario of CLAUDE_SCENARIOS) {
+  for (const scenario of CLAUDE_SCENARIOS.filter(({ name }) => !only || only.includes(name))) {
     const dir = join(out, scenario.name), work = join(dir, 'work');
     mkdirSync(work, { recursive: true });
+    if (scenario.dialog) writeFileSync(join(dir, 'dialog'), '');
     const command = [process.execPath, join(root, 'scripts/corpus.mjs'), 'hook', dir].map(quote).join(' ');
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ hooks: Object.fromEntries(hooks.map((hook) => [hook, [{ hooks: [{ type: 'command', command }] }]])) }));
-    const args = ['--model', scenario.model ?? 'haiku', '--setting-sources', 'project', '--strict-mcp-config', '--settings', join(dir, 'settings.json'), ...(scenario.args ?? [])];
+    if (scenario.mcp) writeFileSync(join(dir, 'mcp.json'), JSON.stringify({ mcpServers: { corpus: { type: 'stdio', command: process.execPath, args: [join(root, 'scripts/corpus-elicit.mjs')] } } }));
+    const args = ['--model', scenario.model ?? 'haiku', '--setting-sources', 'project', '--strict-mcp-config', ...(scenario.mcp ? ['--mcp-config', join(dir, 'mcp.json')] : []), '--settings', join(dir, 'settings.json'), ...(scenario.args ?? [])];
     const steps = scenario.steps.map((step) => ({ ...step, binary: bin }));
     results.push({ scenario: scenario.name, dir, ...(await session({ argv: [bin, ...args], cwd: realpathSync(work), dir, terminal: true, steps, startAfter: (_, payloads) => payloads.some(({ hook_event_name: hook }) => hook === 'SessionStart') })) });
     // A resume of the first session: the same session ID, a new process, SessionStart from "resume".
@@ -363,8 +433,9 @@ async function recordCommand(options) {
   const facts = JSON.parse(readFileSync(factsFile, 'utf8'));
   if (!bin) { say({ type: 'summary', verdict: 'BLOCKED', reason: `${agent} is not on PATH` }); return 1; }
   const version = spawnSync(bin, ['--version'], { encoding: 'utf8' }).stdout.match(/\d+\.\d+\.\d+(?:[-+][\w.]+)?/)?.[0];
-  const scratch = mkdtempSync('/private/tmp/deep-corpus-');
-  const results = agent === 'codex' ? await recordCodex(scratch, bin, facts) : await recordClaude(scratch, bin, facts);
+  const scratch = mkdtempSync(process.platform === 'darwin' ? '/private/tmp/deep-corpus-' : '/tmp/deep-corpus-');
+  const only = options.scenarios?.split(',');
+  const results = agent === 'codex' ? await recordCodex(scratch, bin, facts) : await recordClaude(scratch, bin, facts, only);
   const redact = redactor();
   for (const { scenario, dir, blocked, payloads } of results) {
     if (!payloads.length) { say({ type: 'session', scenario, blocked: blocked ?? 'no payload was recorded' }); continue; }
@@ -393,12 +464,12 @@ const options = { corpus: join(root, 'adapters/corpus'), facts: join(root, 'adap
 for (let index = 0; index < rest.length; index += 2) {
   const [flag, value] = [rest[index], rest[index + 1]];
   if (command === 'hook') { options.dir = flag; break; }
-  if (!['--corpus', '--facts', '--agent', '--out'].includes(flag) || value === undefined) { console.error(`unknown or incomplete option ${flag}`); process.exit(2); }
-  options[flag.slice(2)] = flag === '--agent' ? value : resolve(value);
+  if (!['--corpus', '--facts', '--agent', '--out', '--scenarios'].includes(flag) || value === undefined) { console.error(`unknown or incomplete option ${flag}`); process.exit(2); }
+  options[flag.slice(2)] = flag === '--agent' || flag === '--scenarios' ? value : resolve(value);
 }
 const commands = { replay: replayCommand, check: checkCommand, record: recordCommand, hook: () => hookCommand(options.dir) };
 if (!commands[command] || (command === 'record' && !(options.agent && options.out))) {
-  console.error('Usage: node scripts/corpus.mjs replay|check [--corpus <dir>] [--facts <dir>]\n       node scripts/corpus.mjs record --agent claude-code|codex|pi --out <dir>');
+  console.error('Usage: node scripts/corpus.mjs replay|check [--corpus <dir>] [--facts <dir>]\n       node scripts/corpus.mjs record --agent claude-code|codex|pi --out <dir> [--scenarios <name>,…]');
   process.exit(2);
 }
 process.exitCode = await commands[command](options);

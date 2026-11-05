@@ -6,6 +6,7 @@
 // pusher the provider recorded. Any other head runs only in the platform sandbox, with no network and no
 // credentials, or stays BLOCKED (cause: untrusted head, owner: you).
 import { execFileSync } from 'node:child_process';
+import { gitEnv } from './env.js';
 
 export interface ProviderPush { commit: string; author: string; committer: string; recorded: { pusher: string | null; repo: string; fork: boolean } }
 export interface PushReading { commit: string; pusher: string | null }
@@ -65,13 +66,13 @@ function passes(reader: PushRecordReader): boolean {
 
 export function headTrust(input: HeadInput, options: { sandbox?: boolean; plant?: HeadPlant } = {}): HeadResult {
   const { plant } = options;
-  const shas = execFileSync('git', ['rev-list', '--reverse', `${input.base}..${input.head}`], { cwd: input.repo, encoding: 'utf8' }).split('\n').filter(Boolean);
+  const shas = execFileSync('git', ['rev-list', '--reverse', `${input.base}..${input.head}`], { cwd: input.repo, encoding: 'utf8', env: gitEnv() }).split('\n').filter(Boolean);
   const recorded = new Set(input.recorded);
   const yours = new Set(input.yours);
   const reader = input.reader && (plant === 'unvetted-reader' || passes(input.reader)) ? input.reader : undefined;
   const pending = input.provider.filter((p) => shas.includes(p.commit) && !recorded.has(p.commit));
   const readings = reader && pending.length ? reader.read(pending) : [];
-  const field = (sha: string, f: 'an' | 'cn'): string => execFileSync('git', ['log', '-1', `--format=%${f}`, sha], { cwd: input.repo, encoding: 'utf8' }).trim();
+  const field = (sha: string, f: 'an' | 'cn'): string => execFileSync('git', ['log', '-1', `--format=%${f}`, sha], { cwd: input.repo, encoding: 'utf8', env: gitEnv() }).trim();
   const commits = shas.map((commit) => {
     if (recorded.has(commit)) return { commit, trusted: true, via: 'session' as const, pusher: null };
     const found = readings.filter((r) => r.commit === commit);

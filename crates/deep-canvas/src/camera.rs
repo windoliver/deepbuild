@@ -226,20 +226,13 @@ fn number_or(value: Option<&Value>, path: &str, default: f64) -> Result<f64, Ref
 }
 
 fn vector<const N: usize>(value: &Value, path: &str) -> Result<[f64; N], Refused> {
-    let Some(items) = value.as_array() else {
+    let Some(items) = value.as_array().filter(|a| a.len() == N) else {
         return Err(Refused::new(
             "out_of_range",
             path,
             format!("not {N} numbers"),
         ));
     };
-    if items.len() != N {
-        return Err(Refused::new(
-            "out_of_range",
-            path,
-            format!("not {N} numbers"),
-        ));
-    }
     let mut out = [0.0; N];
     for (i, item) in items.iter().enumerate() {
         out[i] = number(Some(item), &format!("{path}/{i}"))?;

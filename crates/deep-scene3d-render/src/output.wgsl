@@ -1,5 +1,7 @@
 // Issue #378: scene3d's output pass: exposure, the tone map and the sRGB encode, from the linear
-// target into the slot. It's the one pass that writes the final frame.
+// target into the slot. It's the one pass that writes the final frame. Issue #418: the finish in
+// it, each effect an identity at its default: the white balance before the curve, the ASC CDL and
+// saturation after it, and the deband dither after the encode, just before the target quantizes.
 
 struct Tone {
     exposure: f32,
@@ -8,13 +10,25 @@ struct Tone {
     contrast: f32,
     // 0 encodes once; the planted outputs: 1 encodes twice, 2 not at all.
     encode: u32,
-    pad0: u32,
-    pad1: u32,
-    pad2: u32,
+    // The deband's amplitude in 8-bit steps, 0 with it off.
+    deband: f32,
+    saturation: f32,
+    // 1 applies the grade (white balance and CDL); 0 skips it, the identity.
+    graded: u32,
+    // The white balance's rows on linear sRGB.
+    wb0: vec4<f32>,
+    wb1: vec4<f32>,
+    wb2: vec4<f32>,
+    slope: vec4<f32>,
+    offset: vec4<f32>,
+    power: vec4<f32>,
 };
 
 @group(0) @binding(0) var linear_target: texture_2d<f32>;
 @group(0) @binding(1) var<uniform> tone: Tone;
+// What the passes after the finish draw over the frame (status marks and the legend): the
+// deband leaves those pixels undithered (#418). One clear texel when nothing does.
+@group(0) @binding(2) var covered: texture_2d<f32>;
 
 @vertex
 fn out_vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
@@ -89,16 +103,73 @@ fn neutral(x: vec3<f32>) -> vec3<f32> {
     return clamp(mix(c, vec3<f32>(new_peak), g), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
+// The deband's integer hash of a pixel and a lane (lowbias32), as finish.rs has it.
+fn hash(x: u32, y: u32, lane: u32) -> u32 {
+    var h = x * 0x8da6b343u + y * 0xd8163841u + lane * 0xcb1ab31fu;
+    h = h ^ (h >> 16u);
+    h = h * 0x7feb352du;
+    h = h ^ (h >> 15u);
+    h = h * 0x846ca68bu;
+    h = h ^ (h >> 16u);
+    return h;
+}
+
+// A triangular dither of `tone.deband` 8-bit steps at pixel `p`, in (−deband, deband) steps.
+fn dither(p: vec2<u32>) -> f32 {
+    let a = f32(hash(p.x, p.y, 0u) >> 8u) / 16777216.0;
+    let b = f32(hash(p.x, p.y, 1u) >> 8u) / 16777216.0;
+    return (a + b - 1.0) * tone.deband;
+}
+
 @fragment
 fn out_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
-    let linear = textureLoad(linear_target, vec2<i32>(p.xy), 0).rgb * tone.exposure;
-    var mapped = clamp(linear, vec3<f32>(0.0), vec3<f32>(1.0));
+    var encoded = finish(textureLoad(linear_target, vec2<i32>(p.xy), 0).rgb);
+    if tone.deband > 0.0 {
+        let dims = textureDimensions(covered);
+        let at = min(vec2<u32>(p.xy), dims - vec2<u32>(1u));
+        let under = select(0.0, textureLoad(covered, at, 0).r, all(dims > vec2<u32>(1u)));
+        if under == 0.0 {
+            encoded = encoded + vec3<f32>(dither(vec2<u32>(p.xy)) / 255.0);
+        }
+    }
+    return vec4<f32>(encoded, 1.0);
+}
+
+fn cdl(x: vec3<f32>) -> vec3<f32> {
+    let v = pow(clamp(x * tone.slope.rgb + tone.offset.rgb, vec3<f32>(0.0), vec3<f32>(1.0)), tone.power.rgb);
+    let l = dot(v, vec3<f32>(0.2126, 0.7152, 0.0722));
+    return vec3<f32>(l) + tone.saturation * (v - vec3<f32>(l));
+}
+
+// The look's tone curve on an exposed linear value, into [0, 1].
+fn tone_curve(linear: vec3<f32>) -> vec3<f32> {
     if tone.map == 1u {
-        mapped = filmic(linear);
+        return filmic(linear);
     } else if tone.map == 2u {
-        mapped = agx(linear);
+        return agx(linear);
     } else if tone.map == 3u {
-        mapped = neutral(linear);
+        return neutral(linear);
+    }
+    return clamp(linear, vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
+// The `tone` call (#418): the curve alone over an input, before any encode; alpha passes through.
+@fragment
+fn tone_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
+    let v = textureLoad(linear_target, vec2<i32>(p.xy), 0);
+    return vec4<f32>(tone_curve(v.rgb), v.a);
+}
+
+// A linear value through the exposure, the white balance, the tone map, the CDL and the sRGB
+// encode.
+fn finish(value: vec3<f32>) -> vec3<f32> {
+    var linear = value * tone.exposure;
+    if tone.graded == 1u {
+        linear = vec3<f32>(dot(tone.wb0.xyz, linear), dot(tone.wb1.xyz, linear), dot(tone.wb2.xyz, linear));
+    }
+    var mapped = tone_curve(linear);
+    if tone.graded == 1u {
+        mapped = clamp(cdl(mapped), vec3<f32>(0.0), vec3<f32>(1.0));
     }
     var encoded = srgb_encode(mapped);
     if tone.encode == 1u {
@@ -106,5 +177,5 @@ fn out_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
     } else if tone.encode == 2u {
         encoded = mapped;
     }
-    return vec4<f32>(encoded, 1.0);
+    return encoded;
 }

@@ -10,6 +10,20 @@ export interface Deep {
         ask: {
         };
     }): Promise<unknown>;
+    "canvas.read"(params: {
+        doc: string;
+        query: {
+            paths?: Array<string>;
+            at?: Array<string>;
+        };
+    }): Promise<unknown>;
+    "channel.fetch"(params: {
+        call: string;
+        request: {
+            method: "GET" | "POST";
+            path: string;
+        };
+    }): Promise<unknown>;
     "config.get"(params: {
         key: string;
     }): Promise<unknown>;
@@ -29,6 +43,14 @@ export interface Deep {
             kinds?: Array<string>;
         };
     }): Promise<unknown>;
+    "runner.run"(params: {
+        prompt: string;
+        inputs: Array<string>;
+        budget: {
+            usd: number;
+        };
+        deadline: number;
+    }): Promise<unknown>;
     "store.get"(params: {
         kind: string;
         key: string;
@@ -40,6 +62,9 @@ export interface Deep {
         kind: string;
         key: string;
         value: unknown;
+    }): Promise<unknown>;
+    "terminal.close"(params: {
+        terminal: string;
     }): Promise<unknown>;
     "terminal.list"(params: {
     }): Promise<unknown>;
@@ -56,6 +81,11 @@ export interface Deep {
     "terminal.read"(params: {
         terminal: string;
         from: number;
+    }): Promise<unknown>;
+    call(params: {
+        name: string;
+        input: {
+        };
     }): Promise<unknown>;
     fetch(params: {
         request: {
@@ -108,6 +138,14 @@ export interface Deep {
             };
         };
     }): Promise<unknown>;
+    registerChannel(params: {
+        name: string;
+        channel: {
+            slot: "channel@1";
+            revision: number;
+            kind: "device" | "chat" | "email" | "text";
+        };
+    }): Promise<unknown>;
     registerCheck(params: {
         type: string;
     }): Promise<unknown>;
@@ -131,6 +169,18 @@ export interface Deep {
         name: string;
         panel: string;
         area: "sidebar" | "home" | "tab" | "line";
+        view?: {
+            pages?: Array<{
+                name: string;
+                param: string;
+                values?: Array<string>;
+            }>;
+            commands?: Array<{
+                name: string;
+                action: string;
+            }>;
+            binds?: Array<string>;
+        };
     }): Promise<unknown>;
     schedule(params: {
         name: string;

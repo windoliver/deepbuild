@@ -27,12 +27,21 @@
 //! - `effect:<class>`: a call with that effect: `cloud-resource` (a command that creates one), `dependency`
 //!   (adds a package), `service` (starts a long-running one), `top-level-folder` (makes a folder at the
 //!   checkout's top), or `unknown-reach-delete` (a delete run from a script file or over a pattern or a value
-//!   the line can't know, so what it deletes can't be worked out before it runs), or one that needs your
-//!   authority (#321): `push` (`git push`), `merge` (`gh pr merge`), `dispatch` (what `dispatch:workflow` reads),
-//!   `send` (`gh pr comment`, `gh issue comment`, `gh pr review`) or `delete` (`gh repo delete`,
+//!   the line can't know, so what it deletes can't be worked out before it runs), `discard-edits` (git discards
+//!   uncommitted edits to tracked files: a hard reset, a path checkout or restore, a forced switch, `rm` or
+//!   `worktree remove`, `read-tree -u --reset`, `checkout-index -f`, or `--abort` or `--skip` of a merge, rebase,
+//!   cherry-pick, revert or am), `drop-stash`
+//!   (`git stash drop` or `clear`), or one that needs your authority (#321): `push` (`git push`), `merge` (`gh pr merge`), `dispatch` (what `dispatch:workflow` reads),
+//!   `send` (`gh pr comment`, `gh issue comment`, `gh pr review`, or a `gh api` POST of a comment, a review
+//!   comment's reply or a review) or `delete` (`gh repo delete`,
 //!   `gh release delete`, `gh issue delete`).
 //! - `counts:<class>`: the tool counts as `read`, `change`, `send` or `destructive`, by the classes rules.json
 //!   holds; a tool they don't list counts as change, and one whose name starts with `delete_` as destructive.
+//!
+//! A call the reader couldn't read whole meets every entry it may be one of (#1097): a run whose program the line
+//! computes meets a `run:` entry whose argument globs its arguments fit and an `effect:` class whose words they fit,
+//! and a run nested past what the reader reads meets every entry. Its hit says what couldn't be read, so a block
+//! entry denies it and a watch or warn entry records it with that reason. An unread run never lowers a match.
 //!
 //! deep-hook reads rules.json as unreadable when an entry's `match` isn't one of these, so an entry newer than
 //! deep-hook never fails open.
@@ -40,7 +49,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::shell::{self, glob, lexical, real, same_name, Arg, Run};
+use crate::shell::{self, glob, lexical, real, same_name, Arg, Run, Unread};
 
 /// What deep-hook reads from one call: the runs of its shell command and the paths it writes.
 pub struct Call {
@@ -76,12 +85,17 @@ const EFFECTS: &[&str] = &[
     "service",
     "top-level-folder",
     "unknown-reach-delete",
+    "discard-edits",
+    "drop-stash",
     "push",
     "merge",
     "dispatch",
     "send",
     "delete",
 ];
+
+/// How much of a line whose program it computes a match names, in characters.
+const LINE: usize = 200;
 
 /// The hub's login service, as `deep hub start` installs it (packages/hub/src/service.ts).
 const HUB_LABEL: &str = "com.deepbuild.hub";
@@ -125,7 +139,7 @@ impl Call {
         home: &Path,
         hub: &Path,
     ) -> Call {
-        let shell_tool = tool == "Bash";
+        let shell_tool = tool == "Bash" || tool == "bash";
         let runs = match command.filter(|_| shell_tool) {
             Some(line) => shell::runs(line, cwd, home),
             None => Vec::new(),
@@ -133,7 +147,8 @@ impl Call {
         let at = |p: &str| -> Option<PathBuf> {
             let path = Path::new(p);
             if let Some(rest) = p.strip_prefix("~/") {
-                Some(home.join(rest))
+                // Joined as text, as pi joins it: a further `/` doesn't leave home.
+                Some(home.join(rest.trim_start_matches('/')))
             } else if path.is_absolute() {
                 Some(path.to_path_buf())
             } else {
@@ -185,8 +200,58 @@ impl Call {
         }
     }
 
-    /// Whether `pattern` reads this call.
+    /// Whether `pattern` reads this call, or may: what the reader couldn't read of it may be what `pattern` names.
     pub fn matches(&self, pattern: &str) -> Option<Hit> {
+        self.reads_whole(pattern).or_else(|| self.may_be(pattern))
+    }
+
+    /// A hit on a run the reader couldn't read whole, when what it does know of the run fits `pattern`.
+    fn may_be(&self, pattern: &str) -> Option<Hit> {
+        let (kind, rest) = pattern.split_once(':')?;
+        let fits = |run: &&Run| match run.unread {
+            Some(Unread::Depth) => true,
+            Some(Unread::Program) if kind == "run" => {
+                let wanted: Vec<&str> = rest.split_whitespace().skip(1).collect();
+                args_match(run, &wanted)
+            }
+            Some(Unread::Program) if kind == "effect" => programs(rest).iter().any(|p| {
+                let known = Run {
+                    program: p.to_string(),
+                    glob: false,
+                    unread: None,
+                    ..(*run).clone()
+                };
+                has_effect(&known, rest)
+            }),
+            _ => false,
+        };
+        let run = self.runs.iter().find(fits)?;
+        // A line nested that deep is long, and every entry it meets says this: the line is named only for a program
+        // the line computes, and only its start.
+        let what = match run.unread {
+            Some(Unread::Depth) => format!(
+                "it nests past what the reader reads, a depth of {} shells, substitutions or evals",
+                shell::DEPTH
+            ),
+            _ => {
+                let line = self.command.as_deref().unwrap_or_default();
+                let cut = line.char_indices().nth(LINE).map_or(line.len(), |(k, _)| k);
+                let more = if cut < line.len() { "…" } else { "" };
+                format!(
+                    "the line computes the program it runs, in {}{more}",
+                    &line[..cut]
+                )
+            }
+        };
+        Some(Hit {
+            detail: Some(format!(
+                "This call couldn't be read: {what}. It may be one this guard holds. Write the command out plainly and it can be read."
+            )),
+        })
+    }
+
+    /// Whether `pattern` reads this call from what the reader read of it.
+    fn reads_whole(&self, pattern: &str) -> Option<Hit> {
         let (kind, rest) = pattern.split_once(':')?;
         let hit = |detail: Option<String>| Some(Hit { detail });
         match kind {
@@ -289,20 +354,86 @@ impl Call {
                 } else {
                     text
                 };
-                let path = match text.strip_prefix("~/") {
-                    Some(rest) => self.home.join(rest),
-                    None if text == "~" => self.home.clone(),
-                    None => cwd.join(text),
-                };
-                folders.push(lexical(&path));
+                folders.push(self.path_in(cwd, text));
             }
         }
-        // A folder inside another one named is staged with it.
-        folders.sort();
-        folders.dedup();
-        let all = folders.clone();
-        folders.retain(|f| !all.iter().any(|g| g != f && f.starts_with(g)));
-        Some(folders)
+        Some(outermost(folders))
+    }
+
+    /// `text` as the path it is in `cwd`, `~` read as the home folder.
+    fn path_in(&self, cwd: &Path, text: &str) -> PathBuf {
+        let path = match text.strip_prefix("~/") {
+            Some(rest) => self.home.join(rest),
+            None if text == "~" => self.home.clone(),
+            None => cwd.join(text),
+        };
+        lexical(&path)
+    }
+
+    /// What a run that discards tracked edits reaches, for the hub to copy the edited files under it first (#1294):
+    /// the paths it names, or the checkout's root. None when where it works can't be known.
+    pub fn edits(&self) -> Option<Vec<PathBuf>> {
+        let mut paths: Vec<PathBuf> = Vec::new();
+        for run in self.runs.iter().filter(|r| discards(r)) {
+            let cwd = git_cwd(run)?;
+            let sub = git_rest(run)[0].clone();
+            let scoped = matches!(
+                sub.as_str(),
+                "checkout" | "restore" | "rm" | "checkout-index" | "worktree"
+            );
+            let named = named_paths(run);
+            let exact = |a: &&Arg| {
+                a.text
+                    .as_deref()
+                    .filter(|t| !a.glob && !t.starts_with(':') && !t.contains(['*', '?', '[']))
+                    .is_some()
+            };
+            if scoped
+                && !named.is_empty()
+                && named.iter().all(exact)
+                && !run
+                    .words()
+                    .iter()
+                    .any(|w| w.starts_with("--pathspec-from-file"))
+            {
+                paths.extend(
+                    named
+                        .iter()
+                        .filter_map(|a| a.text.as_deref())
+                        .map(|t| self.path_in(&cwd, t)),
+                );
+            } else if sub == "worktree" {
+                // Which worktree goes can't be read, and this one's root isn't it.
+                return None;
+            } else {
+                paths.push(git_target(run).map_or(cwd, |c| c.root));
+            }
+        }
+        Some(outermost(paths))
+    }
+
+    /// The stash a run drops (#1294): the folder it works in, then the entry `drop` names, or none for `clear`, which
+    /// drops every entry. None when the folder or the entry can't be known, or when two drops in a line renumber what
+    /// the second one names.
+    pub fn stash(&self) -> Option<Vec<PathBuf>> {
+        let mut drops = self.runs.iter().filter(|r| drops_stash(r));
+        let run = drops.next()?;
+        if drops.next().is_some() {
+            return None;
+        }
+        let mut reach = vec![git_cwd(run)?];
+        let rest = git_rest(run);
+        if rest[1] == "drop" {
+            let args = &run.args[run.args.len() + 2 - rest.len()..];
+            let mut named = args
+                .iter()
+                .filter(|a| !a.text.as_deref().is_some_and(|t| t.starts_with('-')));
+            reach.push(match named.next() {
+                Some(a) => PathBuf::from(a.text.as_deref()?),
+                None => PathBuf::from("stash@{0}"),
+            });
+        }
+        Some(reach)
     }
 
     /// Whether a run is `deep hub stop` aimed at the installed hub, `~/.deepbuild`, not a dev hub's `--root`.
@@ -358,51 +489,23 @@ impl Call {
     }
 
     fn effect(&self, class: &str) -> Option<Hit> {
-        let found = match class {
-            "cloud-resource" => self.runs.iter().find(|r| creates_cloud(r)),
-            "dependency" => self.runs.iter().find(|r| adds_dependency(r)),
-            "service" => self.runs.iter().find(|r| starts_service(r)),
-            "unknown-reach-delete" => self.runs.iter().find(|r| unknown_reach(r)),
-            "push" => self
-                .runs
-                .iter()
-                .find(|r| r.is("git") && git_rest(r).first().map(String::as_str) == Some("push")),
-            "merge" => self.runs.iter().find(|r| gh(r, &[&["pr", "merge"]])),
-            "dispatch" => self.runs.iter().find(|r| dispatch(r).is_some()),
-            "send" => self.runs.iter().find(|r| {
-                gh(
-                    r,
-                    &[&["pr", "comment"], &["issue", "comment"], &["pr", "review"]],
-                )
-            }),
-            "delete" => self.runs.iter().find(|r| {
-                gh(
-                    r,
-                    &[
-                        &["repo", "delete"],
-                        &["release", "delete"],
-                        &["issue", "delete"],
-                    ],
-                )
-            }),
-            "top-level-folder" => {
-                let root = checkout(self.cwd.as_deref()?)?.root;
-                let new = self.writes.iter().zip(&self.by.0).find_map(|(w, by)| {
-                    let rest = real(w).strip_prefix(&root).ok()?.to_path_buf();
-                    let top = rest.components().next()?;
-                    let folder = root.join(top);
-                    let mkdir = by.is_some_and(|(r, _)| self.runs[r].is("mkdir"));
-                    // A file written at the top is not a folder; a folder already there is not new.
-                    (rest.components().count() > 1 || mkdir)
-                        .then_some(folder)
-                        .filter(|f| !f.exists())
-                })?;
-                return Some(Hit {
-                    detail: Some(format!("It makes the top-level folder {}.", new.display())),
-                });
-            }
-            _ => None,
-        };
+        if class == "top-level-folder" {
+            let root = checkout(self.cwd.as_deref()?)?.root;
+            let new = self.writes.iter().zip(&self.by.0).find_map(|(w, by)| {
+                let rest = real(w).strip_prefix(&root).ok()?.to_path_buf();
+                let top = rest.components().next()?;
+                let folder = root.join(top);
+                let mkdir = by.is_some_and(|(r, _)| self.runs[r].is("mkdir"));
+                // A file written at the top is not a folder; a folder already there is not new.
+                (rest.components().count() > 1 || mkdir)
+                    .then_some(folder)
+                    .filter(|f| !f.exists())
+            })?;
+            return Some(Hit {
+                detail: Some(format!("It makes the top-level folder {}.", new.display())),
+            });
+        }
+        let found = self.runs.iter().find(|r| has_effect(r, class));
         found.map(|run| {
             let detail = if class == "unknown-reach-delete" {
                 let why = if run.scripted {
@@ -414,6 +517,8 @@ impl Call {
                     "What it deletes can't be worked out before it runs: {why}. It runs: {}",
                     command_of(run)
                 )
+            } else if class == "discard-edits" || class == "drop-stash" {
+                format!("To run it yourself: {}", command_of(run))
             } else {
                 format!("It runs: {}", command_of(run))
             };
@@ -604,6 +709,58 @@ fn pgid(pid: i64) -> Option<i64> {
     (group > 0).then_some(i64::from(group))
 }
 
+/// Whether a run has the effect `class`; top-level-folder is the call's, not a run's.
+fn has_effect(run: &Run, class: &str) -> bool {
+    match class {
+        "cloud-resource" => creates_cloud(run),
+        "dependency" => adds_dependency(run),
+        "service" => starts_service(run),
+        "unknown-reach-delete" => unknown_reach(run),
+        "discard-edits" => discards(run),
+        "drop-stash" => drops_stash(run),
+        "push" => run.is("git") && git_rest(run).first().map(String::as_str) == Some("push"),
+        "merge" => gh(run, &[&["pr", "merge"]]),
+        "dispatch" => dispatch(run).is_some(),
+        "send" => {
+            gh(
+                run,
+                &[&["pr", "comment"], &["issue", "comment"], &["pr", "review"]],
+            ) || posts_comment(run)
+        }
+        "delete" => gh(
+            run,
+            &[
+                &["repo", "delete"],
+                &["release", "delete"],
+                &["issue", "delete"],
+            ],
+        ),
+        _ => false,
+    }
+}
+
+/// The programs a run with the effect `class` can be: a run whose program the line computes has it when it would
+/// as one of these.
+fn programs(class: &str) -> &'static [&'static str] {
+    match class {
+        "cloud-resource" => &[
+            "aws", "gcloud", "az", "doctl", "eksctl", "gsutil", "terraform", "tofu", "pulumi", "cdk", "sam",
+            "serverless", "sls",
+        ],
+        "dependency" => &[
+            "npm", "pnpm", "bun", "yarn", "pip", "pip3", "gem", "brew", "uv", "cargo", "go",
+        ],
+        "service" => &[
+            "docker", "podman", "docker-compose", "brew", "systemctl", "launchctl", "pm2",
+        ],
+        "unknown-reach-delete" => &["rm", "unlink", "shred", "srm", "find", "git", "rsync"],
+        "push" | "discard-edits" | "drop-stash" => &["git"],
+        "dispatch" => &["gh", "curl", "wget"],
+        "merge" | "send" | "delete" => &["gh"],
+        _ => &[],
+    }
+}
+
 /// A command that deletes files git may not restore: rm, unlink, shred, `find -delete`, `git clean`, `rsync --delete`.
 /// A delete whose reach can't be worked out before it runs: a script file runs it, or it names a pattern or a value
 /// the line can't know.
@@ -647,6 +804,120 @@ fn deletes(run: &Run) -> bool {
         || (run.is("rsync") && words.iter().any(|w| w.starts_with("--delete")))
 }
 
+/// The paths of `paths` no other one holds: a folder inside another one named goes with it.
+fn outermost(mut paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    paths.sort();
+    paths.dedup();
+    let all = paths.clone();
+    paths.retain(|f| !all.iter().any(|g| g != f && f.starts_with(g)));
+    paths
+}
+
+/// Whether `word` is the long option `long`, or a start of it, which git reads as the option.
+fn long(word: &str, long: &str) -> bool {
+    word.len() > 2 && long.starts_with(word)
+}
+
+/// Whether a word such as `-fq` holds the short option `c`, up to the first letter that takes a value.
+fn short(word: &str, c: char) -> bool {
+    word.strip_prefix('-')
+        .filter(|w| !w.starts_with('-'))
+        .is_some_and(|w| {
+            w.chars()
+                .take_while(|l| !"bBcCsU".contains(*l))
+                .any(|l| l == c)
+        })
+}
+
+/// The folder a git run works in, past its `-C`s; None when the line doesn't say, or it aims at another tree.
+fn git_cwd(run: &Run) -> Option<PathBuf> {
+    let words = run.words();
+    let globals = &words[..words.len() - git_rest(run).len()];
+    if run
+        .env
+        .iter()
+        .any(|(n, _)| n == "GIT_DIR" || n == "GIT_WORK_TREE")
+        || globals
+            .iter()
+            .any(|w| w.starts_with("--git-dir") || w.starts_with("--work-tree"))
+    {
+        return None;
+    }
+    globals
+        .windows(2)
+        .filter(|w| w[0] == "-C")
+        .fold(run.cwd.clone(), |cwd, w| cwd.map(|c| c.join(w[1])))
+}
+
+/// What a `git checkout` or `git restore` names as paths: all that follows `--`, else each word that isn't an option
+/// and is on disk, or could be: a branch or a commit is neither.
+fn named_paths(run: &Run) -> Vec<&Arg> {
+    let args = &run.args[run.args.len() + 1 - git_rest(run).len()..];
+    let cut = args.iter().position(|a| a.text.as_deref() == Some("--"));
+    if let Some(k) = cut {
+        return args[k + 1..].iter().collect();
+    }
+    let cwd = git_cwd(run);
+    let there = |a: &&Arg| match (a.text.as_deref(), &cwd) {
+        (Some(t), _) if t.starts_with('-') => false,
+        (Some(t), Some(c)) => a.glob || c.join(t).symlink_metadata().is_ok(),
+        _ => true,
+    };
+    args.iter().filter(there).collect()
+}
+
+/// Whether a run discards uncommitted edits to tracked files (#1294): a hard reset, a path checkout or restore of the
+/// working files, a forced switch, a forced `git rm` or `git worktree remove`, a forced write from the index or a tree,
+/// or leaving a merge, rebase, cherry-pick, revert or am by `--abort` or `--skip`, which reset the tree.
+fn discards(run: &Run) -> bool {
+    if !run.is("git") {
+        return false;
+    }
+    let rest = git_rest(run);
+    let Some((sub, options)) = rest.split_first() else {
+        return false;
+    };
+    let before: Vec<&str> = options
+        .iter()
+        .map(String::as_str)
+        .take_while(|w| *w != "--")
+        .collect();
+    let has = |name: &str, c: char| before.iter().any(|w| long(w, name) || short(w, c));
+    match sub.as_str() {
+        "reset" => before
+            .iter()
+            .any(|w| long(w, "--hard") || long(w, "--merge")),
+        "switch" => has("--force", 'f') || before.iter().any(|w| long(w, "--discard-changes")),
+        "restore" => !has("--staged", 'S') || has("--worktree", 'W'),
+        "checkout" => {
+            let creates = before
+                .iter()
+                .any(|w| w.starts_with("-b") || w.starts_with("-B") || long(w, "--orphan"));
+            has("--force", 'f')
+                || (!creates
+                    && (!named_paths(run).is_empty()
+                        || has("--patch", 'p')
+                        || before.iter().any(|w| w.starts_with("--pathspec-from-file"))))
+        }
+        "rm" => has("--force", 'f') && !before.iter().any(|w| long(w, "--cached")),
+        "checkout-index" => has("--force", 'f'),
+        "read-tree" => before.iter().any(|w| long(w, "--reset")) && before.contains(&"-u"),
+        "worktree" => before.first() == Some(&"remove") && has("--force", 'f'),
+        "merge" | "rebase" | "cherry-pick" | "revert" | "am" => before
+            .iter()
+            .any(|w| long(w, "--abort") || long(w, "--skip")),
+        _ => false,
+    }
+}
+
+/// Whether a run drops stash entries, with the edits they hold (#1294).
+fn drops_stash(run: &Run) -> bool {
+    let rest = git_rest(run);
+    run.is("git")
+        && rest.first().map(String::as_str) == Some("stash")
+        && matches!(rest.get(1).map(String::as_str), Some("drop" | "clear"))
+}
+
 fn creates_cloud(run: &Run) -> bool {
     let words = run.words();
     let plain = plain(&words);
@@ -670,6 +941,41 @@ fn creates_cloud(run: &Run) -> bool {
 }
 
 /// A `gh` run whose first two plain words are one of `subs`.
+/// A `gh api` call that posts in your name: a POST (by `--method` or `-X`, or by a field, which makes gh post) to an
+/// issue's, a pull request's or a commit's comments, a review comment's replies, or a pull request's reviews (#323).
+fn posts_comment(run: &Run) -> bool {
+    let words = run.words();
+    let plain = plain(&words);
+    if !run.is("gh") || plain.first() != Some(&"api") {
+        return false;
+    }
+    let method = words.iter().enumerate().find_map(|(k, w)| match *w {
+        "-X" | "--method" => words.get(k + 1).copied(),
+        _ => w
+            .strip_prefix("--method=")
+            .or(w.strip_prefix("-X"))
+            .filter(|m| !m.is_empty() && !m.starts_with('-')),
+    });
+    let posts = match method {
+        Some(m) => m.eq_ignore_ascii_case("POST"),
+        None => !fields(&words).is_empty() || words.contains(&"--input"),
+    };
+    posts
+        && plain[1..].iter().any(|w| {
+            let path = w
+                .trim_start_matches("https://api.github.com")
+                .trim_start_matches('/');
+            let parts: Vec<&str> = path.split('?').next().unwrap_or("").split('/').collect();
+            parts.first() == Some(&"repos")
+                && matches!(
+                    parts.get(3..).unwrap_or(&[]),
+                    ["issues" | "pulls" | "commits", _, "comments"]
+                        | ["pulls", _, "reviews"]
+                        | ["pulls", _, "comments", _, "replies"]
+                )
+        })
+}
+
 fn gh(run: &Run, subs: &[&[&str]]) -> bool {
     let words = run.words();
     let plain = plain(&words);
@@ -1161,6 +1467,39 @@ mod tests {
     }
 
     #[test]
+    fn a_call_read_in_part_meets_the_entries_it_may_be() {
+        for line in [
+            "\"$(printf git)\" push origin main",
+            "\"$G\" push origin main",
+        ] {
+            let hit = bash(line).matches("effect:push").expect(line);
+            assert!(hit.detail.unwrap().contains("couldn't be read"));
+            assert!(bash(line).matches("run:git push").is_some(), "{line}");
+            assert!(bash(line).matches("effect:merge").is_none(), "{line}");
+        }
+        let cc = bash("\"$CC\" -o app main.c");
+        for pattern in ["effect:push", "run:git push", "effect:unknown-reach-delete", "effect:cloud-resource"] {
+            assert!(cc.matches(pattern).is_none(), "{pattern}");
+        }
+        assert!(bash("\"$X\" pr merge 12").matches("effect:merge").is_some());
+        assert!(bash("\"$X\" -rf \"$OUT\"/*")
+            .matches("effect:unknown-reach-delete")
+            .is_some());
+        let nest = |n: usize| {
+            let mut line = "pkill node".to_string();
+            for _ in 0..n {
+                line = format!("sh -c {}", quote(&line));
+            }
+            bash(&line)
+        };
+        let read = nest(shell::DEPTH).matches("kill:by-name").unwrap();
+        assert!(read.detail.is_none());
+        let deep = nest(shell::DEPTH + 1).matches("kill:by-name").unwrap();
+        assert!(deep.detail.unwrap().contains("nests"));
+        assert!(nest(shell::DEPTH + 1).matches("run:deep off").is_some());
+    }
+
+    #[test]
     fn a_word_is_whole_and_no_part_of_a_path() {
         let m = "word:kafka";
         assert!(bash("npm install kafka").matches(m).is_some());
@@ -1346,6 +1685,17 @@ mod tests {
         assert!(bash("gh issue comment 3 --body hi")
             .matches("effect:send")
             .is_some());
+        assert!(bash(
+            "gh api --method POST repos/acme/shop/pulls/23/comments/9101/replies -f body='Fixed.'"
+        )
+        .matches("effect:send")
+        .is_some());
+        assert!(bash("gh api repos/acme/shop/issues/3/comments -f body=hi")
+            .matches("effect:send")
+            .is_some());
+        assert!(bash("gh api repos/acme/shop/pulls/23/comments")
+            .matches("effect:send")
+            .is_none());
         assert!(bash("gh repo delete acme/shop --yes")
             .matches("effect:delete")
             .is_some());
@@ -1406,5 +1756,118 @@ mod tests {
         );
         assert!(call.matches("write:.mcp.json").is_some());
         assert!(call.matches("write:.claude/settings.json").is_none());
+    }
+
+    #[test]
+    fn a_discard_is_read_by_its_effect_and_a_move_of_the_work_is_not() {
+        let discards = |line: &str| bash(line).matches("effect:discard-edits").is_some();
+        for line in [
+            "git reset --hard HEAD~2",
+            "git reset --har",
+            "git reset --merge",
+            "git checkout -f main",
+            "git checkout -- src/a.ts",
+            "git checkout HEAD~1 -- src/a.ts",
+            "git checkout \"$BRANCH\"",
+            "git restore src/a.ts",
+            "git restore -SW src/a.ts",
+            "git restore --source=HEAD~1 src/a.ts",
+            "git switch --discard-changes main",
+            "git switch -fq main",
+            "git rm -f src/a.ts",
+            "git rm -rf src",
+            "git checkout-index -a -f",
+            "git read-tree -u --reset HEAD",
+            "git worktree remove --force /w2",
+            "git merge --abort",
+            "git rebase --abort",
+            "git rebase --skip",
+            "git cherry-pick --abort",
+            "git revert --abort",
+            "git am --abort",
+        ] {
+            assert!(discards(line), "{line}");
+        }
+        for line in [
+            "git reset --soft HEAD~1",
+            "git reset HEAD src/a.ts",
+            "git checkout -- ",
+            "git checkout -b fix -- ",
+            "git restore --staged src/a.ts",
+            "git restore -S src/a.ts",
+            "git switch main",
+            "git switch -c fix",
+            "git switch -cfix",
+            "git log --hard",
+            "echo git reset --hard",
+            "git rm src/a.ts",
+            "git rm -f --cached src/a.ts",
+            "git checkout-index -a",
+            "git read-tree HEAD",
+            "git worktree remove /w2",
+            "git worktree add -f /w2",
+            "git merge --continue",
+            "git rebase --continue",
+            "git rebase --quit",
+        ] {
+            assert!(!discards(line), "{line}");
+        }
+    }
+
+    #[test]
+    fn a_discard_reaches_its_paths_or_the_whole_tree() {
+        let edits = |line: &str| {
+            bash(line).edits().map(|p| {
+                p.iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+            })
+        };
+        assert_eq!(
+            edits("git checkout -- src/a.ts src"),
+            Some(vec!["/w/src".to_string()])
+        );
+        assert_eq!(edits("git restore -- '*.ts'"), Some(vec!["/w".to_string()]));
+        assert_eq!(
+            edits("git -C sub restore -- a.ts"),
+            Some(vec!["/w/sub/a.ts".to_string()])
+        );
+        // The line doesn't say where it works, or aims git at another tree: nothing can be listed.
+        assert_eq!(edits("cd \"$REPO\" && git reset --hard"), None);
+        assert_eq!(edits("git --work-tree=/x reset --hard"), None);
+        assert_eq!(edits("GIT_DIR=/x/.git git reset --hard"), None);
+        assert_eq!(
+            edits("git rm -f -- src/a.ts"),
+            Some(vec!["/w/src/a.ts".to_string()])
+        );
+        assert_eq!(edits("git merge --abort"), Some(vec!["/w".to_string()]));
+        assert_eq!(
+            edits("git worktree remove -f -- /w2"),
+            Some(vec!["/w2".to_string()])
+        );
+        assert_eq!(edits("git worktree remove -f \"$TREE\""), None);
+    }
+
+    #[test]
+    fn a_stash_drop_names_its_entry() {
+        let stash = |line: &str| {
+            bash(line).stash().map(|p| {
+                p.iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+            })
+        };
+        assert_eq!(
+            stash("git stash drop -q stash@{1}"),
+            Some(vec!["/w".to_string(), "stash@{1}".to_string()])
+        );
+        assert_eq!(
+            stash("git stash drop"),
+            Some(vec!["/w".to_string(), "stash@{0}".to_string()])
+        );
+        assert_eq!(stash("git stash clear"), Some(vec!["/w".to_string()]));
+        assert_eq!(stash("git stash drop \"$E\""), None);
+        // The second drop's stash@{0} is the first one's stash@{1}.
+        assert_eq!(stash("git stash drop && git stash drop"), None);
     }
 }

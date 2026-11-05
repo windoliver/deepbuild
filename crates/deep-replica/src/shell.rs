@@ -76,15 +76,11 @@ pub fn open_with_card(
             cx,
         )),
     });
-    let question = deep_app::record::with_view(|view| {
-        view.events
-            .iter()
-            .find(|event| event["kind"] == "ask.created")
-            .and_then(|ask| ask["data"]["question"].as_str())
-            .map(str::to_owned)
-    })
-    .flatten()
-    .unwrap_or_else(|| "Nothing needs you.".into());
+    let question = deep_app::record::history()
+        .iter()
+        .find(|event| event["kind"] == "ask.created")
+        .and_then(|ask| ask["data"]["question"].as_str())
+        .map_or_else(|| "Nothing needs you.".into(), str::to_owned);
     handle
         .update(cx, |_, window, cx| {
             deep_app::card::present(card, &question, &["Yes", "No"], window, cx)

@@ -5,7 +5,7 @@
 // anything is written, each quote is checked at its handle and each handle against what that job was delivered; a
 // finding that fails either is dropped and logged. The install writes what is kept to the wiki.
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
-import { createServer, type Server } from 'node:http';
+import type { Server } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -145,6 +145,8 @@ function answerOf(stdout: string): { findings: { text: string; cites: { at: stri
 async function serve(slicer: Slicer, delivered: (handle: string) => boolean, sessions: readonly string[]): Promise<{ socket: string; close(): void }> {
   const dir = realpathSync(mkdtempSync('/tmp/deep-reading-'));
   const socket = join(dir, 's');
+  // node:http is loaded by the one reading job that serves, not by `deep read`, `deep find` or the hub's main thread.
+  const { createServer } = await import('node:http');
   const server: Server = createServer((req, res) => {
     let body = '';
     req.setEncoding('utf8');

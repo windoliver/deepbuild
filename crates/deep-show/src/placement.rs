@@ -7,6 +7,11 @@
 //! still and unobscured, where a window of the app's own stacked over any part of it obscures it.
 //! Only the shell places windows: a pop-out needs the serial of your input in that panel, and an
 //! agent's call never opens or moves one.
+//!
+//! Issue #140: the window and input seams declare their capabilities, and the card reads them. A
+//! window backend that reports no occlusion (the `test-window` build's) never tells the card what
+//! covers it, so the card treats that as not cleared and arms only while its window is active and
+//! frontmost by the platform's own report.
 
 use std::collections::BTreeMap;
 
@@ -22,6 +27,81 @@ const MARGIN: f64 = 20.0;
 /// Frame clock and scheduler: a window's `caps: {inactive: 30 Hz, thermal: 60 Hz, hidden: 0}`.
 const INACTIVE_HZ: i64 = 30;
 const THERMAL_HZ: i64 = 60;
+
+/// The window and input backend this build chose, and what it can do (Seam and backend: the
+/// window and input seams declare capabilities).
+struct Caps {
+    name: &'static str,
+    version: &'static str,
+    occlusion: bool,
+    positions: bool,
+    pointer_lock: bool,
+    warp_cursor: bool,
+    ime: bool,
+}
+
+#[cfg(not(feature = "test-window"))]
+const CAPS: Caps = Caps {
+    name: "window.gpui-macos",
+    version: "1.0.0",
+    occlusion: true,
+    positions: true,
+    pointer_lock: false,
+    warp_cursor: false,
+    ime: true,
+};
+
+/// The test window backend: it reports which window is key and which is frontmost, and nothing
+/// about what covers them.
+#[cfg(feature = "test-window")]
+const CAPS: Caps = Caps {
+    name: "window.test",
+    version: "1.0.0",
+    occlusion: false,
+    positions: true,
+    pointer_lock: false,
+    warp_cursor: false,
+    ime: false,
+};
+
+/// `window_caps`: each capability, whether the backend declares it, and what reads it, with
+/// that consumer's behavior when it is absent.
+pub fn caps_json() -> Value {
+    let cap = |declared: bool, consumers: &[(&str, &str)]| {
+        json!({
+            "declared": declared,
+            "consumers": consumers
+                .iter()
+                .map(|(c, absent)| json!({"consumer": c, "when_absent": absent}))
+                .collect::<Vec<_>>(),
+        })
+    };
+    json!({
+        "backend": {"name": CAPS.name, "version": CAPS.version},
+        "caps": {
+            "occlusion": cap(CAPS.occlusion, &[(
+                "question_card",
+                "arms only while its window is active and frontmost by the platform's report; unknown occlusion is never cleared",
+            )]),
+            "positions": cap(CAPS.positions, &[(
+                "layout_restore",
+                "views reopen where the platform places them, and the layout keeps their saved rects",
+            )]),
+            "pointer_lock": cap(CAPS.pointer_lock, &[(
+                "look_control",
+                "the pointer writes no look; touch zones and keys still do",
+            )]),
+            "warp_cursor": cap(CAPS.warp_cursor, &[(
+                "look_control",
+                "the cursor is hidden where it is instead of held at the view's center",
+            )]),
+            "ime": cap(CAPS.ime, &[(
+                "text_control",
+                "takes key presses as typed, with no input-method composition",
+            )]),
+        },
+    })
+}
 
 /// One display the scenario connects (Frame clock: per display `{uuid, refresh_ns, next_vsync,
 /// latch_lead_ns}`), its bounds in global points. Its scale and color space are checked at the
@@ -237,6 +317,29 @@ pub struct Planted {
     /// #401: a pop-out takes any serial in the writer's ring, however old and from whichever
     /// of its panels.
     pub accepts_any_ring_serial: bool,
+    /// #140: with a backend that reports no occlusion, the card treats unknown occlusion as
+    /// unobscured and judges only the app's own windows.
+    pub ignores_unknown_occlusion: bool,
+}
+
+impl Planted {
+    /// The wrong program a scenario's `planted` names, if it is one of these.
+    pub fn flag(&mut self, name: &str) -> Option<&mut bool> {
+        Some(match name {
+            "restores_to_main" => &mut self.restores_to_main,
+            "card_on_main_display" => &mut self.card_on_main_display,
+            "one_clock_for_all" => &mut self.one_clock_for_all,
+            "arms_under_own_window" => &mut self.arms_under_own_window,
+            "ignores_inactive_cap" => &mut self.ignores_inactive_cap,
+            "ignores_thermal_cap" => &mut self.ignores_thermal_cap,
+            "presents_hidden" => &mut self.presents_hidden,
+            "evaluates_hidden" => &mut self.evaluates_hidden,
+            "arms_from_delivery" => &mut self.arms_from_delivery,
+            "never_rearms" => &mut self.never_rearms,
+            "accepts_any_ring_serial" => &mut self.accepts_any_ring_serial,
+            _ => return None,
+        })
+    }
 }
 
 /// What happened to a window: it opened or was dragged to a rect, or came to the top of the
@@ -276,6 +379,8 @@ struct Reports {
     hot: Vec<(i64, bool)>,
     /// A window you hid (`true`) or showed again.
     hidden: Vec<(i64, String, bool)>,
+    /// #140: a window the platform reported frontmost (`true`) or no longer frontmost.
+    front: Vec<(i64, String, bool)>,
 }
 
 /// The app's windows on the scenario's displays, and what the card's placement reads: your
@@ -449,6 +554,33 @@ impl Placement {
         json!({})
     }
 
+    /// `frontmost`: the platform's report that `window` is, or is no longer, frontmost (#140).
+    pub fn frontmost(&mut self, at: i64, window: &str, front: bool, agent: bool) -> Value {
+        if let Err(e) = self.report(Some(window), agent) {
+            return e;
+        }
+        self.reports.front.push((at, window.to_string(), front));
+        json!({})
+    }
+
+    /// Whether the platform's latest reports at `t` have `window` both key and frontmost.
+    fn cleared(&self, window: &str, t: i64) -> bool {
+        let r = &self.reports;
+        let key = r
+            .key
+            .iter()
+            .rev()
+            .find(|(at, _)| *at <= t)
+            .is_some_and(|(_, k)| k.as_deref() == Some(window));
+        let front = r
+            .front
+            .iter()
+            .rev()
+            .find(|(at, w, _)| *at <= t && w == window)
+            .is_some_and(|(_, _, f)| *f);
+        key && front
+    }
+
     /// `thermal`: the OS's report of the Mac's thermal state, `hot` at `serious` or `critical`.
     pub fn thermal(&mut self, at: i64, hot: bool, agent: bool) -> Value {
         if let Err(e) = self.report(None, agent) {
@@ -562,6 +694,13 @@ impl Placement {
             .rev()
             .find(|(s, (p, when))| p == panel && fresh(*when, now) && usable(**s))
             .map(|(s, _)| *s)
+    }
+
+    /// The panel a gesture serial was delivered to and when (#498).
+    pub fn gesture_of(&self, serial: u64) -> Option<(&str, i64)> {
+        self.serials
+            .get(&serial)
+            .map(|(p, when)| (p.as_str(), *when))
     }
 
     /// Whether `serial` is a gesture of yours in `panel` fresh at `now`.
@@ -718,8 +857,12 @@ impl Placement {
     /// Whether a window of the app's own stacked over the card's window lies over any part of
     /// the card at `t` (Question card: "It can never: be covered, even partly"; `rearm_on:
     /// occluded`).
+    /// With a backend that reports no occlusion, what covers the card is unknown, and only its
+    /// window being key and frontmost clears it (#140).
     fn occluded(&self, own: &str, rect: [f64; 4], t: i64) -> bool {
-        !self.planted.arms_under_own_window && self.stack_at(t).covers(own, rect)
+        let own_windows = !self.planted.arms_under_own_window && self.stack_at(t).covers(own, rect);
+        own_windows
+            || (!CAPS.occlusion && !self.planted.ignores_unknown_occlusion && !self.cleared(own, t))
     }
 
     pub fn planted(&self) -> Planted {
@@ -804,6 +947,18 @@ impl Placement {
             .map(|(at, id, e)| (*at, id == &window.id && matches!(e, Event::Placed(..))));
         // Each instant something changed: `(at, the window moved, a change was reported)`.
         let mut times: Vec<(i64, bool, bool)> = Vec::new();
+        // The platform's reports of the key and frontmost window are instants the card's cover
+        // may change at (#140).
+        let reports = self
+            .reports
+            .key
+            .iter()
+            .map(|(at, _)| *at)
+            .chain(self.reports.front.iter().map(|(at, _, _)| *at))
+            .filter(|at| !CAPS.occlusion && *at > presented && *at <= now)
+            .map(|at| (at, false));
+        let mut changes: Vec<(i64, bool)> = changes.chain(reports).collect();
+        changes.sort_by_key(|(at, _)| *at);
         for (at, moved) in changes {
             match times.last_mut() {
                 Some((t, m, _)) if *t == at => *m |= moved,

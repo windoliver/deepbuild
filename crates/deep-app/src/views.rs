@@ -19,9 +19,7 @@ use gpui_kit::base::dock::{
 use gpui_kit::base::ObservedElement;
 use gpui_kit::{prelude::FluentBuilder as _, *};
 
-use serde_json::Value;
-
-use crate::{canvas, chrome, events::Inbox, states, text};
+use crate::{bound, canvas, chrome, events::Inbox, states, text};
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
 pub const HOME: &str = "deepbuild/home";
@@ -99,6 +97,8 @@ impl Kind {
 pub struct Shipped {
     kind: Kind,
     focus_handle: FocusHandle,
+    /// What Home's Set up click said, once clicked.
+    set_up: Option<String>,
 }
 
 impl Shipped {
@@ -106,6 +106,7 @@ impl Shipped {
         Self {
             kind,
             focus_handle: cx.focus_handle(),
+            set_up: None,
         }
     }
 }
@@ -118,10 +119,12 @@ pub fn register_views(cx: &mut App) {
         });
     }
     register_panel(cx, EXTENSION, |_, _, cx| {
-        Arc::new(cx.new(|cx| Slot {
+        let slot = cx.new(|cx| Slot {
             view: NEXT_EXTENSION.with(|next| next.borrow_mut().take()),
             focus_handle: cx.focus_handle(),
-        }))
+        });
+        SLOT.with(|current| *current.borrow_mut() = Some(slot.downgrade()));
+        Arc::new(slot)
     });
 }
 
@@ -138,6 +141,23 @@ pub const EXTENSION: &str = "deepbuild/extension";
 thread_local! {
     static NEXT_EXTENSION: RefCell<Option<AnyView>> = const { RefCell::new(None) };
     static SLOT_BOUNDS: std::cell::Cell<Option<Bounds<Pixels>>> = const { std::cell::Cell::new(None) };
+    static SLOT: RefCell<Option<WeakEntity<Slot>>> = const { RefCell::new(None) };
+}
+
+/// Puts `view` in the extension slot the shell drew last, in place of what it held: a view's page opened from ⌘K
+/// (#366). False when no slot is drawn.
+pub fn fill_slot(view: AnyView, cx: &mut App) -> bool {
+    let Some(slot) = SLOT
+        .with(|current| current.borrow().clone())
+        .and_then(|slot| slot.upgrade())
+    else {
+        return false;
+    };
+    slot.update(cx, |slot, cx| {
+        slot.view = Some(view);
+        cx.notify();
+    });
+    true
 }
 
 /// Hands the next layout that names [`EXTENSION`] its view.
@@ -227,33 +247,90 @@ fn title(
         .font_weight(FontWeight::SEMIBOLD)
 }
 
-/// What the views draw from the one record reader: its events, its open asks and its sessions.
+/// What a view draws from the one record reader, read in its borrow so no event is copied to draw a frame, and only
+/// what that view shows: its open asks, its sessions with their task's title and state, and the deadlines of the
+/// first session's asks.
 struct Record {
-    events: Vec<Value>,
     /// Open asks, oldest first: `(handle, session)`.
     open: Vec<(String, String)>,
-    sessions: Vec<String>,
+    /// The sessions the view shows, in the order each first appears, with its task's title and its state: every
+    /// one for the sidebar, the first for a session's page and its line, none for the others.
+    sessions: Vec<(String, String, states::State)>,
+    /// The sidebar's rows (#992), one per session: its words after the title and the status-map entry its mark draws.
+    rows: Vec<(String, &'static str)>,
+    /// When each of the first session's open asks defaults, in event order: on a session's page only.
+    deadlines: Vec<u64>,
 }
 
-fn record() -> Record {
-    crate::record::with_view(|view| Record {
-        events: view.events.clone(),
-        open: view
-            .inbox
+/// What the sidebar draws: every session, in the order each first appears, with its task's title and its state.
+pub fn sidebar() -> Vec<(String, String, states::State)> {
+    record(Kind::Sidebar).sessions
+}
+
+fn record(kind: Kind) -> Record {
+    crate::record::with_view(|view| read(view, kind))
+        .unwrap_or_else(|| read(&crate::record::View::default(), kind))
+}
+
+/// What the view `kind` draws of `view`.
+fn read(view: &crate::record::View, kind: Kind) -> Record {
+    let open: Vec<(String, String)> = view
+        .inbox
+        .iter()
+        .filter(|row| row["status"] != "closed")
+        .map(|row| {
+            let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
+            (text("ask"), text("session"))
+        })
+        .collect();
+    let table = view.table();
+    // A session's page and its line draw the first session, or the one named "" when the record has none.
+    let sessions: Vec<(String, String, states::State)> = match kind {
+        Kind::Sidebar => table.every_session(),
+        Kind::Session | Kind::Line => {
+            let session = table.sessions().first().cloned().unwrap_or_default();
+            vec![(
+                session.clone(),
+                table.title(&session),
+                table.state(&session),
+            )]
+        }
+        Kind::Home | Kind::NeedsYou => Vec::new(),
+    };
+    let deadlines = match (kind, sessions.first()) {
+        (Kind::Session, Some((first, ..))) => {
+            let mine: Vec<&String> = open
+                .iter()
+                .filter(|(_, of)| of == first)
+                .map(|(handle, _)| handle)
+                .collect();
+            table
+                .open_asks(None)
+                .into_iter()
+                .filter(|ask| mine.contains(&&states::handle(ask)))
+                .filter_map(|ask| table.deadline(ask))
+                .collect()
+        }
+        _ => Vec::new(),
+    };
+    let rows = match kind {
+        Kind::Sidebar => sessions
             .iter()
-            .filter(|row| row["status"] != "closed")
-            .map(|row| {
-                let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
-                (text("ask"), text("session"))
-            })
+            .map(|(session, ..)| table.row(session, now()))
             .collect(),
-        sessions: states::sessions(&view.events),
-    })
-    .unwrap_or(Record {
-        events: Vec::new(),
-        open: Vec::new(),
-        sessions: Vec::new(),
-    })
+        _ => Vec::new(),
+    };
+    Record {
+        open,
+        sessions,
+        rows,
+        deadlines,
+    }
+}
+
+/// The session a session's page and its line draw, with its task's title and state.
+fn first(record: &Record) -> (String, String, states::State) {
+    record.sessions[0].clone()
 }
 
 /// The virtual clock's time where one runs (the replica), else the system's.
@@ -275,7 +352,12 @@ fn status(
     state: &states::State,
     text: String,
 ) -> ObservedElement<Stateful<Div>> {
-    let glyph = states::glyph(state.entry());
+    marked(id, state.entry(), text)
+}
+
+/// A status mark for a status-map entry, and its words.
+fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElement<Stateful<Div>> {
+    let glyph = states::glyph(entry);
     let name = format!("{glyph} {text}");
     div()
         .id(id)
@@ -290,17 +372,85 @@ fn status(
             div()
                 .size(px(CORE))
                 .flex_none()
-                .bg(rgb(states::color(state.entry()))),
+                .bg(rgb(states::color(entry))),
         )
         .child(glyph)
         .child(text)
 }
 
+/// The bound values on `surface`, one accessibility node each named by its surface, its ID and
+/// what it shows: its ID, the value, and where it comes from, muted. A missing value shows the
+/// dash and says it wasn't reported.
+fn bound_values(
+    surface: bound::Surface,
+    chrome: &chrome::Chrome,
+) -> Vec<ObservedElement<Stateful<Div>>> {
+    bound::on(surface)
+        .into_iter()
+        .enumerate()
+        .map(|(index, b)| {
+            let id = ElementId::Name(format!("bound-{}-{index}", surface.name()).into());
+            let said = match &b.missing {
+                Some(_) => format!("{} · not reported", b.text),
+                None => b.text.clone(),
+            };
+            div()
+                .id(id)
+                .test_support()
+                .role(Role::Label)
+                .aria_label(b.name())
+                .h(px(ROW_HEIGHT))
+                .flex()
+                .items_center()
+                .gap_2()
+                .pl(px(CORE + 4.))
+                .child(
+                    div()
+                        .w(px(64.))
+                        .text_color(chrome.ink_secondary)
+                        .child(b.id.clone()),
+                )
+                .child(text::label(
+                    &format!("bound-{}-{index}-value", surface.name()),
+                    text::Label {
+                        bound: true,
+                        ..text::Label::new(said)
+                    },
+                    chrome.ink_primary,
+                    None,
+                ))
+                .child(div().text_color(chrome.ink_secondary).child(b.from))
+        })
+        .collect()
+}
+
+/// A panel in the window holding the bound values bound to it, when any are.
+fn bound_panel(chrome: &chrome::Chrome) -> Option<Stateful<Div>> {
+    let values = bound_values(bound::Surface::Panel, chrome);
+    (!values.is_empty()).then(|| {
+        div()
+            .id("bound-panel")
+            .mt_2()
+            .w(px(600.))
+            .p_2()
+            .border_1()
+            .border_color(chrome.divider)
+            .flex()
+            .flex_col()
+            .child(label("bound-panel-title", "Cart total").font_weight(FontWeight::SEMIBOLD))
+            .children(values)
+    })
+}
+
 impl Render for Shipped {
-    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let chrome = chrome::of(window);
         let decorations = current_state();
-        let record = record();
+        // While setup hasn't finished, the count says so, never a number of asks (#1002). A view drawn over a fixture
+        // state draws the fixture, whatever this machine's HOME holds.
+        let unfinished = decorations.is_none().then(crate::setup::count).flatten();
+        let record = record(self.kind);
+        let reach = crate::notify::reach();
         let now = now();
         let open = record.open.len();
         let page = div()
@@ -315,23 +465,55 @@ impl Render for Shipped {
             Kind::Sidebar => page
                 .bg(chrome.raised)
                 .child(title("sidebar-title", "Sessions"))
-                .children(record.sessions.iter().enumerate().map(|(index, session)| {
-                    let state = states::state(&record.events, session);
-                    let text = format!(
-                        "{} · {}",
-                        states::title(&record.events, session),
-                        state.text(now)
-                    );
-                    status(("sidebar-session", index), &state, text)
-                        .role(Role::Button)
-                        .h(px(24.))
-                        .px_1()
-                        .rounded_sm()
-                        .hover(|style| style.bg(chrome.hover))
-                })),
-            Kind::Home => page
-                .child(title("home-title", "Home"))
-                .child(label("home-needs-you", format!("{open} asks need you"))),
+                .children(record.sessions.iter().zip(&record.rows).enumerate().map(
+                    |(index, ((_, task, _), (words, entry)))| {
+                        let text = format!("{task} · {words}");
+                        marked(("sidebar-session", index), entry, text)
+                            .role(Role::Button)
+                            .h(px(24.))
+                            .px_1()
+                            .rounded_sm()
+                            .hover(|style| style.bg(chrome.hover))
+                    },
+                )),
+            Kind::Home => match unfinished {
+                Some(count) => page
+                    .child(title("home-title", "Home"))
+                    .child(label("home-needs-you", count))
+                    .children(self.set_up.is_none().then(|| {
+                        label("set-up", "Set up")
+                            .role(Role::Button)
+                            .aria_label("Set up")
+                            // As the welcome draws it: ink on the ground, as wide as its word.
+                            .self_start()
+                            .my_1()
+                            .px_4()
+                            .rounded_md()
+                            .bg(chrome.ink_primary)
+                            .text_color(chrome.ground)
+                            .hover(|style| style.bg(chrome.ink_secondary))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.set_up = Some(
+                                    crate::setup::set_up()
+                                        .map_or_else(|error| error, str::to_owned),
+                                );
+                                cx.notify();
+                            }))
+                    }))
+                    .children(
+                        self.set_up
+                            .clone()
+                            .or_else(crate::setup::reason)
+                            .map(|line| label("set-up-reason", line).h_auto().py_1()),
+                    ),
+                None => page.child(title("home-title", "Home")).child(label(
+                    "home-needs-you",
+                    reach.count(format!("{open} asks need you")),
+                )),
+            },
+            Kind::NeedsYou if unfinished.is_some() => page
+                .child(title("needs-you-title", "Needs you"))
+                .child(label("needs-you-setup", unfinished.unwrap_or_default())),
             Kind::NeedsYou => page.child(title("needs-you-title", "Needs you")).children(
                 record.open.iter().enumerate().map(|(index, (handle, _))| {
                     let has = |list: fn(&AppState) -> &Vec<String>| {
@@ -342,7 +524,12 @@ impl Render for Shipped {
                     let held = decorations
                         .as_ref()
                         .is_some_and(|state| state.held.as_deref() == Some(handle.as_str()));
-                    label(("ask", index), handle.clone())
+                    let text = if reach.not_notified(handle) {
+                        format!("{handle} · not notified")
+                    } else {
+                        handle.clone()
+                    };
+                    label(("ask", index), text)
                         .when(has(|state| &state.inbox.folded), |row| {
                             row.pl_4().text_color(chrome.ink_secondary)
                         })
@@ -353,37 +540,35 @@ impl Render for Shipped {
                 }),
             ),
             Kind::Session => {
-                let session = record.sessions.first().cloned().unwrap_or_default();
-                let mine: Vec<&String> = record
-                    .open
-                    .iter()
-                    .filter(|(_, of)| *of == session)
-                    .map(|(handle, _)| handle)
-                    .collect();
+                let (session, task, state) = first(&record);
+                let mine = record.open.iter().filter(|(_, of)| *of == session).count();
                 let hours: Vec<f64> = record
-                    .events
+                    .deadlines
                     .iter()
-                    .filter(|event| mine.contains(&&states::handle(event)))
-                    .filter_map(|ask| states::deadline(&record.events, ask))
-                    .map(|deadline| (deadline as f64 - now as f64) / 3_600_000.0)
+                    .map(|deadline| (*deadline as f64 - now as f64) / 3_600_000.0)
                     .collect();
                 let points = hours.len();
-                let state = states::state(&record.events, &session);
-                let task = states::title(&record.events, &session);
                 // The line's caption and its readout are the canvas's text (#390): the readout
                 // is a bound number, tabular and never cut, holding its widest value's room.
                 let caption = text::Label::new("Hours to each deadline");
                 let readout = text::Label {
                     bound: true,
-                    ..text::Label::new(mine.len().to_string())
+                    ..text::Label::new(mine.to_string())
                 };
                 page.child(title("session-title", format!("Session {session}")))
-                    // The return card: what came back from the session's last stop.
-                    .child(status(
-                        "return-card",
-                        &state,
-                        format!("{task} returned · {}", state.text(now)),
-                    ))
+                    // The return card: what came back from the session's last stop, with the
+                    // values bound to its runs' assertions (#629).
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(status(
+                                "return-card",
+                                &state,
+                                format!("{task} returned · {}", state.text(now)),
+                            ))
+                            .children(bound_values(bound::Surface::Card, chrome)),
+                    )
                     .child(
                         div()
                             .w(px(600.))
@@ -421,12 +606,11 @@ impl Render for Shipped {
                         "session-line-label",
                         format!("Hours to each deadline: {points} points"),
                     ))
+                    .children(bound_panel(chrome))
             }
             Kind::Line => {
                 // The session's line: from its task to where it stands now.
-                let session = record.sessions.first().cloned().unwrap_or_default();
-                let state = states::state(&record.events, &session);
-                let task = states::title(&record.events, &session);
+                let (_, task, state) = first(&record);
                 page.bg(chrome.raised).child(status(
                     "line-status",
                     &state,
@@ -494,9 +678,11 @@ impl Layout {
     }
 }
 
-/// The window's root: the dock area, loaded from a layout.
+/// The window's root: the dock area, loaded from a layout, and ⌘K over it once views give it entries (#366).
 pub struct Shell {
     pub dock: Entity<DockArea>,
+    commands: Option<Entity<crate::commands::Palette>>,
+    focus_handle: FocusHandle,
 }
 
 impl Shell {
@@ -505,19 +691,46 @@ impl Shell {
         let dock = cx.new(|cx| DockArea::new("deepbuild", None, window, cx));
         dock.update(cx, |dock, cx| dock.load(layout.state(), window, cx))
             .expect("the layout loads");
-        Self { dock }
+        Self {
+            dock,
+            commands: None,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+
+    /// ⌘K over the shell, which takes focus so the key reaches it wherever you are in the window.
+    pub fn set_commands(
+        &mut self,
+        palette: Entity<crate::commands::Palette>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.commands = Some(palette);
+        window.focus(&self.focus_handle, cx);
+        cx.notify();
     }
 }
 
 impl Render for Shell {
-    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let chrome = chrome::of(window);
         div()
             .size_full()
+            .relative()
+            .track_focus(&self.focus_handle)
+            .on_action(
+                cx.listener(|this, _: &crate::commands::OpenCommands, window, cx| {
+                    if let Some(palette) = &this.commands {
+                        let back = this.focus_handle.clone();
+                        palette.update(cx, |palette, cx| palette.show(back, window, cx));
+                    }
+                }),
+            )
             .bg(chrome.ground)
             .text_color(chrome.ink_primary)
             .text_sm()
             .child(self.dock.clone())
+            .children(self.commands.clone())
     }
 }
 

@@ -1,0 +1,24 @@
+{
+  "provides": [
+    {
+      "schema": {
+        "type": "object"
+      },
+      "digests": {
+        "0": "d1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "uses": [
+    {
+      "schema": {
+        "type": "object"
+      },
+      "from": "acme/stocks",
+      "optional": true
+    }
+  ],
+  "pieces": [
+    "acme/stocks"
+  ]
+}

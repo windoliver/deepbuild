@@ -1,7 +1,7 @@
 // AC5, the command check kind's half: a check it runs can't reach the hub's socket or write outside its run's own
 // folders, because the supervisor (#236) sandboxes every process it starts and the command check kind starts its
 // processes only through host@1, building no sandbox of its own. Swapping the kind for a test check kind
-// installed with `replaces` needs the extension slots (#349) and is in blocked.test.ts.
+// installed with `replaces` (#349, #348) is in replaces.test.ts.
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';

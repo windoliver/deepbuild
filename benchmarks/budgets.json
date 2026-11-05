@@ -346,6 +346,28 @@
       "initialReason": "Issue #304 first measurement: the merge base's deep-hook has no check mode and its rules.json no planted calls or tool classes. One process starts the hub on a temp home and times 200 forwarded PreToolUse calls with every shipped default entry in rules.json and 200 with none, interleaved, then deep-hook's check mode on one default's planted call and twin, 200 each, all from spawn to exit, so p50 includes Node's start and the release build; the issue's 2 ms added for matching and 10 ms over process start stay in tests/acceptance/304/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "deep-hook-unread",
+      "command": [
+        "node",
+        "benchmarks/deep-hook.mjs",
+        "unread"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1097 first measurement: the merge base's reader reads a computed program as no program and drops a nesting past its depth, so neither call meets an entry there. One process starts the hub on a temp home and times 200 forwarded PreToolUse calls of `\"$(printf rm)\" -rf \"$OUT\"/*` and 200 of `pkill node` nested 13 `sh -c` deep, each with every shipped default entry in rules.json and with none, interleaved, from spawn to exit; the issue's 2 ms at p95 stays in tests/acceptance/1097/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-hook-heavy",
+      "command": [
+        "node",
+        "benchmarks/deep-hook.mjs",
+        "heavy"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1015 first measurement: the merge base matches no heavy.command@1 entry. One process times, with no hub, 200 PreToolUse calls of `cargo test --workspace`, which a shipped entry matches, and 200 of `cargo --version`, which none does, interleaved, each from spawn to exit; the issue's 1 ms at p95 against the merge base's deep-hook stays in tests/acceptance/1015/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "deep-hook-during-backup",
       "command": [
         "node",
@@ -502,6 +524,17 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #379 first measurement: the merge base has no cost model. The micro-benchmark of every shipped primitive: one process times each operator the shipped build seals over three generated boards through `deep-show run`'s costs call, and scene3d's two passes by their timestamps on the device through `deep-gpu`'s live window at two sizes and two box counts, printing the measured terms beside the build's coefficients (crates/deep-canvas/costs.json, which `--write` replaces on a reference Mac); p50 includes Node's and the binaries' start. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-upscale",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "upscale"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #386 first measurement: the merge base draws no live view through a chosen internal scale. One process draws a 1080p frame of 48 labels of 12 px text and 24 thin diagonal lines in `deep-gpu`'s live window at internal scale 0.5 through the edge-adaptive upscale and sharpen, five runs of 90 frames after a warm-up one, reading each frame's time the two passes cover by their timestamps; p50 includes Node's and the binary's start. The issue's 0.3 ms for the two passes stays in tests/acceptance/386/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "canvas-class-core-view",
@@ -739,6 +772,28 @@
       "initialReason": "Issue #401 first measurement: the merge base has no plug-in panels. One process installs a plug-in with six panels, gives each a click and pops each out onto the second display with its click's serial through `deep-show run`, failing unless every window opens; p50 includes Node's and the binary's start. The issue's 300 ms a pop-out stays in tests/acceptance/401/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "readings-recompute",
+      "command": [
+        "node",
+        "benchmarks/readings.mjs",
+        "recompute"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #45 first measurement: the merge base has no readings. One process folds a heavy month, 18,000 events, failing unless 30 days of readings recompute under 10 s. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "readings-update",
+      "command": [
+        "node",
+        "benchmarks/readings.mjs",
+        "update"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #45 first measurement: the merge base has no readings. One process folds a heavy month, 18,000 events, failing unless readings update over one new session under 1 s. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "pi-client",
       "command": [
         "node",
@@ -747,6 +802,16 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #40 first measurement: the merge base has no pi package. One process runs interleaved 20-call pi sessions with and without the package against a hub, on real pi (DEEP_PI_CLI) and a scripted model; p50 includes pi's start. The issue's 1 ms per event stays in tests/acceptance/40/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "paseo-plugin",
+      "command": [
+        "node",
+        "benchmarks/paseo-plugin.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #55 first measurement: the merge base has no paseo plugin. One process loads the plugin into suite 55's stand-in for paseo's daemon against a hub and fires 40 rounds of a Copilot agent's permission requests and turn ends; p50 includes the hub's start. The issue's 10 ms per gated event stays in tests/acceptance/55/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "terminal-60hz",
@@ -804,6 +869,82 @@
       "initialReason": "Issue #104 first measurement: the merge base hosts no terminal for a piece. One process installs a package that asks for run-as-you, approves it on the trusted path, opens 10 hosted terminals whose programs each write 10,000 lines of scrollback, and fails unless each terminal's output holds them all, in order; then it revokes run-as-you. The issue's 300 MB for 10 terminals stays in tests/acceptance/104/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "canvas-patch-settled",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "patch-settled"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "settled_p95_ms": 4
+      },
+      "initialReason": "Issue #854 first measurement: the merge base has no such task. A release deep-show shows a 10,000-item board in a headless window and takes 200 patches a run, each moving one item, timing each from its arrival to the settled frame it causes, the CPU of the patch path and the frame plus the GPU time of the frame drawn, five runs after a warm-up one. canvas.mjs judge holds each run's p95 to settled_p95_ms by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-patch-dirty",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "patch-dirty"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "cpu_growth": 0.25,
+        "upload_bytes_per_item": 64
+      },
+      "initialReason": "Issue #896 first measurement: the merge base has no such task. A release deep-show takes canvas-patch-settled's 200 one-item patches on a 1,000-item board, then on the 10,000-item one, each board in a fresh process, five runs after a warm-up one, each sample with the bytes the 2D view uploaded and the marks each operator built. canvas.mjs judge holds the CPU per patch at the two sizes to cpu_growth by the design's rule on a reference Mac, and the most bytes one patch uploaded to upload_bytes_per_item on any machine. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-scene-read",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "scene-read"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "summary_ms": 20,
+        "summary_tokens": 2000,
+        "page_ms": 50,
+        "page_rows": 1000
+      },
+      "initialReason": "Issue #854 first measurement: the merge base has no deep_query. A release deep-show holds the same 10,000-item board and answers deep_query's summary and one paged read of 1,000 rows, each timed in the binary, each reply counted in the tokens of the tokenizer adapters/codex.facts.json pins, five runs after a warm-up one. canvas.mjs judge holds the counts on any machine and the times on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-idle",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "idle"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frames": 0,
+        "wakeups": 1,
+        "cpu_fraction": 0.001
+      },
+      "initialReason": "Issue #854 first measurement: the merge base has no idle reading. A release deep-canvas-render opens a still fixture document in a headless window on the real clock and stays 60 s a run, reading the frames it drew, its wakeups and its CPU from its own process (proc_pid_rusage), five runs after a warm-up one, so the command takes over six minutes. A wakeup is a package-idle wakeup (Activity Monitor's Idle Wake Ups); interrupt wakeups are kept as a reading, since a process that has drawn with Metal takes about 22 a minute from the driver whatever it does. canvas.mjs judge holds frames on any machine and wakeups and CPU on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "replica-cold-start",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "replica-cold-start"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "first_settled_ms": 300
+      },
+      "initialReason": "Issue #854 first measurement: the merge base times no replica's cold start. Each run spawns a fresh release deep-gpu on a fixture document in the app's headless window and reads, from the process's own start time, when its first settled frame was drawn, and which pipelines it compiled during that frame, five runs after a warm-up one. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "replica-launch",
       "command": [
         "node",
@@ -850,6 +991,188 @@
         "peakBytes": 500000000
       },
       "initialReason": "Issue #124 first measurement: the merge base has no replica binary. One process replays #124's recorded Claude Code run in a replica on the fixture panel, its launch to its close. The issue's 500 MB per replica caps the peak resident memory /usr/bin/time reads, the larger of Node's and the replica's. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "extension-source-call",
+      "command": [
+        "node",
+        "benchmarks/plugin-blocks.mjs",
+        "source-call"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #365 first measurement: the merge base has no plug-in schedules, notices or sends. One process opens a record, the asks core, the supervisor and project trust and loads one package in the hub, then reads a polled source 200 times against a server on 127.0.0.1, each read a call. The issue's 5 ms beyond the network stays in tests/acceptance/365/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "extension-store-query",
+      "command": [
+        "node",
+        "benchmarks/plugin-blocks.mjs",
+        "store-query"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #365 first measurement: the merge base has no plug-in schedules, notices or sends. One process opens a record, the asks core, the supervisor and project trust and loads one package in the hub, then puts 10,000 items in the package's store and looks up 1,000 random keys from inside the package. The issue's 10 ms at p95 over 100,000 rows stays in tests/acceptance/365/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "extension-schedule-fire",
+      "command": [
+        "node",
+        "benchmarks/plugin-blocks.mjs",
+        "schedule-fire"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #365 first measurement: the merge base has no plug-in schedules, notices or sends. One process opens a record, the asks core, the supervisor and project trust and loads one package in the hub, then runs a schedule every second on the real clock until its job ran three times. The issue's 1 s from slot to start stays in tests/acceptance/365/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "reading-batch-refresh",
+      "command": [
+        "node",
+        "benchmarks/plugin-blocks.mjs",
+        "batch-refresh"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #262 first measurement: the merge base has no series sources. One process opens a record with its evidence store, the asks core, the supervisor and project trust and loads one package in the hub, then lands 20 batches of a 500-series source against a server on 127.0.0.1, reading the 500 bound values live after each; it reports the reads alone. The issue's 1 ms for all 500 stays in tests/acceptance/262/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "reading-value-at-position",
+      "command": [
+        "node",
+        "benchmarks/plugin-blocks.mjs",
+        "value-at-position"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #262 first measurement: the merge base has no series sources. One process opens a record with its evidence store, the asks core, the supervisor and project trust and loads one package in the hub, lands 360 batches of a 500-series source, then resolves 200 bound values each pinned to an earlier batch's log position; it reports the resolutions alone. The issue's 1 ms at p50 stays in tests/acceptance/262/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "seam-suites",
+      "command": [
+        "node",
+        "scripts/seams.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {
+        "p50Ms": 180000
+      },
+      "initialReason": "Issue #140 first measurement: the merge base has no platform seams. One run of every seam's conformance suite (node scripts/seams.mjs: the GPU seam's suite and gated fixtures, the network seam's suite through its test relay, the window and input seams' capabilities and the text, accessibility and headless suites), its start to its last line; the issue caps the suites at 3 minutes, which tests/acceptance/140/platform/budgets.test.ts judges on five runs. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "composition-wire",
+      "command": [
+        "node",
+        "benchmarks/composition.mjs",
+        "wire"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #103 first measurement: the merge base has no typed edges. One process opens a record, the asks core, the supervisor and project trust, loads two providers in the hub, then installs 20 users, each with a use of both providers' readings, so each install type-checks and wires two edges. The issue's 100 ms to wire a composition at install stays in tests/acceptance/103/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "composition-edge-read",
+      "command": [
+        "node",
+        "benchmarks/composition.mjs",
+        "edge-read"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #103 first measurement: the merge base has no typed edges. One process opens a record, the asks core, the supervisor and project trust, loads a provider and a user in the hub, then the user reads the provider's reading through its edge 1,000 times from inside its own code. The issue's 1 ms a reading adds across an edge stays in tests/acceptance/103/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-look-switch",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "look-switch"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "switch_ms": 100
+      },
+      "initialReason": "Issue #417 first measurement: the merge base has no look switch. A release deep-gpu plays the fixture film (tests/acceptance/417/fixtures/film.json) in the app's headless window in the light theme and switches between every ordered pair of shipped looks, timing each switch from its request to the first frame drawn in the new look, presented and read back from the window, whose pixel (4, 4) it records as the ground, five runs after a warm-up one. tests/acceptance/417/budgets.test.ts holds each run's slowest switch to switch_ms by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-look-frames",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "look-frames"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frame_gpu_p95_ms": 2,
+        "frame_cpu_p95_ms": 4
+      },
+      "initialReason": "Issue #417 first measurement: the merge base has no shipped looks. A release deep-gpu plays each shipped look's fixture film (tests/acceptance/417/fixtures/looks/<id>.json) in the app's headless window, 300 timed frames after 30 warm ones, each frame's GPU time (Vello GPU's passes by device timestamps plus GPUI's frame past the window's own) and CPU time (its marks, their encode and GPUI's latch and paint), five runs after a warm-up one. tests/acceptance/417/budgets.test.ts holds the worst look's p95s to the figure class's limits by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "target-origins",
+      "command": [
+        "node",
+        "benchmarks/asks.mjs",
+        "target-origins"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1098 first measurement: the merge base places no target of a plan. One process opens a record with an evidence store and the asks core, archives a session transcript of 5,000 tool results, and raises one authority ask whose step names eight targets of every kind, until its card shows each placed, with no model in the path; p50 includes Node's start, so the issue's 20 ms limit stays in tests/acceptance/1098/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-operator-data-view",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "operator",
+        "data_view"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #429 first measurement: the merge base draws no operator item. One process opens the data_view class's fixture (benchmarks/canvas/data_view.json) with a composed pass that tints the frame at the class's half resolution in `deep-gpu`'s live window, five runs of 300 frames after 30 of warm-up, each run the p95 of the operator's own pass, held to the class's 0.5 ms in tests/acceptance/429/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-structural-steps",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "structural"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #483 first measurement: the merge base has no sort_by_key, scan or compact step. One deep-gpu process runs check_operator frames of sort_by_key over 1,048,576 keys and scan and compact over 1,048,576 elements, dispatched 300 times each, five runs after one of warm-up, each run the p95 of each step's GPU time from its passes' own timestamps, held to 2 ms (sort) and 0.5 ms (scan, compact) in tests/acceptance/483/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "products-place",
+      "command": [
+        "node",
+        "benchmarks/products.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1017 first measurement: the merge base places no build product. One process clones a product shaped like a small Rust target (20 files of 1 MB and 1,000 of 4 KB) copy-on-write into ten new folders one after another, as a worktree receives it; the issue's 2 s for a 15 GB target and a 500 MB node_modules stays in tests/acceptance/1017/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "channels",
+      "command": [
+        "node",
+        "benchmarks/channels.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #65 first measurement: the merge base has no channels. One run installs the four channel plug-ins against a hub and a stand-in provider, then times an agent's permission request to its card at the provider (reach_ms) and reads each plug-in's resident memory (rss_mb). The issue's 10 s and 50 MB stay in tests/acceptance/65/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "lobes",
+      "command": [
+        "node",
+        "benchmarks/lobes.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #428 first measurement: the merge base has no extra lobes and a castle without lamps. One process draws the castle with its 64 lamps cut to 32 orbiting for 120 frames at internal scale 0.5, and a 12-part product fixture at 1080p with sheen, anisotropy and translucency on every part and without them, through `deep-gpu run`'s view3d with timings, so p50 includes Node's and the binary's start. The issue's 10 ms per castle frame and 1 ms added by the lobes stay in tests/acceptance/428/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

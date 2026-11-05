@@ -81,7 +81,8 @@ impl Hub<'_> {
                 return refused("not_presented");
             };
             let scope = &self.scopes[panel].scope;
-            let pointed = match pointer {
+            let t = scope.playhead().unwrap_or(self.now);
+            let mut pointed = match pointer {
                 Some(p) => scope.point(&shown.0, p),
                 None if scope.selection().is_empty() => return refused("nothing_selected"),
                 None => Pointed {
@@ -91,6 +92,28 @@ impl Hub<'_> {
                     quote: None,
                 },
             };
+            // A 3D view's 2D items draw over it (Writer layer: overlays), so they take the
+            // pointer first, a vector item by its part; a text under the pointer, 2D or a label
+            // in depth, is the quote (#1162).
+            let rect = self.placed(panel).map(|p| p.0).or(self.slot(panel));
+            if let (Some(p), Some(rect)) = (pointer, rect) {
+                if deep_canvas_scene3d::scene::has_3d(&shown.0) {
+                    let at = [p[0] - rect[0], p[1] - rect[1]];
+                    let (hit, quote) = self.overlay_at(&shown.0, t, [rect[2], rect[3]], at);
+                    if let Some(id) = hit {
+                        pointed = Pointed {
+                            id: Some(id),
+                            precision: Precision::Id,
+                            region: None,
+                            quote: None,
+                        };
+                    }
+                    if quote.is_some() {
+                        pointed.quote = quote;
+                    }
+                }
+            }
+            let scope = &self.scopes[panel].scope;
             let ids: Vec<String> = match (&pointer, &pointed.id) {
                 (None, _) => scope.selection().to_vec(),
                 (Some(_), Some(id)) => vec![id.clone()],
@@ -100,7 +123,6 @@ impl Hub<'_> {
             attachment.insert("handles".into(), json!(handles));
             // The frame's time: the playhead's where the transport is paused, else the clock's;
             // a still, which has no transport, has none.
-            let t = scope.playhead().unwrap_or(self.now);
             if shown.0.get("transport").is_some() {
                 attachment.insert("t".into(), json!(t));
             }
@@ -248,6 +270,118 @@ impl Hub<'_> {
         })
     }
 
+    /// What `at` (px from the view's top-left, a view of `size` px) is over at `t` in `doc`, a
+    /// document drawn in 3D whose 2D items draw over the view at their evaluated boxes: the
+    /// topmost 2D item there, as `item#part` on a vector item's part, and the text of a text
+    /// item under it, a 2D one or a label in depth at its drawn box (Selection: `quote`).
+    fn overlay_at(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        size: [f64; 2],
+        at: [f64; 2],
+    ) -> (Option<String>, Option<String>) {
+        let empty = Map::new();
+        let items = doc.get("items").and_then(Value::as_object).unwrap_or(&empty);
+        let order = |id: &str| {
+            let item = items.get(id);
+            let order = item.and_then(|i| i.get("order")).and_then(Value::as_str);
+            order.unwrap_or_default().to_string()
+        };
+        let text_of = |id: &str| -> Option<String> {
+            let item = items.get(id)?;
+            let params = item.get("params")?;
+            match params.get("template").and_then(Value::as_str) {
+                Some(template) => deep_canvas::template::expand(doc, template).ok(),
+                None => params.get("text")?.as_str().map(str::to_string),
+            }
+        };
+        let within = |b: [f64; 4], p: [f64; 2]| {
+            p[0] >= b[0] && p[1] >= b[1] && p[0] <= b[0] + b[2] && p[1] <= b[1] + b[3]
+        };
+        // The 2D items draw one document unit to a px of a view the document's size.
+        let page = [0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(size[i]));
+        let u = [0, 1].map(|i| at[i] * page[i] / size[i].max(1.0));
+        // The form the frame draws: the agent's tables and the vectors inlined (#1162).
+        let mut form = doc.clone();
+        let _ = self.inline_tables(&mut form);
+        let _ = self.inline_vectors(&mut form);
+        let session = self.evaluated(&form, t);
+        let mut hits: Vec<(String, String)> = Vec::new();
+        let mut quote = None;
+        if let Some(drawing) = crate::frames::drawing_of(&self.sched, &session) {
+            if let Ok(drawn) = self
+                .renderer
+                .prepare_drawing(&drawing, &self.scenario.evidence)
+            {
+                for (id, _) in drawn.boxes().into_iter().filter(|(_, b)| within(*b, u)) {
+                    let text = items.get(&id).and_then(|i| i.get("kind")) == Some(&json!("text@1"));
+                    if text && quote.is_none() {
+                        quote = text_of(&id);
+                    }
+                    hits.push((order(&id), id));
+                }
+            }
+        }
+        // A vector item's parts, each at its box where the item is placed at t.
+        let bytes = |sha: &str| crate::evidence::read(&self.scenario.evidence, sha);
+        let whole = doc.as_object().cloned().unwrap_or_default();
+        let (_, imported) = deep_canvas_vector::check(&whole, bytes, false);
+        for (id, found) in &imported {
+            let Some(mut item) = items.get(id).cloned() else {
+                continue;
+            };
+            let world = ["marks2d.at", "core.world"].iter().find_map(|a| {
+                let (v, _) = session.read(&self.sched, a, Some(id.as_str()))?;
+                v.as_typed::<deep_canvas::schedule::core_ops::Transform>()
+                    .map(|t| t.pos)
+            });
+            // One the frame didn't place draws nowhere, so nothing hits it.
+            let Some(pos) = world else {
+                continue;
+            };
+            item["at"] = json!({"pos": pos});
+            let part = found
+                .svg
+                .parts
+                .iter()
+                .filter_map(|p| {
+                    let b = deep_canvas_vector::bounds(&item, found, Some(p.id.as_str()))?;
+                    within(b, u).then(|| (b[2] * b[3], p.id.clone()))
+                })
+                .min_by(|a, b| a.0.total_cmp(&b.0));
+            match part {
+                Some((_, part)) => hits.push((order(id), format!("{id}#{part}"))),
+                None => {
+                    let whole = deep_canvas_vector::bounds(&item, found, None);
+                    if whole.is_some_and(|b| within(b, u)) {
+                        hits.push((order(id), id.clone()));
+                    }
+                }
+            }
+        }
+        // A label in depth under the pointer, at the box it draws in.
+        if quote.is_none() {
+            let mut sized = doc.clone();
+            sized["size"] = json!(size);
+            let look = deep_canvas_scene3d::look::Look3::from_roles(self.look.light.clone());
+            let mut labels = deep_canvas_scene3d::label::Labels::new();
+            if let Ok(scene) = deep_canvas_scene3d::scene::evaluate(&sized, t, &look, &mut labels)
+            {
+                quote = scene
+                    .boxes()
+                    .into_iter()
+                    .filter(|(id, b)| {
+                        let kind = items.get(id).and_then(|i| i.get("kind"));
+                        kind == Some(&json!("mark.text@1")) && within(*b, at)
+                    })
+                    .find_map(|(id, _)| text_of(&id));
+            }
+        }
+        let top = hits.into_iter().max_by(|a, b| a.0.cmp(&b.0)).map(|(_, id)| id);
+        (top, quote)
+    }
+
     /// The writer of a document's revision `rev`.
     fn rev_writer(&self, doc: &str, rev: u64) -> Option<Writer> {
         match self.shared.get(doc) {
@@ -279,7 +413,10 @@ impl Hub<'_> {
         };
         let shown = crate::shared::drawable(&document);
         match self.snapshot(&shown, t, size) {
-            Ok(snap) => json!({"rev": rev, "t": t, "snapshots": [snap]}),
+            Ok(snap) => json!({
+                "rev": rev, "t": t, "outcome": "presented", "snapshots": [snap],
+                "backends": crate::seams::backends(true),
+            }),
             Err(e) => e,
         }
     }

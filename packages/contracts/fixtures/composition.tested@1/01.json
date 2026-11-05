@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "composition.tested",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "user": "acme/brief",
+    "interface": "ext.stocks.prices@1",
+    "provider": "acme/stocks",
+    "version": "2.0.0",
+    "passed": true
+  }
+}

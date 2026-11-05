@@ -2,7 +2,67 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "core",
-  "set_digest": "4bda62c5c8c8a6d1a20ef9fc2af6d0736503e8ec3b1c669a27bbfa3a2c911df3",
+  "set_digest": "bdd1d2f71595d3a8cee1dfdabe6ef1c0cc820be5c0d9377b8ca43412465f4cc4",
+  "interfaces": {
+    "look@1": {
+      "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",
+      "reference": "look",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "look",
+      "implementation": {
+        "name": "look",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "text@1": {
+      "digest": "9fcb8911f7ca77eeed73bb877c0d12a266135d4e332f406e7ec0e5cea552bd61",
+      "reference": "text",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "text",
+      "implementation": {
+        "name": "text",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    }
+  },
   "phases": {
     "validate": [
       {
@@ -82,11 +142,24 @@
         "per": "document"
       },
       {
+        "operator": "look.finish",
+        "module": "look",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "look.palette"
+        ],
+        "writes": [
+          "look.finish"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "text.counter",
         "module": "text",
         "version": "1.0.0",
         "reads": [
-          "core.lowered",
+          "core.fields",
           "refs",
           "reading",
           "view(locale)"

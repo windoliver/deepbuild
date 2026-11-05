@@ -1,0 +1,647 @@
+{
+ "format": 1,
+ "id": "rel-221-positions",
+ "profile": "figure",
+ "title": "Nine dots, each labelled below",
+ "description": "Issue #221 proof: nine dots, each with the label next_to(dot, DOWN, buff=0.2) placed beside it on side s over a background rectangle placed onto the label; the label shows buff from the story constant data/buff.",
+ "size": [
+  1920,
+  1080
+ ],
+ "layers": {
+  "main": {
+   "writer": "agent-a",
+   "title": "Main",
+   "order": "a0"
+  }
+ },
+ "items": {
+  "dot1": {
+   "id": "dot1",
+   "kind": "circle@1",
+   "layer": "main",
+   "name": "Dot 1",
+   "order": "b10",
+   "params": {
+    "center": [
+     360,
+     200
+    ],
+    "r": 8,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   }
+  },
+  "back1": {
+   "id": "back1",
+   "kind": "rect@1",
+   "layer": "main",
+   "name": "Label 1 background",
+   "order": "b11",
+   "at": {
+    "place": {
+     "onto": "label1"
+    }
+   },
+   "params": {
+    "box": [
+     0,
+     0,
+     360,
+     40
+    ],
+    "radius": 4,
+    "paint": {
+     "fill": {
+      "role": "muted"
+     }
+    }
+   }
+  },
+  "label1": {
+   "id": "label1",
+   "kind": "text@1",
+   "layer": "main",
+   "name": "Label 1",
+   "order": "b12",
+   "at": {
+    "place": {
+     "beside": "dot1",
+     "side": "s",
+     "gap": 27
+    }
+   },
+   "params": {
+    "font": "body",
+    "size": 20,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    },
+    "template": "next_to(dot, DOWN, buff={data/buff})"
+   }
+  },
+  "dot2": {
+   "id": "dot2",
+   "kind": "circle@1",
+   "layer": "main",
+   "name": "Dot 2",
+   "order": "b20",
+   "params": {
+    "center": [
+     960,
+     200
+    ],
+    "r": 8,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   }
+  },
+  "back2": {
+   "id": "back2",
+   "kind": "rect@1",
+   "layer": "main",
+   "name": "Label 2 background",
+   "order": "b21",
+   "at": {
+    "place": {
+     "onto": "label2"
+    }
+   },
+   "params": {
+    "box": [
+     0,
+     0,
+     360,
+     40
+    ],
+    "radius": 4,
+    "paint": {
+     "fill": {
+      "role": "muted"
+     }
+    }
+   }
+  },
+  "label2": {
+   "id": "label2",
+   "kind": "text@1",
+   "layer": "main",
+   "name": "Label 2",
+   "order": "b22",
+   "at": {
+    "place": {
+     "beside": "dot2",
+     "side": "s",
+     "gap": 27
+    }
+   },
+   "params": {
+    "font": "body",
+    "size": 20,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    },
+    "template": "next_to(dot, DOWN, buff={data/buff})"
+   }
+  },
+  "dot3": {
+   "id": "dot3",
+   "kind": "circle@1",
+   "layer": "main",
+   "name": "Dot 3",
+   "order": "b30",
+   "params": {
+    "center": [
+     1560,
+     200
+    ],
+    "r": 8,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   }
+  },
+  "back3": {
+   "id": "back3",
+   "kind": "rect@1",
+   "layer": "main",
+   "name": "Label 3 background",
+   "order": "b31",
+   "at": {
+    "place": {
+     "onto": "label3"
+    }
+   },
+   "params": {
+    "box": [
+     0,
+     0,
+     360,
+     40
+    ],
+    "radius": 4,
+    "paint": {
+     "fill": {
+      "role": "muted"
+     }
+    }
+   }
+  },
+  "label3": {
+   "id": "label3",
+   "kind": "text@1",
+   "layer": "main",
+   "name": "Label 3",
+   "order": "b32",
+   "at": {
+    "place": {
+     "beside": "dot3",
+     "side": "s",
+     "gap": 27
+    }
+   },
+   "params": {
+    "font": "body",
+    "size": 20,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    },
+    "template": "next_to(dot, DOWN, buff={data/buff})"
+   }
+  },
+  "dot4": {
+   "id": "dot4",
+   "kind": "circle@1",
+   "layer": "main",
+   "name": "Dot 4",
+   "order": "b40",
+   "params": {
+    "center": [
+     360,
+     500
+    ],
+    "r": 8,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   }
+  },
+  "back4": {
+   "id": "back4",
+   "kind": "rect@1",
+   "layer": "main",
+   "name": "Label 4 background",
+   "order": "b41",
+   "at": {
+    "place": {
+     "onto": "label4"
+    }
+   },
+   "params": {
+    "box": [
+     0,
+     0,
+     360,
+     40
+    ],
+    "radius": 4,
+    "paint": {
+     "fill": {
+      "role": "muted"
+     }
+    }
+   }
+  },
+  "label4": {
+   "id": "label4",
+   "kind": "text@1",
+   "layer": "main",
+   "name": "Label 4",
+   "order": "b42",
+   "at": {
+    "place": {
+     "beside": "dot4",
+     "side": "s",
+     "gap": 27
+    }
+   },
+   "params": {
+    "font": "body",
+    "size": 20,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    },
+    "template": "next_to(dot, DOWN, buff={data/buff})"
+   }
+  },
+  "dot5": {
+   "id": "dot5",
+   "kind": "circle@1",
+   "layer": "main",
+   "name": "Dot 5",
+   "order": "b50",
+   "params": {
+    "center": [
+     960,
+     500
+    ],
+    "r": 8,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   }
+  },
+  "back5": {
+   "id": "back5",
+   "kind": "rect@1",
+   "layer": "main",
+   "name": "Label 5 background",
+   "order": "b51",
+   "at": {
+    "place": {
+     "onto": "label5"
+    }
+   },
+   "params": {
+    "box": [
+     0,
+     0,
+     360,
+     40
+    ],
+    "radius": 4,
+    "paint": {
+     "fill": {
+      "role": "muted"
+     }
+    }
+   }
+  },
+  "label5": {
+   "id": "label5",
+   "kind": "text@1",
+   "layer": "main",
+   "name": "Label 5",
+   "order": "b52",
+   "at": {
+    "place": {
+     "beside": "dot5",
+     "side": "s",
+     "gap": 27
+    }
+   },
+   "params": {
+    "font": "body",
+    "size": 20,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    },
+    "template": "next_to(dot, DOWN, buff={data/buff})"
+   }
+  },
+  "dot6": {
+   "id": "dot6",
+   "kind": "circle@1",
+   "layer": "main",
+   "name": "Dot 6",
+   "order": "b60",
+   "params": {
+    "center": [
+     1560,
+     500
+    ],
+    "r": 8,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   }
+  },
+  "back6": {
+   "id": "back6",
+   "kind": "rect@1",
+   "layer": "main",
+   "name": "Label 6 background",
+   "order": "b61",
+   "at": {
+    "place": {
+     "onto": "label6"
+    }
+   },
+   "params": {
+    "box": [
+     0,
+     0,
+     360,
+     40
+    ],
+    "radius": 4,
+    "paint": {
+     "fill": {
+      "role": "muted"
+     }
+    }
+   }
+  },
+  "label6": {
+   "id": "label6",
+   "kind": "text@1",
+   "layer": "main",
+   "name": "Label 6",
+   "order": "b62",
+   "at": {
+    "place": {
+     "beside": "dot6",
+     "side": "s",
+     "gap": 27
+    }
+   },
+   "params": {
+    "font": "body",
+    "size": 20,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    },
+    "template": "next_to(dot, DOWN, buff={data/buff})"
+   }
+  },
+  "dot7": {
+   "id": "dot7",
+   "kind": "circle@1",
+   "layer": "main",
+   "name": "Dot 7",
+   "order": "b70",
+   "params": {
+    "center": [
+     360,
+     800
+    ],
+    "r": 8,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   }
+  },
+  "back7": {
+   "id": "back7",
+   "kind": "rect@1",
+   "layer": "main",
+   "name": "Label 7 background",
+   "order": "b71",
+   "at": {
+    "place": {
+     "onto": "label7"
+    }
+   },
+   "params": {
+    "box": [
+     0,
+     0,
+     360,
+     40
+    ],
+    "radius": 4,
+    "paint": {
+     "fill": {
+      "role": "muted"
+     }
+    }
+   }
+  },
+  "label7": {
+   "id": "label7",
+   "kind": "text@1",
+   "layer": "main",
+   "name": "Label 7",
+   "order": "b72",
+   "at": {
+    "place": {
+     "beside": "dot7",
+     "side": "s",
+     "gap": 27
+    }
+   },
+   "params": {
+    "font": "body",
+    "size": 20,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    },
+    "template": "next_to(dot, DOWN, buff={data/buff})"
+   }
+  },
+  "dot8": {
+   "id": "dot8",
+   "kind": "circle@1",
+   "layer": "main",
+   "name": "Dot 8",
+   "order": "b80",
+   "params": {
+    "center": [
+     960,
+     800
+    ],
+    "r": 8,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   }
+  },
+  "back8": {
+   "id": "back8",
+   "kind": "rect@1",
+   "layer": "main",
+   "name": "Label 8 background",
+   "order": "b81",
+   "at": {
+    "place": {
+     "onto": "label8"
+    }
+   },
+   "params": {
+    "box": [
+     0,
+     0,
+     360,
+     40
+    ],
+    "radius": 4,
+    "paint": {
+     "fill": {
+      "role": "muted"
+     }
+    }
+   }
+  },
+  "label8": {
+   "id": "label8",
+   "kind": "text@1",
+   "layer": "main",
+   "name": "Label 8",
+   "order": "b82",
+   "at": {
+    "place": {
+     "beside": "dot8",
+     "side": "s",
+     "gap": 27
+    }
+   },
+   "params": {
+    "font": "body",
+    "size": 20,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    },
+    "template": "next_to(dot, DOWN, buff={data/buff})"
+   }
+  },
+  "dot9": {
+   "id": "dot9",
+   "kind": "circle@1",
+   "layer": "main",
+   "name": "Dot 9",
+   "order": "b90",
+   "params": {
+    "center": [
+     1560,
+     800
+    ],
+    "r": 8,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   }
+  },
+  "back9": {
+   "id": "back9",
+   "kind": "rect@1",
+   "layer": "main",
+   "name": "Label 9 background",
+   "order": "b91",
+   "at": {
+    "place": {
+     "onto": "label9"
+    }
+   },
+   "params": {
+    "box": [
+     0,
+     0,
+     360,
+     40
+    ],
+    "radius": 4,
+    "paint": {
+     "fill": {
+      "role": "muted"
+     }
+    }
+   }
+  },
+  "label9": {
+   "id": "label9",
+   "kind": "text@1",
+   "layer": "main",
+   "name": "Label 9",
+   "order": "b92",
+   "at": {
+    "place": {
+     "beside": "dot9",
+     "side": "s",
+     "gap": 27
+    }
+   },
+   "params": {
+    "font": "body",
+    "size": 20,
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    },
+    "template": "next_to(dot, DOWN, buff={data/buff})"
+   }
+  }
+ },
+ "data": {
+  "buff": {
+   "value": 0.2,
+   "source": "story"
+  }
+ }
+}

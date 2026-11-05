@@ -1,0 +1,218 @@
+#27 AC4 (#27.e6116d56) Oct 9 cases, blind redraft: runs on the base a1707356 (origin/main, which holds #27's
+implementation, PR #816), Oct 31 2026, on this shared Mac (12 cores, other sessions' load around it). Only this
+folder's test files differ from the base. <checkout> stands for the worktree's path.
+
+Summary
+- Base (beside the AC3 folder's run 1, load 40 -> 33): all four PASS.
+- DEEP_HUB_PLANT=wake-assumed (load 20 -> 150): timed out FAILS at "its delivery must read timed_out within 60 s";
+  replaced FAILS at "its delivery must read replaced" (both: outcomes "delivered via next_prompt"). The waiter case
+  passes. The subagent case was BLOCKED by a load miss (its stop went through unheld: "could not spool within the
+  hook's 50 ms"), not a reading on the plant.
+- DEEP_HUB_PLANT=waiter-outlives-session (load 150 -> 57): the waiter case FAILS at "its waiter ... must not outlive
+  it" (the waiter's group still running 10 s on). The other three failed at load 150: timed out on an empty
+  UserPromptSubmit reply (a spool miss) and the subagent case BLOCKED on an unbound deep_ask, both load misses; the
+  replaced case read `replaced` but its new session's SessionStart reply didn't carry the answer, a cause this job
+  didn't establish (it passed on the base; that plant concerns the waiter's parent watch).
+- DEEP_HUB_PLANT=answer-skips-held-stop (load 57 -> 67): the subagent case FAILS at "must continue the parent's held
+  stop"; the other three pass.
+- Not run here: a hub that confirms delivery from the transcript (none on the base; this job looks at no other
+  branch).
+
+---- base
+== 2026-11-01T00:07:21Z folder=outcomes-redraft plant=none code=a1707356 (the base; only test files differ)
+uptime before: 17:07  up  4:31, 7 users, load averages: 40.22 53.31 62.93
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/27/outcomes-redraft
+
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  17:07:22
+   Duration  329.85s (tests 100%)
+
+exit 0
+uptime after: 17:12  up  4:36, 7 users, load averages: 32.82 39.46 53.01
+
+---- DEEP_HUB_PLANT=wake-assumed
+== 2026-11-01T00:16:15Z folder=outcomes-redraft plant=wake-assumed code=a1707356 (the base; only test files differ)
+uptime before: 17:16  up  4:40, 7 users, load averages: 20.27 33.30 47.88
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/27/outcomes-redraft
+
+ ❯ outcomes.test.ts (4 tests | 3 failed) 389693ms
+   ❯ #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs (4)
+     × #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once 103344ms
+     × #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled, and reaches the cleared thread's new session at its start; once that session's turn shows it, it reads delivered once 133312ms
+     × #27.e6116d56 (a stop held while a Claude subagent still runs) your answer during the hold continues the parent's held stop, once; the subagent's hooks neither end the hold nor take the answer; the session doesn't read as finished; once the turn shows it, it reads delivered by the stop hold, once 56553ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once
+AssertionError: #27.e6116d56 the waiter took ask:01M6A7DN1WRPWVTB1G9T6N769Y and 6ca6b725-fc30-469d-b8da-330663585549's transcript couldn't be read, so nothing proves whether a turn carried it: its delivery must read timed_out within 60 s; outcomes: delivered via next_prompt: expected undefined to be defined
+ ❯ outcomes.test.ts:70:232
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled, and reaches the cleared thread's new session at its start; once that session's turn shows it, it reads delivered once
+AssertionError: #27.e6116d56 3db57322-3a85-47d4-aafe-6aefd4b757a5 was cleared before any turn showed ask:01M6A7GTJ5BMWH0YKCCPH6HJWA: its delivery must read replaced; outcomes: delivered via next_prompt: expected undefined to be defined
+ ❯ outcomes.test.ts:101:157
+     99|     const start = await a.claude.hook('SessionStart', payload(s2, 'Ses…
+    100|     const replaced = await within(30_000, async () => (await outcomes(…
+    101|     expect(replaced, `${ID} ${a.s.id} was cleared before any turn show…
+       |                                                                                                                                                             ^
+    102|     expect((await outcomes(hub, a.id)).filter(is('stalled')), `${ID} a…
+    103|     expect(carriesAnswer(replied(start), a), `${ID} the cleared thread…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a stop held while a Claude subagent still runs) your answer during the hold continues the parent's held stop, once; the subagent's hooks neither end the hold nor take the answer; the session doesn't read as finished; once the turn shows it, it reads delivered by the stop hold, once
+Error: #27.e6116d56 BLOCKED: 27a08744-2fae-433e-9eeb-bc2f25ca7770's stop went through before the subagent ran on, so no stop was held (a hub that missed the hook on a loaded machine): {"runs":[{"command":"'<checkout>/target/debug/deep-hook' claude-code Stop","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":"deep-hook: could not spool 01M6A7S301XTMSQR71V4GA6BEM within the hook's 50 ms\n"},{"command":"'<checkout>/target/debug/deep-hook' claude-code waiter","code":null,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}
+ ❯ outcomes.test.ts:148:24
+    146|     const stopping = app.hook('Stop', payload(a.s, 'Stop', { last_assi…
+    147|     await sleep(3000);
+    148|     if (stopped) throw Error(`${ID} BLOCKED: ${a.s.id}'s stop went thr…
+       |                        ^
+    149|     for (const command of ['git status', 'cat README.md']) subFired.pu…
+    150|     expect(stopped, `${ID} the subagent's hooks must not end the paren…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+   Start at  17:16:16
+   Duration  390.00s (tests 100%)
+
+exit 1
+uptime after: 17:22  up  4:46, 7 users, load averages: 150.85 87.22 65.03
+
+---- DEEP_HUB_PLANT=waiter-outlives-session
+== 2026-11-01T00:22:46Z folder=outcomes-redraft plant=waiter-outlives-session code=a1707356 (the base; only test files differ)
+uptime before: 17:22  up  4:46, 7 users, load averages: 150.85 87.22 65.03
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/27/outcomes-redraft
+
+ ❯ outcomes.test.ts (4 tests | 4 failed) 329016ms
+   ❯ #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs (4)
+     × #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once 122800ms
+     × #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled, and reaches the cleared thread's new session at its start; once that session's turn shows it, it reads delivered once 60615ms
+     × #27.e6116d56 (a waiter that outlives its session) a headless session's Claude Code killed with its waiter waiting: the waiter is gone within 10 s, a later answer isn't counted delivered, and the session never reads as finished 68105ms
+     × #27.e6116d56 (a stop held while a Claude subagent still runs) your answer during the hold continues the parent's held stop, once; the subagent's hooks neither end the hold nor take the answer; the session doesn't read as finished; once the turn shows it, it reads delivered by the stop hold, once 73355ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once
+AssertionError: #27.e6116d56 once e2975ce5-c534-441e-9aed-1397a2eecdec can be read and shows no turn with ask:01M6A7SV42FKA9GMS21DWV9FQE, your next prompt carries it (Green header 24abf011): {"runs":[{"command":"'<checkout>/target/debug/deep-hook' claude-code UserPromptSubmit","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ outcomes.test.ts:76:185
+     74|     }
+     75|     const next = await prompt(a.claude, a.s, 'Did my answer reach you?…
+     76|     expect(carriesAnswer(replied(next), a), `${ID} once ${a.s.id} can …
+       |                                                                                                                                                                                         ^
+     77|     expect(contextEntries(a.s).some((c) => carriesAnswer(c, a)), `${ID…
+     78|     await endTurn(a.claude, a.s, `Going with ${a.green.label}.`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled, and reaches the cleared thread's new session at its start; once that session's turn shows it, it reads delivered once
+AssertionError: #27.e6116d56 the cleared thread's new session cd6e276a-2e10-433d-9f6f-91f6d40a7da4 gets your answer to ask:01M6A7XRZRKWFKV6DRXXHVP6PT (Green header 922e40df) at its SessionStart: {"runs":[{"command":"'<checkout>/target/debug/deep-hook' claude-code SessionStart","code":0,"signal":null,"timedOut":false,"stdout":"{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"DeepBuild is watching this session. No checks are active in this repo yet. When you finish a piece of work, declare it with the deep_claim tool (say what you claim is done); the checks' results decide its verdict, never your own words about it.\",\"watchPaths\":[\"/private/tmp/dh27-wFDGNb/h/.deepbuild/tickers/cd6e276a2e10433d9f6f91f6d40a7da4\"]}}","stderr":""}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ outcomes.test.ts:103:190
+    101|     expect(replaced, `${ID} ${a.s.id} was cleared before any turn show…
+    102|     expect((await outcomes(hub, a.id)).filter(is('stalled')), `${ID} a…
+    103|     expect(carriesAnswer(replied(start), a), `${ID} the cleared thread…
+       |                                                                                                                                                                                              ^
+    104|     expect(contextEntries(s2).some((c) => carriesAnswer(c, a)), `${ID}…
+    105|     // The new session's first turn: you type, the agent replies, the …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a waiter that outlives its session) a headless session's Claude Code killed with its waiter waiting: the waiter is gone within 10 s, a later answer isn't counted delivered, and the session never reads as finished
+AssertionError: #27.e6116d56 bafd5023-11ec-4787-9a5b-11dd9fd18b7d's Claude Code was killed; its waiter (pid 93419) must not outlive it: still running 10 s on: [{"pid":93419,"ppid":1,"pgid":93419,"rssKb":1600,"stat":"Ss","command":"<checkout>/target/debug/deep-hook claude-code waiter"}]: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ outcomes.test.ts:122:179
+    120|     await a.claude.kill();
+    121|     const gone = await within(10_000, () => groupOf(waiter!.pid).lengt…
+    122|     expect(gone, `${ID} ${a.s.id}'s Claude Code was killed; its waiter…
+       |                                                                                                                                                                                   ^
+    123|     await answer(home, a.handle, a.green.id);
+    124|     await sleep(30_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a stop held while a Claude subagent still runs) your answer during the hold continues the parent's held stop, once; the subagent's hooks neither end the hold nor take the answer; the session doesn't read as finished; once the turn shows it, it reads delivered by the stop hold, once
+Error: BLOCKED: timed out after 60000 ms waiting for the deep_ask "Which header colour for the checkout page (20d09abf)?" filed under 97fa3dd6-2774-4c42-8781-b53baf5e7692; deep_ask replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\",\"path\":\"/params/arguments\",\"actual\":\"deep_ask\",\"evidence\":[]}"}],"isError":true}}
+ ❯ standin.ts:127:38
+
+ ❯ beginAsk standin.ts:126:19
+ ❯ outcomes.test.ts:135:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  17:22:48
+   Duration  329.57s (tests 100%)
+
+exit 1
+uptime after: 17:28  up  4:52, 7 users, load averages: 57.42 82.18 71.90
+
+---- DEEP_HUB_PLANT=answer-skips-held-stop
+== 2026-11-01T00:28:17Z folder=outcomes-redraft plant=answer-skips-held-stop code=a1707356 (the base; only test files differ)
+uptime before: 17:28  up  4:52, 7 users, load averages: 57.42 82.18 71.90
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/27/outcomes-redraft
+
+ ❯ outcomes.test.ts (4 tests | 1 failed) 375336ms
+   ❯ #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs (4)
+     × #27.e6116d56 (a stop held while a Claude subagent still runs) your answer during the hold continues the parent's held stop, once; the subagent's hooks neither end the hold nor take the answer; the session doesn't read as finished; once the turn shows it, it reads delivered by the stop hold, once 46598ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a stop held while a Claude subagent still runs) your answer during the hold continues the parent's held stop, once; the subagent's hooks neither end the hold nor take the answer; the session doesn't read as finished; once the turn shows it, it reads delivered by the stop hold, once
+AssertionError: #27.e6116d56 your answer to ask:01M6A8DMFBPHX0MG7PTXJ1AJDP (Green header 5e6579bb) must continue the parent's held stop: {"runs":[{"command":"'<checkout>/target/debug/deep-hook' claude-code Stop","code":0,"signal":null,"timedOut":false,"stdout":"{\"systemMessage\":\"says done · next: DeepBuild · receipt\"}","stderr":""},{"command":"'<checkout>/target/debug/deep-hook' claude-code waiter","code":null,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ outcomes.test.ts:155:171
+    153|     subFired.push(...await sub('git log -1'));
+    154|     await stopping;
+    155|     expect(carriesAnswer(stopped!.blocked ?? '', a), `${ID} your answe…
+       |                                                                                                                                                                           ^
+    156|     for (const f of subFired) expect(carriesAnswer(replied(f), a), `${…
+    157|     // The turn the held stop continued uses the answer and ends.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  17:28:18
+   Duration  375.55s (tests 100%)
+
+exit 1
+uptime after: 17:34  up  4:58, 7 users, load averages: 66.92 63.18 65.10

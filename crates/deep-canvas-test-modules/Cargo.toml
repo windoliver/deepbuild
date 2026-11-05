@@ -12,4 +12,6 @@ publish = false
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
+# Issue #238: test.prog@1's kit rule runs sandbox@1's check and rewrite on each program entry.
+deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
 serde_json = "1"

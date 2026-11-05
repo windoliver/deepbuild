@@ -2,7 +2,241 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r1",
-  "set_digest": "b33a8c72009cf4f2d9bebd587fafca13721246d5c57987a93de9db629ad506cf",
+  "set_digest": "50ac4b90bb2a6b0f905a36aa71f13b90e4f5f9bd855deb2366ef3db9a51616cb",
+  "interfaces": {
+    "data@1": {
+      "digest": "a743bfa040d3d697e65bb0de3eb2c4a6065d7ee983c1eb51dcd25cee5161cf49",
+      "reference": "data",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "data",
+      "implementation": {
+        "name": "data",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "graph@1": {
+      "digest": "840570cf1f3a314adfeb0cb2d42b736e0590426d107bf6e231ab3c0535256415",
+      "reference": "graph",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "graph",
+      "implementation": {
+        "name": "graph",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "look@1": {
+      "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",
+      "reference": "look",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "look",
+      "implementation": {
+        "name": "look",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "marks2d@1": {
+      "digest": "27ecdd230bbf0b037234c96bf88d8c3e6e2c92aeeaa34df2bc5c6c12a091daea",
+      "reference": "marks2d",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "marks2d",
+      "implementation": {
+        "name": "marks2d",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "motion@1": {
+      "digest": "def0784a75255943cbe31d9b104fc00297447171a92b0b229cb139b5949d3663",
+      "reference": "motion",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "motion",
+      "implementation": {
+        "name": "motion",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "record@1": {
+      "digest": "65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021",
+      "reference": "record",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "record",
+      "implementation": {
+        "name": "record",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "sheet@1": {
+      "digest": "d24e60e7c85d9663922617ca0d3c22f8d53e23caf3564cbc6ea1480cb4b57f18",
+      "reference": "sheet",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "sheet",
+      "implementation": {
+        "name": "sheet",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "text@1": {
+      "digest": "9fcb8911f7ca77eeed73bb877c0d12a266135d4e332f406e7ec0e5cea552bd61",
+      "reference": "text",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "text",
+      "implementation": {
+        "name": "text",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    }
+  },
   "phases": {
     "validate": [
       {
@@ -83,13 +317,27 @@
         "per": "document"
       },
       {
+        "operator": "look.finish",
+        "module": "look",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "look.palette"
+        ],
+        "writes": [
+          "look.finish"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "motion.channels",
         "module": "motion",
         "version": "1.0.0",
         "reads": [
           "motion.program",
           "t",
-          "view(reduced_motion)"
+          "view(reduced_motion)",
+          "self"
         ],
         "writes": [
           "motion.at",
@@ -107,6 +355,18 @@
         ],
         "writes": [
           "core.world"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.decimate",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.decimated"
         ],
         "per": "item"
       },
@@ -176,7 +436,7 @@
         "module": "text",
         "version": "1.0.0",
         "reads": [
-          "core.lowered",
+          "core.fields",
           "refs",
           "reading",
           "view(locale)"
@@ -198,6 +458,37 @@
         ],
         "writes": [
           "text.run"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "marks2d.relations",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "core.world",
+          "core.transform",
+          "core.fields",
+          "text.run",
+          "text.counter",
+          "table:text.fonts"
+        ],
+        "writes": [
+          "marks2d.places"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "marks2d.place",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "core.world",
+          "marks2d.places"
+        ],
+        "writes": [
+          "marks2d.at"
         ],
         "per": "item"
       },
@@ -224,6 +515,7 @@
         "reads": [
           "core.fields",
           "core.world",
+          "marks2d.at",
           "text.counter",
           "look.palette",
           "view(locale)"
@@ -241,6 +533,7 @@
           "refs",
           "reading",
           "core.world",
+          "marks2d.at",
           "core.fields",
           "text.counter",
           "text.run",

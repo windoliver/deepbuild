@@ -1,0 +1,14 @@
+{
+  "about": "The #412 include fixture (the criterion's parity/agent/kinds-catalog-include-exclude.view): each case pairs a familiar word, a query or a registry with the names deep_kinds must and must not give, no_match cases included. A name in include matches a listed name or title that contains it, case ignored; a name in exclude matches a listed name exactly, case ignored.",
+  "cases": [
+    { "word": "Circle", "include": ["circle@1"], "exclude": ["rect@1"] },
+    { "word": "Rectangle", "include": ["rect@1"], "exclude": ["circle@1"] },
+    { "word": "Circel", "no_match": true },
+    { "word": "Rect", "no_match": true },
+    { "word": "Spline", "no_match": true },
+    { "query": "circle", "include": ["circle@1"], "exclude": ["rect@1"] },
+    { "query": "turntable", "include": ["product reveal"], "exclude": ["circle@1"] },
+    { "query": "qzxv kwyjibo", "no_match": true },
+    { "registry": "test.mark@1", "include": ["dot", "testpack.ring"] }
+  ]
+}

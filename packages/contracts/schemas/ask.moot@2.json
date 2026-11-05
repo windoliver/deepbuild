@@ -1,0 +1,179 @@
+{
+  "title": "ask.moot@2",
+  "description": "An ask became moot: its check passed, its attempt was replaced, the plan window it waited for reset, or the thread it watched got the reply it expected, so it leaves Needs you with the outcome moot. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [
+    "asks"
+  ],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 2,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "ask.moot"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^ask:[0-9A-Za-z]+$",
+      "description": "The ask this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "because": {
+              "const": "check_passed"
+            },
+            "verdict": {
+              "type": "string",
+              "pattern": "^verdict:[0-9A-Za-z]+$",
+              "description": "A verdict: handle, the verdict that passed its check.",
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "because",
+            "verdict"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "because": {
+              "const": "attempt_replaced"
+            },
+            "session": {
+              "type": "string",
+              "pattern": "^session:[0-9A-Za-z]+$",
+              "description": "A session: handle, the attempt that replaced it.",
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "because",
+            "session"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "because": {
+              "const": "window_reset"
+            },
+            "at": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "When the plan window the task waited for reset, in milliseconds since the Unix epoch: the task's check."
+            }
+          },
+          "required": [
+            "because",
+            "at"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "because": {
+              "const": "thread_replied"
+            },
+            "link": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The chat-app thread whose reply, read through the read-only connector, contained what the task expected."
+            }
+          },
+          "required": [
+            "because",
+            "link"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "because": {
+              "const": "network_reached"
+            },
+            "host": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The host:port a connection reached: the network task's check passing."
+            }
+          },
+          "required": [
+            "because",
+            "host"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "subject",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

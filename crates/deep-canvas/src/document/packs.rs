@@ -15,11 +15,12 @@
 //! The planted wrong programs the acceptance suite names are runtime variants on
 //! [`Planted`], never features: this crate has none.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
 use super::{member, Issue};
+use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 
@@ -108,6 +109,16 @@ pub struct Step {
     pub lets: Vec<(String, Template)>,
     /// `{count, as}`; `None` makes one item.
     pub repeat: Option<(Template, String)>,
+    /// A repeat along a curve (#420): the curve (an input naming a `curve@1` item, or literal
+    /// points) and the spacing that counts the copies when no count does.
+    pub along: Option<(Template, Option<Template>)>,
+    /// Its condition, over the recipe's inputs and lets: false leaves the step out (#420).
+    pub when: Option<Template>,
+    /// The material its items name (Recipe: a step's `material`; #429).
+    pub material: Option<Value>,
+    /// Its own channels, each targeting a field of its items (`params/size/0`), written into the
+    /// document as `<item>.<channel>` as it expands (#429).
+    pub channels: Vec<(String, Value)>,
 }
 
 /// A recipe as its pack ships it.
@@ -120,7 +131,58 @@ pub struct Recipe {
     pub inputs: BTreeMap<String, Input>,
     pub lets: Vec<(String, Template)>,
     pub steps: Vec<Step>,
+    /// Its channels, each targeting a step (`step:<id>/<field>…`), written into the document
+    /// with derived targets when it expands (#420).
+    pub channels: Vec<(String, Value)>,
+    /// Its kind rules (#490), read by the core's `kind_rules` check at rest: each instance
+    /// whose params make one read 0 raises the rule's code.
+    pub rules: Vec<KindRule>,
 }
+
+/// A recipe's kind rule: `<pack>.<rule>`, an expression of the closed function list over the
+/// recipe's inputs that holds where it reads anything but 0, and its fix.
+#[derive(Clone, Debug, PartialEq)]
+pub struct KindRule {
+    pub code: String,
+    pub expr: crate::expr::Expr,
+    pub fix: String,
+}
+
+/// The issue code a failed kind rule raises; its JSON names the rule's own code.
+pub const KIND_RULE: &str = "kind_rule";
+
+impl KindRule {
+    /// Whether the rule holds for an instance's inputs.
+    fn holds(&self, inputs: &Map<String, Value>) -> bool {
+        let vars: Vec<f64> = self
+            .expr
+            .vars
+            .iter()
+            .map(|n| match inputs.get(n) {
+                Some(Value::Number(v)) => v.as_f64().unwrap_or(f64::NAN),
+                Some(Value::Bool(b)) => f64::from(u8::from(*b)),
+                _ => f64::NAN,
+            })
+            .collect();
+        let v = self.expr.eval_num(&vars);
+        v.is_finite() && v != 0.0
+    }
+}
+
+/// What a kind rule's expression resolves through: the build's `ease@1`, when it has one.
+struct RuleScope<'a>(&'a Sealed);
+
+impl crate::expr::Resolve for RuleScope<'_> {
+    fn eases(&self) -> Result<(), String> {
+        match self.0.registry("ease@1") {
+            Some(_) => Ok(()),
+            None => Err(registry::EASES_OUTSIDE_CORE.to_string()),
+        }
+    }
+}
+
+/// How deep recipes nest: a recipe step four recipes down is the last (#420).
+pub const MAX_DEPTH: usize = 4;
 
 /// An admitted pack version.
 #[derive(Clone, Debug, PartialEq)]
@@ -131,13 +193,19 @@ pub struct Pack {
     pub recipes: BTreeMap<String, Recipe>,
     /// `d1:` SHA-256 of the manifest's canonical form: a version's bytes, frozen.
     pub digest: String,
+    /// The entries it fills into registries the build declares, each admitted by its registry's
+    /// kit at the pack check (#200).
+    pub entries: Vec<registry::lists::SealedEntry>,
+    /// A familiar-names pack's words (Pack: math@1's `aliases`): each word, the kind it maps to
+    /// and the conversion the pack states for it, `{target, conversion, renamed_from?}`, by word.
+    pub aliases: BTreeMap<String, Value>,
 }
 
 /// The step ops this slice expands: a mark or an item of a kind the build registers.
-const STEP_OPS: &[&str] = &["mark", "item"];
+const STEP_OPS: &[&str] = &["mark", "item", "builder", "recipe"];
 /// The input types this slice reads.
 const INPUT_TYPES: &[&str] = &[
-    "number", "integer", "bool", "choice", "vec3", "range", "text", "ID",
+    "number", "integer", "bool", "choice", "vec3", "range", "text", "ID", "records", "record",
 ];
 
 /// The pack check (Pack: checked once per version). Refuses with the issues at the manifest's
@@ -296,6 +364,31 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         }
         Some(other) => issues.push(bad("recipes", other.clone(), "not an object")),
     }
+    // Providers, layouts' validators and program entries are programs the sandbox module admits
+    // and runs (#238): a build without it refuses them, whatever `requires.modules` says.
+    for key in ["providers", "layouts"] {
+        if fields.contains_key(key) && sealed.module(SANDBOX).is_none() {
+            issues.push(Issue::envelope(
+                "module_missing",
+                key.into(),
+                json!({"module": SANDBOX}),
+                &format!("pack `{}`'s {key} are programs the sandbox module runs, which this build lacks", id.text()),
+            ));
+        }
+    }
+    let assets = fields
+        .get("assets")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let entries = match fields.get("entries") {
+        None => Vec::new(),
+        Some(e) => check_entries(&id, e, &assets, sealed, &mut issues),
+    };
+    let aliases = match fields.get("aliases") {
+        None => BTreeMap::new(),
+        Some(a) => check_aliases(a, &mut issues),
+    };
     for key in fields.keys() {
         if !PACK_KEYS.contains(&key.as_str()) {
             issues.push(Issue::envelope(
@@ -314,7 +407,194 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         requires_modules,
         recipes,
         digest: digest(manifest),
+        entries,
+        aliases,
     })
+}
+
+/// A pack's `aliases`: each word maps to a kind as `name@major`, with the conversion the pack
+/// states as text; anything else is refused at `aliases/<word>`, so no mapping is inferred.
+fn check_aliases(aliases: &Value, issues: &mut Vec<Issue>) -> BTreeMap<String, Value> {
+    let mut out = BTreeMap::new();
+    let Some(words) = aliases.as_object() else {
+        issues.push(Issue::envelope(
+            "out_of_range",
+            "aliases".into(),
+            aliases.clone(),
+            "not an object",
+        ));
+        return out;
+    };
+    for (word, alias) in words {
+        let target = alias.get("target").and_then(Value::as_str);
+        let conversion = alias.get("conversion").and_then(Value::as_str);
+        let keys_ok = alias.as_object().is_some_and(|a| {
+            a.keys()
+                .all(|k| matches!(k.as_str(), "target" | "conversion" | "renamed_from"))
+        });
+        match (target.and_then(crate::kinds::parse_kind), conversion) {
+            (Some(_), Some(_)) if keys_ok => {
+                out.insert(word.clone(), alias.clone());
+            }
+            _ => issues.push(Issue::envelope(
+                "out_of_range",
+                format!("aliases/{word}"),
+                alias.clone(),
+                "an alias is {target: name@major, conversion: text, renamed_from?}",
+            )),
+        }
+    }
+    out
+}
+
+/// A pack's registry entries (Registry and seal: registries), each checked at the pack check: in
+/// a registry the build declares that packs may fill, named `<pack>.<name>` so it never takes a
+/// first-party name, meeting the entry schema and passing the registry's kit. Each refusal is an
+/// issue at `entries/<registry>`, naming the registry and the entry.
+fn check_entries(
+    id: &PackId,
+    entries: &Value,
+    assets: &[Value],
+    sealed: &Sealed,
+    issues: &mut Vec<Issue>,
+) -> Vec<registry::lists::SealedEntry> {
+    let mut out = Vec::new();
+    let Some(by_registry) = entries.as_object() else {
+        issues.push(Issue::envelope(
+            "out_of_range",
+            "entries".into(),
+            entries.clone(),
+            "not an object",
+        ));
+        return out;
+    };
+    let pack = id.text();
+    for (name, list) in by_registry {
+        let path = format!("entries/{name}");
+        let refuse = |actual: Value, what: String| {
+            Issue::envelope("out_of_range", path.clone(), actual, &what)
+        };
+        let Some(reg) = sealed.registry(name) else {
+            issues.push(refuse(
+                json!({"registry": name}),
+                format!("this build declares no registry `{name}`"),
+            ));
+            continue;
+        };
+        if !reg.def.fill.contains(&"pack") {
+            issues.push(refuse(
+                json!({"registry": name, "fill": reg.def.fill}),
+                format!(
+                    "`{name}` is filled by {} (fill: {}); a pack adds no entry to it",
+                    reg.def.fill.join(", "),
+                    reg.def.fill.join(" | ")
+                ),
+            ));
+            continue;
+        }
+        if reg.def.program.is_some() && sealed.module(SANDBOX).is_none() {
+            issues.push(Issue::envelope(
+                "module_missing",
+                path.clone(),
+                json!({"registry": name, "module": SANDBOX}),
+                &format!("the entries of `{name}` are programs the sandbox module admits and runs, which this build lacks"),
+            ));
+            continue;
+        }
+        let Some(list) = list.as_array() else {
+            issues.push(refuse(list.clone(), "not a list of entries".into()));
+            continue;
+        };
+        for value in list {
+            let Some(entry) = value.get("name").and_then(Value::as_str) else {
+                issues.push(refuse(
+                    value.clone(),
+                    format!("an entry of `{name}` has no name"),
+                ));
+                continue;
+            };
+            let own = format!("{}.", id.name);
+            if !entry.starts_with(&own) {
+                let what = match reg.entry(entry) {
+                    Some(first) => format!(
+                        "`{entry}` would take the first-party entry `{entry}` of `{name}` (`{}`'s); a pack's entry is named `{}{entry}`",
+                        first.module, own
+                    ),
+                    None => format!("a pack's entry is named `<pack>.<name>`: `{}{entry}`, not `{entry}`", own),
+                };
+                issues.push(refuse(json!({"registry": name, "entry": entry}), what));
+                continue;
+            }
+            if out
+                .iter()
+                .any(|e: &registry::lists::SealedEntry| e.registry == *name && e.name == entry)
+            {
+                issues.push(refuse(
+                    json!({"registry": name, "entry": entry}),
+                    format!("`{name}` has two entries named `{entry}`"),
+                ));
+                continue;
+            }
+            if let Some(why) = registry::lists::schema_fault(&reg.def.entry, value, "") {
+                issues.push(refuse(
+                    json!({"registry": name, "entry": entry, "rules": ["entry_schema"]}),
+                    format!("`{entry}` doesn't meet `{name}`'s entry schema: {why}"),
+                ));
+                continue;
+            }
+            // A program entry's kit reads the program's bytes, from the pack's asset of its hash.
+            let judged = match reg.def.program {
+                None => value.clone(),
+                Some(_) => {
+                    let sha = value
+                        .get("program")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let Some(hex) = assets
+                        .iter()
+                        .find(|a| a.get("sha256").and_then(Value::as_str) == Some(sha))
+                        .and_then(|a| a.get("hex"))
+                    else {
+                        issues.push(refuse(
+                            json!({"registry": name, "entry": entry, "program": sha}),
+                            format!("`{entry}`'s program `{sha}` is none of the pack's assets"),
+                        ));
+                        continue;
+                    };
+                    let mut v = value.clone();
+                    v["wasm"] = hex.clone();
+                    v
+                }
+            };
+            let kit = reg.def.run_kit(entry, &judged);
+            if !kit.pass() {
+                let why: Vec<String> = kit
+                    .rules
+                    .iter()
+                    .filter(|r| !r.pass)
+                    .map(|r| format!("{}: {}", r.rule, r.why))
+                    .collect();
+                issues.push(refuse(
+                    json!({"registry": name, "entry": entry, "rules": kit.failed()}),
+                    format!("`{entry}` fails `{name}`'s kit: {}", why.join("; ")),
+                ));
+                continue;
+            }
+            out.push(registry::lists::SealedEntry {
+                name: entry.to_string(),
+                registry: name.clone(),
+                origin: "pack",
+                module: String::new(),
+                pack: pack.clone(),
+                value: value.clone(),
+                since: id.version.to_string(),
+                digest: registry::lists::entry_digest(name, entry, value, &id.version.to_string()),
+                twin: reg.def.twin.map(|t| t(entry, value)),
+                kit,
+            });
+        }
+    }
+    out
 }
 
 /// `d1:` SHA-256 of a manifest's canonical form: a version's bytes, frozen.
@@ -332,7 +612,15 @@ const PACK_KEYS: &[&str] = &[
     "description",
     "requires",
     "recipes",
+    "entries",
+    "aliases",
+    "assets",
+    "providers",
+    "layouts",
 ];
+
+/// The canvas module that admits and runs a pack's programs (#238).
+const SANDBOX: &str = "sandbox";
 
 /// The recipe's keys.
 const RECIPE_KEYS: &[&str] = &[
@@ -349,9 +637,14 @@ const RECIPE_KEYS: &[&str] = &[
     "let",
     "steps",
     "outputs",
+    "channels",
+    "rules",
+    "twins",
 ];
 /// A step's keys in this slice.
-const STEP_KEYS: &[&str] = &["op", "kind", "params", "at", "repeat", "let"];
+const STEP_KEYS: &[&str] = &[
+    "op", "kind", "params", "at", "material", "repeat", "let", "when", "channels",
+];
 
 fn check_recipe(
     pack: &str,
@@ -478,9 +771,7 @@ fn check_recipe(
                 for k in s.keys() {
                     if !STEP_KEYS.contains(&k.as_str()) {
                         let what = match k.as_str() {
-                            "when" | "channels" | "modifiers" | "material" | "steps" => {
-                                "lands with 3D scenes, not this slice"
-                            }
+                            "modifiers" | "steps" => "lands with 3D scenes, not this slice",
                             _ => "not a field of a step",
                         };
                         issues.push(Issue::envelope(
@@ -493,11 +784,7 @@ fn check_recipe(
                 }
                 let op = s.get("op").and_then(Value::as_str).unwrap_or_default();
                 if !STEP_OPS.contains(&op) {
-                    let what = if op == "recipe" {
-                        "a recipe step nests, which lands with 3D scenes; nothing recurses here"
-                    } else {
-                        "not a step op of this slice (mark, item)"
-                    };
+                    let what = "not a step op of this slice (mark, item, builder, recipe)";
                     issues.push(bad(&format!("{at}/op"), json!(op), what));
                     continue;
                 }
@@ -531,20 +818,73 @@ fn check_recipe(
                         continue;
                     }
                 };
+                // What a count, spacing or condition may read: the recipe's inputs and lets,
+                // fixed at check, never `t`.
+                let unfixed = |v: &Value| {
+                    Template::of(v)
+                        .reads()
+                        .0
+                        .iter()
+                        .any(|n| !inputs.contains_key(n) && !lets.iter().any(|(l, _)| l == n))
+                };
+                let mut along = None;
                 let repeat = match s.get("repeat") {
                     None => None,
                     Some(r) => {
-                        let count = member(r, "count").cloned();
+                        let mut count = member(r, "count").cloned();
                         let as_ = member(r, "as").and_then(Value::as_str);
                         let keys: Vec<&String> = r
                             .as_object()
                             .map(|o| o.keys().collect())
                             .unwrap_or_default();
-                        if keys.iter().any(|k| !["count", "as"].contains(&k.as_str())) {
-                            issues.push(bad(&format!("{at}/repeat"), r.clone(), "only `{count, as}` repeats in this slice; over, on, along and pack land with 3D scenes"));
+                        if keys
+                            .iter()
+                            .any(|k| !["count", "as", "along", "spacing"].contains(&k.as_str()))
+                        {
+                            issues.push(bad(&format!("{at}/repeat"), r.clone(), "a repeat is `{count, as}`, or `{along, count | spacing, as}`; over, on and pack land later"));
                             continue;
                         }
+                        if let Some(path) = member(r, "along") {
+                            let spacing = member(r, "spacing");
+                            // The curve: an input that names a `curve@1` item, or points.
+                            let curve_ok = match path {
+                                Value::String(n) => inputs.contains_key(n),
+                                Value::Array(points) => points.len() >= 2,
+                                _ => false,
+                            };
+                            if !curve_ok {
+                                issues.push(bad(&format!("{at}/repeat/along"), path.clone(), &format!("step `{step_id}` repeats along an input that names a curve, or two or more points")));
+                                continue;
+                            }
+                            match (&count, spacing) {
+                                (Some(_), None) => {}
+                                (None, Some(sp)) if !unfixed(sp) => count = Some(json!(0)),
+                                (None, Some(sp)) => {
+                                    issues.push(bad(&format!("{at}/repeat/spacing"), sp.clone(), &format!("step `{step_id}` spaces its copies by more than the recipe's inputs and lets, so no check can fix their count")));
+                                    continue;
+                                }
+                                _ => {
+                                    issues.push(bad(&format!("{at}/repeat"), r.clone(), &format!("step `{step_id}` repeats along a curve by a count or a spacing, one of them")));
+                                    continue;
+                                }
+                            }
+                            along = Some((Template::of(path), spacing.map(Template::of)));
+                        }
                         match (count, as_) {
+                            // A count is fixed at check (Recipe: "repeats have counts fixed at
+                            // check"): it reads only the recipe's inputs and lets, never `t`.
+                            (Some(c), Some(_))
+                                if Template::of(&c).reads().0.iter().any(|n| {
+                                    !inputs.contains_key(n) && !lets.iter().any(|(l, _)| l == n)
+                                }) =>
+                            {
+                                issues.push(bad(
+                                    &format!("{at}/repeat/count"),
+                                    c.clone(),
+                                    &format!("step `{step_id}` repeats by a count that reads more than the recipe's inputs and lets, so no check can fix it"),
+                                ));
+                                continue;
+                            }
                             (Some(c), Some(a)) if well_named(a) => {
                                 Some((Template::of(&c), a.to_string()))
                             }
@@ -552,14 +892,56 @@ fn check_recipe(
                                 issues.push(bad(
                                     &format!("{at}/repeat"),
                                     r.clone(),
-                                    "a repeat is `{count, as}`",
+                                    &format!("step `{step_id}`'s repeat is `{{count, as}}`: one without a count has no count fixed at check"),
                                 ));
                                 continue;
                             }
                         }
                     }
                 };
+                let when = match s.get("when") {
+                    None => None,
+                    Some(w) if unfixed(w) => {
+                        issues.push(bad(&format!("{at}/when"), w.clone(), &format!("step `{step_id}`'s condition reads more than the recipe's inputs and lets, so no check can fix it")));
+                        continue;
+                    }
+                    Some(w) => Some(Template::of(w)),
+                };
                 let step_lets = read_lets(s.get("let"), &format!("{path}/{at}/let"), &mut issues);
+                let material = match s.get("material") {
+                    None => None,
+                    Some(m @ Value::String(_)) => Some(m.clone()),
+                    Some(other) => {
+                        issues.push(bad(&format!("{at}/material"), other.clone(), "not an ID"));
+                        continue;
+                    }
+                };
+                // Its own channels target a field of each item it makes.
+                let mut own = Vec::new();
+                match s.get("channels") {
+                    None => {}
+                    Some(Value::Object(map)) => {
+                        for (name, c) in map {
+                            let target = member(c, "target").and_then(Value::as_str);
+                            if well_named(name) && target.is_some_and(|t| !t.is_empty()) {
+                                own.push((name.clone(), c.clone()));
+                            } else {
+                                issues.push(bad(
+                                    &format!("{at}/channels/{name}/target"),
+                                    json!(target),
+                                    "a step's channel targets a field of the items it makes",
+                                ));
+                            }
+                        }
+                    }
+                    Some(other) => {
+                        issues.push(bad(
+                            &format!("{at}/channels"),
+                            other.clone(),
+                            "not an object",
+                        ));
+                    }
+                }
                 steps.push(Step {
                     id: step_id.clone(),
                     op: op.to_string(),
@@ -568,11 +950,42 @@ fn check_recipe(
                     at: s.get("at").map(Template::of),
                     lets: step_lets,
                     repeat,
+                    along,
+                    when,
+                    material,
+                    channels: own,
                 });
             }
         }
         Some(other) => issues.push(bad("steps", other.clone(), "not an object")),
     }
+    // Its channels target its steps; each is written into the document as it expands.
+    let mut channels = Vec::new();
+    match fields.get("channels") {
+        None => {}
+        Some(Value::Object(map)) => {
+            for (name, c) in map {
+                let target = member(c, "target")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let step = target
+                    .strip_prefix("step:")
+                    .and_then(|t| t.split_once('/'))
+                    .map(|(s, _)| s);
+                if !well_named(name) || !step.is_some_and(|s| steps.iter().any(|x| x.id == s)) {
+                    issues.push(bad(
+                        &format!("channels/{name}/target"),
+                        json!(target),
+                        "a recipe's channel targets one of its steps: `step:<id>/<field>…`",
+                    ));
+                    continue;
+                }
+                channels.push((name.clone(), c.clone()));
+            }
+        }
+        Some(other) => issues.push(bad("channels", other.clone(), "not an object")),
+    }
+    let rules = read_rules(pack, fields, &inputs, sealed, path, &mut issues);
     if !issues.is_empty() {
         return Err(issues);
     }
@@ -583,7 +996,139 @@ fn check_recipe(
         inputs,
         lets,
         steps,
+        channels,
+        rules,
     })
+}
+
+/// A recipe's kind rules, each `{code: "<pack>.<rule>", expr, at: "rest", fix}`, and the kind
+/// kit's planted twin per rule, `twins: [{params, expect: code}]`: an instance's params that must
+/// fail it. A rule whose twin passes it, or with no twin, is refused.
+fn read_rules(
+    pack: &str,
+    fields: &Map<String, Value>,
+    inputs: &BTreeMap<String, Input>,
+    sealed: &Sealed,
+    path: &str,
+    issues: &mut Vec<Issue>,
+) -> Vec<KindRule> {
+    let bad = |at: &str, actual: Value, what: &str| {
+        Issue::envelope("out_of_range", format!("{path}/{at}"), actual, what)
+    };
+    let mut rules = Vec::new();
+    let list = match fields.get("rules") {
+        None => return rules,
+        Some(Value::Array(list)) => list,
+        Some(other) => {
+            issues.push(bad("rules", other.clone(), "not a list of rules"));
+            return rules;
+        }
+    };
+    for (i, r) in list.iter().enumerate() {
+        let at = format!("rules/{i}");
+        let code = r.get("code").and_then(Value::as_str).unwrap_or_default();
+        if !code
+            .strip_prefix(&format!("{pack}."))
+            .is_some_and(well_named)
+        {
+            issues.push(bad(
+                &format!("{at}/code"),
+                json!(code),
+                &format!("a kind rule's code is `{pack}.<rule>`"),
+            ));
+            continue;
+        }
+        if r.get("at").and_then(Value::as_str) != Some("rest") {
+            issues.push(bad(
+                &format!("{at}/at"),
+                r.get("at").cloned().unwrap_or(Value::Null),
+                "a kind rule reads its instance at rest",
+            ));
+            continue;
+        }
+        let Some(text) = r.get("expr").and_then(Value::as_str) else {
+            issues.push(bad(
+                &format!("{at}/expr"),
+                r.get("expr").cloned().unwrap_or(Value::Null),
+                "a kind rule's expr is text",
+            ));
+            continue;
+        };
+        let expr = match crate::expr::Expr::compile(text, &RuleScope(sealed), 256) {
+            Ok(e) => e,
+            Err(e) => {
+                let actual = json!({"rule": code, "call": e.call, "module": e.missing});
+                issues.push(match &e.missing {
+                    Some(module) => Issue::envelope(
+                        "module_missing",
+                        format!("{path}/{at}/expr"),
+                        actual,
+                        &format!("rule `{code}` reads `{}`, and ease@1 is the `{module}` module's, which this build lacks", e.call),
+                    ),
+                    None => bad(&format!("{at}/expr"), actual, &e.why),
+                });
+                continue;
+            }
+        };
+        if let Some(n) = expr.vars.iter().find(|n| !inputs.contains_key(*n)) {
+            issues.push(bad(
+                &format!("{at}/expr"),
+                json!(text),
+                &format!("rule `{code}` reads `{n}`, which is no input of the recipe"),
+            ));
+            continue;
+        }
+        rules.push(KindRule {
+            code: code.to_string(),
+            expr,
+            fix: r
+                .get("fix")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+        });
+    }
+    // The kind kit: each rule's planted twin must fail it.
+    let twins = fields
+        .get("twins")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    for rule in &rules {
+        let mine: Vec<&Value> = twins
+            .iter()
+            .filter(|t| t.get("expect").and_then(Value::as_str) == Some(rule.code.as_str()))
+            .collect();
+        if mine.is_empty() {
+            issues.push(bad(
+                "twins",
+                json!(rule.code),
+                &format!("rule `{}` has no planted twin for the kind kit", rule.code),
+            ));
+        }
+        for twin in mine {
+            let mut values: Map<String, Value> = inputs
+                .iter()
+                .map(|(n, i)| (n.clone(), i.default.clone()))
+                .collect();
+            for (k, v) in twin
+                .get("params")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+            {
+                values.insert(k.clone(), v.clone());
+            }
+            if rule.holds(&values) {
+                issues.push(bad(
+                    "twins",
+                    twin.clone(),
+                    &format!("the kind kit admits rule `{}`'s planted twin", rule.code),
+                ));
+            }
+        }
+    }
+    rules
 }
 
 fn read_lets(
@@ -660,6 +1205,9 @@ fn input_fault(input: &Input, value: &Value) -> Option<String> {
             (!ok).then(|| what.to_string())
         }
         "text" | "ID" => (!value.is_string()).then(|| "not a string".to_string()),
+        // A list of rows, such as points, and one row, such as another tool's mesh (#433).
+        "records" => (!value.is_array()).then(|| "not a list".to_string()),
+        "record" => (!value.is_object()).then(|| "not an object".to_string()),
         _ => None,
     }
 }
@@ -682,6 +1230,11 @@ impl Packs {
             planted,
             ..Packs::default()
         }
+    }
+
+    /// Takes back an admitted version a later half of its pack check refused (#238: its programs).
+    pub fn withdraw(&mut self, key: &str) {
+        self.by_id.remove(key);
     }
 
     /// Runs the pack check and admits the version. A version already admitted with other
@@ -736,6 +1289,11 @@ impl Packs {
     /// The admitted pack at `owner/name@version`.
     pub fn get(&self, id: &str) -> Option<&Pack> {
         self.by_id.get(id)
+    }
+
+    /// Every admitted pack, by ID.
+    pub fn all(&self) -> impl Iterator<Item = &Pack> {
+        self.by_id.values()
     }
 }
 
@@ -917,6 +1475,8 @@ pub struct Expansion {
     pub derived: Map<String, Value>,
     /// The derived IDs a patch broke out, which the instance no longer writes.
     pub broken_out: Vec<String>,
+    /// The recipe's channels, each targeting a derived item, by `<instance>.<channel>[.<k>]`.
+    pub channels: Map<String, Value>,
 }
 
 impl Expansion {
@@ -934,6 +1494,7 @@ impl Expansion {
             "derived": self.derived,
             "seeds": seeds,
             "broken_out": self.broken_out,
+            "channels": self.channels,
         })
     }
 }
@@ -971,8 +1532,9 @@ pub fn expand(
             items,
             &id,
             item.clone(),
-            pack,
-            recipe,
+            (pack, recipe),
+            resolved,
+            std::slice::from_ref(&recipe.id),
             planted,
             &mut order,
             issues,
@@ -980,6 +1542,57 @@ pub fn expand(
             continue;
         };
         out.push(expansion);
+    }
+    out
+}
+
+/// A channel or driver of `doc` on an instance's input that one of its recipe's repeat counts
+/// reads: the count would change while playing, so it is no longer fixed at check (Recipe:
+/// "repeats have counts fixed at check"; #420).
+pub fn driven_counts(
+    doc: &Value,
+    items: &Map<String, Value>,
+    resolved: &Resolved<'_>,
+) -> Vec<Issue> {
+    let mut out = Vec::new();
+    if resolved.is_empty() {
+        return out;
+    }
+    for (id, item) in items {
+        let Some((_, recipe)) = super::kind_text(item).and_then(|k| resolved.recipe(k)) else {
+            continue;
+        };
+        let counted: BTreeSet<String> = recipe
+            .steps
+            .iter()
+            .filter_map(|s| s.repeat.as_ref())
+            .flat_map(|(count, _)| count.names())
+            .filter(|n| recipe.inputs.contains_key(n))
+            .collect();
+        for section in ["channels", "drivers"] {
+            for (cid, c) in member(doc, section)
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+            {
+                let Some(target) = member(c, "target").and_then(Value::as_str) else {
+                    continue;
+                };
+                let hit = counted.iter().find(|n| {
+                    let at = format!("items/{id}/params/{n}");
+                    target == at || target.starts_with(&format!("{at}/"))
+                });
+                if let Some(n) = hit {
+                    out.push(Issue::error(
+                        "out_of_range",
+                        id,
+                        format!("{section}/{cid}/target"),
+                        json!(target),
+                        &format!("`{target}` drives `{n}`, which a repeat of `{}` counts by: a count is fixed at check, so no channel or driver may move it", recipe.id),
+                    ));
+                }
+            }
+        }
     }
     out
 }
@@ -1012,8 +1625,9 @@ pub fn derived_of(
         &mut scratch,
         instance,
         item.clone(),
-        pack,
-        recipe,
+        (pack, recipe),
+        resolved,
+        std::slice::from_ref(&recipe.id),
         Planted::default(),
         &mut order,
         &mut issues,
@@ -1061,13 +1675,76 @@ fn derives(recipe: &Recipe, instance: &str, id: &str) -> bool {
         .any(|s| s.id == step && matches!((&s.repeat, index), (Some(_), Some(_)) | (None, None)))
 }
 
+/// Points a curve value gives: literal `[[x, y, z]…]`, or a `curve@1` item's points by ID.
+fn curve_points(items: &Map<String, Value>, v: &Value) -> Option<Vec<[f64; 3]>> {
+    let list = match v {
+        Value::String(id) => member(items.get(id)?, "params")
+            .and_then(|p| member(p, "points"))?
+            .as_array()?,
+        Value::Array(list) => list,
+        _ => return None,
+    };
+    let points: Option<Vec<[f64; 3]>> = list
+        .iter()
+        .map(|p| {
+            let a = p.as_array().filter(|a| a.len() == 3)?;
+            Some([a[0].as_f64()?, a[1].as_f64()?, a[2].as_f64()?])
+        })
+        .collect();
+    points.filter(|p| p.len() >= 2)
+}
+
+/// The point at arc length `s` along a polyline and its yaw (degrees about +Y that turn +X to
+/// its direction there).
+fn along_at(points: &[[f64; 3]], s: f64) -> ([f64; 3], f64) {
+    let mut left = s.max(0.0);
+    for (k, w) in points.windows(2).enumerate() {
+        let d = [w[1][0] - w[0][0], w[1][1] - w[0][1], w[1][2] - w[0][2]];
+        let len = crate::ops::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+        if left <= len || k + 2 == points.len() {
+            let f = if len > 0.0 {
+                (left / len).min(1.0)
+            } else {
+                0.0
+            };
+            let yaw = crate::ops::deg(crate::ops::atan2(-d[2], d[0]));
+            return (
+                [w[0][0] + d[0] * f, w[0][1] + d[1] * f, w[0][2] + d[2] * f],
+                yaw,
+            );
+        }
+        left -= len;
+    }
+    (points[0], 0.0)
+}
+
+fn polyline_length(points: &[[f64; 3]]) -> f64 {
+    points
+        .windows(2)
+        .map(|w| {
+            let d = [w[1][0] - w[0][0], w[1][1] - w[0][1], w[1][2] - w[0][2]];
+            crate::ops::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
+        })
+        .sum()
+}
+
+/// Truthy: a non-zero number, `true`, or anything but null and `false`.
+fn truthy(v: &Value) -> bool {
+    match v {
+        Value::Null | Value::Bool(false) => false,
+        Value::Number(n) => n.as_f64().is_some_and(|x| x != 0.0),
+        _ => true,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn expand_one(
     items: &mut Map<String, Value>,
     id: &str,
     item: Value,
-    pack: &Pack,
-    recipe: &Recipe,
+    (pack, recipe): (&Pack, &Recipe),
+    resolved: &Resolved<'_>,
+    chain: &[String],
     planted: Planted,
     order: &mut u64,
     issues: &mut Vec<Issue>,
@@ -1190,6 +1867,21 @@ fn expand_one(
     if !ok {
         return None;
     }
+    // The core's `kind_rules` check, at rest: each rule the instance's params make read 0.
+    for rule in &recipe.rules {
+        if !rule.holds(&inputs) {
+            let mut issue = Issue::error(
+                KIND_RULE,
+                id,
+                at("params"),
+                json!({"rule": rule.code, "expr": rule.expr.text}),
+                &format!("the instance breaks {}'s rule `{}`", recipe.id, rule.code),
+            );
+            issue.severity = "warning";
+            issue.fix = rule.fix.clone();
+            issues.push(issue);
+        }
+    }
     if let Some(fields) = items.get_mut(id).and_then(Value::as_object_mut) {
         fields.insert("params".into(), Value::Object(inputs.clone()));
     }
@@ -1219,12 +1911,70 @@ fn expand_one(
     }
     let mut derived = Vec::new();
     let mut derived_items = Map::new();
+    // Each step's derived IDs, which the recipe's channels target, and the channels.
+    let mut ids_of: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut channels = Map::new();
     // One scope for every derived item: the inputs and lets, then each item's own names.
     let base = env.len();
     let mut scope = env;
     for step in &recipe.steps {
+        // A repeat along a curve: its points, and its count from the spacing when it has one.
+        let curve = match &step.along {
+            None => None,
+            Some((path, _)) => {
+                let named = match path.source() {
+                    Value::String(n) => inputs.get(n).cloned().unwrap_or(Value::Null),
+                    v => v.clone(),
+                };
+                match curve_points(items, &named) {
+                    Some(points) => Some(points),
+                    None => {
+                        issues.push(Issue::error(
+                            "ref_unresolved",
+                            id,
+                            at(&format!("steps/{}/repeat/along", step.id)),
+                            named,
+                            "names no curve@1 item with two or more points, nor two or more points",
+                        ));
+                        return None;
+                    }
+                }
+            }
+        };
+        let spaced = match (&step.along, &curve) {
+            (Some((_, Some(spacing))), Some(points)) => {
+                let gap = spacing.eval(&scope[..base]).ok().and_then(|v| v.as_f64());
+                match gap.filter(|g| *g > 0.0) {
+                    Some(g) => Some((((polyline_length(points) / g).floor() + 1.0).min(1e9), g)),
+                    None => {
+                        issues.push(Issue::error(
+                            "out_of_range",
+                            id,
+                            at(&format!("steps/{}/repeat/spacing", step.id)),
+                            spacing.source().clone(),
+                            "a repeat's spacing is a length above zero",
+                        ));
+                        return None;
+                    }
+                }
+            }
+            _ => None,
+        };
         let count: Option<u64> = match &step.repeat {
             None => None,
+            Some(_) if spaced.is_some() => match spaced {
+                Some((n, _)) if n <= MAX_REPEAT as f64 => Some(n as u64),
+                _ => {
+                    issues.push(Issue::error(
+                        "out_of_range",
+                        id,
+                        at(&format!("steps/{}/repeat", step.id)),
+                        json!(spaced.map(|s| s.0)),
+                        &format!("a repeat count is a whole number from 0 to {MAX_REPEAT}"),
+                    ));
+                    return None;
+                }
+            },
             Some((count, _)) => match count.eval(&scope[..base]) {
                 Ok(v) => match v.as_f64() {
                     Some(n) if n.fract() == 0.0 && (0.0..=MAX_REPEAT as f64).contains(&n) => {
@@ -1253,6 +2003,23 @@ fn expand_one(
                 }
             },
         };
+        // A condition false at check leaves the step out: it derives nothing.
+        if let Some(when) = &step.when {
+            match when.eval(&scope[..base]) {
+                Ok(v) if !truthy(&v) => continue,
+                Ok(_) => {}
+                Err(what) => {
+                    issues.push(Issue::error(
+                        "out_of_range",
+                        id,
+                        at(&format!("steps/{}/when", step.id)),
+                        when.source().clone(),
+                        &what,
+                    ));
+                    return None;
+                }
+            }
+        }
         let n = count.unwrap_or(1);
         for index in 0..n {
             let derived_id = match count {
@@ -1339,13 +2106,22 @@ fn expand_one(
             fields.insert("layer".into(), layer.clone());
             fields.insert("name".into(), json!(derived_id));
             fields.insert("order".into(), order_key.clone());
-            // A derived item hides, picks and hangs as its instance does.
-            for key in ["visible", "pickable", "parent", "adjust"] {
+            // A derived item hides, picks and hangs as its instance does, and wears the
+            // material it names (#433).
+            for key in ["visible", "pickable", "parent", "adjust", "material"] {
                 if let Some(v) = member(&item, key) {
                     fields.insert(key.into(), v.clone());
                 }
             }
             fields.insert("params".into(), Value::Object(params));
+            if let Some(m) = &step.material {
+                fields.insert("material".into(), m.clone());
+            }
+            // Without an `at` of its own, an item stands at the instance's origin.
+            if let (None, None, Some(o)) = (&step.at, &curve, &origin) {
+                let pos: Vec<Value> = o.iter().map(|v| number(*v)).collect();
+                fields.insert("at".into(), json!({ "pos": pos }));
+            }
             if let Some(at) = &step.at {
                 match at.eval(&scope) {
                     Ok(mut v) => {
@@ -1375,7 +2151,156 @@ fn expand_one(
                     }
                 }
             }
+            // Along a curve: the copy stands at its arc length, turned to the curve's direction.
+            if let Some(points) = &curve {
+                let length = polyline_length(points);
+                let s = match spaced {
+                    Some((_, gap)) => gap * index as f64,
+                    None if n > 1 => length * index as f64 / (n - 1) as f64,
+                    None => 0.0,
+                };
+                let (p, yaw) = along_at(points, s);
+                let at = fields
+                    .entry("at")
+                    .or_insert_with(|| json!({}))
+                    .as_object_mut()
+                    .map(std::mem::take)
+                    .unwrap_or_default();
+                let three = |key: &str, base: [f64; 3]| -> [f64; 3] {
+                    let mut out = base;
+                    if let Some(list) = at.get(key).and_then(Value::as_array) {
+                        for (o, v) in out.iter_mut().zip(list) {
+                            *o += v.as_f64().unwrap_or(0.0);
+                        }
+                    }
+                    out
+                };
+                // Without an `at` of its own, the copy starts at the instance's origin.
+                let origin3 = if step.at.is_some() {
+                    [0.0; 3]
+                } else {
+                    let o = origin.clone().unwrap_or_default();
+                    [0, 1, 2].map(|k| o.get(k).copied().unwrap_or(0.0))
+                };
+                let pos = three(
+                    "pos",
+                    [p[0] + origin3[0], p[1] + origin3[1], p[2] + origin3[2]],
+                );
+                let rot = three("rot", [0.0, yaw, 0.0]);
+                let mut placed = at.clone();
+                placed.insert("pos".into(), json!(pos.map(number)));
+                placed.insert("rot".into(), json!(rot.map(number)));
+                fields.insert("at".into(), Value::Object(placed));
+            }
+            // A recipe step nests: its item is an instance of the recipe it names, expanded here
+            // with its own derived items under its ID, at most MAX_DEPTH recipes down.
+            if step.op == "recipe" {
+                let Some((child_pack, child)) = resolved.recipe(&step.kind) else {
+                    issues.push(Issue::error(
+                        "ref_unresolved",
+                        id,
+                        at(&format!("steps/{}/kind", step.id)),
+                        json!(step.kind),
+                        "names no recipe of a pack the document names",
+                    ));
+                    return None;
+                };
+                if chain.contains(&child.id) {
+                    issues.push(Issue::error(
+                        "cycle",
+                        id,
+                        at(&format!("steps/{}/kind", step.id)),
+                        json!(chain.iter().chain([&child.id]).collect::<Vec<_>>()),
+                        &format!("recipe `{}` nests itself", child.id),
+                    ));
+                    return None;
+                }
+                if chain.len() >= MAX_DEPTH {
+                    issues.push(Issue::error(
+                        "out_of_range",
+                        id,
+                        at(&format!("steps/{}/kind", step.id)),
+                        json!(chain.len() + 1),
+                        &format!("recipes nest at most {MAX_DEPTH} deep"),
+                    ));
+                    return None;
+                }
+                let nested = Value::Object(fields);
+                // The document's items, which the nested recipe's curves and IDs are read from.
+                let mut scratch = items.clone();
+                scratch.insert(derived_id.clone(), nested.clone());
+                let mut deeper = chain.to_vec();
+                deeper.push(child.id.clone());
+                let inner = expand_one(
+                    &mut scratch,
+                    &derived_id,
+                    nested,
+                    (child_pack, child),
+                    resolved,
+                    &deeper,
+                    planted,
+                    order,
+                    issues,
+                )?;
+                let instance = scratch.remove(&derived_id).unwrap_or(Value::Null);
+                derived_items.insert(derived_id.clone(), instance);
+                for (k, v) in inner.derived {
+                    if items.contains_key(&k) {
+                        issues.push(Issue::error(
+                            "bad_id",
+                            id,
+                            format!("items/{k}"),
+                            json!(k),
+                            &format!(
+                                "the document holds an item at the ID `{}` expands to",
+                                recipe.id
+                            ),
+                        ));
+                        return None;
+                    }
+                    derived_items.insert(k, v);
+                }
+                derived.extend(inner.items);
+                channels.extend(inner.channels);
+                ids_of.entry(step.id.clone()).or_default().push(derived_id);
+                continue;
+            }
+            ids_of
+                .entry(step.id.clone())
+                .or_default()
+                .push(derived_id.clone());
+            // The step's own channels, each on this item's field.
+            for (name, c) in &step.channels {
+                let field = member(c, "target")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let mut out = c.clone();
+                out["target"] = json!(format!("items/{derived_id}/{field}"));
+                channels.insert(format!("{derived_id}.{name}"), out);
+            }
             derived_items.insert(derived_id, Value::Object(fields));
+        }
+    }
+    // The recipe's channels, one per item of the step each targets.
+    for (name, c) in &recipe.channels {
+        let target = member(c, "target")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let Some((step, rest)) = target.strip_prefix("step:").and_then(|t| t.split_once('/'))
+        else {
+            continue;
+        };
+        let targets = ids_of.get(step).cloned().unwrap_or_default();
+        let many = targets.len() > 1;
+        for (k, derived_id) in targets.iter().enumerate() {
+            let mut out = c.clone();
+            out["target"] = json!(format!("items/{derived_id}/{rest}"));
+            let cid = if many {
+                format!("{id}.{name}.{k}")
+            } else {
+                format!("{id}.{name}")
+            };
+            channels.insert(cid, out);
         }
     }
     // Written only once the whole expansion went through: a refused instance writes nothing.
@@ -1390,6 +2315,7 @@ fn expand_one(
         items: derived,
         derived: derived_items,
         broken_out,
+        channels,
     })
 }
 
@@ -1429,6 +2355,56 @@ enum Form {
     Literal,
     List(Vec<Template>),
     Map(Vec<(String, Template)>),
+    /// `{"repeat": {count | over, as, let?, of}}`: a list of `of`, once per index (or element),
+    /// its count fixed at check like a step's repeat, at most [`MAX_REPEAT`] (#433).
+    Repeat(Box<ListRepeat>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct ListRepeat {
+    /// `count`, an expression, or `over`, an expression giving a list.
+    count: Option<Expr>,
+    over: Option<Expr>,
+    as_: String,
+    lets: Vec<(String, Expr)>,
+    of: Template,
+}
+
+impl ListRepeat {
+    fn of(r: &Value) -> Option<ListRepeat> {
+        let o = r.as_object()?;
+        if o.keys()
+            .any(|k| !["count", "over", "as", "let", "of"].contains(&k.as_str()))
+        {
+            return None;
+        }
+        let expr = |k: &str| -> Option<Option<Expr>> {
+            match o.get(k) {
+                None => Some(None),
+                Some(Value::String(t)) => Expr::parse(t).ok().map(Some),
+                Some(Value::Number(n)) => n.as_f64().map(|n| Some(Expr::Num(n))),
+                Some(_) => None,
+            }
+        };
+        let (count, over) = (expr("count")?, expr("over")?);
+        if count.is_some() == over.is_some() {
+            return None;
+        }
+        let as_ = o.get("as")?.as_str().filter(|a| well_named(a))?.to_string();
+        let mut lets = Vec::new();
+        if let Some(l) = o.get("let") {
+            for (k, v) in l.as_object()? {
+                lets.push((k.clone(), Expr::parse(v.as_str()?).ok()?));
+            }
+        }
+        Some(ListRepeat {
+            count,
+            over,
+            as_,
+            lets,
+            of: Template::of(o.get("of")?),
+        })
+    }
 }
 
 impl Template {
@@ -1439,11 +2415,17 @@ impl Template {
                 Err(_) => Form::Literal,
             },
             Value::Array(list) => Form::List(list.iter().map(Template::of).collect()),
-            Value::Object(map) => Form::Map(
-                map.iter()
-                    .map(|(k, v)| (k.clone(), Template::of(v)))
-                    .collect(),
-            ),
+            Value::Object(map) => match map.get("repeat").filter(|_| map.len() == 1) {
+                Some(r) => match ListRepeat::of(r) {
+                    Some(r) => Form::Repeat(Box::new(r)),
+                    None => Form::Literal,
+                },
+                None => Form::Map(
+                    map.iter()
+                        .map(|(k, v)| (k.clone(), Template::of(v)))
+                        .collect(),
+                ),
+            },
             _ => Form::Literal,
         };
         Template {
@@ -1457,12 +2439,50 @@ impl Template {
         &self.source
     }
 
+    /// The names its expressions read and don't bind themselves, words included.
+    pub fn names(&self) -> Vec<String> {
+        let (mut reads, words) = self.reads();
+        reads.extend(words);
+        reads
+    }
+
+    /// The names its expressions read and don't bind themselves, and apart from them the bare
+    /// names that read as their own text when nothing binds them (`type == POINT`).
+    pub fn reads(&self) -> (Vec<String>, Vec<String>) {
+        let (mut out, mut words) = (Vec::new(), Vec::new());
+        self.walk(&mut Vec::new(), &mut out, &mut words);
+        (out, words)
+    }
+
+    fn walk(&self, bound: &mut Vec<String>, out: &mut Vec<String>, words: &mut Vec<String>) {
+        match &self.form {
+            Form::Expr(e) => e.free(bound, out, words),
+            Form::Literal => {}
+            Form::List(l) => l.iter().for_each(|t| t.walk(bound, out, words)),
+            Form::Map(m) => m.iter().for_each(|(_, t)| t.walk(bound, out, words)),
+            Form::Repeat(r) => {
+                let depth = bound.len();
+                for e in r.count.iter().chain(&r.over) {
+                    e.free(bound, out, words);
+                }
+                bound.push(r.as_.clone());
+                bound.push("i".into());
+                for (name, e) in &r.lets {
+                    e.free(bound, out, words);
+                    bound.push(name.clone());
+                }
+                r.of.walk(bound, out, words);
+                bound.truncate(depth);
+            }
+        }
+    }
+
     pub fn eval(&self, scope: &[(String, Value)]) -> Result<Value, String> {
         match &self.form {
             Form::Expr(Expr::Name(name)) if !scope.iter().any(|(k, _)| k == name) => {
                 Ok(self.source.clone())
             }
-            Form::Expr(expr) => expr.eval(scope).map(number),
+            Form::Expr(expr) => expr.value(scope),
             Form::Literal => Ok(self.source.clone()),
             Form::List(list) => list
                 .iter()
@@ -1475,6 +2495,40 @@ impl Template {
                     out.insert(k.clone(), t.eval(scope)?);
                 }
                 Ok(Value::Object(out))
+            }
+            Form::Repeat(r) => {
+                let elements: Vec<Value> = match (&r.count, &r.over) {
+                    (Some(c), _) => {
+                        let n = c.eval(scope)?;
+                        if !(0.0..=MAX_REPEAT as f64).contains(&n) || n.fract() != 0.0 {
+                            return Err(format!("a repeat counts 0 to {MAX_REPEAT}, not {n}"));
+                        }
+                        (0..n as u64).map(|i| json!(i)).collect()
+                    }
+                    (_, Some(o)) => match o.value(scope)? {
+                        Value::Array(a) if a.len() as u64 <= MAX_REPEAT => a,
+                        other => {
+                            return Err(format!(
+                                "a repeat is over a list of at most {MAX_REPEAT}, not {other}"
+                            ))
+                        }
+                    },
+                    _ => Vec::new(),
+                };
+                let mut inner = scope.to_vec();
+                let base = inner.len();
+                let mut out = Vec::with_capacity(elements.len());
+                for (i, e) in elements.into_iter().enumerate() {
+                    inner.truncate(base);
+                    inner.push(("i".into(), json!(i)));
+                    inner.push((r.as_.clone(), e));
+                    for (name, l) in &r.lets {
+                        let v = l.value(&inner)?;
+                        inner.push((name.clone(), v));
+                    }
+                    out.push(r.of.eval(&inner)?);
+                }
+                Ok(Value::Array(out))
             }
         }
     }
@@ -1489,70 +2543,290 @@ fn number(n: f64) -> Value {
     }
 }
 
-/// An expression: numbers, names, `+ - * / %`, unary minus, parentheses and the functions
-/// `min`, `max`, `floor`, `ceil`, `round` and `abs`.
+/// One step of an expression in postfix order: the form a caller that evaluates it frame after
+/// frame without allocating compiles it to, such as a driver's `expr` (Driver).
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExprStep {
+    Num(f64),
+    Name(String),
+    Neg,
+    /// One of `+ - * / %`.
+    Bin(char),
+    /// A function of the closed list, with its argument count.
+    Call(String, usize),
+}
+
+/// `text` parsed as a recipe expression, in postfix order. The forms only a recipe reads at
+/// check (comparisons, conditions, indexes, members, `len`, `sum`) have no postfix form.
+pub fn postfix(text: &str) -> Result<Vec<ExprStep>, String> {
+    fn walk(e: &Expr, out: &mut Vec<ExprStep>) -> Result<(), String> {
+        match e {
+            Expr::Num(n) => out.push(ExprStep::Num(*n)),
+            Expr::Name(n) => out.push(ExprStep::Name(n.clone())),
+            Expr::Neg(a) => {
+                walk(a, out)?;
+                out.push(ExprStep::Neg);
+            }
+            Expr::Bin(op, a, b) => {
+                walk(a, out)?;
+                walk(b, out)?;
+                out.push(ExprStep::Bin(*op));
+            }
+            Expr::Call(name, args) if !matches!(name.as_str(), "len" | "sum" | "unmapped") => {
+                for a in args {
+                    walk(a, out)?;
+                }
+                out.push(ExprStep::Call(name.clone(), args.len()));
+            }
+            _ => return Err("a comparison, condition, index or member has no postfix form".into()),
+        }
+        Ok(())
+    }
+    let mut out = Vec::new();
+    walk(&Expr::parse(text)?, &mut out)?;
+    Ok(out)
+}
+
+/// An expression: numbers, names, `+ - * / %`, unary minus, parentheses, the functions `min`,
+/// `max`, `floor`, `ceil`, `round` and `abs`, and the closed function list's powers and angles
+/// (`sqrt pow sin cos tan asin acos atan atan2 deg rad`, constants `pi tau`) in its pinned math.
+/// For a familiar-names pack's stated conversions (#433) a recipe also reads the list's logic,
+/// `== != < <= > >= && || !` and `c ? a : b`; `a[i]` and `a.name` into a list or record input;
+/// `len(list)`; the bounded sum `sum(k, a, b, term)` (at most 256 terms); and `unmapped()`, which
+/// refuses the value it stands for. `==` and `!=` compare text too, a bare name nothing binds
+/// being its own text, so `units == Lumens` reads a choice.
 #[derive(Clone, Debug, PartialEq)]
 enum Expr {
     Num(f64),
     Name(String),
     Neg(Box<Expr>),
+    Not(Box<Expr>),
+    /// One of `+ - * / %`.
     Bin(char, Box<Expr>, Box<Expr>),
+    /// One of `== != < <= > >= && ||`.
+    Logic(&'static str, Box<Expr>, Box<Expr>),
+    Cond(Box<Expr>, Box<Expr>, Box<Expr>),
+    Index(Box<Expr>, Box<Expr>),
+    Member(Box<Expr>, String),
     Call(String, Vec<Expr>),
 }
+
+/// The most terms a bounded sum adds (The closed function list: bounded sums).
+const MAX_SUM: f64 = 256.0;
 
 impl Expr {
     fn parse(text: &str) -> Result<Expr, String> {
         let tokens = tokenize(text)?;
         let mut p = Parser { tokens, at: 0 };
-        let e = p.sum()?;
+        let e = p.cond()?;
         if p.at != p.tokens.len() {
             return Err(format!("unexpected `{}`", p.tokens[p.at]));
         }
         Ok(e)
     }
 
-    fn eval(&self, scope: &[(String, Value)]) -> Result<f64, String> {
-        Ok(match self {
-            Expr::Num(n) => *n,
-            Expr::Name(name) => {
-                let v = scope.iter().rev().find(|(k, _)| k == name).map(|(_, v)| v);
-                match v {
-                    Some(v) => match v {
-                        Value::Number(n) => n.as_f64().unwrap_or(f64::NAN),
-                        Value::Bool(b) => f64::from(u8::from(*b)),
-                        _ => return Err(format!("`{name}` is not a number")),
-                    },
-                    None => return Err(format!("`{name}` is not in scope")),
+    /// The names it reads that `bound` doesn't hold, into `out`, and each bare name that is text
+    /// when nothing binds it (a side of `==` or `!=`, a branch of a condition) into `words`.
+    fn free(&self, bound: &mut Vec<String>, out: &mut Vec<String>, words: &mut Vec<String>) {
+        let word =
+            |e: &Expr, bound: &mut Vec<String>, out: &mut Vec<String>, words: &mut Vec<String>| {
+                match e {
+                    Expr::Name(n) if !bound.contains(n) => words.push(n.clone()),
+                    _ => e.free(bound, out, words),
+                }
+            };
+        match self {
+            Expr::Num(_) => {}
+            Expr::Name(n) => {
+                if !bound.contains(n) {
+                    out.push(n.clone());
                 }
             }
-            Expr::Neg(e) => -e.eval(scope)?,
+            Expr::Neg(a) | Expr::Not(a) | Expr::Member(a, _) => a.free(bound, out, words),
+            Expr::Logic("==" | "!=", a, b) => {
+                word(a, bound, out, words);
+                word(b, bound, out, words);
+            }
+            Expr::Bin(_, a, b) | Expr::Logic(_, a, b) | Expr::Index(a, b) => {
+                a.free(bound, out, words);
+                b.free(bound, out, words);
+            }
+            Expr::Cond(c, a, b) => {
+                c.free(bound, out, words);
+                word(a, bound, out, words);
+                word(b, bound, out, words);
+            }
+            Expr::Call(name, args) if name == "sum" && args.len() == 4 => {
+                args[1].free(bound, out, words);
+                args[2].free(bound, out, words);
+                if let Expr::Name(k) = &args[0] {
+                    bound.push(k.clone());
+                    args[3].free(bound, out, words);
+                    bound.pop();
+                }
+            }
+            Expr::Call(_, args) => args.iter().for_each(|a| a.free(bound, out, words)),
+        }
+    }
+
+    /// Its value as a number (a bool reads 1 or 0).
+    fn eval(&self, scope: &[(String, Value)]) -> Result<f64, String> {
+        match self.value(scope)? {
+            Value::Number(n) => Ok(n.as_f64().unwrap_or(f64::NAN)),
+            Value::Bool(b) => Ok(f64::from(u8::from(b))),
+            other => Err(format!("`{}` is not a number", shown(&other))),
+        }
+    }
+
+    /// Its value: a number, or what a name, index or member reads.
+    fn value(&self, scope: &[(String, Value)]) -> Result<Value, String> {
+        let n = |x: f64| -> Result<Value, String> { Ok(number(x)) };
+        match self {
+            Expr::Num(x) => n(*x),
+            Expr::Name(name) => scope
+                .iter()
+                .rev()
+                .find(|(k, _)| k == name)
+                .map(|(_, v)| v.clone())
+                .ok_or_else(|| format!("`{name}` is not in scope")),
+            Expr::Index(a, i) => {
+                let list = a.value(scope)?;
+                let k = i.eval(scope)?;
+                let item = list
+                    .as_array()
+                    .filter(|_| k >= 0.0 && k.fract() == 0.0)
+                    .and_then(|l| l.get(k as usize));
+                item.cloned()
+                    .ok_or_else(|| format!("no element {k} of `{}`", shown(&list)))
+            }
+            Expr::Member(a, name) => {
+                let record = a.value(scope)?;
+                record
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| format!("no `{name}` in `{}`", shown(&record)))
+            }
+            Expr::Neg(e) => n(-e.eval(scope)?),
+            Expr::Not(e) => n(f64::from(u8::from(e.eval(scope)? == 0.0))),
+            Expr::Cond(c, a, b) => {
+                let picked = if c.eval(scope)? != 0.0 { a } else { b };
+                match &**picked {
+                    // A bare name nothing binds is its own text, such as a choice's word.
+                    Expr::Name(w) if !scope.iter().any(|(k, _)| k == w) => Ok(json!(w)),
+                    e => e.value(scope),
+                }
+            }
+            Expr::Logic(op @ ("==" | "!="), a, b) => {
+                // A bare name nothing binds is its own text, so a choice compares to a word.
+                let side = |e: &Expr| -> Result<Value, String> {
+                    match e {
+                        Expr::Name(w) if !scope.iter().any(|(k, _)| k == w) => Ok(json!(w)),
+                        _ => e.value(scope),
+                    }
+                };
+                let (a, b) = (side(a)?, side(b)?);
+                let same = match (a.as_f64(), b.as_f64()) {
+                    (Some(x), Some(y)) => x == y,
+                    _ => a == b,
+                };
+                n(f64::from(u8::from(same == (*op == "=="))))
+            }
+            Expr::Logic(op, a, b) => {
+                let x = a.eval(scope)?;
+                // `&&` and `||` read their right side only when they need it.
+                let truth = match *op {
+                    "&&" => x != 0.0 && b.eval(scope)? != 0.0,
+                    "||" => x != 0.0 || b.eval(scope)? != 0.0,
+                    _ => {
+                        let y = b.eval(scope)?;
+                        match *op {
+                            "<" => x < y,
+                            "<=" => x <= y,
+                            ">" => x > y,
+                            _ => x >= y,
+                        }
+                    }
+                };
+                n(f64::from(u8::from(truth)))
+            }
             Expr::Bin(op, a, b) => {
                 let (a, b) = (a.eval(scope)?, b.eval(scope)?);
-                match op {
+                n(match op {
                     '+' => a + b,
                     '-' => a - b,
                     '*' => a * b,
                     _ if b == 0.0 => return Err("division by zero".into()),
                     '/' => a / b,
                     _ => a % b,
+                })
+            }
+            Expr::Call(name, args) if name == "unmapped" && args.is_empty() => {
+                Err("the pack maps no such value: refused, never guessed".into())
+            }
+            Expr::Call(name, args) if name == "len" && args.len() == 1 => {
+                match args[0].value(scope)? {
+                    Value::Array(a) => n(a.len() as f64),
+                    other => Err(format!("`{}` is not a list", shown(&other))),
                 }
+            }
+            Expr::Call(name, args) if name == "sum" && args.len() == 4 => {
+                let Expr::Name(k) = &args[0] else {
+                    return Err("sum(k, a, b, term) binds a name k".into());
+                };
+                let (a, b) = (args[1].eval(scope)?, args[2].eval(scope)?);
+                if a.fract() != 0.0 || b.fract() != 0.0 || b - a + 1.0 > MAX_SUM {
+                    return Err(format!("a sum runs over at most {MAX_SUM} whole k"));
+                }
+                let mut inner = scope.to_vec();
+                let mut total = 0.0;
+                let mut i = a;
+                while i <= b {
+                    inner.push((k.clone(), number(i)));
+                    total += args[3].eval(&inner)?;
+                    inner.pop();
+                    i += 1.0;
+                }
+                n(total)
             }
             Expr::Call(name, args) => {
                 let vals = args
                     .iter()
                     .map(|a| a.eval(scope))
                     .collect::<Result<Vec<_>, _>>()?;
-                match (name.as_str(), vals.as_slice()) {
+                n(match (name.as_str(), vals.as_slice()) {
                     ("min", [a, b]) => a.min(*b),
                     ("max", [a, b]) => a.max(*b),
                     ("floor", [a]) => a.floor(),
                     ("ceil", [a]) => a.ceil(),
                     ("round", [a]) => a.round(),
                     ("abs", [a]) => a.abs(),
+                    ("sqrt", [a]) => ops::sqrt(*a),
+                    ("pow", [a, b]) => ops::pow(*a, *b),
+                    ("sin", [a]) => ops::sin(*a),
+                    ("cos", [a]) => ops::cos(*a),
+                    ("tan", [a]) => ops::tan(*a),
+                    ("asin", [a]) => ops::asin(*a),
+                    ("acos", [a]) => ops::acos(*a),
+                    ("atan", [a]) => ops::atan(*a),
+                    ("atan2", [a, b]) => ops::atan2(*a, *b),
+                    ("deg", [a]) => ops::deg(*a),
+                    ("rad", [a]) => ops::rad(*a),
                     _ => return Err(format!("no function `{name}` of {} arguments", vals.len())),
-                }
+                })
             }
-        })
+        }
+    }
+}
+
+fn shown(v: &Value) -> String {
+    let s = v.to_string();
+    if s.len() > 80 {
+        format!(
+            "{}…",
+            &s[..s.char_indices().nth(80).map_or(s.len(), |(i, _)| i)]
+        )
+    } else {
+        s
     }
 }
 
@@ -1562,11 +2836,10 @@ fn tokenize(text: &str) -> Result<Vec<String>, String> {
     let mut i = 0;
     while i < chars.len() {
         let c = chars[i];
+        let next = chars.get(i + 1).copied();
         if c.is_whitespace() {
             i += 1;
-        } else if c.is_ascii_digit()
-            || (c == '.' && chars.get(i + 1).is_some_and(char::is_ascii_digit))
-        {
+        } else if c.is_ascii_digit() || (c == '.' && next.is_some_and(|d| d.is_ascii_digit())) {
             let start = i;
             while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
                 i += 1;
@@ -1578,7 +2851,13 @@ fn tokenize(text: &str) -> Result<Vec<String>, String> {
                 i += 1;
             }
             out.push(chars[start..i].iter().collect());
-        } else if "+-*/%(),".contains(c) {
+        } else if let Some(two) = next
+            .map(|d| format!("{c}{d}"))
+            .filter(|t| ["==", "!=", "<=", ">=", "&&", "||"].contains(&t.as_str()))
+        {
+            out.push(two);
+            i += 2;
+        } else if "+-*/%(),[].?:<>!".contains(c) {
             out.push(c.to_string());
             i += 1;
         } else {
@@ -1604,6 +2883,53 @@ impl Parser {
         t
     }
 
+    fn cond(&mut self) -> Result<Expr, String> {
+        let c = self.or()?;
+        if self.peek() != Some("?") {
+            return Ok(c);
+        }
+        self.at += 1;
+        let a = self.cond()?;
+        if self.take().as_deref() != Some(":") {
+            return Err("missing `:`".into());
+        }
+        let b = self.cond()?;
+        Ok(Expr::Cond(Box::new(c), Box::new(a), Box::new(b)))
+    }
+
+    fn or(&mut self) -> Result<Expr, String> {
+        let mut left = self.and()?;
+        while self.peek() == Some("||") {
+            self.at += 1;
+            left = Expr::Logic("||", Box::new(left), Box::new(self.and()?));
+        }
+        Ok(left)
+    }
+
+    fn and(&mut self) -> Result<Expr, String> {
+        let mut left = self.compare()?;
+        while self.peek() == Some("&&") {
+            self.at += 1;
+            left = Expr::Logic("&&", Box::new(left), Box::new(self.compare()?));
+        }
+        Ok(left)
+    }
+
+    fn compare(&mut self) -> Result<Expr, String> {
+        let left = self.sum()?;
+        let op = match self.peek() {
+            Some("==") => "==",
+            Some("!=") => "!=",
+            Some("<") => "<",
+            Some("<=") => "<=",
+            Some(">") => ">",
+            Some(">=") => ">=",
+            _ => return Ok(left),
+        };
+        self.at += 1;
+        Ok(Expr::Logic(op, Box::new(left), Box::new(self.sum()?)))
+    }
+
     fn sum(&mut self) -> Result<Expr, String> {
         let mut left = self.product()?;
         while let Some(op @ ("+" | "-")) = self.peek() {
@@ -1627,11 +2953,44 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<Expr, String> {
-        if self.peek() == Some("-") {
-            self.at += 1;
-            return Ok(Expr::Neg(Box::new(self.unary()?)));
+        match self.peek() {
+            Some("-") => {
+                self.at += 1;
+                Ok(Expr::Neg(Box::new(self.unary()?)))
+            }
+            Some("!") => {
+                self.at += 1;
+                Ok(Expr::Not(Box::new(self.unary()?)))
+            }
+            _ => self.postfix(),
         }
-        self.atom()
+    }
+
+    /// An atom with its indexes and members, `a[i].b`.
+    fn postfix(&mut self) -> Result<Expr, String> {
+        let mut e = self.atom()?;
+        loop {
+            match self.peek() {
+                Some("[") => {
+                    self.at += 1;
+                    let i = self.cond()?;
+                    if self.take().as_deref() != Some("]") {
+                        return Err("missing `]`".into());
+                    }
+                    e = Expr::Index(Box::new(e), Box::new(i));
+                }
+                Some(".") => {
+                    self.at += 1;
+                    match self.take() {
+                        Some(name) if well_named_member(&name) => {
+                            e = Expr::Member(Box::new(e), name)
+                        }
+                        _ => return Err("a member is a name".into()),
+                    }
+                }
+                _ => return Ok(e),
+            }
+        }
     }
 
     fn atom(&mut self) -> Result<Expr, String> {
@@ -1639,7 +2998,7 @@ impl Parser {
             return Err("expression ends early".into());
         };
         if t == "(" {
-            let e = self.sum()?;
+            let e = self.cond()?;
             if self.take().as_deref() != Some(")") {
                 return Err("missing `)`".into());
             }
@@ -1648,16 +3007,18 @@ impl Parser {
         if let Ok(n) = t.parse::<f64>() {
             return Ok(Expr::Num(n));
         }
-        if t.chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-        {
+        match t.as_str() {
+            "pi" => return Ok(Expr::Num(std::f64::consts::PI)),
+            "tau" => return Ok(Expr::Num(std::f64::consts::TAU)),
+            _ => {}
+        }
+        if well_named_member(&t) {
             if self.peek() == Some("(") {
                 self.at += 1;
                 let mut args = Vec::new();
                 if self.peek() != Some(")") {
                     loop {
-                        args.push(self.sum()?);
+                        args.push(self.cond()?);
                         match self.take().as_deref() {
                             Some(",") => continue,
                             Some(")") => break,
@@ -1675,9 +3036,68 @@ impl Parser {
     }
 }
 
+/// A name token: a letter or `_` first.
+fn well_named_member(t: &str) -> bool {
+    t.chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The pack format's contract entry (#200) holds the keys and lists the pack check reads, so
+    /// the contract diff sees a change to either.
+    #[test]
+    fn the_pack_schema_holds_the_checks_keys_and_lists() {
+        let schema: Value = serde_json::from_str(include_str!(
+            "../../../../packages/contracts/canvas-schemas/pack@1.json"
+        ))
+        .expect("JSON");
+        let keys = |v: &Value| -> Vec<String> {
+            let mut k: Vec<String> = v["properties"]
+                .as_object()
+                .expect("properties")
+                .keys()
+                .cloned()
+                .collect();
+            k.sort();
+            k
+        };
+        let sorted = |l: &[&str]| -> Vec<String> {
+            let mut k: Vec<String> = l.iter().map(|s| s.to_string()).collect();
+            k.sort();
+            k
+        };
+        let list = |v: &Value| -> Vec<String> {
+            v["enum"]
+                .as_array()
+                .expect("enum")
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        };
+        let defs = &schema["$defs"];
+        assert_eq!(keys(&schema), sorted(PACK_KEYS), "a pack's keys");
+        assert_eq!(
+            keys(&defs["recipe"]),
+            sorted(RECIPE_KEYS),
+            "a recipe's keys"
+        );
+        assert_eq!(keys(&defs["step"]), sorted(STEP_KEYS), "a step's keys");
+        assert_eq!(
+            list(&defs["step"]["properties"]["op"]),
+            STEP_OPS,
+            "step ops"
+        );
+        assert_eq!(
+            list(&defs["input"]["properties"]["type"]),
+            INPUT_TYPES,
+            "input types"
+        );
+    }
 
     fn scope() -> Vec<(String, Value)> {
         vec![("n".into(), json!(5)), ("i".into(), json!(2))]
@@ -1933,5 +3353,273 @@ mod tests {
             ..Planted::default()
         };
         assert!(check_pack(&manifest, &registry::core(), planted).is_ok());
+    }
+    // ---- #420: nesting, conditions, repeats along a curve, channels, lights in the budget ----
+
+    fn nest_pack(recipes: Value) -> Value {
+        json!({
+            "id": "test/nest", "name": "nest", "version": "1.0.0", "license": "MIT",
+            "description": "recipes in recipes",
+            "requires": {"core": ">=0.0.0", "modules": {}},
+            "recipes": recipes
+        })
+    }
+
+    fn rect_step() -> Value {
+        json!({"op": "mark", "kind": "test.rect@1", "params": {"w": 10, "h": 10}})
+    }
+
+    fn nested(name: &str, child: &str) -> Value {
+        json!({"id": format!("nest.{name}"), "version": "1.0",
+               "steps": {"inner": {"op": "recipe", "kind": format!("nest.{child}@1")}}})
+    }
+
+    fn nest_doc(kind: &str, extra: Value) -> Value {
+        let mut doc = json!({
+            "format": 1, "id": "doc-1", "profile": "figure", "title": "T", "description": "D",
+            "size": [640, 360], "packs": ["test/nest@1.0.0"],
+            "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+            "items": {"n1": {"id": "n1", "kind": kind, "layer": "main", "name": "n1", "order": "a0",
+                             "at": {"pos": [10, 0, 0]}}}
+        });
+        if let (Some(d), Some(e)) = (doc.as_object_mut(), extra.as_object()) {
+            for (k, v) in e {
+                if k == "items" {
+                    let items = d
+                        .get_mut("items")
+                        .and_then(Value::as_object_mut)
+                        .expect("items");
+                    items.extend(v.as_object().cloned().unwrap_or_default());
+                } else {
+                    d.insert(k.clone(), v.clone());
+                }
+            }
+        }
+        doc
+    }
+
+    fn checked(recipes: Value, kind: &str, extra: Value) -> crate::document::CheckResult {
+        let packs = packs_with(&nest_pack(recipes));
+        super::super::check_packed(&nest_doc(kind, extra), &registry::core(), &packs)
+    }
+
+    #[test]
+    fn a_recipe_step_nests_its_recipe_under_its_own_derived_id() {
+        let result = checked(
+            json!({
+                "nest.leaf@1": {"id": "nest.leaf", "version": "1.0", "steps": {"r": rect_step()}},
+                "nest.box@1": nested("box", "leaf"),
+            }),
+            "nest.box@1",
+            json!({}),
+        );
+        assert!(result.ok, "{:?}", result.issues);
+        let derived: Vec<&String> = result.expansions[0].derived.keys().collect();
+        assert_eq!(derived, ["n1.inner", "n1.inner.r"]);
+        assert_eq!(
+            result.expansions[0].derived["n1.inner"]["kind"],
+            json!("nest.leaf@1")
+        );
+    }
+
+    #[test]
+    fn recipes_nest_four_deep_and_a_fifth_is_refused_naming_its_step() {
+        let chain = |deep: usize| {
+            let mut recipes = Map::new();
+            for k in 1..deep {
+                recipes.insert(
+                    format!("nest.d{k}@1"),
+                    nested(&format!("d{k}"), &format!("d{}", k + 1)),
+                );
+            }
+            recipes.insert(
+                format!("nest.d{deep}@1"),
+                json!({"id": format!("nest.d{deep}"), "version": "1.0", "steps": {"r": rect_step()}}),
+            );
+            Value::Object(recipes)
+        };
+        let four = checked(chain(4), "nest.d1@1", json!({}));
+        assert!(four.ok, "{:?}", four.issues);
+        assert!(four.expansions[0]
+            .derived
+            .contains_key("n1.inner.inner.inner.r"));
+        let five = checked(chain(5), "nest.d1@1", json!({}));
+        assert!(!five.ok);
+        assert!(
+            five.issues.iter().any(|i| i.code == "out_of_range"
+                && i.path == "items/n1.inner.inner.inner/steps/inner/kind"),
+            "{:?}",
+            five.issues
+        );
+        assert!(
+            five.expansions.is_empty(),
+            "a refused nesting writes nothing"
+        );
+    }
+
+    #[test]
+    fn a_recipe_that_nests_itself_is_refused_as_a_cycle() {
+        let result = checked(
+            json!({"nest.a@1": nested("a", "b"), "nest.b@1": nested("b", "a")}),
+            "nest.a@1",
+            json!({}),
+        );
+        assert!(
+            result.issues.iter().any(|i| i.code == "cycle"),
+            "{:?}",
+            result.issues
+        );
+        assert!(result.expansions.is_empty());
+    }
+
+    #[test]
+    fn a_false_condition_leaves_its_step_out_and_one_reading_t_is_refused_at_the_pack_check() {
+        let recipes = |when: &str| {
+            json!({"nest.opt@1": {
+                "id": "nest.opt", "version": "1.0",
+                "inputs": {"lamp": {"type": "bool", "default": false}},
+                "steps": {"base": rect_step(),
+                          "lamp": {"op": "mark", "kind": "test.rect@1", "when": when, "params": {"w": 2, "h": 2}}}
+            }})
+        };
+        let off = checked(recipes("lamp"), "nest.opt@1", json!({}));
+        assert!(off.ok, "{:?}", off.issues);
+        assert_eq!(
+            off.expansions[0].derived.keys().collect::<Vec<_>>(),
+            ["n1.base"]
+        );
+        let lit = json!({"items": {"n1": {"id": "n1", "kind": "nest.opt@1", "layer": "main", "name": "n1",
+                                          "order": "a0", "params": {"lamp": true}}}});
+        let on = checked(recipes("lamp"), "nest.opt@1", lit);
+        assert_eq!(
+            on.expansions[0].derived.keys().collect::<Vec<_>>(),
+            ["n1.base", "n1.lamp"]
+        );
+        let mut packs = Packs::default();
+        let refused = packs
+            .admit(&nest_pack(recipes("t * 2")), &registry::core())
+            .expect_err("a condition reading t is refused");
+        assert!(
+            refused.iter().any(|i| i.path.ends_with("steps/lamp/when")),
+            "{refused:?}"
+        );
+    }
+
+    #[test]
+    fn copies_along_a_curve_stand_at_their_arc_lengths_turned_to_it() {
+        let recipes = |repeat: Value| {
+            json!({"nest.row@1": {
+                "id": "nest.row", "version": "1.0",
+                "inputs": {"rail": {"type": "ID", "default": "rail"}},
+                "steps": {"post": {"op": "mark", "kind": "test.rect@1", "repeat": repeat, "params": {"w": 1, "h": 1}}}
+            }})
+        };
+        let rail = json!({"items": {"rail": {"id": "rail", "kind": "test.rect@1", "layer": "main",
+            "name": "rail", "order": "a1", "params": {"points": [[0, 0, 0], [4, 0, 0], [4, 0, -2]]}}}});
+        let counted = checked(
+            recipes(json!({"along": "rail", "count": 4, "as": "i"})),
+            "nest.row@1",
+            rail.clone(),
+        );
+        let at = |r: &crate::document::CheckResult, k: usize| {
+            r.expansions[0].derived[&format!("n1.post.{k}")]["at"].clone()
+        };
+        // Six metres in four copies: 0, 2, 4 (the corner) and 6, each from the instance's origin.
+        assert_eq!(at(&counted, 0)["pos"], json!([10, 0, 0]));
+        assert_eq!(at(&counted, 1)["pos"], json!([12, 0, 0]));
+        assert_eq!(at(&counted, 3)["pos"], json!([14, 0, -2]));
+        assert_eq!(at(&counted, 1)["rot"], json!([0, 0, 0]));
+        // Past the corner it runs along −z: a quarter turn about +Y.
+        assert_eq!(at(&counted, 3)["rot"], json!([0, 90, 0]));
+        let spaced = checked(
+            recipes(json!({"along": "rail", "spacing": 1.5, "as": "i"})),
+            "nest.row@1",
+            rail,
+        );
+        assert_eq!(
+            spaced.expansions[0].derived.len(),
+            5,
+            "floor(6 / 1.5) + 1 copies"
+        );
+        assert_eq!(
+            spaced.expansions[0].derived["n1.post.3"]["at"]["pos"],
+            json!([14, 0, -0.5])
+        );
+        let mut packs = Packs::default();
+        let refused = packs
+            .admit(
+                &nest_pack(recipes(json!({"along": "rail", "spacing": "t", "as": "i"}))),
+                &registry::core(),
+            )
+            .expect_err("a spacing reading t is refused");
+        assert!(
+            refused
+                .iter()
+                .any(|i| i.path.ends_with("steps/post/repeat/spacing")),
+            "{refused:?}"
+        );
+    }
+
+    #[test]
+    fn a_recipes_channels_join_the_document_targeting_the_items_it_derived() {
+        let result = checked(
+            json!({"nest.grow@1": {
+                "id": "nest.grow", "version": "1.0",
+                "steps": {"bars": {"op": "mark", "kind": "test.rect@1", "repeat": {"count": 2, "as": "i"},
+                                   "params": {"w": 4, "h": 4}}},
+                "channels": {"rise": {"target": "step:bars/params/h", "type": "f32",
+                    "keys": {"k0": {"t": "0s", "value": 4, "interp": "linear"}, "k1": {"t": "1s", "value": 8}}}}
+            }}),
+            "nest.grow@1",
+            json!({}),
+        );
+        assert!(result.ok, "{:?}", result.issues);
+        let channels = &result.lowered["channels"];
+        assert_eq!(
+            channels["n1.rise.0"]["target"],
+            json!("items/n1.bars.0/params/h")
+        );
+        assert_eq!(
+            channels["n1.rise.1"]["target"],
+            json!("items/n1.bars.1/params/h")
+        );
+        let bad = json!({"nest.bad@1": {"id": "nest.bad", "version": "1.0",
+            "steps": {"bars": rect_step()},
+            "channels": {"rise": {"target": "step:nothing/params/h"}}}});
+        let mut packs = Packs::default();
+        let refused = packs
+            .admit(&nest_pack(bad), &registry::core())
+            .expect_err("a channel on no step is refused");
+        assert!(
+            refused
+                .iter()
+                .any(|i| i.path.ends_with("channels/rise/target")),
+            "{refused:?}"
+        );
+    }
+
+    #[test]
+    fn lights_a_recipe_derives_count_against_the_documents_light_cap() {
+        let recipes = json!({"nest.lamps@1": {
+            "id": "nest.lamps", "version": "1.0",
+            "steps": {"lamp": {"op": "item", "kind": "light.sun@1", "repeat": {"count": 3, "as": "i"}}}
+        }});
+        let over = checked(
+            recipes.clone(),
+            "nest.lamps@1",
+            json!({"budget": {"lights": 2}}),
+        );
+        let issue = over.issues.iter().find(|i| i.path == "budget/lights");
+        assert!(
+            issue.is_some_and(|i| i.code == "over_budget" && i.ids.len() == 3),
+            "{:?}",
+            over.issues
+        );
+        let fits = checked(recipes, "nest.lamps@1", json!({"budget": {"lights": 3}}));
+        assert!(
+            !fits.issues.iter().any(|i| i.path == "budget/lights"),
+            "{:?}",
+            fits.issues
+        );
     }
 }

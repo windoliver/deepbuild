@@ -4,6 +4,7 @@
 // script, Makefile or justfile target it runs, and any other file its runs read under the repo's test, fixture and
 // script folders. The code under test is an input for staleness, never an own file.
 import { execFileSync } from 'node:child_process';
+import { gitEnv } from './env.js';
 import { matches } from './glob.js';
 
 export interface ApprovedCheck {
@@ -15,13 +16,16 @@ export type SourcePlant = 'every-read-file-is-own' | 'declared-only' | 'ignores-
 
 /** The folders a read file under is the check's own. */
 const OWN_FOLDERS = new Set(['test', 'tests', '__tests__', 'fixtures', '__fixtures__', '__snapshots__', 'scripts', 'spec']);
-const gitIn = (repo: string, args: string[]): string => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd: repo, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+const gitIn = (repo: string, args: string[]): string => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd: repo, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: gitEnv() });
 const show = (repo: string, rev: string, path: string): string | null => {
   try { return gitIn(repo, ['show', `${rev}:${path}`]); } catch { return null; }
 };
 
+/** Whether a file a check's run read is its own: one under the repo's test, fixture and script folders. */
+export const ownRead = (path: string): boolean => path.split('/').slice(0, -1).some((part) => OWN_FOLDERS.has(part));
+
 /** What a script target runs, from a file's text: a package.json script, or a Makefile or justfile recipe. */
-export function targetBody(file: string, text: string | null, target: string): string | null {
+function targetBody(file: string, text: string | null, target: string): string | null {
   if (text === null) return null;
   if (file.endsWith('package.json')) {
     try { return (JSON.parse(text) as { scripts?: Record<string, string> }).scripts?.[target] ?? null; } catch { return null; }
@@ -43,7 +47,7 @@ export function checkSource(check: ApprovedCheck, diff: { repo: string; from: st
   const own = (path: string): boolean => {
     if (declared.some((g) => matches(g, path))) return true;
     if (plant === 'declared-only' || !reads.has(path)) return false;
-    return plant === 'every-read-file-is-own' || path.split('/').slice(0, -1).some((part) => OWN_FOLDERS.has(part));
+    return plant === 'every-read-file-is-own' || ownRead(path);
   };
   if (changed.some(own)) return 'own';
   const script = d.script;

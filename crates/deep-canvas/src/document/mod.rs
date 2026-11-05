@@ -18,6 +18,7 @@
 
 mod apply;
 mod check;
+mod close;
 mod merge;
 mod order;
 pub mod packs;
@@ -34,14 +35,14 @@ pub use apply::{
     Patched, Refused, Writing,
 };
 pub use check::{
-    check, check_costed, check_in, check_packed, check_with, duration, frame_rate_of, recheck,
-    recheck_skipping_referrers, CheckResult,
+    check, check_costed, check_in, check_packed, check_with, duration, frame_rate_of,
+    literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
 };
 pub use merge::{merge, Merged};
 pub use order::key_between;
 pub use packs::{Expansion, Pack, PackId, Packs, Planted as PackPlanted};
 pub use requires::{derived_kinds, write_required_kinds};
-pub use rules::STATUS_ROLE;
+pub use rules::{shown_inside, story_issues, STATUS_ROLE};
 pub use shape::{canonical, canonical_in, extends_by_default, Canonical, DocShape};
 
 /// The check kind every issue here is raised by.
@@ -76,6 +77,7 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "constraints",
     "clips",
     "placements",
+    "time_remaps",
     "transitions",
     "shots",
     "markers",
@@ -104,6 +106,7 @@ pub const ID_MAPS: &[&str] = &[
     "constraints",
     "clips",
     "placements",
+    "time_remaps",
     "transitions",
     "shots",
     "markers",
@@ -129,6 +132,19 @@ pub const ITEM_KEYS: &[&str] = &[
     "pickable",
     "order",
     "broken_out",
+    // A solid's modifier stack (Modifier; #411), checked by the canvas module whose kind it is.
+    "modifiers",
+    // An object's fields (Object; #420): its materials, constraints, shadows, level of detail,
+    // and in a figure its tone, halo and relations.
+    "materials",
+    "material",
+    "constraints",
+    "cast_shadow",
+    "receive_shadow",
+    "lod",
+    "tone",
+    "halo",
+    "relations",
 ];
 
 /// The item fields a path or an op may reach besides `params` and `at`.
@@ -143,6 +159,11 @@ pub const ITEM_OWN_FIELDS: &[&str] = &[
     "pickable",
     "order",
     "broken_out",
+    "material",
+    "cast_shadow",
+    "receive_shadow",
+    "tone",
+    "halo",
 ];
 
 /// The item fields `unset` may remove (every one with a default).
@@ -172,6 +193,12 @@ pub const ADJUST_FIELDS: &[&str] = &[
 /// The `at` members that are vectors of three.
 pub const AT_VECTORS: &[&str] = &["pos", "rot", "scale", "pivot"];
 
+/// The `at` members that place an item by relation (Item and kind: relations).
+pub const AT_RELATIONS: &[&str] = &["place", "align"];
+
+/// The nine box points every 2D item has, read-only (closed: determinism).
+pub const BOX_POINTS: &[&str] = &["n", "ne", "e", "se", "s", "sw", "w", "nw", "c"];
+
 /// The most characters a description has.
 pub const MAX_DESCRIPTION: usize = 400;
 
@@ -193,6 +220,9 @@ pub struct Issue {
     /// The last good revision, checked by the same rules, had it too: show-time admission
     /// returns it marked carried and never refuses for it (Revision).
     pub carried: bool,
+    /// On `unknown_kind` and `unknown_field`: at most three close names, a rename or retirement
+    /// record's first (#412).
+    pub close: Vec<Value>,
 }
 
 impl Issue {
@@ -209,6 +239,7 @@ impl Issue {
             forms: Vec::new(),
             fix_ops: None,
             carried: false,
+            close: Vec::new(),
         }
     }
 
@@ -233,11 +264,28 @@ impl Issue {
         if self.code == "bad_unit" {
             out.insert("forms".into(), json!(self.forms));
         }
+        // The column view's issue names its reader, column, row, value and step (#397).
+        if self.code == "column.out_of_range" {
+            if let Value::Object(fields) = &self.actual {
+                for (k, v) in fields {
+                    out.entry(k.clone()).or_insert_with(|| v.clone());
+                }
+            }
+        }
+        // A pack kind's rule names its own code, `<pack>.<rule>` (#490).
+        if self.code == packs::KIND_RULE {
+            if let Some(rule) = self.actual.get("rule") {
+                out.insert("code".into(), rule.clone());
+            }
+        }
         if let Some(ops) = &self.fix_ops {
             out.insert("fix_ops".into(), json!(ops));
         }
         if self.carried {
             out.insert("carried".into(), json!(true));
+        }
+        if !self.close.is_empty() {
+            out.insert("close".into(), json!(self.close));
         }
         Value::Object(out)
     }
@@ -275,6 +323,8 @@ pub struct Notice {
     /// On `deprecated`: the kind that replaces it (`family.name@major`) and the release since
     /// which it is deprecated.
     pub replaced_by: Option<(String, String)>,
+    /// On `unknown_kind` and `unknown_field`: at most three close names (#412).
+    pub close: Vec<Value>,
 }
 
 impl Notice {
@@ -294,6 +344,9 @@ impl Notice {
         if let Some((replaced_by, since)) = &self.replaced_by {
             out.insert("replaced_by".into(), json!(replaced_by));
             out.insert("deprecated_since".into(), json!(since));
+        }
+        if !self.close.is_empty() {
+            out.insert("close".into(), json!(self.close));
         }
         Value::Object(out)
     }
@@ -409,6 +462,7 @@ pub fn fix_for(code: &str) -> String {
         "unknown_kind" => "Register the kind, or remove the item.",
         "kind_too_new" => "Save the item at a major this build knows.",
         "module_missing" => "Open the document in a build with the module, or remove the field.",
+        "column.out_of_range" => "Read the column as a type that holds the value, or fix the source's value.",
         "pack_missing" => "Install the pack at that version, or open the document where it is installed; never draw it with another version.",
         "derived_item" => "Patch the instance's inputs, or break the item out first with `break_out {instance, item}`.",
         "out_of_range" => "Give the field a value of its type inside its range.",
@@ -529,7 +583,9 @@ mod tests {
 
     /// The patch fuzzer's fifth law: after each seeded patch (a create, a set of a param in and out
     /// of range, a move under another item or under itself, a delete that leaves children
-    /// behind), the incremental re-check gives the full check's issues, by code, IDs and path.
+    /// behind), the incremental re-check gives the full check's issues, by code, IDs and path;
+    /// and so does the one that finds what a patch reaches by the referrers the last revision
+    /// left, followed to each revision by the items it changed (#896).
     #[test]
     fn the_incremental_recheck_gives_the_full_checks_issues() {
         let mut doc = base();
@@ -549,8 +605,8 @@ mod tests {
                 .collect()
         };
         let mut issues = check(&doc).issues;
+        let mut referrers = check::Referrers::of(&doc);
         let mut seed: u64 = 96;
-        let knows = |_: &str| true;
         for n in 0..300 {
             seed = seed
                 .wrapping_mul(6364136223846793005)
@@ -568,14 +624,7 @@ mod tests {
                 }
             };
             let patch = json!({"patch": "01J9Z00000000000000000AC05", "doc": "doc-1", "base": 0, "reason": "law 5", "ops": [op]});
-            let writing = Writing {
-                layer: "main",
-                writer: "agent-a",
-                you: false,
-                base: None,
-                knows: &knows,
-                packs: None,
-            };
+            let writing = agent_a();
             let was = doc.clone();
             let Ok(patched) = apply_ops(&mut doc, &patch, "patch", "doc-1", &writing) else {
                 assert_eq!(
@@ -590,6 +639,22 @@ mod tests {
                 recheck(&doc, &issues, &changed, &crate::registry::core()).expect("items only");
             let full = check(&doc).issues;
             assert_eq!(key(&incremental), key(&full), "patch {n}: {op}");
+            let indexed = recheck_with(
+                &doc,
+                &issues,
+                &changed,
+                &crate::registry::core(),
+                &referrers,
+            )
+            .expect("items only");
+            assert_eq!(
+                key(&indexed),
+                key(&full),
+                "patch {n}, by its referrers: {op}"
+            );
+            for (id, was) in &patched.before {
+                referrers.update(id, was.as_ref(), doc["items"].get(id));
+            }
             // Taken back out, the document is what it was, byte for byte.
             let mut back = doc.clone();
             rollback(&mut back, &patched);
@@ -603,20 +668,24 @@ mod tests {
         assert!(!issues.is_empty(), "the walk left some issue to compare");
     }
 
+    /// Writes as `agent-a` on `main`, every kind known.
+    fn agent_a() -> Writing<'static> {
+        Writing {
+            layer: "main",
+            writer: "agent-a",
+            you: false,
+            base: None,
+            knows: &|_| true,
+            packs: None,
+        }
+    }
+
     /// One op as `agent-a`, applied through `apply_ops`, on `doc`.
     fn op_on(doc: &Value, op: Value) -> Result<Value, Refused> {
         let mut out = doc.clone();
         let patch = json!({"patch": "01J9Z00000000000000000AC96", "doc": "doc-1", "base": 0,
                            "reason": "ops", "ops": [op]});
-        let knows = |_: &str| true;
-        let writing = Writing {
-            layer: "main",
-            writer: "agent-a",
-            you: false,
-            base: None,
-            knows: &knows,
-            packs: None,
-        };
+        let writing = agent_a();
         apply_ops(&mut out, &patch, "patch", "doc-1", &writing).map(|_| out)
     }
 
@@ -674,48 +743,26 @@ mod tests {
     #[test]
     fn a_coalesce_key_is_a_string_and_no_other_patch_field_is_read() {
         let mut out = base();
-        let knows = |_: &str| true;
-        let writing = Writing {
-            layer: "main",
-            writer: "agent-a",
-            you: false,
-            base: None,
-            knows: &knows,
-            packs: None,
-        };
-        let patch = |extra: Value| {
+        let mut apply = |extra: Value| {
             let mut p = json!({"patch": "01J9Z00000000000000000AC96", "doc": "doc-1", "base": 0, "reason": "r", "ops": []});
             for (k, v) in extra.as_object().unwrap() {
                 p[k] = v.clone();
             }
-            p
+            apply_ops(&mut out, &p, "patch", "doc-1", &agent_a())
         };
-        assert!(apply_ops(
-            &mut out,
-            &patch(json!({"coalesce_key": "drag"})),
-            "patch",
-            "doc-1",
-            &writing
-        )
-        .is_ok());
-        let bad = apply_ops(
-            &mut out,
-            &patch(json!({"coalesce_key": 3})),
-            "patch",
-            "doc-1",
-            &writing,
-        )
-        .unwrap_err();
+        assert!(apply(json!({"coalesce_key": "drag"})).is_ok());
+        let bad = apply(json!({"coalesce_key": 3})).unwrap_err();
         assert_eq!(bad.code, "out_of_range");
-        let unknown = apply_ops(
-            &mut out,
-            &patch(json!({"preview": true})),
-            "patch",
-            "doc-1",
-            &writing,
-        )
-        .unwrap_err();
+        let unknown = apply(json!({"preview": true})).unwrap_err();
         assert_eq!(unknown.code, "unknown_field");
+    }
+
+    /// Whether the check found an issue of `code` at `path`.
+    fn found(result: &CheckResult, code: &str, path: &str) -> bool {
+        result
+            .issues
+            .iter()
+            .any(|i| i.code == code && i.path == path)
     }
 
     /// The smallest document the check passes: every required envelope field, one layer, no item.
@@ -765,10 +812,7 @@ mod tests {
             let result = check(&doc);
             assert!(!result.ok, "{key} absent");
             assert!(
-                result
-                    .issues
-                    .iter()
-                    .any(|i| i.code == "out_of_range" && i.path == key),
+                found(&result, "out_of_range", key),
                 "{key}: {:?}",
                 result.issues
             );
@@ -828,33 +872,17 @@ mod tests {
             refused_at(json!({"ops": []})),
             ("out_of_range", "patches/0/patch".to_string())
         );
-        let mut p = patch(json!([]));
-        p["patch"] = json!("not-a-ulid");
-        assert_eq!(refused_at(p), ("bad_id", "patches/0/patch".to_string()));
-        let mut p = patch(json!([]));
-        p["doc"] = json!("doc-2");
-        assert_eq!(
-            refused_at(p),
-            ("ref_unresolved", "patches/0/doc".to_string())
-        );
-        let mut p = patch(json!([]));
-        p["base"] = json!(-1);
-        assert_eq!(
-            refused_at(p),
-            ("out_of_range", "patches/0/base".to_string())
-        );
-        let mut p = patch(json!([]));
-        p["reason"] = json!(7);
-        assert_eq!(
-            refused_at(p),
-            ("out_of_range", "patches/0/reason".to_string())
-        );
-        let mut p = patch(json!([]));
-        p["lease"] = json!("x");
-        assert_eq!(
-            refused_at(p),
-            ("unknown_field", "patches/0/lease".to_string())
-        );
+        for (field, value, code, path) in [
+            ("patch", json!("not-a-ulid"), "bad_id", "patches/0/patch"),
+            ("doc", json!("doc-2"), "ref_unresolved", "patches/0/doc"),
+            ("base", json!(-1), "out_of_range", "patches/0/base"),
+            ("reason", json!(7), "out_of_range", "patches/0/reason"),
+            ("lease", json!("x"), "unknown_field", "patches/0/lease"),
+        ] {
+            let mut p = patch(json!([]));
+            p[field] = value;
+            assert_eq!(refused_at(p), (code, path.to_string()), "{field}");
+        }
         assert_eq!(
             refused_at(json!([])),
             ("out_of_range", "patches/0".to_string())
@@ -967,10 +995,7 @@ mod tests {
             ]
         );
         assert!(
-            result
-                .issues
-                .iter()
-                .any(|i| i.code == "out_of_range" && i.path == "controls"),
+            found(&result, "out_of_range", "controls"),
             "{:?}",
             result.issues
         );
@@ -1161,59 +1186,48 @@ mod tests {
     fn requires_is_a_closed_object_of_core_kinds_modules_and_preview() {
         // canvas primitives: `requires: {core: semver, kinds: [family.name@major.minor],
         // modules: {canvas module → semver range}, preview: [name@major]}`.
-        let issue = |doc: &Value, code: &str, path: &str| {
-            let result = check(doc);
-            assert!(!result.ok, "{path}");
-            assert!(
-                result
-                    .issues
-                    .iter()
-                    .any(|i| i.code == code && i.path == path),
-                "{path}: {:?}",
-                result.issues
-            );
-        };
         let with = |requires: Value| {
             let mut doc = base();
             doc["requires"] = requires;
             doc
         };
-        issue(&with(json!(7)), "out_of_range", "requires");
+        let issue = |requires: Value, code: &str, path: &str| {
+            let result = check(&with(requires));
+            assert!(!result.ok, "{path}");
+            assert!(found(&result, code, path), "{path}: {:?}", result.issues);
+        };
+        issue(json!(7), "out_of_range", "requires");
         issue(
-            &with(json!({"kinds": [], "extra": 1})),
+            json!({"kinds": [], "extra": 1}),
             "unknown_field",
             "requires/extra",
         );
-        issue(&with(json!({"core": 1})), "out_of_range", "requires/core");
+        issue(json!({"core": 1}), "out_of_range", "requires/core");
+        issue(json!({"modules": []}), "out_of_range", "requires/modules");
         issue(
-            &with(json!({"modules": []})),
-            "out_of_range",
-            "requires/modules",
-        );
-        issue(
-            &with(json!({"modules": {"grid": 1}})),
+            json!({"modules": {"grid": 1}}),
             "out_of_range",
             "requires/modules/grid",
         );
         issue(
-            &with(json!({"preview": "x@1"})),
+            json!({"preview": "x@1"}),
             "out_of_range",
             "requires/preview",
         );
         issue(
-            &with(json!({"preview": [1]})),
+            json!({"preview": [1]}),
             "out_of_range",
             "requires/preview/0",
         );
         // A required kind's name follows the kind grammar too; a well-formed one this build lacks
         // is fine, since it binds only its own kind's items.
         issue(
-            &with(json!({"kinds": ["bad name.x@1.0"]})),
+            json!({"kinds": ["bad name.x@1.0"]}),
             "out_of_range",
             "requires/kinds/0",
         );
         issue(
-            &with(json!({"kinds": ["a..b@1.0"]})),
+            json!({"kinds": ["a..b@1.0"]}),
             "out_of_range",
             "requires/kinds/0",
         );
@@ -1221,7 +1235,7 @@ mod tests {
         // R1's canvas is canvas modules (#388): a build holds text or marks2d only when it
         // registers them, and the core's own set registers none.
         issue(
-            &with(json!({"modules": {"marks2d": "^1"}})),
+            json!({"modules": {"marks2d": "^1"}}),
             "module_missing",
             "requires/modules/marks2d",
         );
@@ -1235,12 +1249,12 @@ mod tests {
         // A required canvas module this build lacks refuses the document, naming it (#305:
         // Registry and seal), where #389's slice only read the range's type.
         issue(
-            &with(json!({"modules": {"grid": "^1"}})),
+            json!({"modules": {"grid": "^1"}}),
             "module_missing",
             "requires/modules/grid",
         );
         issue(
-            &with(json!({"modules": {"grid": 1}})),
+            json!({"modules": {"grid": 1}}),
             "out_of_range",
             "requires/modules/grid",
         );
@@ -1295,10 +1309,7 @@ mod tests {
             let result = check(&doc);
             assert!(!result.ok, "params absent or not an object");
             assert!(
-                result
-                    .issues
-                    .iter()
-                    .any(|i| i.code == "out_of_range" && i.path == "items/cube/params"),
+                found(&result, "out_of_range", "items/cube/params"),
                 "{:?}",
                 result.issues
             );
@@ -1324,10 +1335,7 @@ mod tests {
         assert!(!result.ok);
         for path in ["size", "items/slab/at/pos", "items/slab/at/shear"] {
             assert!(
-                result
-                    .issues
-                    .iter()
-                    .any(|i| i.code == "out_of_range" && i.path == path),
+                found(&result, "out_of_range", path),
                 "{path}: {:?}",
                 result.issues
             );
@@ -1337,10 +1345,7 @@ mod tests {
         let result = check(&doc);
         assert!(!result.ok);
         assert!(
-            result
-                .issues
-                .iter()
-                .any(|i| i.code == "out_of_range" && i.path == "items/slab/params/width"),
+            found(&result, "out_of_range", "items/slab/params/width"),
             "{:?}",
             result.issues
         );
@@ -1399,10 +1404,7 @@ mod tests {
             let result = check(&doc);
             assert!(!result.ok, "{id:?}");
             assert!(
-                result
-                    .issues
-                    .iter()
-                    .any(|i| i.code == "bad_id" && i.path == "id"),
+                found(&result, "bad_id", "id"),
                 "{id:?}: {:?}",
                 result.issues
             );
@@ -1427,10 +1429,7 @@ mod tests {
             assert!(!result.ok, "{field}: {value}");
             let path = format!("layers/main/{field}");
             assert!(
-                result
-                    .issues
-                    .iter()
-                    .any(|i| i.code == "out_of_range" && i.path == path),
+                found(&result, "out_of_range", &path),
                 "{field}: {:?}",
                 result.issues
             );
@@ -1461,24 +1460,26 @@ mod tests {
         assert_eq!(result.issues[0].path, "profile");
     }
 
+    /// The code of the issue at a channel on `doc` targeting `target`, if any.
+    fn target_code(doc: &Value, target: &str) -> Option<&'static str> {
+        let mut doc = doc.clone();
+        doc["channels"] = json!({"c": {"target": target}});
+        let result = check(&doc);
+        result
+            .issues
+            .iter()
+            .find(|i| i.path == "channels/c/target")
+            .map(|i| i.code)
+    }
+
     #[test]
     fn a_path_into_another_section_resolves_only_where_a_value_is() {
         // No kind in this build gives `controls` a schema, so a field step there must reach a
         // value in the document itself: a key of an object or an index of a list.
         let mut doc = base();
         doc["controls"] = json!({"slider": {"role": "slider", "value": 1, "range": [0, 10]}});
-        let refused = |target: &str| {
-            let mut doc = doc.clone();
-            doc["channels"] = json!({"c": {"target": target}});
-            let result = check(&doc);
-            result
-                .issues
-                .iter()
-                .find(|i| i.path == "channels/c/target")
-                .map(|i| i.code)
-        };
         for target in ["controls/slider/value", "controls/slider/range/1"] {
-            assert_eq!(refused(target), None, "{target}");
+            assert_eq!(target_code(&doc, target), None, "{target}");
         }
         for target in [
             "controls/slider/nonexistent",
@@ -1486,7 +1487,11 @@ mod tests {
             "controls/slider/range/5",
             "controls/slider/range/x",
         ] {
-            assert_eq!(refused(target), Some("ref_unresolved"), "{target}");
+            assert_eq!(
+                target_code(&doc, target),
+                Some("ref_unresolved"),
+                "{target}"
+            );
         }
     }
 
@@ -1498,21 +1503,11 @@ mod tests {
         let mut cam = item("cam", "main", Value::Null);
         cam["params"] = json!({"orbit": {"azimuth": 0, "elevation": 35}, "target": [0, 0.5, 0]});
         doc["items"] = json!({"cam": cam});
-        let refused = |target: &str| {
-            let mut doc = doc.clone();
-            doc["channels"] = json!({"c": {"target": target}});
-            let result = check(&doc);
-            result
-                .issues
-                .iter()
-                .find(|i| i.path == "channels/c/target")
-                .map(|i| i.code)
-        };
         for target in [
             "items/cam/params/orbit/azimuth",
             "items/cam/params/target/1",
         ] {
-            assert_eq!(refused(target), None, "{target}");
+            assert_eq!(target_code(&doc, target), None, "{target}");
         }
         for target in [
             "items/cam/params/orbit/roll",
@@ -1520,7 +1515,11 @@ mod tests {
             "items/cam/params/target/3",
             "items/cam/params/fov/x",
         ] {
-            assert_eq!(refused(target), Some("ref_unresolved"), "{target}");
+            assert_eq!(
+                target_code(&doc, target),
+                Some("ref_unresolved"),
+                "{target}"
+            );
         }
     }
 
@@ -1541,6 +1540,7 @@ mod tests {
             what: String::new(),
             migration: None,
             replaced_by: None,
+            close: Vec::new(),
         };
         let mut forward = vec![notice("items/x/a"), notice("items/x/b")];
         let mut backward = vec![notice("items/x/b"), notice("items/x/a")];

@@ -1,6 +1,6 @@
 // What the blind suite leaves open, on real pi with the real package and hub: only the model is scripted. Without
 // DEEP_PI_CLI (pi's dist/cli.js) these don't run; the #40 suite, which blocks on it, stands for the package then.
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -349,4 +349,60 @@ describe.skipIf(!process.env.DEEP_PI_CLI)('the pi package', () => {
     expect((await outcomesOf(w, handle)).map((e) => e.data.outcome)).toEqual(['delivered']);
     expect(w.pi.userMessagesWith(label)).toHaveLength(1);
   }, 180_000);
+
+  it('an answer another extension rewrites goes once, and is reported once', async () => {
+    // pi applies an input transform to an extension's prompt too, so the text the model gets isn't the text sent.
+    const question = `Which ${word()} river?`;
+    const tmp = tempDir();
+    const [home, cwd] = [join(tmp, 'h'), join(tmp, 'w')];
+    mkdirSync(join(home, '.pi/agent/extensions'), { recursive: true });
+    mkdirSync(cwd);
+    writeFileSync(join(home, '.pi/agent/extensions/shout.ts'), "export default function shout(pi) { pi.on('input', (event) => ({ action: 'transform', text: event.text.toUpperCase() })); }\n");
+    const hub = await startHub(home);
+    const client = await Client.open(hub);
+    const pi = await Pi.start(home, cwd, { steps: [askStep(question, 'Nile'), { echo: true }, { text: 'done' }, { text: 'done' }, { text: 'done' }] });
+    const w = { tmp, home, cwd, hub, client, pi };
+    await waitFor(async () => (await client.events()).some((e) => e.kind === 'session.start' && e.session === pi.session), 15_000, 'session.start');
+    const handle = await pendingAsk(w, question);
+    await answer(w, handle);
+    await w.pi.until('agent_settled', 2, 30_000);
+    await sleep(3000);
+    expect(w.pi.count('agent_start'), 'one run for the answer, not one per settle').toBe(2);
+    expect((await outcomesOf(w, handle)).map((e) => e.data.outcome)).toEqual(['delivered']);
+    expect(w.pi.userMessagesWith('NILE')).toHaveLength(1);
+    await pi.stop();
+  }, 180_000);
+
+  it('a line from the hub that isn\'t JSON leaves pi running, and later hooks still flow', async () => {
+    const tmp = tempDir();
+    const [home, cwd] = [join(tmp, 'h'), join(tmp, 'w')];
+    mkdirSync(join(home, '.deepbuild'), { recursive: true });
+    mkdirSync(cwd);
+    const events: string[] = [];
+    const server = net.createServer((sock) => {
+      sock.on('error', () => undefined);
+      sock.write('{"v":1,"hub":true}\n');
+      let buffer = '';
+      sock.setEncoding('utf8').on('data', (chunk: string) => {
+        buffer += chunk;
+        for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
+          const m = JSON.parse(buffer.slice(0, i)) as { hello?: string; event?: string; id?: string };
+          buffer = buffer.slice(i + 1);
+          if (m.hello) sock.write('not a line of the protocol\n{"v":1,"role":"mcp"}\n');
+          else if (m.event) {
+            events.push(m.event);
+            sock.write(`${m.event === 'agent_start' ? 'not a line of the protocol\n' : ''}{"v":1,"ack":true}\n{"v":1,"exit":0,"stderr":"","stdout":""}\n`);
+          } else sock.write(`${JSON.stringify({ v: 1, id: m.id, result: { ok: true } })}\n`);
+        }
+      });
+    });
+    await new Promise<void>((done) => server.listen(join(home, '.deepbuild', 'hub.sock'), done));
+    const pi = await Pi.start(home, cwd, { steps: [{ tools: [{ name: 'deep_status', arguments: {} }] }, { text: 'ok' }] });
+    await pi.call({ type: 'prompt', message: 'go' });
+    await pi.until('agent_settled', 1, 20_000);
+    expect(pi.child.exitCode, 'pi is still running').toBeNull();
+    expect(events).toContain('agent_settled');
+    server.close();
+    await pi.stop();
+  }, 120_000);
 });

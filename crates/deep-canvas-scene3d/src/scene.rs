@@ -8,18 +8,22 @@
 //! Box, cylinder and sphere are unit meshes, 1 m across and centred on the item's origin, scaled
 //! by `size`; a cylinder's axis is +Y.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::ops::Index;
+use std::sync::Arc;
 
 use deep_canvas::camera::{screen_basis, Offsets, Rig, Spec, Vec3};
 use deep_canvas::kinds::with_defaults;
 use deep_canvas::ops::{cos, rad, sin, sqrt, tan};
 use deep_canvas_motion::eval;
-use deep_canvas_motion::program::Program;
+use deep_canvas_motion::program::{Program, State, TRANSFORM};
 use deep_text::Role;
 use serde_json::{Map, Value};
 
 pub use crate::label::Labels;
 use crate::label::{AtlasPage, Glyph, WORLD_EM_PX};
+use crate::light;
+pub use crate::light::{Light, Material};
 use crate::look::Look3;
 
 /// Why a document can't be drawn: a closed-list code and the path it names.
@@ -51,7 +55,7 @@ pub const OVERLAY: &str = "overlay.frame@1";
 
 /// Whether an item of `kind` (its text, `family.name@major`) is one of scene3d's marks.
 pub fn is_3d(kind: &str) -> bool {
-    KINDS.contains(&kind)
+    KINDS.contains(&kind) || crate::builders::KINDS.contains(&kind)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -59,6 +63,8 @@ pub enum Shape {
     Box,
     Cylinder,
     Sphere,
+    /// A builder's mesh (#420), by the hash of its bytes: the solid carries it.
+    Built(u64),
 }
 
 /// An object: one instance record, a 3×4 world matrix (rows), its paint and its item.
@@ -68,6 +74,105 @@ pub struct Solid {
     pub shape: Shape,
     pub model: [[f64; 4]; 3],
     pub color: [u8; 3],
+    /// Its stroke slot: an outline around the object (#386).
+    pub stroke: Option<Stroke>,
+    /// A builder's mesh in the item's own space, which `model` places (#420).
+    pub mesh: Option<Arc<crate::geom::Mesh>>,
+    /// Object: `cast_shadow` and `receive_shadow`, both true unless the item says not.
+    pub cast_shadow: bool,
+    pub receive_shadow: bool,
+    /// The `material@1` it names (#421), which shades it under the lights in place of `color`.
+    pub material: Option<Material>,
+    /// Object: see-through order's `sort_bias`, in m along the view axis (#421).
+    pub sort_bias: f64,
+    /// Its coverage (#418): its material's alpha (1 opaque, 0 or 1 under a mask) times the item's
+    /// `adjust.opacity`. Below 1 it draws see-through and writes no ambient-occlusion depth.
+    pub alpha: f64,
+    /// Its material's emission × emission_strength, linear RGB.
+    pub emission: [f64; 3],
+    /// Its material's texture maps (#423), which the renderer samples from the scene's `texels`.
+    pub maps: Option<Arc<crate::light::Maps>>,
+    /// Its level of detail (#425): bands by projected size and its mesh's levels by error, which
+    /// [`crate::lod::resolve`] turns into what a view draws.
+    pub lod: Option<Arc<crate::lod::Lod>>,
+    /// Inside a band margin, the mask its band's draw keeps pixels by (#425).
+    pub mask: Option<crate::lod::Mask>,
+    /// It draws only in the shadow passes: a level the light's projection chose (#425).
+    pub cast_only: bool,
+    /// How far a cast-only level is drawn inside its surface, along its normals, in its own m.
+    pub inset: f64,
+    /// The material operator its material names (#429), which shades it per pixel.
+    pub op: Option<SolidOp>,
+    /// Whether the scene's cutaway reaches it (#424).
+    pub cut: bool,
+    /// Object: see-through order's `resolve: per_pixel` (#424): its fragments join per-pixel
+    /// lists and composite by depth per pixel, back faces included.
+    pub per_pixel: bool,
+    /// Its item's adjust (#424): its colour adjustments apply to its lit color before fog, and
+    /// an opacity below 1 draws it see-through after a depth pass of its own; `None` at the
+    /// identity.
+    pub adjust: Option<Adjust3>,
+}
+
+/// An item's adjust as a 3D item takes it in shading (Object: adjust; Item and kind: adjust):
+/// its tint in linear RGB.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Adjust3 {
+    pub opacity: f64,
+    pub exposure: f64,
+    pub contrast: f64,
+    pub gamma: f64,
+    pub hue: f64,
+    pub saturation: f64,
+    pub brightness: f64,
+    pub tint: Option<[f64; 3]>,
+    pub invert: bool,
+}
+
+impl Adjust3 {
+    /// Whether it changes no color (its opacity aside).
+    pub fn colors(&self) -> bool {
+        self.exposure != 0.0
+            || self.contrast != 1.0
+            || self.gamma != 1.0
+            || self.hue != 0.0
+            || self.saturation != 1.0
+            || self.brightness != 1.0
+            || self.tint.is_some()
+            || self.invert
+    }
+}
+
+/// A material operator on one solid (#429): the `gpu.material@1` item as evaluated, and the
+/// solid's own time, which its `t@1` reads: inside a time-remapped recipe instance, child time.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SolidOp {
+    pub id: String,
+    pub item: Arc<Value>,
+    /// Seconds from the document's start, on the item's own clock.
+    pub t: f64,
+    /// The document's seed, which with the solid's ID keys its `seed@1`.
+    pub doc_seed: u64,
+}
+
+impl Solid {
+    /// Where it reaches in world space: a builder's mesh's vertices through its model, or the
+    /// unit shape's eight corners (#1162).
+    pub fn points(&self) -> Vec<Vec3> {
+        match &self.mesh {
+            Some(m) => m.positions.iter().map(|p| apply(&self.model, *p)).collect(),
+            None => corners(&self.model),
+        }
+    }
+}
+
+/// An object's outline: its silhouette drawn `width` device px wide in `color`, which a status
+/// binding draws `exact` (unlit, after tone mapping).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Stroke {
+    pub color: [u8; 3],
+    pub width: f64,
+    pub exact: bool,
 }
 
 /// One segment of a line, its ends' widths in its size space.
@@ -86,6 +191,41 @@ pub struct Line {
     /// Widths in m (`size_space: world`), else in px.
     pub world: bool,
     pub color: [u8; 3],
+    /// What a mesh-edge line draws the edges of (Marks in 3D: mesh edges; #420).
+    pub edges: Option<Arc<EdgesOf>>,
+    /// Drawn over whatever is in front of it: the planted `edges_skip_depth`'s line.
+    pub over: bool,
+}
+
+/// A mesh-edge line's mesh, its kind and the matrix that places the mesh.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EdgesOf {
+    pub mesh: Arc<crate::geom::Mesh>,
+    pub kind: crate::geom::EdgeKind,
+    pub model: Affine3,
+    pub width: f64,
+}
+
+impl EdgesOf {
+    /// The segments it draws, on welded positions unless `welded` is false (the planted
+    /// `edges_unwelded` reader).
+    pub fn segments(&self, welded: bool) -> Vec<Segment> {
+        let edges = if welded {
+            self.mesh.edge_list(self.kind, None)
+        } else {
+            self.mesh
+                .edges(self.kind == crate::geom::EdgeKind::All, false)
+        };
+        edges
+            .into_iter()
+            .map(|[a, b]| Segment {
+                a: apply(&self.model, a),
+                b: apply(&self.model, b),
+                wa: self.width,
+                wb: self.width,
+            })
+            .collect()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -142,6 +282,28 @@ pub struct Layer3 {
     pub lines: Vec<Line>,
     pub points: Vec<Point>,
     pub labels: Vec<Label>,
+    /// Its soft cloud sprites (#422; Puff `puff@1`).
+    pub puffs: Vec<Puff>,
+}
+
+/// A soft cloud sprite at t (#422; Puff `puff@1`): where it is in world m, its size, and how the
+/// key sun and the sky light it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Puff {
+    pub id: String,
+    pub pos: Vec3,
+    pub radius: f64,
+    pub aspect: f64,
+    pub density: f64,
+    pub bright: f64,
+    pub seed: u32,
+    /// Lit by the key sun; by the sky's ambient.
+    pub sun: bool,
+    pub ambient: bool,
+    pub phase: f64,
+    pub shade: f64,
+    /// Inside this distance of the camera it fades out, in m.
+    pub near_fade: f64,
 }
 
 impl Layer3 {
@@ -152,6 +314,7 @@ impl Layer3 {
         out.extend(self.lines.iter().map(|s| s.id.clone()));
         out.extend(self.points.iter().map(|s| s.id.clone()));
         out.extend(self.labels.iter().map(|s| s.id.clone()));
+        out.extend(self.puffs.iter().map(|s| s.id.clone()));
         out
     }
 }
@@ -232,6 +395,24 @@ impl Camera {
     pub fn to_view(&self, p: Vec3) -> Vec3 {
         let d = sub(p, self.eye);
         [dot(d, self.right), dot(d, self.up), dot(d, self.forward)]
+    }
+
+    /// The world point at frame px (`sx`, `sy`) and depth `vz` along the forward axis: the
+    /// inverse of [`Camera::project`].
+    pub fn unproject(&self, sx: f64, sy: f64, vz: f64) -> Vec3 {
+        let [c, sn] = self.roll;
+        let (dx, dy) = (sx - self.centre[0], sy - self.centre[1]);
+        let (x, y) = (dx * c + dy * sn, -dx * sn + dy * c);
+        let s = if self.perspective {
+            self.scale / vz
+        } else {
+            self.scale
+        };
+        let (vx, vy) = (x / s, -y / s);
+        add(
+            add(add(self.eye, mul(self.right, vx)), mul(self.up, vy)),
+            mul(self.forward, vz),
+        )
     }
 
     /// Where a point lands in px (x right, y down) with its depth, or `None` behind a
@@ -340,6 +521,71 @@ pub struct Sun {
     pub toward: Vec3,
     pub illuminance: f64,
     pub shadow: bool,
+    /// Its shadow's cascades (#422).
+    pub cascades: Cascades,
+}
+
+/// The key sun's cascades (#422; canvas primitives: Light policy: cascades).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Cascades {
+    /// 1 to 4.
+    pub count: u32,
+    /// 0 uniform, 1 logarithmic.
+    pub split: f64,
+    /// The last cascade's far end in m; `None` for auto, from the view's bounds.
+    pub far: Option<f64>,
+    /// Blend across cascade edges.
+    pub fade: bool,
+}
+
+impl Default for Cascades {
+    fn default() -> Self {
+        Cascades {
+            count: 3,
+            split: 0.5,
+            far: None,
+            fade: true,
+        }
+    }
+}
+
+/// A sun's `cascades`, `split`, `shadow_far` and `fade`; more than four cascades is refused.
+fn cascades(params: &Value, path: &str) -> Result<Cascades, Refused> {
+    let mut c = Cascades::default();
+    if let Some(v) = params.get("cascades") {
+        c.count = v
+            .as_u64()
+            .filter(|n| (1..=4).contains(n))
+            .ok_or_else(|| Refused {
+                code: "out_of_range",
+                path: format!("{path}/cascades"),
+            })? as u32;
+    }
+    if let Some(v) = params.get("split") {
+        c.split = num(Some(v))
+            .filter(|s| (0.0..=1.0).contains(s))
+            .ok_or_else(|| Refused {
+                code: "out_of_range",
+                path: format!("{path}/split"),
+            })?;
+    }
+    match params.get("shadow_far") {
+        None => {}
+        Some(Value::String(s)) if s == "auto" => {}
+        Some(v) => {
+            c.far = Some(num(Some(v)).filter(|f| *f > 0.0).ok_or_else(|| Refused {
+                code: "out_of_range",
+                path: format!("{path}/shadow_far"),
+            })?)
+        }
+    }
+    if let Some(v) = params.get("fade") {
+        c.fade = v.as_bool().ok_or_else(|| Refused {
+            code: "out_of_range",
+            path: format!("{path}/fade"),
+        })?;
+    }
+    Ok(c)
 }
 
 /// An item of a kind another canvas module draws (particles@1 among them), as evaluated at t:
@@ -350,6 +596,29 @@ pub struct Other {
     pub kind: String,
     pub params: Value,
     pub pos: Vec3,
+}
+
+/// Motion blur by velocity (#419; Motion blur: velocity): the cameras at t − s/2 and t + s/2, each
+/// solid's world at both times by ID, and, for a solid whose surface deforms with its topology
+/// held, its mesh at both times; with the reconstruction's taps, travel cap and tile.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Motion {
+    pub open: Camera,
+    pub close: Camera,
+    pub solids: BTreeMap<String, MotionSolid>,
+    pub taps: u32,
+    pub max_px: f64,
+    pub tile_px: u32,
+}
+
+/// One solid's place at t − s/2 and t + s/2.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MotionSolid {
+    pub open: Affine3,
+    pub close: Affine3,
+    /// Its pre-skins at both times, vertex for vertex with its mesh at t; `None` reads its mesh at
+    /// t at both times (a rigid item, or one whose topology changed inside the shutter).
+    pub meshes: Option<(Arc<crate::geom::Mesh>, Arc<crate::geom::Mesh>)>,
 }
 
 /// A document at t, as the GPU layer draws it.
@@ -363,9 +632,74 @@ pub struct Scene {
     pub overlays: Vec<Overlay>,
     /// The first sun in item order, which shades the solids and casts the shadow.
     pub sun: Option<Sun>,
+    /// Every light, in layer and item order (#421): what shades the solids that name a material.
+    pub lights: Vec<Light>,
+    /// The first `sky@1` (#418, #422): its ambient light from above and below, its background,
+    /// fog and environment; with none, the solids keep the fixed ambient term.
+    pub sky: Option<crate::sky::Sky>,
     pub others: Vec<Other>,
+    /// Each curve item's samples in world metres, closed ones back to their start (#420).
+    pub curves: BTreeMap<String, Vec<Vec3>>,
     /// The core's glyph atlas pages the labels' glyphs sample, by page number.
     pub pages: Vec<AtlasPage>,
+    /// Motion blur by velocity this frame (#419): the evaluations at t ± half the shutter that the
+    /// renderer's velocity target reads, or `None`.
+    pub motion: Option<Arc<Motion>>,
+    /// Each `overlay.text@1` readout (#419): drawn by the view after the frame's samples and
+    /// motion blur resolve, over the frame, never into the frame itself.
+    pub readouts: Vec<Label>,
+    /// The texels of every map the solids sample, by the image's SHA-256, as the host had the
+    /// decode worker make them (#423); a map whose texels aren't here draws without it.
+    pub texels: BTreeMap<String, Arc<crate::light::Texels>>,
+    /// The frame's sub-pixel offset, px right and down (#423: Look: samples).
+    pub jitter: [f64; 2],
+    /// The light cut to draw in place of the policy's at this view: only #425's planted session
+    /// hysteresis sets one.
+    pub light_cut: Option<crate::light::Policy>,
+    /// The first `cutaway@1` (#424), which the solids it reaches are cut by in every pass.
+    pub cutaway: Option<crate::cut::Cutaway>,
+    /// The per-pixel resolve's room (#424): the view's `max_fragments`, and the most fragments
+    /// the class's GPU memory holds at 16 B each.
+    pub fragments: [u64; 2],
+}
+
+impl Scene {
+    /// Cuts the scene by `cutaway` (#424): a view input in session state replaces the
+    /// document's, and reaches the solids its `applies_to` names.
+    pub fn set_cutaway(&mut self, cutaway: Option<crate::cut::Cutaway>) {
+        for s in self.layers.iter_mut().flat_map(|l| &mut l.solids) {
+            s.cut = cutaway
+                .as_ref()
+                .is_some_and(|c| !c.planes.is_empty() && c.reaches(&s.id));
+        }
+        self.cutaway = cutaway;
+    }
+
+    /// Whether the key sun's shadow is drawn through its cascades (#422): a shadowed sun over a
+    /// scene whose solids name materials, which shade it per pixel. A scene of painted solids
+    /// alone keeps the single fitted map the effects' shadow reads (#380).
+    pub fn cascaded(&self) -> bool {
+        self.sun.as_ref().is_some_and(|s| s.shadow)
+            && self
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .any(|s| s.material.is_some())
+    }
+
+    /// #420 AC6's wrong programs, reachable only through `deep-gpu --planted`: mesh-edge lines
+    /// read from the unwelded mesh, or drawn over what is in front of them.
+    pub fn plant_edges(&mut self, unwelded: bool, over: bool) {
+        for line in self.layers.iter_mut().flat_map(|l| &mut l.lines) {
+            let Some(edges) = line.edges.clone() else {
+                continue;
+            };
+            if unwelded {
+                line.segments = edges.segments(false);
+            }
+            line.over |= over;
+        }
+    }
 }
 
 pub(crate) fn num(v: Option<&Value>) -> Option<f64> {
@@ -393,7 +727,7 @@ pub(crate) fn size3(v: Option<&Value>, default: Vec3) -> Option<Vec3> {
 }
 
 /// `x ↦ R·S·x + T` as rows of a 3×4 matrix.
-pub(crate) type Affine3 = [[f64; 4]; 3];
+pub type Affine3 = [[f64; 4]; 3];
 
 pub(crate) fn matmul(a: &Affine3, b: &Affine3) -> Affine3 {
     let mut out = [[0.0; 4]; 3];
@@ -425,13 +759,29 @@ fn turn(m: &Affine3, d: Vec3) -> Vec3 {
     ]
 }
 
-/// An item's own `at`: scale, then rotate about X, Y and Z in turn, then move to `pos`.
+/// An item's own `at`: subtract the pivot, scale, then rotate about X, Y and Z in turn, then move
+/// to `pos` (Units and axes).
 fn local(item: &Value, extra_scale: Vec3) -> Affine3 {
     let at = item.get("at");
     let pos = vec3(at.and_then(|a| a.get("pos"))).unwrap_or([0.0; 3]);
     let rot = vec3(at.and_then(|a| a.get("rot"))).unwrap_or([0.0; 3]);
     let sc = size3(at.and_then(|a| a.get("scale")), [1.0; 3]).unwrap_or([1.0; 3]);
-    local_of(pos, rot, sc, extra_scale)
+    pivoted(local_of(pos, rot, sc, extra_scale), item)
+}
+
+/// An item's vector `at.pivot`, if it has one (a box-point pivot is the core's to resolve).
+pub(crate) fn pivot_of(item: &Value) -> Option<Vec3> {
+    vec3(item.get("at").and_then(|a| a.get("pivot")))
+}
+
+/// `m` after subtracting the item's pivot: the pivot lands at `pos` (#433).
+fn pivoted(mut m: Affine3, item: &Value) -> Affine3 {
+    if let Some(p) = pivot_of(item) {
+        for row in &mut m {
+            row[3] -= row[0] * p[0] + row[1] * p[1] + row[2] * p[2];
+        }
+    }
+    m
 }
 
 /// [`local`] from the numbers themselves.
@@ -463,32 +813,122 @@ pub(crate) fn local_of(pos: Vec3, rot: Vec3, sc: Vec3, extra_scale: Vec3) -> Aff
 /// An item's world transform, without its size: its parents' composed over its own, in 3D. The
 /// items carry their own transforms (`Program::evaluate_local`): motion's child-of parenting
 /// turns a child only about z, and composed here again it would add the parent twice.
-fn world(items: &Map<String, Value>, id: &str) -> Affine3 {
-    let mut m = match items.get(id) {
-        Some(item) => local(item, [1.0; 3]),
-        None => {
-            return [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-            ]
-        }
+fn world(items: &Items<'_>, id: &str) -> Affine3 {
+    let Some((item, mut m)) = items.placed(id) else {
+        return [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+        ];
     };
-    let mut seen = vec![id.to_string()];
-    let mut at = items
-        .get(id)
-        .and_then(|i| i.get("parent"))
-        .and_then(Value::as_str);
+    // The parents passed, after `id` itself.
+    let mut seen: Vec<&str> = Vec::new();
+    let mut at = item.get("parent").and_then(Value::as_str);
     while let Some(p) = at {
-        if seen.iter().any(|s| s == p) {
+        if p == id || seen.contains(&p) {
             break;
         }
-        let Some(parent) = items.get(p) else { break };
-        m = matmul(&local(parent, [1.0; 3]), &m);
-        seen.push(p.to_string());
+        let Some((parent, local)) = items.placed(p) else {
+            break;
+        };
+        m = matmul(&local, &m);
+        seen.push(p);
         at = parent.get("parent").and_then(Value::as_str);
     }
     m
+}
+
+/// The document's items at a time, as [`eval::items`] gives them, without copying the document:
+/// an item a field names is its copy in `written`, and every other item is the document's own,
+/// its `at` the three numbers of each group in its slots.
+struct Items<'a> {
+    doc: &'a Map<String, Value>,
+    written: &'a Map<String, Value>,
+    /// Each item as evaluated, and for an object nothing writes, its index in the program: its
+    /// transform is its `TRANSFORM` slots from there.
+    entries: HashMap<&'a str, (&'a Value, Option<usize>)>,
+    slots: &'a [f64],
+}
+
+impl<'a> Items<'a> {
+    /// `doc`'s items, with `written` from [`eval::written`] of its program at `state`. The
+    /// program's items are the document's in its order, so item `i`'s transform is its
+    /// `TRANSFORM` slots from `i * TRANSFORM`.
+    fn new(doc: &'a Map<String, Value>, written: &'a Map<String, Value>, state: &'a State) -> Self {
+        let mut entries = HashMap::with_capacity(doc.len());
+        let mut copies = written.iter().peekable();
+        for (i, (id, item)) in doc.iter().enumerate() {
+            let entry = match copies.next_if(|(w, _)| *w == id) {
+                Some((_, evaluated)) => (evaluated, None),
+                None => (item, item.is_object().then_some(i)),
+            };
+            entries.insert(id.as_str(), entry);
+        }
+        Items {
+            doc,
+            written,
+            entries,
+            slots: &state.slots,
+        }
+    }
+
+    fn get(&self, id: &str) -> Option<&'a Value> {
+        self.entries.get(id).map(|e| e.0)
+    }
+
+    fn contains_key(&self, id: &str) -> bool {
+        self.entries.contains_key(id)
+    }
+
+    /// The items in document order. `written` holds some of them in that order too.
+    fn iter(&self) -> impl Iterator<Item = (&'a String, &'a Value)> {
+        let mut written = self.written.iter().peekable();
+        self.doc
+            .iter()
+            .map(move |(id, item)| match written.next_if(|(w, _)| *w == id) {
+                Some((_, evaluated)) => (id, evaluated),
+                None => (id, item),
+            })
+    }
+
+    /// The item `id` and its [`local`] transform: an object nothing writes reads its `at` from
+    /// its slots as the evaluated item holds them, a number that isn't finite leaving its group's
+    /// default.
+    fn placed(&self, id: &str) -> Option<(&'a Value, Affine3)> {
+        let &(item, index) = self.entries.get(id)?;
+        let m = match index {
+            Some(i) => {
+                let slots = &self.slots[i * TRANSFORM..(i + 1) * TRANSFORM];
+                let group = |k: usize, default: Vec3| {
+                    let s = &slots[3 * k..3 * k + 3];
+                    if s.iter().all(|x| x.is_finite()) {
+                        [s[0], s[1], s[2]]
+                    } else {
+                        default
+                    }
+                };
+                pivoted(
+                    local_of(
+                        group(0, [0.0; 3]),
+                        group(1, [0.0; 3]),
+                        group(2, [1.0; 3]),
+                        [1.0; 3],
+                    ),
+                    item,
+                )
+            }
+            None => local(item, [1.0; 3]),
+        };
+        Some((item, m))
+    }
+}
+
+impl Index<&str> for Items<'_> {
+    type Output = Value;
+
+    fn index(&self, id: &str) -> &Value {
+        self.get(id).expect("an item of the document")
+    }
 }
 
 fn origin(m: &Affine3) -> Vec3 {
@@ -507,15 +947,47 @@ fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
     }
 }
 
-fn order_key(item: &Value) -> String {
-    item.get("order")
+/// A solid's `paint.stroke {role, width}`: an outline around a box; a cylinder's or a sphere's
+/// isn't drawn yet, so it's refused rather than left out.
+fn stroke(
+    look: &Look3,
+    params: &Value,
+    shape: Shape,
+    path: &str,
+) -> Result<Option<Stroke>, Refused> {
+    let Some(st) = params.get("paint").and_then(|p| p.get("stroke")) else {
+        return Ok(None);
+    };
+    if shape != Shape::Box {
+        return refused("stroke_shape", format!("{path}/paint/stroke"));
+    }
+    let Some(color) = st
+        .get("role")
         .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string()
+        .and_then(|r| look.role(r))
+    else {
+        return refused("ref_unresolved", format!("{path}/paint/stroke/role"));
+    };
+    let width = match st.get("width") {
+        None => 1.0,
+        Some(w) => match num(Some(w)).filter(|w| *w > 0.0) {
+            Some(w) => w,
+            None => return refused("out_of_range", format!("{path}/paint/stroke/width")),
+        },
+    };
+    Ok(Some(Stroke {
+        color,
+        width,
+        exact: false,
+    }))
+}
+
+fn order_key(item: &Value) -> &str {
+    item.get("order").and_then(Value::as_str).unwrap_or("")
 }
 
 /// An entry of a line's `points`: a point, or an item's evaluated anchor (its origin).
-fn point_of(items: &Map<String, Value>, v: &Value, path: &str) -> Result<Vec3, Refused> {
+fn point_of(items: &Items<'_>, v: &Value, path: &str) -> Result<Vec3, Refused> {
     if let Some(p) = vec3(Some(v)) {
         return Ok(p);
     }
@@ -542,12 +1014,7 @@ pub fn segments(mode: &str, n: usize) -> Option<Vec<(usize, usize)>> {
     }
 }
 
-fn line(
-    items: &Map<String, Value>,
-    id: &str,
-    params: &Value,
-    look: &Look3,
-) -> Result<Line, Refused> {
+fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Line, Refused> {
     let path = format!("items/{id}/params");
     let points = params
         .get("points")
@@ -593,12 +1060,408 @@ fn line(
         segments,
         world: params.get("size_space").and_then(Value::as_str) == Some("world"),
         color: paint(look, params, &path)?,
+        edges: None,
+        over: false,
     })
+}
+
+/// A line's stroke modifiers at `seconds`, in its declared order (Modifier: `dash`, `outline`,
+/// `boil`, and `build` on a stroke): each edits the line's segments while its `while` holds
+/// (`drawing` while a build on the line is mid-progress, `moving` while a channel moves the
+/// line's `at`); an outline is a wider line drawn under it, which this returns.
+fn strokes(
+    map: &Map<String, Value>,
+    id: &str,
+    item: &Value,
+    line: &mut Line,
+    look: &Look3,
+    seconds: f64,
+) -> Result<Vec<Line>, Refused> {
+    let list = item.get("modifiers").and_then(Value::as_array);
+    let Some(list) = list.filter(|l| !l.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    let on = |m: &Value| crate::stack::enabled(m);
+    let num = |m: &Value, f: &str, d: f64| -> Option<f64> {
+        match m.pointer(&format!("/params/{f}")) {
+            None => Some(d),
+            Some(v) => v.as_f64().filter(|x| x.is_finite()),
+        }
+    };
+    let drawing = list.iter().any(|m| {
+        on(m)
+            && m.get("kind").and_then(Value::as_str) == Some("mod.build@1")
+            && num(m, "to", 1.0)
+                .is_some_and(|to| to < 1.0 && to > num(m, "from", 0.0).unwrap_or(0.0))
+    });
+    let at = format!("items/{id}/at");
+    let moving = ["channels", "drivers"].iter().any(|section| {
+        map.get(*section)
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .any(|(_, c)| {
+                c.get("target")
+                    .and_then(Value::as_str)
+                    .is_some_and(|t| t.starts_with(&at))
+            })
+    });
+    let mut under = Vec::new();
+    for (k, m) in list.iter().enumerate() {
+        let path = |f: &str| format!("items/{id}/modifiers/{k}/{f}");
+        let kind = m.get("kind").and_then(Value::as_str).unwrap_or("");
+        if !crate::stack::STROKE.contains(&kind) {
+            return refused("out_of_range", path("kind"));
+        }
+        if !on(m) {
+            continue;
+        }
+        let holds = match m.get("while").and_then(Value::as_str).unwrap_or("always") {
+            "always" => true,
+            "drawing" => drawing,
+            "moving" => moving,
+            _ => return refused("out_of_range", path("while")),
+        };
+        if !holds {
+            continue;
+        }
+        let bad = |f: &str| Refused {
+            code: "out_of_range",
+            path: path(&format!("params/{f}")),
+        };
+        match kind {
+            "mod.build@1" => {
+                let (from, to) = (
+                    num(m, "from", 0.0).ok_or_else(|| bad("from"))?,
+                    num(m, "to", 1.0).ok_or_else(|| bad("to"))?,
+                );
+                if !(0.0..=1.0).contains(&from) || !(0.0..=1.0).contains(&to) {
+                    return Err(bad("to"));
+                }
+                let total = stroke_length(&line.segments);
+                line.segments = cut(&line.segments, from.min(to) * total, from.max(to) * total);
+            }
+            "mod.dash@1" => {
+                let (dash, gap) = (
+                    num(m, "dash", 0.1).ok_or_else(|| bad("dash"))?,
+                    num(m, "gap", 0.05).ok_or_else(|| bad("gap"))?,
+                );
+                if dash <= 0.0 || gap < 0.0 {
+                    return Err(bad("dash"));
+                }
+                let total = stroke_length(&line.segments);
+                let mut out = Vec::new();
+                let mut s = 0.0;
+                while s < total && out.len() < 100_000 {
+                    out.extend(cut(&line.segments, s, (s + dash).min(total)));
+                    s += dash + gap;
+                }
+                line.segments = out;
+            }
+            "mod.boil@1" => {
+                let (amount, hz) = (
+                    num(m, "amount", 0.01).ok_or_else(|| bad("amount"))?,
+                    num(m, "hz", 8.0).ok_or_else(|| bad("hz"))?,
+                );
+                if hz <= 0.0 {
+                    return Err(bad("hz"));
+                }
+                // Stepped at hz: one draw per step, the same for every frame in it.
+                let step = (seconds * hz).floor() as i64 as u64;
+                let seed = crate::stack::seed_of(id, m);
+                let jitter = |p: Vec3, j: u64| -> Vec3 {
+                    let n = |axis: u64| {
+                        crate::stack::unit_noise(seed ^ step.wrapping_mul(0x9e37), 3 * j + axis)
+                    };
+                    [
+                        p[0] + amount * n(0),
+                        p[1] + amount * n(1),
+                        p[2] + amount * n(2),
+                    ]
+                };
+                for (j, seg) in line.segments.iter_mut().enumerate() {
+                    seg.a = jitter(seg.a, 2 * j as u64);
+                    seg.b = jitter(seg.b, 2 * j as u64 + 1);
+                }
+            }
+            "mod.outline@1" => {
+                let width = num(m, "width", 2.0)
+                    .filter(|w| *w > 0.0)
+                    .ok_or_else(|| bad("width"))?;
+                let role = m
+                    .pointer("/params/role")
+                    .and_then(Value::as_str)
+                    .unwrap_or("ground");
+                let Some(color) = look.role(role) else {
+                    return refused("ref_unresolved", path("params/role"));
+                };
+                let mut wide = line.clone();
+                for seg in &mut wide.segments {
+                    seg.wa += 2.0 * width;
+                    seg.wb += 2.0 * width;
+                }
+                wide.color = color;
+                under.push(wide);
+            }
+            _ => {}
+        }
+    }
+    Ok(under)
+}
+
+/// A stroke's length: its segments' in turn.
+fn stroke_length(segments: &[Segment]) -> f64 {
+    segments.iter().map(|s| dist(s.a, s.b)).sum()
+}
+
+fn dist(a: Vec3, b: Vec3) -> f64 {
+    sqrt(
+        (b[0] - a[0]) * (b[0] - a[0])
+            + (b[1] - a[1]) * (b[1] - a[1])
+            + (b[2] - a[2]) * (b[2] - a[2]),
+    )
+}
+
+/// The part of a stroke from `s0` to `s1` metres along it.
+fn cut(segments: &[Segment], s0: f64, s1: f64) -> Vec<Segment> {
+    let lerp = |a: Vec3, b: Vec3, f: f64| {
+        [
+            a[0] + (b[0] - a[0]) * f,
+            a[1] + (b[1] - a[1]) * f,
+            a[2] + (b[2] - a[2]) * f,
+        ]
+    };
+    let mut out = Vec::new();
+    let mut at = 0.0;
+    for seg in segments {
+        let len = dist(seg.a, seg.b);
+        let (from, to) = ((s0 - at).max(0.0), (s1 - at).min(len));
+        if to > from && len > 0.0 {
+            let (fa, fb) = (from / len, to / len);
+            out.push(Segment {
+                a: lerp(seg.a, seg.b, fa),
+                b: lerp(seg.a, seg.b, fb),
+                wa: seg.wa + (seg.wb - seg.wa) * fa,
+                wb: seg.wa + (seg.wb - seg.wa) * fb,
+            });
+        }
+        at += len;
+    }
+    out
+}
+
+/// A builder's or building kind's mesh after its stack, or why it can't be built.
+fn mesh_of(
+    doc: &Value,
+    id: &str,
+    item: &Value,
+    t: f64,
+    outlines: Outlines<'_>,
+) -> Result<crate::geom::Mesh, Refused> {
+    let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+    let built = if crate::building::KINDS.contains(&kind) {
+        crate::building::build(doc, id, item)
+    } else {
+        let run = crate::stack::Run {
+            outlines: outlines.to_vec(),
+            ..Default::default()
+        };
+        crate::build::built(doc, id, item, &run, t).map(|b| b.mesh.unwrap_or_default())
+    };
+    built.map_err(|path| Refused {
+        code: "out_of_range",
+        path: format!("items/{id}/{path}"),
+    })
+}
+
+/// A line of the edges of the mesh `edges.of` builds (Marks in 3D: mesh edges).
+fn edge_line(
+    doc: &Value,
+    items: &Items<'_>,
+    id: &str,
+    params: &Value,
+    look: &Look3,
+    seconds: f64,
+    outlines: Outlines<'_>,
+) -> Result<Line, Refused> {
+    let path = format!("items/{id}/params");
+    let edges = &params["edges"];
+    let of = edges.get("of").and_then(Value::as_str).unwrap_or("");
+    let target = of.split('#').next().unwrap_or("");
+    let Some(item) = items.get(target) else {
+        return refused("ref_unresolved", format!("{path}/edges/of"));
+    };
+    let Some(kind) =
+        crate::geom::EdgeKind::named(edges.get("kind").and_then(Value::as_str).unwrap_or("quads"))
+    else {
+        return refused("out_of_range", format!("{path}/edges/kind"));
+    };
+    let width = match params.get("width") {
+        None | Some(Value::Null) => 1.5,
+        Some(v) => match num(Some(v)).filter(|w| *w >= 0.0) {
+            Some(w) => w,
+            None => return refused("out_of_range", format!("{path}/width")),
+        },
+    };
+    let mut mesh = mesh_of(doc, target, item, seconds, outlines)?;
+    if let Some((_, part)) = of.split_once('#') {
+        let Some(tris) = mesh
+            .parts
+            .get(part)
+            .or_else(|| mesh.closed.get(part).map(|c| &c.0))
+            .cloned()
+        else {
+            return refused("ref_unresolved", format!("{path}/edges/of"));
+        };
+        let mut only = crate::geom::Mesh {
+            positions: mesh.positions.clone(),
+            normals: mesh.normals.clone(),
+            ..Default::default()
+        };
+        for t in tris {
+            let k = 3 * t as usize;
+            only.indices.extend(&mesh.indices[k..k + 3]);
+            only.faces.push(mesh.faces[t as usize]);
+        }
+        mesh = only;
+    }
+    let source = EdgesOf {
+        mesh: Arc::new(mesh),
+        kind,
+        model: world(items, target),
+        width,
+    };
+    Ok(Line {
+        id: id.to_string(),
+        segments: source.segments(true),
+        world: params.get("size_space").and_then(Value::as_str) == Some("world"),
+        color: paint(look, params, &path)?,
+        edges: Some(Arc::new(source)),
+        over: false,
+    })
+}
+
+/// A solid's color: its paint's role, or the look's `muted` when it names none.
+/// A linear RGB value: three (or four, alpha last) finite numbers at least 0.
+fn linear3(v: &Value) -> Option<[f64; 3]> {
+    let a = v.as_array().filter(|a| a.len() == 3 || a.len() == 4)?;
+    let mut out = [0.0; 3];
+    for (o, x) in out.iter_mut().zip(a) {
+        *o = num(Some(x)).filter(|x| *x >= 0.0)?;
+    }
+    Some(out)
+}
+
+fn encode8(v: f64) -> u8 {
+    let v = v.clamp(0.0, 1.0);
+    let e = if v <= 0.0031308 {
+        v * 12.92
+    } else {
+        1.055 * deep_canvas::ops::pow(v, 1.0 / 2.4) - 0.055
+    };
+    (e * 255.0).round() as u8
+}
+
+/// What an object's material and `adjust` give its surface (#418; Material: alpha_mode, alpha,
+/// emission; Item: adjust.opacity): its base color when the material sets one, its coverage and
+/// its emission.
+struct Surface {
+    color: Option<[u8; 3]>,
+    alpha: f64,
+    emission: [f64; 3],
+}
+
+fn surface(items: &Items<'_>, look: &Look3, id: &str, item: &Value) -> Result<Surface, Refused> {
+    let mut out = Surface {
+        color: None,
+        alpha: 1.0,
+        emission: [0.0; 3],
+    };
+    if let Some(o) = item.get("adjust").and_then(|a| a.get("opacity")) {
+        out.alpha = num(Some(o))
+            .filter(|o| (0.0..=1.0).contains(o))
+            .ok_or(Refused {
+                code: "out_of_range",
+                path: format!("items/{id}/adjust/opacity"),
+            })?;
+    }
+    let Some(material) = item.get("material").filter(|m| !m.is_null()) else {
+        return Ok(out);
+    };
+    let unresolved = || Refused {
+        code: "ref_unresolved",
+        path: format!("items/{id}/material"),
+    };
+    let mid = material.as_str().ok_or_else(unresolved)?;
+    let m = items
+        .get(mid)
+        .filter(|m| m.get("kind").and_then(Value::as_str) == Some("material@1"))
+        .ok_or_else(unresolved)?;
+    let empty = Value::Object(Map::new());
+    let params = m.get("params").unwrap_or(&empty);
+    let path = format!("items/{mid}/params");
+    let bad = |k: &str| Refused {
+        code: "out_of_range",
+        path: format!("{path}/{k}"),
+    };
+    let mut alpha = 1.0;
+    out.color = match params.get("base_color") {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(o)) => {
+            let role = o.get("role").and_then(Value::as_str);
+            Some(role.and_then(|r| look.role(r)).ok_or(Refused {
+                code: "ref_unresolved",
+                path: format!("{path}/base_color/role"),
+            })?)
+        }
+        Some(v) => {
+            let c = linear3(v).ok_or_else(|| bad("base_color"))?;
+            if let Some(a) = v.as_array().and_then(|a| a.get(3)) {
+                alpha = num(Some(a)).ok_or_else(|| bad("base_color"))?;
+            }
+            Some(c.map(encode8))
+        }
+    };
+    if let Some(a) = params.get("alpha") {
+        alpha *= num(Some(a))
+            .filter(|a| (0.0..=1.0).contains(a))
+            .ok_or_else(|| bad("alpha"))?;
+    }
+    let coverage = match params.get("alpha_mode").and_then(Value::as_str) {
+        None | Some("opaque") => 1.0,
+        Some("blend" | "add") => alpha,
+        // A mask keeps a fragment whole or cuts it.
+        Some("mask") => {
+            let cutoff = num(params.get("alpha_cutoff")).unwrap_or(0.5);
+            if alpha >= cutoff {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        Some(_) => return Err(bad("alpha_mode")),
+    };
+    out.alpha *= coverage;
+    if let Some(e) = params.get("emission") {
+        let e = linear3(e).ok_or_else(|| bad("emission"))?;
+        let k = num(params.get("emission_strength")).unwrap_or(1.0);
+        out.emission = e.map(|c| c * k);
+    }
+    Ok(out)
+}
+
+fn paint_or_muted(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
+    if params.pointer("/paint/fill/role").is_none() {
+        if let Some(c) = look.role("muted") {
+            return Ok(c);
+        }
+    }
+    paint(look, params, path)
 }
 
 /// The camera's evaluated pose on a frame of `size`, with near and far from the params or
 /// from `bounds` (each a world point the scene draws).
-fn camera(
+pub(crate) fn camera(
     params: &Map<String, Value>,
     size: [f64; 2],
     bounds: &[Vec3],
@@ -692,17 +1555,81 @@ pub fn corners(model: &Affine3) -> Vec<Vec3> {
 
 /// [`corners`], pushed onto `out`.
 pub(crate) fn corners_into(model: &Affine3, out: &mut Vec<Vec3>) {
+    out.extend(corners8(model));
+}
+
+/// [`corners`], in an array.
+pub(crate) fn corners8(model: &Affine3) -> [Vec3; 8] {
+    let mut out = [[0.0; 3]; 8];
+    let mut k = 0;
     for x in [-0.5, 0.5] {
         for y in [-0.5, 0.5] {
             for z in [-0.5, 0.5] {
-                out.push(apply(model, [x, y, z]));
+                out[k] = apply(model, [x, y, z]);
+                k += 1;
             }
         }
     }
+    out
 }
 
-/// Evaluates `doc` at `t` (flicks) on a frame of its `size`.
+/// Reads a stored asset's bytes by its sha256.
+pub type Assets<'a> = &'a dyn Fn(&str) -> Option<Vec<u8>>;
+
+/// The build's outline sources an `extrude` reads its text, path or vector outline through
+/// (#443): the core's `outline.source@1`, as the sealed set holds it.
+pub type Outlines<'a> = &'a [deep_canvas::registry::SealedOutline];
+
+/// Evaluates `doc` at `t` (flicks) on a frame of its `size`; a `mesh.asset@1` draws only where
+/// [`evaluate_with`] has a store to read it from.
 pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Result<Scene, Refused> {
+    evaluate_any(doc, t, look, labels, None, &[])
+}
+
+/// [`evaluate`] with the asset store `assets` that `mesh.asset@1` items read their glTF from.
+pub fn evaluate_with(
+    doc: &Value,
+    t: i64,
+    look: &Look3,
+    labels: &mut Labels,
+    assets: Assets<'_>,
+) -> Result<Scene, Refused> {
+    evaluate_any(doc, t, look, labels, Some(assets), &[])
+}
+
+/// [`evaluate_with`] whose extrudes read their outlines through `outlines` (#443).
+pub fn evaluate_sourced(
+    doc: &Value,
+    t: i64,
+    look: &Look3,
+    labels: &mut Labels,
+    assets: Assets<'_>,
+    outlines: Outlines<'_>,
+) -> Result<Scene, Refused> {
+    evaluate_any(doc, t, look, labels, Some(assets), outlines)
+}
+
+fn evaluate_any(
+    doc: &Value,
+    t: i64,
+    look: &Look3,
+    labels: &mut Labels,
+    assets: Option<Assets<'_>>,
+    outlines: Outlines<'_>,
+) -> Result<Scene, Refused> {
+    let Some(map) = doc.as_object() else {
+        return refused("out_of_range", "");
+    };
+    let program = Program::compile(map).map_err(|r| Refused {
+        code: r.code,
+        path: r.path,
+    })?;
+    evaluate_compiled(map, &program, t, look, labels, assets, outlines)
+}
+
+/// Each item of `doc` at `t` as evaluated, in item order, with its world transform without its
+/// size: what the spatial index (#421) bounds and queries.
+pub fn placed_at(doc: &Value, t: i64) -> Result<Vec<(String, Value, Affine3)>, Refused> {
     let Some(map) = doc.as_object() else {
         return refused("out_of_range", "");
     };
@@ -712,7 +1639,350 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
     })?;
     let mut state = program.state();
     program.evaluate_local(t, eval::Validity::Full, &mut state);
-    let items = eval::items(map, &program, &state);
+    let empty = Map::new();
+    let doc_items = map
+        .get("items")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let written = eval::written(map, &program, &state);
+    let items = Items::new(doc_items, &written, &state);
+    Ok(items
+        .iter()
+        .map(|(id, item)| (id.clone(), item.clone(), world(&items, id)))
+        .collect())
+}
+
+/// An item's Object shadow flag: true unless it says false.
+fn shadows(item: &Value, name: &str) -> bool {
+    item.get(name).and_then(Value::as_bool).unwrap_or(true)
+}
+
+/// Whether a solid casts: its Object flag, and its material's `shadow` (#421).
+fn casts(item: &Value, material: &Option<Material>) -> bool {
+    shadows(item, "cast_shadow") && material.as_ref().is_none_or(|m| m.casts)
+}
+
+/// A solid's outline: its own stroke, else its material's ink in the ink's role at its weight;
+/// an ink on a part the outline can't follow is refused as a stroke there is (#421).
+fn inked(
+    own: Option<Stroke>,
+    material: &Option<Material>,
+    shape: Shape,
+    path: &str,
+) -> Result<Option<Stroke>, Refused> {
+    let Some((color, width)) = material.as_ref().and_then(|m| m.ink) else {
+        return Ok(own);
+    };
+    if own.is_some() {
+        return Ok(own);
+    }
+    if shape != Shape::Box {
+        return refused("stroke_shape", format!("{path}/material"));
+    }
+    Ok(Some(Stroke {
+        color,
+        width,
+        exact: false,
+    }))
+}
+
+/// A light's face axes: its local +X and +Y in the world, unit.
+fn axes(m: &Affine3) -> [Vec3; 2] {
+    [
+        normalize(turn(m, [1.0, 0.0, 0.0])),
+        normalize(turn(m, [0.0, 1.0, 0.0])),
+    ]
+}
+
+/// A light's flicker: a gain, or the value at t of the document channel its `flicker` names; 1
+/// with none.
+fn flicker(program: &Program, state: &State, params: &Value, path: &str) -> Result<f64, Refused> {
+    match params.get("flicker") {
+        None | Some(Value::Null) => Ok(1.0),
+        Some(Value::Number(_)) => num(params.get("flicker")).ok_or(Refused {
+            code: "out_of_range",
+            path: format!("{path}/flicker"),
+        }),
+        Some(v) => v
+            .as_str()
+            .and_then(|c| program.channel_value(state, c))
+            .ok_or(Refused {
+                code: "ref_unresolved",
+                path: format!("{path}/flicker"),
+            }),
+    }
+}
+
+/// A `mesh.asset@1`'s mesh, read from the store, with the name every item of that asset and
+/// node shares.
+fn asset_mesh(
+    read: Assets<'_>,
+    id: &str,
+    params: &Value,
+) -> Result<(crate::geom::Mesh, Option<String>), Refused> {
+    let path = format!("items/{id}/params");
+    let Some(sha) = params.get("sha256").and_then(Value::as_str) else {
+        return refused("out_of_range", format!("{path}/sha256"));
+    };
+    let Some(bytes) = read(sha) else {
+        return refused("asset_missing", format!("{path}/sha256"));
+    };
+    let node = params.get("node").cloned().unwrap_or(Value::from(0));
+    let mesh = crate::gltf::mesh(&bytes, &node).map_err(|_| Refused {
+        code: "out_of_range",
+        path: format!("{path}/sha256"),
+    })?;
+    Ok((mesh, Some(format!("{sha}#{node}"))))
+}
+
+/// An item's level of detail (#425): its `lod` bands and, for a mesh the simplify job gave
+/// levels, those levels keyed off its `hash`; none when it has neither.
+fn lod_of(
+    item: &Value,
+    path: &str,
+    bounds: [Vec3; 2],
+    mesh: Option<(&crate::geom::Mesh, u64)>,
+    doc: &Map<String, Value>,
+) -> Result<Option<Arc<crate::lod::Lod>>, Refused> {
+    let bands = crate::lod::bands_of(item, path.trim_end_matches("/params"))?;
+    let leveled = mesh.filter(|(m, _)| !m.lods.is_empty());
+    if bands.is_none() && leveled.is_none() {
+        return Ok(None);
+    }
+    let crate::lod::Bands {
+        bands,
+        margin,
+        proxy,
+    } = bands.unwrap_or(crate::lod::Bands {
+        bands: Vec::new(),
+        margin: 0.1,
+        proxy: None,
+    });
+    let (levels, extent) = match leveled {
+        Some((m, h)) => (crate::lod::levels(&Arc::new(m.clone()), h), m.lod_extent),
+        None => (Vec::new(), 0.0),
+    };
+    // A mesh without levels takes its proxy from the simplify step, once per content key.
+    let proxy_mesh = match (proxy, mesh) {
+        (Some(p), Some((m, h))) if levels.is_empty() => crate::lod::proxy_of(m, h, p),
+        _ => None,
+    };
+    Ok(Some(Arc::new(crate::lod::Lod {
+        bands,
+        margin,
+        bounds,
+        levels,
+        extent,
+        lod_px: crate::lod::lod_px(doc),
+        proxy,
+        proxy_mesh,
+    })))
+}
+
+/// A built solid's world bounds' corners.
+fn corners_of(s: &Solid) -> Vec<Vec3> {
+    let Some(mesh) = &s.mesh else {
+        return Vec::new();
+    };
+    let [lo, hi] = mesh.bounds();
+    (0..8)
+        .map(|c| {
+            let p = [
+                if c & 1 == 0 { lo[0] } else { hi[0] },
+                if c & 2 == 0 { lo[1] } else { hi[1] },
+                if c & 4 == 0 { lo[2] } else { hi[2] },
+            ];
+            apply(&s.model, p)
+        })
+        .collect()
+}
+
+/// Whether the node a `mesh.asset@1` names has a primitive that names one of the file's materials
+/// (#423), so it draws with them rather than with the item's paint.
+fn asset_has_materials(read: Assets<'_>, params: &Value) -> bool {
+    let Some(bytes) = params.get("sha256").and_then(Value::as_str).and_then(read) else {
+        return false;
+    };
+    let node = params.get("node").cloned().unwrap_or(Value::from(0));
+    crate::gltf::node_materials(&bytes, &node)
+}
+
+/// A `mesh.asset@1` naming a file's scene (#423): one solid per triangle primitive of each node,
+/// picked as `<item>#<node name>` (or its index), placed at the item's `model` × the node's world
+/// matrix, shaded by the `material@1` the import made of its glTF material. Naming one node, it
+/// draws that node's primitives alone, in the node's own space, picked as the item.
+fn asset_scene(
+    read: Assets<'_>,
+    id: &str,
+    params: &Value,
+    model: &Affine3,
+    look: &Look3,
+) -> Result<(Vec<Solid>, Vec<([[f64; 4]; 3], Value)>), Refused> {
+    let path = format!("items/{id}/params/sha256");
+    let Some(sha) = params.get("sha256").and_then(Value::as_str) else {
+        return refused("out_of_range", path);
+    };
+    let Some(bytes) = read(sha) else {
+        return refused("asset_missing", path);
+    };
+    let scene_i = params
+        .pointer("/node/scene")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as usize;
+    let one = params.get("node").filter(|n| n.get("scene").is_none());
+    let imported = crate::gltf::import(&bytes, sha, scene_i, read).map_err(|p| Refused {
+        code: "out_of_range",
+        path: format!("items/{id}/{p}"),
+    })?;
+    let mut out = Vec::new();
+    // The file's punctual lights at their world transforms under the item's (#428).
+    let lights = imported
+        .lights
+        .iter()
+        .map(|(w, l)| (matmul(model, w), l.clone()))
+        .collect();
+    for (k, node) in imported.nodes.iter().enumerate() {
+        let named = |n: &Value| match n {
+            Value::Number(i) => i.as_u64() == Some(node.index as u64),
+            Value::String(s) => *s == node.name,
+            _ => false,
+        };
+        if one.is_some_and(|n| !named(n)) {
+            continue;
+        }
+        let solid_model = match one {
+            Some(_) => *model,
+            None => matmul(model, &node.world),
+        };
+        for (p, prim) in node.primitives.iter().enumerate() {
+            if prim.mesh.triangles() == 0 {
+                continue;
+            }
+            let pick = match one {
+                Some(_) => id.to_string(),
+                None => format!("{id}#{}", node.name),
+            };
+            let mat_id = format!("{id}#material{}", prim.material.map_or(-1, |m| m as i64));
+            let mat_item = serde_json::json!({"kind": "material@1", "params": prim
+                .material
+                .and_then(|m| imported.materials.get(m))
+                .map_or_else(|| serde_json::json!({"metallic": 1.0, "roughness": 1.0, "base_color": [1, 1, 1, 1]}), |m| m.params.clone())});
+            let holder = serde_json::json!({"material": mat_id});
+            let named = |n: &str| (n == mat_id).then_some(&mat_item);
+            let material = light::material(&holder, named, look, id)?;
+            let maps = light::maps(&holder, named)?;
+            let mut h = deep_canvas::schedule::Hasher::new("scene3d.mesh");
+            h.text(&format!("{sha}#scene{scene_i}#{k}#{p}"));
+            let key = h.finish().0;
+            let hash = u64::from_le_bytes([
+                key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
+            ]);
+            // Its coverage: the factor's alpha, which a mask's cutoff and a blend read with the
+            // base color map's (opaque parts whole).
+            let alpha = material.as_ref().map_or(1.0, |m| match m.alpha_mode {
+                light::AlphaMode::Opaque => 1.0,
+                _ => m.base[3],
+            });
+            out.push(Solid {
+                id: pick,
+                shape: Shape::Built(hash),
+                model: solid_model,
+                color: material
+                    .as_ref()
+                    .map_or([204; 3], |m| [m.base[0], m.base[1], m.base[2]].map(encode8)),
+                stroke: None,
+                mesh: Some(Arc::new(prim.mesh.clone())),
+                lod: None,
+                mask: None,
+                cast_only: false,
+                inset: 0.0,
+                cast_shadow: true,
+                receive_shadow: true,
+                emission: material.as_ref().map_or([0.0; 3], |m| m.emission),
+                material,
+                sort_bias: 0.0,
+                alpha,
+                maps,
+                // An imported material names no operator.
+                op: None,
+                cut: false,
+                per_pixel: false,
+                adjust: None,
+            });
+        }
+    }
+    Ok((out, lights))
+}
+
+/// A figure lights one item at most (Object: `tone`, "one lit per figure"), and every tone is
+/// of the closed list.
+fn tones(map: &Map<String, Value>) -> Result<(), Refused> {
+    let mut lit = false;
+    for (id, item) in map
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let Some(tone) = item.get("tone") else {
+            continue;
+        };
+        match tone.as_str() {
+            Some("lit") if lit && map.get("profile").and_then(Value::as_str) == Some("figure") => {
+                return refused("out_of_range", format!("items/{id}/tone"));
+            }
+            Some("lit") => lit = true,
+            Some("faint" | "lo" | "mid" | "hi") => {}
+            _ => return refused("out_of_range", format!("items/{id}/tone")),
+        }
+    }
+    Ok(())
+}
+
+/// The material operator a solid's material names, on the solid's own clock (#429): inside a
+/// time-remapped recipe instance, child time.
+fn solid_op(
+    items: &Items<'_>,
+    map: &Map<String, Value>,
+    program: &Program,
+    t: i64,
+    id: &str,
+    item: &Value,
+) -> Result<Option<SolidOp>, Refused> {
+    let Some((op, op_item)) = light::material_op(item, |m| items.get(m))? else {
+        return Ok(None);
+    };
+    let motion = &program.motion;
+    let own = motion.item_time(id, eval::position(motion, t).0) - motion.transport.start;
+    Ok(Some(SolidOp {
+        id: op.to_string(),
+        item: Arc::new(op_item.clone()),
+        t: own as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64,
+        doc_seed: map.get("seed").and_then(Value::as_u64).unwrap_or(0),
+    }))
+}
+
+/// [`evaluate`] of a document whose motion program is compiled already.
+pub(crate) fn evaluate_compiled(
+    map: &Map<String, Value>,
+    program: &Program,
+    t: i64,
+    look: &Look3,
+    labels: &mut Labels,
+    assets: Option<Assets<'_>>,
+    outlines: Outlines<'_>,
+) -> Result<Scene, Refused> {
+    tones(map)?;
+    let mut state = program.state();
+    program.evaluate_local(t, eval::Validity::Full, &mut state);
+    let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
+    let empty = Map::new();
+    let doc_items = map
+        .get("items")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let written = eval::written(map, program, &state);
+    let items = Items::new(doc_items, &written, &state);
     let size = match map
         .get("size")
         .and_then(Value::as_array)
@@ -726,56 +1996,88 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
     };
 
     // Layers in their order; an item with no layer draws in one of its own, first.
-    let mut layer_order: Vec<(String, String)> = map
+    let mut layer_order: Vec<(&str, &str)> = map
         .get("layers")
         .and_then(Value::as_object)
         .map(|l| {
             l.iter()
-                .map(|(id, layer)| (order_key(layer), id.clone()))
+                .map(|(id, layer)| (order_key(layer), id.as_str()))
                 .collect()
         })
         .unwrap_or_default();
     layer_order.sort();
-    let mut by_layer: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
-    for (id, item) in &items {
-        let layer = item
-            .get("layer")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
+    // Each layer's items: their order keys, IDs and evaluated items.
+    let mut by_layer: BTreeMap<&str, Vec<(&str, &String, &Value)>> = BTreeMap::new();
+    for (id, item) in items.iter() {
+        let layer = item.get("layer").and_then(Value::as_str).unwrap_or("");
         by_layer
             .entry(layer)
             .or_default()
-            .push((order_key(item), id.clone()));
+            .push((order_key(item), id, item));
     }
-    let mut order: Vec<String> = Vec::new();
+    let mut order: Vec<&str> = Vec::new();
     if by_layer.contains_key("") {
-        order.push(String::new());
+        order.push("");
     }
     order.extend(layer_order.into_iter().map(|(_, id)| id));
     for id in by_layer.keys() {
         if !order.contains(id) {
-            order.push(id.clone());
+            order.push(id);
         }
     }
 
     let mut layers = Vec::new();
     let mut overlay_items = Vec::new();
+    let mut readout_items: Vec<(String, Value)> = Vec::new();
+    // The document as builders read it (the curves they name), made once when one draws.
+    let mut doc_value: Option<Value> = None;
     let mut bounds: Vec<Vec3> = Vec::new();
     let mut sun = None;
+    let mut lights = Vec::new();
+    let mut sky = None;
+    let mut puffs = 0u64;
     let mut others = Vec::new();
+    let mut curves = BTreeMap::new();
+    // #424: the prototypes instancers name, whose solids are kept in their own space whether or
+    // not they draw themselves; the instancers, placed once every layer is read; the cutaway.
+    let mut protos_wanted: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    for (id, item) in items.iter() {
+        if item.get("kind").and_then(Value::as_str) == Some("instance@1") && shown(&items, id) {
+            for p in item
+                .pointer("/params/of")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                if let Some(p) = p.as_str() {
+                    protos_wanted.insert(p);
+                }
+            }
+        }
+    }
+    let mut protos: HashMap<String, Vec<Solid>> = HashMap::new();
+    let mut instancers: Vec<(usize, String)> = Vec::new();
+    let mut cutaway = None;
     for layer_id in &order {
         let Some(list) = by_layer.get_mut(layer_id) else {
             continue;
         };
-        list.sort();
+        // IDs are unique, so this is the order of (order key, ID) alone.
+        list.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
         let mut layer = Layer3 {
-            id: layer_id.clone(),
+            id: layer_id.to_string(),
             ..Layer3::default()
         };
-        for (_, id) in list.iter() {
-            let item = &items[id];
+        for &(_, id, item) in list.iter() {
             let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+            // An item draws when it and every parent are visible (Item: `visible`, inherited);
+            // a prototype is read either way, for its instancers.
+            let visible = shown(&items, id);
+            let proto = protos_wanted.contains(id.as_str());
+            if !visible && !proto {
+                continue;
+            }
+            let before = layer.solids.len();
             let path = format!("items/{id}/params");
             let empty = Value::Object(Map::new());
             let params = item.get("params").unwrap_or(&empty);
@@ -799,16 +2101,239 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
                         ],
                     );
                     bounds.extend(corners(&model));
+                    let material = light::material(item, |m| items.get(m), look, id)?;
+                    let maps = light::maps(item, |m| items.get(m))?;
+                    let surface = surface(&items, look, id, item)?;
+                    if surface.alpha <= 0.0 {
+                        continue;
+                    }
                     layer.solids.push(Solid {
+                        maps,
                         id: id.clone(),
                         shape,
                         model,
-                        color: paint(look, params, &path)?,
+                        color: match (surface.color, &material) {
+                            (Some(c), _) => c,
+                            // A material's default base color (#421), unless paint gives one.
+                            (None, Some(m)) if params.pointer("/paint/fill").is_none() => {
+                                [m.base[0], m.base[1], m.base[2]].map(encode8)
+                            }
+                            (None, _) => paint(look, params, &path)?,
+                        },
+                        stroke: inked(
+                            stroke(look, params, shape, &path)?,
+                            &material,
+                            shape,
+                            &path,
+                        )?,
+                        mesh: None,
+                        lod: lod_of(item, &path, [[-0.5; 3], [0.5; 3]], None, map)?,
+                        mask: None,
+                        cast_only: false,
+                        inset: 0.0,
+                        cast_shadow: casts(item, &material),
+                        receive_shadow: shadows(item, "receive_shadow"),
+                        material,
+                        sort_bias: num(item.get("sort_bias")).unwrap_or(0.0),
+                        alpha: surface.alpha,
+                        emission: surface.emission,
+                        op: solid_op(&items, map, program, t, id, item)?,
+                        cut: false,
+                        per_pixel: false,
+                        adjust: None,
                     });
                 }
-                "mark.line@1" => {
-                    let l = line(&items, id, params, look)?;
+                "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
+                    let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
+                    let l = edge_line(doc, &items, id, params, look, seconds, outlines)?;
                     bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
+                    layer.lines.push(l);
+                }
+                "mesh.asset@1" if assets.is_none() => {}
+                // A glTF file's whole scene (#423): each node at its world transform in the file,
+                // drawn with the materials the file declares.
+                "mesh.asset@1"
+                    if params.pointer("/node/scene").is_some()
+                        || (item.get("material").is_none()
+                            && asset_has_materials(assets.expect("matched above"), params)) =>
+                {
+                    let read = assets.expect("matched above");
+                    let model = world(&items, id);
+                    let (solids, file_lights) = asset_scene(read, id, params, &model, look)?;
+                    for s in solids {
+                        bounds.extend(corners_of(&s));
+                        layer.solids.push(s);
+                    }
+                    // A directional KHR_lights_punctual light lights the view as a sun of its
+                    // intensity in lx and its color (#428).
+                    for (k, (m, l)) in file_lights.iter().enumerate() {
+                        if l.get("type").and_then(Value::as_str) != Some("directional") {
+                            continue;
+                        }
+                        let lid = format!("{id}#light{k}");
+                        let p = serde_json::json!({
+                            "illuminance": num(l.get("intensity")).unwrap_or(1.0),
+                            "color": l.get("color").cloned().unwrap_or(serde_json::json!([1, 1, 1])),
+                        });
+                        let dir = normalize(turn(m, [0.0, 0.0, -1.0]));
+                        lights.extend(light::light(
+                            &lid,
+                            "light.sun@1",
+                            &p,
+                            origin(m),
+                            dir,
+                            axes(m),
+                            1.0,
+                        ));
+                        if sun.is_none() {
+                            sun = Some(Sun {
+                                id: lid,
+                                toward: normalize(turn(m, [0.0, 0.0, 1.0])),
+                                illuminance: num(p.get("illuminance")).unwrap_or(1.0),
+                                shadow: false,
+                                cascades: cascades(&p, &path)?,
+                            });
+                        }
+                    }
+                }
+                "mesh.sequence@1" if assets.is_none() => {}
+                // #419's stand-in for the physics module: each body a sphere at the bake's
+                // position at t, read from the bake, never stepped.
+                "fixture.world@1" => {
+                    let w = crate::fixtures::bake(params, &path)?;
+                    let material = light::material(item, |m| items.get(m), look, id)?;
+                    let surface = surface(&items, look, id, item)?;
+                    for (b, p) in w.bodies.iter().zip(w.at(t)) {
+                        let r = 2.0 * b.radius;
+                        let model = [
+                            [r, 0.0, 0.0, p[0]],
+                            [0.0, r, 0.0, p[1]],
+                            [0.0, 0.0, r, p[2]],
+                        ];
+                        bounds.extend(corners(&model));
+                        layer.solids.push(Solid {
+                            maps: None,
+                            id: format!("{id}#{}", b.id),
+                            shape: Shape::Sphere,
+                            model,
+                            color: match (&surface.color, &material) {
+                                (Some(c), _) => *c,
+                                (None, Some(m)) => [m.base[0], m.base[1], m.base[2]].map(encode8),
+                                (None, None) => paint(look, params, &path)?,
+                            },
+                            stroke: None,
+                            mesh: None,
+                            lod: None,
+                            mask: None,
+                            cast_only: false,
+                            inset: 0.0,
+                            cast_shadow: casts(item, &material),
+                            receive_shadow: shadows(item, "receive_shadow"),
+                            material: material.clone(),
+                            sort_bias: 0.0,
+                            alpha: surface.alpha,
+                            emission: surface.emission,
+                            op: None,
+                            cut: false,
+                            per_pixel: false,
+                            adjust: None,
+                        });
+                    }
+                }
+                k if crate::builders::KINDS.contains(&k)
+                    || crate::building::KINDS.contains(&k)
+                    || k == "mesh.asset@1"
+                    || k == "mesh.sequence@1"
+                    || k == "fixture.skin@1" =>
+                {
+                    let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
+                    let (mesh, shared) = match (k, assets) {
+                        ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params)?,
+                        // #419's stand-ins: a pre-skin per time, and a sequence's frame at t.
+                        ("fixture.skin@1", _) => (crate::fixtures::skin(params, &path)?, None),
+                        ("mesh.sequence@1", Some(read)) => {
+                            (crate::fixtures::sequence(params, t, &path, read)?, None)
+                        }
+                        _ => (mesh_of(doc, id, item, seconds, outlines)?, None),
+                    };
+                    if mesh.triangles() == 0 {
+                        continue;
+                    }
+                    let model = world(&items, id);
+                    let [lo, hi] = mesh.bounds();
+                    for c in 0..8 {
+                        let p = [
+                            if c & 1 == 0 { lo[0] } else { hi[0] },
+                            if c & 2 == 0 { lo[1] } else { hi[1] },
+                            if c & 4 == 0 { lo[2] } else { hi[2] },
+                        ];
+                        bounds.push(apply(&model, p));
+                    }
+                    // Equal meshes, and items naming one asset and node, share one mesh.
+                    let mut h = deep_canvas::schedule::Hasher::new("scene3d.mesh");
+                    match &shared {
+                        Some(name) => h.text(name),
+                        None => h.bytes(&deep_canvas::schedule::Canonical::canonical_bytes(&mesh)),
+                    };
+                    let key = h.finish().0;
+                    let material = light::material(item, |m| items.get(m), look, id)?;
+                    let maps = light::maps(item, |m| items.get(m))?;
+                    let hash = u64::from_le_bytes([
+                        key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
+                    ]);
+                    let surface = surface(&items, look, id, item)?;
+                    if surface.alpha <= 0.0 {
+                        continue;
+                    }
+                    layer.solids.push(Solid {
+                        maps,
+                        id: id.clone(),
+                        shape: Shape::Built(hash),
+                        model,
+                        color: match (surface.color, &material) {
+                            (Some(c), _) => c,
+                            // A material's default base color (#421), unless paint gives one.
+                            (None, Some(m)) if params.pointer("/paint/fill").is_none() => {
+                                [m.base[0], m.base[1], m.base[2]].map(encode8)
+                            }
+                            (None, _) => paint_or_muted(look, params, &path)?,
+                        },
+                        stroke: inked(None, &material, Shape::Built(hash), &path)?,
+                        lod: lod_of(item, &path, mesh.bounds(), Some((&mesh, hash)), map)?,
+                        mesh: Some(Arc::new(mesh)),
+                        mask: None,
+                        cast_only: false,
+                        inset: 0.0,
+                        cast_shadow: casts(item, &material),
+                        receive_shadow: shadows(item, "receive_shadow"),
+                        material,
+                        sort_bias: num(item.get("sort_bias")).unwrap_or(0.0),
+                        alpha: surface.alpha,
+                        emission: surface.emission,
+                        op: solid_op(&items, map, program, t, id, item)?,
+                        cut: false,
+                        per_pixel: false,
+                        adjust: None,
+                    });
+                }
+                // A curve draws nothing; what follows it (particles along it, #420) reads it
+                // sampled, in world metres.
+                "curve@1" => {
+                    if let Ok(c) = crate::curve::sample(params) {
+                        let m = world(&items, id);
+                        let mut points: Vec<Vec3> =
+                            c.points.iter().map(|p| apply(&m, *p)).collect();
+                        if c.closed {
+                            points.push(points[0]);
+                        }
+                        curves.insert(id.clone(), points);
+                    }
+                }
+                "mark.line@1" => {
+                    let mut l = line(&items, id, params, look)?;
+                    let under = strokes(map, id, item, &mut l, look, seconds)?;
+                    bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
+                    layer.lines.extend(under);
                     layer.lines.push(l);
                 }
                 "mark.point@1" => {
@@ -875,10 +2400,27 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
                         color: paint(look, params, &path)?,
                     });
                 }
-                OVERLAY => overlay_items.push((layer_id.clone(), id.clone())),
-                "light.sun@1" if sun.is_none() => {
-                    // It shines along its local −Z, glTF's convention for lights.
+                OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
+                "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
+                "puff@1" => {
                     let m = world(&items, id);
+                    layer.puffs.push(puff(id, params, origin(&m), &path)?);
+                    puffs += 1;
+                }
+                "light.sun@1" if sun.is_none() => {
+                    // A light shines along its local −Z, glTF's convention for lights.
+                    let m = world(&items, id);
+                    let dir = normalize(turn(&m, [0.0, 0.0, -1.0]));
+                    let flicker = flicker(program, &state, params, &path)?;
+                    lights.extend(light::light(
+                        id,
+                        kind,
+                        params,
+                        origin(&m),
+                        dir,
+                        axes(&m),
+                        flicker,
+                    ));
                     sun = Some(Sun {
                         id: id.clone(),
                         toward: normalize(turn(&m, [0.0, 0.0, 1.0])),
@@ -887,9 +2429,45 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
                             .get("shadow")
                             .and_then(Value::as_bool)
                             .unwrap_or(false),
+                        cascades: cascades(params, &path)?,
                     });
                 }
-                "light.sun@1" | "camera@1" => {}
+                "sky@1" if sky.is_none() => {
+                    sky = Some(crate::sky::parse(id, params, look, assets)?);
+                }
+                "light.sun@1" | "light.point@1" | "light.spot@1" | "light.area@1" => {
+                    let m = world(&items, id);
+                    let dir = normalize(turn(&m, [0.0, 0.0, -1.0]));
+                    let flicker = flicker(program, &state, params, &path)?;
+                    lights.extend(light::light(
+                        id,
+                        kind,
+                        params,
+                        origin(&m),
+                        dir,
+                        axes(&m),
+                        flicker,
+                    ));
+                }
+                // A material draws nothing itself; the objects naming it read it (#418). A group
+                // draws nothing either: its children take its transform and its `visible` (#424).
+                "camera@1" | "sky@1" | "material@1" | "group@1" => {}
+                // #424: an instancer's elements, placed once its prototypes are read.
+                "instance@1" => instancers.push((layers.len(), id.clone())),
+                "cutaway@1" if cutaway.is_none() => {
+                    cutaway = Some(crate::cut::cutaway(
+                        id,
+                        params,
+                        &path,
+                        |r| {
+                            look.role(r).map(|c| {
+                                c.map(|v| deep_canvas::color::srgb_decode(f64::from(v) / 255.0))
+                            })
+                        },
+                        look.basis == crate::look::Basis::Physical,
+                    )?);
+                }
+                "cutaway@1" => {}
                 _ => others.push(Other {
                     id: id.clone(),
                     kind: kind.to_string(),
@@ -897,11 +2475,76 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
                     pos: origin(&world(&items, id)),
                 }),
             }
+            if proto {
+                protos.insert(id.clone(), layer.solids[before..].to_vec());
+            }
+            if !visible {
+                layer.solids.truncate(before);
+            }
         }
-        if !layer.items().is_empty() {
+        if !layer.items().is_empty() || instancers.iter().any(|(l, _)| *l == layers.len()) {
             layers.push(layer);
         }
     }
+    // Each element: its prototype's solids moved from the prototype's world to the instancer's
+    // world × the element's own transform, addressed `<instancer>#<id>` (Instance `instance@1`).
+    for (l, id) in &instancers {
+        let path = format!("items/{id}/params");
+        let empty = Value::Object(Map::new());
+        let params = items[id.as_str()].get("params").unwrap_or(&empty);
+        let (of, elements) = crate::cut::elements(params, &path)?;
+        let at = world(&items, id);
+        let from: Vec<Affine3> = of
+            .iter()
+            .map(|p| crate::cut::inverse(&world(&items, p)))
+            .collect();
+        for e in elements {
+            let Some(solids) = protos.get(&of[e.proto]) else {
+                return refused("ref_unresolved", format!("{path}/of"));
+            };
+            let place = matmul(&matmul(&at, &e.at), &from[e.proto]);
+            for (k, s) in solids.iter().enumerate() {
+                let mut s = s.clone();
+                s.id = if solids.len() == 1 {
+                    format!("{id}#{}", e.id)
+                } else {
+                    format!("{id}#{}#{k}", e.id)
+                };
+                s.model = matmul(&place, &s.model);
+                s.op = None;
+                bounds.extend(s.points());
+                layers[*l].solids.push(s);
+            }
+        }
+    }
+    layers.retain(|l| !l.items().is_empty());
+    let mut max_fragments: u64 = 8_388_608;
+    // Each solid's adjust past opacity, by its item (an element's, its instancer's), and how it
+    // resolves (#424).
+    for s in layers.iter_mut().flat_map(|l| &mut l.solids) {
+        let owner = s.id.split('#').next().unwrap_or(&s.id);
+        s.adjust = items.get(owner).and_then(|i| adjust3(look, i));
+        let item = items.get(owner);
+        s.per_pixel =
+            item.and_then(|i| i.get("resolve")).and_then(Value::as_str) == Some("per_pixel");
+        if s.per_pixel {
+            if let Some(m) = item
+                .and_then(|i| i.get("max_fragments"))
+                .and_then(Value::as_u64)
+            {
+                max_fragments = max_fragments.min(m.max(1));
+            }
+        }
+    }
+    // The class's GPU memory, at 16 B a fragment (Object: see-through order).
+    let budget = Value::Object(
+        map.get("budget")
+            .map(|b| ("budget".to_string(), b.clone()))
+            .into_iter()
+            .collect(),
+    );
+    let gpu = deep_canvas::budget::of(&budget).map_or(512 << 20, |(_, l)| l.gpu_bytes);
+    let fragments = [max_fragments, (gpu / 16).max(max_fragments)];
 
     let camera_id = map.get("camera").and_then(Value::as_str);
     let Some(cam_item) = camera_id.and_then(|c| items.get(c)) else {
@@ -920,17 +2563,55 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
         &cam_path,
     )?;
 
+    // A readout sits in the view's top-left corner, its text the template's (#419).
+    let mut readouts = Vec::new();
+    for (id, params) in &readout_items {
+        let text = params.get("template").and_then(Value::as_str).unwrap_or("");
+        let size = num(params.get("size")).unwrap_or(13.0);
+        let (run_box, glyphs) = labels.run(text, Role::Body, size as f32);
+        let shaped_at = glyphs.first().map_or(size as f32, |g| g.size);
+        let quad = [
+            run_box[0] * size / f64::from(shaped_at),
+            run_box[1] * size / f64::from(shaped_at),
+        ];
+        let depth = if camera.perspective {
+            2.0 * camera.near
+        } else {
+            camera.near + 0.01
+        };
+        readouts.push(Label {
+            id: id.clone(),
+            text: text.to_string(),
+            role: Role::Body,
+            glyphs,
+            bounds: run_box,
+            pos: camera.unproject(12.0 + quad[0] / 2.0, 12.0 + quad[1] / 2.0, depth),
+            em: size,
+            quad,
+            world: false,
+            facing: Facing::Camera,
+            axes: [camera.right, camera.up],
+            color: look
+                .role("stone")
+                .or(look.role("ink"))
+                .unwrap_or([255, 255, 255]),
+        });
+    }
     // Each label's glyphs from the atlas at its size on screen; a frame that found the atlas full
     // starts it over and places them all again.
     labels.begin();
     for pass in 0..2 {
-        for l in layers.iter_mut().flat_map(|layer| layer.labels.iter_mut()) {
+        for l in layers
+            .iter_mut()
+            .flat_map(|layer| layer.labels.iter_mut())
+            .chain(readouts.iter_mut())
+        {
             let em_px = if l.world {
                 l.em * camera.px_per_m(camera.to_view(l.pos)[2])
             } else {
                 l.em
             };
-            labels.place(&l.text, l.role, &mut l.glyphs, l.bounds, em_px);
+            labels.place(&l.text, l.role, &mut l.glyphs, l.bounds, em_px, l.world);
         }
         if pass == 1 || !labels.make_room() {
             break;
@@ -941,16 +2622,79 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
     for (layer, id) in overlay_items {
         overlays.push(overlay(&items, &layer, &id, &camera, look)?);
     }
-    Ok(Scene {
+    // Puffs past the document's cap are refused, never dropped (#422).
+    let cap = map
+        .get("budget")
+        .and_then(|b| b.get("puffs"))
+        .and_then(Value::as_u64)
+        .unwrap_or(512);
+    if puffs > cap {
+        return refused("out_of_range", "budget/puffs");
+    }
+    let mut scene = Scene {
         size,
         camera,
         ground: look.ground,
         layers,
         overlays,
         sun,
+        lights,
+        sky,
         others,
+        light_cut: None,
+        curves,
         pages: labels.pages(),
-    })
+        motion: None,
+        readouts,
+        texels: BTreeMap::new(),
+        jitter: [0.0; 2],
+        cutaway: None,
+        fragments,
+    };
+    scene.set_cutaway(cutaway);
+    Ok(scene)
+}
+
+/// Whether `id` and each of its parents are visible (Item: `visible`, inherited).
+fn shown(items: &Items<'_>, id: &str) -> bool {
+    let mut at = Some(id);
+    let mut seen = 0;
+    while let Some(i) = at {
+        let Some(item) = items.get(i) else {
+            return true;
+        };
+        if item.get("visible") == Some(&Value::Bool(false)) {
+            return false;
+        }
+        at = item.get("parent").and_then(Value::as_str);
+        seen += 1;
+        if seen > 64 {
+            return true;
+        }
+    }
+    true
+}
+
+/// An item's adjust (Item and kind: adjust), `None` at the identity (#424).
+fn adjust3(look: &Look3, item: &Value) -> Option<Adjust3> {
+    let m = item.get("adjust")?.as_object()?;
+    let n = |k: &str, d: f64| num(m.get(k)).unwrap_or(d);
+    let a = Adjust3 {
+        opacity: n("opacity", 1.0).clamp(0.0, 1.0),
+        tint: m
+            .get("tint")
+            .and_then(|t| t.as_str().or_else(|| t.get("role").and_then(Value::as_str)))
+            .and_then(|r| look.role(r))
+            .map(|c| c.map(|v| deep_canvas::color::srgb_decode(f64::from(v) / 255.0))),
+        hue: n("hue", 0.0),
+        saturation: n("saturation", 1.0),
+        brightness: n("brightness", 1.0),
+        contrast: n("contrast", 1.0),
+        exposure: n("exposure", 0.0),
+        gamma: n("gamma", 1.0),
+        invert: m.get("invert") == Some(&Value::Bool(true)),
+    };
+    (a.colors() || a.opacity < 1.0).then_some(a)
 }
 
 fn xy(v: Option<&Value>) -> Option<[f64; 2]> {
@@ -961,9 +2705,63 @@ fn xy(v: Option<&Value>) -> Option<[f64; 2]> {
     Some([num(a.first())?, num(a.get(1))?])
 }
 
+/// A `puff@1` at `pos` (#422).
+fn puff(id: &str, params: &Value, pos: Vec3, path: &str) -> Result<Puff, Refused> {
+    let field = |k: &str, default: f64, ok: fn(f64) -> bool| -> Result<f64, Refused> {
+        match params.get(k) {
+            None => Ok(default),
+            Some(v) => num(Some(v)).filter(|x| ok(*x)).ok_or(Refused {
+                code: "out_of_range",
+                path: format!("{path}/{k}"),
+            }),
+        }
+    };
+    let radius = field("radius", 1.0, |r| r > 0.0)?;
+    let light = params.get("light");
+    let on = |k: &str, yes: &str| -> Result<bool, Refused> {
+        match light.and_then(|l| l.get(k)) {
+            None => Ok(true),
+            Some(Value::String(s)) if s == yes => Ok(true),
+            Some(Value::String(s)) if s == "none" => Ok(false),
+            Some(_) => refused("out_of_range", format!("{path}/light/{k}")),
+        }
+    };
+    let lf = |k: &str, default: f64| -> Result<f64, Refused> {
+        match light.and_then(|l| l.get(k)) {
+            None => Ok(default),
+            Some(v) => num(Some(v)).filter(|x| (0.0..=1.0).contains(x)).ok_or(Refused {
+                code: "out_of_range",
+                path: format!("{path}/light/{k}"),
+            }),
+        }
+    };
+    let near_fade = match params.get("near_fade") {
+        None => radius,
+        Some(Value::String(s)) if s == "auto" => radius,
+        Some(v) => num(Some(v)).filter(|x| *x >= 0.0).ok_or(Refused {
+            code: "out_of_range",
+            path: format!("{path}/near_fade"),
+        })?,
+    };
+    Ok(Puff {
+        id: id.to_string(),
+        pos,
+        radius,
+        aspect: field("aspect", 1.6, |a| a > 0.0)?,
+        density: field("density", 0.5, |d| (0.0..=1.0).contains(&d))?,
+        bright: field("bright", 1.0, |b| b >= 0.0)?,
+        seed: params.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32,
+        sun: on("sun", "key")?,
+        ambient: on("ambient", "sky")?,
+        phase: lf("phase", 0.5)?,
+        shade: lf("shade", 0.6)?,
+        near_fade,
+    })
+}
+
 /// An `overlay.frame@1`: its frame's shapes, placed at its anchor's projection plus its offset.
 fn overlay(
-    items: &Map<String, Value>,
+    items: &Items<'_>,
     layer: &str,
     id: &str,
     camera: &Camera,
@@ -996,7 +2794,7 @@ fn overlay(
         })
         .as_ref())
     .unwrap_or([0.0; 2]);
-    let mut children: Vec<(String, &String)> = items
+    let mut children: Vec<(&str, &String)> = items
         .iter()
         .filter(|(_, i)| i.get("parent").and_then(Value::as_str) == Some(frame))
         .map(|(cid, i)| (order_key(i), cid))
@@ -1079,7 +2877,7 @@ impl Scene {
         let proj = |p: Vec3| cam.project(p).map(|q| [q[0], q[1]]);
         for layer in &self.layers {
             for s in &layer.solids {
-                let pts: Vec<[f64; 2]> = corners(&s.model).into_iter().filter_map(proj).collect();
+                let pts: Vec<[f64; 2]> = s.points().into_iter().filter_map(proj).collect();
                 if let Some(b) = boxed(&pts) {
                     out.push((s.id.clone(), b));
                 }
@@ -1144,6 +2942,82 @@ pub fn has_3d(doc: &Value) -> bool {
                 .values()
                 .any(|i| i.get("kind").and_then(Value::as_str).is_some_and(is_3d))
         })
+}
+
+#[cfg(test)]
+mod stroke_tests {
+    use super::*;
+
+    fn doc(modifiers: Value) -> Value {
+        serde_json::json!({
+            "format": 1, "size": [320, 240], "camera": "cam",
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "order": "a0",
+                        "params": {"projection": "perspective", "position": [0, 0, 5], "target": [0, 0, 0], "fov": 40}},
+                "l": {"id": "l", "kind": "mark.line@1", "order": "a1",
+                      "params": {"points": [[0, 0, 0], [2, 0, 0]], "width": 2, "paint": {"fill": {"role": "ink"}}},
+                      "modifiers": modifiers}
+            }
+        })
+    }
+
+    fn lines(modifiers: Value, t: i64) -> Vec<Line> {
+        let look = crate::look::Look3::from_roles(
+            [
+                ("ink".to_string(), [0, 0, 0]),
+                ("ground".to_string(), [255, 255, 255]),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        let mut labels = Labels::new();
+        let scene = evaluate(&doc(modifiers), t, &look, &mut labels).unwrap();
+        scene.layers.into_iter().flat_map(|l| l.lines).collect()
+    }
+
+    #[test]
+    fn dash_cuts_a_two_metre_stroke_into_its_dashes() {
+        let ls = lines(
+            serde_json::json!([{"kind": "mod.dash@1", "params": {"dash": 0.3, "gap": 0.2}}]),
+            0,
+        );
+        assert_eq!(ls.len(), 1);
+        // 0–0.3, 0.5–0.8, 1.0–1.3, 1.5–1.8.
+        assert_eq!(ls[0].segments.len(), 4);
+        assert!((stroke_length(&ls[0].segments) - 1.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn outline_draws_a_wider_line_under_it() {
+        let ls = lines(
+            serde_json::json!([{"kind": "mod.outline@1", "params": {"width": 1}}]),
+            0,
+        );
+        assert_eq!(ls.len(), 2);
+        assert_eq!(ls[0].segments[0].wa, 4.0);
+        assert_eq!(ls[1].segments[0].wa, 2.0);
+    }
+
+    #[test]
+    fn boil_steps_at_its_rate_and_while_drawing_waits_for_a_build() {
+        let fl = deep_canvas::camera::FLICKS_PER_SECOND;
+        let boil = serde_json::json!([{"kind": "mod.boil@1", "params": {"amount": 0.05, "hz": 2}}]);
+        let at = |t: i64| lines(boil.clone(), t)[0].segments[0].a;
+        assert_eq!(at(fl / 10), at(fl / 5), "one step holds for half a second");
+        assert_ne!(at(fl / 10), at(fl), "the next step draws again");
+        let waiting = serde_json::json!([
+            {"kind": "mod.build@1", "params": {"to": 1}},
+            {"kind": "mod.boil@1", "while": "drawing", "params": {"amount": 0.05, "hz": 2}}
+        ]);
+        assert_eq!(lines(waiting, fl / 10)[0].segments[0].a, [0.0, 0.0, 0.0]);
+        let mid = serde_json::json!([
+            {"kind": "mod.build@1", "params": {"to": 0.5}},
+            {"kind": "mod.boil@1", "while": "drawing", "params": {"amount": 0.05, "hz": 2}}
+        ]);
+        let ls = lines(mid, fl / 10);
+        assert_ne!(ls[0].segments[0].a, [0.0, 0.0, 0.0]);
+        assert!(stroke_length(&ls[0].segments) < 1.2);
+    }
 }
 
 #[cfg(test)]

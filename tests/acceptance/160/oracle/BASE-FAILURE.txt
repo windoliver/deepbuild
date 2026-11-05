@@ -1,0 +1,617 @@
+Base commit: 69803b946abf4881f818485c5898865949a2a871 (with the one change outside the tests this lane's checkout
+carries: crates/deep-app/Cargo.toml lists image under [dependencies], so deep-canvas-render builds on Linux; see the
+parent suite's BASE-FAILURE.txt, Run 1, for the base as committed, where every test fails on the build)
+Command: npx vitest run --root tests/acceptance/160/oracle --no-file-parallelism
+Date: 2026-11-04T10:05:59Z  Node v24.22.0  vitest 5.0.5 linux-arm64  cargo 1.99.1
+Where: the session that wrote these files could not write into the checkout, so the run used a copy of this folder
+outside it (shown below as <oracle>), with ../helpers.ts and node_modules linked to the checkout's, so the same
+helpers, the checkout's cargo build of deep-canvas-render and its vitest ran.
+Every one of the 28 tests fails at the base, each for its own reason:
+  - 'deep-canvas-render path exited 2' with its usage line: the base has no path subcommand (all 23 tests in
+    lottie.test.ts, arclength.test.ts and contact.test.ts: AC1, AC3, AC5, AC7, AC12, AC13), so no op, anchor,
+    arrow or attachment is ever read;
+  - pixels the base draws in tree order, because it ignores z on rect@1 (all 5 tests in zindex.test.ts, AC16): the
+    red box drawn later covers the green in z-index-001, -007, -010, abspos-001 and dynamic-001 at 1 s; stack-001
+    shows blue on top where orange belongs; the isolation test's twin without isolation shows the green child, not
+    the red it should sink under. (The parts the base gets right by tree order, stack-002, z-index-005, -013, the
+    isolated case and dynamic-001 at 0 s, sit in tests whose other parts fail.)
+
+
+ RUN  v5.0.5 <oracle>
+
+ ❯ arclength.test.ts (10 tests | 10 failed) 3090ms
+   ❯ AC13 kurbo's arc-length cases through #length and #at (3)
+     × AC13 #length of kurbo's cubic, quadratic, accuracy cubic, line and pathological quadratic is each one's true arc length within 0.01 u 66ms
+     × AC13 cubicbez_inv_arclen: #at:j/10 on the parabola, as a cubic and as a quadratic, lies j/10 of its arc length along it within 0.1 u, along its tangent within 1° 463ms
+     × AC13 cubicbez_inv_arclen_accuracy and line_arclen: the point 50 u along kurbo's accuracy cubic, and a third of the way along its line 19ms
+   ❯ AC1 AC7 a trim and a trimmed arrow on kurbo's cubic, by its arc length (3)
+     × AC1 trim 0.25..0.75 of the parabola covers it from a quarter to three quarters of its arc length within 0.01 u 13ms
+     × AC1 a planted change in trim's output (moved:trim) fails the arc-length reference 8ms
+     × AC7 an arrow at the end of the parabola trimmed to 0.25, 0.5 and 1 has its tip at that fraction of its arc length within 0.1 u, along the tangent within 1° 7ms
+   ❯ AC13 Godot's PathFollow2D and Curve2D cases through #at and #length (4)
+     × AC13 PathFollow2D: the square of four 100 u lines has #length 400, and by progress ratio and by progress each point lies where Godot puts it within 0.1 u (progress 150 is 50 u into the second side) 12ms
+     × AC13 PathFollow2D, removal of a point: #at:0.5 of (0,0) (100,0) (100,100) is (100, 0), and of (0,0) (100,100) is (50, 50) 8ms
+     × AC13 Curve2D: a 50 u line's #length is 50 and it samples (0, 0), (0, 25), (0, 50); sample_baked_with_rotation at 25 gives each line's midpoint and its angle, 0°, 90°, 180° and −90° 6ms
+     × AC13 Curve2D's sample Bézier is longer than its 50 u chord, as Godot checks, and its #length and #at:0.5 are its arc length's within 0.01 u and 0.1 u 4ms
+ ❯ zindex.test.ts (5 tests | 5 failed) 1832ms
+   ❯ AC16 WPT CSS 2 z-index and isolation, ported (5)
+     × AC16 z-index-001, -007 and -010: a greater z draws in front though it comes first in the tree 240ms
+     × AC16 z-index-stack-001 and -002, z-index-005 and -013: boxes stack by z, and at equal z by tree order 221ms
+     × AC16 z-index-abspos-001's rule across groups: a z −1 box in a later group draws under the z 0 box before it 48ms
+     × AC16 isolation-establishes-stacking-context: an isolated group keeps its z −1 child inside it, over the red before it; without isolation the child sinks under the red 60ms
+     × AC16 z-index-dynamic-001: z changed from −1 to 1 brings the green box from under the red to over it 55ms
+ ❯ contact.test.ts (2 tests | 2 failed) 1168ms
+   ❯ AC12 kurbo's line meeting a quadratic, as an end attached at outline (2)
+     × AC12 an end attached at outline with gap 0 stops where kurbo's line meets its quadratic, (10, 5) turned and moved, within 0.5 u 65ms
+     × AC12 the twin that reads the box (at: edge) does not land on the contact, so the case tells the outline from the bounds 14ms
+ ❯ lottie.test.ts (11 tests | 11 failed) 1162ms
+   ❯ AC1 AC5 Lottie Trim Path on the spec's trim_path.json (4)
+     × AC1 AC5 the example as it is (start 0, end 50, offset 0, m 1): each shape trimmed to the first half of its actual length, within 0.01 u 26ms
+     × AC1 the spec's offset rule: offsets 90°, 450° and −270° all give the window 0.25..0.75 of each shape, and 270° wraps through the start 19ms
+     × AC1 m 2 (sequential, our each: false): the shapes in render order, last first, trimmed as one length 18ms
+     × AC5 a planted change in trim's output (moved:trim) fails the Lottie reference 18ms
+   ❯ AC5 Lottie Rounded Corners on the spec's rounded_corners.json (2)
+     × AC5 the example's star (5 points, radii 222.7 and 111.4, turned 358.67°) with radius 50 matches lottie-web's rounded corners within 0.01 u 9ms
+     × AC5 a planted change in round_corners's output (moved:round_corners) fails the Lottie reference 15ms
+   ❯ AC5 Lottie Pucker / Bloat on the spec's pucker_bloat.json (2)
+     × AC5 the example's pentagon (radius 160) at amount 50 (our 0.5) matches the spec's pucker_bloat within 0.01 u 12ms
+     × AC5 a planted change in pucker's output (moved:pucker) fails the Lottie reference 12ms
+   ❯ AC3 AC5 lottie-web's zig zag on a closed 4-segment square (3)
+     × AC3 AC5 5 ridges per segment build the 24 segments computed before the build, the ridges where lottie-web puts them within 0.01 u 16ms
+     × AC5 each corner moves as lottie-web's corner rule moves it: size along the normal of its neighbours' chord, keeping the alternation 11ms
+     × AC5 a planted change in zigzag's output (moved:zigzag) fails the lottie-web reference 10ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 28 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  arclength.test.ts > AC13 kurbo's arc-length cases through #length and #at > AC13 #length of kurbo's cubic, quadratic, accuracy cubic, line and pathological quadratic is each one's true arc length within 0.01 u
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ arclength.test.ts:117:28
+ ❯ arclength.test.ts:116:44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/28]⎯
+
+ FAIL  arclength.test.ts > AC13 kurbo's arc-length cases through #length and #at > AC13 cubicbez_inv_arclen: #at:j/10 on the parabola, as a cubic and as a quadratic, lies j/10 of its arc length along it within 0.1 u, along its tangent within 1°
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ arclength.test.ts:130:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/28]⎯
+
+ FAIL  arclength.test.ts > AC13 kurbo's arc-length cases through #length and #at > AC13 cubicbez_inv_arclen_accuracy and line_arclen: the point 50 u along kurbo's accuracy cubic, and a third of the way along its line
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ arclength.test.ts:142:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/28]⎯
+
+ FAIL  arclength.test.ts > AC1 AC7 a trim and a trimmed arrow on kurbo's cubic, by its arc length > AC1 trim 0.25..0.75 of the parabola covers it from a quarter to three quarters of its arc length within 0.01 u
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ arclength.test.ts:168:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/28]⎯
+
+ FAIL  arclength.test.ts > AC1 AC7 a trim and a trimmed arrow on kurbo's cubic, by its arc length > AC1 a planted change in trim's output (moved:trim) fails the arc-length reference
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ arclength.test.ts:173:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/28]⎯
+
+ FAIL  arclength.test.ts > AC1 AC7 a trim and a trimmed arrow on kurbo's cubic, by its arc length > AC7 an arrow at the end of the parabola trimmed to 0.25, 0.5 and 1 has its tip at that fraction of its arc length within 0.1 u, along the tangent within 1°
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ arclength.test.ts:180:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/28]⎯
+
+ FAIL  arclength.test.ts > AC13 Godot's PathFollow2D and Curve2D cases through #at and #length > AC13 PathFollow2D: the square of four 100 u lines has #length 400, and by progress ratio and by progress each point lies where Godot puts it within 0.1 u (progress 150 is 50 u into the second side)
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ arclength.test.ts:212:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/28]⎯
+
+ FAIL  arclength.test.ts > AC13 Godot's PathFollow2D and Curve2D cases through #at and #length > AC13 PathFollow2D, removal of a point: #at:0.5 of (0,0) (100,0) (100,100) is (100, 0), and of (0,0) (100,100) is (50, 50)
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ arclength.test.ts:223:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/28]⎯
+
+ FAIL  arclength.test.ts > AC13 Godot's PathFollow2D and Curve2D cases through #at and #length > AC13 Curve2D: a 50 u line's #length is 50 and it samples (0, 0), (0, 25), (0, 50); sample_baked_with_rotation at 25 gives each line's midpoint and its angle, 0°, 90°, 180° and −90°
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ arclength.test.ts:229:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/28]⎯
+
+ FAIL  arclength.test.ts > AC13 Godot's PathFollow2D and Curve2D cases through #at and #length > AC13 Curve2D's sample Bézier is longer than its 50 u chord, as Godot checks, and its #length and #at:0.5 are its arc length's within 0.01 u and 0.1 u
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ arclength.test.ts:239:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/28]⎯
+
+ FAIL  contact.test.ts > AC12 kurbo's line meeting a quadratic, as an end attached at outline > AC12 an end attached at outline with gap 0 stops where kurbo's line meets its quadratic, (10, 5) turned and moved, within 0.5 u
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ endOf contact.test.ts:37:14
+ ❯ contact.test.ts:45:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/28]⎯
+
+ FAIL  contact.test.ts > AC12 kurbo's line meeting a quadratic, as an end attached at outline > AC12 the twin that reads the box (at: edge) does not land on the contact, so the case tells the outline from the bounds
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ endOf contact.test.ts:37:14
+ ❯ contact.test.ts:50:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/28]⎯
+
+ FAIL  lottie.test.ts > AC1 AC5 Lottie Trim Path on the spec's trim_path.json > AC1 AC5 the example as it is (start 0, end 50, offset 0, m 1): each shape trimmed to the first half of its actual length, within 0.01 u
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ lottie.test.ts:230:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/28]⎯
+
+ FAIL  lottie.test.ts > AC1 AC5 Lottie Trim Path on the spec's trim_path.json > AC1 the spec's offset rule: offsets 90°, 450° and −270° all give the window 0.25..0.75 of each shape, and 270° wraps through the start
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ lottie.test.ts:237:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/28]⎯
+
+ FAIL  lottie.test.ts > AC1 AC5 Lottie Trim Path on the spec's trim_path.json > AC1 m 2 (sequential, our each: false): the shapes in render order, last first, trimmed as one length
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ lottie.test.ts:247:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/28]⎯
+
+ FAIL  lottie.test.ts > AC1 AC5 Lottie Trim Path on the spec's trim_path.json > AC5 a planted change in trim's output (moved:trim) fails the Lottie reference
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ lottie.test.ts:263:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/28]⎯
+
+ FAIL  lottie.test.ts > AC5 Lottie Rounded Corners on the spec's rounded_corners.json > AC5 the example's star (5 points, radii 222.7 and 111.4, turned 358.67°) with radius 50 matches lottie-web's rounded corners within 0.01 u
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ lottie.test.ts:297:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/28]⎯
+
+ FAIL  lottie.test.ts > AC5 Lottie Rounded Corners on the spec's rounded_corners.json > AC5 a planted change in round_corners's output (moved:round_corners) fails the Lottie reference
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ lottie.test.ts:304:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/28]⎯
+
+ FAIL  lottie.test.ts > AC5 Lottie Pucker / Bloat on the spec's pucker_bloat.json > AC5 the example's pentagon (radius 160) at amount 50 (our 0.5) matches the spec's pucker_bloat within 0.01 u
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ lottie.test.ts:333:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/28]⎯
+
+ FAIL  lottie.test.ts > AC5 Lottie Pucker / Bloat on the spec's pucker_bloat.json > AC5 a planted change in pucker's output (moved:pucker) fails the Lottie reference
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ lottie.test.ts:339:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/28]⎯
+
+ FAIL  lottie.test.ts > AC3 AC5 lottie-web's zig zag on a closed 4-segment square > AC3 AC5 5 ridges per segment build the 24 segments computed before the build, the ridges where lottie-web puts them within 0.01 u
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ lottie.test.ts:392:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/28]⎯
+
+ FAIL  lottie.test.ts > AC3 AC5 lottie-web's zig zag on a closed 4-segment square > AC5 each corner moves as lottie-web's corner rule moves it: size along the normal of its neighbours' chord, keeping the alternation
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ lottie.test.ts:402:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/28]⎯
+
+ FAIL  lottie.test.ts > AC3 AC5 lottie-web's zig zag on a closed 4-segment square > AC5 a planted change in zigzag's output (moved:zigzag) fails the lottie-web reference
+Error: deep-canvas-render path exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry
+
+ ❯ batch ../helpers.ts:159:31
+    157|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+    158|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    159|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+    160|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    161|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ pathAll ../helpers.ts:348:16
+ ❯ pathFrames ../helpers.ts:354:10
+ ❯ pathAt ../helpers.ts:359:10
+ ❯ lottie.test.ts:408:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/28]⎯
+
+ FAIL  zindex.test.ts > AC16 WPT CSS 2 z-index and isolation, ported > AC16 z-index-001, -007 and -010: a greater z draws in front though it comes first in the tree
+AssertionError: z-index-001: 10000 pixels of the square are not green, first (20, 20) reads [200,30,30]
+z-index-001: 10000 red pixels
+z-index-007: 10000 pixels of the square are not green, first (20, 20) reads [200,30,30]
+z-index-007: 10000 red pixels
+z-index-010: 10000 pixels of the square are not green, first (20, 20) reads [200,30,30]
+z-index-010: 10000 red pixels: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "z-index-001: 10000 pixels of the square are not green, first (20, 20) reads [200,30,30]",
++   "z-index-001: 10000 red pixels",
++   "z-index-007: 10000 pixels of the square are not green, first (20, 20) reads [200,30,30]",
++   "z-index-007: 10000 red pixels",
++   "z-index-010: 10000 pixels of the square are not green, first (20, 20) reads [200,30,30]",
++   "z-index-010: 10000 red pixels",
++ ]
+
+ ❯ zindex.test.ts:70:43
+     68|       return greenSquareFailures(draw(d, name), name);
+     69|     });
+     70|     expect(failures, failures.join('\n')).toEqual([]);
+       |                                           ^
+     71|   }, TIMEOUT);
+     72|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/28]⎯
+
+ FAIL  zindex.test.ts > AC16 WPT CSS 2 z-index and isolation, ported > AC16 z-index-stack-001 and -002, z-index-005 and -013: boxes stack by z, and at equal z by tree order
+AssertionError: z-index-stack-001: CSS (45, 45) reads [40,90,160], not orange
+z-index-stack-001: CSS (40, 80) reads [40,90,160], not orange
+z-index-stack-001: CSS (75, 75) reads [40,90,160], not yellow: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "z-index-stack-001: CSS (45, 45) reads [40,90,160], not orange",
++   "z-index-stack-001: CSS (40, 80) reads [40,90,160], not orange",
++   "z-index-stack-001: CSS (75, 75) reads [40,90,160], not yellow",
++ ]
+
+ ❯ zindex.test.ts:92:43
+     90|       failures.push(...greenSquareFailures(draw(d, name), name));
+     91|     }
+     92|     expect(failures, failures.join('\n')).toEqual([]);
+       |                                           ^
+     93|   }, TIMEOUT);
+     94|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/28]⎯
+
+ FAIL  zindex.test.ts > AC16 WPT CSS 2 z-index and isolation, ported > AC16 z-index-abspos-001's rule across groups: a z −1 box in a later group draws under the z 0 box before it
+AssertionError: z-index-abspos-001: 10000 pixels of the square are not green, first (20, 20) reads [200,30,30]
+z-index-abspos-001: 12000 red pixels: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "z-index-abspos-001: 10000 pixels of the square are not green, first (20, 20) reads [200,30,30]",
++   "z-index-abspos-001: 12000 red pixels",
++ ]
+
+ ❯ zindex.test.ts:102:43
+    100|     ]);
+    101|     const failures = greenSquareFailures(draw(d, 'z-index-abspos-001')…
+    102|     expect(failures, failures.join('\n')).toEqual([]);
+       |                                           ^
+    103|   }, TIMEOUT);
+    104|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/28]⎯
+
+ FAIL  zindex.test.ts > AC16 WPT CSS 2 z-index and isolation, ported > AC16 isolation-establishes-stacking-context: an isolated group keeps its z −1 child inside it, over the red before it; without isolation the child sinks under the red
+AssertionError: the twin without isolation: the z −1 child sinks under the red: expected [ 30, 150, 60 ] to deeply equal [ 200, 30, 30 ]
+
+- Expected
++ Received
+
+  [
+-   200,
+-   30,
+    30,
++   150,
++   60,
+  ]
+
+ ❯ zindex.test.ts:116:152
+    114|     const failures = greenSquareFailures(draw(isolation(true), 'the is…
+    115|     expect(failures, failures.join('\n')).toEqual([]);
+    116|     expect(pixel(draw(isolation(false), 'the parent not isolated'), O …
+       |                                                                                                                                                        ^
+    117|   }, TIMEOUT);
+    118|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/28]⎯
+
+ FAIL  zindex.test.ts > AC16 WPT CSS 2 z-index and isolation, ported > AC16 z-index-dynamic-001: z changed from −1 to 1 brings the green box from under the red to over it
+AssertionError: z-index-dynamic-001 at 1 s: 10000 pixels of the square are not green, first (20, 20) reads [200,30,30]
+z-index-dynamic-001 at 1 s: 10000 red pixels: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "z-index-dynamic-001 at 1 s: 10000 pixels of the square are not green, first (20, 20) reads [200,30,30]",
++   "z-index-dynamic-001 at 1 s: 10000 red pixels",
++ ]
+
+ ❯ zindex.test.ts:127:43
+    125|     expect(pixel(draw(d, 'before the change', 0), O + 50, O + 50), 'at…
+    126|     const failures = greenSquareFailures(draw(d, 'after the change', f…
+    127|     expect(failures, failures.join('\n')).toEqual([]);
+       |                                           ^
+    128|   }, TIMEOUT);
+    129| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/28]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  28 failed (28)
+   Start at  02:06:03
+   Duration  8.76s (tests 93%, transform 5%, import 2%)
+
+    Isolate  4 workers spawned · ~185ms startup each (spawn + environment, per file)
+             at least ~555ms faster with isolate: false — reuses workers across files instead of one per file
+

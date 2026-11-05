@@ -1,0 +1,47 @@
+{
+  "id": "lowpoly.tree",
+  "version": "1.0",
+  "title": "Low-poly tree",
+  "license": "MIT",
+  "author": "the #420 acceptance suite",
+  "description": "A faceted tree: a six-sided tapered trunk (lathe@1, flat caps) under a crown that is an icosahedron split once (ball@1, geodesic, detail 1), both with shade: flat.",
+  "inputs": {
+    "height": {
+      "type": "number",
+      "unit": "m",
+      "default": 2,
+      "min": 0.5,
+      "max": 20,
+      "about": "the tree's height"
+    }
+  },
+  "steps": {
+    "trunk": {
+      "op": "builder",
+      "kind": "lathe@1",
+      "params": {
+        "outline": [[0.12, 0, false], [0.08, "height * 0.4", false]],
+        "segments": 6,
+        "caps": "flat",
+        "shade": "flat"
+      }
+    },
+    "crown": {
+      "op": "builder",
+      "kind": "ball@1",
+      "params": {
+        "radius": "height * 0.35",
+        "tessellation": "geodesic",
+        "base": "icosa",
+        "detail": 1,
+        "shade": "flat"
+      },
+      "at": {
+        "pos": [0, "height * 0.65", 0]
+      }
+    }
+  },
+  "outputs": {
+    "parts": ["trunk", "crown"]
+  }
+}

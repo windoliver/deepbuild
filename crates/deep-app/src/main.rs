@@ -1,6 +1,15 @@
-//! `deep-app [--panel DIR] [MODE]`: the spike's window, with the count in the menu bar.
+//! `deep-app [--panel DIR [--view NAME]] [MODE]`: the spike's window, with the count in the menu bar.
+//!
+//! Issue #262: with `--view`, the panel draws that plug-in view, and the app reports it shown to the hub every 5 s
+//! while the window shows it (`deep_app::shown`).
 //!
 //! `deep-app --set-up` runs the first launch's Set up click with no window and prints its one line (#326).
+//!
+//! Issue #883: the window's app posts each ask to Notification Center and withdraws it once the
+//! record says it closed (`notifications`, below); macOS shows them only from the app bundle `scripts/app-bundle`
+//! builds. Issue #994: a second launch brings the first window forward and exits, and the notifier keeps trying a hub
+//! that isn't answering. `--notification-center`, run from that bundle, prints what Notification Center holds from the app, one
+//! JSON line per notification (`{"tag","title","body"}`), and quits.
 //!
 //! With `DEEP_APP_EXIT_AFTER_FIRST_FRAME` set it prints `first-frame-ms N` once the window
 //! has drawn and quits, which is how the spike measures cold start.
@@ -24,13 +33,36 @@
 //! "picker":true,"source","display":{"id","main"},"frames","first_frame_ms","held_ms",
 //! "asset":{"sha256","redaction":"unknown"}}`.
 //!
+//! Issue #498 adds `--capture-devices STORE`: reads DeepBuild's camera and microphone permissions
+//! (never asks for them; without both it prints them and quits), then twice arms a capture of the
+//! default camera and microphone and records each while a person holds ⌥Space, keeps each
+//! recording in the evidence store at STORE by its hash and prints one line: `{"capture":498,
+//! "permission":{"camera","microphone"},"via","hold","holds":[{"down_ms","up_ms"}],"captures":
+//! [{"request","source","requested_ms","period_ms","kept_before_hold","kept","first_ms","last_ms",
+//! "asset":{"sha256","redaction":"unknown"}}]}`.
+//!
+//! Issue #140 adds `--color-check [--planted gpui_layer_untagged | wgpu_default_colorspace]`: the
+//! color seam on the real window. Each status color of the shipped look is drawn as a swatch
+//! through every Metal layer the app presents through (the window's, which GPUI composites the GPU
+//! layer's slots into, and a surface wgpu configures with its `Srgb` color space), read back from
+//! that layer's drawable, and printed as one line with each layer's colorspace as the layer
+//! reports it: `{"color":140,"layers":[{"layer","owner","colorspace"}],"swatches":[{"layer",
+//! "status","read":[r,g,b]}]}`. The planted twins leave the window's layer, or the wgpu surface's,
+//! untagged.
+//!
+//! Issue #140 adds `--capture-seam`: the capture seam's macOS backend asked for the main display
+//! with no picker (refused), then the system picker; once a person has picked, 3 s of it
+//! recorded and kept nowhere, with the system's recording indicator read from the window server
+//! while frames arrive. One line: `{"capture":140,"backend","permission","direct":{"outcome",
+//! "frames","indicator":{"system"}},"picker","picked","recorded","frames","indicator":{"system"}}`.
+//!
 //! Each probe prints what the gate saw as JSON on stdout, then its report as the last line:
 //! `{"spike":339,"mode":"synthetic"|"held","presses":n,"frames":n,"held":bool,"permission":
 //! "granted"|"denied"|"undetermined"}`.
 
 use std::{path::PathBuf, time::Instant};
 
-use deep_app::{init, menu_bar_title, mount_panel, sessions, Spike};
+use deep_app::{init, menu_bar_line, mount_panel, sessions, Spike};
 use gpui_kit::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,16 +82,40 @@ enum Mode {
         chords: u64,
     },
     SetUp,
+    NotificationCenter,
     CaptureBug {
         store: PathBuf,
     },
+    CaptureDevices {
+        store: PathBuf,
+    },
+    ColorCheck {
+        planted: Option<String>,
+    },
+    CaptureSeam,
 }
 
 fn main() {
+    // The signed app has no allow-jit entitlement (#358), so no panel in it may ask for native code.
+    rquickjs_jit::deny_native_code();
+    #[cfg(feature = "panel-check")]
+    {
+        let all: Vec<String> = std::env::args().skip(1).collect();
+        match all.first().map(String::as_str) {
+            Some("panel-check") => std::process::exit(deep_app::panel_check::check(&all[1..])),
+            Some("panel-bench") => std::process::exit(deep_app::panel_check::bench(&all[1..])),
+            Some("panel-keys") => std::process::exit(deep_app::panel_keys::keys(&all[1..])),
+            _ => {}
+        }
+    }
     let started = Instant::now();
-    let (panel_dir, mode) = args();
+    let (panel_dir, view, mode) = args();
     if let Mode::PostForged { chords } = mode {
         trusted::post_forged(chords);
+        return;
+    }
+    if mode == Mode::NotificationCenter {
+        notification_center::print();
         return;
     }
     if mode == Mode::SetUp {
@@ -72,11 +128,37 @@ fn main() {
         }
         return;
     }
+    #[cfg(target_os = "macos")]
+    if let Mode::ColorCheck { planted } = &mode {
+        if planted.as_deref() == Some("gpui_layer_untagged") {
+            gpui_apple::metal_renderer::layer_colorspace::plant_untagged();
+        }
+        let wgpu_untagged = planted.as_deref() == Some("wgpu_default_colorspace");
+        application().run(move |cx| {
+            gpui_kit::init(cx);
+            color_check::run(wgpu_untagged, cx);
+        });
+        return;
+    }
+    // One app per user (#994). A window for a panel or a view is a tool beside it, and runs no notifier.
+    let mut held = None;
+    if mode == Mode::Window && panel_dir.is_none() && view.is_none() {
+        match deep_app::single::claim(&deep_app::hub::root()) {
+            Ok(deep_app::single::Claim::Second) => return,
+            Ok(deep_app::single::Claim::First(claim)) => held = Some(claim),
+            Err(error) => {
+                eprintln!("deep-app: couldn't claim the app, so no notifications: {error}")
+            }
+        }
+    }
     application().run(move |cx| {
         gpui_kit::init(cx);
         init(cx);
         menu_bar::set_dock_icon();
-        menu_bar::show_title(&menu_bar_title(&sessions()));
+        menu_bar::show_title(&menu_bar_line(&sessions()));
+        if let Some(held) = held {
+            notifications::start(held, cx);
+        }
 
         let runtime = deep_app::new_runtime().expect("panel runtime");
         // The window draws its own title bar, with the mark, so it owns the bar's drag.
@@ -92,6 +174,16 @@ fn main() {
                     .unwrap_or_else(|error| panic!("panel {}: {error:#}", dir.display()));
                 (dir.display().to_string(), view)
             });
+            if let Some(view) = view {
+                let handle = window.window_handle();
+                deep_app::shown::start(
+                    vec![view],
+                    handle,
+                    &deep_app::hub::address(),
+                    &deep_app::hub::root().join("control.token"),
+                    cx,
+                );
+            }
             window.on_next_frame(move |_, cx| {
                 let ms = started.elapsed().as_secs_f64() * 1000.0;
                 eprintln!("first-frame-ms {ms:.1}");
@@ -101,6 +193,10 @@ fn main() {
                 match mode {
                     Mode::Window => {}
                     Mode::CaptureBug { store } => capture_bug::start(store, cx),
+                    #[cfg(target_os = "macos")]
+                    Mode::CaptureDevices { store } => capture_devices::start(store, cx),
+                    #[cfg(target_os = "macos")]
+                    Mode::CaptureSeam => capture_seam::start(cx),
                     mode => trusted::start(mode, cx),
                 }
             });
@@ -111,8 +207,9 @@ fn main() {
     });
 }
 
-fn args() -> (Option<PathBuf>, Mode) {
+fn args() -> (Option<PathBuf>, Option<String>, Mode) {
     let mut panel = None;
+    let mut view = None;
     let mut mode = Mode::Window;
     let mut frame = None;
     let mut args = std::env::args().skip(1);
@@ -122,6 +219,12 @@ fn args() -> (Option<PathBuf>, Mode) {
                 panel = Some(PathBuf::from(
                     args.next().expect("--panel takes a directory"),
                 ))
+            }
+            "--view" => {
+                view = Some(
+                    args.next()
+                        .expect("--view takes the name of the view the panel draws"),
+                )
             }
             "--cursor-demo" => {
                 mode = Mode::CursorDemo {
@@ -140,9 +243,31 @@ fn args() -> (Option<PathBuf>, Mode) {
                 }
             }
             "--set-up" => mode = Mode::SetUp,
+            "--notification-center" => mode = Mode::NotificationCenter,
             "--capture-bug" => {
                 mode = Mode::CaptureBug {
                     store: PathBuf::from(args.next().expect("--capture-bug takes a folder")),
+                }
+            }
+            "--capture-devices" => {
+                mode = Mode::CaptureDevices {
+                    store: PathBuf::from(args.next().expect("--capture-devices takes a folder")),
+                }
+            }
+            "--color-check" => mode = Mode::ColorCheck { planted: None },
+            "--capture-seam" => mode = Mode::CaptureSeam,
+            "--planted" => {
+                let twin = args.next().expect("--planted takes a name");
+                assert!(
+                    matches!(
+                        twin.as_str(),
+                        "gpui_layer_untagged" | "wgpu_default_colorspace"
+                    ),
+                    "unknown planted {twin}"
+                );
+                match &mut mode {
+                    Mode::ColorCheck { planted } => *planted = Some(twin),
+                    _ => panic!("--planted follows --color-check"),
                 }
             }
             "--frame" => frame = Some(PathBuf::from(args.next().expect("--frame takes a path"))),
@@ -157,7 +282,11 @@ fn args() -> (Option<PathBuf>, Mode) {
     if let Mode::ProbeHeld { frame: slot, .. } = &mut mode {
         *slot = frame;
     }
-    (panel, mode)
+    assert!(
+        view.is_none() || panel.is_some(),
+        "--view names the view a --panel draws"
+    );
+    (panel, view, mode)
 }
 
 fn number(arg: Option<String>, what: &str) -> u64 {
@@ -349,10 +478,15 @@ mod trusted {
                             poster_started && tick > 10 + presses + 120
                         }
                     }
-                    Mode::PostForged { .. } | Mode::SetUp => {
+                    Mode::PostForged { .. } | Mode::SetUp | Mode::NotificationCenter => {
                         unreachable!("these modes have no window")
                     }
                     Mode::CaptureBug { .. } => unreachable!("the bug capture runs on its own"),
+                    Mode::CaptureDevices { .. } => {
+                        unreachable!("the device capture runs on its own")
+                    }
+                    Mode::ColorCheck { .. } => unreachable!("the color check runs on its own"),
+                    Mode::CaptureSeam => unreachable!("the capture seam's check runs on its own"),
                     Mode::ProbeHeld { seconds, frame } => {
                         let captured = gate.borrow().counts.frames > 0;
                         if captured {
@@ -495,6 +629,633 @@ mod trusted {
 mod trusted {
     pub fn start(_: super::Mode, _: &mut gpui_kit::App) {
         eprintln!("deep-app: the cursor window and the probes run on macOS only");
+    }
+
+    pub fn post_forged(_: u64) {
+        eprintln!("deep-app: the probes run on macOS only");
+    }
+}
+
+/// `--color-check` (#140): every layer the app presents through, read back and asked its colorspace.
+#[cfg(target_os = "macos")]
+mod color_check {
+    use std::{cell::RefCell, rc::Rc};
+
+    use deep_app::color;
+    use deep_gpu::device::{Backend, Gpu};
+    use deep_gpu::surface::{allocate, Handoff, Path, Shown};
+    use gpui_apple::metal_renderer::layer_colorspace;
+    use gpui_kit::*;
+    use objc2::rc::Retained;
+    use objc2_app_kit::{NSView, NSWindowOcclusionState};
+    use objc2_core_foundation::{CGPoint, CGRect, CGSize};
+    use objc2_quartz_core::CAMetalLayer;
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use serde_json::{json, Value};
+
+    /// A swatch's side in points, and the step between swatches.
+    const SIDE: f32 = 48.;
+    const STEP: f32 = 56.;
+    /// The wgpu surface's swatches, in pixels.
+    const CELL: u32 = 16;
+
+    /// The look's status colors as sRGB-encoded bytes, in the look's order.
+    fn statuses() -> Vec<(String, [u8; 3])> {
+        let look = deep_canvas_marks::look::shipped("clean").expect("the shipped look");
+        let byte = |hex: &str, i: usize| u8::from_str_radix(&hex[i..i + 2], 16).expect("hex");
+        look["status"]
+            .as_object()
+            .expect("the look's status map")
+            .iter()
+            .filter_map(|(status, hex)| {
+                let hex = hex.as_str()?.strip_prefix('#')?;
+                Some((status.clone(), [byte(hex, 0), byte(hex, 2), byte(hex, 4)]))
+            })
+            .collect()
+    }
+
+    /// One GPU-layer slot per status, rendered by wgpu and handed to GPUI on the copy path.
+    fn slots(statuses: &[(String, [u8; 3])]) -> Vec<(Box<dyn Handoff>, Shown)> {
+        let gpu = Gpu::open(Backend::Gpu).expect("the GPU");
+        let device = gpu.device();
+        statuses
+            .iter()
+            .map(|(_, [r, g, b])| {
+                let slot = allocate(&device, Path::Copy, [96, 96]).expect("a slot");
+                let mut encoder = device.device.create_command_encoder(&Default::default());
+                encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: slot.target(),
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: f64::from(*r) / 255.,
+                                g: f64::from(*g) / 255.,
+                                b: f64::from(*b) / 255.,
+                                a: 1.,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    ..Default::default()
+                });
+                slot.after_render(&mut encoder);
+                device.queue.submit([encoder.finish()]);
+                slot.finish(&device).expect("the slot's read back");
+                let shown = slot.shown();
+                (slot, shown)
+            })
+            .collect()
+    }
+
+    struct Swatches {
+        shown: Vec<Shown>,
+        placed: Rc<RefCell<Vec<Bounds<Pixels>>>>,
+    }
+
+    impl Render for Swatches {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let (shown, placed) = (self.shown.clone(), self.placed.clone());
+            canvas(
+                |_, _, _| (),
+                move |bounds, _, window, _| {
+                    let mut placed = placed.borrow_mut();
+                    placed.clear();
+                    for (i, slot) in shown.iter().enumerate() {
+                        let at = point(
+                            bounds.origin.x + px(16. + STEP * i as f32),
+                            bounds.origin.y + px(16.),
+                        );
+                        let swatch = Bounds::new(at, size(px(SIDE), px(SIDE)));
+                        window.paint_surface(swatch, slot.clone());
+                        placed.push(swatch);
+                    }
+                },
+            )
+            .size_full()
+        }
+    }
+
+    pub fn run(wgpu_untagged: bool, cx: &mut App) {
+        let statuses = statuses();
+        let slots = slots(&statuses);
+        let shown = slots.iter().map(|(_, s)| s.clone()).collect();
+        let placed = Rc::new(RefCell::new(Vec::new()));
+        // Above every other window, so the platform reports it visible and hands out drawables.
+        let options = WindowOptions {
+            window_bounds: Some(WindowBounds::centered(size(px(560.), px(160.)), cx)),
+            kind: WindowKind::PopUp,
+            ..Default::default()
+        };
+        open_window(options, cx, move |window, cx| {
+            let painted = placed.clone();
+            visible(window, 0, move |window, cx| {
+                let _slots = slots;
+                check(window, cx, statuses, painted, wgpu_untagged)
+            });
+            cx.new(|_| Swatches { shown, placed })
+        })
+        .expect("open the window");
+        cx.activate(true);
+    }
+
+    /// Runs `then` on the first frame after AppKit reports the window visible, or after 2 s of
+    /// frames when it never does.
+    fn visible(
+        window: &mut Window,
+        frames: u32,
+        then: impl FnOnce(&mut Window, &mut App) + 'static,
+    ) {
+        window.on_next_frame(move |window, cx| {
+            let shown = window_view(window)
+                .window()
+                .is_some_and(|w| w.occlusionState().contains(NSWindowOcclusionState::Visible));
+            if shown || frames > 240 {
+                then(window, cx);
+            } else {
+                window.refresh();
+                visible(window, frames + 1, then);
+            }
+        });
+    }
+
+    fn window_view(window: &Window) -> &NSView {
+        let handle = HasWindowHandle::window_handle(window).expect("the window's handle");
+        let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+            panic!("an AppKit window");
+        };
+        // SAFETY: gpui's AppKit handle wraps its NSView, alive while the gpui window is.
+        unsafe { handle.ns_view.cast::<NSView>().as_ref() }
+    }
+
+    /// The window's own CAMetalLayer: the layer GPUI's view hosts.
+    fn window_layer(window: &Window) -> Retained<CAMetalLayer> {
+        let layer = window_view(window).layer().expect("the view's layer");
+        layer.downcast::<CAMetalLayer>().expect("a CAMetalLayer")
+    }
+
+    /// A surface wgpu configures on a layer of its own inside the window's, each status drawn
+    /// into its drawable and read back from it before it is presented.
+    fn wgpu_swatches(
+        window_layer: &CAMetalLayer,
+        statuses: &[(String, [u8; 3])],
+        untagged: bool,
+    ) -> (Retained<CAMetalLayer>, Vec<[u8; 3]>) {
+        let (width, height) = (CELL * statuses.len() as u32, CELL);
+        let layer = CAMetalLayer::new();
+        layer.setFrame(CGRect::new(
+            CGPoint::new(16., 80.),
+            CGSize::new(f64::from(width), f64::from(height)),
+        ));
+        window_layer.addSublayer(&layer);
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::METAL,
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
+        });
+        // SAFETY: the layer outlives the surface: both are dropped before this returns, the
+        // layer kept retained by the window's layer.
+        let surface = unsafe {
+            instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(
+                Retained::as_ptr(&layer).cast_mut().cast(),
+            ))
+        }
+        .expect("a surface on the layer");
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            compatible_surface: Some(&surface),
+            ..Default::default()
+        }))
+        .expect("an adapter");
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&Default::default())).expect("a device");
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            color_space: wgpu::SurfaceColorSpace::Srgb,
+            width,
+            height,
+            present_mode: wgpu::PresentMode::Fifo,
+            desired_maximum_frame_latency: 2,
+            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
+            view_formats: vec![],
+        };
+        if untagged {
+            surface.configure(&device, &config);
+        } else {
+            color::configure(&surface, &device, &config, &layer);
+        }
+        let row = (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+        let mut pixels = vec![0u8; (row * height) as usize];
+        for y in 0..height {
+            for x in 0..width {
+                let [r, g, b] = statuses[(x / CELL) as usize].1;
+                let at = (y * row + x * 4) as usize;
+                pixels[at..at + 4].copy_from_slice(&[b, g, r, 255]);
+            }
+        }
+        let layout = wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(row),
+            rows_per_image: Some(height),
+        };
+        let buffer = |usage, contents: Option<&[u8]>| {
+            let b = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("color check"),
+                size: u64::from(row * height),
+                usage,
+                mapped_at_creation: contents.is_some(),
+            });
+            if let Some(contents) = contents {
+                b.slice(..)
+                    .get_mapped_range_mut()
+                    .expect("the upload's mapping")
+                    .copy_from_slice(contents);
+                b.unmap();
+            }
+            b
+        };
+        let upload = buffer(wgpu::BufferUsages::COPY_SRC, Some(&pixels));
+        let readback = buffer(
+            wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            None,
+        );
+        // A window that stays occluded (a closed lid, another Space) gets no drawable, so
+        // nothing can be read back and the check says why and fails.
+        let frame = match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            other => {
+                println!(
+                    "{}",
+                    json!({"color": 140, "error": format!("no drawable: {other:?}")})
+                );
+                std::process::exit(1);
+            }
+        };
+        let extent = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let mut encoder = device.create_command_encoder(&Default::default());
+        encoder.copy_buffer_to_texture(
+            wgpu::TexelCopyBufferInfo {
+                buffer: &upload,
+                layout,
+            },
+            frame.texture.as_image_copy(),
+            extent,
+        );
+        encoder.copy_texture_to_buffer(
+            frame.texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout,
+            },
+            extent,
+        );
+        queue.submit([encoder.finish()]);
+        queue.present(frame);
+        readback.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+        device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("the read back");
+        let data = readback
+            .slice(..)
+            .get_mapped_range()
+            .expect("the read back's mapping");
+        let read = (0..statuses.len() as u32)
+            .map(|i| {
+                let at = ((CELL / 2) * row + (i * CELL + CELL / 2) * 4) as usize;
+                [data[at + 2], data[at + 1], data[at]]
+            })
+            .collect();
+        (layer, read)
+    }
+
+    fn check(
+        window: &mut Window,
+        cx: &mut App,
+        statuses: Vec<(String, [u8; 3])>,
+        placed: Rc<RefCell<Vec<Bounds<Pixels>>>>,
+        wgpu_untagged: bool,
+    ) {
+        let gpui_layer = window_layer(window);
+        let (wgpu_layer, wgpu_read) = wgpu_swatches(&gpui_layer, &statuses, wgpu_untagged);
+        layer_colorspace::read_next_frame();
+        window.refresh();
+        let scale = window.scale_factor();
+        read_back(window, cx, 0, move |frame, cx| {
+            let mut swatches: Vec<Value> = Vec::new();
+            let placed = placed.borrow();
+            for (i, (status, _)) in statuses.iter().enumerate() {
+                let read = placed.get(i).and_then(|b| {
+                    let center = b.center();
+                    let x = (f32::from(center.x) * scale) as u32;
+                    let y = (f32::from(center.y) * scale) as u32;
+                    frame
+                        .as_ref()?
+                        .get_pixel_checked(x, y)
+                        .map(|p| [p[0], p[1], p[2]])
+                });
+                swatches.push(json!({"layer": "window", "status": status, "read": read}));
+                swatches
+                    .push(json!({"layer": "wgpu-surface", "status": status, "read": wgpu_read[i]}));
+            }
+            let report = json!({
+                "color": 140,
+                "backend": {"name": color::BACKEND.0, "version": color::BACKEND.1},
+                "layers": [
+                    {"layer": "window", "owner": "gpui", "colorspace": color::colorspace(&gpui_layer)},
+                    {"layer": "wgpu-surface", "owner": "wgpu", "colorspace": color::colorspace(&wgpu_layer)},
+                ],
+                "swatches": swatches,
+            });
+            println!("{report}");
+            cx.quit();
+        });
+    }
+
+    /// Waits for the frame the window draws next to be read back from its layer's drawable.
+    fn read_back(
+        window: &mut Window,
+        _: &mut App,
+        tries: u32,
+        done: impl FnOnce(Option<image::RgbaImage>, &mut App) + 'static,
+    ) {
+        window.on_next_frame(move |window, cx| match layer_colorspace::take_frame() {
+            Some(frame) => done(Some(frame), cx),
+            None if tries < 120 => {
+                window.refresh();
+                read_back(window, cx, tries + 1, done);
+            }
+            None => done(None, cx),
+        });
+    }
+}
+
+/// Issue #883: the hub's record through the app's one reader. The notifier posts each ask it finds due to
+/// Notification Center, tagged with its session so a newer one replaces it in place, and withdraws one whose ask the
+/// record says closed. The reader starts from the inbox and the stream after it, so what was in the record before
+/// the app or the hub started never reaches the notifier as new.
+///
+/// Issue #994: the loop outlives a late or lost hub, trying it on [`HubWatch`]'s schedule, and is the one notifier: a
+/// later launch calls this app forward through `held`. It reads the notification setting at start and each time the
+/// app becomes active, and an ask macOS wouldn't show is logged as not notified, never as notified.
+mod notifications {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    use deep_app::{
+        hub,
+        notify::{self, NotificationSetting, Notifier, NOTIFY_AFTER},
+        record::{self, HubWatch, RecordReader},
+        single::Held,
+    };
+    use gpui_kit::{App, AsyncApp, SystemNotification};
+
+    const TICK: Duration = Duration::from_millis(250);
+
+    fn now() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |since| since.as_millis() as u64)
+    }
+
+    /// What the OS says now: the test's stand-in if set, else the bundle's setting; `None` when neither answers.
+    fn setting() -> Option<NotificationSetting> {
+        match std::env::var("DEEP_APP_NOTIFICATION_SETTING") {
+            Ok(name) => NotificationSetting::parse(&name),
+            Err(_) => super::notification_center::setting(),
+        }
+    }
+
+    fn read_setting(notifier: &mut Notifier) {
+        if let Some(setting) = setting() {
+            record::report_setting(setting.name());
+            if !cfg!(feature = "plant-posts-unchecked") {
+                notifier.set_setting(setting, now());
+            }
+        }
+    }
+
+    /// The notifier starts on the record it first reads and what Notification Center still holds.
+    fn begin(notifier: &mut Notifier, cx: &mut AsyncApp) {
+        let held = super::notification_center::delivered().unwrap_or_default();
+        let stale = record::with_view(|view| {
+            // What Notification Center still holds from before: each is its session's open ask whose question it
+            // carries, and one whose ask closed while the app was away leaves now.
+            let (kept, stale): (Vec<_>, Vec<_>) = held
+                .into_iter()
+                .map(|mut notification| {
+                    notification.ask = view
+                        .inbox
+                        .iter()
+                        .find(|row| {
+                            row["session"] == notification.session.as_str()
+                                && row["status"] != "closed"
+                                && row["question"].as_str().is_some_and(|question| {
+                                    !question.is_empty() && notification.text.contains(question)
+                                })
+                        })
+                        .and_then(|row| row["ask"].as_str().map(str::to_owned));
+                    notification
+                })
+                .partition(|notification| notification.ask.is_some());
+            notifier.start(view, kept);
+            stale
+        })
+        .unwrap_or_default();
+        // What the reads hold, the notifier has started on.
+        record::take_unseen();
+        cx.update(|cx| {
+            for notification in stale {
+                eprintln!("deep-app: withdrew {}", notification.session);
+                cx.dismiss_system_notification(&notification.session);
+            }
+        });
+    }
+
+    pub fn start(held: Held, cx: &mut App) {
+        record::install(RecordReader::unopened(
+            &hub::address(),
+            &hub::root().join("control.token"),
+        ));
+        cx.spawn(async move |cx| {
+            let mut notifier = Notifier::new(NOTIFY_AFTER);
+            let mut watch = HubWatch::default();
+            let (mut begun, mut active) = (false, false);
+            read_setting(&mut notifier);
+            loop {
+                cx.background_executor().timer(TICK).await;
+                if held.called() {
+                    eprintln!("deep-app: brought forward");
+                    cx.update(|cx| {
+                        cx.activate(true);
+                        if let Some(window) = cx.windows().first() {
+                            let _ = window.update(cx, |_, window, _| window.activate_window());
+                        }
+                    });
+                }
+                let was_active = std::mem::replace(&mut active, super::menu_bar::app_active());
+                if active && !was_active {
+                    read_setting(&mut notifier);
+                }
+                let now = now();
+                watch.tick(now, || record::read(Duration::from_millis(5)));
+                if !begun && record::connected() {
+                    begin(&mut notifier, cx);
+                    begun = true;
+                }
+                if begun {
+                    post(&mut notifier, now, cx);
+                }
+                let reach = notifier.reach(watch.down());
+                if reach != notify::reach() {
+                    notify::publish(reach);
+                    let line = deep_app::menu_bar_line(&deep_app::sessions());
+                    super::menu_bar::show_title(&line);
+                    cx.update(|cx| cx.refresh_windows());
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// One tick's work: what the record brought, what came due, what left.
+    fn post(notifier: &mut Notifier, now: u64, cx: &mut AsyncApp) {
+        let before: Vec<String> = notifier
+            .delivered()
+            .iter()
+            .map(|notification| notification.session.clone())
+            .collect();
+        for event in record::take_unseen() {
+            notifier.saw(&event, now);
+        }
+        let posted =
+            record::with_view(|view| notifier.due(view, now, None, true)).unwrap_or_default();
+        for (ask, session) in notifier.newly_missed() {
+            eprintln!(
+                "deep-app: not notified {session} {ask}: {}",
+                notifier.reach(false).setting.name()
+            );
+        }
+        cx.update(|cx| {
+            for session in before.iter().filter(|session| {
+                !notifier
+                    .delivered()
+                    .iter()
+                    .any(|notification| &notification.session == *session)
+            }) {
+                eprintln!("deep-app: withdrew {session}");
+                cx.dismiss_system_notification(session);
+            }
+            for notification in posted {
+                let body = notification
+                    .text
+                    .split_once('\n')
+                    .map_or("", |(_, body)| body);
+                eprintln!(
+                    "deep-app: notified {} {}",
+                    notification.session,
+                    notification.ask.as_deref().unwrap_or("notice")
+                );
+                if notification.sound.is_some() {
+                    super::menu_bar::play_question();
+                }
+                cx.show_system_notification(SystemNotification {
+                    tag: notification.session.into(),
+                    title: notification.title.into(),
+                    body: body.to_owned().into(),
+                    actions: Vec::new(),
+                });
+            }
+        });
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod notification_center {
+    use std::{ptr::NonNull, sync::mpsc, time::Duration};
+
+    use block2::RcBlock;
+    use deep_app::notify::{Notification, NotificationSetting};
+    use objc2_foundation::{NSArray, NSBundle};
+    use objc2_user_notifications::{
+        UNAlertStyle, UNAuthorizationStatus, UNNotification, UNNotificationSettings,
+        UNUserNotificationCenter,
+    };
+
+    /// What macOS says of the app's notifications; `None` outside the bundle, or when the OS doesn't answer.
+    pub fn setting() -> Option<NotificationSetting> {
+        NSBundle::mainBundle().bundleIdentifier()?;
+        let (sender, receiver) = mpsc::channel();
+        let read = RcBlock::new(move |settings: NonNull<UNNotificationSettings>| {
+            // SAFETY: the OS passes valid settings for the call's duration.
+            let settings = unsafe { settings.as_ref() };
+            let _ = sender.send(
+                if settings.authorizationStatus() == UNAuthorizationStatus::Denied {
+                    NotificationSetting::Denied
+                } else if settings.authorizationStatus() != UNAuthorizationStatus::NotDetermined
+                    && settings.alertStyle() == UNAlertStyle::None
+                {
+                    NotificationSetting::AlertsNone
+                } else {
+                    NotificationSetting::Allowed
+                },
+            );
+        });
+        UNUserNotificationCenter::currentNotificationCenter()
+            .getNotificationSettingsWithCompletionHandler(&read);
+        receiver.recv_timeout(Duration::from_secs(2)).ok()
+    }
+
+    /// What Notification Center holds from the app's bundle, as the OS lists it: each one's tag as its session and
+    /// no ask, which only the record can name. `None` outside the bundle, where the center aborts the process, as
+    /// gpui notes, or when the OS doesn't answer.
+    pub fn delivered() -> Option<Vec<Notification>> {
+        NSBundle::mainBundle().bundleIdentifier()?;
+        let (sender, receiver) = mpsc::channel();
+        let listed = RcBlock::new(move |list: NonNull<NSArray<UNNotification>>| {
+            // SAFETY: the OS passes a valid array for the call's duration.
+            let list = unsafe { list.as_ref() };
+            let held: Vec<Notification> = list
+                .iter()
+                .map(|notification| {
+                    let request = notification.request();
+                    let content = request.content();
+                    let title = content.title().to_string();
+                    Notification {
+                        ask: None,
+                        session: request.identifier().to_string(),
+                        text: format!("{title}\n{}", content.body()),
+                        title,
+                        sound: None,
+                    }
+                })
+                .collect();
+            let _ = sender.send(held);
+        });
+        UNUserNotificationCenter::currentNotificationCenter()
+            .getDeliveredNotificationsWithCompletionHandler(&listed);
+        receiver.recv_timeout(Duration::from_secs(10)).ok()
+    }
+
+    /// `--notification-center`: one JSON line per notification it holds.
+    pub fn print() {
+        let Some(held) = delivered() else {
+            eprintln!("deep-app: Notification Center didn't list the app's notifications (run it from the bundle)");
+            std::process::exit(1);
+        };
+        for notification in held {
+            let body = notification
+                .text
+                .split_once('\n')
+                .map_or("", |(_, body)| body);
+            let line = serde_json::json!({"tag": notification.session, "title": notification.title, "body": body});
+            println!("{line}");
+        }
     }
 }
 
@@ -640,6 +1401,266 @@ mod capture_bug {
     }
 }
 
+/// `--capture-devices STORE` (#498): the camera and microphone through the OS permission and the
+/// held control, twice.
+#[cfg(target_os = "macos")]
+mod capture_devices {
+    use std::{path::PathBuf, time::Duration};
+
+    use deep_app::capture::{Indicator, MAX_SECONDS};
+    use deep_app::devices::{host_now, permission, Capture, Kind};
+    use deep_app::trusted_input::{hid_shortcut_down, main_thread};
+    use gpui_kit::*;
+    use serde_json::{json, Value};
+
+    const TICK: Duration = Duration::from_millis(4);
+    /// How long a person has to hold, each time.
+    const WAIT: Duration = Duration::from_secs(240);
+
+    pub fn start(store: PathBuf, cx: &mut App) {
+        let granted =
+            json!({"camera": permission(Kind::Camera), "microphone": permission(Kind::Microphone)});
+        // Read, never asked for: without both there is nothing to record and no prompt shows.
+        if granted["camera"] != "granted" || granted["microphone"] != "granted" {
+            println!(
+                "{}",
+                json!({"capture": 498, "permission": granted, "via": "os_permission + trusted control",
+                "hold": "shortcut", "holds": [], "captures": []})
+            );
+            cx.quit();
+            return;
+        }
+        cx.activate(true);
+        cx.spawn(async move |cx| match run(&store, cx).await {
+            Ok(mut line) => {
+                line["permission"] = granted;
+                println!("{line}");
+                cx.update(|cx| cx.quit());
+            }
+            Err(blocked) => {
+                println!("{}", json!({"capture": 498, "blocked": blocked}));
+                std::process::exit(1);
+            }
+        })
+        .detach();
+    }
+
+    async fn wait_for(cx: &mut AsyncApp, down: bool, limit: Duration) -> bool {
+        let begun = std::time::Instant::now();
+        while hid_shortcut_down() != down {
+            if begun.elapsed() > limit {
+                return false;
+            }
+            cx.background_executor().timer(TICK).await;
+        }
+        true
+    }
+
+    async fn run(store: &std::path::Path, cx: &mut AsyncApp) -> Result<Value, String> {
+        let t0 = host_now();
+        let ms = |s: f64| ((s - t0) * 1000.0 * 10.0).round() / 10.0;
+        let (mut holds, mut captures) = (Vec::new(), Vec::new());
+        for request in 1..=2 {
+            if request == 2 {
+                // A later request, after the release: it waits armed, keeping nothing.
+                cx.background_executor().timer(Duration::from_secs(2)).await;
+            }
+            let requested = host_now();
+            let armed = [Capture::arm(Kind::Camera)?, Capture::arm(Kind::Microphone)?];
+            if request == 2 {
+                cx.background_executor().timer(Duration::from_secs(3)).await;
+            }
+            eprintln!("deep-app: hold ⌥Space to record the camera and microphone ({request} of 2), then let go");
+            if !wait_for(cx, true, WAIT).await {
+                return Err("the shortcut was never held".into());
+            }
+            let down = host_now();
+            let indicator = Indicator::titled(
+                main_thread(),
+                "● Camera and microphone — let go of ⌥Space to stop",
+            );
+            armed.iter().for_each(|c| c.start(down));
+            let limit = Duration::from_secs_f64((MAX_SECONDS - (host_now() - down)).max(0.0));
+            wait_for(cx, false, limit).await;
+            let up = host_now();
+            armed.iter().for_each(|c| c.stop(up));
+            drop(indicator);
+            holds.push(json!({"down_ms": ms(down), "up_ms": ms(up)}));
+            for c in &armed {
+                let sha = c.finish(store)?;
+                let k = c.shared.lock().map_err(|_| "a callback panicked")?;
+                captures.push(json!({
+                    "request": request,
+                    "source": c.kind.name(),
+                    "requested_ms": ms(requested),
+                    "period_ms": k.period.map(|p| (p * 1000.0 * 1000.0).round() / 1000.0),
+                    "kept_before_hold": 0,
+                    "delivered_before_hold": k.before_hold,
+                    "kept": k.kept,
+                    "first_ms": k.first.map(ms),
+                    "last_ms": k.last.map(ms),
+                    "asset": sha.map(|s| json!({"sha256": s, "redaction": "unknown"})),
+                }));
+            }
+        }
+        Ok(
+            json!({"capture": 498, "via": "os_permission + trusted control", "hold": "shortcut",
+            "holds": holds, "captures": captures}),
+        )
+    }
+}
+
+/// `--capture-seam` (#140): a capture starts only through the system picker, and the system's
+/// own indicator shows while it records.
+#[cfg(target_os = "macos")]
+mod capture_seam {
+    use std::{
+        sync::{Arc, Mutex},
+        time::{Duration, Instant},
+    };
+
+    use deep_app::capture::{
+        admit, close_picker, picked, prepare, present_picker, spool, start as record, stop,
+        system_indicator, Observer, Reported, Shared, Source, BACKEND,
+    };
+    use deep_app::trusted_input::{capture_access, request_capture_access};
+    use gpui_kit::*;
+    use serde_json::{json, Value};
+
+    const TICK: Duration = Duration::from_millis(50);
+    /// How long a person has to answer the picker, how long the pick records, and how long the
+    /// recording has to finish.
+    const WAIT: Duration = Duration::from_secs(540);
+    const RECORD: Duration = Duration::from_secs(3);
+    const FINISH: Duration = Duration::from_secs(10);
+
+    pub fn start(cx: &mut App) {
+        let granted = capture_access() || request_capture_access();
+        let main = objc2_core_graphics::CGMainDisplayID();
+        let outcome = match admit(Source::Display(main)) {
+            Ok(_) => "started",
+            Err(_) => "refused",
+        };
+        // Nothing was started, so no frame came; the indicator is read from the window server.
+        let mut line = json!({
+            "capture": 140,
+            "backend": {"name": BACKEND.0, "version": BACKEND.1},
+            "permission": if granted { "granted" } else { "denied" },
+            "direct": {"outcome": outcome, "frames": 0, "indicator": {"system": system_indicator()}},
+            "picker": false,
+        });
+        if !granted {
+            println!("{line}");
+            cx.quit();
+            return;
+        }
+        let shared: Shared = Arc::new(Mutex::new(Reported::default()));
+        let observer = Observer::new(shared.clone());
+        present_picker(&observer);
+        cx.activate(true);
+        cx.spawn(async move |cx| {
+            match run(&shared, &observer, cx).await {
+                Ok(seen) => {
+                    for (k, v) in seen.as_object().into_iter().flatten() {
+                        line[k] = v.clone();
+                    }
+                    println!("{line}");
+                }
+                Err(blocked) => {
+                    line["blocked"] = json!(blocked);
+                    println!("{line}");
+                    std::process::exit(1);
+                }
+            }
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+    }
+
+    async fn tick(cx: &mut AsyncApp, shared: &Shared) -> Result<Reported, String> {
+        cx.background_executor().timer(TICK).await;
+        let r = shared
+            .lock()
+            .map_err(|_| "a callback panicked".to_string())?;
+        match &r.failed {
+            Some(failed) => Err(failed.clone()),
+            None => Ok(Reported {
+                picked: r.picked.clone(),
+                cancelled: r.cancelled,
+                failed: None,
+                frames: r.frames,
+                first_frame: r.first_frame,
+                finished: r.finished,
+            }),
+        }
+    }
+
+    async fn run(shared: &Shared, observer: &Observer, cx: &mut AsyncApp) -> Result<Value, String> {
+        let begun = Instant::now();
+        let choice = loop {
+            let r = tick(cx, shared).await?;
+            if r.cancelled {
+                return Err("the picker was cancelled: nothing recorded".into());
+            }
+            if let Some(p) = r.picked {
+                break p;
+            }
+            if begun.elapsed() > WAIT {
+                return Err("no pick".into());
+            }
+        };
+        close_picker(observer);
+        let as_json = |(kind, display): (&str, Option<(u32, bool)>)| json!({"kind": kind, "id": display.map(|(id, _)| id)});
+        let chosen = as_json(picked(&choice.0));
+        let filter = admit(Source::Picked(choice)).map_err(str::to_string)?.0;
+        let spool = spool();
+        let _ = std::fs::remove_file(&spool);
+        let (stream, _recording) = prepare(&filter, observer, &spool)?;
+        record(&stream, shared);
+        let started = Instant::now();
+        let mut indicator = false;
+        while started.elapsed() < RECORD {
+            let r = tick(cx, shared).await?;
+            // Read while frames arrive, so it is the recording the indicator shows.
+            if r.frames > 0 {
+                indicator |= system_indicator();
+            }
+        }
+        stop(&stream, shared);
+        let stopped = Instant::now();
+        let frames = loop {
+            let r = tick(cx, shared).await?;
+            if r.finished || stopped.elapsed() > FINISH {
+                break r.frames;
+            }
+        };
+        let _ = std::fs::remove_file(&spool);
+        Ok(json!({
+            "picker": true,
+            "picked": chosen,
+            "recorded": as_json(picked(&filter)),
+            "frames": frames,
+            "indicator": {"system": indicator},
+        }))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod notification_center {
+    pub fn delivered() -> Option<Vec<deep_app::notify::Notification>> {
+        None
+    }
+
+    pub fn setting() -> Option<deep_app::notify::NotificationSetting> {
+        None
+    }
+
+    pub fn print() {
+        eprintln!("deep-app: --notification-center runs on macOS only");
+        std::process::exit(1);
+    }
+}
+
 #[cfg(not(target_os = "macos"))]
 mod capture_bug {
     pub fn start(_: std::path::PathBuf, _: &mut gpui_kit::App) {
@@ -652,10 +1673,16 @@ mod menu_bar {
     use deep_app::brand;
     use objc2::{rc::Retained, AllocAnyThread as _, MainThreadMarker};
     use objc2_app_kit::{
-        NSApplication, NSBitmapImageRep, NSCellImagePosition, NSImage, NSStatusBar,
-        NSVariableStatusItemLength,
+        NSApplication, NSBitmapImageRep, NSCellImagePosition, NSImage, NSSound, NSStatusBar,
+        NSStatusItem, NSVariableStatusItemLength,
     };
     use objc2_foundation::{NSData, NSSize, NSString};
+
+    thread_local! {
+        /// The count's one status item, kept for the life of the process.
+        static ITEM: Retained<NSStatusItem> =
+            NSStatusBar::systemStatusBar().statusItemWithLength(NSVariableStatusItemLength);
+    }
 
     /// The kit's menu-bar template as one image with both scales, 16 pt, marked as a template
     /// so macOS tints it for the light and the dark menu bar.
@@ -684,19 +1711,33 @@ mod menu_bar {
         unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(image.as_deref()) };
     }
 
-    /// gpui-kit has no menu-bar item, so the count is one `NSStatusItem`, kept for the life
-    /// of the process, with the template mark before the count.
+    /// gpui-kit has no menu-bar item, so the count is one `NSStatusItem`, with the template mark before the count.
     pub fn show_title(title: &str) {
         let mtm = MainThreadMarker::new().expect("the menu bar is set from the main thread");
-        let item = NSStatusBar::systemStatusBar().statusItemWithLength(NSVariableStatusItemLength);
-        if let Some(button) = item.button(mtm) {
-            if let Some(image) = template() {
-                button.setImage(Some(&image));
-                button.setImagePosition(NSCellImagePosition::ImageLeading);
+        ITEM.with(|item| {
+            if let Some(button) = item.button(mtm) {
+                if button.image().is_none() {
+                    if let Some(image) = template() {
+                        button.setImage(Some(&image));
+                        button.setImagePosition(NSCellImagePosition::ImageLeading);
+                    }
+                }
+                button.setTitle(&NSString::from_str(title));
             }
-            button.setTitle(&NSString::from_str(title));
+        });
+    }
+
+    /// Whether the app is the active one.
+    pub fn app_active() -> bool {
+        let mtm = MainThreadMarker::new().expect("read from the main thread");
+        NSApplication::sharedApplication(mtm).isActive()
+    }
+
+    /// A question sounds like a question: gpui's post carries no sound, so the app plays it.
+    pub fn play_question() {
+        if let Some(sound) = NSSound::soundNamed(&NSString::from_str("Ping")) {
+            sound.play();
         }
-        std::mem::forget(item);
     }
 }
 
@@ -704,4 +1745,8 @@ mod menu_bar {
 mod menu_bar {
     pub fn set_dock_icon() {}
     pub fn show_title(_: &str) {}
+    pub fn app_active() -> bool {
+        false
+    }
+    pub fn play_question() {}
 }

@@ -138,7 +138,8 @@ impl Path {
                 Some(why) => Err(bad(why)),
             })
             .collect::<Result<Vec<_>, _>>()?;
-        if fields.is_empty() {
+        // A data constant is a value of its own: a channel may key `data/<name>` (Path).
+        if fields.is_empty() && section != Section::Data {
             return Err(bad("a path names at least one field below the ID".into()));
         }
         Ok(Path {
@@ -248,7 +249,11 @@ pub fn gen_path_mutant(rng: &mut Seeded) -> String {
             gen_id(rng),
             rng.pick(&["", ".a", "_a", "A", "a b"])
         ),
-        12 => format!("{}/{}", rng.pick(&Section::ALL).as_str(), gen_id(rng)),
+        // A bare data constant is a whole value (`data/<name>`); every other section needs a field.
+        12 => {
+            let section = rng.pick(&Section::ALL[..4]).as_str();
+            format!("{section}/{}", gen_id(rng))
+        }
         9 => format!(
             "{}/#{}",
             rng.pick(&Section::ALL).as_str(),
