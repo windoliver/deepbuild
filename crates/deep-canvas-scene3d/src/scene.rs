@@ -598,6 +598,29 @@ pub struct Other {
     pub pos: Vec3,
 }
 
+/// Motion blur by velocity (#419; Motion blur: velocity): the cameras at t − s/2 and t + s/2, each
+/// solid's world at both times by ID, and, for a solid whose surface deforms with its topology
+/// held, its mesh at both times; with the reconstruction's taps, travel cap and tile.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Motion {
+    pub open: Camera,
+    pub close: Camera,
+    pub solids: BTreeMap<String, MotionSolid>,
+    pub taps: u32,
+    pub max_px: f64,
+    pub tile_px: u32,
+}
+
+/// One solid's place at t − s/2 and t + s/2.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MotionSolid {
+    pub open: Affine3,
+    pub close: Affine3,
+    /// Its pre-skins at both times, vertex for vertex with its mesh at t; `None` reads its mesh at
+    /// t at both times (a rigid item, or one whose topology changed inside the shutter).
+    pub meshes: Option<(Arc<crate::geom::Mesh>, Arc<crate::geom::Mesh>)>,
+}
+
 /// A document at t, as the GPU layer draws it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scene {
@@ -619,6 +642,9 @@ pub struct Scene {
     pub curves: BTreeMap<String, Vec<Vec3>>,
     /// The core's glyph atlas pages the labels' glyphs sample, by page number.
     pub pages: Vec<AtlasPage>,
+    /// Motion blur by velocity this frame (#419): the evaluations at t ± half the shutter that the
+    /// renderer's velocity target reads, or `None`.
+    pub motion: Option<Arc<Motion>>,
     /// Each `overlay.text@1` readout (#419): drawn by the view after the frame's samples and
     /// motion blur resolve, over the frame, never into the frame itself.
     pub readouts: Vec<Label>,
@@ -2580,6 +2606,7 @@ pub(crate) fn evaluate_compiled(
         light_cut: None,
         curves,
         pages: labels.pages(),
+        motion: None,
         readouts,
         texels: BTreeMap::new(),
         jitter: [0.0; 2],
