@@ -38,7 +38,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
 import type { EvidenceStore } from '@deepbuild/evidence';
-import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
+import type { ChannelCtx, ChannelDelivered, ChannelFill, ChannelItem, ChannelReceived, CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
@@ -209,6 +209,11 @@ export interface Refused { status: 'refused'; id: string; version: string; reaso
 export type Load = Loaded | Refused;
 export interface ExtensionHost {
   install(from: InstallFrom): Promise<Installed>;
+  /** The channels of the packages loaded and started (#65), each by name with what it reaches. */
+  channels(): { name: string; kind: 'device' | 'chat' | 'email' | 'text'; extension: string }[];
+  /** One send or read of a loaded channel (#65), its provider calls made by `ctx.fetch`, the caller's. */
+  channel(name: string, op: 'deliver', item: ChannelItem, ctx: ChannelCtx): Promise<ChannelDelivered>;
+  channel(name: string, op: 'receive', item: null, ctx: ChannelCtx): Promise<ChannelReceived>;
   /** Kept across a restart: a new host on the same home. */
   installed(): Promise<Installed[]>;
   /**
@@ -357,6 +362,11 @@ const NODE_HOME = dirname(dirname(realpathSync(process.execPath)));
 const LOAD_MS = 10_000;
 /** How long a package gets to take a batch of events, or to answer a request on a route. */
 const CALL_MS = 10_000;
+/** How long a channel's send or read may take (#65): its provider calls are the hub's, each bounded by the hub. */
+const CHANNEL_MS = 30_000;
+const CHANNEL = 'channel@1';
+const CHANNEL_KINDS = ['device', 'chat', 'email', 'text'] as const;
+type ChannelKind = typeof CHANNEL_KINDS[number];
 /**
  * How long past a hook's deadline the host waits for a package's replies to arrive: the package marks each handler
  * late at the deadline itself, so its other handlers' replies (a deny among them) still make the trip back.
@@ -483,6 +493,8 @@ interface Ext {
   routes: Set<string>;
   /** The adapter names it registered. */
   adapters: Set<string>;
+  /** The channels it registered (#65), by name, with what each reaches; their deliver and receive stay with the package. */
+  channels: Map<string, ChannelKind>;
   /** The index it registered, by name, with the kit revision it declares, and how the host reaches it once loaded. */
   index?: { name: string; revision: number; fill?: IndexFill };
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts. */
@@ -799,6 +811,9 @@ class Host implements ExtensionHost {
   private readonly wired = new Map<string, Map<string, string>>();
   /** The provider each use reads from, by user and interface, until a piece loads, stops or installs (#103). */
   private readonly routes = new Map<string, Ext | undefined>();
+  /** The channel sends and reads under way (#65), by the call ID their context's fetch names. */
+  private readonly channelCalls = new Map<string, { ext: Ext; ctx: ChannelCtx }>();
+  private channelCount = 0;
   /** Install folders' manifests, read once each. */
   private readonly manifests = new Map<string, Manifest>();
   /** The starts of the packages loaded before ready, once ready runs. */
@@ -1352,6 +1367,35 @@ class Host implements ExtensionHost {
     }
     return runs;
   }
+  /** The channels of the packages loaded and started (#65): each by name, with what it reaches. */
+  channels(): { name: string; kind: ChannelKind; extension: string }[] {
+    return [...this.exts.values()].filter((e) => e.live && e.ask).flatMap((e) => [...e.channels].map(([name, kind]) => ({ name, kind, extension: e.entry.id })));
+  }
+  /** One send or read of a loaded channel, its context's fetch the caller's; bounded, and never unloading it. */
+  async channel(name: string, op: 'deliver', item: ChannelItem, ctx: ChannelCtx): Promise<ChannelDelivered>;
+  async channel(name: string, op: 'receive', item: null, ctx: ChannelCtx): Promise<ChannelReceived>;
+  async channel(name: string, op: 'deliver' | 'receive', item: ChannelItem | null, ctx: ChannelCtx): Promise<unknown> {
+    const ext = [...this.exts.values()].find((e) => e.live && e.ask && e.channels.has(name));
+    if (!ext) throw Error(`no loaded package registers the channel ${name}`);
+    return this.channelAsk(ext, name, op, item, ctx);
+  }
+  private async channelAsk(ext: Ext, name: string, op: 'deliver' | 'receive', item: ChannelItem | null, ctx: ChannelCtx): Promise<unknown> {
+    const call = `channel:${++this.channelCount}`;
+    this.channelCalls.set(call, { ext, ctx });
+    try {
+      return await within(CHANNEL_MS, `${ext.entry.id}'s channel ${name}`, ext.ask!(`channel.${op}`, { name, call, settings: ctx.settings, ...(item ? { item } : {}) }));
+    } finally {
+      this.channelCalls.delete(call);
+    }
+  }
+  /** A registered channel as a channel@1 fill the kit judges, its calls going to the package. */
+  private channelFill(ext: Ext, name: string, kind: ChannelKind, revision: number): ChannelFill {
+    return {
+      slot: CHANNEL, revision, kind,
+      deliver: (item, ctx) => this.channelAsk(ext, name, 'deliver', item, ctx) as Promise<ChannelDelivered>,
+      receive: (ctx) => this.channelAsk(ext, name, 'receive', null, ctx) as Promise<ChannelReceived>,
+    };
+  }
   async enterSecret(connection: Connection, extension: string, name: string, value: string): Promise<{ test: KeyTest; saved: boolean }> {
     this.trustedPath(connection, 'a secret is entered');
     this.secretOf(extension, name);
@@ -1730,7 +1774,20 @@ class Host implements ExtensionHost {
       // The calls it made and didn't wait for are answered too before its run is read.
       await Promise.all(this.calls);
     } catch (e) {
+      await ext.stop?.();
       return [`its code didn't register in the platform sandbox: ${message(e)}`];
+    }
+    // Each channel it registers is held to channel@1's kit (#65), its code running where conformance runs it.
+    const kitted: string[] = [];
+    try {
+      for (const [name, kind] of ext.channels) {
+        const { runKit, slotKits } = await import('@deepbuild/conformance');
+        const kit = slotKits().find((k) => k.slot === CHANNEL) as SlotKit<ChannelFill> | undefined;
+        if (!kit) { kitted.push(`the conformance package ships no ${CHANNEL} kit, so its channel ${name} is unkitted`); continue; }
+        const report = await runKit(kit, this.channelFill(ext, name, kind, kit.revision), { parts: ['fixed'] });
+        const failed = report.cases.find((c) => c.outcome !== 'PASS');
+        if (report.verdict !== 'PASS') kitted.push(`its channel ${name} reads ${report.verdict} on ${CHANNEL}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}`);
+      }
     } finally {
       await ext.stop?.();
     }
@@ -1738,6 +1795,7 @@ class Host implements ExtensionHost {
     const environments = manifest.environments ?? [];
     return [
       ...ext.refusals,
+      ...kitted,
       ...actionRules(ext.actions),
       ...ext.kinds.filter((k) => !declared.includes(k)).map((k) => `it registers the check kind ${k}, which its manifest doesn't declare`),
       ...ext.environments.filter((e) => !environments.includes(e)).map((e) => `it registers the environment ${e}, which its manifest doesn't declare`),
@@ -1748,7 +1806,7 @@ class Host implements ExtensionHost {
     return {
       entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
-      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
+      adapters: new Set(), channels: new Map(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -2243,6 +2301,23 @@ class Host implements ExtensionHost {
         }
         ext.adapters.add(name);
         return null;
+      }
+      case 'deep.registerChannel': {
+        const [name, channel] = args as [unknown, { slot?: unknown; revision?: unknown; kind?: unknown } | null | undefined];
+        if (typeof name !== 'string' || !ADAPTER_NAME.test(name)) throw Error(`deep.registerChannel takes the channel's name first, one lower-case word, not ${JSON.stringify(name)}`);
+        if (channel?.slot !== CHANNEL || !Number.isSafeInteger(channel.revision) || (channel.revision as number) < 1) throw Error(`deep.registerChannel: ${name} declares itself a ${CHANNEL} fill, with the kit revision it was built against`);
+        if (!CHANNEL_KINDS.includes(channel.kind as ChannelKind)) throw Error(`deep.registerChannel: ${name}'s kind is one of ${CHANNEL_KINDS.join(', ')}`);
+        const owner = conformance ? undefined : [...this.exts.values()].find((e) => e !== ext && e.channels.has(name));
+        if (owner) throw Error(`the channel ${name} is already registered by ${owner.entry.id}`);
+        ext.channels.set(name, channel.kind as ChannelKind);
+        return null;
+      }
+      case 'deep.channel.fetch': {
+        // Only a send or read of its own under way: the hub's call, with the channel's settings and token.
+        const [call, request] = args;
+        const live = typeof call === 'string' ? this.channelCalls.get(call) : undefined;
+        if (!live || live.ext !== ext) throw Error(`deep.channel.fetch: ${id} has no channel send or read under way as ${String(call)}`);
+        return live.ctx.fetch(request as Parameters<ChannelCtx['fetch']>[0]);
       }
       case 'deep.registerIndex': {
         const [name, fill] = args as [unknown, { slot?: unknown; revision?: unknown } | null | undefined];

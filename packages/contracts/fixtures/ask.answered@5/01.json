@@ -1,0 +1,24 @@
+{
+  "v": 5,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "ask.answered",
+  "subject": "ask:01K74G4B6D8F0H2K4M6P8R0T2V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "answer": "sqlite",
+    "plan_hash": null,
+    "decision": "none",
+    "via": "channel",
+    "verified": true,
+    "on": {
+      "kind": "commit",
+      "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+    },
+    "token": null,
+    "words": null,
+    "image": null
+  }
+}
