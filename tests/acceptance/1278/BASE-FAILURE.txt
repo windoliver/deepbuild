@@ -1,0 +1,53 @@
+# #1278 acceptance suite at the base, 79d98cbc (Merge pull request #1242), before any implementation.
+#
+# Machine: Mac15,7 (macOS, Metal), load average about 50-60 during the runs.
+# deep-gpu built with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked --bin deep-gpu.
+#
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/1278/tsconfig.json   -> exit 0, no errors
+#   npx vitest run tests/acceptance/1278 --testTimeout=600000 --silent=false      -> exit 1
+#
+#  Test Files  1 failed | 1 passed (2)
+#       Tests  1 failed | 3 passed (4)
+#    Duration  55.38s
+#
+#   × AC1 #1278.09e67199 four plays of the 97-frame view in one deep-gpu run process, no capture: each frame's
+#     pixel_hash is the same in all four                                                       FAIL (the stated reason)
+#       7 of 97 frames differ across 4 plays:
+#         frame 47 (t = 1.46875 s): play 1 d648cc798e58, play 2 04c5359e03fc, play 3 d648cc798e58, play 4 04c5359e03fc
+#         frame 54 (t = 1.68750 s): play 1 bf184a6e8157, play 2 d071a1368731, play 3 d071a1368731, play 4 bf184a6e8157
+#         frame 64 (t = 2.00000 s): play 1 e677edbd8f13, play 2 e677edbd8f13, play 3 a432c1a6ee0a, play 4 a432c1a6ee0a
+#         frame 67 (t = 2.09375 s): play 1 b3cfdfafdb32, play 2 b3cfdfafdb32, play 3 feb752379160, play 4 b3cfdfafdb32
+#         frame 68 (t = 2.12500 s): play 1 333645f6426f, play 2 90f640c81318, play 3 333645f6426f, play 4 90f640c81318
+#         frame 85 (t = 2.65625 s): play 1 4ac634c53f14, play 2 4ac634c53f14, play 3 4ac634c53f14, play 4 3b105accad4c
+#         frame 96 (t = 3.00000 s): play 1 e21fa8149fbe, play 2 648f6bdc03d7, play 3 96447b25b43c, play 4 96447b25b43c
+#     An earlier run of the same files on the same binary: 9 of 97 (frames 47, 54, 57, 63, 64, 67, 68, 85, 87).
+#     The issue measured 9 to 11; which frames flip changes run to run, as GPU timing does.
+#   ✓ AC1 #1278.09e67199 the fixture is the repro: at frames 0, 48 and 96 the box covers part of the ball   PASS
+#       frame 0: ball 22448 px, box 12738 px, 127 ball px beside the box
+#       frame 48: ball 1600 px, box 1108 px, 126 ball px beside the box
+#       frame 96: ball 832 px, box 453 px, 26 ball px beside the box
+#   ✓ AC2 #1278.2d35ce9a a mirror ball's sun image keeps its energy at sub-pixel phases ...               PASS
+#       ball r 1,     phase 0 / 0.25 / 0.5: 8.26658e-3 / 8.31612e-3 / 8.33291e-3 against 8.26446e-3 (+0.03 / +0.63 / +0.83%)
+#       ball r 0.125, phase 0 / 0.25 / 0.5: 1.21720e-4 / 1.21905e-4 / 1.21948e-4 (spread 0.19%)
+#   ✓ AC2 #1278.2d35ce9a with the highlight on a pixel center its brightest pixel holds 2% to 50% ...      PASS
+#       brightest pixel share at phase 0.5: 18.7% (r 1), 14.8% (r 0.125); small ÷ big 0.789
+#
+# AC2 passes at the base, as it must: it guards behavior the base has (#422's widening) and a fix must keep.
+# It was shown to fail on two wrong programs, each a temporary edit of crates/deep-scene3d-render/src/scene3d.wgsl's
+# direct(), reverted after the run (the file is byte-identical to the base again; git status shows only this folder):
+#
+#   `let dn = 0.0;` (no widening):
+#     × AC2 energy: ball r 1: 1.9517e-3 / 8.3962e-3 / 3.0518e-2 at phases 0 / 0.25 / 0.5 (moves 1463.7%);
+#                   ball r 0.125: 4.1554e-7 / 1.7848e-6 / 2.7417e-2 (moves 6597861%); r 1 off E·R²/(2d − R)² by -76% and +269%
+#     × AC2 width:  the brightest pixel holds 97.6% (r 1) and 100.0% (r 0.125) of the sun's image (over 50%)
+#     ✓ AC1: 0 of 97 frames differ across 4 plays (the issue's own observation: with dn 0 every frame matches,
+#            so the derivative is the cause and AC1 sees it)
+#   `let dn = 0.0129;` (a fixed widening, the small ball's footprint, on every pixel):
+#     × AC2 energy: ball r 1 off E·R²/(2d − R)² by +2.6% at each phase
+#     × AC2 width:  ball r 1's brightest pixel holds 0.20% (under 2%); shares 15.1% vs 0.2%, ratio 74.19
+#
+# Reruns: AC1 failed on both runs with the final fixture. Two earlier drafts of the fixture passed AC1 at the base,
+# each for a fixture fault, not a fix: (1) with a `sky@1` item every frame drew black (README: Notes on the base), so
+# all hashes matched and the fixture test found no ball or box; the sky was dropped; (2) with a 2 lx sun and 30 lamps
+# of 150 lm the picture was clipped white under the plain look, so no code value could move; the lights were dimmed
+# to 0.6 lx and 6 lm. Nothing else changed between drafts.
