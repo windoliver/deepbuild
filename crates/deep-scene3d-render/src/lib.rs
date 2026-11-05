@@ -4040,7 +4040,7 @@ impl Renderer {
             // Motion blur by velocity resolves the finished geometry, before the effects (#419).
             let blur = |encoder: &mut wgpu::CommandEncoder| {
                 if let Some((m, linear)) = &motion {
-                    m.record(encoder, linear);
+                    m.record(encoder, linear, &profiler);
                 }
             };
             let Some((_, info, pipeline, fallback, binds, draws)) = &resolve else {

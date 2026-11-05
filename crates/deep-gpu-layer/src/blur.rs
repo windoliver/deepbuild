@@ -39,16 +39,24 @@ fn points(s: &Solid) -> Vec<V3> {
     }
 }
 
-/// The most any solid's points move on screen between evaluations `a` and `b`, px, each seen
-/// through its own camera: a camera's move moves everything it shows.
+/// The most any solid's points, or the background far away, move on screen between evaluations
+/// `a` and `b`, px, each seen through its own camera: a camera's move moves everything it shows.
 pub fn travel(a: &Scene, b: &Scene) -> f64 {
+    let (ca, cb) = (&a.camera, &b.camera);
+    let far = if ca.perspective { 1e6 } else { ca.far };
+    let [w, h] = ca.size;
+    let mut most: f64 = 0.0;
+    for (x, y) in [(0.0, 0.0), (w, 0.0), (0.0, h), (w, h), (w / 2.0, h / 2.0)] {
+        if let Some(q) = cb.project(ca.unproject(x, y, far)) {
+            most = most.max((q[0] - x).hypot(q[1] - y));
+        }
+    }
     let bs: HashMap<&str, &Solid> = b
         .layers
         .iter()
         .flat_map(|l| &l.solids)
         .map(|s| (s.id.as_str(), s))
         .collect();
-    let mut most: f64 = 0.0;
     for sa in a.layers.iter().flat_map(|l| &l.solids) {
         let Some(sb) = bs.get(sa.id.as_str()) else {
             continue;
