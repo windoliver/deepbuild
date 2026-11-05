@@ -147,9 +147,17 @@ impl Device {
                 features = choice.request;
                 name = adapter.get_info().name;
                 info = Some(adapter.get_info());
+                // A storage binding as large as the adapter holds: the per-pixel resolve's lists
+                // grow up to the class's GPU memory (#424).
+                let limits = adapter.limits();
                 pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                     label: Some("deep-gpu"),
                     required_features: features,
+                    required_limits: wgpu::Limits {
+                        max_storage_buffer_binding_size: limits.max_storage_buffer_binding_size,
+                        max_buffer_size: limits.max_buffer_size,
+                        ..Default::default()
+                    },
                     ..Default::default()
                 }))
                 .map_err(|e| format!("no GPU device: {e}"))?
