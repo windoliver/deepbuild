@@ -1,5 +1,20 @@
 # Modularity audit — partial implementation, not closed
 
+## Latest verification attempt — still blocked
+
+The cold-workspace job was retried with the documented **30-minute build-grant wait**, in a persistent process instead of a short tool invocation. It exited **3**, `INCONCLUSIVE no grant: no build grant came within 30 min`. The cold-reset helper runs only after the grant, so this attempt moved no generated files and executed no build. Its follow-on mutation/affected checks did not start. A separate process-read regression waiter was cancelled by its own recorded PID while still waiting; that test was unrun.
+
+Read-only inspection found both machine test grants occupied and timed requests pending. The pending timed requests prevent new top-level build/test grants by design. No other session was killed, no throttle state was edited, and no lease or check was bypassed. The job owners must finish or stop their work before this attempt can be verified here.
+
+Prepared but **not verified** in this continuation:
+
+- Real-component coverage for injected adapter capabilities in both directions, with a wrong program that ignores the callback.
+- Shared project-trust cache coverage across the record and extension-host entries, including symlink approval, immediate revocation and refusal of untrusted writers; a separate-cache mutant is prepared.
+- Real-child process-observation coverage and a boundary-failure regression for unknown OS observations. The latter is not yet reproduced, and no behavior fix for it has been applied.
+- Removal of the supervisor's remaining duplicate liveness function in favor of the already shared helper. This refactor still needs the affected checks.
+
+These tests are new regression files, not edits to acceptance criteria. Nothing in this section establishes that the broader audit is closed or that the PR is merge-ready.
+
 ## Current integration checkpoint
 
 The branch has been reconciled with main at `0c153d7cd4dd167130f62fafc382114c47ed261a`. Six merge conflicts were resolved without changing acceptance tests or known-failure baselines. The extracted run service now carries main's durable journal recovery, `run.started@3` redaction/withheld fields, paid-run IDs, stand-in/host arguments, and gate-adjusted results. Retention preserves main's notice/series and reading evidence. Stack credential-mode plants and session-retention ownership are preserved.
