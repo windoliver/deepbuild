@@ -1,0 +1,130 @@
+#1172 at the base: commit 58862789 (origin/main), with this folder and the three plant features added to
+crates/deep-app/Cargo.toml, nothing else. The real target/debug/deep-app against a real hub, on a Mac15,7 (load 50 to 120
+during the run), Node 24.22, outside the Bash tool's sandbox so Accessibility and Screen Recording held.
+
+  DA1172_SCREENS=<dir> NO_COLOR=1 npx vitest run --root tests/acceptance/1172 --no-file-parallelism --reporter=verbose
+
+Every test failed on an assertion, none by failing to load, and none BLOCKED. 12 failed, 8 passed, 767 s.
+
+The 8 that pass at the base, on purpose, and why:
+- judges.test.ts, 7 tests: drawn pictures, no app and no criterion.
+- shell.test.ts "AC1 wrong program: the planted build ... naming the spike window": at the base plant-spike-window changes
+  nothing, and the base IS the spike window, so the judge names it. That is the criterion's failure, seen on the real binary.
+
+By criterion, the reason each fails at the base:
+- AC1: "the window is the spike window: it draws "143 waiting on you"", read off the real window's pixels; no node named
+  Sessions; no rows; the menu bar reads ["143"].
+- AC1 proof: `deep-replica --first-screen` over this home's hub draws no session row at the base: its reader folds no history
+  from before it opened. The same reader feeds the app, so what fills the real sidebar should fill the replica's.
+- AC2: stops at its precondition: before the answer the window reads 143, not 3 (the same 12 failures).
+- AC3: "Needs you has no row showing <ask>'s question", naming each ask. AC3's plant: at the base the plant changes nothing,
+  so the row isn't there at all and the test wants "by its handle" (a seam that doesn't exist yet). With a temporary build
+  whose main.rs opened views::Shell, reverted, this same test passed on real handle rows (README).
+- AC4 panel: "the plug-in panel draws no stale value 182.40", read off the pixels of the window `--panel` opens at the base.
+- AC4 terminal: "the terminal tab can't be reached: the sidebar has no row "Cart totals" to click". The grid's pixel judge can't
+  run at the base (no tab, a seam that doesn't exist yet); judges.test.ts shows it on drawn pictures. The plant fails likewise.
+- AC5: stops before the press: the main window doesn't draw Needs you at all. The Pop out control doesn't exist yet.
+- AC6: "the welcome pane's ground in dark mode is #f6f6f4, not the look's dark ground #0b0c0e", and light "#f6f6f4, not
+  #ffffff": the pane's Paper, on the real window's pixels. DEEP_APP_APPEARANCE is unread at the base, so dark draws light.
+- AC7: every picture written (15 files, the window ones at 3024 x 1964), then "INCONCLUSIVE: AC7: no taste call is recorded".
+
+What could not run at the base: nothing failed to run, but the judges for the card, the stale value's ink, the cell grid's law on
+a real tab and the popped-out window have seen no such window, since none exists. They are unproven on a right program.
+
+After this run the fixture panel moved to a temp copy per run (gpui-shell writes type files beside a panel it loads); the panel
+test was re-run and failed the same way, and shown.test.ts, which only takes the same path, was not re-run.
+
+--- trimmed output ---
+ × shown.test.ts > #1172 shown to you > AC7 the check run takes the screenshots at the reference window, and the run reads INCONCLUSIVE unless a recorded taste call on ex
+ × shell.test.ts > #1172 the app a person runs > AC1 deep-app shows the registered sidebar with the 2 sessions and Needs you with 3 rows, the menu bar reads 3, and no row
+ ✓ shell.test.ts > #1172 the app a person runs > AC1 wrong program: the planted build that opens the spike window fails, naming the spike window 25293ms
+ × shell.test.ts > #1172 the app a person runs > AC1 proof: the real window's sidebar rows are the replica's rows over the same record 21255ms
+ × shell.test.ts > #1172 the app a person runs > AC2 answering one ask in the record makes the window and the menu bar read 2 within 1 s 16653ms
+ × rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 each row shows its ask's question, and a click on it presents that ask's question card in
+ × rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask 51032ms
+ × terminal.test.ts > #1172 a terminal tab draws in the app > AC4 a terminal tab draws its rows through the cell grid, on the window's pixels 33492ms
+ × terminal.test.ts > #1172 a terminal tab draws in the app > AC4 wrong program: a planted tab that writes its text outside the grid fails, naming the tab 101953ms
+ × popout.test.ts > #1172 a popped-out view leaves the main window > AC5 after Needs you pops out to its own window, the main window no longer draws it and the new window
+ × panel.test.ts > #1172 a plug-in panel draws in the app > AC4 a bound value past its freshness draws in the look's muted role with its age, and a fresh one neither, on 
+ × welcome.test.ts > #1172 the welcome pane takes its colors from the look and the appearance > AC6 in dark mode the welcome pane's ground is the look's dark ground 14698
+ × welcome.test.ts > #1172 the welcome pane takes its colors from the look and the appearance > AC6 wrong program: in light mode the same pane's ground is the look's ligh
+ ✓ judges.test.ts > #1172 (judges) the grid law > control: fills on a grid of 16 × 32 px cells pass, whatever the cell 13ms
+ ✓ judges.test.ts > #1172 (judges) the grid law > control: fills on a grid of 18 × 36 px cells pass, whatever the cell 9ms
+ ✓ judges.test.ts > #1172 (judges) the grid law > control: fills on a grid of 14 × 28 px cells pass, whatever the cell 8ms
+ ✓ judges.test.ts > #1172 (judges) the grid law > wrong program: text with no cell fills fails, naming the tab 8ms
+ ✓ judges.test.ts > #1172 (judges) the grid law > wrong program: proportional text, whose rows end at different columns, fails, naming the tab 7ms
+ ✓ judges.test.ts > #1172 (judges) the grid law > wrong program: cells of unequal width fail, naming the tab 5ms
+ ✓ judges.test.ts > #1172 (judges) ground and ink > control: the most common color is the ground and the strokes' core its ink 2ms
+
+FAIL  panel.test.ts > #1172 a plug-in panel draws in the app > AC4 a bound value past its freshness draws in the look's muted role with its age, and a fresh one neither, on the window's pixels
+AssertionError: expected [ …(2) ] to deeply equal []
++   "the plug-in panel draws no stale value 182.40: the window's pixels read [\"•• D\",\"143 waiting on you\",\"V Session 0001\",\"O Session 0002\",\"• Session 0003\",\"• Session 0004\",\"• Session 0005\",\"O Session 0006\",\"v Session 0007\",\"• Session 0008\",\"O Session 0009\",\"v Session 0010\",
++   "the plug-in panel draws no fresh value 96.10: the window's pixels read [\"•• D\",\"143 waiting on you\",\"V Session 0001\",\"O Session 0002\",\"• Session 0003\",\"• Session 0004\",\"• Session 0005\",\"O Session 0006\",\"v Session 0007\",\"• Session 0008\",\"O Session 0009\",\"v Session 0010\",\
+
+FAIL  popout.test.ts > #1172 a popped-out view leaves the main window > AC5 after Needs you pops out to its own window, the main window no longer draws it and the new window does
+AssertionError: the reading sees the view in the main window before it pops out: expected [ …(3) ] to deeply equal []
++   "before the pop-out the main window should draw \"Which header colour on the login page?\": its pixels read [\"•• D\",\"143 waiting on you\",\"V Session 0001\",\"• Session 0002\",\"O Session 0003\",\"• Session 0004\",\"• Session 0005\",\"O Session 0006\",\"v Session 0007\",\"• Session 0008\",\"O
++   "before the pop-out the main window should draw \"Which font for the printed receipt?\": its pixels read [\"•• D\",\"143 waiting on you\",\"V Session 0001\",\"• Session 0002\",\"O Session 0003\",\"• Session 0004\",\"• Session 0005\",\"O Session 0006\",\"v Session 0007\",\"• Session 0008\",\"O Se
++   "before the pop-out the main window should draw \"Which layout for the changelog?\": its pixels read [\"•• D\",\"143 waiting on you\",\"V Session 0001\",\"• Session 0002\",\"O Session 0003\",\"• Session 0004\",\"• Session 0005\",\"O Session 0006\",\"v Session 0007\",\"• Session 0008\",\"O Sessio
+
+FAIL  rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window
+AssertionError: expected [ …(3) ] to deeply equal []
++   "Needs you has no row showing ask:01M6PP6RWT5NGKQH5CREBCQA4B's question \"Which header colour on the login page?\"",
++   "Needs you has no row showing ask:01M6PP6RX7271SDDEGDW7AWPGS's question \"Which font for the printed receipt?\"",
++   "Needs you has no row showing ask:01M6PP6RXBFZQHBPGKSECN5TEC's question \"Which layout for the changelog?\"",
+
+FAIL  rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask
+AssertionError: expected 'Needs you has no row showing ask:01M6…' to match /by its handle/
+
+FAIL  shell.test.ts > #1172 the app a person runs > AC1 deep-app shows the registered sidebar with the 2 sessions and Needs you with 3 rows, the menu bar reads 3, and no row reads "Session 0001"
+AssertionError: expected [ …(12) ] to deeply equal []
++   "the window is the spike window: it draws \"143 waiting on you\"",
++   "the window has no registered sidebar: no node is named \"Sessions\"; its names are []",
++   "the sidebar should show session \"Cart totals\" once, as a row; it has 0",
++   "the sidebar should show session \"Release notes\" once, as a row; it has 0",
++   "the window has no Needs you view: no node is named \"Needs you\"",
++   "Needs you should show 1 row for ask:01M6PP3JJ9Q40EXGWJ009PATZH (\"Which header colour on the login page?\"); it has 0",
++   "the window's pixels lack ask:01M6PP3JJ9Q40EXGWJ009PATZH's question: they read [\"D\",\"143 waiting on you\",\"V Session 0001\",\"• Session 0002\",\"• Session 0003\",\"• Session 0004\",\"• Session 0005\",\"O Session 0006\",\"v Session 0007\",\"• Session 0008\",\"O Session 0009\",\"v Session 0010
++   "Needs you should show 1 row for ask:01M6PP3JJDZX9FTY3P8RM9CPFY (\"Which font for the printed receipt?\"); it has 0",
++   "the window's pixels lack ask:01M6PP3JJDZX9FTY3P8RM9CPFY's question: they read [\"D\",\"143 waiting on you\",\"V Session 0001\",\"• Session 0002\",\"• Session 0003\",\"• Session 0004\",\"• Session 0005\",\"O Session 0006\",\"v Session 0007\",\"• Session 0008\",\"O Session 0009\",\"v Session 0010
++   "Needs you should show 1 row for ask:01M6PP3JJEKEFTDN2M2NMPK463 (\"Which layout for the changelog?\"); it has 0",
++   "the window's pixels lack ask:01M6PP3JJEKEFTDN2M2NMPK463's question: they read [\"D\",\"143 waiting on you\",\"V Session 0001\",\"• Session 0002\",\"• Session 0003\",\"• Session 0004\",\"• Session 0005\",\"O Session 0006\",\"v Session 0007\",\"• Session 0008\",\"O Session 0009\",\"v Session 0010
++   "the menu bar reads [\"143\"], not 3",
+
+FAIL  shell.test.ts > #1172 the app a person runs > AC1 proof: the real window's sidebar rows are the replica's rows over the same record
+AssertionError: the replica over this home's record draws both sessions (its frames sit beside the real window's in the proof): expected [] to have a length of 2 but got +0
+
+FAIL  shell.test.ts > #1172 the app a person runs > AC2 answering one ask in the record makes the window and the menu bar read 2 within 1 s
+AssertionError: before the answer the window and the menu bar read 3: expected [ …(12) ] to deeply equal []
++   "the window is the spike window: it draws \"143 waiting on you\"",
++   "the window has no registered sidebar: no node is named \"Sessions\"; its names are []",
++   "the sidebar should show session \"Cart totals\" once, as a row; it has 0",
++   "the sidebar should show session \"Release notes\" once, as a row; it has 0",
++   "the window has no Needs you view: no node is named \"Needs you\"",
++   "Needs you should show 1 row for ask:01M6PP5Y7KHBXMEZ6CSZ60DBJW (\"Which header colour on the login page?\"); it has 0",
++   "the window's pixels lack ask:01M6PP5Y7KHBXMEZ6CSZ60DBJW's question: they read [\"•• D\",\"143 waiting on you\",\"V Session 0001\",\"• Session 0002\",\"O Session 0003\",\"• Session 0004\",\"• Session 0005\",\"O Session 0006\",\"v Session 0007\",\"• Session 0008\",\"O Session 0009\",\"v Session 0
++   "Needs you should show 1 row for ask:01M6PP5Y7QB8PA7RGT8XSDZKBF (\"Which font for the printed receipt?\"); it has 0",
++   "the window's pixels lack ask:01M6PP5Y7QB8PA7RGT8XSDZKBF's question: they read [\"•• D\",\"143 waiting on you\",\"V Session 0001\",\"• Session 0002\",\"O Session 0003\",\"• Session 0004\",\"• Session 0005\",\"O Session 0006\",\"v Session 0007\",\"• Session 0008\",\"O Session 0009\",\"v Session 0
++   "Needs you should show 1 row for ask:01M6PP5Y7RRC4T0EB9ZJYQ0K4F (\"Which layout for the changelog?\"); it has 0",
++   "the window's pixels lack ask:01M6PP5Y7RRC4T0EB9ZJYQ0K4F's question: they read [\"•• D\",\"143 waiting on you\",\"V Session 0001\",\"• Session 0002\",\"O Session 0003\",\"• Session 0004\",\"• Session 0005\",\"O Session 0006\",\"v Session 0007\",\"• Session 0008\",\"O Session 0009\",\"v Session 0
++   "the menu bar reads [\"143\"], not 3",
+
+FAIL  shown.test.ts > #1172 shown to you > AC7 the check run takes the screenshots at the reference window, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they
+AssertionError: INCONCLUSIVE: AC7: no taste call is recorded for these screenshots (TASTE.json holds none); this is not a pass
+
+FAIL  terminal.test.ts > #1172 a terminal tab draws in the app > AC4 a terminal tab draws its rows through the cell grid, on the window's pixels
+AssertionError: expected [ Array(1) ] to deeply equal []
++   "the terminal tab can't be reached: the sidebar has no row \"Cart totals\" to click",
+
+FAIL  terminal.test.ts > #1172 a terminal tab draws in the app > AC4 wrong program: a planted tab that writes its text outside the grid fails, naming the tab
+AssertionError: the planted tab fails the same pixel judge: expected 'the terminal tab can\'t be reached: t…' to match /the terminal tab wrote its text outsi…/
+
+FAIL  welcome.test.ts > #1172 the welcome pane takes its colors from the look and the appearance > AC6 in dark mode the welcome pane's ground is the look's dark ground
+AssertionError: the welcome pane's ground in dark mode is #f6f6f4, not the look's dark ground #0b0c0e: expected false to be true // Object.is equality
+
+FAIL  welcome.test.ts > #1172 the welcome pane takes its colors from the look and the appearance > AC6 wrong program: in light mode the same pane's ground is the look's light ground, so one color for 
+AssertionError: the welcome pane's ground in light mode is #f6f6f4, not the look's ground #ffffff: expected false to be true // Object.is equality
+
+ Test Files  7 failed | 1 passed (8)
+      Tests  12 failed | 8 passed (20)
+   Duration  767.46s (tests 99%, import 1%)
