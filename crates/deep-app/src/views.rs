@@ -450,6 +450,7 @@ impl Render for Shipped {
         // state draws the fixture, whatever this machine's HOME holds.
         let unfinished = decorations.is_none().then(crate::setup::count).flatten();
         let record = record(self.kind);
+        let reach = crate::notify::reach();
         let now = now();
         let open = record.open.len();
         let page = div()
@@ -505,9 +506,10 @@ impl Render for Shipped {
                             .or_else(crate::setup::reason)
                             .map(|line| label("set-up-reason", line).h_auto().py_1()),
                     ),
-                None => page
-                    .child(title("home-title", "Home"))
-                    .child(label("home-needs-you", format!("{open} asks need you"))),
+                None => page.child(title("home-title", "Home")).child(label(
+                    "home-needs-you",
+                    reach.count(format!("{open} asks need you")),
+                )),
             },
             Kind::NeedsYou if unfinished.is_some() => page
                 .child(title("needs-you-title", "Needs you"))
@@ -522,7 +524,12 @@ impl Render for Shipped {
                     let held = decorations
                         .as_ref()
                         .is_some_and(|state| state.held.as_deref() == Some(handle.as_str()));
-                    label(("ask", index), handle.clone())
+                    let text = if reach.not_notified(handle) {
+                        format!("{handle} · not notified")
+                    } else {
+                        handle.clone()
+                    };
+                    label(("ask", index), text)
                         .when(has(|state| &state.inbox.folded), |row| {
                             row.pl_4().text_color(chrome.ink_secondary)
                         })

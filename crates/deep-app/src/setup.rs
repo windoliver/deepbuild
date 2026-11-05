@@ -17,7 +17,20 @@ pub const SET_UP_LINE: &str = "DeepBuild added its hooks in watch-only mode, so 
 pub fn needed() -> bool {
     let root = crate::hub::root();
     !root.join("setup-finished.json").exists()
-        && (!root.exists() || root.join("setup-stopped.json").exists())
+        && (nothing_here(&root) || root.join("setup-stopped.json").exists())
+}
+
+/// Whether `root` holds nothing of DeepBuild's: the running app's claim on it (#994) isn't setup.
+fn nothing_here(root: &Path) -> bool {
+    std::fs::read_dir(root).map_or(true, |mut entries| {
+        entries.all(|entry| {
+            entry.is_ok_and(|entry| {
+                crate::single::FILES
+                    .iter()
+                    .any(|file| entry.file_name() == *file)
+            })
+        })
+    })
 }
 
 /// Why the last setup stopped, and its fix, as it kept them in `~/.deepbuild/setup-stopped.json`; `None` when it
