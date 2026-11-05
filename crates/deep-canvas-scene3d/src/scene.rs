@@ -1817,7 +1817,7 @@ fn asset_scene(
     params: &Value,
     model: &Affine3,
     look: &Look3,
-) -> Result<Vec<Solid>, Refused> {
+) -> Result<(Vec<Solid>, Vec<([[f64; 4]; 3], Value)>), Refused> {
     let path = format!("items/{id}/params/sha256");
     let Some(sha) = params.get("sha256").and_then(Value::as_str) else {
         return refused("out_of_range", path);
@@ -1835,6 +1835,12 @@ fn asset_scene(
         path: format!("items/{id}/{p}"),
     })?;
     let mut out = Vec::new();
+    // The file's punctual lights at their world transforms under the item's (#428).
+    let lights = imported
+        .lights
+        .iter()
+        .map(|(w, l)| (matmul(model, w), l.clone()))
+        .collect();
     for (k, node) in imported.nodes.iter().enumerate() {
         let named = |n: &Value| match n {
             Value::Number(i) => i.as_u64() == Some(node.index as u64),
@@ -1905,7 +1911,7 @@ fn asset_scene(
             });
         }
     }
-    Ok(out)
+    Ok((out, lights))
 }
 
 /// A figure lights one item at most (Object: `tone`, "one lit per figure"), and every tone is
@@ -2153,9 +2159,41 @@ pub(crate) fn evaluate_compiled(
                 {
                     let read = assets.expect("matched above");
                     let model = world(&items, id);
-                    for s in asset_scene(read, id, params, &model, look)? {
+                    let (solids, file_lights) = asset_scene(read, id, params, &model, look)?;
+                    for s in solids {
                         bounds.extend(corners_of(&s));
                         layer.solids.push(s);
+                    }
+                    // A directional KHR_lights_punctual light lights the view as a sun of its
+                    // intensity in lx and its color (#428).
+                    for (k, (m, l)) in file_lights.iter().enumerate() {
+                        if l.get("type").and_then(Value::as_str) != Some("directional") {
+                            continue;
+                        }
+                        let lid = format!("{id}#light{k}");
+                        let p = serde_json::json!({
+                            "illuminance": num(l.get("intensity")).unwrap_or(1.0),
+                            "color": l.get("color").cloned().unwrap_or(serde_json::json!([1, 1, 1])),
+                        });
+                        let dir = normalize(turn(m, [0.0, 0.0, -1.0]));
+                        lights.extend(light::light(
+                            &lid,
+                            "light.sun@1",
+                            &p,
+                            origin(m),
+                            dir,
+                            axes(m),
+                            1.0,
+                        ));
+                        if sun.is_none() {
+                            sun = Some(Sun {
+                                id: lid,
+                                toward: normalize(turn(m, [0.0, 0.0, 1.0])),
+                                illuminance: num(p.get("illuminance")).unwrap_or(1.0),
+                                shadow: false,
+                                cascades: cascades(&p, &path)?,
+                            });
+                        }
                     }
                 }
                 "mesh.sequence@1" if assets.is_none() => {}
