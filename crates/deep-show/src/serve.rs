@@ -145,14 +145,16 @@ fn cell_size(points: f64) -> [f64; 2] {
     [points * 8.0 / 13.0, points * 16.0 / 13.0]
 }
 
-/// The bytes the PTY holds that nobody has read.
-fn unread(master: &File) -> usize {
-    let mut n: libc::c_int = 0;
-    // SAFETY: FIONREAD writes one int through the pointer; the descriptor is a PTY master.
-    match unsafe { libc::ioctl(master.as_raw_fd(), libc::FIONREAD as _, &mut n) } {
-        0 => n.max(0) as usize,
-        _ => 0,
-    }
+/// Whether the PTY holds output nobody has read, asked of poll without waiting. FIONREAD can't
+/// say: on macOS a PTY master's FIONREAD counts the program's unread input, not its output.
+fn unread(master: &File) -> bool {
+    let mut fds = libc::pollfd {
+        fd: master.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    // SAFETY: poll reads and writes the one pollfd we pass.
+    unsafe { libc::poll(&mut fds, 1, 0) > 0 && fds.revents & libc::POLLIN != 0 }
 }
 
 /// A paste's text with every bracketed-paste marker taken out, so it can't end early.
@@ -685,19 +687,18 @@ impl Serve {
                 // Read only what the PTY holds, so the read never blocks while the lock is held;
                 // a hang-up with nothing left reads its end.
                 let hung = fds.revents & (libc::POLLHUP | libc::POLLERR) != 0;
-                if ready <= 0 || (unread(&master) == 0 && !hung) {
+                if ready <= 0 || (!unread(&master) && !hung) {
                     continue;
                 }
                 // One chunk of everything the PTY holds, up to CHUNK, read in as few passes as it
-                // takes.
+                // takes; a read the PTY has output for returns what it holds without waiting.
                 let mut n = 0;
                 loop {
-                    let want = unread(&master).clamp(1, CHUNK - n);
-                    match (&*master).read(&mut buf[n..n + want]) {
+                    match (&*master).read(&mut buf[n..]) {
                         Ok(0) | Err(_) => break,
                         Ok(k) => n += k,
                     }
-                    if n == CHUNK || unread(&master) == 0 {
+                    if n == CHUNK || !unread(&master) {
                         break;
                     }
                 }
@@ -942,7 +943,7 @@ impl Serve {
                 let full = t.stream.flow.lock().expect("flow").queued + 4 * CHUNK > WINDOW;
                 let empty = full || {
                     let _held = t.stream.reading.lock().expect("reading");
-                    unread(&master) == 0
+                    !unread(&master)
                 };
                 if empty {
                     break;
