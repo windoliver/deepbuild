@@ -2300,8 +2300,8 @@ impl Live {
 
 /// One canonical render of a stamped document at `t`: a fresh view of one slot, its own results,
 /// no history, at the class's base rung with every operator at full resolution; `live` is the
-/// planted worker's live rung and operator resolution; `out` where its picture is written as a
-/// PNG when asked (#1173).
+/// planted worker's live rung and operator resolution; `out` where its final picture (a PNG) and
+/// its resolved linear target (f32 RGBA) are written when asked, each by its flag (#1173).
 #[allow(clippy::too_many_arguments)]
 fn render_canonical(
     device: &Arc<Device>,
@@ -2317,7 +2317,7 @@ fn render_canonical(
     labels: &mut Labels,
     plants: &Plants,
     fail: &[String],
-    out: Option<&str>,
+    out: Option<(&str, bool, bool)>,
 ) -> Value {
     let _ = assets;
     let mut doc = doc.clone();
@@ -2444,9 +2444,21 @@ fn render_canonical(
         "msaa": msaa,
         "render_targets": render_targets,
     });
-    if let (Some(out), Some(bgra)) = (out, &pixels) {
+    let Some((out, final_, linear)) = out else {
+        return reply;
+    };
+    if let (true, Some(bgra)) = (final_, &pixels) {
         match crate::view3d::write_final(out, bgra, size) {
             Ok(name) => reply["final"] = json!(name),
+            Err(e) => return e,
+        }
+    }
+    let read = (linear && device.backend != Backend::Noop)
+        .then(|| view.renderer().read_targets(device))
+        .flatten();
+    if let Some((floats, _)) = read {
+        match crate::view3d::write_named(out, &floats, "f32") {
+            Ok(name) => reply["linear"] = json!(name),
             Err(e) => return e,
         }
     }
@@ -2472,10 +2484,13 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
     };
     let fps = call["fps"].as_u64().unwrap_or(60).max(1) as i64;
     let plants = Plants::of(app.planted);
-    let out = call["targets"]
-        .as_array()
-        .is_some_and(|t| t.iter().any(|t| t == "final"))
-        .then(|| out.to_string());
+    let wants = |name: &str| {
+        call["targets"]
+            .as_array()
+            .is_some_and(|t| t.iter().any(|t| t == name))
+    };
+    let (final_, linear) = (wants("final"), wants("linear"));
+    let out = (final_ || linear).then(|| out.to_string());
     app.worker.call(move |state| {
         let device = match state.gpu.recover() {
             Ok(d) => d,
@@ -2511,7 +2526,7 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
             &mut labels,
             &plants,
             &[],
-            out.as_deref(),
+            out.as_deref().map(|o| (o, final_, linear)),
         );
         if let Some(o) = c.as_object_mut() {
             o.insert("frame".into(), json!(frame));
