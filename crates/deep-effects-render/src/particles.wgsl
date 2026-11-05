@@ -3,8 +3,9 @@
 // the item's roles over its life, added to the linear target where it shows in front of the
 // scene (reversed Z, so a nearer sprite has the larger depth). Issue #420: its size and opacity
 // over life, up to four color stops mixed in OKLab, and its draw: a dot, a spark, a puff (shaded
-// at half resolution unless `full`) or a streak along its velocity. Written for this module;
-// nothing here is ported.
+// at half resolution unless `full`) or a streak along its velocity. Issue #1173: a half-resolution
+// puff draws into a half-size target, hidden where the scene's depth is nearer, which a filtered
+// upsample adds to the linear target. Written for this module; nothing here is ported.
 
 struct Draw {
     clip: mat4x4<f32>,
@@ -12,7 +13,8 @@ struct Draw {
     view: vec4<f32>,
     // Its size at birth and at death, its opacity at birth and at death.
     life: vec4<f32>,
-    // Its draw (0 dot, 1 spark, 2 puff, 3 streak), half-resolution shading, and its stop count.
+    // Its draw (0 dot, 1 spark, 2 puff, 3 streak), half-resolution shading, its stop count, and
+    // the planted block copy (#1173).
     kind: vec4<f32>,
     // Each color stop's place in life, and its linear color.
     at: vec4<f32>,
@@ -21,12 +23,16 @@ struct Draw {
 
 @group(0) @binding(0) var<uniform> draw: Draw;
 @group(0) @binding(1) var<storage, read> inst: array<f32>;
+// The half-resolution draw's: the scene's depth; the upsample's: the half-size target.
+@group(0) @binding(2) var scene_depth: texture_depth_2d;
+@group(0) @binding(3) var half_target: texture_2d<f32>;
+@group(0) @binding(4) var half_sampler: sampler;
 
 struct Out {
     @builtin(position) pos: vec4<f32>,
     @location(0) at: vec2<f32>,
     @location(1) life: f32,
-    // The sprite's centre and half extents in px, for half-resolution shading.
+    // The sprite's centre and half extents in px, for the planted block copy.
     @location(2) centre: vec2<f32>,
     @location(3) half_px: vec2<f32>,
 };
@@ -131,11 +137,45 @@ fn color_at(l: f32) -> vec3<f32> {
 @fragment
 fn fs(in: Out) -> @location(0) vec4<f32> {
     var at = in.at;
-    // A puff at half resolution shades once per 2 × 2 px block.
-    if draw.kind.y > 0.5 {
+    // The planted block copy (#1173): a puff shaded once per 2 × 2 px block, that value written
+    // to all four.
+    if draw.kind.w > 0.5 {
         let block = floor(in.pos.xy * 0.5) * 2.0 + 1.0;
         at = (block - in.centre) / max(in.half_px, vec2<f32>(1.0));
     }
+    return shade(in, at);
+}
+
+// A half-size pixel of a half-resolution puff, times the share of the four full-size pixels under
+// it where the puff is in front of the scene (reversed Z).
+@fragment
+fn half_fs(in: Out) -> @location(0) vec4<f32> {
+    let full = vec2<i32>(floor(in.pos.xy)) * 2;
+    let last = vec2<i32>(textureDimensions(scene_depth)) - 1;
+    var shown = 0.0;
+    for (var i = 0; i < 4; i++) {
+        let p = min(full + vec2<i32>(i & 1, i >> 1u), last);
+        shown += select(0.0, 0.25, in.pos.z >= textureLoad(scene_depth, p, 0));
+    }
+    return shade(in, in.at) * shown;
+}
+
+@vertex
+fn upsample_vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
+    let x = f32((vi << 1u) & 2u);
+    let y = f32(vi & 2u);
+    return vec4<f32>(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0);
+}
+
+// The half-size target filtered up to this full-size pixel: a full-size pixel's centre is half a
+// half-size texel's coordinate.
+@fragment
+fn upsample_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
+    let uv = p.xy * 0.5 / vec2<f32>(textureDimensions(half_target));
+    return textureSampleLevel(half_target, half_sampler, uv, 0.0);
+}
+
+fn shade(in: Out, at: vec2<f32>) -> vec4<f32> {
     let r2 = dot(at, at);
     if r2 > 1.0 {
         discard;
