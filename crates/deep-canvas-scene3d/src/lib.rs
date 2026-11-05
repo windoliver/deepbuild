@@ -14,6 +14,7 @@ pub mod gltf;
 pub mod hull;
 pub mod label;
 pub mod light;
+pub mod lod;
 pub mod look;
 pub mod modifiers;
 pub mod module;

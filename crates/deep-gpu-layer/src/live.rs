@@ -66,6 +66,8 @@ pub struct Plants {
     /// #420 AC7's wrong cache: a result's memory goes back when a revision drops its last
     /// reader, while a frame that binds it is still in flight.
     releases_at_revision: bool,
+    /// #425: canonical renders draw at the live view's rung once it has climbed.
+    canonical_climbs: bool,
     /// #429's: the emitter's and the check's planted programs; a render-back that draws
     /// live-only operators; a core that calls a frame drawn with a fallback settled.
     ops: (deep_canvas_effects::emit::Options, deep_canvas_effects::check::CheckOptions),
@@ -81,7 +83,10 @@ impl Plants {
                 skips_a_rung: p == Some(Planted::SkipsARung),
                 budgets_each_window: p == Some(Planted::BudgetsEachWindow),
                 steps_main_window: p == Some(Planted::StepsMainWindow),
+                climb_never_steps_down: p == Some(Planted::ClimbNeverStepsDown),
+                reclimbs_without_view_change: p == Some(Planted::ReclimbsWithoutViewChange),
             },
+            canonical_climbs: p == Some(Planted::CanonicalClimbs),
             tells_first_step_only: p == Some(Planted::TellsFirstStepOnly),
             steps_every_writer: p == Some(Planted::StepsEveryWriter),
             sums_pass_intervals: p == Some(Planted::SumsPassIntervals),
@@ -227,6 +232,10 @@ struct Args {
     stub: Option<Stub>,
     battery: Vec<(u64, f64, bool)>,
     assets: BTreeMap<String, PathBuf>,
+    /// The frames whose views are written as PNGs, as presented (#425's taste call).
+    capture: BTreeSet<u64>,
+    /// Where the captured PNGs go.
+    out: String,
     /// #429's test hook: the operator items whose pipelines the device rejects.
     fail_pipelines: Vec<String>,
 }
@@ -279,7 +288,7 @@ fn history_of(look: &Value) -> Result<u32, String> {
     }
 }
 
-fn parse(call: &Value) -> Result<Args, Value> {
+fn parse(call: &Value, out: &str) -> Result<Args, Value> {
     let bad = |what: &str| refused("bad_input", what);
     let test_build = cfg!(feature = "test-meter");
     let frames = call["frames"]
@@ -469,6 +478,13 @@ fn parse(call: &Value) -> Result<Args, Value> {
         stub,
         battery,
         assets,
+        capture: call["capture"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_u64)
+            .collect(),
+        out: out.to_string(),
     })
 }
 
@@ -531,6 +547,7 @@ struct Rev {
     class: Option<Class>,
     limits: Limits,
     fit: Estimate,
+    skips: Vec<Rung>,
     #[cfg(feature = "test-meter")]
     placed: Vec<crate::testgpu::Placed>,
     #[cfg(feature = "test-meter")]
@@ -618,6 +635,8 @@ struct Admitted {
     limits: Limits,
     fit: Estimate,
     size: [u32; 2],
+    /// The climb rungs that don't fit its memory cap (#425).
+    skips: Vec<Rung>,
 }
 
 /// A writer's payload checked as its session's next revision, before it shows: stamped by the
@@ -721,6 +740,9 @@ fn admit(
             ),
         })]
     })?;
+    // The cascades' four layers at twice their size add three times their bytes.
+    let side = u64::from(deep_scene3d_render::shadow::SIZE);
+    let skips = meter::climb_skips(&shape, &fit, limits.gpu_bytes, 3 * side * side * 4 * 4);
     Ok(Admitted {
         doc,
         frames,
@@ -728,6 +750,7 @@ fn admit(
         limits,
         fit,
         size,
+        skips,
     })
 }
 
@@ -808,8 +831,7 @@ struct ChangeRow {
 }
 
 pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
-    let _ = out;
-    let args = match parse(call) {
+    let args = match parse(call, out) {
         Ok(a) => a,
         Err(e) => return e,
     };
@@ -950,7 +972,9 @@ impl Live {
     /// takes effect on the first frame after they're ready.
     fn decide(&mut self, frame: u64, session: usize, step: Step, scope: Option<&'static str>) {
         let change = self.record_change(frame, session, step, scope);
-        let needs = step.to.scale(1.0) < 1.0 && self.kit.upscale.is_none();
+        // A rung off scale 1 draws through the upscale's pipelines: below it to upscale, at the
+        // 4-samples rung to filter four samples into each pixel (#425).
+        let needs = step.to.scale(1.0) != 1.0 && self.kit.upscale.is_none();
         let compiling = (needs && !self.plants.compiles_at_swap).then(|| {
             self.changes[change].pipelines =
                 vec![crate::liveview::UPSCALE, crate::liveview::SHARPEN];
@@ -1046,6 +1070,15 @@ impl Live {
         self.revise(n, &o.doc);
         // The first revision latches as the session opens.
         self.latch(n);
+        // A view whose class draws below scale 1 while moving has the upscale's pipelines before
+        // its first frame too (#425: a showpiece's live view starts at its base, 0.5).
+        let below = self.sessions[n]
+            .view
+            .as_ref()
+            .is_some_and(|v| v.scale < 1.0);
+        if below && self.kit.upscale.is_none() {
+            self.kit.upscale = Some(Arc::new(compile_upscale(&self.device)));
+        }
         let s = &mut self.sessions[n];
         if s.current.is_none() {
             s.state = State::Refused;
@@ -1085,6 +1118,7 @@ impl Live {
                 limits,
                 fit,
                 size,
+                skips,
             }) => {
                 #[cfg(feature = "test-meter")]
                 let (placed, loops) = match crate::testgpu::items(&doc) {
@@ -1118,6 +1152,7 @@ impl Live {
                     class,
                     limits,
                     fit,
+                    skips,
 
                     #[cfg(feature = "test-meter")]
                     placed,
@@ -1218,6 +1253,7 @@ impl Live {
                 &self.results,
             );
         }
+        ses.ladder.skip(&rev.skips);
         // The revision's composed operators (#429): built here, off the frame, each pipeline
         // checked on the device; one the device rejects raises operator_compile to its writer.
         if let Some(v) = ses.view.as_mut() {
@@ -1589,7 +1625,13 @@ impl Live {
                 let drawing = Drawing {
                     rung,
                     offsets: ses.offsets,
-                    effects_resolution: ses.ops_resolution,
+                    // The climb's full-resolution effects rung (#425) overrides the operator
+                    // meter's half resolution.
+                    effects_resolution: if rung <= Rung::FullResEffects {
+                        1.0
+                    } else {
+                        ses.ops_resolution
+                    },
                     canonical: false,
                     settles: self.in_flight.is_empty(),
                 };
@@ -1885,7 +1927,7 @@ impl Live {
                     limit,
                 )
             };
-            let app_over = self.app.last_over;
+            let (app_over, app_room) = (self.app.last_over, self.app.last_room);
             let mut stepped_for_health = false;
             for v in views_start..views_end {
                 if self.views[v].paused {
@@ -1893,7 +1935,10 @@ impl Live {
                 }
                 let (s, gpu, cpu) = (self.views[v].session, self.views[v].gpu, self.views[v].cpu);
                 let limits = self.sessions[s].limits();
-                if let Some(step) = self.sessions[s].ladder.frame(gpu, cpu, &limits, app_over) {
+                if let Some(step) = self.sessions[s]
+                    .ladder
+                    .frame(gpu, cpu, &limits, app_over, app_room)
+                {
                     stepped_for_health = true;
                     let scope = (step.reason == Reason::FrameHealth).then_some("writer");
                     self.decide(frame, s, step, scope);
@@ -1963,6 +2008,23 @@ impl Live {
                 }
                 extra.insert("hashes".into(), Value::Object(hashes));
             }
+            if self.args.capture.contains(&frame) && !self.noop {
+                let mut finals = Map::new();
+                for v in &self.views[views_start..views_end] {
+                    let Some(view) = self.sessions[v.session].view.as_ref().filter(|_| v.drawn)
+                    else {
+                        continue;
+                    };
+                    if let Some(bgra) = view.pixels() {
+                        if let Ok(name) =
+                            crate::view3d::write_final(&self.args.out, &bgra, view.size)
+                        {
+                            finals.insert(v.session.to_string(), json!(name));
+                        }
+                    }
+                }
+                extra.insert("finals".into(), Value::Object(finals));
+            }
             if self.args.reports.memory {
                 extra.insert("memory".into(), self.memory());
             }
@@ -2025,9 +2087,8 @@ impl Live {
         let Some(rev) = ses.current.as_ref() else {
             return refused("no_revision", "the session has no current revision");
         };
-        let live = self
-            .plants
-            .shares_meter_with_worker
+        let live = (self.plants.shares_meter_with_worker
+            || (self.plants.canonical_climbs && ses.drawn < Rung::Base))
             .then_some((ses.drawn, ses.ops_resolution));
         // The planted render takes the live session's surface; a canonical render never does.
         let surface = self
@@ -2082,6 +2143,9 @@ impl Live {
                         });
                         if let Some(h) = f.extra.get("hashes") {
                             o["pixel_hash"] = h.get(v.session.to_string()).cloned().unwrap_or(Value::Null);
+                        }
+                        if let Some(name) = f.extra.get("finals").and_then(|h| h.get(v.session.to_string())) {
+                            o["final"] = name.clone();
                         }
                         if self.args.reports.binds {
                             o["binds"] = json!(v.binds);
