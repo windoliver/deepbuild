@@ -495,6 +495,21 @@ struct TextRecord {
     pad: u32,
 }
 
+/// Whether a solid's shading reads its pixel's quad (#1278): a lit material whose lobe can be
+/// narrower somewhere than the cap on the normal's change across the pixel (α² 0.18 in
+/// `direct()`), which widens it only there, so roughness under 0.18^¼ ≈ 0.651. Maps and an
+/// operator can lower roughness at any pixel, and the glass curtain pattern by 0.45.
+fn reads_quad(s: &Solid, maps: u32, op: u64) -> bool {
+    /// The glass curtain's number in `pattern()` (scene3d.wgsl), the one pattern that lowers
+    /// roughness.
+    const GLASS: u32 = 8;
+    let Some(m) = s.material.filter(|m| !m.unlit) else {
+        return false;
+    };
+    let lowered = if m.pattern == GLASS { 0.45 } else { 0.0 };
+    maps != 0 || op != 0 || m.roughness < 0.66 + lowered
+}
+
 /// A solid's instance record: `tie` its rank by ID, `winding` false for the planted program that
 /// ignores its determinant.
 fn solid_record(s: &Solid, pick: u32, tie: u32, winding: bool, maps: bool) -> SolidRecord {
@@ -870,6 +885,9 @@ struct Batch {
     /// The opaque solids by shape, material maps (0: none; #423) and material operator
     /// ([`op::key`]; 0 for none; #429).
     solids: BTreeMap<(Shape, u32, u64), Set>,
+    /// This frame's opaque sets that hold a solid whose shading reads its quad ([`reads_quad`]),
+    /// drawn with their depth written (#1278).
+    late: std::collections::BTreeSet<(Shape, u32, u64)>,
     lines: Set,
     points: Set,
     /// One record per inked glyph of its labels.
@@ -989,6 +1007,8 @@ pub struct Renderer {
     /// the output pass's undithered mask; one clear texel with none (#418).
     covered: (Option<std::sync::Arc<[u8]>>, wgpu::TextureView),
     mesh_pipeline: wgpu::RenderPipeline,
+    /// The opaque solids' pipeline that writes each fragment's depth (#1278).
+    late_pipeline: wgpu::RenderPipeline,
     /// Ambient occlusion's prepass, passes and the solids' group 2 (#418).
     ao: ao::Passes,
     /// The scene3d shader module and the solids' vertex layouts, which the ao prepass shares.
@@ -1384,7 +1404,8 @@ fn clear_pipeline(
         Some(layout),
         module,
         ("mesh_vs", &buffers),
-        Some(("mesh_fs", &targets)),
+        // Drawn after every opaque solid, so their depth written (#1278).
+        Some(("mesh_late_fs", &targets)),
         Some(depth),
     )
 }
@@ -1712,6 +1733,15 @@ impl Renderer {
             "mesh_fs",
             &mesh_buffers,
         );
+        let late_pipeline = draw_pipeline(
+            d,
+            &module,
+            &mesh_layout,
+            planted.forward_z,
+            "mesh_vs",
+            "mesh_late_fs",
+            &mesh_buffers,
+        );
         // The shadow map: the solids' vertex stage under the light's clip matrix, depth only,
         // nearest the light kept.
         let shadow_pipeline = pipeline(
@@ -1929,6 +1959,7 @@ impl Renderer {
             output_layout,
             covered: (None, uncovered),
             mesh_pipeline,
+            late_pipeline,
             ao,
             scene_module: module.clone(),
             families: Families {
@@ -2962,6 +2993,7 @@ impl Renderer {
         for set in batch.solids.values_mut() {
             set.begin();
         }
+        batch.late.clear();
         let winding = !self.planted.winding_ignores_determinant;
         let mut order: Vec<(&Solid, &mut Slot)> = layer.solids.iter().zip(&mut slots).collect();
         // The planted ties_by_submission: the opaque draws' order turns over each frame.
@@ -2981,6 +3013,9 @@ impl Renderer {
                 see_through.push((depth + s.sort_bias, s, record, (slot.0 .0, slot.0 .1)));
                 slot.1 = u32::MAX;
                 continue;
+            }
+            if reads_quad(s, slot.0 .1, slot.0 .2) {
+                batch.late.insert(slot.0);
             }
             let set = batch.solids.entry(slot.0).or_default();
             slot.1 = set.count as u32;
@@ -3078,13 +3113,14 @@ impl Renderer {
         if !batch.solids.is_empty() {
             batch.next_key.extend([20, self.ao.generation]);
         }
-        for ((shape, maps, op), set) in &batch.solids {
+        for (key @ (shape, maps, op), set) in &batch.solids {
             batch.next_key.extend([
                 shape_code(*shape),
                 u64::from(*maps),
                 *op,
                 set.generation,
                 u64::from(set.len()),
+                u64::from(batch.late.contains(key)),
             ]);
         }
         for (family, set) in [(10, &batch.lines), (11, &batch.points), (12, &batch.labels)] {
@@ -3137,7 +3173,7 @@ impl Renderer {
         enc.set_bind_group(0, &self.frame_bind, &[]);
         enc.set_bind_group(1, &self.lights_bind, &[]);
         enc.set_bind_group(2, self.ao.shade(), &[]);
-        for ((shape, maps, op), set) in &batch.solids {
+        for (key @ (shape, maps, op), set) in &batch.solids {
             let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
                 continue;
             };
@@ -3147,7 +3183,11 @@ impl Renderer {
                     enc.set_bind_group(3, g, &[]);
                 }
                 _ => {
-                    enc.set_pipeline(&self.mesh_pipeline);
+                    enc.set_pipeline(if batch.late.contains(key) {
+                        &self.late_pipeline
+                    } else {
+                        &self.mesh_pipeline
+                    });
                     enc.set_bind_group(3, self.maps.by_index(*maps), &[]);
                 }
             }

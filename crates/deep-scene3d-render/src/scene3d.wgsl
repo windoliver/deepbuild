@@ -864,6 +864,27 @@ fn occlusion(pos: vec2<f32>, albedo: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
+    return mesh_shade(in, front);
+}
+
+// Issue #1278: a lit material's fragment stage writes its own depth, so no fragment of its draw
+// is culled before it shades. The specular lobe's widening reads `dpdx(n)` across the pixel's
+// quad; on a tiled GPU a quad pixel that an earlier, nearer draw covers may or may not shade,
+// as timing has it, and the derivative with it. Written depth is the rasterizer's own, so every
+// depth test keeps its result.
+struct LateTargets {
+    @location(0) color: vec4<f32>,
+    @location(1) id: u32,
+    @builtin(frag_depth) depth: f32,
+};
+
+@fragment
+fn mesh_late_fs(in: MeshOut, @builtin(front_facing) front: bool) -> LateTargets {
+    let t = mesh_shade(in, front);
+    return LateTargets(t.color, t.id, in.pos.z);
+}
+
+fn mesh_shade(in: MeshOut, front: bool) -> Targets {
     // The texture coordinates' derivatives, while every pixel of the quad still runs (#423).
     let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
     // Derivatives first, while every pixel of the quad still runs: the face's normal in its

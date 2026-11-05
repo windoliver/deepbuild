@@ -5,8 +5,9 @@
 
 var<private> op_frame: OpFrame;
 
+// Its depth written, as every lit material's is (#1278: `mesh_late_fs`).
 @fragment
-fn op_mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
+fn op_mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> LateTargets {
     // The texture coordinates' derivatives, while every pixel of the quad still runs (#423).
     let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
     let local_n = normalize(cross(dpdx(in.local), dpdy(in.local)) + vec3<f32>(0.0, 1e-9, 0.0));
@@ -43,5 +44,6 @@ fn op_mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
         m.surface.y = clamp(o.mr.y, 0.0, 1.0);
     }
     // With no light, no sky and no environment it takes the view's key light.
-    return shade(m, front, local_n, g, true);
+    let t = shade(m, front, local_n, g, true);
+    return LateTargets(t.color, t.id, in.pos.z);
 }
