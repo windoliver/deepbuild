@@ -247,6 +247,11 @@ export interface Asks {
    * `to`. Time the hub was down the core reads from the log when it opens.
    */
   away(from: number, to: number): Promise<void>;
+  /**
+   * Whether macOS will show the app's notifications (#994). While it won't, an ask you haven't seen takes no default,
+   * and the time before you saw it, or before they were back on, moves its deadline later as `away` does.
+   */
+  notifications(off: boolean): Promise<void>;
   card(ask: string): Promise<Card>;
   needsYou(): Promise<Card[]>;
   holds(session: string, step: Step): Promise<string[]>;
@@ -562,6 +567,8 @@ class AsksCore implements Asks {
    */
   private logged: number | undefined;
   private opened = false;
+  /** Since when the app has said macOS won't show its notifications (#994). */
+  private notificationsOff: number | undefined;
   private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null; agent: string }>();
   /** The sessions whose verified end the core read, oldest first: past the newest ENDED_KEPT they leave memory (#824). */
   private readonly endOrder = new Set<string>();
@@ -861,6 +868,18 @@ class AsksCore implements Asks {
     return this.exclusive(async () => {
       await this.sync();
       await this.moveAway(from, to);
+      await this.settle();
+    });
+  }
+
+  notifications(off: boolean): Promise<void> {
+    return this.exclusive(async () => {
+      await this.sync();
+      const since = this.notificationsOff;
+      this.notificationsOff = off ? since ?? this.options.now() : undefined;
+      if (off || since === undefined) return;
+      for (const ask of this.open()) if (!this.seenCard(ask)) await this.moveUnseen(ask, since);
+      await this.sync();
       await this.settle();
     });
   }
@@ -1607,7 +1626,13 @@ class AsksCore implements Asks {
    * fixes what the card says it saves; a resolver's read never presents it.
    */
   private async cardOf(ask: Ask, presented = false): Promise<Card> {
-    if (presented && ask.saves === undefined && !ask.closed) ask.saves = this.savesOf(ask);
+    if (presented && ask.saves === undefined && !ask.closed) {
+      ask.saves = this.savesOf(ask);
+      if (this.notificationsOff !== undefined) {
+        await this.moveUnseen(ask, this.notificationsOff);
+        await this.sync();
+      }
+    }
     return {
       ask: ask.handle,
       kind: ask.data.kind as AskKind,
@@ -2070,7 +2095,7 @@ class AsksCore implements Asks {
           await this.options.record.append(as, { ...base, kind: 'ask.cancelled', data: { answer: ask.data.default as string, plan_hash: null, decision: 'none' } });
         } else if (await this.reoffer(ask, as, now)) {
           // Offered again on the new commit: the new ask supersedes this one.
-        } else if (now >= (ask.data.deadline as number) && (seen.has(ask.handle) || ask.theirs)) {
+        } else if (now >= (ask.data.deadline as number) && (seen.has(ask.handle) || ask.theirs) && (this.notificationsOff === undefined || this.seenCard(ask))) {
           // Shown before this call: an ask the hub first shows now, after downtime past its deadline, stays in
           // Needs you until a later call, so it can be seen before its default. A block someone else owns never
           // shows to you: at its deadline it stays BLOCKED, by the default its raiser named.
@@ -2102,12 +2127,29 @@ class AsksCore implements Asks {
     if (to - from <= AWAY) return;
     const now = this.options.now();
     for (const ask of this.open()) {
-      const deadline = ask.data.deadline as number;
-      const moved = Math.min(deadline + Math.min(to, deadline) - Math.max(from, ask.created), to + this.waitFor(ask));
-      if (ask.shown || ask.theirs || moved <= deadline) continue;
+      const moved = this.movedPast(ask, from, to);
+      if (ask.shown || ask.theirs || moved <= (ask.data.deadline as number)) continue;
       await this.moveDeadline(ask, moved, 'away', now);
     }
     await this.sync();
+  }
+
+  /** Its deadline with the part of `from` to `to` before it given back, never past its kind's wait counted from `to`. */
+  private movedPast(ask: Ask, from: number, to: number): number {
+    const deadline = ask.data.deadline as number;
+    return Math.min(deadline + Math.min(to, deadline) - Math.max(from, ask.created), to + this.waitFor(ask));
+  }
+
+  /** Whether you've seen the ask's card, or it was never yours to see: notifications off holds nothing back from it. */
+  private seenCard(ask: Ask): boolean {
+    return ask.saves !== undefined || ask.theirs;
+  }
+
+  /** The time since `from`, with notifications off and the ask unseen, didn't count against its deadline (#994). */
+  private async moveUnseen(ask: Ask, from: number): Promise<void> {
+    const now = this.options.now();
+    const moved = this.movedPast(ask, from, now);
+    if (moved > (ask.data.deadline as number)) await this.moveDeadline(ask, moved, 'away', now);
   }
 
   /**
@@ -2465,7 +2507,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
   await core.tick();
   // Plain functions, so a caller can wrap one method and keep the rest.
   return {
-    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), card: core.card.bind(core),
+    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
     later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),
