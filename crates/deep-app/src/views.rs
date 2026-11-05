@@ -560,7 +560,7 @@ impl Render for Shipped {
                                 &state,
                                 format!("{task} returned · {}", state.text(now)),
                             ))
-                            .children(bound_values(bound::Surface::Card, &chrome)),
+                            .children(bound_values(bound::Surface::Card, chrome)),
                     )
                     .child(
                         div()
@@ -599,7 +599,7 @@ impl Render for Shipped {
                         "session-line-label",
                         format!("Hours to each deadline: {points} points"),
                     ))
-                    .children(bound_panel(&chrome))
+                    .children(bound_panel(chrome))
             }
             Kind::Line => {
                 // The session's line: from its task to where it stands now.
