@@ -1,0 +1,44 @@
+# #425 acceptance suite at the base, 2ea0fb77 (Merge pull request #1233), before any implementation.
+#
+# Not run at the base. The owner asked for a fast job, and the surfaces plainly don't exist there; no cargo binary was
+# built. What was checked instead:
+#
+#   npm ci --ignore-scripts
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/425/tsconfig.json   -> exit 0, no errors
+#
+# Why each test fails at the base, read from the base's code (crates/deep-gpu-layer, crates/deep-gpu/src/meter.rs,
+# crates/deep-canvas-scene3d). deep-gpu refuses every --planted name this suite uses at startup (main.rs's
+# Planted::parse has none of band_hysteresis, light_cut_hysteresis, band_fade_by_wall_clock, level_by_earlier_frame,
+# band_masks_independent, blend_level_on_gpu, climb_never_steps_down, canonical_climbs, reclimbs_without_view_change:
+# bad_input() prints {"ok": false, "code": "bad_input"} and exits 2), so runGpu fails at "exited 0" in every planted run.
+#
+#   pure-selection.test.ts  AC1  test 1: view3d's parse ignores `lod` and `light_cut`, so the sweep's frames carry no
+#                                `lod` and no `light_cut`; crossings() fails at its first line, "frame 0 carries no lod
+#                                report" (then "frame 0 carries no light_cut report"), in
+#                                none(crossings(...), "the sweep crosses the ball's band threshold and the light cut").
+#                                test 2: --planted band_hysteresis is refused at startup.
+#   levels.test.ts          AC2  both tests: there is no `simplify` call (main.rs answers {"code": "bad_input", "what":
+#                                "unknown call"}), so simplifiedOf fails at answered(): "the simplify job was answered,
+#                                not refused". Past that: no `lod` rows, no levels in mesh.asset@1.
+#   masks.test.ts           AC3  test 1: no frame carries `lod`, so no frame reports a blend level: run() fails at
+#                                expect.fail("no frame of the sweep reports a blend level: frame 0 reports no lod row
+#                                for the ball …"). Past that: view3d writes no `masks`. test 2: --planted
+#                                band_masks_independent is refused at startup.
+#   climb.test.ts           AC4  test 1: Rung::up() returns None at `base` (meter.rs: "the climb above it needs
+#                                coefficients measured on this machine at setup (R6)"), so 5 ms of 10 never climbs;
+#                                the 12 ms from frame 151 steps base -> effects_off at 180. climbProblems returns "no climb
+#                                to scale_1_moving for headroom by frame 190; the changes: frame 180: base -> effects_off
+#                                (frame_health …)", failing none(..., "the climb and the step down"). test 2: no change
+#                                at all in 250 frames of 5 ms: "frame 120 should climb base -> scale_1_moving for
+#                                headroom; change 0 is missing", failing none(..., "the live view climbs rung by rung").
+#                                The base's canonical renders already draw at `base`, so the byte-identity halves may
+#                                pass at the base; --planted climb_never_steps_down and canonical_climbs are refused.
+#   hold.test.ts            AC5  test 1: no climb at 120 (as above); the 12 ms window steps base -> effects_off at 180,
+#                                so holdProblems returns "frame 120 should climb base -> scale_1_moving for headroom;
+#                                the first change is frame 180: base -> effects_off (frame_health …)". (The base does
+#                                hold a frame-health drop until a camera event, from effects_off back to base, which
+#                                this test doesn't credit.) test 2: --planted reclimbs_without_view_change is refused.
+#   taste.test.ts           AC6  the `simplify` call is unknown, so simplifiedOf fails at answered() before any picture
+#                                is written; with no TASTE.json the run would be INCONCLUSIVE, never PASS.
+#
+# A run at the base, when one is made, is recorded beside this note by the job that runs it.
