@@ -73,6 +73,8 @@ interface Mapped {
   first: number; seen: number;
   /** The files each of its edits in flight changes, by call, from its PreToolUse, for the lines its PostToolUse reports. */
   editing: Map<string, string[]>;
+  /** Its edits whose PostToolUse came before their PreToolUse, by call. */
+  ahead: Set<string>;
 }
 interface Notice { type: Kind; source: string | null; files: string[]; pr: number | null; key: string; version: string; text: string }
 
@@ -251,7 +253,9 @@ export class Siblings {
     if (meta.event === 'SessionStart') this.started(m);
     await this.sameIssue(m);
     const before = drafts.find((d) => d.kind === 'tool.before');
-    if (before && (before.data.kind === 'edit' || before.data.kind === 'write') && Array.isArray(before.data.paths) && !meta.blockedBy?.length && !meta.denied) {
+    // A PreToolUse spooled behind its own PostToolUse comes after the change it announces: nothing new.
+    const late = meta.event === 'PreToolUse' && !!meta.toolUse && m.ahead.delete(meta.toolUse);
+    if (before && !late && (before.data.kind === 'edit' || before.data.kind === 'write') && Array.isArray(before.data.paths) && !meta.blockedBy?.length && !meta.denied) {
       for (const p of before.data.paths) {
         const path = typeof p === 'string' ? this.inRepo(m, p) : undefined;
         if (!path) continue;
@@ -267,8 +271,9 @@ export class Siblings {
       }
       if (meta.toolUse) m.editing.set(meta.toolUse, before.data.paths.flatMap((p) => (typeof p === 'string' ? [this.inRepo(m, p) ?? ''] : [])).filter(Boolean));
     }
-    // The lines an edit changed, which its own call's PostToolUse reports: the file's newest state.
-    const call = meta.event === 'PostToolUse' && meta.toolUse ? m.editing.get(meta.toolUse) : undefined;
+    // The lines an edit changed, which its own call's PostToolUse reports: the file's newest state. One spooled ahead
+    // of its PreToolUse names its file in its own input.
+    const call = meta.event === 'PostToolUse' && meta.toolUse ? m.editing.get(meta.toolUse) ?? this.ranAhead(m, meta) : undefined;
     if (meta.toolUse && meta.event !== 'PreToolUse') m.editing.delete(meta.toolUse);
     const mine = call?.length === 1 && meta.hunks ? m.files.get(call[0]!) : undefined;
     if (mine) {
@@ -277,6 +282,15 @@ export class Siblings {
       await this.changed(m, call![0]!);
     }
     this.poll();
+  }
+  /** The file of an edit whose PostToolUse came before its PreToolUse, now this session's change; that PreToolUse is then late. */
+  private ranAhead(m: Mapped, meta: HookMeta): string[] | undefined {
+    const file = meta.hunks && meta.call?.input.file_path;
+    const path = typeof file === 'string' ? this.inRepo(m, file) : undefined;
+    if (!path) return undefined;
+    if (!m.files.has(path)) m.files.set(path, { version: meta.id, lines: [] });
+    m.ahead.add(meta.toolUse!);
+    return [path];
   }
 
   /**
@@ -323,7 +337,7 @@ export class Siblings {
     const real = realSync(cwd);
     const dirs = await gitDirs(real).catch(() => undefined);
     if (!dirs) return undefined;
-    const m: Mapped = { id, agent, cwd: real, top: realSync(dirs.top), common: realSync(dirs.common), branch: null, head: null, issue: null, files: new Map(), ended: false, first: this.o.now(), seen: this.o.now(), editing: new Map() };
+    const m: Mapped = { id, agent, cwd: real, top: realSync(dirs.top), common: realSync(dirs.common), branch: null, head: null, issue: null, files: new Map(), ended: false, first: this.o.now(), seen: this.o.now(), editing: new Map(), ahead: new Set() };
     this.map.set(id, m);
     // Its issue is compared once its process's lead has had time to be linked, whether or not it hooks again by then.
     setTimeout(() => this.o.queue(() => this.sameIssue(m)), ISSUE_SETTLE_MS + 100).unref();
