@@ -11,7 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::Value;
 
 use crate::graph::{
-    self, Arg, Body, Class, Count, From, Issue, Kind, Operator, Origin, Sc, Step, Tex, Ty,
+    self, Arg, Body, Class, Count, Fallback, From, Issue, Kind, Operator, Origin, Sc, Step, Tex,
+    Ty,
 };
 use crate::table::{self, Def};
 
@@ -74,10 +75,41 @@ pub fn acc_key(name: &str) -> String {
     format!("acc:{name}")
 }
 
+/// What keeps an operator from being exact: a step, or an input by its path.
+#[derive(Clone, Debug)]
+pub enum Why {
+    Step(String, String),
+    Input(String, String),
+}
+
+/// The check's planted wrong programs (canvas primitives: Determinism class; the issue's
+/// criteria name each one), all off in every real build.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CheckOptions {
+    /// Takes the declared class instead of the computed one.
+    pub declared_class: bool,
+    /// An op table that marks f32 compares exact.
+    pub exact_f32_compares: bool,
+    /// An op table that marks f32 floor exact.
+    pub exact_f32_floor: bool,
+    /// Trusts a compute write's index.
+    pub trusts_index: bool,
+    /// An op table whose noise octave weight is halved.
+    pub noise_weight_halved: bool,
+}
+
 struct Ctx<'a> {
     op: &'a Operator,
     types: BTreeMap<String, Ty>,
-    exact: bool,
+    /// The first step or input that keeps the operator from being exact, if any.
+    inexact: Option<Why>,
+    /// Each integer value that is an affine function `scale × element + offset` of the
+    /// invocation's element index, by its name in the type map: what a compute write's index
+    /// must be for each invocation to write only its own slots.
+    affine: BTreeMap<String, (u64, u64)>,
+    /// Steps whose value is the same in every invocation.
+    uniform: BTreeSet<String>,
+    options: CheckOptions,
     weight: f64,
     fetches: u32,
     body_order: BTreeMap<String, Vec<String>>,
@@ -188,6 +220,62 @@ pub fn const_type(step: &Step) -> Result<Ty, String> {
         .ok_or_else(|| format!("{value} is not a literal of a step type"))
 }
 
+/// A seeded step's literal fields (`noise@1`, `fbm@1`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Seeded {
+    /// 0 for none: the noise repeats every `period` lattice cells on each axis.
+    pub period: u32,
+    pub octaves: u32,
+    pub lacunarity: f64,
+    pub gain: f64,
+}
+
+/// Periods above this many cells are refused.
+pub const MAX_PERIOD: u32 = 65_536;
+
+/// A seeded step's fields, defaulted: no period, 4 octaves, lacunarity 2, gain 0.5; fbm with a
+/// period takes a whole-number lacunarity, since each octave must repeat within it.
+pub fn seeded_fields(s: &Step) -> Result<Seeded, String> {
+    let num = |k: &str, or: f64| -> Result<f64, String> {
+        match s.fields.get(k) {
+            None => Ok(or),
+            Some(v) => v
+                .as_f64()
+                .filter(|x| x.is_finite())
+                .ok_or_else(|| format!("{k} is a number")),
+        }
+    };
+    let period = num("period", 0.0)?;
+    if period < 0.0 || period.fract() != 0.0 || period > f64::from(MAX_PERIOD) {
+        return Err(format!(
+            "period is a whole number of cells, 0 to {MAX_PERIOD}"
+        ));
+    }
+    let octaves = num("octaves", 4.0)?;
+    if !(1.0..=8.0).contains(&octaves) || octaves.fract() != 0.0 {
+        return Err("octaves is 1 to 8".into());
+    }
+    let lacunarity = num("lacunarity", 2.0)?;
+    if !(1.0..=8.0).contains(&lacunarity) {
+        return Err("lacunarity is 1 to 8".into());
+    }
+    if period > 0.0 && lacunarity.fract() != 0.0 {
+        return Err(format!(
+            "fbm with a period takes a whole-number lacunarity, not {lacunarity}: each octave must repeat within the period"
+        ));
+    }
+    let gain = num("gain", 0.5)?;
+    if !(0.0..=1.0).contains(&gain) {
+        return Err("gain is 0 to 1".into());
+    }
+    Ok(Seeded {
+        period: period as u32,
+        octaves: octaves as u32,
+        lacunarity,
+        gain,
+    })
+}
+
 fn pick_lane(c: char) -> Option<u8> {
     "xyzw".find(c).or_else(|| "rgba".find(c)).map(|i| i as u8)
 }
@@ -280,9 +368,9 @@ impl Ctx<'_> {
         if name == "repeat" {
             return self.repeat(id, s, scope, depth, trips);
         }
-        if name == "write" {
-            self.write(id, s, scope)?;
-            self.cost(def, &BTreeMap::new(), &Ty::U32, trips);
+        if name == "write" || name.starts_with("atomic_") {
+            self.write(id, s, scope, name != "write")?;
+            self.cost(id, def, &BTreeMap::new(), &Ty::U32, trips);
             return Ok(Vec::new());
         }
         let mut args: BTreeMap<&str, Ty> = BTreeMap::new();
@@ -316,8 +404,12 @@ impl Ctx<'_> {
                     .ok_or_else(|| bad(format!("{} takes to: a type", s.op)))?;
                 let x = concrete(need("x")?);
                 match (lanes(&x), lanes(&to)) {
+                    // A scalar's bits splat into every lane.
                     (Some((xs, a)), Some((ts, b)))
-                        if name == "bitcast" && a == b && xs != Sc::Bool && ts != Sc::Bool =>
+                        if name == "bitcast"
+                            && (a == b || a == 1)
+                            && xs != Sc::Bool
+                            && ts != Sc::Bool =>
                     {
                         to
                     }
@@ -478,6 +570,17 @@ impl Ctx<'_> {
                 }
                 Ty::U32
             }
+            "noise" | "fbm" => {
+                if float(&need("p")?).map_err(bad)? != Ty::V(Sc::F32, 2) {
+                    return Err(bad(format!("{}'s p is a vec2<f32>", s.op)));
+                }
+                match need("seed")? {
+                    Ty::Int | Ty::V(Sc::U32, 1) => {}
+                    t => return Err(bad(format!("{} takes a u32 seed, not {}", s.op, t.wgsl()))),
+                }
+                seeded_fields(s).map_err(bad)?;
+                Ty::F32
+            }
             "rand" => {
                 match need("key")? {
                     Ty::Int | Ty::V(Sc::U32, 1) => {}
@@ -499,6 +602,24 @@ impl Ctx<'_> {
                         "camera takes of: clip, inverse_clip, position or near".into()
                     ))
                 }
+            },
+            "role" => {
+                let name = s.fields.get("name").and_then(Value::as_str).unwrap_or("");
+                if graph::STATUS_ROLES.contains(&name) {
+                    return Err(Issue::at_step(
+                        "operator_status_color",
+                        id,
+                        format!("role {name} is a status color: no operator reads or writes one (status colors are reachable only through a binding)"),
+                    ));
+                }
+                if name.is_empty() {
+                    return Err(bad("role names a look role".into()));
+                }
+                Ty::V(Sc::F32, 3)
+            }
+            "normal" => match s.fields.get("space").and_then(Value::as_str) {
+                Some("object" | "world" | "view") => Ty::V(Sc::F32, 3),
+                _ => return Err(bad("normal takes space: object, world or view".into())),
             },
             "luminance" => {
                 match float(&need("rgb")?).map_err(bad)? {
@@ -577,7 +698,15 @@ impl Ctx<'_> {
                     }
                 }
                 int_of("i")?;
-                Ty::V(sc, 1)
+                // An attribute reads whole elements at its packed stride.
+                let lanes = match s.args.get("buf") {
+                    Some(Arg::Ref(b, None)) => match self.op.inputs.get(b).map(|i| &i.from) {
+                        Some(From::Attribute { lanes, .. }) => *lanes,
+                        _ => 1,
+                    },
+                    _ => 1,
+                };
+                Ty::V(sc, lanes)
             }
             "discard_if" => {
                 match need("cond")? {
@@ -595,13 +724,88 @@ impl Ctx<'_> {
             }
         };
         let out = concrete(out);
-        self.cost(def, &args, &out, trips);
+        // fbm's weight is per octave.
+        let octaves = if name == "fbm" {
+            seeded_fields(s).map_or(1, |f| f.octaves)
+        } else {
+            1
+        };
+        self.cost(id, def, &args, &out, trips * octaves);
+        self.track_affine(id, name, s);
         Ok(vec![(None, out)])
     }
 
-    /// `write(buf, i, v)`: `buf` names one of the operator's storage outputs, and a constant
-    /// index past its declared count is refused.
-    fn write(&mut self, id: &str, s: &Step, scope: &BTreeSet<String>) -> Result<(), Issue> {
+    /// Records an integer step that is an affine function of the element index, `k × element +
+    /// j` plus any value the same in every invocation (a param, say).
+    fn track_affine(&mut self, id: &str, name: &str, s: &Step) {
+        // The same in every invocation: a literal, a value input, or pure arithmetic on them.
+        let uniform = |a: &Arg| match a {
+            Arg::Lit(_) => true,
+            Arg::Ref(n, None) => {
+                self.uniform.contains(n)
+                    || self
+                        .op
+                        .inputs
+                        .get(n)
+                        .is_some_and(|i| !matches!(i.ty, Ty::Tex(_) | Ty::Storage(..)))
+            }
+            Arg::Ref(..) => false,
+        };
+        let pure = matches!(
+            name,
+            "const" | "convert" | "bitcast" | "add" | "sub" | "mul" | "div" | "rem" | "min"
+                | "max" | "and" | "or" | "xor" | "shl" | "shr" | "select" | "hash"
+        );
+        let is_uniform = pure && s.args.values().all(uniform);
+        let of = |a: Option<&Arg>| -> Option<(u64, u64)> {
+            match a? {
+                Arg::Lit(v) => Some((0, v.as_u64()?)),
+                Arg::Ref(n, None) => self.affine.get(n).copied(),
+                Arg::Ref(..) => None,
+            }
+        };
+        let either = |a: Option<&Arg>, b: Option<&Arg>| match (a, b) {
+            (Some(x), Some(y)) if uniform(y) => of(Some(x)),
+            (Some(x), Some(y)) if uniform(x) => of(Some(y)),
+            _ => None,
+        };
+        let got = match name {
+            "element" => Some((1, 0)),
+            "const" => s.fields.get("value").and_then(Value::as_u64).map(|c| (0, c)),
+            "convert" | "bitcast" => of(s.args.get("x")),
+            "add" => match (of(s.args.get("a")), of(s.args.get("b"))) {
+                (Some((a, b)), Some((c, d))) => a.checked_add(c).zip(b.checked_add(d)),
+                // A uniform shift moves every invocation's slots alike.
+                _ => either(s.args.get("a"), s.args.get("b")),
+            },
+            "mul" => match (of(s.args.get("a")), of(s.args.get("b"))) {
+                (Some((a, b)), Some((0, k))) | (Some((0, k)), Some((a, b))) => {
+                    a.checked_mul(k).zip(b.checked_mul(k))
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        if is_uniform {
+            self.uniform.insert(id.to_string());
+        }
+        if let Some(g) = got {
+            self.affine.insert(id.to_string(), g);
+        }
+    }
+
+    /// `write(buf, i, v)` and the atomics: `buf` names one of the operator's storage outputs, and
+    /// a constant index past its declared count is refused. A write lands only in the
+    /// invocation's own slots, an index `k × element + j` with `j < k` (or any index in a
+    /// dispatch of one element); an atomic statement, whose result is never read, may land
+    /// anywhere.
+    fn write(
+        &mut self,
+        id: &str,
+        s: &Step,
+        scope: &BTreeSet<String>,
+        atomic: bool,
+    ) -> Result<(), Issue> {
         let bad = |m: String| Issue::at_step("operator_type", id, m);
         let out = match s.args.get("buf") {
             Some(Arg::Ref(name, None)) => self
@@ -633,6 +837,29 @@ impl Ctx<'_> {
             },
             None => return Err(bad("write takes i".into())),
         }
+        if !atomic && !self.options.trusts_index && self.op.elements > 1 {
+            let own = match s.args.get("i") {
+                Some(Arg::Ref(n, None)) => self
+                    .affine
+                    .get(n)
+                    .is_some_and(|(k, j)| *k >= 1 && j < k),
+                _ => false,
+            };
+            if !own {
+                return Err(Issue::at_step(
+                    "operator_kind_rule",
+                    id,
+                    "a compute operator writes storage only at its own element's index (k × element + j, j < k); add into a shared slot with an atomic statement instead",
+                ));
+            }
+        }
+        if atomic && !out.sc.is_int() {
+            return Err(bad(format!(
+                "{} adds into integer storage, not {}",
+                s.op,
+                out.sc.wgsl()
+            )));
+        }
         let v = self.ty_of(
             scope,
             s.args.get("v").ok_or_else(|| bad("write takes v".into()))?,
@@ -656,13 +883,15 @@ impl Ctx<'_> {
         Ok(())
     }
 
-    fn cost(&mut self, def: &Def, args: &BTreeMap<&str, Ty>, out: &Ty, trips: u32) {
+    fn cost(&mut self, id: &str, def: &Def, args: &BTreeMap<&str, Ty>, out: &Ty, trips: u32) {
         let lanes_of = |t: &Ty| match t {
             Ty::V(_, n) => f64::from(*n),
             Ty::Mat(n) => f64::from(*n) * f64::from(*n),
             _ => 1.0,
         };
-        self.weight += def.weight * lanes_of(out) * f64::from(trips);
+        let halved = self.options.noise_weight_halved && matches!(def.name, "noise@1" | "fbm@1");
+        let weight = if halved { def.weight / 2.0 } else { def.weight };
+        self.weight += weight * lanes_of(out) * f64::from(trips);
         self.fetches += def.fetches * trips;
         let floats = |t: &Ty| {
             matches!(
@@ -673,8 +902,20 @@ impl Ctx<'_> {
                     | Ty::Storage(Sc::F32, _)
             )
         };
-        if !def.exact || floats(out) || args.values().any(floats) {
-            self.exact = false;
+        let planted = (self.options.exact_f32_compares
+            && matches!(def.name, "eq@1" | "ne@1" | "lt@1" | "le@1" | "gt@1" | "ge@1"))
+            || (self.options.exact_f32_floor && def.name == "floor@1");
+        // Floats travel only as bits: a bitcast or a constant moves them without an f32 operation.
+        let carries_bits = matches!(def.name, "bitcast@1" | "const@1");
+        let inexact = !def.exact
+            || (!planted && !carries_bits && (floats(out) || args.values().any(floats)));
+        if inexact && self.inexact.is_none() {
+            let why = if def.exact {
+                format!("{} on f32 values", def.name)
+            } else {
+                format!("{} is never exact", def.name)
+            };
+            self.inexact = Some(Why::Step(id.to_string(), why));
         }
     }
 
@@ -906,14 +1147,26 @@ impl Ctx<'_> {
 
 fn input_class(from: &From) -> Class {
     match from {
-        From::Target { .. } | From::Time | From::Phase(_) | From::Channel(_) => Class::SameMachine,
+        // A target the GPU rasterized is same machine, and so is time.
+        From::Target { .. } | From::Time | From::Phase(_) => Class::SameMachine,
         // Storage carries its writer's bits; an operator's class over them is its own.
-        From::Param(_) | From::Seed | From::Role(_) | From::Storage { .. } => Class::Exact,
+        From::Param(_)
+        | From::Channel(_)
+        | From::Seed
+        | From::Role(_)
+        | From::Storage { .. }
+        | From::Column { .. }
+        | From::Attribute { .. } => Class::Exact,
     }
 }
 
 /// Checks an operator: Ok with what the emitter and the interpreter need, or every refusal.
 pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
+    check_with(op, CheckOptions::default())
+}
+
+/// [`check`], under the planted wrong programs `options` turns on.
+pub fn check_with(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<Issue>> {
     if op.source.is_some() {
         return Err(vec![Issue::at_path(
             "operator_source",
@@ -924,7 +1177,10 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
     let mut ctx = Ctx {
         op,
         types: BTreeMap::new(),
-        exact: true,
+        inexact: None,
+        affine: BTreeMap::new(),
+        uniform: BTreeSet::new(),
+        options,
         weight: 0.0,
         fetches: 0,
         body_order: BTreeMap::new(),
@@ -954,10 +1210,20 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
             Ty::Storage(..) => storage_inputs.push(name.clone()),
             _ => {}
         }
-        if input_class(&input.from) != Class::Exact
-            || matches!(input.ty, Ty::V(Sc::F32, _) | Ty::Mat(_))
-        {
-            ctx.exact = false;
+        let why = if input_class(&input.from) != Class::Exact {
+            Some(match &input.from {
+                From::Target { output, .. } => {
+                    format!("it reads the {output} target, which the GPU rasterized")
+                }
+                _ => "it reads time".to_string(),
+            })
+        } else if matches!(input.ty, Ty::V(Sc::F32, _) | Ty::Mat(_)) {
+            Some(format!("it is a {}", input.ty.wgsl()))
+        } else {
+            None
+        };
+        if let (Some(why), None) = (why, &ctx.inexact) {
+            ctx.inexact = Some(Why::Input(path.clone(), why));
         }
         ctx.types.insert(name.clone(), input.ty.clone());
     }
@@ -1020,11 +1286,11 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
     }
     for (name, a) in &op.outputs {
         let path = format!("outputs/{name}");
-        let want = match (op.kind, name.as_str()) {
-            (Kind::Pass, "color") => Ty::V(Sc::F32, 4),
-            (Kind::Pass, "coverage") => Ty::F32,
-            (Kind::Material, "base_color" | "emission") => Ty::V(Sc::F32, 3),
-            (Kind::Material, "alpha" | "metallic" | "roughness") => Ty::F32,
+        // Today's outputs are the core's entries of gpu.output@1 (#200).
+        let want = match deep_canvas::registry::core_lists::output_type(op.kind.name(), name) {
+            Some("vec4<f32>") => Ty::V(Sc::F32, 4),
+            Some("vec3<f32>") => Ty::V(Sc::F32, 3),
+            Some("f32") => Ty::F32,
             _ => {
                 issues.push(Issue::at_path(
                     "operator_type",
@@ -1058,23 +1324,50 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
     if !issues.is_empty() {
         return Err(issues);
     }
-    let class = if ctx.exact {
+    let class = if ctx.inexact.is_none() {
         Class::Exact
     } else {
         Class::SameMachine
     };
     if let Some(d) = op.declared {
-        if d < class {
-            return Err(vec![Issue::at_path(
-                "not_exact",
-                "determinism",
-                format!(
-                    "declared {}, but its steps and inputs make it {}",
-                    d.name(),
-                    class.name()
-                ),
-            )]);
+        if d < class && !options.declared_class {
+            let (step, path, why) = match ctx.inexact.clone() {
+                Some(Why::Step(s, w)) => (Some(s), None, w),
+                Some(Why::Input(p, w)) => (None, Some(p), w),
+                None => (None, Some("determinism".to_string()), String::new()),
+            };
+            return Err(vec![Issue {
+                step,
+                path,
+                ..Issue::new(
+                    "not_exact",
+                    format!(
+                        "{} is declared {}, but its steps and inputs make it {}: {why}",
+                        op.id,
+                        d.name(),
+                        class.name()
+                    ),
+                )
+            }]);
         }
+    }
+    // A live-only operator draws its fallback in every canonical render; a material with no
+    // fallback would leave its parts undrawn there.
+    if op.declared == Some(Class::LiveOnly)
+        && op.kind == Kind::Material
+        && op.fallback == Fallback::None
+    {
+        return Err(vec![Issue {
+            item: Some(op.id.clone()),
+            ..Issue::at_path(
+                "live_only_canonical",
+                "fallback",
+                format!(
+                    "{} is declared live_only with fallback none: canonical renders, render-back, exports and goldens would draw nothing for it",
+                    op.id
+                ),
+            )
+        }]);
     }
     let estimate = ctx.weight * NS_PER_UNIT + f64::from(ctx.fetches) * NS_PER_FETCH;
     match op.cost {
@@ -1106,7 +1399,11 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
         order,
         body_order: ctx.body_order,
         types: ctx.types,
-        class: op.declared.map_or(class, |d| d.max(class)),
+        class: if options.declared_class {
+            op.declared.unwrap_or(class)
+        } else {
+            op.declared.map_or(class, |d| d.max(class))
+        },
         estimate,
         fetches: ctx.fetches,
         textures,
@@ -1117,4 +1414,9 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
 /// Reads and checks an operator's JSON.
 pub fn read_and_check(v: &Value) -> Result<Checked, Vec<Issue>> {
     check(&graph::read(v)?)
+}
+
+/// [`read_and_check`] under planted wrong programs.
+pub fn read_and_check_with(v: &Value, options: CheckOptions) -> Result<Checked, Vec<Issue>> {
+    check_with(&graph::read(v)?, options)
 }

@@ -373,6 +373,10 @@
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
           "why": "Issue #348: host@1, through which every package outside the signed release starts in the platform sandbox (#236)."
+        },
+        "better-sqlite3": {
+          "spec": "13.0.3",
+          "why": "Issue #989: takes the hub's lock as the hub does (packages/hub/src/lock.ts) when no hub holds it, through SQLite alone so no other descriptor drops its fcntl locks; already in the tree."
         }
       }
     },
@@ -454,6 +458,10 @@
           "spec": "0.0.0",
           "why": "Issue #356: setup's wiki build hands the free text pattern matching left to your own agent, a slice at a time through handles, as the one reading the design names."
         },
+        "@deepbuild/readings": {
+          "spec": "0.0.0",
+          "why": "Issue #45: the hub serves the Numbers, folded from the record by the readings package, through numbers.read, deep numbers and deep_search."
+        },
         "@deepbuild/resolver-decisions": {
           "spec": "0.0.0",
           "why": "Issue #23: the hub runs resolver-decisions, a first-party extension on by default, registered with its asks core so your saved decisions answer the asks they cover."
@@ -505,6 +513,38 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #318: the record the asks core reads its state from and appends asks, answers, defaults and closes to."
+        }
+      }
+    },
+    "packages/checks-numbers/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #87: the check.kind@1 slot's fill and kit types, and the Finding the numbers kit's judge ends a case with, so the one kit runner judges the numbers kind."
+        },
+        "@deepbuild/verdicts": {
+          "spec": "0.0.0",
+          "why": "Issue #87: the timing report a speed claim's run carries, which the verdict engine reads."
+        }
+      }
+    },
+    "packages/checks-review/package.json": {
+      "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Issue #87: each agent's facts name a model's family, and the route a session started on, which decide whether a review counts."
+        },
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #87: the check.kind@1 slot's fill and kit types, and the Finding the review kit's judge ends a case with, so the one kit runner judges the review kind."
+        },
+        "@deepbuild/runner": {
+          "spec": "0.0.0",
+          "why": "Issue #87: the review job's record, whose answering model and wait at your reserve the review's run is made from."
+        },
+        "@deepbuild/verdicts": {
+          "spec": "0.0.0",
+          "why": "Issue #87: the run record and claim check a review job's run is written as."
         }
       }
     },
@@ -693,6 +733,10 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #305: a kind param's default is a JSON value. Already in the workspace tree."
+        },
+        "deep-canvas-sandbox": {
+          "spec": "* path=../deep-canvas-sandbox",
+          "why": "Issue #238: test.prog@1's kit rule runs sandbox@1's check and rewrite on each program entry."
         }
       }
     },
@@ -708,8 +752,32 @@
         }
       }
     },
+    "crates/deep-motion/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #489: the flick count the deep-motion binary's time fields are in."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #489: the motion module the deep-motion proof binary compiles and evaluates documents with; the binary moved out of the deep-canvas* crate because `eval`'s `timing` reads the clock."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #417: `deep-motion eval` takes a shipped look by its ID (look::shipped), for the time feel a change of state moves by."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #391: the deep-motion CLI's JSON lines; float_roundtrip, so a key value reads back to its exact f64. Already in the workspace tree."
+        }
+      }
+    },
     "crates/deep-canvas-marks/Cargo.toml": {
       "dependencies": {
+        "unicode-normalization": {
+          "spec": "^0.1",
+          "why": "Issue #406: a code item's display form puts each grapheme in NFC; already in deep-canvas's tree."
+        },
         "deep-canvas": {
           "spec": "* path=../deep-canvas",
           "why": "Issue #391: the ops module on pinned libm that path flattening and stroking go through."
@@ -801,6 +869,10 @@
         "deep-gpu": {
           "spec": "* path=../deep-gpu",
           "why": "Issue #385: the GPUI live view opens the GPU layer's device the first time a writer layer needs Vello GPU."
+        },
+        "deep-canvas-vector": {
+          "spec": "* path=../deep-canvas-vector",
+          "why": "Issue #398: check, raster and geometry import each vector@1 item's SVG from the line's store and draw it as marks2d's items."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -979,6 +1051,18 @@
         "deep-relay": {
           "spec": "* path=../deep-relay",
           "why": "Issue #309: the network seam's macOS backend, which the seam_suite and relay_client calls run, and relay@1's wire."
+        },
+        "deep-canvas-vector": {
+          "spec": "* path=../deep-canvas-vector",
+          "why": "Issue #398: the vector canvas module, in the r2 build set and up."
+        },
+        "deep-canvas-sandbox": {
+          "spec": "* path=../deep-canvas-sandbox",
+          "why": "Issue #238: the sandbox module the full set holds."
+        },
+        "deep-sandbox-wasmtime": {
+          "spec": "* path=../deep-sandbox-wasmtime",
+          "why": "Issue #238: runs providers, layouts' validators and program entries at check, and sandbox@1's kit part."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1214,6 +1298,10 @@
     },
     "crates/deep-canvas-scene3d/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #418: the finish's tone map, exposure and grade, read and shared with 2D marks."
+        },
         "deep-canvas": {
           "spec": "* path=../deep-canvas",
           "why": "Issue #378: the registry it registers through, the camera it evaluates and the ops module its math goes through."
@@ -1257,6 +1345,12 @@
         "wgpu-profiler": {
           "spec": "^0.28",
           "why": "Issue #380: times scene3d's own passes (shadow map, geometry, output) in the same frame as the effects."
+        }
+      },
+      "dev-dependencies": {
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #386: the renderer's tests build their scene documents as JSON; already in the tree."
         }
       }
     },
@@ -1398,11 +1492,15 @@
         },
         "@deepbuild/conformance": {
           "spec": "0.0.0",
-          "why": "Issue #31: the check.kind@1 fill (CheckRunnerFill) and its result types the base-commit service runs a claim's checks through; types only."
+          "why": "Issue #31: a base-commit or snapshot run returns the conformance kit's CheckResult and Failure, and its runners fill CheckRunnerFill."
         },
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
-          "why": "Issue #31: the Supervisor the base-commit service is handed, through which every git and check process of a checkout starts; types only."
+          "why": "Issue #31: a checkout starts and cleans up the stand-ins for its checks' declared services and pages through the supervisor host."
+        },
+        "yaml": {
+          "spec": "2.9.1",
+          "why": "Issue #324: size and scope lists the services a change adds to a compose file, a YAML file the repo writes, with the parser the hub and env-local already use."
         }
       }
     },
@@ -1459,6 +1557,10 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #140: a result's `backends` object, each seam with its backend's name and version; already in the canvas crates' tree."
+        },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #185: each seam registers as a canvas interface and each backend as an implementation through deep-canvas's registry (Manifest, Interface, Implementation)."
         }
       }
     },
@@ -1507,9 +1609,95 @@
           "why": "Issue #309: the WebSocket relay@1 rides on over https, so a browser's web player can speak it too; already in the lockfile."
         }
       }
+    },
+    "crates/deep-canvas-vector/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #398: the registry and seal the vector module registers through, the document issues its import answers, and the ops module every number of its geometry goes through."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #398: the path verbs and flattening a vector's outlines are drawn and measured with, as marks2d's own items."
+        },
+        "roxmltree": {
+          "spec": "^0.21",
+          "why": "Issue #398: the SVG's XML read once, refusing a DTD; no float math (lint/canvas/crates.json). Already in the lockfile, through usvg."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #398: a vector item's params and the items it draws as, as the document holds them. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-canvas-sandbox/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #238: the manifest, registrar and implementation types the sandbox module registers through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #238: a refusal's JSON and a program entry's value. Already in the workspace tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #238: the rewritten program's hash, by which it runs everywhere. Already in the workspace tree."
+        },
+        "wasmparser": {
+          "spec": "=0.258.3",
+          "why": "Issue #238: the subset check's parser and validator, on an allowlist of WebAssembly 2.0 features; the version wasmtime 49.0.2 itself parses with, so Cargo.lock holds one."
+        },
+        "wasm-encoder": {
+          "spec": "=0.258.3",
+          "why": "Issue #238: writes the rewritten program, through its reencoder of wasmparser's operators; the version wasmtime 49.0.2 uses."
+        }
+      }
+    },
+    "crates/deep-sandbox-wasmtime/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-sandbox": {
+          "spec": "* path=../deep-canvas-sandbox",
+          "why": "Issue #238: the check, the rewrite and the kit this engine runs, with no copy of its own."
+        },
+        "wasmtime": {
+          "spec": "=49.0.2",
+          "why": "Issue #238: sandbox@1's engine in the app, the version the design pins (Logic: sandbox), cranelift and runtime only."
+        },
+        "base64": {
+          "spec": "^0.22",
+          "why": "Issue #238: programs travel as base64 in deep-sandbox's JSON lines. Already in the workspace tree."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #238: deep-sandbox's JSON lines and the kit's file. Already in the workspace tree."
+        },
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #238: assembles sandbox@1's kit programs from their text; the version wasmtime 49.0.2 already pulls in."
+        }
+      }
+    },
+    "tests/acceptance/238/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #238's blind suite: its own assembler for the fixtures, apart from the code under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #238's blind suite: lists each fixture's operators with their offsets, so a test knows where each trap's instruction is."
+        }
+      }
     }
   },
   "allowedFindings": [
+    {
+      "path": "tests/acceptance/45-redraft/billing.test.ts",
+      "kind": "API key",
+      "sha256": "6680e30ade307323f061e820b9912a7ad632bfaa2c868bcdab8ba9408da87fe4",
+      "why": "Issue #45: the blind redraft's made-up key, which the billing test hands a hook to prove the key's value never reaches the record; no real credential."
+    },
     {
       "path": "tests/acceptance/402/cellgrid.test.ts",
       "kind": "home path",
@@ -1545,6 +1733,18 @@
       "kind": "home path",
       "sha256": "1ee1a19bd298057a7a90734bccee13976a34914fd0c29fda5aebc848bbfd7961",
       "why": "Issue #20: the generated sessions' working folder under the placeholder user dev, a made-up cwd written into seeded transcripts for the budgets; no real home."
+    },
+    {
+      "path": "tests/acceptance/39/helpers.ts",
+      "kind": "API key",
+      "sha256": "9c88ccbf2cbb8faf2ee7522d40f527e13d882749809ac3cb3e40c3859e4b18dd",
+      "why": "Issue #39: a made-up API key (dh39FAKE) the fake codex login prints, proving it never reaches an output, the record or a file under ~/.deepbuild; no real key."
+    },
+    {
+      "path": "tests/acceptance/39/fixtures/fake-codex.pl",
+      "kind": "API key",
+      "sha256": "9c88ccbf2cbb8faf2ee7522d40f527e13d882749809ac3cb3e40c3859e4b18dd",
+      "why": "Issue #39: a made-up API key (dh39FAKE) the fake codex login prints, proving it never reaches an output, the record or a file under ~/.deepbuild; no real key."
     }
   ]
 }

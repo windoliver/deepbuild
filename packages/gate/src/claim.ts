@@ -105,7 +105,10 @@ export function claimVerdict(claim: ClaimedRuns, options: { plant?: VerdictPlant
   const runs: Run[] = [];
   for (const c of claim.checks) {
     const digest = digestOf(c);
-    const mask = exitOnly ? null : maskIn(c.command);
+    // The locked command's own mask, or one the kind found by the same rule in what it runs (a script, a package.json
+    // script, named `<mask> in <file>`): either can't fail. The kind's other uncounted causes (an untraced program,
+    // altered evidence) name no mask the rule reads.
+    const mask = exitOnly ? null : maskIn(c.command) ?? c.runs.map((r) => r.mask).find((m): m is string => m !== null && maskIn(m) !== null) ?? null;
     checks.push({
       check: c.check, digest, source: c.source, depth: c.depth ?? 'unit', proof: c.proof ?? 'test_run', covers: [...c.covers],
       ...(c.inputs ? { inputs: [...c.inputs] } : {}), ...(c.deadline !== undefined ? { deadline: c.deadline } : {}),

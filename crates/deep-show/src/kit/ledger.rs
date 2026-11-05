@@ -11,8 +11,20 @@ use serde_json::Value;
 /// The ledger this build embeds.
 const LEDGER: &str = include_str!(concat!(env!("OUT_DIR"), "/kit-ledger.json"));
 
+/// A module's kit result as this build's ledger records it (#1162: deep_kinds' module rows): its
+/// verdict at this digest; a record of another digest, or none, never reads PASS.
+pub fn kit_of(name: &str, digest: &str) -> Value {
+    let ledger: Value = serde_json::from_str(LEDGER).unwrap_or(Value::Null);
+    let record = &ledger[name];
+    if record["digest"] == digest {
+        serde_json::json!({"verdict": record["verdict"], "digest": digest})
+    } else {
+        serde_json::json!({"verdict": "INCONCLUSIVE", "digest": digest, "reason": "the ledger holds no kit run at this digest"})
+    }
+}
+
 /// The modules a release build refuses, as the seal's refusal; nothing in a debug build.
-pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
+pub fn admit(sealed: &Sealed) -> Result<(), Box<SealError>> {
     if cfg!(debug_assertions) {
         return Ok(());
     }
@@ -20,7 +32,7 @@ pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
         i.implementation.equivalence == Equivalence::Measured
             && i.behavior.as_ref().is_none_or(|b| b.fixtures.is_empty())
     }) {
-        return Err(SealError {
+        return Err(Box::new(SealError {
             code: "no_behavior_part",
             what: format!(
                 "`{}` is measured and `{}` has no behavior part, so it admits only its reference and bit implementations",
@@ -31,7 +43,8 @@ pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
             operators: Vec::new(),
             interface: Some(i.name.clone()),
             implementations: vec![i.implementation.name.clone()],
-        });
+            ..SealError::default()
+        }));
     }
     let ledger: Value = serde_json::from_str(LEDGER).unwrap_or(Value::Null);
     let failed: Vec<String> = sealed
@@ -56,7 +69,7 @@ pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
         .filter_map(|m| sealed.interface_of(m))
         .map(|i| i.implementation.name.clone())
         .collect();
-    Err(SealError {
+    Err(Box::new(SealError {
         code: "kit_failed",
         what: format!(
             "{} hasn't passed the canvas conformance kit at its digest",
@@ -67,5 +80,6 @@ pub fn admit(sealed: &Sealed) -> Result<(), SealError> {
         operators: Vec::new(),
         interface,
         implementations,
-    })
+        ..SealError::default()
+    }))
 }

@@ -1,0 +1,17 @@
+{
+  "name": "barepack",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #200 acceptance suite whose one test.mark@1 entry is named dot, without the pack's name: the first-party entry's name.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "test.mark": ">=0.0.0"
+    }
+  },
+  "entries": {
+    "test.mark@1": [
+      { "name": "dot", "size": 8 }
+    ]
+  }
+}

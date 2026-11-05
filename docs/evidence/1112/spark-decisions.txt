@@ -1,0 +1,49 @@
+# #1112 on the Spark: what each policy found, and what was done (2026-11-03 UTC)
+# Columns: worktree | branch | PR | HEAD in origin/main | porcelain lines | target/ | idle days | live processes in it | decision
+
+## Worktrees (policy: prune merged branches down to open PRs; never one on an open branch or with uncommitted edits)
+deepbuild (main checkout)        | detached                       | -            | yes | 0 | 27G   | 0 | 36 | kept: the main checkout
+agent-a2661611c3c99bbb8          | worktree-agent-a2661611c3c99bbb8 | -          | yes | 6 | -     | 1 | 0  | kept: uncommitted edits (tests/acceptance/85)
+issue-1112-implementation-c22f96 | claude/issue-1112-...          | -            | yes | 0 | -     | 0 | 3  | kept: this issue
+issue-30-e7e603                  | claude/issue-30-e7e603         | #986 MERGED  | yes | 0 | 8.4G  | 0 | 3  | kept, listed for the owner: a live Claude Code session runs in it
+issue-31                         | claude/31-redraft-split        | #1028 OPEN   | no  | 5 | 15G   | 0 | 3  | kept: open PR
+issue-39-ec48f7                  | claude/issue-39-ec48f7         | -            | yes | 0 | 8.5G  | 1 | 2  | kept, listed for the owner: live session
+issue-40-68cd15                  | claude/issue-40-68cd15         | #1019 MERGED | yes | 0 | 373M  | 1 | 3  | kept, listed for the owner: live session
+issue-45-d2a764                  | claude/issue-45-impl...        | #844 OPEN    | no  | 2 | 11G   | 0 | 3  | kept: open PR, large target listed for the owner
+issue-70                         | claude/issue-70-bubblewrap     | #1013 CLOSED | no  | 1 | 3.8G  | 1 | 0  | kept, listed for the owner: unmerged commits and an untracked file
+issue-70-bwrap                   | claude/issue-70-bwrap          | #987 MERGED  | yes | 0 | 847M  | 0 | 1  | kept, listed for the owner: live session
+issue-824-finish                 | claude/issue-824-impl...       | #865 OPEN    | no  | 0 | 37G   | 0 | 1  | kept: open PR, large target listed for the owner
+issue-842-92f0b3                 | claude/issue-842-92f0b3        | -            | yes | 0 | -     | 1 | 2  | kept, listed for the owner: live session
+issue-85-cbc758                  | claude/issue-85-cbc758         | #984 MERGED  | yes | 0 | 28G   | 1 | 9  | kept, listed for the owner: live session, plus six stray `hub run` processes (below)
+<scratchpad>/blind31             | detached                       | -            | yes | 1 | 373M  | 1 | 0  | kept: untracked tests/acceptance/31/
+<scratchpad>/t31                 | scratch/31-on-70               | -            | no  | 0 | 374M  | 1 | 0  | kept: commits not on main
+<scratchpad>/main-base           | detached at a main commit      | -            | yes | 0 | 3.7G  | 1 | 0  | kept, listed for the owner: a base checkout inside the live issue-45 session's scratchpad
+
+Every merged worktree on the Spark still hosts a resident Claude Code session; removing it would pull the
+directory out from under that session. Archiving those sessions in the desktop app is the owner's call.
+
+## target/ idle more than three days
+None: every worktree saw a file change within the last day. Nothing deleted.
+
+## Orphaned proof-run folders under the temp directory (checked by PID)
+/tmp/deep-proof-run-LDhJu7, 5.8G, made 2026-11-01 21:54 local. No watcher process (the `kill -0 <creator pid>`
+loop scripts/proof-runs.mjs starts) is alive and no process has its cwd or an open file inside it, so its
+creator is gone. Removal was refused by this session's permission policy; left for the owner.
+
+## Processes listed for the owner, not stopped (an agent stops only processes it started)
+Six `node packages/cli/dist/main.js hub run` in issue-85-cbc758, PIDs 503350 505057 506711 508030 607740 614737,
+parent systemd --user (orphaned), running about 41 hours, about 180 MB resident each.
+
+## Resident sessions
+The three-session limit is for the Mac. The Spark has 17 Claude Code processes resident (see spark-before.txt).
+
+## Free disk
+Before and after: / 3.3T free of 3.7T (7% used), well above the ~40 GB bays need. /tmp holds 24G.
+
+## Before and after (spark-before.txt 2026-11-03T01:23Z, spark-after.txt 2026-11-03T04:5xZ)
+Every worktree in the before list is in the after list, and none was removed. Each one's `git status --porcelain`
+is unchanged. Differences come from other sessions working meanwhile, not from #1112:
+- issue-1111-implementation-41f269 is new, made by another session for #1111.
+- issue-45-d2a764 moved from 0f9f00dd to fca0c4e9, and its target/ grew from 11G to 12G.
+- main-base (in the issue-45 session's scratchpad) moved from 6119bfa5 to 1461f904.
+/tmp/deep-proof-run-LDhJu7 (5.8G) is still present, waiting for the owner. Free disk is unchanged at 3.3T.

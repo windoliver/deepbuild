@@ -147,19 +147,22 @@ async function debugBundle(): Promise<number> {
 }
 
 // The first `deep` command sets everything up, as the app's Set up click does (#326): in a home with nothing of
-// DeepBuild, the commands you run yourself first run setup's steps without asking. The hub's modules load only then,
-// so a set-up home starts as fast as before (#24's budget). deep env with --root names a dev hub and acts on it alone
-// (#331), or is a usage error, so it sets nothing up in the home.
+// DeepBuild, or one where a setup started and didn't finish (#1002, setup.ts), the commands you run yourself first run
+// setup's steps without asking. The hub's modules load only then, so a set-up home starts as fast as before (#24's
+// budget). deep env with --root names a dev hub and acts on it alone (#331), or is a usage error, so it sets nothing up
+// in the home.
 const yours = ['status', 'inbox', 'off', 'on', 'env', 'install', 'guard', 'memory'];
 const devHub = args[0] === 'env' && args.includes('--root');
-if (yours.includes(args[0] ?? '') && !devHub && !existsSync(join(homedir(), '.deepbuild'))) {
+const installed = join(homedir(), '.deepbuild');
+const unfinished = !existsSync(join(installed, 'setup-finished.json')) && (!existsSync(installed) || existsSync(join(installed, 'setup-stopped.json')));
+if (yours.includes(args[0] ?? '') && !devHub && unfinished) {
   const { setUpFirst } = await import('@deepbuild/hub');
   const code = await setUpFirst(fileURLToPath(import.meta.url));
   if (code !== 0) process.exit(code);
 }
 
 if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
-  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json] [--prompt]   --prompt also sends each signed-in agent one test prompt, which spends plan usage\n       deep status  every session, what needs you first\n       deep off | on   every gate watch-only, or back, once the OS confirms you\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop [--root <folder>]\n       deep hub use --root <folder>   this worktree's sessions to a dev hub, once the OS confirms you\n       deep setup [--undo]  install DeepBuild for Claude Code beside your settings, or remove it all once the OS confirms you\n       deep mcp [actions]   the MCP server an agent starts, on stdio; actions serves deep-actions, the plug-ins' actions\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n       deep show --doc <doc ID> --document <file> [--check] [--snap] [--claim <claim>] [--json]   a canvas document drawn in your layer, or in the agent's whose process tree runs it\n       deep inbox  your open asks\n       deep inbox answer <ask> <option>   answer one, once the OS confirms you\n       deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you\n       deep inbox save <offer>   save a permission you said yes to as a decision for its repo, once the OS confirms you\n       deep install [--trust-key] <package folder>   its source and permissions, then installed once the OS confirms you\n       deep guard add <file>   guard entries you wrote, each checked on its planted call and twin, added once the OS confirms you\n       deep memory [--json]   what every agent's memory taught, ranked, for you to keep or remove\n       deep memory keep | remove <lesson>   your decision on one, once the OS confirms you\n       deep memory overrule <decision>   a rejection or a kept lesson undone, once the OS confirms you\n       deep undo staged:<id>   a destructive command's run undone from the copy staged before it ran\n       deep backup <folder>   the record, its evidence and its wiki, copied through the running hub\n       deep restore <folder>   a backup put back with the hub stopped, once the OS confirms you\n       deep debug bundle   redacted logs, versions and doctor output, for a bug report\n       deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names\n       deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it\n\nRepository skeleton.`);
+  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json] [--prompt]   --prompt also sends each signed-in agent one test prompt, which spends plan usage\n       deep status  every session, what needs you first\n       deep off | on   every gate watch-only, or back, once the OS confirms you\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop [--root <folder>]\n       deep hub use --root <folder>   this worktree's sessions to a dev hub, once the OS confirms you\n       deep setup [--undo]  install DeepBuild for Claude Code beside your settings, or remove it all once the OS confirms you\n       deep mcp [actions]   the MCP server an agent starts, on stdio; actions serves deep-actions, the plug-ins' actions\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n       deep lease [kind...] -- <command>   a heavy build or test suite run under one cpu.slot and a lease on each kind, at a lower priority\n       deep numbers [--json] | refresh | baseline <manifest> | sample <before date> [manifest]   your readings, each with its source and age\n       deep show --doc <doc ID> --document <file> [--check] [--snap] [--claim <claim>] [--json]   a canvas document drawn in your layer, or in the agent's whose process tree runs it\n       deep kinds --dump <folder> | --diff <a> <b>   the canvas core's whole listing as canonical JSON named by its module-set digest, or two such dumps diffed\n       deep inbox  your open asks\n       deep inbox answer <ask> <option>   answer one, once the OS confirms you\n       deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you\n       deep inbox save <offer>   save a permission you said yes to as a decision for its repo, once the OS confirms you\n       deep install [--trust-key] <package folder>   its source and permissions, then installed once the OS confirms you\n       deep guard add <file>   guard entries you wrote, each checked on its planted call and twin, added once the OS confirms you\n       deep memory [--json]   what every agent's memory taught, ranked, for you to keep or remove\n       deep memory keep | remove <lesson>   your decision on one, once the OS confirms you\n       deep memory overrule <decision>   a rejection or a kept lesson undone, once the OS confirms you\n       deep undo staged:<id>   a destructive command's run undone from the copy staged before it ran\n       deep backup <folder>   the record, its evidence and its wiki, copied through the running hub\n       deep restore <folder>   a backup put back with the hub stopped, once the OS confirms you\n       deep debug bundle   redacted logs, versions and doctor output, for a bug report\n       deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names\n       deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it\n\nRepository skeleton.`);
 } else if (args[0] === 'doctor') {
   const { doctorCommand } = await import('@deepbuild/hub');
   process.exitCode = await doctorCommand(args.slice(1), telemetryItems);
@@ -171,6 +174,10 @@ if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
   // Loaded only for hub commands, so every other command starts without the hub's modules.
   const { hubCommand } = await import('@deepbuild/hub');
   process.exitCode = await hubCommand(args.slice(1), fileURLToPath(import.meta.url));
+} else if (args[0] === 'lease') {
+  // Its own entry, so a leased command starts without the hub's module graph.
+  const { leaseCommand } = await import('@deepbuild/hub/lease');
+  process.exitCode = await leaseCommand(args.slice(1));
 } else if (args[0] === 'env') {
   const { envCommand } = await import('@deepbuild/hub');
   process.exitCode = await envCommand(args.slice(1));
@@ -183,9 +190,15 @@ if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
 } else if (args.length === 1 && (args[0] === 'off' || args[0] === 'on')) {
   const { gatesCommand } = await import('@deepbuild/hub');
   process.exitCode = await gatesCommand(args[0] === 'off');
+} else if (args[0] === 'numbers') {
+  const { numbersCommand } = await import('@deepbuild/hub');
+  process.exitCode = await numbersCommand(args.slice(1));
 } else if (args[0] === 'show') {
   const { showCommand } = await import('@deepbuild/hub');
   process.exitCode = await showCommand(args.slice(1));
+} else if (args[0] === 'kinds' && (args[1] === '--dump' || args[1] === '--diff')) {
+  const { kindsCommand } = await import('@deepbuild/hub');
+  process.exitCode = await kindsCommand(args.slice(1));
 } else if (args[0] === 'status') {
   const { statusCommand } = await import('@deepbuild/hub');
   process.exitCode = await statusCommand(args.slice(1));

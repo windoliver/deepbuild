@@ -1,16 +1,22 @@
 // Issue #380: the core's instanced draw of a particles@1 item's instance columns, which its
-// shipped compute operator wrote this frame: one dot per live particle, sized in px, its color
-// the item's roles mixed over its life, added to the linear target where it shows in front of
-// the scene (reversed Z, so a nearer dot has the larger depth). Written for this module; nothing
-// here is ported.
+// shipped compute operator wrote this frame: one sprite per live particle, sized in px, its color
+// the item's roles over its life, added to the linear target where it shows in front of the
+// scene (reversed Z, so a nearer sprite has the larger depth). Issue #420: its size and opacity
+// over life, up to four color stops mixed in OKLab, and its draw: a dot, a spark, a puff (shaded
+// at half resolution unless `full`) or a streak along its velocity. Written for this module;
+// nothing here is ported.
 
 struct Draw {
     clip: mat4x4<f32>,
-    // The view's width and height in px, the dot's size in px, and its opacity.
+    // The view's width and height in px, a size scale in px, and an opacity scale.
     view: vec4<f32>,
-    // Linear colors at birth and at death; w unused.
-    from_color: vec4<f32>,
-    to_color: vec4<f32>,
+    // Its size at birth and at death, its opacity at birth and at death.
+    life: vec4<f32>,
+    // Its draw (0 dot, 1 spark, 2 puff, 3 streak), half-resolution shading, and its stop count.
+    kind: vec4<f32>,
+    // Each color stop's place in life, and its linear color.
+    at: vec4<f32>,
+    colors: array<vec4<f32>, 4>,
 };
 
 @group(0) @binding(0) var<uniform> draw: Draw;
@@ -20,6 +26,9 @@ struct Out {
     @builtin(position) pos: vec4<f32>,
     @location(0) at: vec2<f32>,
     @location(1) life: f32,
+    // The sprite's centre and half extents in px, for half-resolution shading.
+    @location(2) centre: vec2<f32>,
+    @location(3) half_px: vec2<f32>,
 };
 
 @vertex
@@ -29,9 +38,10 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Out {
         vec2<f32>(-1.0, 1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0),
     );
     let k = corners[vi];
-    let base = ii * 4u;
+    let base = ii * 8u;
     let p = vec3<f32>(inst[base], inst[base + 1u], inst[base + 2u]);
     let life = inst[base + 3u];
+    let v = vec3<f32>(inst[base + 4u], inst[base + 5u], inst[base + 6u]);
     var out: Out;
     out.at = k;
     out.life = life;
@@ -40,20 +50,108 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Out {
         out.pos = vec4<f32>(2.0, 2.0, 2.0, 1.0);
         return out;
     }
-    let half_px = 0.5 * draw.view.z;
-    let ndc = k * half_px * 2.0 / draw.view.xy;
+    let l = clamp(life, 0.0, 1.0);
+    let size = mix(draw.life.x, draw.life.y, l) * draw.view.z;
+    let half_px = 0.5 * max(size, 1.0);
+    // Across the view in px: a streak runs along where its velocity takes it in a 30th of a s.
+    var ax = vec2<f32>(1.0, 0.0);
+    var ext = vec2<f32>(half_px, half_px);
+    if draw.kind.x == 3.0 {
+        let c2 = draw.clip * vec4<f32>(p + v * (1.0 / 30.0), 1.0);
+        if c2.w > 0.0 {
+            let d = (c2.xy / c2.w - c.xy / c.w) * 0.5 * draw.view.xy;
+            let len = length(d);
+            if len > 1e-3 {
+                ax = d / len;
+                ext = vec2<f32>(max(0.5 * len, half_px), half_px);
+            }
+        }
+    }
+    let across = vec2<f32>(-ax.y, ax.x);
+    let off = ax * k.x * ext.x + across * k.y * ext.y;
+    let ndc = off * 2.0 / draw.view.xy;
     out.pos = vec4<f32>(c.xy + ndc * c.w, c.z, c.w);
+    out.centre = (c.xy / c.w * vec2<f32>(0.5, -0.5) + 0.5) * draw.view.xy;
+    out.half_px = ext;
     return out;
+}
+
+fn cbrt(x: f32) -> f32 {
+    return sign(x) * pow(abs(x), 1.0 / 3.0);
+}
+
+fn to_oklab(c: vec3<f32>) -> vec3<f32> {
+    let l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
+    let m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
+    let s = 0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b;
+    let l_ = cbrt(l);
+    let m_ = cbrt(m);
+    let s_ = cbrt(s);
+    return vec3<f32>(
+        0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+        1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+        0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_,
+    );
+}
+
+fn from_oklab(c: vec3<f32>) -> vec3<f32> {
+    let l_ = c.x + 0.3963377774 * c.y + 0.2158037573 * c.z;
+    let m_ = c.x - 0.1055613458 * c.y - 0.0638541728 * c.z;
+    let s_ = c.x - 0.0894841775 * c.y - 1.2914855480 * c.z;
+    let l = l_ * l_ * l_;
+    let m = m_ * m_ * m_;
+    let s = s_ * s_ * s_;
+    return vec3<f32>(
+        4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+    );
+}
+
+/// The color at `l` of its life: the stops' colors mixed in OKLab between the two about it.
+fn color_at(l: f32) -> vec3<f32> {
+    let n = i32(draw.kind.z);
+    var lo = 0;
+    for (var i = 1; i < 4; i++) {
+        if i < n && draw.at[i] <= l {
+            lo = i;
+        }
+    }
+    let hi = min(lo + 1, n - 1);
+    let a = draw.at[lo];
+    let b = draw.at[hi];
+    var f = 0.0;
+    if b > a {
+        f = clamp((l - a) / (b - a), 0.0, 1.0);
+    }
+    let mixed = mix(to_oklab(draw.colors[lo].rgb), to_oklab(draw.colors[hi].rgb), f);
+    return max(from_oklab(mixed), vec3<f32>(0.0));
 }
 
 @fragment
 fn fs(in: Out) -> @location(0) vec4<f32> {
-    let r2 = dot(in.at, in.at);
+    var at = in.at;
+    // A puff at half resolution shades once per 2 × 2 px block.
+    if draw.kind.y > 0.5 {
+        let block = floor(in.pos.xy * 0.5) * 2.0 + 1.0;
+        at = (block - in.centre) / max(in.half_px, vec2<f32>(1.0));
+    }
+    let r2 = dot(at, at);
     if r2 > 1.0 {
         discard;
     }
-    let soft = (1.0 - r2) * (1.0 - r2);
-    let fade = 1.0 - clamp(in.life, 0.0, 1.0);
-    let color = mix(draw.from_color.rgb, draw.to_color.rgb, clamp(in.life, 0.0, 1.0));
-    return vec4<f32>(color * soft * fade * draw.view.w, 0.0);
+    let l = clamp(in.life, 0.0, 1.0);
+    var shape = (1.0 - r2) * (1.0 - r2);
+    if draw.kind.x == 1.0 {
+        // A spark: a hard bright core.
+        shape = exp(-12.0 * r2);
+    } else if draw.kind.x == 2.0 {
+        // A puff: a wide soft gaussian, faint.
+        shape = 0.35 * exp(-3.0 * r2);
+    } else if draw.kind.x == 3.0 {
+        // A streak: soft across, full along.
+        shape = 1.0 - at.y * at.y;
+    }
+    let fade = mix(draw.life.z, draw.life.w, l) * (1.0 - l);
+    return vec4<f32>(color_at(l) * shape * fade * draw.view.w, 0.0);
 }

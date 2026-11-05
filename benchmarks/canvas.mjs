@@ -1,8 +1,8 @@
-// One canvas workload per run, for the perf lane's budgets (issues #96, #305, #379, #383 and #854): node
+// One canvas workload per run, for the perf lane's budgets (issues #96, #305, #379, #383, #417 and #854): node
 // benchmarks/canvas.mjs <task>. Each drives a built binary over JSON lines, as the acceptance tests do: `deep-show run`
 // for patches and the seal, `deep-canvas merge` for a merge, `deep-gpu run` for the deepest level of a 3D city.
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -157,6 +157,9 @@ const COSTS = join(root, 'crates', 'deep-canvas', 'costs.json');
 const LOOK = join(root, 'tests', 'acceptance', '379', 'fixtures', 'look.json');
 // Bytes per pixel from the passes' formats: the linear, object-ID and depth targets, and three BGRA slots.
 const PASS_BYTES = { 'scene3d.geometry': 16, 'scene3d.output': 12 };
+// Passes the bench doesn't time, which keep their declared terms (#200): the shadow map, which its scenes don't cast,
+// and the object-ID writes, which run and are timed inside scene3d.geometry, whose bytes count the object-ID target.
+const DECLARED_ONLY = ['scene3d.shadow', 'scene3d.object_id'];
 
 function sceneDoc({ title, budgetClass, size, boxes }) {
   const items = { cam: { id: 'cam', kind: 'camera@1', name: 'Camera', order: 'a0', params: { projection: 'perspective', target: [0, 1, 0], orbit: { azimuth: 30, elevation: 25, distance: 14 }, fov: 40 } } };
@@ -250,6 +253,7 @@ workloads.costs = () => {
   const declared = JSON.parse(readFileSync(COSTS, 'utf8'));
   const terms = { ...measured.terms };
   for (const [pass, bytes] of Object.entries({ ...PASS_BYTES, ...EFFECT_BYTES })) terms[pass] = { ...(declared.terms[pass] ?? {}), bytes_per_px: bytes };
+  for (const pass of DECLARED_ONLY) if (declared.terms[pass]) terms[pass] = declared.terms[pass];
   if (process.platform === 'darwin') {
     const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
     try {
@@ -353,6 +357,34 @@ workloads.class = () => {
         return { patch, ms: r.settled_ms, pipelines: r.pipelines };
       });
     }
+    console.log(JSON.stringify(report));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #429: a composed operator's GPU time in its class. The data_view fixture with a composed pass that tints the
+// frame (resolution half, the class's), five runs of 300 frames after 30 of warm-up, each run the p95 of the
+// operator's own pass; the perf lane compares it with the merge base, which draws no operator item.
+const OPERATOR_LIMITS = { data_view: 0.5 };
+workloads.operator = () => {
+  const cls = process.argv[3] ?? 'data_view';
+  if (!(cls in OPERATOR_LIMITS)) throw Error(`Unknown class ${cls}; one of: ${Object.keys(OPERATOR_LIMITS).join(', ')}`);
+  const doc = JSON.parse(readFileSync(join(root, 'benchmarks', 'canvas', `${cls}.json`), 'utf8'));
+  doc.requires.modules.effects = '^1';
+  doc.items.tint = { id: 'tint', kind: 'gpu.pass@1', name: 'Tint', order: 'z0', params: {
+    about: 'The #429 benchmark pass: adds 0.6 to the frame\'s red.', origin: 'composed',
+    inputs: { src: { type: 'texture', from: { texture: { target: { op: 'core', output: 'color' } } } } },
+    steps: { uv: { op: 'screen_uv@1', args: {} }, c: { op: 'sample@1', args: { tex: 'src', uv: 'uv', lod: 0 } },
+      red: { op: 'const@1', args: { value: [0.6, 0, 0, 0], type: 'vec4' } }, out: { op: 'add@1', args: { a: 'c', b: 'red' } } },
+    outputs: { color: 'out' }, chain: 'effects', order: 'a0', resolution: 'half', cost: { ns_per_px: 50 }, fallback: 'look' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const runs = liveCalls(dir, Array.from({ length: 5 }, () => ({ docs: [doc], frames: WARM_UP + WARM_FRAMES, report: ['passes'] })));
+    const report = { task: 'operator', class: cls, limit_ms: OPERATOR_LIMITS[cls], fingerprint: fingerprint(), runs: runs.map((r) => {
+      const ms = r.frames.slice(WARM_UP).map((f) => f.passes.filter((p) => p.operator === 'tint').reduce((s, p) => s + (p.end_ns - p.start_ns) / 1e6, 0));
+      return { frames: ms.length, operator_p95_ms: p95(ms) };
+    }) };
     console.log(JSON.stringify(report));
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -746,6 +778,67 @@ function judgeEfficiency(current) {
   const status = ['FAIL', 'BLOCKED', 'INCONCLUSIVE'].find((s) => statuses.includes(s)) ?? 'PASS';
   console.log(JSON.stringify({ task, status, profile, targets: judged, ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
 }
+
+// #417's looks (tests/acceptance/417/README.md, "AC5's reports"): a release `deep-gpu`'s `film2d` plays a 2D film
+// in the app's headless window in a look's light theme, one warm-up run and five, each run a fresh process.
+// `look-frames` plays each shipped look's fixture film, 30 warm frames then 300 timed, each frame's GPU and CPU
+// ms; `look-switch` plays the fixture film and switches between every ordered pair of shipped looks, each switch
+// timed from its request to the new look's first frame read back from the window, with that frame's pixel (4, 4).
+// `--planted stops_at_request` passes deep-gpu's wrong clock, stopped at the request.
+const LOOKS_417 = join('tests', 'acceptance', '417', 'fixtures');
+/** Every shipped look's fixture, `{id, fixture, doc}`: the fixtures and the shipped looks are the same set (#417). */
+function lookFilms() {
+  return readdirSync(join(root, LOOKS_417, 'looks')).filter((f) => f.endsWith('.json')).sort().map((f) => {
+    const fixture = `${LOOKS_417}/looks/${f}`;
+    const { look, film } = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+    return { id: look, fixture, doc: JSON.parse(readFileSync(join(root, LOOKS_417, film), 'utf8')) };
+  });
+}
+/** One fresh release `deep-gpu run` over `calls`: its replies, each a film2d answer. */
+function films(calls) {
+  const [answer] = run('deep-gpu', ['run', ...(planted() ? ['--planted', planted()] : [])].join(' '), [JSON.stringify({ out: tmpdir(), calls })], 'release');
+  const replies = answer.replies ?? [];
+  if (answer.ok !== true || replies.length !== calls.length || replies.some((r) => !Array.isArray(r.frames))) throw Error(`deep-gpu film2d answered ${JSON.stringify(answer).slice(0, 1500)}`);
+  return replies;
+}
+
+workloads['look-frames'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const looks = lookFilms();
+  const measured = runs(() => {
+    const replies = films(looks.map(({ id, doc }) => ({ call: 'film2d', doc, look: id, frames: WARM_UP + WARM_FRAMES })));
+    return { looks: Object.fromEntries(looks.map(({ id, fixture }, i) => [id, {
+      fixture, frames: replies[i].frames.slice(WARM_UP).map(({ gpu_ms, cpu_ms }) => ({ gpu_ms, cpu_ms })),
+    }])) };
+  });
+  console.log(JSON.stringify({ task: 'canvas-look-frames', fingerprint, runs: measured }));
+};
+
+/** A walk through every ordered pair of distinct `ids` once, starting and ending at the first (Hierholzer). */
+function everyPair(ids) {
+  const used = new Set();
+  const walk = [];
+  const visit = (from) => {
+    for (const to of ids) if (to !== from && !used.has(`${from}>${to}`)) { used.add(`${from}>${to}`); visit(to); }
+    walk.push(from);
+  };
+  visit(ids[0]);
+  return walk.reverse();
+}
+const SWITCH_EVERY = 10;
+workloads['look-switch'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const fixture = `${LOOKS_417}/film.json`;
+  const doc = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+  const walk = everyPair(lookFilms().map((l) => l.id));
+  const events = walk.slice(1).map((look, i) => ({ frame: SWITCH_EVERY * (i + 1), look }));
+  const measured = runs(() => {
+    const [reply] = films([{ call: 'film2d', doc, look: walk[0], frames: SWITCH_EVERY * walk.length, events }]);
+    if (reply.switches?.length !== events.length) throw Error(`film2d timed ${reply.switches?.length} of ${events.length} switches`);
+    return { samples: reply.switches.map(({ ms, ground }, i) => ({ from: walk[i], to: walk[i + 1], ms, ground })) };
+  });
+  console.log(JSON.stringify({ task: 'canvas-look-switch', fixture, fingerprint, runs: measured }));
+};
 
 // #105: a bug capture of the second display through `deep-show run` on the virtual clock: picked, the chord held for
 // 119.5 s, released and saved; fails unless the saved asset holds every frame of the hold.

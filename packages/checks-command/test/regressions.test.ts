@@ -923,6 +923,12 @@ describe('a shell script the command runs is read as the command', () => {
     expect(maskOf('sh .deepbuild/checks/one.sh', cwd)).toBeNull();
     expect(maskOf('sh .deepbuild/checks/one.sh || true', cwd), 'the command\'s own mask comes first').toBe('|| true');
   });
+  it('a mask in the package.json script a check runs is the command\'s, through the check\'s own script (#669)', () => {
+    const cwd = folder({ '.deepbuild/checks/npm-test.sh': 'npm test\n', 'package.json': JSON.stringify({ scripts: { test: 'vitest run || true', lint: 'eslint .' } }) });
+    expect(maskOf('sh .deepbuild/checks/npm-test.sh', cwd)).toBe('|| true in package.json\'s test script in .deepbuild/checks/npm-test.sh');
+    expect(maskOf('npm run test', cwd)).toBe('|| true in package.json\'s test script');
+    expect(maskOf('npm run lint', cwd), 'a script with no mask').toBeNull();
+  });
 });
 
 // #30 AC17: a test that failed and then passed on the tool's own retry is a pass and a fail on the commit: the run
@@ -947,5 +953,30 @@ describe('a test retried by its tool inside one run', () => {
     const r = vitestReport([line('test:pass', 1, [error])], checkout, true);
     expect(r.ran.map((t) => t.attempts)).toEqual([['passed']]);
     expect(r.failures).toEqual([]);
+  });
+});
+
+// #874: on a base with no entry for a command, a check reaches the command's stand-in by name, a program that does
+// nothing and reads no file, and fails there on its own assertion; without the stand-in the child the check starts
+// is a program no tracer sees into, so the run counts nothing.
+describe('a command a base has no entry for', () => {
+  const files = {
+    'cli.test.mjs': `import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+test('greets', () => {
+  assert.equal(spawnSync('deep-greet', ['Ada'], { encoding: 'utf8' }).stdout, 'hello Ada\\n');
+});
+`,
+  };
+  const spec = { ...VITEST, runner: 'node --test cli.test.mjs' };
+  it('reaches its stand-in by name, traced, and fails on its assertion', async () => {
+    const r = await runCommandCheck(check(folder(files), { spec, standIns: ['deep-greet'] }));
+    expect(r.outcome, JSON.stringify({ mask: r.mask, failures: r.failures })).toBe('failed');
+    expect(r.failures.map((f) => [f.test, f.assertion])).toEqual([['greets', true]]);
+  });
+  it('(wrong program) without the stand-in, the run is uncounted, naming the command', async () => {
+    const r = await runCommandCheck(check(folder(files), { spec }));
+    expect([r.outcome, r.mask]).toEqual(['uncounted', 'untraced program deep-greet']);
   });
 });

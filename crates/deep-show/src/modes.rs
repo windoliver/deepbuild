@@ -80,8 +80,8 @@ fn world_bounds(b: [f64; 4], t: &Transform) -> ([f64; 3], [f64; 3]) {
 }
 
 impl Hub<'_> {
-    /// A deep_show or deep show call in a diagnostic mode.
-    pub fn mode_show(&mut self, show: &Show, mode: &str) -> Value {
+    /// A deep_show or deep show call in a diagnostic mode, its readings from `cursor`.
+    pub fn mode_show(&mut self, show: &Show, mode: &str, cursor: usize) -> Value {
         let module = owner(mode).unwrap_or("core");
         if !DRAWN.contains(&mode) {
             return json!({"outcome": "refused", "code": "module_missing", "module": module,
@@ -94,12 +94,17 @@ impl Hub<'_> {
         let drawn = self.bounds_at(&show.doc, show.t);
         reply["mode"] = json!(mode);
         reply["display_only"] = json!(true);
-        reply["drawn"] = json!(drawn);
         reply["snapshots"] = json!([]);
         if let Some((sha, picture, size)) = self.bounds_picture(&show.doc, &drawn, show.size) {
             let mut entry = crate::snapshot::entry(&sha, &picture, size);
             entry["display_only"] = json!(true);
             reply["snapshots"] = json!([entry]);
+        }
+        // #412: the readings past what fits under 64 KB come on the next page, by its cursor.
+        let (page, next) = crate::query::fitted(&drawn, cursor, crate::query::reply_room(&reply));
+        reply["drawn"] = json!(page);
+        if let Some(n) = next {
+            reply["next"] = json!(n.to_string());
         }
         // A mode's picture and readings are never evidence: a check they'd pass stays unproven.
         if reply.get("result").and_then(Value::as_str) == Some("PASS") {

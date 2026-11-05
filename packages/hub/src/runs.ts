@@ -4,11 +4,11 @@
 // journal keeps each run until its finish is durable, so a start after a cut finishes or reruns it.
 import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
-import { isAbsolute, relative } from 'node:path';
+import { readFileSync, realpathSync } from 'node:fs';
+import { basename, isAbsolute, relative } from 'node:path';
 import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
-import { sha256Hex } from '@deepbuild/contracts';
-import type { Evidence, EvidenceStore, PutResult } from '@deepbuild/evidence';
+import { sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { scrubText, type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
 import type { ExtensionHost } from '@deepbuild/extension-host';
 import { slot } from '@deepbuild/gate';
 import type { LeaseTable } from '@deepbuild/leases';
@@ -16,13 +16,18 @@ import { after, type Grant, type Host, type Started, type Supervisor } from '@de
 import type { Up } from '@deepbuild/env-local';
 import { words } from './claude-settings.js';
 import type { Stacks } from './stacks.js';
+import { keepAside, writeSynced } from './vfs.js';
 import { refusal, Refused, ulid, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
 /** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
 export interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number;
   /** A claim's check (#30): the command line the command check kind runs in `cwd`, hermetically through host@1; `argv` is what it would be as a shell line. */
-  command?: string }
+  command?: string;
+  /** Named command stand-ins in base runs (#874). */
+  stand_ins?: string[];
+  /** Recovered runs with withheld environment values cannot run again unchanged (#996). */
+  withheld?: string[] }
 /**
  * How long a claim's check runs when its definition names no deadline: a day, so a run no tool ends is still stopped and
  * recorded overran. Spec-draft sets a check's own deadline from the time it took when drafted (#30); until it does, this stands.
@@ -44,6 +49,7 @@ const isUnder = (path: string, dir: string) => {
 export interface RunsOptions {
   /** The journal file: each run started and not yet durably finished. */
   journalFile: string;
+  point(): void;
   /** The folder the base-commit service keeps its checkouts in; a run there isn't rerun after a cut. */
   checkouts: string;
   now: () => number;
@@ -56,7 +62,7 @@ export interface RunsOptions {
   stored(put: PutResult, what: string): Promise<Evidence>;
   invalid(claim: string, commit: string, reason: string, outcome?: 'INVALID' | 'INCONCLUSIVE'): Promise<void>;
   /** The gate runner keeps a claim's check run's closed record for its verdict. */
-  recorded(run: string, record: CommandRun): void;
+  recorded(run: string, record: CommandRun): CommandRun;
   stopping: () => boolean;
   stacks: Stacks;
   store: () => EvidenceStore;
@@ -66,7 +72,48 @@ export interface RunsOptions {
   extensions: () => ExtensionHost | undefined;
 }
 
+/**
+ * What the record keeps of a run's spec in its run.started@3 (#996): each text as the evidence store would scrub it and
+ * within the read cap, each list within its bound. What that changed is named in `withheld` ($NAME for a variable), and
+ * a run rebuilt from the record with any of it withheld can't run again as it was.
+ */
+function recordable(run: Run, held: string[]): { spec: Obj; withheld: string[] } {
+  const CAP = 8192;
+  const MANY = 65536;
+  const withheld: string[] = [];
+  const clean = (v: string): string => scrubText(v, { env: run.env, held }).slice(0, CAP);
+  const list = (name: string, values: string[], max: number, empty = true): string[] => {
+    const kept = values.slice(0, max).map(clean).filter((v) => empty || v);
+    if (kept.length !== values.length || kept.some((v, i) => v !== values[i])) withheld.push(name);
+    return kept;
+  };
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(run.env)) {
+    if (/^[^=]+$/.test(k) && k.length <= CAP && clean(v) === v) env[k] = v;
+    else withheld.push(`${k.slice(0, CAP - 1)}`);
+  }
+  const argv = list('argv', run.argv, MANY);
+  const cwd = clean(run.cwd);
+  if (cwd !== run.cwd) withheld.push('cwd');
+  const grant = Object.fromEntries(Object.entries(run.grant).map(([k, v]) => [k, Array.isArray(v) ? list(`grant.${k}`, v, MANY) : v]));
+  const command = run.command === undefined ? undefined : clean(run.command);
+  if (run.command !== undefined && command !== run.command) withheld.push('command');
+  const stand_ins = run.stand_ins && list('stand_ins', run.stand_ins, 1024, false);
+  const deadline = run.deadline !== undefined && Number.isFinite(run.deadline) && run.deadline >= 0 ? run.deadline : null;
+  if (run.deadline !== undefined && deadline === null) withheld.push('deadline');
+  return {
+    spec: {
+      argv: argv.length ? argv : ['-'], cwd: cwd || '/', env, grant: grant as JsonValue, deadline_ms: deadline,
+      ...(command ? { command } : {}), ...(stand_ins ? { stand_ins } : {}),
+    },
+    withheld: [...new Set(withheld)].slice(0, MANY),
+  };
+}
+
+
 export class Runs {
+  /** The journal read at start, updated and durably written as a whole. */
+  private journal: Record<string, Run> = {};
   /** Each run in flight, by its handle: what it is, its end, and how to stop it. */
   private readonly live = new Map<string, { run: Run; done: Promise<void>; stop(): void }>();
   constructor(private readonly o: RunsOptions) {}
@@ -84,23 +131,62 @@ export class Runs {
     await Promise.race([Promise.allSettled([...this.live.values()].map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
   }
 
-  private journal(): Record<string, Run> {
+  /**
+   * The journal as this start finds it (#996). One it can't read is kept aside under a name with its time, never read
+   * as empty: its runs in flight are rebuilt from their run.started, and one reading names the file.
+   */
+  async open(): Promise<void> {
+    let bytes: Buffer;
     try {
-      return JSON.parse(readFileSync(this.o.journalFile, 'utf8')) as Record<string, Run>;
-    } catch {
-      return {};
+      bytes = readFileSync(this.o.journalFile);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
     }
+    try {
+      const runs = JSON.parse(bytes.toString('utf8')) as unknown;
+      if (isObj(runs)) {
+        this.journal = runs as Record<string, Run>;
+        return;
+      }
+    } catch {
+      // Damaged: kept aside below.
+    }
+    const aside = keepAside(this.o.journalFile, bytes, this.o.now());
+    // The core's run.started@3 carries what a run runs; an earlier one can't be run again from the record, and no
+    // other writer's start or finish counts.
+    const rows = (await this.o.raw(`SELECT s.data FROM events s WHERE s.kind = 'run.started' AND s.writer = 'core' AND s.v >= 3 AND NOT EXISTS
+      (SELECT 1 FROM events f WHERE f.kind = 'run.finished' AND f.writer = 'core' AND json_extract(f.data, '$.run') = json_extract(s.data, '$.run')) ORDER BY s.log_pos`)) as { data: string }[];
+    // The reading first, then the journal written again: a cut in between finds it damaged and rebuilds it again.
+    const now = this.o.now();
+    await this.o.appendCore('reading.recorded', {
+      reading: `reading:${ulid(now)}`, value: rows.length, unit: 'runs rebuilt from the record', as_of: now,
+      source: `${basename(this.o.journalFile)} couldn't be read, so it was kept aside as ${basename(aside)}`, n: 1, outside: false,
+    });
+    this.writeJournal((runs) => {
+      for (const row of rows) {
+        const d = JSON.parse(row.data) as Obj;
+        const needs = (isObj(d.needs) ? d.needs : {}) as Obj;
+        runs[String(d.run)] = {
+          run: String(d.run), check: String(d.check), claim: String(d.claim), commit: String(d.commit), argv: d.argv as string[], env: d.env as Record<string, string>,
+          cwd: String(d.cwd), grant: d.grant as Grant, lane: d.lane === 'fast' ? 'fast' : 'slow', expected_ms: typeof needs.expected_ms === 'number' ? needs.expected_ms : null,
+          ...(typeof d.deadline_ms === 'number' ? { deadline: d.deadline_ms } : {}), ...(d.environment === true ? { environment: true } : {}),
+          ...(typeof d.command === 'string' ? { command: d.command } : {}), ...(Array.isArray(d.stand_ins) ? { stand_ins: d.stand_ins as string[] } : {}),
+          ...(Array.isArray(d.withheld) && d.withheld.length ? { withheld: d.withheld as string[] } : {}),
+        };
+      }
+    });
   }
+  /** Changes the journal and writes it whole: a temp file, synced, renamed and its folder synced, one numbered point. */
   private writeJournal(update: (runs: Record<string, Run>) => void): void {
-    const runs = this.journal();
-    update(runs);
-    writeFileSync(`${this.o.journalFile}.tmp`, JSON.stringify(runs), { mode: 0o600 });
-    renameSync(`${this.o.journalFile}.tmp`, this.o.journalFile);
+    update(this.journal);
+    writeSynced(this.o.journalFile, Buffer.from(JSON.stringify(this.journal)));
+    this.o.point();
   }
 
   /** run.start, and deep_run's runs with the deadline their spec gives, in ms. */
-  async start(params: Obj, deadline?: number): Promise<Obj> {
-    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command } = params;
+  async start(params: Obj, deadline?: number, id?: string): Promise<Obj> {
+    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins } = params;
     const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
     if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
@@ -120,9 +206,10 @@ export class Runs {
     if (grant.run_as_you !== undefined && typeof grant.run_as_you !== 'boolean') throw new Refused(refusal('type', '/params/grant/run_as_you', 'Give run_as_you as true or false.', grant.run_as_you));
     if (typeof environment !== 'boolean') throw new Refused(refusal('type', '/params/environment', 'Give environment as true when the run needs its folder\'s stack running.', environment));
     const run = await this.launch({
-      run: `run:${ulid(this.o.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment ? { environment } : {}),
+      run: id ?? `run:${ulid(this.o.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment ? { environment } : {}),
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
       ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
+      ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
     });
     return { run };
   }
@@ -142,9 +229,19 @@ export class Runs {
     const lease = await slot(this.o.leases(), holder, run.run, run.lane === 'fast' ? 'fast' : 'slow');
     // Where it runs and what it needs (#29), so a later placement can pick any host from the same record.
     const ts = this.o.now();
+    const { spec, withheld } = recordable(run, this.o.held);
     await this.o.appendAsCore({
-      v: 2, id: ulid(ts), kind: 'run.started', ts, subject: run.run,
-      data: { run: run.run, check: run.check, claim: run.claim, commit: run.commit, host: 'local', needs: { cores: 1, memory_mb: 0, stack_slot: run.environment ? 1 : 0, gpus: 0, expected_ms: run.expected_ms ?? null }, lane: run.lane ?? 'slow' },
+      v: 3, id: ulid(ts), kind: 'run.started', ts, subject: run.run,
+      data: {
+        run: run.run, check: run.check, claim: run.claim, commit: run.commit, host: 'local', needs: { cores: 1, memory_mb: 0, stack_slot: run.environment ? 1 : 0, gpus: 0, expected_ms: run.expected_ms ?? null }, lane: run.lane ?? 'slow',
+        // What it runs (#996): a journal that can't be read is rebuilt from it.
+        ...spec, withheld, ...(run.environment ? { environment: true } : {}),
+      },
+    }).catch(async (error: unknown) => {
+      // A start the record refused never ran: it leaves neither its slot nor the journal, and the refusal is what's thrown.
+      await this.o.leases().release(lease.id, []).catch(() => undefined);
+      try { this.writeJournal((runs) => { delete runs[run.run]; }); } catch { /* the restart's recovery finds no start for it */ }
+      throw error;
     });
     const token = randomBytes(24).toString('base64url');
     const env = { ...run.env, DEEP_RUN_TOKEN: token };
@@ -172,7 +269,9 @@ export class Runs {
       const replaced = async (): Promise<boolean> => (await this.o.extensions()?.checks().catch(() => []) ?? []).some((c) => c.kind === 'command');
       ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun }> => {
         if (!byPackage) {
-          const record = await runCommandCheck({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env, stop: controller.signal });
+          // #669's planted runner judges the run by its exit code alone, whatever masks it.
+          const exitOnly = this.o.plant === 'runner-passes-masked-exit' ? { plant: 'exit-code-only' as const } : {};
+          const record = await runCommandCheck({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env, ...(run.grant.hosts?.length ? { hosts: run.grant.hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly });
           return { code: record.exit?.code ?? null, record };
         }
         const result = await this.o.extensions()!.runCheck('command', spec, { checkout: run.cwd, deadline });
@@ -242,7 +341,7 @@ export class Runs {
         // evidence names what run.finished names.
         const [stdout, stderr] = evidence;
         if (stdout !== undefined && stderr !== undefined) record = { ...record, output: { ...record.output, sha256: { stdout, stderr } } };
-        this.o.recorded(run.run, record);
+        record = this.o.recorded(run.run, record);
         const outcome = record.outcome;
         const findings = outcome === 'stopped' ? ['hub stopped'] : record.mask !== null ? [`uncounted: ${record.mask}`] : record.failures.slice(0, 20).map((f) => `${f.test} (${f.file}:${f.line}): ${f.message}`);
         // What the kind's result names as its evidence beyond the output (a replacing kind's content keys) is kept with the findings.
@@ -274,7 +373,7 @@ export class Runs {
   /** After a start with runs still in the journal: each was in flight when the hub stopped without a clean stop. */
   async recover(): Promise<void> {
     const recorded = async (kind: string, run: string) => (await this.o.raw(`SELECT 1 FROM events WHERE kind = ? AND json_extract(data, '$.run') = ? LIMIT 1`, [kind, run.replace(/'/g, "''")])).length > 0;
-    for (const run of Object.values(this.journal())) {
+    for (const run of Object.values({ ...this.journal })) {
       if (await recorded('run.finished', run.run)) {
         this.writeJournal((runs) => { delete runs[run.run]; });
         continue;
@@ -283,10 +382,11 @@ export class Runs {
       if (await recorded('run.started', run.run)) await this.finish(run, 'stopped', ['hub restarted'], []);
       else this.writeJournal((runs) => { delete runs[run.run]; });
       // Its checkout went as the service opened, so it isn't run again where nothing is left: what it would have shown stays unknown.
-      if (run.cwd && isUnder(run.cwd, realpathSync(this.o.checkouts))) {
+      // One rebuilt without values its environment had can't run again as it was either (#996).
+      if (run.withheld?.length || (run.cwd && isUnder(run.cwd, realpathSync(this.o.checkouts)))) {
         const [claim] = (await this.o.raw(`SELECT commit_sha, verdict_id FROM claims WHERE id = '${sql(run.claim.slice(6))}'`)) as { commit_sha: string | null; verdict_id: string | null }[];
         // A verdict it already has stands.
-        if (!claim?.verdict_id) await this.o.invalid(run.claim, claim?.commit_sha ?? run.commit, `${run.check} was cut short by a hub restart`, 'INCONCLUSIVE');
+        if (!claim?.verdict_id) await this.o.invalid(run.claim, claim?.commit_sha ?? run.commit, `${run.check} was cut short by a hub restart${run.withheld?.length ? `, and the record doesn't keep its ${run.withheld.join(', ')}` : ''}`, 'INCONCLUSIVE');
         continue;
       }
       // Its claim's check runs again.

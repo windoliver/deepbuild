@@ -320,7 +320,9 @@ fn the_design_examples_parse() {
         assert_eq!(Path::parse(text).unwrap().print(), text);
     }
     assert_eq!(Path::parse("layers/box").unwrap_err().code, "bad_path");
-    assert_eq!(Path::parse("data/speed").unwrap_err().code, "bad_path");
+    // A channel may key `data/<name>` (Path).
+    assert_eq!(Path::parse("data/speed").unwrap().print(), "data/speed");
+    assert_eq!(Path::parse("controls/dial").unwrap_err().code, "bad_path");
     assert_eq!(Path::parse("items/box/-x").unwrap_err().code, "bad_path");
     assert_eq!(Path::parse("items/box#.x/y").unwrap_err().code, "bad_path");
     assert_eq!(Path::parse("items/B/x/y").unwrap_err().code, "bad_id");

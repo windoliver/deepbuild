@@ -7,8 +7,8 @@ use serde_json::{json, Map, Value};
 
 use super::packs::{self, Expansion, Packs, Resolved};
 use super::{
-    kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS, AT_VECTORS,
-    ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
+    kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS, AT_RELATIONS,
+    AT_VECTORS, BOX_POINTS, ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
 };
 use crate::cost::Coefficients;
 use crate::grammar::{
@@ -155,6 +155,7 @@ fn check_by(
             // Expansion at check, never per frame (Recipe): the derived items join the lowered
             // items before any item is checked, so they meet the item contract, the module
             // checks and the budget as any item does.
+            issues.extend(packs::driven_counts(doc, items, &resolved));
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
             let derived: BTreeSet<&str> = expansions
                 .iter()
@@ -227,6 +228,20 @@ fn check_by(
         )),
     }
 
+    // A recipe's channels join the document's, targeting the items it derived (#420).
+    let recipe_channels: Map<String, Value> =
+        expansions.iter().flat_map(|e| e.channels.clone()).collect();
+    if !recipe_channels.is_empty() {
+        if let Some(doc) = lowered.as_object_mut() {
+            let channels = doc
+                .entry("channels")
+                .or_insert_with(|| Value::Object(Map::new()));
+            if let Some(map) = channels.as_object_mut() {
+                map.extend(recipe_channels);
+            }
+        }
+    }
+
     // The module checks, the budget estimate and the document checks read the lowered document
     // alone: a big document's estimate runs on its own thread, beside the others, and the
     // findings join in this order.
@@ -244,6 +259,7 @@ fn check_by(
                 Tail::Document => {
                     check_id_maps(&lowered, &mut issues);
                     check_controls(&lowered, &mut issues);
+                    check_time_remaps(&lowered, &expansions, &mut issues);
                     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
                     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
                     super::rules::check(&lowered, &mut issues, |entries, work| {
@@ -400,6 +416,7 @@ fn module_checks(
                         what: r.what,
                         migration: None,
                         replaced_by: None,
+                        close: Vec::new(),
                     });
                     continue;
                 }
@@ -443,6 +460,35 @@ fn module_checks(
     }
 }
 
+/// The document's `budget.lights` cap (Document envelope: `budget`): every `light.*` item counts,
+/// those a recipe derived among them (Recipe: lights count in the budget; #420), and a
+/// document with more is refused, naming them.
+fn lights_check(lowered: &Value, issues: &mut Vec<Issue>) {
+    let Some(cap) = member(lowered, "budget")
+        .and_then(|b| member(b, "lights"))
+        .and_then(Value::as_u64)
+    else {
+        return;
+    };
+    let lights: Vec<String> = member(lowered, "items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, item)| kind_text(item).is_some_and(|k| k.starts_with("light.")))
+        .map(|(id, _)| id.clone())
+        .collect();
+    if lights.len() as u64 > cap {
+        let mut issue = Issue::envelope(
+            "over_budget",
+            "budget/lights".into(),
+            json!(lights.len()),
+            &format!("{} lights, past the document's cap of {cap}", lights.len()),
+        );
+        issue.ids = lights;
+        issues.push(issue);
+    }
+}
+
 /// The budget estimate (issue #379; canvas primitives: The cost model, "Before it shows"): a
 /// document that names its budget class and whose estimated CPU time, GPU time or GPU memory
 /// per frame passes one of its caps is refused, naming its top three contributors, with the
@@ -453,6 +499,7 @@ fn budget_check(
     coefficients: Option<&Coefficients>,
     issues: &mut Vec<Issue>,
 ) {
+    lights_check(lowered, issues);
     let Some((class, limits)) = crate::budget::of(lowered) else {
         return;
     };
@@ -1106,6 +1153,7 @@ pub(super) fn migrate_item(
             ),
             migration: Some((entry.full_name(), step.from, step.to)),
             replaced_by: None,
+            close: Vec::new(),
         });
     }
 }
@@ -1137,6 +1185,8 @@ struct KindFacts<'a> {
     lookup: Lookup<'a>,
     /// `(deprecated_since, replaced_by)` when a module deprecated the kind.
     deprecation: Option<&'a (String, String)>,
+    /// The close names an unknown kind's notice names (#412).
+    close: Vec<Value>,
 }
 
 impl<'a> KindFacts<'a> {
@@ -1152,6 +1202,12 @@ impl<'a> KindFacts<'a> {
             deprecation: match lookup {
                 Lookup::Known { entry, .. } => sealed.deprecation_of(&entry.full_name()),
                 _ => None,
+            },
+            close: match lookup {
+                Lookup::UnknownKind if !instance => {
+                    super::close::kind_names(text, kinds, sealed.close_fault)
+                }
+                _ => Vec::new(),
             },
         }
     }
@@ -1254,6 +1310,7 @@ fn check_item(
                 what: format!("kind `{text}` is not registered in this build; the item is skipped"),
                 migration: None,
                 replaced_by: None,
+                close: facts.close.clone(),
             });
             None
         }
@@ -1294,6 +1351,7 @@ fn check_item(
                 what: format!("kind `{text}` is deprecated since {since}; use {replaced_by}"),
                 migration: None,
                 replaced_by: Some((replaced_by.clone(), since.clone())),
+                close: Vec::new(),
             });
         }
     }
@@ -1461,7 +1519,21 @@ fn check_at(key: &str, at_value: &Value, issues: &mut Vec<Issue>) {
     };
     for (name, value) in members {
         let path = format!("items/{key}/at/{name}");
-        if AT_VECTORS.contains(&name.as_str()) {
+        if name == "pivot" && value.is_string() {
+            if !value.as_str().is_some_and(|p| BOX_POINTS.contains(&p)) {
+                issues.push(Issue::error(
+                    "out_of_range",
+                    key,
+                    path,
+                    value.clone(),
+                    "not a box point (n ne e se s sw w nw c)",
+                ));
+            }
+        } else if name == "place" {
+            check_place(key, value, issues);
+        } else if name == "align" {
+            check_align(key, value, issues);
+        } else if AT_VECTORS.contains(&name.as_str()) {
             if !is_vector(value, 3) {
                 issues.push(Issue::error(
                     "out_of_range",
@@ -1488,6 +1560,105 @@ fn check_at(key: &str, at_value: &Value, issues: &mut Vec<Issue>) {
                 path,
                 value.clone(),
                 "not a member of at in this slice",
+            ));
+        }
+    }
+}
+
+/// A relation's target: an item ID with an optional `#part`, or a point `[u, u]`; `frame` too
+/// where `frame` is allowed.
+fn relation_target(value: &Value, frame: bool) -> bool {
+    match value {
+        Value::String(s) => (frame && s == "frame") || !s.is_empty(),
+        v => is_vector(v, 2),
+    }
+}
+
+/// `at.place` (Item and kind: relations): exactly one of `beside`, `edge` and `onto`, with the
+/// members its form takes, sides and points from the box points.
+fn check_place(key: &str, value: &Value, issues: &mut Vec<Issue>) {
+    let base = format!("items/{key}/at/place");
+    let mut fault = |path: String, v: &Value, why: &str, code: &'static str| {
+        issues.push(Issue::error(code, key, path, v.clone(), why));
+    };
+    let Some(place) = value.as_object() else {
+        return fault(base, value, "not an object", "out_of_range");
+    };
+    let forms: Vec<&str> = ["beside", "edge", "onto"]
+        .into_iter()
+        .filter(|f| place.contains_key(*f))
+        .collect();
+    let members: &[&str] = match forms.as_slice() {
+        ["beside"] => &["beside", "side", "gap", "align", "own"],
+        ["edge"] => &["edge", "margin"],
+        ["onto"] => &["onto", "point"],
+        _ => {
+            return fault(
+                base,
+                value,
+                "not exactly one of beside, edge and onto",
+                "out_of_range",
+            )
+        }
+    };
+    let side = |v: &Value| {
+        v.as_str()
+            .is_some_and(|s| s != "c" && BOX_POINTS.contains(&s))
+    };
+    for (name, v) in place {
+        let path = format!("{base}/{name}");
+        let ok = match name.as_str() {
+            n if !members.contains(&n) => {
+                fault(path, v, "not a member of this placement", "unknown_field");
+                continue;
+            }
+            "beside" | "onto" => relation_target(v, false),
+            "edge" | "side" => side(v),
+            "point" => v.as_str().is_some_and(|s| BOX_POINTS.contains(&s)),
+            "gap" | "margin" => fits_f32(v),
+            "align" => v
+                .as_str()
+                .is_some_and(|s| ["start", "center", "end", "baseline"].contains(&s)),
+            _ => v.as_str().is_some_and(|s| !s.is_empty()),
+        };
+        if !ok {
+            fault(path, v, "not a value this member takes", "out_of_range");
+        }
+    }
+}
+
+/// `at.align`: at most two `{to, side}`, each moving the item along one axis.
+fn check_align(key: &str, value: &Value, issues: &mut Vec<Issue>) {
+    let base = format!("items/{key}/at/align");
+    let list = match value.as_array() {
+        Some(list) if list.len() <= 2 => list,
+        _ => {
+            issues.push(Issue::error(
+                "out_of_range",
+                key,
+                base,
+                value.clone(),
+                "not a list of at most two",
+            ));
+            return;
+        }
+    };
+    for (i, a) in list.iter().enumerate() {
+        let to = a.get("to").is_some_and(|t| relation_target(t, true));
+        let side = a
+            .get("side")
+            .and_then(Value::as_str)
+            .is_some_and(|s| ["n", "s", "e", "w", "cx", "cy"].contains(&s));
+        let only = a
+            .as_object()
+            .is_some_and(|o| o.keys().all(|k| k == "to" || k == "side"));
+        if !(to && side && only) {
+            issues.push(Issue::error(
+                "out_of_range",
+                key,
+                format!("{base}/{i}"),
+                a.clone(),
+                "not {to, side}",
             ));
         }
     }
@@ -1584,21 +1755,25 @@ fn check_params(
                     ),
                     migration: None,
                     replaced_by: None,
+                    close: Vec::new(),
                 });
                 dropped.push(name.clone());
             } else {
-                issues.push(Issue::error(
-                    "unknown_field",
-                    key,
-                    path(),
-                    value.clone(),
-                    &format!(
-                        "{}@{}.{} does not define `{name}`",
-                        entry.full_name(),
-                        version.major,
-                        version.minor
-                    ),
-                ));
+                issues.push(Issue {
+                    close: super::close::field_names(name, entry, version, sealed.close_fault),
+                    ..Issue::error(
+                        "unknown_field",
+                        key,
+                        path(),
+                        value.clone(),
+                        &format!(
+                            "{}@{}.{} does not define `{name}`",
+                            entry.full_name(),
+                            version.major,
+                            version.minor
+                        ),
+                    )
+                });
             }
             continue;
         };
@@ -1697,7 +1872,7 @@ fn convert_literal(text: &str, unit: &str) -> Result<f64, Refusal> {
 
 /// The forms a field in `unit` takes, each a literal the unit printer wrote (`1m`, `1cm`, …);
 /// the bare form is left out.
-pub(crate) fn literal_forms(unit: &str) -> Vec<String> {
+pub fn literal_forms(unit: &str) -> Vec<String> {
     forms_for(unit)
         .into_iter()
         .filter(|form| form.bytes().any(|c| c.is_ascii_lowercase()))
@@ -1764,6 +1939,53 @@ fn check_controls(doc: &Value, issues: &mut Vec<Issue>) {
             fields.get("role").cloned().unwrap_or(Value::Null),
             what,
         ));
+    }
+}
+
+/// Each time remap (Time remap; #429): its target a recipe instance the check expanded, and its
+/// map `reverse`, the one preset this build plays, over the document's span; the other maps and a
+/// placement target land later and are refused, naming the field.
+fn check_time_remaps(doc: &Value, expansions: &[Expansion], issues: &mut Vec<Issue>) {
+    let Some(entries) = member(doc, "time_remaps").and_then(Value::as_object) else {
+        return;
+    };
+    let span = member(doc, "transport").and_then(|t| member(t, "span"));
+    for (key, entry) in entries {
+        let Some(fields) = entry.as_object() else {
+            continue;
+        };
+        let mut bad = |code, field: &str, what: &str| {
+            let actual = fields.get(field).cloned().unwrap_or(Value::Null);
+            let path = format!("time_remaps/{key}/{field}");
+            issues.push(Issue::error(code, key, path, actual, what));
+        };
+        for field in fields.keys() {
+            if !["target", "map", "clamp"].contains(&field.as_str()) {
+                bad("unknown_field", field, "not a field of a time remap");
+            }
+        }
+        let target = fields.get("target").and_then(Value::as_str);
+        if !target.is_some_and(|t| expansions.iter().any(|e| e.instance == t)) {
+            bad(
+                "ref_unresolved",
+                "target",
+                "names no recipe instance of the document",
+            );
+        }
+        if fields.get("map").and_then(Value::as_str) != Some("reverse") {
+            bad(
+                "out_of_range",
+                "map",
+                "this build plays a time remap's `reverse` map; the other maps land later",
+            );
+        }
+        if span.is_none_or(|s| s == "auto" || s == "open") {
+            bad(
+                "out_of_range",
+                "map",
+                "a reverse map runs over the document's span, which it doesn't give",
+            );
+        }
     }
 }
 
@@ -2097,7 +2319,14 @@ pub(crate) fn resolve(
             let mut cursor = member(target, "params").and_then(|p| member(p, name));
             for field in rest {
                 cursor = match cursor {
-                    Some(Value::Object(map)) => map.get(*field),
+                    // A path op is an object with one key, its kind (Path `path@1`: ops), so a
+                    // step that names one of its fields reaches through that key.
+                    Some(Value::Object(map)) => map.get(*field).or_else(|| {
+                        let (only, inner) = (map.len() == 1).then(|| map.iter().next())??;
+                        (*name == "ops" && !only.is_empty())
+                            .then(|| inner.get(*field))
+                            .flatten()
+                    }),
                     Some(Value::Array(list)) => {
                         field.parse::<usize>().ok().and_then(|i| list.get(i))
                     }
@@ -2127,12 +2356,63 @@ pub(crate) fn resolve(
                 unreachable()
             }
         }
+        // A param of one of the item's modifiers (Modifier; #420): it must reach a value the
+        // modifier holds, as a param's parts do.
+        ["modifiers", k, "params", rest @ ..] if !rest.is_empty() => {
+            let mut cursor = member(target, "modifiers")
+                .and_then(Value::as_array)
+                .and_then(|list| k.parse::<usize>().ok().and_then(|i| list.get(i)))
+                .and_then(|m| member(m, "params"));
+            for field in rest {
+                cursor = match cursor {
+                    Some(Value::Object(map)) => map.get(*field),
+                    Some(Value::Array(list)) => {
+                        field.parse::<usize>().ok().and_then(|i| list.get(i))
+                    }
+                    _ => None,
+                };
+            }
+            if cursor.is_some() {
+                Ok(())
+            } else {
+                unreachable()
+            }
+        }
         ["at", name] if AT_VECTORS.contains(name) || *name == "shear" => Ok(()),
         ["at", name, index] if AT_VECTORS.contains(name) && ["0", "1", "2"].contains(index) => {
             Ok(())
         }
+        // Every relation field is a channel target (Item and kind: relations), on a relation
+        // the item holds.
+        ["at", name, rest @ ..] if AT_RELATIONS.contains(name) && !rest.is_empty() => {
+            let mut cursor = member(target, "at").and_then(|a| member(a, name));
+            for field in rest {
+                cursor = match cursor {
+                    Some(Value::Object(map)) => map.get(*field),
+                    Some(Value::Array(list)) => {
+                        field.parse::<usize>().ok().and_then(|i| list.get(i))
+                    }
+                    _ => None,
+                };
+            }
+            if cursor.is_some() {
+                Ok(())
+            } else {
+                unreachable()
+            }
+        }
         ["adjust", name] if ADJUST_FIELDS.contains(name) => Ok(()),
         [field] if ITEM_OWN_FIELDS.contains(field) => Ok(()),
+        // A part of a module's kind, such as a vector's SVG ids (#398): its role, opacity and
+        // offset. The parts come from the module's import, so the module resolves the part.
+        ["parts", _, "role" | "opacity" | "at", ..]
+            if !matches!(
+                kind_text(target).map(|text| lookup(kinds, text)),
+                Some(Lookup::Known { .. })
+            ) =>
+        {
+            Ok(())
+        }
         _ => unreachable(),
     }
 }

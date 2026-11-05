@@ -18,6 +18,7 @@
 
 mod apply;
 mod check;
+mod close;
 mod merge;
 mod order;
 pub mod packs;
@@ -34,14 +35,14 @@ pub use apply::{
     Patched, Refused, Writing,
 };
 pub use check::{
-    check, check_costed, check_in, check_packed, check_with, duration, frame_rate_of, recheck,
-    recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
+    check, check_costed, check_in, check_packed, check_with, duration, frame_rate_of,
+    literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
 };
 pub use merge::{merge, Merged};
 pub use order::key_between;
 pub use packs::{Expansion, Pack, PackId, Packs, Planted as PackPlanted};
 pub use requires::{derived_kinds, write_required_kinds};
-pub use rules::STATUS_ROLE;
+pub use rules::{shown_inside, story_issues, STATUS_ROLE};
 pub use shape::{canonical, canonical_in, extends_by_default, Canonical, DocShape};
 
 /// The check kind every issue here is raised by.
@@ -76,6 +77,7 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "constraints",
     "clips",
     "placements",
+    "time_remaps",
     "transitions",
     "shots",
     "markers",
@@ -104,6 +106,7 @@ pub const ID_MAPS: &[&str] = &[
     "constraints",
     "clips",
     "placements",
+    "time_remaps",
     "transitions",
     "shots",
     "markers",
@@ -131,6 +134,17 @@ pub const ITEM_KEYS: &[&str] = &[
     "broken_out",
     // A solid's modifier stack (Modifier; #411), checked by the canvas module whose kind it is.
     "modifiers",
+    // An object's fields (Object; #420): its materials, constraints, shadows, level of detail,
+    // and in a figure its tone, halo and relations.
+    "materials",
+    "material",
+    "constraints",
+    "cast_shadow",
+    "receive_shadow",
+    "lod",
+    "tone",
+    "halo",
+    "relations",
 ];
 
 /// The item fields a path or an op may reach besides `params` and `at`.
@@ -145,6 +159,11 @@ pub const ITEM_OWN_FIELDS: &[&str] = &[
     "pickable",
     "order",
     "broken_out",
+    "material",
+    "cast_shadow",
+    "receive_shadow",
+    "tone",
+    "halo",
 ];
 
 /// The item fields `unset` may remove (every one with a default).
@@ -174,6 +193,12 @@ pub const ADJUST_FIELDS: &[&str] = &[
 /// The `at` members that are vectors of three.
 pub const AT_VECTORS: &[&str] = &["pos", "rot", "scale", "pivot"];
 
+/// The `at` members that place an item by relation (Item and kind: relations).
+pub const AT_RELATIONS: &[&str] = &["place", "align"];
+
+/// The nine box points every 2D item has, read-only (closed: determinism).
+pub const BOX_POINTS: &[&str] = &["n", "ne", "e", "se", "s", "sw", "w", "nw", "c"];
+
 /// The most characters a description has.
 pub const MAX_DESCRIPTION: usize = 400;
 
@@ -195,6 +220,9 @@ pub struct Issue {
     /// The last good revision, checked by the same rules, had it too: show-time admission
     /// returns it marked carried and never refuses for it (Revision).
     pub carried: bool,
+    /// On `unknown_kind` and `unknown_field`: at most three close names, a rename or retirement
+    /// record's first (#412).
+    pub close: Vec<Value>,
 }
 
 impl Issue {
@@ -211,6 +239,7 @@ impl Issue {
             forms: Vec::new(),
             fix_ops: None,
             carried: false,
+            close: Vec::new(),
         }
     }
 
@@ -235,11 +264,28 @@ impl Issue {
         if self.code == "bad_unit" {
             out.insert("forms".into(), json!(self.forms));
         }
+        // The column view's issue names its reader, column, row, value and step (#397).
+        if self.code == "column.out_of_range" {
+            if let Value::Object(fields) = &self.actual {
+                for (k, v) in fields {
+                    out.entry(k.clone()).or_insert_with(|| v.clone());
+                }
+            }
+        }
+        // A pack kind's rule names its own code, `<pack>.<rule>` (#490).
+        if self.code == packs::KIND_RULE {
+            if let Some(rule) = self.actual.get("rule") {
+                out.insert("code".into(), rule.clone());
+            }
+        }
         if let Some(ops) = &self.fix_ops {
             out.insert("fix_ops".into(), json!(ops));
         }
         if self.carried {
             out.insert("carried".into(), json!(true));
+        }
+        if !self.close.is_empty() {
+            out.insert("close".into(), json!(self.close));
         }
         Value::Object(out)
     }
@@ -277,6 +323,8 @@ pub struct Notice {
     /// On `deprecated`: the kind that replaces it (`family.name@major`) and the release since
     /// which it is deprecated.
     pub replaced_by: Option<(String, String)>,
+    /// On `unknown_kind` and `unknown_field`: at most three close names (#412).
+    pub close: Vec<Value>,
 }
 
 impl Notice {
@@ -296,6 +344,9 @@ impl Notice {
         if let Some((replaced_by, since)) = &self.replaced_by {
             out.insert("replaced_by".into(), json!(replaced_by));
             out.insert("deprecated_since".into(), json!(since));
+        }
+        if !self.close.is_empty() {
+            out.insert("close".into(), json!(self.close));
         }
         Value::Object(out)
     }
@@ -411,6 +462,7 @@ pub fn fix_for(code: &str) -> String {
         "unknown_kind" => "Register the kind, or remove the item.",
         "kind_too_new" => "Save the item at a major this build knows.",
         "module_missing" => "Open the document in a build with the module, or remove the field.",
+        "column.out_of_range" => "Read the column as a type that holds the value, or fix the source's value.",
         "pack_missing" => "Install the pack at that version, or open the document where it is installed; never draw it with another version.",
         "derived_item" => "Patch the instance's inputs, or break the item out first with `break_out {instance, item}`.",
         "out_of_range" => "Give the field a value of its type inside its range.",
@@ -1488,6 +1540,7 @@ mod tests {
             what: String::new(),
             migration: None,
             replaced_by: None,
+            close: Vec::new(),
         };
         let mut forward = vec![notice("items/x/a"), notice("items/x/b")];
         let mut backward = vec![notice("items/x/b"), notice("items/x/a")];

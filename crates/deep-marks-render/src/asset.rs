@@ -6,7 +6,7 @@ use std::path::Path;
 
 use deep_canvas_marks::key::sha256_hex;
 use image::RgbaImage;
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 
 use crate::refused;
 
@@ -21,6 +21,11 @@ fn read(store: Option<&Path>, hash: &str, path: &str) -> Result<Vec<u8>, Value> 
         return Err(refused("asset_mismatch", &format!("{path}: {hash}")));
     }
     Ok(bytes)
+}
+
+/// The bytes of `hash` in the store, checked against it, if it holds them: a vector's SVG (#398).
+pub fn bytes(store: Option<&Path>, hash: &str) -> Option<Vec<u8>> {
+    read(store, hash, "").ok()
 }
 
 /// Every mark set column of `doc` whose `data` is `{sidecar: sha256}`, read from the store, checked
@@ -52,6 +57,12 @@ pub fn sidecars(doc: &mut Map<String, Value>, store: Option<&Path>) -> Result<()
         }
     }
     Ok(())
+}
+
+/// Every mark set column of `doc` that reads a table, inlined from the evidence store
+/// (`deep_marks_vello::tables`).
+pub fn tables(doc: &mut Map<String, Value>, evidence: Option<&Path>) -> Result<(), Value> {
+    deep_marks_vello::tables::tables(doc, evidence).map_err(|r| refused(r.code, &r.path))
 }
 
 /// The asset's pixels, straight RGBA, cropped to `crop` (`[x, y, w, h]` in image pixels).

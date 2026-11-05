@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "id": "rel-221-cycle-three",
+  "profile": "figure",
+  "title": "A planted three-item cycle",
+  "description": "Issue #221 AC5: a beside b, b aligned to c, c onto a: a cycle through three relations of three kinds; d beside a is outside the chain.",
+  "size": [800, 600],
+  "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+  "items": {
+    "a": {"id": "a", "kind": "rect@1", "layer": "main", "name": "A", "order": "a1", "at": {"place": {"beside": "b", "side": "e"}},
+      "params": {"box": [0, 0, 60, 40], "paint": {"fill": {"role": "accent"}}}},
+    "b": {"id": "b", "kind": "rect@1", "layer": "main", "name": "B", "order": "a2", "at": {"align": [{"to": "c", "side": "n"}]},
+      "params": {"box": [200, 100, 60, 40], "paint": {"fill": {"role": "ink"}}}},
+    "c": {"id": "c", "kind": "rect@1", "layer": "main", "name": "C", "order": "a3", "at": {"place": {"onto": "a", "point": "c"}},
+      "params": {"box": [400, 300, 30, 30], "paint": {"fill": {"role": "accent"}}}},
+    "d": {"id": "d", "kind": "rect@1", "layer": "main", "name": "D", "order": "a4", "at": {"place": {"beside": "a", "side": "s"}},
+      "params": {"box": [0, 0, 20, 20], "paint": {"fill": {"role": "ink"}}}}
+  }
+}

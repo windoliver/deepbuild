@@ -7,6 +7,7 @@ The append-only SQLite event log and the projections rebuilt from it by replay (
 ## Where new code goes
 
 - `src/index.ts`: the store, append and read; `src/projections.ts`: every table but `events`, each a function of the events alone.
+- `src/lifecycle.ts`: the gate that moves asks, ask-tasks, leases, claims and open items only through their lifecycle tables; a move no row allows stays out of the projections and is recorded as `move.refused` (#570).
 - `src/learned.ts`: the learned layer; `src/replay.ts`: the replay comparison; `src/storage.ts`: the storage the record writes through; `src/trust.ts`: project trust, one decision in the record that the extension host, the wiki and the hub all read.
 - `src/ids.ts`: the database-free public `@deepbuild/record/ids` entry for event IDs and their timestamps; the main entry re-exports `ulid` for existing callers.
 - Regression tests go in `test/`; acceptance tests live in `tests/acceptance/14`, `62` and `112` and are never edited.

@@ -76,20 +76,34 @@ export interface HookMeta {
   notes?: Record<string, string>;
   /** The folders a delete whose reach can't be worked out names, by the entry that matched it, for the hub to stage (#347). */
   stage?: Record<string, string[]>;
+  /** The heavy.command@1 entry a shell call matched in deep-hook (#1015): the hub runs it under `deep lease` with its kinds. */
+  heavy?: { name: string; kinds: string[]; form: string };
   /** A spooled call deep-hook let through because the hub was late, and the guard entries it matched. */
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
   payloadWriter?: string;
   /** Why the adapter can't read this patch's paths, so its PreToolUse is denied before it runs (#39). */
   denied?: string;
+  /** Set by the server on a PreToolUse its guard entries blocked: the entries, by name, for a PostToolUse that shows it ran anyway (#1033). */
+  blockedBy?: string[];
   /** What a hook said beside its turn, for the core to append as a session.reading (#39). */
   reading?: string;
+  /** A caller name the payload's own fields contradict, for the core to append once per session as a reading (#993). */
+  caller?: string;
+  /** Set by the server on a hook whose agent's hook program the last check found can't run (#993): its gates watch-only. */
+  cantRun?: boolean;
   /** A shell call's command line; only the matches-text plant reads it. */
   command?: string;
   /** The agent version the session's transcript names; unset until it holds an entry. */
   version?: string;
   /** Set for a session on a version its facts don't cover: recorded unverified, its holds and blocks watch-only. */
   watchOnly?: boolean;
+  /**
+   * A line from paseo's plugin (#55): the agent's provider and paseo's own agent ID, the token its DeepBuild MCP server
+   * binds by, a permission request's ID and kind, an answer's source; and, for a provider the facts don't cover, what
+   * they lack.
+   */
+  paseo?: { provider: string; agent: string; bind: string; request?: string; kind?: string; behavior?: string; from?: string; lacks?: string };
   /**
    * What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and
    * subagent, a stop's last message, Codex's turn, and a FileChanged hook's path.
@@ -102,8 +116,12 @@ export interface HookMeta {
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
   /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
   pr?: string;
-  /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent or command (#907) started, by its call. */
-  loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: 'subagent' | 'command'; call: string; what: string };
+  /**
+   * A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, a background subagent or
+   * command (#907) started, by its call, or a monitor's watch armed or stopped, by its ID (#997).
+   */
+  loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: 'subagent' | 'command'; call: string; what: string }
+    | { monitor: string; what: string; command: string; timeout: number | null } | { stopped: string };
 }
 /** The effect classes no "proceed" covers (#321). */
 export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']);
@@ -122,6 +140,8 @@ export interface Gated {
   screen?: boolean;
   /** A delete whose reach can't be worked out (#347): the folders it names, to stage before it runs; null when it names one nobody can know. */
   stage?: string[] | null;
+  /** A `gh pr create` (#322): its body's `Closes #n` is checked against the issue's task before it runs. */
+  pr?: boolean;
   /** A call in a session whose cut-off turn started a send with no recorded end (#85): checked against it first. */
   resend?: boolean;
 }
@@ -188,8 +208,14 @@ export interface CoreOptions {
   sorter?: string;
   /** The definitions handed to the kernel, from DEEP_HUB_TEST_DRAFTS: by a prompt's text or a work item's ID; only tests set it. */
   drafts?: string;
+  /** The changes you accepted, a file named by DEEP_HUB_TEST_ACCEPTED: by repo, kind, base and commit; only tests set it (#324). */
+  accepted?: string;
   /** The test work source's work.item@1 readings, from DEEP_HUB_TEST_WORK; only tests set it. */
   work?: string;
+  /** Paid checks' prices and their runs' cost readings, a file named by DEEP_HUB_TEST_PRICES; only tests set it (#325). */
+  prices?: string;
+  /** The GitHub API's recorded answers, a file named by DEEP_HUB_TEST_GITHUB; only tests set it (#322). */
+  github?: string;
   /** A file of runs for the background job `test` (#909), from DEEP_HUB_TEST_FAIL_JOB: a line `fail` throws, `ok` passes; only tests set it. */
   failJob?: string;
 }

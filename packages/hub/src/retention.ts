@@ -8,6 +8,8 @@ export interface RetentionOptions {
   raw(query: string): Promise<unknown[]>;
   store: EvidenceStore;
   checkouts: Checkouts;
+  /** Decisions, verdicts and notices' retained series evidence, as the extension host reads it. */
+  cited(): Promise<Set<string>>;
   /** The planted wrong program: nothing is cited, so nothing is kept. */
   keepNothing: boolean;
   /** Records each file the pass removed. */
@@ -19,8 +21,11 @@ export interface RetentionOptions {
  * CI logs ci.archived links, which outlive the forge's own retention only if ours keeps them.
  */
 export async function retain(o: RetentionOptions): Promise<void> {
-  const rows = (await o.raw("SELECT evidence FROM events WHERE kind IN ('decision.created', 'decision.applied', 'verdict.made') AND evidence IS NOT NULL")) as { evidence: string }[];
-  const cited = new Set<string>(o.keepNothing ? [] : rows.flatMap((r) => JSON.parse(r.evidence) as string[]));
+  const cited = o.keepNothing ? new Set<string>() : await o.cited();
+  if (!o.keepNothing) {
+    const readings = (await o.raw("SELECT evidence FROM events WHERE kind = 'reading.recorded' AND evidence IS NOT NULL")) as { evidence: string }[];
+    for (const row of readings) for (const sha of JSON.parse(row.evidence) as string[]) cited.add(sha);
+  }
   const linked = (await o.raw("SELECT json_extract(data, '$.evidence') AS sha FROM events WHERE kind = 'transcript.archived'")) as { sha: string | null }[];
   const logs = (await o.raw("SELECT evidence FROM events WHERE kind = 'ci.archived' AND evidence IS NOT NULL")) as { evidence: string }[];
   const archived = new Set([...linked.flatMap((r) => (r.sha ? [r.sha] : [])), ...logs.flatMap((r) => JSON.parse(r.evidence) as string[])]);

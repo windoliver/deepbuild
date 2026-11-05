@@ -1,0 +1,551 @@
+# #1113 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (74e6ff91, no scripts/throttle.mjs), in a scratch extract (`git archive HEAD`, node_modules linked)
+
+$ node --test 'tests/acceptance/1113/*.test.mjs'
+(stack-trace lines dropped; the extract's path reads <base>, home paths ~)
+
+✖ #1113.6899a042 #1113.a0183037 the before lane spawns its timed set only after its timed grant, which waits up to 15 minutes, so a wait leaves the spawn its full 20-minute TIMEOUT (10049.829153ms)
+✖ #1113.060e7bae a wrapped command that exits 3 makes throttle.mjs exit 3, and one killed by SIGTERM exits 143 (18.625416ms)
+✖ #1113.99a9da00 a no-grant timeout exits non-zero with INCONCLUSIVE no grant as its first line, and never runs the command (10024.469059ms)
+✖ #1113.06c9ec7b a forged DEEP_THROTTLE is ignored and a fresh grant is requested: a live holder's value copied from outside its chain, or a made-up one (10016.65115ms)
+✖ #1113.ca815dac nested build and test requests under a build holder pass through, though both classes are full outside its chain (10029.532079ms)
+✖ #1113.ca815dac a nested timed request under a build holder still drains: it waits for a holder outside its chain, and no other grant starts until it ends (10024.032066ms)
+✖ #1113.1f6072ef two timed requests nested in different chains (a build holder and a test holder) both complete in request order without hitting the timeout (26.611754ms)
+✖ #1113.1f6072ef two chains that each hold a bay pair and each make a nested timed request both complete in request order without hitting the timeout (19.609717ms)
+✖ #1113.3fd014d8 throttle.mjs and perf.mjs are in the guard regex: an unsigned change to either fails the guard (327.61389ms)
+✖ #1113.a4cc0a86 the throttle log shows no top-level timed grant started at load > cores, and a nested timed under a timed grant passes through (50.492237ms)
+✖ #1113.74ef5038 a preflight that requests timed while another session holds a bay pair waits until the pair is released, then completes, and its perf child is not BLOCKED (10072.517578ms)
+✖ #1113.74ef5038 a perf run started by hand that requests timed while another session holds a bay pair waits until the pair is released, then completes (10054.631179ms)
+✖ #1113.dadec762 a preflight run's measured time contains no throttle wait: the grant precedes the timer (10049.712299ms)
+✖ #1113.a0183037 a lane command waits up to 30 minutes for its grant, as build for an unlisted command (134.44729ms)
+✖ #1113.a0183037 a measured run's top-level timed waits up to 60 minutes: preflight, and perf started by hand (461.246288ms)
+✖ #1113.a0183037 an affected.mjs job waits up to 30 minutes for its grant, its node --test block as test (45112.681291ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 0
+ℹ fail 16
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45775.297363
+
+✖ failing tests:
+
+test at tests/acceptance/1113/before.test.mjs:54:1
+✖ #1113.6899a042 #1113.a0183037 the before lane spawns its timed set only after its timed grant, which waits up to 15 minutes, so a wait leaves the spawn its full 20-minute TIMEOUT (10049.829153ms)
+  AssertionError [ERR_ASSERTION]: neighbour never started under the throttle
+  events:
+  
+  log:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/cli.test.mjs:16:1
+✖ #1113.060e7bae a wrapped command that exits 3 makes throttle.mjs exit 3, and one killed by SIGTERM exits 143 (18.625416ms)
+  AssertionError [ERR_ASSERTION]: a child that exits 3
+  events:
+  
+  log:
+  
+  exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<base>/scripts/throttle.mjs'
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  1 !== 3
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 3,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/cli.test.mjs:30:1
+✖ #1113.99a9da00 a no-grant timeout exits non-zero with INCONCLUSIVE no grant as its first line, and never runs the command (10024.469059ms)
+  AssertionError [ERR_ASSERTION]: build-holder-0 never started under the throttle
+  events:
+  
+  log:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/cli.test.mjs:42:1
+✖ #1113.06c9ec7b a forged DEEP_THROTTLE is ignored and a fresh grant is requested: a live holder's value copied from outside its chain, or a made-up one (10016.65115ms)
+  AssertionError [ERR_ASSERTION]: build-holder-0 never started under the throttle
+  events:
+  
+  log:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/drain.test.mjs:8:1
+✖ #1113.ca815dac nested build and test requests under a build holder pass through, though both classes are full outside its chain (10029.532079ms)
+  AssertionError [ERR_ASSERTION]: A never started under the throttle
+  events:
+  
+  log:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/drain.test.mjs:30:1
+✖ #1113.ca815dac a nested timed request under a build holder still drains: it waits for a holder outside its chain, and no other grant starts until it ends (10024.032066ms)
+  AssertionError [ERR_ASSERTION]: B never started under the throttle
+  events:
+  
+  log:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/drain.test.mjs:70:1
+✖ #1113.1f6072ef two timed requests nested in different chains (a build holder and a test holder) both complete in request order without hitting the timeout (26.611754ms)
+  AssertionError [ERR_ASSERTION]: chain 0 never made its timed request
+  events:
+  
+  log:
+  
+  exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<base>/scripts/throttle.mjs'
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<base>/scripts/throttle.mjs'
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/drain.test.mjs:74:1
+✖ #1113.1f6072ef two chains that each hold a bay pair and each make a nested timed request both complete in request order without hitting the timeout (19.609717ms)
+  AssertionError [ERR_ASSERTION]: chain 0 never made its timed request
+  events:
+  
+  log:
+  
+  exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<base>/scripts/throttle.mjs'
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<base>/scripts/throttle.mjs'
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/guard.test.mjs:12:1
+✖ #1113.3fd014d8 throttle.mjs and perf.mjs are in the guard regex: an unsigned change to either fails the guard (327.61389ms)
+  AssertionError [ERR_ASSERTION]: an unsigned change to scripts/throttle.mjs passed the guard
+  events:
+  
+  log:
+  
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  
+  stderr:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/load.test.mjs:7:1
+✖ #1113.a4cc0a86 the throttle log shows no top-level timed grant started at load > cores, and a nested timed under a timed grant passes through (50.492237ms)
+  AssertionError [ERR_ASSERTION]: events:
+  
+  log:
+  
+  exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<base>/scripts/throttle.mjs'
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<base>/scripts/throttle.mjs'
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.0
+  
+  
+  1 !== 0
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/measured.test.mjs:10:1
+✖ #1113.74ef5038 a preflight that requests timed while another session holds a bay pair waits until the pair is released, then completes, and its perf child is not BLOCKED (10072.517578ms)
+  AssertionError [ERR_ASSERTION]: bay never started under the throttle
+  events:
+  
+  log:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/measured.test.mjs:27:1
+✖ #1113.74ef5038 a perf run started by hand that requests timed while another session holds a bay pair waits until the pair is released, then completes (10054.631179ms)
+  AssertionError [ERR_ASSERTION]: bay never started under the throttle
+  events:
+  
+  log:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/measured.test.mjs:40:1
+✖ #1113.dadec762 a preflight run's measured time contains no throttle wait: the grant precedes the timer (10049.712299ms)
+  AssertionError [ERR_ASSERTION]: neighbour never started under the throttle
+  events:
+  
+  log:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/waits.test.mjs:13:1
+✖ #1113.a0183037 a lane command waits up to 30 minutes for its grant, as build for an unlisted command (134.44729ms)
+  AssertionError [ERR_ASSERTION]: the lane's command ran under no build grant
+  events:
+  {"name":"lane","event":"start","t":1793689508823,"throttle":null}
+  log:
+  
+  exit 0
+  stdout:
+  RUN corpus
+  PASS stub corpus
+  PASS corpus (0.03 s)
+  
+  stderr:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'null',
+    expected: /^build:\S+$/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/waits.test.mjs:27:1
+✖ #1113.a0183037 a measured run's top-level timed waits up to 60 minutes: preflight, and perf started by hand (461.246288ms)
+  AssertionError [ERR_ASSERTION]: scripts/preflight.mjs made one top-level timed grant
+  events:
+  {"name":"checks","event":"start","t":1793689508930,"throttle":null,"pid":1267342}
+  log:
+  
+  exit 0
+  stdout:
+  Warming builds (not timed)
+  PASS stub checks
+  RUN perf
+  {"task":"preflight","baseCommit":"9c2d82b54e762b87cbb882734e7f5a6f76669208","status":"INITIAL","reason":"Fixture for #1113: a stub workload.","samples":1,"current":{"elapsedMs":328.986364,"cpuMs":320,"peakBytes":54231040,"instructions":null},"base":null,"counter":null,"fingerprint":{"model":null,"chip":null,"memoryBytes":null,"power":null,"lowPowerMode":null,"thermalState":null,"macosBuild":null}}
+  PASS perf (0.02 s)
+  SKIP hub churn: it spends plan usage, so only the release preflight runs it
+  SKIP ecosystem corpus: it spends plan usage, so only the release preflight runs it
+  SKIP spine checkpoint: it spends plan usage, so only the release preflight runs it
+  SKIP setup checkpoint: it spends plan usage, so only the release preflight runs it
+  SKIP claude code adapter live: it spends plan usage, so only the release preflight runs it
+  SKIP gpu validation: it spends plan usage, so only the release preflight runs it
+  Checks elapsed: 0.34 s (budget: <900 s); preflight elapsed: 0.39 s
+  
+  stderr:
+  
+  
+  0 !== 1
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1113/waits.test.mjs:39:1
+✖ #1113.a0183037 an affected.mjs job waits up to 30 minutes for its grant, its node --test block as test (45112.681291ms)
+  AssertionError [ERR_ASSERTION]: the probe's node --test job ran under no test grant
+  events:
+  {"name":"probe","event":"start","t":1793689523616,"throttle":null,"pid":1292776}
+  log:
+  
+  exit 1
+  stdout:
+  parallel node: tests/acceptance/1113/fixtures/probe.test.mjs
+  KNOWN cards: crates/deep-panel-host has no README.md card
+  KNOWN canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs
+  KNOWN canvas-lint: crates/deep-canvas/src/document/check.rs the thread module, ambient input a check never reads
+  KNOWN canvas-lint: crates/deep-canvas/src/document/check.rs the thread module, ambient input a check never reads
+  KNOWN canvas-lint: crates/deep-canvas/src/schedule/tests.rs the thread module, ambient input a check never reads
+  KNOWN canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)
+  KNOWN canvas-lint: crates/deep-text/src/cache.rs a static item, state a check could carry between runs
+  KNOWN canvas-lint: crates/deep-text/src/cache.rs a static item, state a check could carry between runs
+  KNOWN canvas-lint: crates/deep-text/src/cache.rs a static item, state a check could carry between runs
+  KNOWN canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods)
+  KNOWN canvas-lint: crates/deep-text/src/cache.rs a static item, state a check could carry between runs
+  KNOWN canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)
+  KNOWN canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+  KNOWN canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+  KNOWN canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+  KNOWN color literal: crates/deep-app/src/panel_check.rs: `div().size_full().bg(rgb(0xffffff)).child(panel)` names a color; use the look's role ground (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+  KNOWN color literal: crates/deep-app/src/panel_tree.rs: `assert_eq!(text_arg(&tree.ops[2].args).as_deref(), Some("#f8f8f8"));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+  KNOWN color literal: crates/deep-app/src/panel_tree.rs: `assert_eq!(color(&tree.ops[2].args), Some(0xf8f8f8));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+  BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+  BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/1106/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/386/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/386/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/386/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/39-redraft-ac26/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/39-redraft/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/39/fixtures/fake-codex.pl: API key
+  NEW FAIL secrets: tests/acceptance/39/helpers.ts: API key
+  NEW FAIL secrets: tests/acceptance/398/BASE-FAILURE-redraft.txt: home path
+  NEW FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/417/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL secrets: tests/acceptance/874/BASE-FAILURE.txt: home path
+  NEW FAIL deps: packages/gate/package.json dependencies @deepbuild/conformance 0.0.0 is not in scripts/repo-rules.json
+  NEW FAIL deps: packages/gate/package.json dependencies @deepbuild/supervisor 0.0.0 is not in scripts/repo-rules.json
+  NEW FAIL deps: crates/deep-canvas-seams/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json
+  NEW FAIL deps: crates/deep-scene3d-render/Cargo.toml dev-dependencies serde_json ^1 is not in scripts/repo-rules.json
+  NEW FAIL canvas-lint: crates/deep-canvas-marks/src/check.rs a static item, state a check could carry between runs
+  NEW FAIL canvas-lint: crates/deep-canvas-marks/src/check.rs a static item, state a check could carry between runs
+  NEW FAIL canvas-lint: crates/deep-canvas-sandbox/src/check.rs a macro definition, whose expansion the scan never reads
+  NEW FAIL canvas-lint: crates/deep-canvas/src/document/packs.rs include_str! of a file the lint can't read: outside the crate, or not a literal path
+  NEW FAIL canvas-lint: crates/deep-text/src/fonts.rs a raw pointer (ptr::), an address that differs per process and target
+  NEW FAIL canvas-lint: crates/deep-text/src/fonts.rs a static item, state a check could carry between runs
+  NEW FAIL canvas-lint: crates/deep-text/src/lib.rs a build predicate (feature), code that computes differently per build
+  NEW FAIL canvas-lint: wasmparser depends on semver 1.0.28, which lint/canvas/crates.json doesn't list
+  FAIL affected: 78 new, 18 already failing on main, 2 inconclusive or blocked, 1 passed, in 31 s at load 17; logs in /tmp/deep-affected-INeTh7
+  
+  stderr:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'null',
+    expected: /^test:\S+$/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+Every test fails at its AssertionError, in the test or its helpers (tests/), never on an import: the "Cannot find
+module …/scripts/throttle.mjs" lines above are the stderr of the stub holders' commands, which the failing
+assertion prints.
+
+## A planted fix, and the planted wrong programs
+
+In a second scratch extract of the base, a planted fix (the blind job's own throttle.mjs, with small edits to
+lanes.mjs, preflight.mjs, perf.mjs, proof-runs.mjs, affected.mjs and the guard regex; none of it is in this
+repository) passed all 16 tests, in 47 s on the Spark (spark-c89f, 20 cores, load under 3).
+
+Each twin in twins/ replaced that fix's scripts/throttle.mjs; cli, drain and load tests were run on each:
+
+- exits-0 (a wrapper that exits 0):
+  ✖ #1113.060e7bae a wrapped command that exits 3 makes throttle.mjs exit 3, and one killed by SIGTERM exits 143
+  every other test passed.
+- timed-passes-through (a timed request passes through any verified ancestor's grant):
+  ✖ #1113.ca815dac a nested timed request under a build holder still drains: …
+  ✖ #1113.1f6072ef two timed requests nested in different chains … in request order …
+  ✖ #1113.1f6072ef two chains that each hold a bay pair … in request order …
+  every other test passed.
+- trusts-throttle-env (a trusted DEEP_THROTTLE):
+  ✖ #1113.06c9ec7b a forged DEEP_THROTTLE is ignored and a fresh grant is requested: …
+  every other test passed.
+
+One more wrong program, not kept as a twin since the base already fails its test: the planted preflight.mjs with
+its timed claim moved after `const started = performance.now()`:
+  ✖ #1113.dadec762 a preflight run's measured time contains no throttle wait: the grant precedes the timer
+  AssertionError [ERR_ASSERTION]: preflight elapsed 3.53 s, but only 0.91 s passed after the grant could come: the wait is in the measured time

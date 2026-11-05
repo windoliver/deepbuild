@@ -1,0 +1,170 @@
+{
+  "title": "issue.drafted@1",
+  "description": "A new issue drafted from a task (#325): what a split moves out of it, each item with what it needs, or the follow-up a decision that a switch stays off needs. Only the core appends it; nothing is filed until you file it.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "issue.drafted"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "task_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The task it was drafted from."
+        },
+        "issue": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The issue that task is for, as its work source names it."
+        },
+        "because": {
+          "type": "string",
+          "enum": [
+            "split",
+            "switch"
+          ],
+          "description": "Why: a stalled claim you split, or a switch you decided stays off.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "decision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^decision:[0-9A-Za-z]+$",
+          "description": "The decision it follows from, once saved; null while none is.",
+          "maxLength": 8192
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The drafted issue's title."
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 256,
+          "description": "What moves to the new issue: each requirement with what it needs.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "needs": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "What it needs to pass: its check, a live run, a switch turned on."
+              }
+            },
+            "required": [
+              "id",
+              "text",
+              "needs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "follow_up": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The follow-up it records, in one line."
+        }
+      },
+      "required": [
+        "task_ref",
+        "issue",
+        "because",
+        "decision",
+        "title",
+        "items",
+        "follow_up"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

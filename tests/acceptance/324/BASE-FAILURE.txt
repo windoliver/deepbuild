@@ -1,0 +1,32 @@
+#324 acceptance suite on the base commit 7b18ed17 (origin/main), 2026-11-03 22:29-22:30 UTC, before any #324 code.
+Run: node node_modules/vitest/vitest.mjs run --root tests/acceptance/324 --no-file-parallelism
+     (Node 24.22.0 from /var/tmp/deep40/node/bin first on PATH, Linux arm64; 1-minute load about 2)
+Result: Test Files 5 failed (5); Tests 5 failed (5); 29.8 s. Every test fails at a named assertion about the missing
+behaviour, after its setup held (the task opened, its definition locked, the claim was made, the checks ran and, for
+AC1, passed; for AC5 the agent's deep show presented both revisions and the patch was recorded as the agent's).
+None is BLOCKED and none crashes the runner. Trimmed to each test's failing assertion.
+
+What the base does: it reads no plan and no accepted changes (it ignores the handed draft's `kind` and `plan`, and
+DEEP_HUB_TEST_ACCEPTED), measures no size, lists nothing outside a plan in a claim, raises no ask about a plan, and
+lets a green stop through whatever its size: "PASS 1/1 · next: you · receipt". A figure claim's verdict is decided by
+its requirement alone (INVALID: R1 has no check); the series and legend its patch changed are never named.
+
+FAIL  figure.test.ts > AC5 #324.96d43bd6 a figure claim's extra changes are listed by ID, sent back once, then one taste call; the asked-for axis never listed > AC5 #324.96d43bd6 relabeling axis-y while recoloring both series and moving the legend: series-revenue, series-cost, legend listed and sent back at stop 1, one taste call at stop 2, axis-y never listed, no FAIL
+  Error: AC5 #324.96d43bd6 the claim must list series-revenue, series-cost, legend by ID as outside the plan, together and without axis-y; lists naming series-revenue: []; the claim's record is claim.made at log_pos 15 {"task_ref":"session:e037e72dcf244e0a93e4b460904259e7#0","attempt":1,"commit":"9dfb7278ed814deb6e19576447eb734bf1c3e801","scope":"session","predictions":[],"hash":"18c468f600a8c6d022ff7bb29ec2f07d766d680354df934cf456a7649670e811"}; verdict.made at log_pos 33 {"outcome":"INVALID","verdict":"verdict:01M6HRGDB2YCWJ1WD4G1R5CKEK","claim":"claim:01M6HRGCZ6C03WZ1JB9CC0S6XH","reasons":["req:sessione037e72dcf244e0a93e4b460904259e70#R1 is covered by no check at depth unit: it needs a check at depth unit"],"requirements":[{"req":"req:sessione037e72dcf244e0a93e4b460904259e70#R1","outcome":"INVALID","check":"none","depth":"unit","oracle":"code","runs":{"clean":0,"needed":0,"counted":[]}, …
+  ❯ figure.test.ts:100:5
+
+FAIL  outside.test.ts > AC3 #324.c3d7daec a dependency or top-level folder outside the plan is listed in the claim with where it came from > AC3 #324.c3d7daec left-pad (the plan names only dayjs) is listed with package.json or its Edit, and the new folder vendor with vendor/pad.js or its Write
+  Error: AC3 #324.c3d7daec left-pad was added outside the plan (it names only dayjs): the claim must list it with where it came from, package.json or the Edit toolu_300d4bdbad8f8c9ca06c5; the claim's record is claim.made at log_pos 20 {"task_ref":"session:2aa04600af93489a8a983dfe03d4abec#0","attempt":1,"commit":"3a67c31830bb2b6c65c724e600c85e1df9e23d01","scope":"session","predictions":[],"hash":"c152f07827aa99be6b1efef5154046095ef461482c16f5144c470805351220a4"}; verdict.made at log_pos 75 {"outcome":"PASS","verdict":"verdict:01M6HRGH2KMP4Q6JCEBP203QFE","claim":"claim:01M6HRGGCAD0JS8TGG49C0SQJW","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run"],"requirements":[{"req":"req:session2aa04600af93489a8a983dfe03d4abec0#R1","outcome":"PASS","check":".deepbuild/checks/expired-token.sh","depth":"unit","oracle":"code","runs":{"clean":1,"needed":1,"counte …
+  ❯ outside.test.ts:48:5
+
+FAIL  plan.test.ts > AC2 #324.adc9187e a plan past the usual size reaches you before any code is written > AC2 #324.adc9187e a large plan of 12 files (usual 3) brings one ask with approve, shrink and split before the first edit lands; a large plan of 1 file brings none
+  Error: AC2 #324.adc9187e the plan marks the issue as large and names 12 files against a usual 3: an ask with approve, shrink and split must reach you before any code is written; the asks raised were none
+  ❯ plan.test.ts:78:5
+
+FAIL  size.test.ts > AC1 #324.5829869b a change ten times the usual size: sent back once with the numbers, then one taste call, never FAIL > AC1 #324.5829869b 189 lines over 12 files against a usual 17 lines for a feature: stop 1 sent back with both numbers and "cut it to what the issue needs, or say why each part is needed", stop 2 one taste call, stop 3 nothing more, no FAIL
+  Error: AC1 #324.5829869b a change of 189 lines against a usual 17 for a feature is sent back once with the numbers; stop 1 was let through: PASS 1/1 · next: you · receipt
+  ❯ size.test.ts:55:5
+
+FAIL  unreached.test.ts > AC4 #324.a94619b4 changed files neither the plan nor a check reaches: listed, sent back once, then one taste call with the diff > AC4 #324.a94619b4 src/billing.js is listed apart from src/auth.js and src/clock.js, sent back at stop 1, then one taste call with its diff at stop 2, nothing more at stop 3
+  Error: AC4 #324.a94619b4 src/billing.js is changed and neither the plan (src/auth.js) nor any check (they load src/auth.js and src/clock.js) reaches it: the claim must list it apart from those two; lists naming it: []; the claim's record is claim.made at log_pos 18 {"task_ref":"session:49810dd44c134628b03fc0e6f5938985#0","attempt":1,"commit":"d902ec2ea09b66369a23a1363d42fa149ed461ff","scope":"session","predictions":[],"hash":"5bc018c9690600efd3548cd2d976d340ca2b00199f5054f9189c7bd4cf581ef4"}; verdict.made at log_pos 71 {"outcome":"PASS","verdict":"verdict:01M6HRGF76H1QTCQ0ZXKZ043SN","claim":"claim:01M6HRGEFD0YZK26941SSDY8Q2","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run"],"requirements":[{"req":"req:session49810dd44c134628b03fc0e6f59389850#R1","outcome":"PASS","check":".deepbuild/checks/expired-token.sh","depth":"unit","oracle":"code","ru …
+  ❯ unreached.test.ts:53:5

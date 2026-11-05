@@ -210,3 +210,14 @@ impl Shaper {
         }
     }
 }
+
+/// Default_Ignorable_Code_Point (DerivedCoreProperties.txt at Unicode 17.0.0): code points such as
+/// joiners, variation selectors and tags, which draw nothing of their own, so no face needs a glyph
+/// for one (#417: `text.glyph_missing`).
+pub fn is_default_ignorable(c: char) -> bool {
+    matches!(u32::from(c),
+        0x00AD | 0x034F | 0x061C | 0x115F..=0x1160 | 0x17B4..=0x17B5 | 0x180B..=0x180F
+        | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x206F | 0x3164 | 0xFE00..=0xFE0F
+        | 0xFEFF | 0xFFA0 | 0xFFF0..=0xFFF8 | 0x1BCA0..=0x1BCA3 | 0x1D173..=0x1D17A
+        | 0xE0000..=0xE0FFF)
+}

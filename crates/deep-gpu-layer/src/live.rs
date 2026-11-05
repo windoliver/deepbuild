@@ -16,12 +16,19 @@ use std::time::Instant;
 use deep_canvas::budget::{self, Class, Limits};
 use deep_canvas::camera::Offsets;
 use deep_canvas::document::check_in;
+use deep_effects_render::docops::{self, item_of_mark, DocOps, Drew};
 use deep_canvas::registry::{BuildSet, Registry, Sealed};
 use deep_canvas::show::{stamp, Writer, WriterKind};
 use deep_canvas_scene3d::frames::Frames;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::Labels;
-use deep_gpu::cache::{self, Cache, Reader};
+use deep_gpu::cache::{self, Cache, Reader, Retired};
+
+/// A shared result: `test.gpu`'s texture or mesh in the test build, nothing otherwise.
+#[cfg(feature = "test-meter")]
+type Made = crate::testgpu::Made;
+#[cfg(not(feature = "test-meter"))]
+type Made = ();
 use deep_gpu::compile::{CompileThread, Compiling, THREAD as COMPILE_THREAD};
 use deep_gpu::device::{Backend, Device};
 use deep_gpu::memory;
@@ -32,7 +39,9 @@ use deep_gpu::surface::Path;
 use serde_json::{json, Map, Value};
 
 use crate::frames::hex;
-use crate::liveview::{compile_upscale, surface_of, Drawing, Kit, Timer, Upscale, View, SLOTS};
+use crate::liveview::{
+    compile_upscale, surface_of, Content, Drawing, Kit, Timer, Upscale, View, SLOTS,
+};
 use crate::{refused, App, Planted};
 use deep_scene3d_render::surface::Surface;
 
@@ -54,6 +63,14 @@ pub struct Plants {
     shares_meter_with_worker: bool,
     exports_live_surface: bool,
     upscale: deep_scene3d_render::surface::Planted,
+    /// #420 AC7's wrong cache: a result's memory goes back when a revision drops its last
+    /// reader, while a frame that binds it is still in flight.
+    releases_at_revision: bool,
+    /// #429's: the emitter's and the check's planted programs; a render-back that draws
+    /// live-only operators; a core that calls a frame drawn with a fallback settled.
+    ops: (deep_canvas_effects::emit::Options, deep_canvas_effects::check::CheckOptions),
+    render_back_live_only: bool,
+    settles_with_fallback: bool,
 }
 
 impl Plants {
@@ -70,6 +87,7 @@ impl Plants {
             sums_pass_intervals: p == Some(Planted::SumsPassIntervals),
             allocates_per_frame: p == Some(Planted::AllocatesPerFrame),
             compiles_at_swap: p == Some(Planted::CompilesAtSwap),
+            releases_at_revision: p == Some(Planted::ReleasesAtRevision),
             cache: cache::Planted {
                 charges_first_holder: p == Some(Planted::ChargesFirstHolder),
                 keeps_unread: p == Some(Planted::KeepsUnreadResults),
@@ -77,18 +95,20 @@ impl Plants {
             shares_meter_with_worker: p == Some(Planted::SharesMeterWithWorker),
             exports_live_surface: p == Some(Planted::ExportsLiveSurface),
             upscale: crate::session3::upscale_planted(p),
+            ops: crate::effects::operator_plants(p),
+            render_back_live_only: p == Some(Planted::RenderBackDrawsLiveOnly),
+            settles_with_fallback: p == Some(Planted::SettlesWithFallback),
         }
     }
 }
 
-/// The build's sealed set: every shipped canvas module except effects, which the live path draws
-/// none of; in a `test-meter` build, also `test.gpu`.
+/// The build's sealed set: every shipped canvas module; in a `test-meter` build, also `test.gpu`.
 pub fn sealed() -> &'static Sealed {
     static SEALED: OnceLock<Sealed> = OnceLock::new();
     SEALED.get_or_init(|| {
+        // Effects is in the set for its operator items (#429), which the live path draws.
         let registry = crate::plugin::shipped_modules()
             .into_iter()
-            .filter(|m| m.manifest.name != "effects")
             .fold(Registry::new(BuildSet::Full), Registry::with);
         #[cfg(feature = "test-meter")]
         let registry = registry.with(deep_canvas_test_modules::test_gpu());
@@ -117,6 +137,8 @@ enum Purpose {
     RenderBack,
     Export,
     FrameBudget,
+    /// A check that needs the frame (#429).
+    PixelCheck,
 }
 
 impl Purpose {
@@ -125,6 +147,7 @@ impl Purpose {
             "render_back" => Purpose::RenderBack,
             "export" => Purpose::Export,
             "frame_budget" => Purpose::FrameBudget,
+            "pixel_check" => Purpose::PixelCheck,
             _ => return None,
         })
     }
@@ -134,6 +157,7 @@ impl Purpose {
             Purpose::RenderBack => "render_back",
             Purpose::Export => "export",
             Purpose::FrameBudget => "frame_budget",
+            Purpose::PixelCheck => "pixel_check",
         }
     }
 }
@@ -142,9 +166,15 @@ enum Event {
     Open(Open),
     Close(String),
     Revise(String, PathBuf),
+    /// #420's fault fixture: the session's frame is encoded as usual and handed to the queue
+    /// only once frame `until` is presented, so it is in flight across the frames between.
+    Hold(String, u64),
     Camera(String, f64),
     Rung(String, Rung),
     Canonical(String, Purpose, u64, [u32; 2]),
+    /// A window shown or hidden, focused or not, from this frame on: the headless window has no
+    /// occlusion or activation of its own, so the call says what the app's window would.
+    Window(usize, Option<bool>, Option<bool>),
 }
 
 struct Charge {
@@ -176,6 +206,10 @@ struct Reports {
     memory: bool,
     allocs: bool,
     meter: bool,
+    /// #420: the fence record, each view's bound results, and the device's errors.
+    fences: bool,
+    binds: bool,
+    errors: bool,
 }
 
 struct Args {
@@ -193,6 +227,8 @@ struct Args {
     stub: Option<Stub>,
     battery: Vec<(u64, f64, bool)>,
     assets: BTreeMap<String, PathBuf>,
+    /// #429's test hook: the operator items whose pipelines the device rejects.
+    fail_pipelines: Vec<String>,
 }
 
 fn pair(v: &Value) -> Option<[u32; 2]> {
@@ -306,6 +342,14 @@ fn parse(call: &Value) -> Result<Args, Value> {
                 return Err(bad("revise is {session, doc}"));
             };
             Event::Revise(s.to_string(), PathBuf::from(d))
+        } else if let Some(h) = e.get("hold") {
+            let (Some(s), Some(until)) = (h["session"].as_str(), h["until"].as_u64()) else {
+                return Err(bad("hold is {session, until}"));
+            };
+            if until <= frame {
+                return Err(bad("a hold ends after its frame"));
+            }
+            Event::Hold(s.to_string(), until)
         } else if let Some(c) = e.get("camera") {
             let (Some(s), Some(a)) = (c["session"].as_str(), c["azimuth"].as_f64()) else {
                 return Err(bad("camera is {session, azimuth}"));
@@ -329,9 +373,26 @@ fn parse(call: &Value) -> Result<Args, Value> {
                 return Err(bad("canonical is {session, purpose, frame, size}"));
             };
             Event::Canonical(s.to_string(), p, f, size)
+        } else if let Some(w) = e.get("window_state") {
+            let window = match w.get("window") {
+                None | Some(Value::Null) => Some(0),
+                Some(id) => windows.iter().position(|x| Some(x.as_str()) == id.as_str()),
+            };
+            let flag = |key: &str| match w.get(key) {
+                None => Ok(None),
+                Some(v) => v.as_bool().map(Some).ok_or(()),
+            };
+            let (Some(window), Ok(visible), Ok(focused)) =
+                (window, flag("visible"), flag("focused"))
+            else {
+                return Err(bad(
+                    "window_state is {window?, visible?: bool, focused?: bool}",
+                ));
+            };
+            Event::Window(window, visible, focused)
         } else {
             return Err(bad(
-                "an event is open, close, revise, camera, rung or canonical",
+                "an event is open, close, revise, hold, camera, rung, canonical or window_state",
             ));
         };
         events.push((frame, ev));
@@ -346,7 +407,14 @@ fn parse(call: &Value) -> Result<Args, Value> {
             Some("memory") => reports.memory = true,
             Some("meter") => reports.meter = true,
             Some("allocs") if test_build => reports.allocs = true,
-            _ => return Err(bad("report holds passes, hashes, memory, allocs or meter")),
+            Some("fences") => reports.fences = true,
+            Some("binds") => reports.binds = true,
+            Some("errors") => reports.errors = true,
+            _ => {
+                return Err(bad(
+                    "report holds passes, hashes, memory, allocs, meter, fences, binds or errors",
+                ))
+            }
         }
     }
     let stub = match call.get("stub_meter") {
@@ -371,6 +439,16 @@ fn parse(call: &Value) -> Result<Args, Value> {
             }
         }
     }
+    let fail_pipelines: Vec<String> = match call.get("fail_pipelines") {
+        None => Vec::new(),
+        Some(_) if !test_build => return Err(bad("fail_pipelines is a test build's")),
+        Some(f) => f
+            .as_array()
+            .ok_or_else(|| bad("fail_pipelines is a list of operator items"))?
+            .iter()
+            .filter_map(|x| x.as_str().map(String::from))
+            .collect(),
+    };
     let mut assets = BTreeMap::new();
     for (sha, path) in call["assets"].as_object().into_iter().flatten() {
         assets.insert(
@@ -379,6 +457,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         );
     }
     Ok(Args {
+        fail_pipelines,
         named: call.get("windows").is_some(),
         windows,
         look,
@@ -448,7 +527,7 @@ struct Rev {
     number: u64,
     doc: Value,
     /// Its compiled frames, until it latches and its view takes them.
-    frames: Option<Frames>,
+    frames: Option<Content>,
     class: Option<Class>,
     limits: Limits,
     fit: Estimate,
@@ -490,6 +569,10 @@ struct Session {
     view_changed: bool,
     over_ops: u32,
     ops_resolution: f64,
+    /// Each composed operator's resolution (1, 0.5, 0.25 or 0) and its frames over twice its
+    /// declared cost in a row (#429).
+    op_resolution: BTreeMap<String, f64>,
+    op_over: BTreeMap<String, u32>,
     surface: Surface,
     /// Each revision's check time, ms, from receipt to its verdict (#386).
     checks: BTreeMap<u64, f64>,
@@ -530,7 +613,7 @@ fn issue(code: &str, path: &str, actual: Value, what: &str) -> Value {
 /// A revision that passed admission.
 struct Admitted {
     doc: Value,
-    frames: Frames,
+    frames: Content,
     class: Option<Class>,
     limits: Limits,
     fit: Estimate,
@@ -597,16 +680,26 @@ fn admit(
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
     }
-    let frames = program
-        .and_then(|p| Frames::with_program(&doc, p, look, labels))
-        .map_err(|r| {
-            vec![issue(
-                r.code,
-                &r.path,
-                Value::Null,
-                "the document can't be evaluated",
-            )]
-        })?;
+    let unevaluated = |(code, path): (&str, String)| {
+        vec![issue(
+            code,
+            &path,
+            Value::Null,
+            "the document can't be evaluated",
+        )]
+    };
+    // A document with no camera is 2D, as a chart is, and draws by marks2d (#397).
+    let frames = if crate::flat::is_flat(&doc) {
+        Content::Flat(Box::new(
+            crate::flat::Flat::new(&doc, &look.roles).map_err(unevaluated)?,
+        ))
+    } else {
+        Content::Scene(Box::new(
+            program
+                .and_then(|p| Frames::with_program(&doc, p, look, labels))
+                .map_err(|r| unevaluated((r.code, r.path)))?,
+        ))
+    };
     let moving = camera_moves(&doc);
     let base_scale = if moving { limits.scale_moving } else { 1.0 };
     let effects = doc["items"]
@@ -657,16 +750,24 @@ fn camera_moves(doc: &Value) -> bool {
 // ------------------------------------------------------------------------------------------
 // What a frame reports, kept in buffers reserved before the first frame.
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 struct ViewRow {
     session: usize,
+    /// The results its draws bound (#420).
+    binds: Vec<String>,
     rung: Option<Rung>,
     drawn: bool,
+    /// Its window hidden, or unfocused under a class that pauses then: nothing drawn or metered.
+    paused: bool,
     gpu: f64,
     cpu: f64,
     scale: f64,
     upscale: &'static str,
     history: u32,
+    /// Whether the frame is settled: never while an operator draws its fallback.
+    settled: bool,
+    /// Each composed operator: its item, resolution and what it drew.
+    ops: Vec<(String, f64, &'static str)>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -688,6 +789,8 @@ struct FrameRow {
     views: (usize, usize),
     passes: (usize, usize),
     allocs: Option<u64>,
+    /// When its views presented, in ms from the first frame's due time; `None` when none drew.
+    presented_ms: Option<f64>,
     /// Its pixel hashes and memory, when the call reports them.
     extra: Map<String, Value>,
 }
@@ -734,10 +837,19 @@ struct Live {
     /// window opens, before any change needs them.
     warming: Option<Compiling<Arc<Upscale>>>,
     labels: Labels,
-    #[cfg(feature = "test-meter")]
-    results: Cache<crate::testgpu::Made>,
-    #[cfg(not(feature = "test-meter"))]
-    results: Cache<()>,
+    results: Cache<Made>,
+    /// Results out of the cache whose memory waits on a submitted frame that binds them: each
+    /// with its writer and the last frame that bound it (#420).
+    retired: Vec<(Retired<Made>, String, u64)>,
+    /// The last frame that bound each result.
+    last_bound: BTreeMap<String, u64>,
+    /// Frames submitted, or held, whose `gpu_done` hasn't signalled.
+    in_flight: std::collections::BTreeSet<u64>,
+    /// The held frames: session, frame, until, and the frame's encoded work.
+    holds: Vec<(usize, u64, u64)>,
+    held: Vec<(usize, u64, u64, wgpu::CommandBuffer)>,
+    fences: Vec<Value>,
+    errors: Vec<Value>,
     sessions: Vec<Session>,
     next_rev: u64,
     frames: Vec<FrameRow>,
@@ -746,7 +858,11 @@ struct Live {
     changes: Vec<ChangeRow>,
     app: AppMeter,
     canonicals: Vec<Value>,
+    /// Each operator step-down, told to its writer (#429).
+    op_told: Vec<Value>,
     planted_log: Vec<Vec<f64>>,
+    /// Each window's (visible, focused), by index in `args.windows`.
+    shown: Vec<(bool, bool)>,
 }
 
 impl Live {
@@ -774,6 +890,13 @@ impl Live {
             warming,
             labels: Labels::new(),
             results: Cache::new(plants.cache),
+            retired: Vec::new(),
+            last_bound: BTreeMap::new(),
+            in_flight: Default::default(),
+            holds: Vec::new(),
+            held: Vec::new(),
+            fences: Vec::new(),
+            errors: Vec::new(),
             sessions: Vec::new(),
             next_rev: 1,
             frames: Vec::with_capacity(frames),
@@ -782,7 +905,9 @@ impl Live {
             changes: Vec::new(),
             app: AppMeter::new(plants.ladder),
             canonicals: Vec::new(),
+            op_told: Vec::new(),
             planted_log: Vec::new(),
+            shown: vec![(true, true); args.windows.len()],
             device,
             args,
             plants,
@@ -908,6 +1033,8 @@ impl Live {
             view_changed: false,
             over_ops: 0,
             ops_resolution: 1.0,
+            op_resolution: BTreeMap::new(),
+            op_over: BTreeMap::new(),
             surface: o.surface,
             checks: BTreeMap::new(),
         });
@@ -1018,7 +1145,9 @@ impl Live {
         let failed = rev.placed.iter().find_map(|p| {
             let (device, pipes, assets) = (&self.device, &self.kit.test, &self.args.assets);
             self.results
-                .read(&p.key, &reader, || pipes.make(device, &p.need, assets))
+                .read(&p.key, &reader, || {
+                    pipes.make(device, &p.need, assets, &p.key)
+                })
                 .err()
         });
         #[cfg(not(feature = "test-meter"))]
@@ -1089,9 +1218,97 @@ impl Live {
                 &self.results,
             );
         }
+        // The revision's composed operators (#429): built here, off the frame, each pipeline
+        // checked on the device; one the device rejects raises operator_compile to its writer.
+        if let Some(v) = ses.view.as_mut() {
+            let (options, planted) = self.plants.ops;
+            v.ops = DocOps::new(&self.device, &rev.doc, options, planted, &self.args.fail_pipelines);
+            v.canonical_draws_live_only = self.plants.render_back_live_only;
+            for i in v.ops.issues() {
+                if !ses.issues.contains(&i) {
+                    ses.issues.push(i);
+                }
+            }
+        }
         let old = ses.current.replace(rev);
         if let Some(old) = old {
-            self.results.release(old.id);
+            let writer = ses.writer.clone();
+            for r in self.results.retire(old.id) {
+                self.retire(r, &writer);
+            }
+        }
+    }
+
+    /// A result its last revision dropped: out of the cache at once, its memory back once no
+    /// frame in flight binds it; the planted cache gives it back now (#420 AC7).
+    fn retire(&mut self, r: Retired<Made>, writer: &str) {
+        let last = self.last_bound.get(&r.key).copied().unwrap_or(0);
+        if self.plants.releases_at_revision {
+            #[cfg(feature = "test-meter")]
+            if let crate::testgpu::Made::Texture(_, texture) = &r.result {
+                texture.destroy();
+            }
+            self.fence("release", None, None, Some((&r.key, r.bytes.unwrap_or(0))));
+            return;
+        }
+        self.retired.push((r, writer.to_string(), last));
+    }
+
+    /// Gives back each retired result no frame in flight binds.
+    fn release_retired(&mut self) {
+        let mut keep = Vec::new();
+        for (r, writer, last) in std::mem::take(&mut self.retired) {
+            if self.in_flight.iter().any(|f| *f <= last) {
+                keep.push((r, writer, last));
+                continue;
+            }
+            let (key, bytes) = (r.key.clone(), r.bytes.unwrap_or(0));
+            drop(r);
+            memory::drain(&self.device);
+            self.fence("release", None, None, Some((&key, bytes)));
+        }
+        self.retired = keep;
+    }
+
+    /// One fence event, numbered in the order they came.
+    fn fence(
+        &mut self,
+        event: &str,
+        session: Option<usize>,
+        frame: Option<u64>,
+        resource: Option<(&str, u64)>,
+    ) {
+        let mut e = json!({"seq": self.fences.len(), "event": event});
+        if let Some(s) = session {
+            e["session"] = json!(self.sessions[s].id);
+        }
+        if let Some(f) = frame {
+            e["frame"] = json!(f);
+        }
+        if let Some((key, bytes)) = resource {
+            e["resource"] = json!(key);
+            e["bytes"] = json!(bytes);
+        }
+        self.fences.push(e);
+    }
+
+    /// What the device raised through its uncaptured-error callback, on `frame`.
+    fn raised(&mut self, frame: u64, session: Option<usize>, raised: Vec<(String, String)>) {
+        for (kind, message) in raised {
+            let resource = self
+                .last_bound
+                .keys()
+                .find(|k| message.contains(k.as_str()))
+                .cloned();
+            let code = if message.contains("destroyed") {
+                "destroyed_resource"
+            } else {
+                kind.as_str()
+            };
+            self.errors.push(json!({
+                "frame": frame, "session": session.map(|s| self.sessions[s].id.clone()),
+                "code": code, "resource": resource, "message": message,
+            }));
         }
     }
 
@@ -1150,6 +1367,81 @@ impl Live {
         }
     }
 
+    /// Whether the device rejected the pipeline of operator `item` in session `s`'s view.
+    fn failed(&self, s: usize, item: &str) -> bool {
+        self.sessions[s].view.as_ref().is_some_and(|v| {
+            v.ops
+                .ops
+                .iter()
+                .any(|o| o.item == item && o.failed.is_some())
+        })
+    }
+
+    /// The operator meter (#429): each composed operator the view drew is measured against its
+    /// declared cost (the stub's factor, or its pass charge against its declared ns per pixel at
+    /// its resolution); one over twice its declaration for 30 frames in a row steps its own
+    /// resolution down a rung (half, quarter, off), told to its writer. Other writers' operators
+    /// and views are untouched.
+    fn operator_meter(&mut self, v: usize, frame: u64, charges: &[f64], passes_start: usize) {
+        let s = self.views[v].session;
+        if !self.views[v].drawn {
+            return;
+        }
+        let size = self.sessions[s].size.unwrap_or([1, 1]);
+        let rows = self.views[v].ops.clone();
+        for (item, res, drew) in rows {
+            if drew != Drew::Operator.name() {
+                continue;
+            }
+            let stub = self
+                .args
+                .stub
+                .as_ref()
+                .and_then(|st| st.operators.get(&item).copied());
+            let factor = stub.or_else(|| {
+                let declared = self.sessions[s]
+                    .view
+                    .as_ref()?
+                    .ops
+                    .ops
+                    .iter()
+                    .find(|o| o.item == item)?
+                    .declared_ns;
+                let mark = docops::mark_of(&item);
+                let px = f64::from(size[0]) * f64::from(size[1]) * res * res;
+                let measured: f64 = self.passes[passes_start..]
+                    .iter()
+                    .zip(charges)
+                    .filter(|(p, _)| p.session == Some(s) && p.name == mark)
+                    .map(|(_, c)| *c)
+                    .sum();
+                let want = declared * px / 1e6;
+                (want > 0.0 && measured > 0.0).then(|| measured / want)
+            });
+            let Some(f) = factor else {
+                continue;
+            };
+            let ses = &mut self.sessions[s];
+            let over = ses.op_over.entry(item.clone()).or_insert(0);
+            *over = if f > 2.0 { *over + 1 } else { 0 };
+            if *over >= meter::DOWN_AFTER {
+                *over = 0;
+                let (next, rung) = if res > 0.5 {
+                    (0.5, "half")
+                } else if res > 0.25 {
+                    (0.25, "quarter")
+                } else {
+                    (0.0, "off")
+                };
+                ses.op_resolution.insert(item.clone(), next);
+                self.op_told.push(json!({
+                    "frame": frame, "session": ses.id, "writer": ses.writer, "scope": "operator",
+                    "operator": item, "rung": rung, "reason": "operator_cost", "factor": f,
+                }));
+            }
+        }
+    }
+
     fn stub_charge(&self, writer: &str, frame: u64) -> Option<(f64, f64)> {
         let list = self.args.stub.as_ref()?.writers.get(writer)?;
         list.iter()
@@ -1175,9 +1467,16 @@ impl Live {
         // The window presents frame k no sooner than (k − 1) ÷ fps after the first, as a display
         // does, so work off-screen (a rung's compile) runs beside the frames it would in the app.
         let origin = Instant::now();
+        // The last present and the ambient cap of the views it showed (the budget class table).
+        let mut last: Option<(Instant, u32)> = None;
         for frame in 1..=self.args.frames {
-            let due = origin
+            let mut due = origin
                 + std::time::Duration::from_secs_f64((frame - 1) as f64 / self.args.fps as f64);
+            // A class's ambient cap holds its views' presents at least 1 ÷ cap apart, however
+            // fast the call's clock runs; frame k still shows t = (k − 1) ÷ fps.
+            if let Some((at, cap)) = last.filter(|(_, cap)| u64::from(*cap) < self.args.fps) {
+                due = due.max(at + std::time::Duration::from_secs_f64(1.0 / f64::from(cap)));
+            }
             if let Some(wait) = due.checked_duration_since(Instant::now()) {
                 std::thread::sleep(wait);
             }
@@ -1188,6 +1487,7 @@ impl Live {
             let began = Instant::now();
             canonical_queue.clear();
             self.take_effect(frame);
+            self.release_retired();
             while next_event < events.len() && events[next_event].0 == frame {
                 match &events[next_event].1 {
                     Event::Open(o) => self.open(frame, o),
@@ -1202,6 +1502,11 @@ impl Live {
                             .filter(|s| self.sessions[*s].state == State::Live)
                         {
                             self.revise(s, doc);
+                        }
+                    }
+                    Event::Hold(id, until) => {
+                        if let Some(s) = self.find(id) {
+                            self.holds.push((s, frame, *until));
                         }
                     }
                     Event::Camera(id, azimuth) => {
@@ -1226,6 +1531,11 @@ impl Live {
                             canonical_queue.push((s, *purpose, *of, *size));
                         }
                     }
+                    Event::Window(w, visible, focused) => {
+                        let shown = &mut self.shown[*w];
+                        shown.0 = visible.unwrap_or(shown.0);
+                        shown.1 = focused.unwrap_or(shown.1);
+                    }
                 }
                 next_event += 1;
             }
@@ -1244,16 +1554,36 @@ impl Live {
                     .create_command_encoder(&Default::default())
             });
             let views_start = self.views.len();
+            let mut drew = Vec::new();
             for s in 0..self.sessions.len() {
                 if self.sessions[s].state != State::Live {
                     continue;
                 }
+                // Hidden, or unfocused under a class that pauses then, it draws and submits nothing.
+                let (visible, focused) = self.shown[self.sessions[s].window];
+                let paused = !self.sessions[s]
+                    .class()
+                    .unwrap_or(Class::Figure)
+                    .draws(visible, focused);
+                let hold = self
+                    .holds
+                    .iter()
+                    .find(|h| h.0 == s && h.1 == frame && !paused)
+                    .map(|h| h.2);
+                let mut held = hold.map(|_| {
+                    let enc = self
+                        .device
+                        .device
+                        .create_command_encoder(&Default::default());
+                    (enc, Timer::new(&self.device))
+                });
                 let rung = self.sessions[s].drawn;
-                let drawn = match rung {
-                    Rung::Freeze => false,
-                    Rung::Hz30 => frame % 2 == 1,
-                    _ => true,
-                };
+                let mut drawn = !paused
+                    && match rung {
+                        Rung::Freeze => false,
+                        Rung::Hz30 => frame % 2 == 1,
+                        _ => true,
+                    };
                 let started = Instant::now();
                 let ses = &mut self.sessions[s];
                 let drawing = Drawing {
@@ -1261,42 +1591,137 @@ impl Live {
                     offsets: ses.offsets,
                     effects_resolution: ses.ops_resolution,
                     canonical: false,
+                    settles: self.in_flight.is_empty(),
                 };
+                let res = &ses.op_resolution;
                 let (scale, upscale, history) = match ses.view.as_mut() {
                     Some(view) => {
+                        view.op_resolution.clone_from(res);
                         if drawn {
-                            let _ = view.draw(
-                                &self.device,
-                                &self.kit,
-                                &self.args.look,
-                                t,
-                                &drawing,
-                                &mut self.labels,
-                                &mut encoder,
-                                &mut timer,
-                                s,
-                            );
+                            let (enc, tim) = match held.as_mut() {
+                                Some((e, t)) => {
+                                    t.begin_frame();
+                                    (e, t)
+                                }
+                                None => (&mut encoder, &mut timer),
+                            };
+                            drawn = view
+                                .draw(
+                                    &self.device,
+                                    &self.kit,
+                                    &self.args.look,
+                                    t,
+                                    &drawing,
+                                    &mut self.labels,
+                                    enc,
+                                    tim,
+                                    s,
+                                )
+                                .unwrap_or(true);
                         }
                         (view.drew.0, view.drew.1, view.history_frames(&drawing))
                     }
                     None => (1.0, "none", 0),
                 };
                 cpu_of[s % 64] = started.elapsed().as_secs_f64() * 1e3;
+                #[cfg(feature = "test-meter")]
+                let binds: Vec<String> = match (drawn, self.sessions[s].view.as_ref()) {
+                    (true, Some(v)) => v.test.bound.clone(),
+                    _ => Vec::new(),
+                };
+                #[cfg(not(feature = "test-meter"))]
+                let binds: Vec<String> = Vec::new();
+                for k in &binds {
+                    self.last_bound.insert(k.clone(), frame);
+                }
+                match (held, hold) {
+                    (Some((mut enc, tim)), Some(until)) => {
+                        tim.resolve(&mut enc);
+                        self.held.push((s, frame, until, enc.finish()));
+                        self.in_flight.insert(frame);
+                    }
+                    _ if drawn => drew.push(s),
+                    _ => {}
+                }
+                let ops: Vec<(String, f64, &'static str)> = self.sessions[s]
+                    .view
+                    .as_ref()
+                    .map(|v| {
+                        v.op_rows
+                            .iter()
+                            .map(|r| (r.item.clone(), r.resolution, r.drew.name()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let settled = self.plants.settles_with_fallback
+                    || !ops.iter().any(|o| o.2 == Drew::Fallback.name() && self.failed(s, &o.0));
                 self.views.push(ViewRow {
                     session: s,
+                    binds,
                     rung: Some(rung),
                     drawn,
+                    paused,
                     gpu: 0.0,
                     cpu: cpu_of[s % 64],
                     scale,
                     upscale,
                     history,
+                    settled,
+                    ops,
                 });
             }
             timer.resolve(&mut encoder);
             let cpu_ms = began.elapsed().as_secs_f64() * 1e3;
             deep_gpu::alloc::outside(|| self.device.queue.submit([encoder.finish()]));
+            for &s in &drew {
+                self.fence("submit", Some(s), Some(frame), None);
+            }
             memory::drain(&self.device);
+            for &s in &drew {
+                self.fence("gpu_done", Some(s), Some(frame), None);
+                self.fence("present", Some(s), Some(frame), None);
+            }
+            let presented = (!drew.is_empty()).then(Instant::now);
+            if let Some(at) = presented {
+                let cap = drew
+                    .iter()
+                    .filter_map(|&s| {
+                        self.sessions[s]
+                            .class()
+                            .unwrap_or(Class::Figure)
+                            .ambient_fps()
+                    })
+                    .min();
+                last = cap.map(|c| (at, c));
+            }
+            let raised = self
+                .device
+                .take_raised()
+                .into_iter()
+                .map(|r| (r.kind.to_string(), r.error))
+                .collect();
+            self.raised(frame, None, raised);
+            // A held frame goes to the queue once its `until` is presented, and is done then.
+            let due: Vec<usize> = (0..self.held.len())
+                .filter(|&i| self.held[i].2 == frame)
+                .collect();
+            for i in due.into_iter().rev() {
+                let (s, of, _, buffer) = self.held.remove(i);
+                let scope = self
+                    .device
+                    .device
+                    .push_error_scope(wgpu::ErrorFilter::Validation);
+                deep_gpu::alloc::outside(|| self.device.queue.submit([buffer]));
+                self.fence("submit", Some(s), Some(of), None);
+                let error = crate::effects::pollster_block(scope.pop());
+                memory::drain(&self.device);
+                self.in_flight.remove(&of);
+                self.fence("gpu_done", Some(s), Some(of), None);
+                self.fence("present", Some(s), Some(of), None);
+                if let Some(e) = error {
+                    self.raised(of, Some(s), vec![("validation".to_string(), e.to_string())]);
+                }
+            }
             timer.read(&self.device);
             let views_end = self.views.len();
             for ses in &mut self.sessions {
@@ -1414,6 +1839,9 @@ impl Live {
             // The meter: each writer's charges and the operator meter, the app's one budget
             // across every window, then each layer's ladder.
             for v in views_start..views_end {
+                if self.views[v].paused {
+                    continue;
+                }
                 let s = self.views[v].session;
                 let (mut gpu, mut cpu) = charged[s % 64];
                 if !self.views[v].drawn {
@@ -1438,6 +1866,7 @@ impl Live {
                         ses.ops_resolution = 0.5;
                     }
                 }
+                self.operator_meter(v, frame, &charges[..n], passes_start);
             }
             // The app's frame is every window's views; its limit the loosest class among them
             // (none if one has none), so no writer is held to a tighter class's share of the app.
@@ -1451,6 +1880,7 @@ impl Live {
                 self.app.frame(
                     views
                         .iter()
+                        .filter(|v| !v.paused)
                         .map(|v| (v.session, sessions[v.session].window, v.gpu)),
                     limit,
                 )
@@ -1458,6 +1888,9 @@ impl Live {
             let app_over = self.app.last_over;
             let mut stepped_for_health = false;
             for v in views_start..views_end {
+                if self.views[v].paused {
+                    continue;
+                }
                 let (s, gpu, cpu) = (self.views[v].session, self.views[v].gpu, self.views[v].cpu);
                 let limits = self.sessions[s].limits();
                 if let Some(step) = self.sessions[s].ladder.frame(gpu, cpu, &limits, app_over) {
@@ -1544,6 +1977,7 @@ impl Live {
                 views: (views_start, views_end),
                 passes: (passes_start, self.passes.len()),
                 allocs,
+                presented_ms: presented.map(|at| at.duration_since(origin).as_secs_f64() * 1e3),
                 extra,
             });
         }
@@ -1561,6 +1995,12 @@ impl Live {
             for (key, bytes) in self.results.charged(writer) {
                 e.0 += bytes.unwrap_or(0);
                 e.1.push(json!({"key": key, "bytes": bytes.unwrap_or(0)}));
+            }
+            // A result out of the cache still counts until its memory goes back (#420).
+            for (r, w, _) in &self.retired {
+                if w == writer {
+                    e.0 += r.bytes.unwrap_or(0);
+                }
             }
         }
         let (entries, bytes) = self.results.totals();
@@ -1607,6 +2047,8 @@ impl Live {
             surface,
             &self.args.assets,
             &mut self.labels,
+            &self.plants,
+            &self.args.fail_pipelines,
         );
         if let Some(o) = c.as_object_mut() {
             o.insert("frame".into(), json!(frame));
@@ -1633,18 +2075,23 @@ impl Live {
                         let mut o = json!({
                             "session": ses.id, "writer": ses.writer, "window": self.args.windows[ses.window],
                             "rung": v.rung.unwrap_or(Rung::Base).name(),
-                            "drawn": v.drawn, "charged_gpu_ms": v.gpu, "charged_cpu_ms": v.cpu,
+                            "drawn": v.drawn, "paused": v.paused, "charged_gpu_ms": v.gpu, "charged_cpu_ms": v.cpu,
                             "internal_scale": v.scale, "upscale": v.upscale, "history_frames": v.history,
+                            "settled": v.settled,
+                            "operators": v.ops.iter().map(|(item, res, drew)| json!({"operator": item, "item": item, "resolution": res, "drew": drew})).collect::<Vec<_>>(),
                         });
                         if let Some(h) = f.extra.get("hashes") {
                             o["pixel_hash"] = h.get(v.session.to_string()).cloned().unwrap_or(Value::Null);
+                        }
+                        if self.args.reports.binds {
+                            o["binds"] = json!(v.binds);
                         }
                         o
                     })
                     .collect();
                 let mut o = json!({
                     "frame": f.frame, "gpu_ms": f.gpu_ms, "cpu_ms": f.cpu_ms,
-                    "gpu_source": source,
+                    "gpu_source": source, "presented_ms": f.presented_ms,
                     "views": views,
                 });
                 if self.args.reports.passes {
@@ -1663,6 +2110,7 @@ impl Live {
                             let mut o = json!({
                                 "name": name, "session": p.session.map(|s| sessions[s].id.clone()), "source": source,
                                 "start_ns": p.start_ns, "end_ns": p.end_ns, "charged_ms": p.charged_ms,
+                                "operator": item_of_mark(&name),
                             });
                             if !shares.is_null() {
                                 o["shares"] = shares;
@@ -1716,6 +2164,8 @@ impl Live {
                 })
             })
             .collect();
+        let mut told = told;
+        told.extend(self.op_told.iter().cloned());
         let session_rows: Vec<Value> = sessions
             .iter()
             .map(|s| {
@@ -1740,6 +2190,12 @@ impl Live {
             "backends": {"gpu": deep_gpu::seam::BACKEND.json()},
             "device_before": device_before,
         });
+        if self.args.reports.fences {
+            out["fences"] = json!(self.fences);
+        }
+        if self.args.reports.errors {
+            out["errors"] = json!(self.errors);
+        }
         if self.args.reports.meter {
             let mut rows: Vec<Value> = sessions
                 .iter()
@@ -1789,6 +2245,8 @@ fn render_canonical(
     surface: Option<Surface>,
     assets: &BTreeMap<String, PathBuf>,
     labels: &mut Labels,
+    plants: &Plants,
+    fail: &[String],
 ) -> Value {
     let _ = assets;
     let mut doc = doc.clone();
@@ -1797,7 +2255,8 @@ fn render_canonical(
         Ok(f) => f,
         Err(r) => return refused(r.code, r.path),
     };
-    let mut view = match View::new(device, Path::Copy, size, 1, frames, 1.0, 0, look, labels) {
+    let content = Content::Scene(Box::new(frames));
+    let mut view = match View::new(device, Path::Copy, size, 1, content, 1.0, 0, look, labels) {
         Ok(v) => v,
         Err(e) => return refused("no_view", e),
     };
@@ -1815,19 +2274,24 @@ fn render_canonical(
             writer: "canonical".into(),
         };
         for p in &placed {
-            if let Err(e) = results.read(&p.key, &reader, || kit.test.make(device, &p.need, assets))
-            {
+            if let Err(e) = results.read(&p.key, &reader, || {
+                kit.test.make(device, &p.need, assets, &p.key)
+            }) {
                 return refused("asset_unreadable", e);
             }
         }
         view.test.set(device, kit, &placed, loops, &results);
     }
+    let (options, planted) = plants.ops;
+    view.ops = DocOps::new(device, &doc, options, planted, fail);
+    view.canonical_draws_live_only = plants.render_back_live_only;
     let (rung, resolution) = live.unwrap_or((Rung::Base, 1.0));
     let drawing = Drawing {
         rung,
         offsets: Offsets::default(),
         effects_resolution: resolution,
         canonical: live.is_none() && surface.is_none(),
+        settles: false,
     };
     let mut timer = Timer::new(device);
     timer.begin_frame();
@@ -1847,8 +2311,10 @@ fn render_canonical(
     }
     device.queue.submit([encoder.finish()]);
     memory::drain(device);
+    // A canonical render reads its frame through a copy slot, which holds the frame's pixels
+    // only once it is finished (before #429 every canonical render hashed an empty slot).
     let pixels = (device.backend != Backend::Noop)
-        .then(|| view.pixels())
+        .then(|| view.finish(device).ok().and_then(|()| view.pixels()))
         .flatten();
     let mut operators: Vec<Value> = Vec::new();
     let mut seen = BTreeSet::new();
@@ -1862,8 +2328,29 @@ fn render_canonical(
             operators.push(json!({"operator": m.name, "resolution": res}));
         }
     }
+    // A frame drawn with an operator's fallback, its pipeline rejected, is still settling: a
+    // render-back of it is not presented, and a check that needs it is BLOCKED (#429).
+    let failed: Vec<&str> = view
+        .ops
+        .ops
+        .iter()
+        .filter(|o| o.failed.is_some())
+        .map(|o| o.item.as_str())
+        .collect();
+    let presented = failed.is_empty() || plants.settles_with_fallback;
+    let reason = (!presented).then(|| {
+        format!(
+            "settling: operator {} draws its fallback (operator_compile)",
+            failed.join(", ")
+        )
+    });
+    let verdict = match purpose {
+        Purpose::PixelCheck => Some(if presented { "PASS" } else { "BLOCKED" }),
+        _ => None,
+    };
     json!({
         "purpose": purpose.name(),
+        "presented": presented, "reason": reason, "verdict": verdict,
         "pixel_hash": pixels.map(|p| hex(&p)),
         "rung": rung.name(),
         "internal_scale": if live.is_some() { rung.scale(1.0) } else { view.drew.0 },
@@ -1890,6 +2377,7 @@ pub fn canonical(app: &mut App, call: &Value) -> Value {
         Err(e) => return bad(&format!("look: {e}")),
     };
     let fps = call["fps"].as_u64().unwrap_or(60).max(1) as i64;
+    let plants = Plants::of(app.planted);
     app.worker.call(move |state| {
         let device = match state.gpu.recover() {
             Ok(d) => d,
@@ -1923,6 +2411,8 @@ pub fn canonical(app: &mut App, call: &Value) -> Value {
             None,
             &BTreeMap::new(),
             &mut labels,
+            &plants,
+            &[],
         );
         if let Some(o) = c.as_object_mut() {
             o.insert("frame".into(), json!(frame));

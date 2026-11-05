@@ -29,10 +29,16 @@
 //!   checkout's top), or `unknown-reach-delete` (a delete run from a script file or over a pattern or a value
 //!   the line can't know, so what it deletes can't be worked out before it runs), or one that needs your
 //!   authority (#321): `push` (`git push`), `merge` (`gh pr merge`), `dispatch` (what `dispatch:workflow` reads),
-//!   `send` (`gh pr comment`, `gh issue comment`, `gh pr review`) or `delete` (`gh repo delete`,
+//!   `send` (`gh pr comment`, `gh issue comment`, `gh pr review`, or a `gh api` POST of a comment, a review
+//!   comment's reply or a review) or `delete` (`gh repo delete`,
 //!   `gh release delete`, `gh issue delete`).
 //! - `counts:<class>`: the tool counts as `read`, `change`, `send` or `destructive`, by the classes rules.json
 //!   holds; a tool they don't list counts as change, and one whose name starts with `delete_` as destructive.
+//!
+//! A call the reader couldn't read whole meets every entry it may be one of (#1097): a run whose program the line
+//! computes meets a `run:` entry whose argument globs its arguments fit and an `effect:` class whose words they fit,
+//! and a run nested past what the reader reads meets every entry. Its hit says what couldn't be read, so a block
+//! entry denies it and a watch or warn entry records it with that reason. An unread run never lowers a match.
 //!
 //! deep-hook reads rules.json as unreadable when an entry's `match` isn't one of these, so an entry newer than
 //! deep-hook never fails open.
@@ -40,7 +46,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::shell::{self, glob, lexical, real, Arg, Run};
+use crate::shell::{self, glob, lexical, real, Arg, Run, Unread};
 
 /// What deep-hook reads from one call: the runs of its shell command and the paths it writes.
 pub struct Call {
@@ -82,6 +88,9 @@ const EFFECTS: &[&str] = &[
     "send",
     "delete",
 ];
+
+/// How much of a line whose program it computes a match names, in characters.
+const LINE: usize = 200;
 
 /// The hub's login service, as `deep hub start` installs it (packages/hub/src/service.ts).
 const HUB_LABEL: &str = "com.deepbuild.hub";
@@ -186,8 +195,58 @@ impl Call {
         }
     }
 
-    /// Whether `pattern` reads this call.
+    /// Whether `pattern` reads this call, or may: what the reader couldn't read of it may be what `pattern` names.
     pub fn matches(&self, pattern: &str) -> Option<Hit> {
+        self.reads_whole(pattern).or_else(|| self.may_be(pattern))
+    }
+
+    /// A hit on a run the reader couldn't read whole, when what it does know of the run fits `pattern`.
+    fn may_be(&self, pattern: &str) -> Option<Hit> {
+        let (kind, rest) = pattern.split_once(':')?;
+        let fits = |run: &&Run| match run.unread {
+            Some(Unread::Depth) => true,
+            Some(Unread::Program) if kind == "run" => {
+                let wanted: Vec<&str> = rest.split_whitespace().skip(1).collect();
+                args_match(run, &wanted)
+            }
+            Some(Unread::Program) if kind == "effect" => programs(rest).iter().any(|p| {
+                let known = Run {
+                    program: p.to_string(),
+                    glob: false,
+                    unread: None,
+                    ..(*run).clone()
+                };
+                has_effect(&known, rest)
+            }),
+            _ => false,
+        };
+        let run = self.runs.iter().find(fits)?;
+        // A line nested that deep is long, and every entry it meets says this: the line is named only for a program
+        // the line computes, and only its start.
+        let what = match run.unread {
+            Some(Unread::Depth) => format!(
+                "it nests past what the reader reads, a depth of {} shells, substitutions or evals",
+                shell::DEPTH
+            ),
+            _ => {
+                let line = self.command.as_deref().unwrap_or_default();
+                let cut = line.char_indices().nth(LINE).map_or(line.len(), |(k, _)| k);
+                let more = if cut < line.len() { "…" } else { "" };
+                format!(
+                    "the line computes the program it runs, in {}{more}",
+                    &line[..cut]
+                )
+            }
+        };
+        Some(Hit {
+            detail: Some(format!(
+                "This call couldn't be read: {what}. It may be one this guard holds. Write the command out plainly and it can be read."
+            )),
+        })
+    }
+
+    /// Whether `pattern` reads this call from what the reader read of it.
+    fn reads_whole(&self, pattern: &str) -> Option<Hit> {
         let (kind, rest) = pattern.split_once(':')?;
         let hit = |detail: Option<String>| Some(Hit { detail });
         match kind {
@@ -359,51 +418,23 @@ impl Call {
     }
 
     fn effect(&self, class: &str) -> Option<Hit> {
-        let found = match class {
-            "cloud-resource" => self.runs.iter().find(|r| creates_cloud(r)),
-            "dependency" => self.runs.iter().find(|r| adds_dependency(r)),
-            "service" => self.runs.iter().find(|r| starts_service(r)),
-            "unknown-reach-delete" => self.runs.iter().find(|r| unknown_reach(r)),
-            "push" => self
-                .runs
-                .iter()
-                .find(|r| r.is("git") && git_rest(r).first().map(String::as_str) == Some("push")),
-            "merge" => self.runs.iter().find(|r| gh(r, &[&["pr", "merge"]])),
-            "dispatch" => self.runs.iter().find(|r| dispatch(r).is_some()),
-            "send" => self.runs.iter().find(|r| {
-                gh(
-                    r,
-                    &[&["pr", "comment"], &["issue", "comment"], &["pr", "review"]],
-                )
-            }),
-            "delete" => self.runs.iter().find(|r| {
-                gh(
-                    r,
-                    &[
-                        &["repo", "delete"],
-                        &["release", "delete"],
-                        &["issue", "delete"],
-                    ],
-                )
-            }),
-            "top-level-folder" => {
-                let root = checkout(self.cwd.as_deref()?)?.root;
-                let new = self.writes.iter().zip(&self.by.0).find_map(|(w, by)| {
-                    let rest = real(w).strip_prefix(&root).ok()?.to_path_buf();
-                    let top = rest.components().next()?;
-                    let folder = root.join(top);
-                    let mkdir = by.is_some_and(|(r, _)| self.runs[r].is("mkdir"));
-                    // A file written at the top is not a folder; a folder already there is not new.
-                    (rest.components().count() > 1 || mkdir)
-                        .then_some(folder)
-                        .filter(|f| !f.exists())
-                })?;
-                return Some(Hit {
-                    detail: Some(format!("It makes the top-level folder {}.", new.display())),
-                });
-            }
-            _ => None,
-        };
+        if class == "top-level-folder" {
+            let root = checkout(self.cwd.as_deref()?)?.root;
+            let new = self.writes.iter().zip(&self.by.0).find_map(|(w, by)| {
+                let rest = real(w).strip_prefix(&root).ok()?.to_path_buf();
+                let top = rest.components().next()?;
+                let folder = root.join(top);
+                let mkdir = by.is_some_and(|(r, _)| self.runs[r].is("mkdir"));
+                // A file written at the top is not a folder; a folder already there is not new.
+                (rest.components().count() > 1 || mkdir)
+                    .then_some(folder)
+                    .filter(|f| !f.exists())
+            })?;
+            return Some(Hit {
+                detail: Some(format!("It makes the top-level folder {}.", new.display())),
+            });
+        }
+        let found = self.runs.iter().find(|r| has_effect(r, class));
         found.map(|run| {
             let detail = if class == "unknown-reach-delete" {
                 let why = if run.scripted {
@@ -604,6 +635,56 @@ fn pgid(pid: i64) -> Option<i64> {
     (group > 0).then_some(i64::from(group))
 }
 
+/// Whether a run has the effect `class`; top-level-folder is the call's, not a run's.
+fn has_effect(run: &Run, class: &str) -> bool {
+    match class {
+        "cloud-resource" => creates_cloud(run),
+        "dependency" => adds_dependency(run),
+        "service" => starts_service(run),
+        "unknown-reach-delete" => unknown_reach(run),
+        "push" => run.is("git") && git_rest(run).first().map(String::as_str) == Some("push"),
+        "merge" => gh(run, &[&["pr", "merge"]]),
+        "dispatch" => dispatch(run).is_some(),
+        "send" => {
+            gh(
+                run,
+                &[&["pr", "comment"], &["issue", "comment"], &["pr", "review"]],
+            ) || posts_comment(run)
+        }
+        "delete" => gh(
+            run,
+            &[
+                &["repo", "delete"],
+                &["release", "delete"],
+                &["issue", "delete"],
+            ],
+        ),
+        _ => false,
+    }
+}
+
+/// The programs a run with the effect `class` can be: a run whose program the line computes has it when it would
+/// as one of these.
+fn programs(class: &str) -> &'static [&'static str] {
+    match class {
+        "cloud-resource" => &[
+            "aws", "gcloud", "az", "doctl", "eksctl", "gsutil", "terraform", "tofu", "pulumi", "cdk", "sam",
+            "serverless", "sls",
+        ],
+        "dependency" => &[
+            "npm", "pnpm", "bun", "yarn", "pip", "pip3", "gem", "brew", "uv", "cargo", "go",
+        ],
+        "service" => &[
+            "docker", "podman", "docker-compose", "brew", "systemctl", "launchctl", "pm2",
+        ],
+        "unknown-reach-delete" => &["rm", "unlink", "shred", "srm", "find", "git", "rsync"],
+        "push" => &["git"],
+        "dispatch" => &["gh", "curl", "wget"],
+        "merge" | "send" | "delete" => &["gh"],
+        _ => &[],
+    }
+}
+
 /// A command that deletes files git may not restore: rm, unlink, shred, `find -delete`, `git clean`, `rsync --delete`.
 /// A delete whose reach can't be worked out before it runs: a script file runs it, or it names a pattern or a value
 /// the line can't know.
@@ -670,6 +751,41 @@ fn creates_cloud(run: &Run) -> bool {
 }
 
 /// A `gh` run whose first two plain words are one of `subs`.
+/// A `gh api` call that posts in your name: a POST (by `--method` or `-X`, or by a field, which makes gh post) to an
+/// issue's, a pull request's or a commit's comments, a review comment's replies, or a pull request's reviews (#323).
+fn posts_comment(run: &Run) -> bool {
+    let words = run.words();
+    let plain = plain(&words);
+    if !run.is("gh") || plain.first() != Some(&"api") {
+        return false;
+    }
+    let method = words.iter().enumerate().find_map(|(k, w)| match *w {
+        "-X" | "--method" => words.get(k + 1).copied(),
+        _ => w
+            .strip_prefix("--method=")
+            .or(w.strip_prefix("-X"))
+            .filter(|m| !m.is_empty() && !m.starts_with('-')),
+    });
+    let posts = match method {
+        Some(m) => m.eq_ignore_ascii_case("POST"),
+        None => !fields(&words).is_empty() || words.contains(&"--input"),
+    };
+    posts
+        && plain[1..].iter().any(|w| {
+            let path = w
+                .trim_start_matches("https://api.github.com")
+                .trim_start_matches('/');
+            let parts: Vec<&str> = path.split('?').next().unwrap_or("").split('/').collect();
+            parts.first() == Some(&"repos")
+                && matches!(
+                    parts.get(3..).unwrap_or(&[]),
+                    ["issues" | "pulls" | "commits", _, "comments"]
+                        | ["pulls", _, "reviews"]
+                        | ["pulls", _, "comments", _, "replies"]
+                )
+        })
+}
+
 fn gh(run: &Run, subs: &[&[&str]]) -> bool {
     let words = run.words();
     let plain = plain(&words);
@@ -1160,6 +1276,39 @@ mod tests {
     }
 
     #[test]
+    fn a_call_read_in_part_meets_the_entries_it_may_be() {
+        for line in [
+            "\"$(printf git)\" push origin main",
+            "\"$G\" push origin main",
+        ] {
+            let hit = bash(line).matches("effect:push").expect(line);
+            assert!(hit.detail.unwrap().contains("couldn't be read"));
+            assert!(bash(line).matches("run:git push").is_some(), "{line}");
+            assert!(bash(line).matches("effect:merge").is_none(), "{line}");
+        }
+        let cc = bash("\"$CC\" -o app main.c");
+        for pattern in ["effect:push", "run:git push", "effect:unknown-reach-delete", "effect:cloud-resource"] {
+            assert!(cc.matches(pattern).is_none(), "{pattern}");
+        }
+        assert!(bash("\"$X\" pr merge 12").matches("effect:merge").is_some());
+        assert!(bash("\"$X\" -rf \"$OUT\"/*")
+            .matches("effect:unknown-reach-delete")
+            .is_some());
+        let nest = |n: usize| {
+            let mut line = "pkill node".to_string();
+            for _ in 0..n {
+                line = format!("sh -c {}", quote(&line));
+            }
+            bash(&line)
+        };
+        let read = nest(shell::DEPTH).matches("kill:by-name").unwrap();
+        assert!(read.detail.is_none());
+        let deep = nest(shell::DEPTH + 1).matches("kill:by-name").unwrap();
+        assert!(deep.detail.unwrap().contains("nests"));
+        assert!(nest(shell::DEPTH + 1).matches("run:deep off").is_some());
+    }
+
+    #[test]
     fn a_word_is_whole_and_no_part_of_a_path() {
         let m = "word:kafka";
         assert!(bash("npm install kafka").matches(m).is_some());
@@ -1241,6 +1390,17 @@ mod tests {
         assert!(bash("gh issue comment 3 --body hi")
             .matches("effect:send")
             .is_some());
+        assert!(bash(
+            "gh api --method POST repos/acme/shop/pulls/23/comments/9101/replies -f body='Fixed.'"
+        )
+        .matches("effect:send")
+        .is_some());
+        assert!(bash("gh api repos/acme/shop/issues/3/comments -f body=hi")
+            .matches("effect:send")
+            .is_some());
+        assert!(bash("gh api repos/acme/shop/pulls/23/comments")
+            .matches("effect:send")
+            .is_none());
         assert!(bash("gh repo delete acme/shop --yes")
             .matches("effect:delete")
             .is_some());

@@ -38,8 +38,10 @@ function isolated(args: string[]): boolean {
 }
 /** A command that changes where Python finds its site setup, which the run's tracer is part of. */
 const PYTHON_SETUP = /\b(PYTHONPATH|PYTHONHOME)\b/;
-/** The system's programs that read no file whatever they're asked: pnpm lists processes with `ps`. */
-const READS_NOTHING = new Set(['/bin/ps']);
+/** The system's program that does nothing, exits 0 and prints nothing: what a base's command stand-in runs as (#874). */
+export const DOES_NOTHING = ['/usr/bin/true', '/bin/true'].find((p) => existsSync(p)) ?? '/usr/bin/true';
+/** The system's programs that read no file whatever they're asked: pnpm lists processes with `ps`; `true`, by its real file. */
+const READS_NOTHING = new Set(['/bin/ps', DOES_NOTHING]);
 /**
  * Which programs a command or a child counts as traced: Node and Python only where the run's variables reach them
  * (a process the Python tracer recorded says whether they do; a Python a Node process starts may get an
@@ -53,6 +55,7 @@ const installed = (at: string, writable: string[]): string | null => {
   try { real = realpathSync(at); } catch { return null; }
   return writable.some((w) => real === w || real.startsWith(`${w}/`)) ? null : (real.split('/').pop() ?? real);
 };
+const realOf = (at: string): string => { try { return realpathSync(at); } catch { return at; } };
 /**
  * A program the run's tracers see into: Node, Python with its site setup, or a script one of them runs (its `#!`
  * line, through `env` or not), each as `trust` allows; or one that reads no file.
@@ -61,7 +64,7 @@ function traced(program: string, args: string[], cwd: string, path: string, trus
   const name = program.split('/').pop() ?? program;
   const at = programPath(program, cwd, path);
   if (at === null) return false;
-  if (READS_NOTHING.has(at)) return true;
+  if (READS_NOTHING.has(at) || READS_NOTHING.has(realOf(at))) return true;
   // Node and Python by the name of the file they are, never by the name of a link to it.
   const real = installed(at, trust.writable);
   if (name === 'node' || real === 'node') return trust.node && real === 'node';
@@ -143,13 +146,35 @@ export function programsIn(command: string, cwd?: string): string[] {
     return [...(program !== undefined && !BUILTINS.has(program) ? [program] : []), ...(script ? programsIn(script.lines.join('\n')) : [])];
   });
 }
-/** The command's mask, or a mask in the script it runs, named with the file (the core's one rule, on each): null for none. */
-export function maskOf(command: string, cwd: string): string | null {
+/** The package managers whose `<pm> test` or `<pm> run <name>` runs a script of the checkout's package.json. */
+const PACKAGE_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun']);
+/**
+ * The package.json script a segment runs, as `npm test` or `npm run <name>` (pnpm, yarn and bun alike), read from
+ * the checkout, with its `pre` and `post` scripts, which run with it; null for any other segment.
+ */
+export function packageScriptOf(segment: string, cwd: string): Script | null {
+  const [pm, verb, name] = wordsOf(segment).filter((w) => !ASSIGNMENT.test(w));
+  if (!pm || !PACKAGE_MANAGERS.has(pm.split('/').pop() ?? pm) || !verb) return null;
+  const script = verb === 'test' || verb === 't' ? 'test' : (verb === 'run' || verb === 'run-script') && name && !name.startsWith('-') ? name : null;
+  if (!script) return null;
+  let scripts: unknown;
+  try { scripts = (JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as { scripts?: unknown }).scripts; } catch { return null; }
+  if (!scripts || typeof scripts !== 'object') return null;
+  const lines = [`pre${script}`, script, `post${script}`].map((n) => (scripts as Record<string, unknown>)[n]).filter((l): l is string => typeof l === 'string');
+  return lines.length ? { file: `package.json's ${script} script`, lines } : null;
+}
+/**
+ * The command's mask, or a mask in the script it runs, named with the file (the core's one rule, on each): null for
+ * none. A script is read through what it runs in turn, a package.json script included (`sh check.sh` running
+ * `npm test` whose script is `vitest run || true`), a few levels deep.
+ */
+export function maskOf(command: string, cwd: string, depth = 0): string | null {
   const own = maskIn(command);
   if (own !== null) return own;
+  if (depth >= 4) return null;
   for (const segment of segmentsOf(command)) {
-    const script = scriptOf(segment, cwd);
-    const mask = script && maskIn(script.lines.join('\n'));
+    const script = scriptOf(segment, cwd) ?? packageScriptOf(segment, cwd);
+    const mask = script && maskOf(script.lines.join('\n'), cwd, depth + 1);
     if (mask) return `${mask} in ${script.file}`;
   }
   return null;

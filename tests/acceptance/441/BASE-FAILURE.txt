@@ -1,0 +1,1 @@
+Not run at the base (881e2ed4): the surfaces plainly don't exist there (geometry answers no curve@1 item and takes no `at`, builder rows have no `rings`, curve@1 refuses `mode: bezier | bspline`, extrude@1 has no `along`, and none of the four planted names exists), so every test would fail on a missing surface.

@@ -18,7 +18,14 @@ pub struct Row {
     pub version: String,
     pub state: &'static str,
     pub issues: Vec<Value>,
+    /// Each layout, as its validator judged its twins at the pack check (#238).
+    pub layouts: Vec<Value>,
 }
+
+/// The half of the pack check that runs a pack's programs, after the core's half admitted it:
+/// its layouts' rows and the issues that refuse it (#238).
+pub type Vet<'v> =
+    &'v mut dyn FnMut(&Value, &deep_canvas::document::Pack) -> (Vec<Value>, Vec<Issue>);
 
 /// Reads a pack folder as one manifest: `pack.json`, its `id` set to `owner/name`, and each
 /// `recipes` entry's file inlined.
@@ -51,6 +58,34 @@ fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
         )]);
     };
     fields.insert("id".into(), json!(id));
+    // #238: each asset's bytes, in hex, once its sha256 and size match what the manifest lists, for
+    // the programs and data the sandbox module runs at the pack check.
+    if let Some(Value::Array(assets)) = fields.get_mut("assets") {
+        for (i, a) in assets.iter_mut().enumerate() {
+            let path = a
+                .get("path")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let bytes = fs::read(dir.join(&path)).ok();
+            let sha = bytes.as_deref().map(deep_canvas::schedule::sha256_hex);
+            let listed = a.get("sha256").and_then(Value::as_str);
+            let size = a.get("size").and_then(Value::as_u64);
+            match bytes {
+                Some(b) if sha.as_deref() == listed && size == Some(b.len() as u64) => {
+                    a["hex"] = json!(b.iter().map(|x| format!("{x:02x}")).collect::<String>());
+                }
+                _ => return Err(vec![Issue::envelope(
+                    "ref_unresolved",
+                    format!("assets/{i}"),
+                    a.clone(),
+                    &format!(
+                        "the asset `{path}` isn't there with the sha256 and size the pack lists"
+                    ),
+                )]),
+            }
+        }
+    }
     if let Some(Value::Object(recipes)) = fields.get_mut("recipes") {
         for (kind, entry) in recipes.iter_mut() {
             if let Some(file) = entry.as_str() {
@@ -75,13 +110,28 @@ pub fn install(
     sealed: &Sealed,
     id: &str,
     dir: &Path,
+    twin: Option<&str>,
+    vet: Vet<'_>,
 ) -> Value {
+    let mut layouts = Vec::new();
     let (version, outcome, issues) = match load(id, dir) {
         Err(issues) => (String::new(), "refused", issues),
-        Ok(manifest) => {
+        Ok(mut manifest) => {
+            if let Some(planted) = twin {
+                crate::familiar::twin(planted, id, &mut manifest);
+            }
             let version = manifest["version"].as_str().unwrap_or_default().to_string();
-            match packs.admit(&manifest, sealed) {
-                Ok(_) => (version, "installed", Vec::new()),
+            match packs.admit(&manifest, sealed).cloned() {
+                Ok(pack) => {
+                    let (rows, issues) = vet(&manifest, &pack);
+                    layouts = rows;
+                    if issues.is_empty() {
+                        (version, "installed", Vec::new())
+                    } else {
+                        packs.withdraw(&pack.id.text());
+                        (version, "refused", issues)
+                    }
+                }
                 Err(issues) => (version, "refused", issues),
             }
         }
@@ -97,6 +147,7 @@ pub fn install(
             if row.state == "refused" && outcome == "installed" {
                 row.state = outcome;
                 row.issues = issues.clone();
+                row.layouts = layouts.clone();
             }
         }
         None => rows.push(Row {
@@ -104,9 +155,10 @@ pub fn install(
             version: version.clone(),
             state: outcome,
             issues: issues.clone(),
+            layouts: layouts.clone(),
         }),
     }
-    json!({"outcome": outcome, "pack": id, "version": version, "issues": issues})
+    json!({"outcome": outcome, "pack": id, "version": version, "issues": issues, "layouts": layouts})
 }
 
 /// The `packs` reply: one row per version offered, in order, with how often the store has run
@@ -121,6 +173,7 @@ pub fn rows_reply(rows: &[Row], packs: &Packs) -> Value {
                 "state": r.state,
                 "checks": packs.checks(&format!("{}@{}", r.pack, r.version)),
                 "issues": r.issues,
+                "layouts": r.layouts,
             })
         })
         .collect();

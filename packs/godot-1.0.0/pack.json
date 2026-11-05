@@ -1,0 +1,34 @@
+{
+  "name": "godot",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "Godot 4's words (#433): MeshInstance3D with a BoxMesh, OmniLight3D and SpotLight3D in physical units, each with its stated conversion. A word with no mapping is refused.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "scene3d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "godot.mesh_instance_3d@1": "mesh_instance_3d@1.json",
+    "godot.omni_light_3d@1": "omni_light_3d@1.json",
+    "godot.spot_light_3d@1": "spot_light_3d@1.json"
+  },
+  "aliases": {
+    "MeshInstance3D": {
+      "target": "godot.mesh_instance_3d@1",
+      "conversion": "BoxMesh to slab@1; rotation YXZ radians through the matrix to ours",
+      "renamed_from": "MeshInstance"
+    },
+    "OmniLight3D": {
+      "target": "godot.omni_light_3d@1",
+      "conversion": "light_intensity_lumens kept",
+      "renamed_from": "OmniLight"
+    },
+    "SpotLight3D": {
+      "target": "godot.spot_light_3d@1",
+      "conversion": "light_intensity_lumens kept (Godot's spot counts the whole sphere, as ours); spot_angle the outer half angle",
+      "renamed_from": "SpotLight"
+    }
+  }
+}

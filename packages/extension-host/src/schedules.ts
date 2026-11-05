@@ -12,7 +12,8 @@ export type Verdict = 'PASS' | 'FAIL' | 'BLOCKED' | 'INCONCLUSIVE' | 'INVALID' |
 export type Cadence = { every: number } | { cron: string };
 /** What a scheduled job may do: the sources it reads, the notice, store and send kinds it may make, and whether it may end with a no-op. */
 export interface Declares { readings: string[]; notices: string[]; stores: string[]; sends: string[]; noop: boolean }
-export interface ScheduleDecl { name: string; plugin: string; cadence: Cadence; deadline: number; declares: Declares }
+/** `cadence` is null for a job that checks notices and runs only on the schedules notices give it (#262). */
+export interface ScheduleDecl { name: string; plugin: string; cadence: Cadence | null; deadline: number; declares: Declares }
 
 /** One run of a schedule, as the hub recorded it. */
 export interface ScheduleRun {
@@ -107,8 +108,9 @@ function nextCron(cron: Cron, after: number): number {
   }
   throw Error('the cron line matches no time in the years ahead');
 }
-/** The first slot of a cadence strictly after `after`. */
-function nextSlot(cadence: Cadence, after: number): number {
+/** The first slot of a cadence strictly after `after`; never, for a job with none. */
+function nextSlot(cadence: Cadence | null, after: number): number {
+  if (!cadence) return Infinity;
   return 'every' in cadence ? (Math.floor(after / cadence.every) + 1) * cadence.every : nextCron(parseCron(cadence.cron), after);
 }
 
@@ -131,11 +133,13 @@ export function declareSchedule(name: unknown, declared: unknown, own: { plugin:
   const refuse = (why: string): never => { throw Error(`deep.schedule: ${String(name)} ${why}`); };
   if (typeof name !== 'string' || !NAME.test(name) || !name.startsWith(`ext.${own.plugin.slice(own.plugin.indexOf('/') + 1)}.`)) refuse(`isn't a name of ${own.plugin}'s own, ext.<plugin>.<name>`);
   const d = (typeof declared === 'object' && declared !== null ? declared : {}) as Record<string, unknown>;
-  let cadence: Cadence;
+  let cadence: Cadence | null = null;
   try {
     cadence = cadenceOf({ ...(d.every !== undefined ? { every: d.every } : {}), ...(d.cron !== undefined ? { cron: d.cron } : {}) });
   } catch (e) {
-    return refuse((e as Error).message);
+    // A job with neither runs only on the schedules notices give it (#262), so it checks a notice kind.
+    const notices = (d.declares as { notices?: unknown } | undefined)?.notices;
+    if (d.every !== undefined || d.cron !== undefined || !texts(notices) || !notices.length) return refuse((e as Error).message);
   }
   if (!Number.isSafeInteger(d.deadline) || (d.deadline as number) < 1) refuse('gives no deadline, in ms');
   const x = (d.declares ?? {}) as Record<string, unknown>;
@@ -148,7 +152,7 @@ export function declareSchedule(name: unknown, declared: unknown, own: { plugin:
   };
   if (x.noop !== undefined && typeof x.noop !== 'boolean') refuse('declares noop as true or false');
   return {
-    name: name as string, plugin: own.plugin, cadence: cadence!, deadline: d.deadline as number,
+    name: name as string, plugin: own.plugin, cadence, deadline: d.deadline as number,
     declares: { readings: list('readings', own.sources), notices: list('notices', own.notices), stores: list('stores', own.stores), sends: list('sends'), noop: x.noop === true },
   };
 }
@@ -156,7 +160,7 @@ export function declareSchedule(name: unknown, declared: unknown, own: { plugin:
 interface Run { run: string; due: number; dispatched: number | null; resumed?: true; done?: Promise<void> }
 interface Schedule {
   decl: ScheduleDecl;
-  cadence: Cadence;
+  cadence: Cadence | null;
   /** When its next run is due. */
   next: number;
   paused: { owner: string } | null;
@@ -381,7 +385,7 @@ export class Schedules {
     return s;
   }
   private settings(s: Schedule): Settings {
-    return { ...(s.cadence !== s.decl.cadence ? { cadence: s.cadence } : {}), ...(s.paused ? { paused: s.paused } : {}) };
+    return { ...(s.cadence && s.cadence !== s.decl.cadence ? { cadence: s.cadence } : {}), ...(s.paused ? { paused: s.paused } : {}) };
   }
 
   /** The schedules list's rows, each with its last run from the record. */
@@ -389,7 +393,7 @@ export class Schedules {
     return [...this.all.values()].filter((s) => s.live).map((s) => {
       const state = s.paused ? 'paused' : 'on';
       const activity = s.running ? 'running' : s.queued ? 'queued' : 'idle';
-      const next = s.paused || s.blocked ? null : s.next;
+      const next = s.paused || s.blocked || !Number.isFinite(s.next) ? null : s.next;
       const owner = s.paused?.owner ?? (s.blocked ? 'you' : null);
       const words = [
         s.paused ? `paused after ${PAUSE_AFTER} FAILs in a row until you resume it` : 'on',
