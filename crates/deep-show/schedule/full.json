@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "84f4372241d8319e971b2a8be2bbe319d2e440ed5cebeaf26ff32af48ea86880",
+  "set_digest": "7cc778d6e9bca903c24ae5382f0a9b0f09500a8a04ec6038790b68b3d5564f15",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -179,7 +179,7 @@
       }
     },
     "marks2d@1": {
-      "digest": "27ecdd230bbf0b037234c96bf88d8c3e6e2c92aeeaa34df2bc5c6c12a091daea",
+      "digest": "22c7f31ba14211509ab4750264aba6d121993e871b48845c8cca0702a6fec2c3",
       "reference": "marks2d",
       "kit": [
         "fixtures",
@@ -364,7 +364,7 @@
       }
     },
     "text@1": {
-      "digest": "9fcb8911f7ca77eeed73bb877c0d12a266135d4e332f406e7ec0e5cea552bd61",
+      "digest": "d0fa45f80320dad79a56bf5abe27513ede63bb9084ab6ac0c87c56f9de47048f",
       "reference": "text",
       "kit": [
         "fixtures",
@@ -393,7 +393,7 @@
       }
     },
     "vector@1": {
-      "digest": "69f3afc6fddede15eca7dc55b08b4f9e635da29e3510bb3dcd7b3f26c6162f0d",
+      "digest": "0158aea41637608890c4b742799200c23bc3e5f1aef98adb9c0e56b1d4b48a40",
       "reference": "vector",
       "kit": [
         "fixtures",
