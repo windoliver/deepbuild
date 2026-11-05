@@ -591,15 +591,19 @@ fn lobes(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, s: Surface, a2: f32, dfg_v: v
 }
 
 // The key sun's visibility at `world` from cascade `i`: the share of a 3 × 3 texel
-// neighbourhood that doesn't block it, the point first pushed along its normal by a texel and a
-// half (1 outside the cascade).
-fn cascade_lit(i: u32, world: vec3<f32>, n: vec3<f32>) -> f32 {
-    // Biased toward the sun, by a texel plus 1.5 texels of the surface's slope to the light, so
-    // the point keeps its own place in the map: the shadow's edge lands where the casters put
-    // it, and a cut face beside a kept edge isn't shadowed by that edge (#424).
+// neighbourhood that doesn't block it, the point first biased by `curved` (1 outside the
+// cascade).
+fn cascade_lit(i: u32, world: vec3<f32>, n: vec3<f32>, curved: bool) -> f32 {
+    // A flat face is biased toward the sun, by a texel plus 1.5 texels of its slope to the light,
+    // so the point keeps its own place in the map: the shadow's edge lands where the casters put
+    // it, and a cut face beside a kept edge isn't shadowed by that edge (#424). A smooth-shaded
+    // curved face is pushed along its normal by a texel and a half instead: its facets lie off
+    // the surface its normal describes, steeper to the light than the normal says, and a bias by
+    // the normal's slope draws hatched stripes across the ones that graze the sun (#1297).
     let c = clamp(dot(n, frame.light.xyz), 0.05, 1.0);
     let slope = min(sqrt(1.0 - c * c) / c, 4.0);
-    let p = world + frame.light.xyz * ((1.0 + 1.5 * slope) * lights.texels[i]);
+    let toward = frame.light.xyz * (1.0 + 1.5 * slope);
+    let p = world + select(toward, n * 1.5, curved) * lights.texels[i];
     let lp = lights.cascades[i] * vec4<f32>(p, 1.0);
     let uv = lp.xy * vec2<f32>(0.5, -0.5) + 0.5;
     if any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) || lp.z > 1.0 {
@@ -618,7 +622,7 @@ fn cascade_lit(i: u32, world: vec3<f32>, n: vec3<f32>) -> f32 {
 
 // The key sun's visibility at `world` (#422): the cascade its view depth falls in, blended with
 // the next across the last tenth of its range when fade is on; 1 past the last cascade.
-fn lit_share(world: vec3<f32>, n: vec3<f32>) -> f32 {
+fn lit_share(world: vec3<f32>, n: vec3<f32>, curved: bool) -> f32 {
     let count = lights.count.w;
     if count == 0u {
         return 1.0;
@@ -627,13 +631,13 @@ fn lit_share(world: vec3<f32>, n: vec3<f32>) -> f32 {
     for (var i = 0u; i < count; i++) {
         let far = lights.splits[i];
         if d <= far {
-            let lit = cascade_lit(i, world, n);
+            let lit = cascade_lit(i, world, n, curved);
             let near = select(0.0, lights.splits[max(i, 1u) - 1u], i > 0u);
             let edge = far - 0.1 * (far - near);
             if lights.forward.w > 0.5 && d > edge {
                 var next = 1.0;
                 if i + 1u < count {
-                    next = cascade_lit(i + 1u, world, n);
+                    next = cascade_lit(i + 1u, world, n, curved);
                 }
                 return mix(lit, next, (d - edge) / max(far - edge, 1e-6));
             }
@@ -881,7 +885,7 @@ struct Direct {
     removed: f32,
 };
 
-fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32) -> Direct {
+fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> Direct {
     let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
     let rough = clamp(s.rough, 0.045, 1.0);
     // Geometric specular antialiasing (Kaplanyan): the normal's change across the pixel widens
@@ -929,7 +933,7 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32) -> Direct {
         // reports the share its shadow removes.
         var lit = 1.0;
         if lights.count.y == i + 1u && (in.flags & NO_RECEIVE) == 0u {
-            lit = lit_share(in.world, n);
+            lit = lit_share(in.world, n, curved);
         }
         if catches {
             let y = dot(add, vec3<f32>(0.2126, 0.7152, 0.0722));
@@ -1010,6 +1014,10 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             | select(UNLIT, 0u, (frame.cut_info.z & 2u) != 0u);
     }
     let n = normalize(in.normal);
+    // Whether its interpolated normal turns across the triangle: a smooth-shaded curved face,
+    // never a flat one or a cap (the cascades' bias, #1297).
+    let dn = dpdx(in.normal) * dpdx(in.normal) + dpdy(in.normal) * dpdy(in.normal);
+    let curved = dn.x + dn.y + dn.z > 1e-10;
     if (in.flags & MATERIAL) != 0u {
         // Its back faces are culled; a negative determinant turns its winding over.
         if (front == ((in.flags & MIRRORED) != 0u)) && (in.flags & DOUBLE_SIDED) == 0u {
@@ -1041,7 +1049,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
         if (in.flags & UNLIT) != 0u {
             return Targets(see_through(adjusted(s.base + m.emission, in.op.w), alpha, mode), in.pick);
         }
-        let d = direct(in, facing, s, m.spread);
+        let d = direct(in, facing, s, m.spread, curved);
         // A shadow catcher writes black, as opaque as the share of light its shadow removes, at
         // its strength.
         if (in.flags & CATCH) != 0u {
@@ -1075,7 +1083,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
     }
     // Under the key sun's cascades (#422) a painted solid is shadowed as a material is.
     if lights.count.w > 0u && (in.flags & NO_RECEIVE) == 0u {
-        direct = direct * lit_share(in.world, n);
+        direct = direct * lit_share(in.world, n, curved);
     }
     let albedo = paint(in.color);
     let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
