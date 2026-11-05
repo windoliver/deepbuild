@@ -56,6 +56,8 @@ struct Args {
     patches: Vec<(u64, String, Value)>,
     targets: BTreeSet<String>,
     capture: Capture,
+    /// Operator outputs each captured frame reads back (#483).
+    read: Vec<String>,
     window: Option<Window3>,
     latency: Vec<u64>,
     counts: bool,
@@ -371,6 +373,10 @@ fn parse(call: &Value) -> Result<Args, Value> {
         patches,
         targets,
         capture,
+        read: call["read"]
+            .as_array()
+            .map(|r| r.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+            .unwrap_or_default(),
         window,
         latency,
         counts: call["counts"].as_bool().unwrap_or(false),
@@ -1242,6 +1248,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
                 if let Some(name) = &dirt_file {
                     frame.insert("dirt".into(), json!(name));
+                }
+                if !args.read.is_empty() {
+                    // Each operator output as it stood when this frame drew (#483).
+                    let (keys, fx2, dir) = (args.read.clone(), fx.clone(), out.to_string());
+                    let read = app.worker.call(move |state| -> Result<Value, Value> {
+                        let device = state.gpu.device();
+                        let fx = lock(&fx2);
+                        let ops = fx
+                            .docops
+                            .as_ref()
+                            .ok_or_else(|| refused("bad_input", "read names an operator output, and the document runs no operator"))?;
+                        let mut m = serde_json::Map::new();
+                        for k in &keys {
+                            m.insert(k.clone(), crate::opframe::read_one(&device, ops, &Default::default(), k, &dir)?);
+                        }
+                        Ok(Value::Object(m))
+                    })?;
+                    frame.insert("read".into(), read);
                 }
                 if let Some((linear, ids)) = &drawn.targets {
                     if args.targets.contains("linear") {

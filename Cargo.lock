@@ -2144,6 +2144,7 @@ name = "deep-effects-render"
 version = "0.0.0"
 dependencies = [
  "deep-canvas-effects",
+ "deep-canvas-motion",
  "deep-gpu",
  "deep-scene3d-render",
  "naga 30.0.1",

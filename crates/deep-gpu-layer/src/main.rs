@@ -32,6 +32,7 @@ mod live;
 mod liveview;
 mod lod;
 mod marks2d;
+mod opframe;
 mod parity;
 mod plugin;
 mod reference;
@@ -218,6 +219,14 @@ pub enum Planted {
     ClimbNeverStepsDown,
     CanonicalClimbs,
     ReclimbsWithoutViewChange,
+    // #483: the structural steps' wrong programs.
+    IterateFeedsFirst,
+    SortTiesDecreasing,
+    CompactByAtomic,
+    IndexWraps,
+    MipsLevel0Only,
+    MipsKeptUnderOldKey,
+    PoolWithoutClear,
 }
 
 impl Planted {
@@ -334,6 +343,13 @@ impl Planted {
             "climb_never_steps_down" => Planted::ClimbNeverStepsDown,
             "canonical_climbs" => Planted::CanonicalClimbs,
             "reclimbs_without_view_change" => Planted::ReclimbsWithoutViewChange,
+            "iterate_feeds_first" => Planted::IterateFeedsFirst,
+            "sort_ties_decreasing" => Planted::SortTiesDecreasing,
+            "compact_by_atomic" => Planted::CompactByAtomic,
+            "index_wraps" => Planted::IndexWraps,
+            "mips_level0_only" => Planted::MipsLevel0Only,
+            "mips_kept_under_old_key" => Planted::MipsKeptUnderOldKey,
+            "pool_without_clear" => Planted::PoolWithoutClear,
             _ => return None,
         })
     }
@@ -541,6 +557,7 @@ impl App {
             Some("operators") => effects::operators(self),
             Some("calibrate") => calibrate::calibrate(self),
             Some("reference") => effects::reference(self, out, call),
+            Some("check_operator") if opframe::wants(call) => opframe::call(self, out, call),
             Some("check_operator") => effects::check_operator(self, call),
             Some("op") => effects::op(self, call),
             Some("columns") => columns::call(self, call),
