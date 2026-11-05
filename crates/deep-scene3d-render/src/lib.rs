@@ -1429,6 +1429,8 @@ pub struct Renderer {
     /// draws one.
     solid_layout: wgpu::PipelineLayout,
     clear_pipelines: [Option<wgpu::RenderPipeline>; 6],
+    /// Blend and add over the glass, which draws after the resolve (#428, #1173).
+    late_pipelines: [Option<wgpu::RenderPipeline>; 2],
     /// This frame's adjust table (#424), each distinct adjust once, entry k + 1 at k.
     adjust_buffer: wgpu::Buffer,
     adjusts: Vec<AdjustEntry>,
@@ -1827,7 +1829,14 @@ fn clear_pipeline(
     layout: &wgpu::PipelineLayout,
     planted: &Planted,
     kind: usize,
+    after_resolve: bool,
 ) -> wgpu::RenderPipeline {
+    // A pass after the resolve draws into the one-sample targets, the IDs whole (#1173).
+    let (samples, ids) = if after_resolve {
+        (1, IDS)
+    } else {
+        (samples, IDS_MS)
+    };
     let add = kind == usize::from(ADD);
     // A fade (#424): first a depth pass of its own triangles, writing depth and no color; then
     // its color where that depth is equal, so only its nearest surface shows.
@@ -1882,7 +1891,7 @@ fn clear_pipeline(
             },
         }),
         Some(wgpu::ColorTargetState {
-            format: IDS_MS,
+            format: ids,
             blend: None,
             write_mask: if glass {
                 wgpu::ColorWrites::ALL
@@ -1900,7 +1909,16 @@ fn clear_pipeline(
         Some(layout),
         module,
         ("mesh_vs", &buffers),
-        Some((if per_pixel { "oit_fs" } else { "mesh_fs" }, &targets)),
+        Some((
+            if per_pixel {
+                "oit_fs"
+            } else if glass {
+                "glass_fs"
+            } else {
+                "mesh_fs"
+            },
+            &targets,
+        )),
         Some(depth),
         None,
     )
@@ -1964,6 +1982,9 @@ const CLEAR_NAMES: [&str; 6] = [
     "scene3d.per_pixel",
     "scene3d.transmission",
 ];
+
+/// Blend's and add's pipelines over the glass, by kind.
+const LATE_NAMES: [&str; 2] = ["scene3d.blend_over_glass", "scene3d.add_over_glass"];
 
 #[allow(clippy::too_many_arguments)]
 fn draw_pipeline(
@@ -2629,6 +2650,7 @@ impl Renderer {
             maps,
             filter_taps: 8,
             clear_pipelines: [None, None, None, None, None, None],
+            late_pipelines: [None, None],
             adjust_buffer,
             adjusts: Vec::new(),
             lobe_buffer,
@@ -3916,9 +3938,26 @@ impl Renderer {
                     &self.solid_layout,
                     &self.planted,
                     k,
+                    k == usize::from(GLASS),
                 ));
                 self.compiled += 1;
                 self.names.push(CLEAR_NAMES[k]);
+            }
+        }
+        let glass = self.clear_pipelines[usize::from(GLASS)].is_some();
+        for k in [BLEND, ADD].map(usize::from) {
+            if glass && self.clear_pipelines[k].is_some() && self.late_pipelines[k].is_none() {
+                self.late_pipelines[k] = Some(clear_pipeline(
+                    &device.device,
+                    self.families.samples,
+                    &self.families.module,
+                    &self.solid_layout,
+                    &self.planted,
+                    k,
+                    true,
+                ));
+                self.compiled += 1;
+                self.names.push(LATE_NAMES[k]);
             }
         }
         let mut written = 0u32;
@@ -4262,7 +4301,7 @@ impl Renderer {
                 }
                 let (Some(mesh), Some(pipeline)) = (
                     self.meshes.get(shape),
-                    &self.clear_pipelines[usize::from(*kind)],
+                    &self.late_pipelines[usize::from(*kind)],
                 ) else {
                     continue;
                 };
@@ -6124,5 +6163,40 @@ mod tests {
             whole.prepare(&device, frames.scene(), &look);
             assert_eq!(records(&playing), records(&whole), "frame {n}");
         }
+    }
+
+    /// The glass pass (#428) draws after the geometry pass resolves (#1173), so its pipelines
+    /// take the resolved targets' sample count and ID format, not the geometry pass's.
+    #[test]
+    fn a_glass_part_over_a_blend_part_draws_with_no_validation_error() {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let look =
+            Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap();
+        let part = |id: &str, order: &str, x: f64, material: &str| json!({"id": id, "kind": "mark.box@1", "name": id, "order": order, "layer": "main", "material": material, "params": {"size": 1, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [x, 0.5, 0.0]}});
+        let mut items = serde_json::Map::new();
+        items.insert("cam".into(), json!({"id": "cam", "kind": "camera@1", "name": "C", "order": "a0", "layer": "main", "params": {"projection": "perspective", "target": [0, 0, 0], "orbit": {"azimuth": 30, "elevation": 35, "distance": 8}, "fov": 40}}));
+        items.insert("glass".into(), json!({"id": "glass", "kind": "material@1", "name": "Glass", "order": "a1", "layer": "main", "params": {"base_color": [1, 1, 1, 1], "metallic": 0, "roughness": 0.2, "transmission": 1, "ior": 1.5}}));
+        items.insert("tint".into(), json!({"id": "tint", "kind": "material@1", "name": "Tint", "order": "a2", "layer": "main", "params": {"base_color": [1, 0.5, 0.2, 0.5], "alpha_mode": "blend"}}));
+        items.insert("a".into(), part("a", "b0", -0.6, "glass"));
+        items.insert("b".into(), part("b", "b1", 0.6, "tint"));
+        let doc = json!({
+            "format": 1, "profile": "scene", "title": "T", "size": [96, 64], "camera": "cam",
+            "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
+            "items": items,
+        });
+        let mut labels = Labels::new();
+        let mut frames = Frames::new(&doc, &look, &mut labels).unwrap();
+        frames
+            .at(0, [96, 64], &Default::default(), &mut labels)
+            .unwrap();
+        let mut renderer = Renderer::new(&device, Planted::default());
+        draw_offscreen(&device, &mut renderer, frames.scene(), &look, None);
+        assert!(
+            renderer.clear_pipelines[usize::from(GLASS)].is_some(),
+            "the glass part is drawn as glass"
+        );
+        let raised = device.take_raised();
+        assert!(raised.is_empty(), "the device raised: {raised:?}");
     }
 }

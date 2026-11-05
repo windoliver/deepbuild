@@ -1565,6 +1565,23 @@ fn occlusion(pos: vec2<f32>, albedo: vec3<f32>) -> vec3<f32> {
 // so every derivative the shading takes still sees the whole quad.
 @fragment
 fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
+    return mesh(in, front);
+}
+
+// The object ID whole, for a pass drawn after the resolve into its one-sample target (#1173).
+struct Resolved {
+    @location(0) color: vec4<f32>,
+    @location(1) id: u32,
+};
+
+// A transmissive part (#428), drawn over the resolved opaque scene.
+@fragment
+fn glass_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Resolved {
+    let t = mesh(in, front);
+    return Resolved(t.color, t.id.x | (t.id.y << 16u));
+}
+
+fn mesh(in: MeshOut, front: bool) -> Targets {
     // The texture coordinates' derivatives, while every pixel of the quad still runs (#423).
     let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
     // Derivatives first, while every pixel of the quad still runs: the face's normal in its
