@@ -4,5 +4,8 @@ pub mod compile;
 pub mod docops;
 pub mod frame;
 pub mod glow;
+pub mod mips;
+pub mod planted;
 pub mod reference;
 pub mod runner;
+pub mod structural;

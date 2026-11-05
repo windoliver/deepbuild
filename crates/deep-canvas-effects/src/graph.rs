@@ -142,6 +142,8 @@ pub enum Ty {
     /// `mat3x3<f32>` or `mat4x4<f32>`.
     Mat(u8),
     Tex(Tex),
+    /// A 3D texture a compute operator wrote earlier in the frame (#483).
+    Tex3(Tex),
     /// `array<T, n ≤ 16>`.
     Arr(Sc, u8, u32),
     /// A storage buffer of `count` scalars, read with `read` and written with `write`.
@@ -163,6 +165,8 @@ impl Ty {
             Ty::Tex(Tex::Float) => "texture_2d<f32>".into(),
             Ty::Tex(Tex::Uint) => "texture_2d<u32>".into(),
             Ty::Tex(Tex::Depth) => "texture_depth_2d".into(),
+            Ty::Tex3(Tex::Uint) => "texture_3d<u32>".into(),
+            Ty::Tex3(_) => "texture_3d<f32>".into(),
             Ty::Arr(sc, 1, n) => format!("array<{}, {n}>", sc.wgsl()),
             Ty::Arr(sc, l, n) => format!("array<vec{l}<{}>, {n}>", sc.wgsl()),
             // Bools are stored as u32 words.
@@ -191,6 +195,8 @@ impl Ty {
             "texture" | "texture<f32>" => return Some(Ty::Tex(Tex::Float)),
             "texture<u32>" => return Some(Ty::Tex(Tex::Uint)),
             "depth" => return Some(Ty::Tex(Tex::Depth)),
+            "texture3d" | "texture3d<f32>" => return Some(Ty::Tex3(Tex::Float)),
+            "texture3d<u32>" => return Some(Ty::Tex3(Tex::Uint)),
             _ => {}
         }
         if let Some(rest) = t.strip_prefix("vec") {
@@ -223,6 +229,13 @@ pub enum From {
     Target {
         op: String,
         output: String,
+    },
+    /// A 3D texture a compute operator wrote earlier in the frame; `previous` marks a read of
+    /// an earlier frame's, which the check refuses (#483).
+    Texture3d {
+        op: String,
+        output: String,
+        previous: bool,
     },
     /// Storage an operator wrote earlier in the frame.
     Storage {
@@ -298,6 +311,21 @@ pub struct Step {
     /// (convert and bitcast), `pick` (split), `of` (camera).
     pub fields: Map<String, Value>,
     pub body: Option<Box<Body>>,
+    /// An `iterate@1`'s count, ping-pong targets and body pass (#483).
+    pub iterate: Option<Box<Iterate>>,
+}
+
+/// `iterate {count ≤ 16, body: pass graph, ping_pong: {format, resolution}}` (Step and the closed
+/// step list: structural steps): `body` runs `count` times over two targets, each run reading the
+/// last run's output as the input `prev` and its run as the u32 `index`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Iterate {
+    pub count: u64,
+    pub index: String,
+    pub format: String,
+    pub resolution: Size,
+    pub steps: BTreeMap<String, Step>,
+    pub outputs: BTreeMap<String, Arg>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -351,11 +379,56 @@ pub enum Size {
     Of { input: String, scale: f64 },
 }
 
+/// The formats a compute texture output may take (Operator output).
+pub const TEXTURE_FORMATS: &[&str] = &["r32uint", "r32float", "rgba16float", "rgba8unorm"];
+
+/// A compute operator's texture output: `texture {format, size, mips}` (2D) or `texture3d
+/// {format, size}` (#483).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TexOut {
+    pub format: String,
+    /// Width, height and depth (1 for 2D).
+    pub size: [u32; 3],
+    pub dim3: bool,
+    pub mips: bool,
+}
+
+impl TexOut {
+    /// Bytes a texel takes.
+    pub fn texel_bytes(&self) -> u64 {
+        match self.format.as_str() {
+            "rgba16float" => 8,
+            _ => 4,
+        }
+    }
+
+    /// Bytes it takes in the class's operator storage: its texels, and a third more with mips.
+    pub fn bytes(&self) -> u64 {
+        let base = self.texel_bytes() * self.size.iter().map(|&n| u64::from(n)).product::<u64>();
+        if self.mips {
+            base + base / 3
+        } else {
+            base
+        }
+    }
+
+    /// The value one of its texels holds.
+    pub fn value(&self) -> Ty {
+        match self.format.as_str() {
+            "r32uint" => Ty::U32,
+            "r32float" => Ty::F32,
+            _ => Ty::V(Sc::F32, 4),
+        }
+    }
+}
+
 /// A compute operator's output: storage of `count` scalars.
 #[derive(Clone, Debug, PartialEq)]
 pub struct StorageOut {
     pub sc: Sc,
     pub count: u32,
+    /// The multi-dispatch step whose result it takes (`from: step[.port]`, #483).
+    pub from: Option<Arg>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -369,6 +442,8 @@ pub struct Operator {
     pub outputs: BTreeMap<String, Arg>,
     /// A compute operator's storage outputs.
     pub storage: BTreeMap<String, StorageOut>,
+    /// A compute operator's texture outputs (#483).
+    pub textures: BTreeMap<String, TexOut>,
     pub blend: Blend,
     pub declared: Option<Class>,
     pub fallback: Fallback,
@@ -427,6 +502,8 @@ const LITERAL_FIELDS: &[&str] = &[
     "octaves",
     "lacunarity",
     "gain",
+    // scan's operator (#483).
+    "op",
 ];
 /// The look's status roles: no operator reads or writes one (Status guard).
 pub const STATUS_ROLES: &[&str] = &[
@@ -531,6 +608,7 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
         }
     };
     let repeat = op.starts_with("repeat@");
+    let iterating = op == "iterate@1";
     let role = (op == "role@1")
         .then(|| given.get("name").and_then(Value::as_str))
         .flatten();
@@ -541,11 +619,13 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
             fields.insert(port.clone(), v.clone());
         } else if !(repeat
             && ["count", "accumulate", "body", "stop_if", "index"].contains(&port.as_str()))
+            && !(iterating && ["count", "body", "index", "ping_pong"].contains(&port.as_str()))
         {
             args.insert(port.clone(), arg(v));
         }
     }
     let body = repeat.then(|| Box::new(body(given, issues)));
+    let iterate = iterating.then(|| Box::new(iterate(id, given, issues)));
     if let Some(name) = role {
         args.insert("x".into(), Arg::Ref(role_input(name), None));
     }
@@ -555,7 +635,65 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
         when: o.get("when").and_then(Value::as_str).map(String::from),
         fields,
         body,
+        iterate,
     })
+}
+
+fn size_of(v: Option<&Value>, path: &str, issues: &mut Vec<Issue>) -> Size {
+    match v.and_then(Value::as_str) {
+        None | Some("half") => Size::Half,
+        Some("full") => Size::Full,
+        Some("quarter") => Size::Quarter,
+        Some(_) => {
+            issues.push(Issue::at_path(
+                "operator_type",
+                path,
+                "resolution is full, half or quarter",
+            ));
+            Size::Half
+        }
+    }
+}
+
+fn iterate(id: &str, a: &Map<String, Value>, issues: &mut Vec<Issue>) -> Iterate {
+    let pp = a.get("ping_pong");
+    let body = a.get("body");
+    let mut outputs = BTreeMap::new();
+    if let Some(o) = body.and_then(|b| b.get("outputs")).and_then(Value::as_object) {
+        for (name, v) in o {
+            outputs.insert(name.clone(), arg(v));
+        }
+    }
+    let count = match a.get("count").and_then(Value::as_u64) {
+        Some(c) => c,
+        None => {
+            issues.push(Issue::at_step(
+                "operator_unbounded",
+                id,
+                "an iterate's count is a literal, fixed at check",
+            ));
+            0
+        }
+    };
+    Iterate {
+        count,
+        index: a
+            .get("index")
+            .and_then(Value::as_str)
+            .unwrap_or("index")
+            .to_string(),
+        format: pp
+            .and_then(|p| p.get("format"))
+            .and_then(Value::as_str)
+            .unwrap_or("rgba16float")
+            .to_string(),
+        resolution: size_of(pp.and_then(|p| p.get("resolution")), "steps", issues),
+        steps: steps(
+            body.and_then(|b| b.get("steps")).unwrap_or(&Value::Null),
+            issues,
+        ),
+        outputs,
+    }
 }
 
 fn body(a: &Map<String, Value>, issues: &mut Vec<Issue>) -> Body {
@@ -634,6 +772,15 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                         bad(issues, "a texture input names a target {op, output}");
                         return None;
                     }
+                }
+            } else if let Some(t) = f.get("texture3d") {
+                From::Texture3d {
+                    op: t.get("op").and_then(Value::as_str).unwrap_or("").into(),
+                    output: t.get("output").and_then(Value::as_str).unwrap_or("").into(),
+                    previous: t
+                        .get("frame")
+                        .and_then(Value::as_str)
+                        .is_some_and(|f| f != "current"),
                 }
             } else if let Some(s) = f.get("storage") {
                 From::Storage {
@@ -820,6 +967,9 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
             if let Some(b) = &s.body {
                 stack.push(&b.steps);
             }
+            if let Some(it) = &s.iterate {
+                stack.push(&it.steps);
+            }
         }
     }
     for name in roles {
@@ -832,6 +982,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
     }
     let mut outputs = BTreeMap::new();
     let mut storage = BTreeMap::new();
+    let mut textures = BTreeMap::new();
     let mut blend = Blend::Replace;
     if let Some(out) = o.get("outputs").and_then(Value::as_object) {
         for (name, v) in out {
@@ -853,6 +1004,39 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 };
                 continue;
             }
+            if let Some((t, dim3)) = v
+                .get("texture")
+                .map(|t| (t, false))
+                .or_else(|| v.get("texture3d").map(|t| (t, true)))
+            {
+                let path = format!("outputs/{name}");
+                let format = t.get("format").and_then(Value::as_str).unwrap_or("");
+                let size: Vec<u32> = t
+                    .get("size")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_u64).map(|n| n as u32).collect())
+                    .unwrap_or_default();
+                let mips = t.get("mips").and_then(Value::as_bool).unwrap_or(false);
+                let dims = if dim3 { 3 } else { 2 };
+                if !TEXTURE_FORMATS.contains(&format) || size.len() != dims {
+                    issues.push(Issue::at_path(
+                        "operator_type",
+                        &path,
+                        format!("a texture output is {{format: {}, size: [{dims} sizes]}}", TEXTURE_FORMATS.join(" | ")),
+                    ));
+                    continue;
+                }
+                textures.insert(
+                    name.clone(),
+                    TexOut {
+                        format: format.into(),
+                        size: [size[0], size[1], if dim3 { size[2] } else { 1 }],
+                        dim3,
+                        mips,
+                    },
+                );
+                continue;
+            }
             // A readback (exact only, ≤ 64 KiB) is storage the CPU reads back a frame late.
             if let Some(s) = v.get("storage").or_else(|| v.get("readback")) {
                 if v.get("readback").is_some()
@@ -872,6 +1056,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                             StorageOut {
                                 sc,
                                 count: count as u32,
+                                from: v.get("from").map(arg),
                             },
                         );
                     }
@@ -976,6 +1161,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
         steps,
         outputs,
         storage,
+        textures,
         blend,
         declared,
         fallback,
