@@ -3761,10 +3761,6 @@ export class Core {
     await this.queue(() => this.appendReading(session, live?.agent ?? 'claude-code', `${checks.join(', ')} waited 30 minutes for work in the background and ${checks.length === 1 ? 'starts' : 'start'} now${still.length ? `; still running: ${backgrounded(still)}, which DeepBuild leaves running` : ''}.`));
   }
   /**
-   * The messages typed mid-turn since the last acknowledgement (#340): the agent is asked to acknowledge each in one
-   * line, and the chat shows each with its task and the queue: every message typed mid-turn in the turn so far.
-   */
-  /**
    * An idle session woken with a notice through its waiter (#352): never one held on an ask still open for you, or
    * whose newest claim's verdict stands BLOCKED (its cause yours to clear, which a BLOCKED verdict names); that one
    * hears it at its next turn instead.
@@ -3792,6 +3788,10 @@ export class Core {
       return typeof origin?.from === 'string' ? /^local_(.+)$/.exec(origin.from)?.[1] : undefined;
     });
   }
+  /**
+   * The messages typed mid-turn since the last acknowledgement (#340): the agent is asked to acknowledge each in one
+   * line, and the chat shows each with its task and the queue: every message typed mid-turn in the turn so far.
+   */
   private acknowledge(id: string): { context?: string; message?: string } {
     const acks = this.acks.get(id);
     this.acks.delete(id);
@@ -5182,7 +5182,6 @@ export class Core {
     return { channel, account };
   }
 
-  /** What feeds your numbers or labels is yours to run: an agent's word is never evidence. */
   /** `deep race <issue>` (#352): you start a race on an issue, so its sessions settle on the first PASS and raise no "keep which?" ask. */
   private async race(params: Obj, context: CallContext): Promise<Obj> {
     const issue = Number(params.issue);
@@ -5198,6 +5197,7 @@ export class Core {
     await this.append(this.connection('core'), { v: 1, id: ulid(ts), kind: 'race.started', ts, data: { issue } });
     return { issue };
   }
+  /** What feeds your numbers or labels is yours to run: an agent's word is never evidence. */
   private async notAnAgent(context: CallContext, method: string): Promise<void> {
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing changed: this deep command runs inside agent session ${agent}'s process tree, and no agent feeds its own numbers. Run it from your own terminal.`, method));

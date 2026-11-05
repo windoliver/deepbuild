@@ -115,8 +115,8 @@ export interface HookMeta {
    */
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
   /**
-   * The hunks an edit's PostToolUse reports (#352): each by its old start and length and its new length, with the new
-   * lines it changed, its common head and tail taken off. Numbers only: no line's text leaves the parser.
+   * The hunks an edit's PostToolUse reports (#352): one per run of changed lines, its context and its common head and
+   * tail taken off, in order down the file. Numbers only: no line's text leaves the parser.
    */
   hunks?: Hunk[];
   /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
@@ -128,7 +128,7 @@ export interface HookMeta {
   loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: 'subagent' | 'command'; call: string; what: string }
     | { monitor: string; what: string; command: string; timeout: number | null } | { stopped: string };
 }
-/** One hunk of an edit, in line numbers (#352). */
+/** One run of an edit's changed lines (#352): where it starts once the runs above it are applied, the lines it removes and adds there, and the new lines it changed. */
 export interface Hunk { oldStart: number; oldLines: number; newLines: number; changed: number[] }
 /** The effect classes no "proceed" covers (#321). */
 export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']);
