@@ -849,6 +849,9 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
 }
 
 fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
+    // The cold report's build time runs from here to the first frame's scene, less the view's
+    // opening, which compiles (#428).
+    let started = std::time::Instant::now();
     let mut args = parse(call)?;
     // A document that names packs draws as the check lowers it, the call's packs installed
     // first (#429).
@@ -890,8 +893,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     };
     let size = args.size;
     let timings = args.timings && !noop;
+    let opening = std::time::Instant::now();
     let opened = session3::open_doc(app, size, timings, shows, &args.doc)?;
     session3::surface(app, args.surface)?;
+    let opening = opening.elapsed();
+    let mut build_ms = None;
     let (ui, fx) = (opened.ui.clone(), opened.fx.clone());
     // What the view compiled as it opened, before its first frame (#854).
     let mut cold = args.cold.then(|| (session3::pipelines(app), Value::Null));
@@ -1050,6 +1056,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let mut scene =
                 evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
                     .map_err(|r| refused(r.code, r.path))?;
+            if build_ms.is_none() {
+                build_ms = Some(started.elapsed().saturating_sub(opening).as_secs_f64() * 1e3);
+            }
             let values = if args.evaluate.is_empty() {
                 None
             } else {
@@ -1508,7 +1517,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                         .into_iter()
                         .map(|p| json!({"name": p, "on_first_frame": !before.contains(&p)}))
                         .collect();
-                    *report = json!({"since_spawn_ms": ms, "pipelines": pipelines});
+                    *report =
+                        json!({"since_spawn_ms": ms, "pipelines": pipelines, "build_ms": build_ms});
                 }
             }
             // A material operator that can't draw refuses the frame, never drawn without it.
