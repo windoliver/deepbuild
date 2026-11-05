@@ -373,6 +373,8 @@ export class Core {
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   private asks!: Asks;
+  /** What the app last said of macOS and its notifications (#994). */
+  private notifications: string | null = null;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
   private readonly holds: Holds;
   /** The ask each plug-in change or send waits on, by its session and request ID (#363). */
@@ -4902,6 +4904,14 @@ export class Core {
           .catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
         return { reported: true };
       }
+      case 'notifications.report': {
+        if (context.role !== 'app') throw refuse('role', '/method', 'Only the app reports its notification setting.', method);
+        const setting = params.setting;
+        if (setting !== 'allowed' && setting !== 'denied' && setting !== 'alerts_none') throw refuse('type', '/params/setting', 'The setting is allowed, denied or alerts_none.', method);
+        this.notifications = setting;
+        await this.asks.notifications(setting !== 'allowed');
+        return { reported: true };
+      }
       case 'windows.report': return this.runner.report(params as unknown as WindowReport).then(() => { this.tasks.windowChanged(); return { reported: true }; });
       default: throw new Refused(refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method));
     }
@@ -4949,12 +4959,17 @@ export class Core {
     return { folder };
   }
 
+  /** The app that reported the setting left: asks no longer wait on its reading, which `deep doctor` keeps showing. */
+  async notifierGone(): Promise<void> {
+    await this.asks.notifications(false);
+  }
+
   async health(): Promise<Obj> {
     const network = Object.values(networkInterfaces()).flat().some((i) => i && !i.internal) ? 'reachable' : 'unreachable';
     // The timing relations our entries in Claude Code's settings keep, and what the settings watch and recheck put back.
     const claude = { relations: relations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...this.settingsReadings] };
     const codex = { relations: codexRelations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...modified(this.root.dir), ...trustProblems(this.root.dir).map((p) => `Codex's hook list reports ${p}`)], trust: readTrust(this.root.dir) ?? null };
-    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, secrets: await this.secretStore(), network, claude, codex, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
+    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
   private secretStore(): Promise<string> {

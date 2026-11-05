@@ -30251,6 +30251,7 @@ pub enum DoctorItemCode {
     RenderFailed,
     JobFailing,
     HookProgramMissing,
+    NotificationsOff,
     Unknown,
 }
 
@@ -30282,6 +30283,7 @@ impl Contract for DoctorItemCode {
             "render_failed" => Ok(Self::RenderFailed),
             "job_failing" => Ok(Self::JobFailing),
             "hook_program_missing" => Ok(Self::HookProgramMissing),
+            "notifications_off" => Ok(Self::NotificationsOff),
             "unknown" => Ok(Self::Unknown),
             other => Err(format!("{at}: {other:?} is not one of the listed values")),
         }
@@ -30313,6 +30315,7 @@ impl Contract for DoctorItemCode {
             Self::RenderFailed => "render_failed",
             Self::JobFailing => "job_failing",
             Self::HookProgramMissing => "hook_program_missing",
+            Self::NotificationsOff => "notifications_off",
             Self::Unknown => "unknown",
         }.to_string())
     }
