@@ -7,7 +7,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { deflateSync, inflateSync } from 'node:zlib';
@@ -221,7 +221,7 @@ export function drawn(dir: string, v: VectorDoc, what: string, planted?: string)
 // The pinned headless Chrome (README: Chrome).
 
 export const CHROME_VERSION = '156.0.8078.4';
-export const CHROME = process.env['DEEP1175_CHROME'] ?? '/home/jing/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux-arm64/chrome-headless-shell';
+export const CHROME = process.env['DEEP1175_CHROME'] ?? join(homedir(), '.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux-arm64/chrome-headless-shell');
 
 /** BLOCKED unless the pinned Chrome for Testing is there at its pinned version. */
 export function requireChrome(): void {
