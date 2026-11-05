@@ -397,6 +397,24 @@ impl Camera {
         [dot(d, self.right), dot(d, self.up), dot(d, self.forward)]
     }
 
+    /// The world point at frame px (`sx`, `sy`) and depth `vz` along the forward axis: the
+    /// inverse of [`Camera::project`].
+    pub fn unproject(&self, sx: f64, sy: f64, vz: f64) -> Vec3 {
+        let [c, sn] = self.roll;
+        let (dx, dy) = (sx - self.centre[0], sy - self.centre[1]);
+        let (x, y) = (dx * c + dy * sn, -dx * sn + dy * c);
+        let s = if self.perspective {
+            self.scale / vz
+        } else {
+            self.scale
+        };
+        let (vx, vy) = (x / s, -y / s);
+        add(
+            add(add(self.eye, mul(self.right, vx)), mul(self.up, vy)),
+            mul(self.forward, vz),
+        )
+    }
+
     /// Where a point lands in px (x right, y down) with its depth, or `None` behind a
     /// perspective eye.
     pub fn project(&self, p: Vec3) -> Option<[f64; 3]> {
@@ -580,6 +598,29 @@ pub struct Other {
     pub pos: Vec3,
 }
 
+/// Motion blur by velocity (#419; Motion blur: velocity): the cameras at t − s/2 and t + s/2, each
+/// solid's world at both times by ID, and, for a solid whose surface deforms with its topology
+/// held, its mesh at both times; with the reconstruction's taps, travel cap and tile.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Motion {
+    pub open: Camera,
+    pub close: Camera,
+    pub solids: BTreeMap<String, MotionSolid>,
+    pub taps: u32,
+    pub max_px: f64,
+    pub tile_px: u32,
+}
+
+/// One solid's place at t − s/2 and t + s/2.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MotionSolid {
+    pub open: Affine3,
+    pub close: Affine3,
+    /// Its pre-skins at both times, vertex for vertex with its mesh at t; `None` reads its mesh at
+    /// t at both times (a rigid item, or one whose topology changed inside the shutter).
+    pub meshes: Option<(Arc<crate::geom::Mesh>, Arc<crate::geom::Mesh>)>,
+}
+
 /// A document at t, as the GPU layer draws it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scene {
@@ -601,6 +642,12 @@ pub struct Scene {
     pub curves: BTreeMap<String, Vec<Vec3>>,
     /// The core's glyph atlas pages the labels' glyphs sample, by page number.
     pub pages: Vec<AtlasPage>,
+    /// Motion blur by velocity this frame (#419): the evaluations at t ± half the shutter that the
+    /// renderer's velocity target reads, or `None`.
+    pub motion: Option<Arc<Motion>>,
+    /// Each `overlay.text@1` readout (#419): drawn by the view after the frame's samples and
+    /// motion blur resolve, over the frame, never into the frame itself.
+    pub readouts: Vec<Label>,
     /// The texels of every map the solids sample, by the image's SHA-256, as the host had the
     /// decode worker make them (#423); a map whose texels aren't here draws without it.
     pub texels: BTreeMap<String, Arc<crate::light::Texels>>,
@@ -1975,6 +2022,7 @@ pub(crate) fn evaluate_compiled(
 
     let mut layers = Vec::new();
     let mut overlay_items = Vec::new();
+    let mut readout_items: Vec<(String, Value)> = Vec::new();
     // The document as builders read it (the curves they name), made once when one draws.
     let mut doc_value: Option<Value> = None;
     let mut bounds: Vec<Vec3> = Vec::new();
@@ -2110,13 +2158,64 @@ pub(crate) fn evaluate_compiled(
                         layer.solids.push(s);
                     }
                 }
+                "mesh.sequence@1" if assets.is_none() => {}
+                // #419's stand-in for the physics module: each body a sphere at the bake's
+                // position at t, read from the bake, never stepped.
+                "fixture.world@1" => {
+                    let w = crate::fixtures::bake(params, &path)?;
+                    let material = light::material(item, |m| items.get(m), look, id)?;
+                    let surface = surface(&items, look, id, item)?;
+                    for (b, p) in w.bodies.iter().zip(w.at(t)) {
+                        let r = 2.0 * b.radius;
+                        let model = [
+                            [r, 0.0, 0.0, p[0]],
+                            [0.0, r, 0.0, p[1]],
+                            [0.0, 0.0, r, p[2]],
+                        ];
+                        bounds.extend(corners(&model));
+                        layer.solids.push(Solid {
+                            maps: None,
+                            id: format!("{id}#{}", b.id),
+                            shape: Shape::Sphere,
+                            model,
+                            color: match (&surface.color, &material) {
+                                (Some(c), _) => *c,
+                                (None, Some(m)) => [m.base[0], m.base[1], m.base[2]].map(encode8),
+                                (None, None) => paint(look, params, &path)?,
+                            },
+                            stroke: None,
+                            mesh: None,
+                            lod: None,
+                            mask: None,
+                            cast_only: false,
+                            inset: 0.0,
+                            cast_shadow: casts(item, &material),
+                            receive_shadow: shadows(item, "receive_shadow"),
+                            material: material.clone(),
+                            sort_bias: 0.0,
+                            alpha: surface.alpha,
+                            emission: surface.emission,
+                            op: None,
+                            cut: false,
+                            per_pixel: false,
+                            adjust: None,
+                        });
+                    }
+                }
                 k if crate::builders::KINDS.contains(&k)
                     || crate::building::KINDS.contains(&k)
-                    || k == "mesh.asset@1" =>
+                    || k == "mesh.asset@1"
+                    || k == "mesh.sequence@1"
+                    || k == "fixture.skin@1" =>
                 {
                     let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
                     let (mesh, shared) = match (k, assets) {
                         ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params)?,
+                        // #419's stand-ins: a pre-skin per time, and a sequence's frame at t.
+                        ("fixture.skin@1", _) => (crate::fixtures::skin(params, &path)?, None),
+                        ("mesh.sequence@1", Some(read)) => {
+                            (crate::fixtures::sequence(params, t, &path, read)?, None)
+                        }
                         _ => (mesh_of(doc, id, item, seconds, outlines)?, None),
                     };
                     if mesh.triangles() == 0 {
@@ -2264,6 +2363,7 @@ pub(crate) fn evaluate_compiled(
                     });
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
+                "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
                 "puff@1" => {
                     let m = world(&items, id);
                     layer.puffs.push(puff(id, params, origin(&m), &path)?);
@@ -2425,11 +2525,49 @@ pub(crate) fn evaluate_compiled(
         &cam_path,
     )?;
 
+    // A readout sits in the view's top-left corner, its text the template's (#419).
+    let mut readouts = Vec::new();
+    for (id, params) in &readout_items {
+        let text = params.get("template").and_then(Value::as_str).unwrap_or("");
+        let size = num(params.get("size")).unwrap_or(13.0);
+        let (run_box, glyphs) = labels.run(text, Role::Body, size as f32);
+        let shaped_at = glyphs.first().map_or(size as f32, |g| g.size);
+        let quad = [
+            run_box[0] * size / f64::from(shaped_at),
+            run_box[1] * size / f64::from(shaped_at),
+        ];
+        let depth = if camera.perspective {
+            2.0 * camera.near
+        } else {
+            camera.near + 0.01
+        };
+        readouts.push(Label {
+            id: id.clone(),
+            text: text.to_string(),
+            role: Role::Body,
+            glyphs,
+            bounds: run_box,
+            pos: camera.unproject(12.0 + quad[0] / 2.0, 12.0 + quad[1] / 2.0, depth),
+            em: size,
+            quad,
+            world: false,
+            facing: Facing::Camera,
+            axes: [camera.right, camera.up],
+            color: look
+                .role("stone")
+                .or(look.role("ink"))
+                .unwrap_or([255, 255, 255]),
+        });
+    }
     // Each label's glyphs from the atlas at its size on screen; a frame that found the atlas full
     // starts it over and places them all again.
     labels.begin();
     for pass in 0..2 {
-        for l in layers.iter_mut().flat_map(|layer| layer.labels.iter_mut()) {
+        for l in layers
+            .iter_mut()
+            .flat_map(|layer| layer.labels.iter_mut())
+            .chain(readouts.iter_mut())
+        {
             let em_px = if l.world {
                 l.em * camera.px_per_m(camera.to_view(l.pos)[2])
             } else {
@@ -2468,6 +2606,8 @@ pub(crate) fn evaluate_compiled(
         light_cut: None,
         curves,
         pages: labels.pages(),
+        motion: None,
+        readouts,
         texels: BTreeMap::new(),
         jitter: [0.0; 2],
         cutaway: None,

@@ -1784,10 +1784,10 @@ fn cuts_of(
     Ok(cuts)
 }
 
-/// The marker kinds (canvas primitives: Marker).
-/// Stage and hold markers wait on present mode (Marker: present mode), which motion doesn't land
-/// yet, so they are refused rather than played through.
-const MARKER_KINDS: [&str; 7] = ["cue", "shot", "section", "beat", "word", "moment", "record"];
+/// The marker kinds (canvas primitives: Marker), with a reading hold (#419), which motion blur
+/// never spans. Stage markers wait on present mode (Marker: present mode), which motion doesn't
+/// land yet, so they are refused rather than played through.
+const MARKER_KINDS: [&str; 8] = ["cue", "shot", "section", "beat", "word", "moment", "record", "hold"];
 
 /// Resolves every marker at check, in dependency order: a marker whose time names another marker
 /// waits for it, so a relative time keeps its offset when its marker moves. One that never
