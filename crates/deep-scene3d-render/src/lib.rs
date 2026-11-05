@@ -3770,6 +3770,7 @@ impl Renderer {
                 self.frame_bind.clone(),
                 self.lights_bind.clone(),
                 self.ao.shade().clone(),
+                self.maps.none.clone(),
             ],
             buffer,
             count,
@@ -3859,6 +3860,7 @@ impl Renderer {
                 self.frame_bind.clone(),
                 self.lights_bind.clone(),
                 self.ao.shade().clone(),
+                self.maps.none.clone(),
             ],
         ))
     }
@@ -4087,10 +4089,10 @@ pub(crate) fn read_texture(
     Some(out)
 }
 
-/// The sky's draw: its pipeline and the solids' three bind groups.
-type SkyDraw = (wgpu::RenderPipeline, [wgpu::BindGroup; 3]);
+/// The sky's draw: its pipeline and the solids' four bind groups, the maps' stand-in last (#1285).
+type SkyDraw = (wgpu::RenderPipeline, [wgpu::BindGroup; 4]);
 /// The puffs' draw: their pipeline, the solids' bind groups, and their instances back to front.
-type PuffDraw = (wgpu::RenderPipeline, [wgpu::BindGroup; 3], wgpu::Buffer, u32);
+type PuffDraw = (wgpu::RenderPipeline, [wgpu::BindGroup; 4], wgpu::Buffer, u32);
 
 /// A puff's instance record (scene3d.wgsl's `puff_vs`).
 #[repr(C)]
