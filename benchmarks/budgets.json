@@ -1134,6 +1134,16 @@
       "initialReason": "Issue #429 first measurement: the merge base draws no operator item. One process opens the data_view class's fixture (benchmarks/canvas/data_view.json) with a composed pass that tints the frame at the class's half resolution in `deep-gpu`'s live window, five runs of 300 frames after 30 of warm-up, each run the p95 of the operator's own pass, held to the class's 0.5 ms in tests/acceptance/429/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "products-place",
+      "command": [
+        "node",
+        "benchmarks/products.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1017 first measurement: the merge base places no build product. One process clones a product shaped like a small Rust target (20 files of 1 MB and 1,000 of 4 KB) copy-on-write into ten new folders one after another, as a worktree receives it; the issue's 2 s for a 15 GB target and a 500 MB node_modules stays in tests/acceptance/1017/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "journey-run",
       "command": [
         "node",
