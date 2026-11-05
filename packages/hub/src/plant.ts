@@ -116,7 +116,10 @@ export type Plant =
   | 'normalizer-drops-numbers' | 'pr-body-only' | 'resolved-counts-closed' | 'completed-closes-item'
   // #669's: a command check's runner that reads a masked exit as a clean pass, a stop reply whose line says PASS with no
   // verdict behind it, and a status question sent on to the model.
-  | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model';
+  | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model'
+  // #1016's: a jobserver of its own for each build, a pipe topped up while a build runs, and a runner's share that
+  // ignores the builds running beside it.
+  | 'jobserver-per-build' | 'refills-while-running' | 'share-ignores-running-build';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -173,6 +176,7 @@ const PLANTS: readonly string[] = [
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
+  'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
