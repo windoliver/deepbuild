@@ -8,7 +8,7 @@ import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@d
 import { scrubText } from '@deepbuild/evidence';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
-import { derivedId, refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
+import { derivedId, refusal, signature, type Draft, type HookMeta, type Hunk, type Parsed, type Plant } from './wire.js';
 
 /** The hub's moments an agent's own event names stand for, where the agent's differ from the hook names the core reads. */
 const MOMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
@@ -32,6 +32,40 @@ const needsSubject = (kind: string): boolean => {
   if (needs === undefined) aboutSession.set(kind, (needs = ((getSchema(`${kind}@1`) as { required?: string[] }).required ?? []).includes('subject')));
   return needs;
 };
+
+/**
+ * A structuredPatch hunk in line numbers (#352): the new lines each run of removed and added lines changed, its lines
+ * equal at both ends taken off, so an insert above a line counts as the insert alone; a run that only removes marks
+ * where it was. The lines' text is compared here and dropped.
+ */
+function hunkOf(h: JsonObject): Hunk[] {
+  const nums = [h.oldStart, h.oldLines, h.newStart, h.newLines];
+  if (!nums.every((n) => Number.isInteger(n) && Number(n) >= 0) || !Array.isArray(h.lines)) return [];
+  const [oldStart, oldLines, newStart, newLines] = nums as number[];
+  const changed: number[] = [];
+  let line = newStart!;
+  let gone: string[] = [];
+  let came: string[] = [];
+  const flush = () => {
+    let head = 0;
+    while (head < gone.length && head < came.length && gone[head] === came[head]) head++;
+    let tail = 0;
+    while (tail < gone.length - head && tail < came.length - head && gone[gone.length - 1 - tail] === came[came.length - 1 - tail]) tail++;
+    const first = line - came.length;
+    for (let i = head; i < came.length - tail; i++) changed.push(first + i);
+    if (came.length - tail <= head && gone.length - tail > head) changed.push(first + head);
+    gone = [];
+    came = [];
+  };
+  for (const raw of h.lines) {
+    const text = str(raw);
+    if (text.startsWith('-')) { if (came.length) flush(); gone.push(text.slice(1)); }
+    else if (text.startsWith('+')) { came.push(text.slice(1)); line++; }
+    else { flush(); line++; }
+  }
+  flush();
+  return [{ oldStart: oldStart!, oldLines: oldLines!, newLines: newLines!, changed: [...new Set(changed)].sort((a, b) => a - b) }];
+}
 
 let adapters: AdapterRegistry | undefined;
 /**
@@ -199,6 +233,10 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
   if (plant === 'writer-from-payload' && typeof payload.writer === 'string') meta.payloadWriter = payload.writer;
   if (plant === 'matches-text' && tool === 'Bash' && isObj(payload.tool_input)) meta.command = str(payload.tool_input.command);
+  if (event === 'PostToolUse' && isObj(payload.tool_response) && Array.isArray(payload.tool_response.structuredPatch)) {
+    const hunks = payload.tool_response.structuredPatch.flatMap((h) => (isObj(h) ? hunkOf(h) : []));
+    if (hunks.length) meta.hunks = hunks;
+  }
   if ((event === 'PreToolUse' || event === 'PermissionRequest' || event === 'PostToolUse') && tool) {
     meta.call = { mode: str(payload.permission_mode), tool, input: isObj(payload.tool_input) ? payload.tool_input : {}, suggestions: Array.isArray(payload.permission_suggestions) ? payload.permission_suggestions : [] };
   }

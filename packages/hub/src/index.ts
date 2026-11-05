@@ -9,7 +9,7 @@ import { confirmed, gatesCommand, useCommand } from './authority.js';
 import { backupCommand, restoreCommand } from './backup.js';
 import { envCommand } from './env.js';
 import { guardCommand } from './guards.js';
-import { inboxCommand } from './inbox.js';
+import { inboxCommand, raceCommand } from './inbox.js';
 import { installCommand } from './install.js';
 import { memoryCommand } from './memory.js';
 import { undoCommand } from './undo.js';
@@ -19,7 +19,7 @@ import { runHub } from './server.js';
 import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
 import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.js';
 
-export { backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, memoryCommand, relationItems, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
+export { backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, raceCommand, memoryCommand, relationItems, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
 export { numbersCommand, statusCommand } from './status.js';
 export { showCommand } from './show.js';
 export { kindsCommand } from './canvas.js';
