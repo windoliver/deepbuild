@@ -163,6 +163,7 @@ impl Hub<'_> {
             Err(code) => return json!({"code": code}),
         };
         let planted = self.scenario.module_planted.clone();
+        let outlines = self.startup.sealed.outlines.clone();
         let Some(session) = self.sessions.get(&g.doc) else {
             return json!({"code": "no_revision"});
         };
@@ -190,6 +191,8 @@ impl Hub<'_> {
                     .as_deref()
                     .and_then(Plants::named)
                     .unwrap_or_default(),
+                outlines: &outlines,
+                planted: planted.as_deref(),
             };
             let mut out = Vec::new();
             for id in &ids {
@@ -212,6 +215,7 @@ impl Hub<'_> {
                     planted: planted.clone(),
                     blocks: g.blocks,
                     rotate: g.rotate,
+                    outlines: outlines.clone(),
                 };
                 let ctx = Ctx {
                     id: id.as_str(),
@@ -315,6 +319,7 @@ impl Hub<'_> {
                         planted: planted.clone(),
                         blocks: g.blocks,
                         rotate: g.rotate,
+                        outlines: outlines.clone(),
                     };
                     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
                     deep_canvas_scene3d::build::built(&doc, id, i, &run, seconds)
@@ -369,6 +374,8 @@ impl Hub<'_> {
                         .as_deref()
                         .and_then(Plants::named)
                         .unwrap_or_default(),
+                    outlines: &outlines,
+                    planted: planted.as_deref(),
                 };
                 builders::estimate(&b.kind, &params, &ctx).unwrap_or(b.declared)
             } else if let Some(m) = &asset {

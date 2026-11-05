@@ -53,6 +53,8 @@ pub struct Run {
     pub planted: Option<String>,
     pub blocks: Option<usize>,
     pub rotate: usize,
+    /// The build's outline sources an `extrude` reads (#443).
+    pub outlines: Vec<deep_canvas::registry::SealedOutline>,
 }
 
 impl Run {
@@ -1247,6 +1249,8 @@ mod tests {
             id: "it",
             doc: &doc,
             plants: Default::default(),
+            outlines: &[],
+            planted: None,
         };
         builders::build("slab@1", &json!({"size": [1, 1, 1]}), &ctx).unwrap()
     }
@@ -1257,6 +1261,8 @@ mod tests {
             id: "it",
             doc: &doc,
             plants: Default::default(),
+            outlines: &[],
+            planted: None,
         };
         builders::build("plate@1", &json!({"grid": [2, 2], "size": [1, 1]}), &ctx).unwrap()
     }
@@ -1506,6 +1512,8 @@ mod tests {
             id: "it",
             doc: &doc,
             plants: Default::default(),
+            outlines: &[],
+            planted: None,
         };
         let d = builders::build("display@1", &json!({"size": [0.6, 0.4]}), &ctx).unwrap();
         let m = run(

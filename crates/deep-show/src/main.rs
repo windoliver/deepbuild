@@ -53,7 +53,8 @@ mod time;
     feature = "test-debug-digest",
     feature = "test-accent",
     feature = "test-threads",
-    feature = "test-scene3d-tie-by-order"
+    feature = "test-scene3d-tie-by-order",
+    feature = "test-scene3d-reads-vector"
 ))]
 mod twins;
 mod verdict;
@@ -1623,6 +1624,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-sim-c",
     feature = "test-gpu-second-backend",
     feature = "test-scene3d-tie-by-order",
+    feature = "test-scene3d-reads-vector",
     feature = "test-b",
     feature = "test-b-requires-a",
     feature = "test-two-writers",
@@ -1697,7 +1699,14 @@ fn modules(set: BuildSet) -> Vec<Module> {
         // Issue #421: `test-scene3d-tie-by-order` holds the planted implementation in its place.
         #[cfg(feature = "test-scene3d-tie-by-order")]
         out.push(twins::scene3d_tie_by_order());
-        #[cfg(not(feature = "test-scene3d-tie-by-order"))]
+        // Issue #443: `test-scene3d-reads-vector` holds the planted scene3d that reads vector's
+        // items itself.
+        #[cfg(feature = "test-scene3d-reads-vector")]
+        out.push(twins::scene3d_reads_vector());
+        #[cfg(not(any(
+            feature = "test-scene3d-tie-by-order",
+            feature = "test-scene3d-reads-vector"
+        )))]
         out.push(deep_canvas_scene3d::module::module());
         // Issue #380: the shipped effects, whose passes go into scene3d's frame; #200's planted
         // layout has it fill the op table's base steps.
@@ -1814,6 +1823,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     // #403: `full` holds no logic module yet; once one lands, this build leaves it out.
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
+    // #443: a build without the vector module, whose scene3d@1 and marks2d@1 digests equal the
+    // full set's.
+    #[cfg(feature = "test-leave-out-vector")]
+    out.retain(|m| m.manifest.name != "vector");
     // #489: a build without the data module, whose motion@1 digest equals the full set's.
     #[cfg(feature = "test-leave-out-data")]
     out.retain(|m| m.manifest.name != "data");
