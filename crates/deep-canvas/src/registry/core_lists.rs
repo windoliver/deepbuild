@@ -124,6 +124,7 @@ fn step_twin_result(name: &str, v: &Value) -> KitResult {
                 .err()
                 .map(|w| format!("{name}'s planted twin `{twin}`: {w}"))
                 .unwrap_or_default(),
+            report: None,
         }],
     }
 }
@@ -853,6 +854,169 @@ fn column_source() -> RegistryDef {
     def
 }
 
+// ---- outline.source@1 (#443: Builder `extrude`: outlines from text, paths and SVG)
+
+/// The contours and fill rule at `at` in an entry's fixture.
+fn rings_at(v: &Value, at: &str) -> Result<(Vec<Vec<[f64; 2]>>, crate::outline::FillRule), String> {
+    let o = v.pointer(at).ok_or(format!("its fixture has no `{at}`"))?;
+    let rule = match o.get("rule").and_then(Value::as_str) {
+        Some("nonzero") => crate::outline::FillRule::NonZero,
+        Some("evenodd") => crate::outline::FillRule::EvenOdd,
+        _ => return Err(format!("`{at}` names no fill rule")),
+    };
+    let rings = o
+        .get("contours")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .map(|r| {
+                    r.as_array()
+                        .map(|pts| {
+                            pts.iter()
+                                .filter_map(|p| Some([p.get(0)?.as_f64()?, p.get(1)?.as_f64()?]))
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok((rings, rule))
+}
+
+fn covered(rings: &[Vec<[f64; 2]>], rule: crate::outline::FillRule, p: [f64; 2]) -> bool {
+    rule.filled(rings.iter().map(|r| crate::outline::winding(r, p)).sum())
+}
+
+/// The distance from `p` to the nearest edge of `rings`.
+fn to_edge(rings: &[Vec<[f64; 2]>], p: [f64; 2]) -> f64 {
+    let mut best = f64::INFINITY;
+    for r in rings {
+        for k in 0..r.len() {
+            let (a, b) = (r[k], r[(k + 1) % r.len()]);
+            let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+            let l = dx * dx + dy * dy;
+            let t = if l > 0.0 {
+                (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let (ex, ey) = (a[0] + t * dx - p[0], a[1] + t * dy - p[1]);
+            best = best.min(crate::ops::sqrt(ex * ex + ey * ey));
+        }
+    }
+    best
+}
+
+/// The points an outline is held to its 2D fill at.
+pub const OUTLINE_SAMPLES: usize = 1_000;
+
+/// The k-th point of the Halton (2, 3) sequence.
+fn halton(mut k: usize, base: usize) -> f64 {
+    let (mut f, mut r) = (1.0, 0.0);
+    k += 1;
+    while k > 0 {
+        f /= base as f64;
+        r += f * (k % base) as f64;
+        k /= base;
+    }
+    r
+}
+
+/// The points an entry's outline covers differently from its 2D fill, past the tolerance, out of
+/// 1,000 spread over the fill's box by the Halton (2, 3) sequence, each by its own fill rule; the
+/// first such point described.
+fn outline_misses(v: &Value) -> Result<(usize, Option<String>), String> {
+    let (outline, rule) = rings_at(v, "/fixture/outline")?;
+    let (fill, fill_rule) = rings_at(v, "/fixture/fill2d")?;
+    let tol = v
+        .pointer("/fixture/tolerance")
+        .and_then(Value::as_f64)
+        .filter(|t| *t > 0.0)
+        .ok_or("its fixture has no tolerance")?;
+    let pts: Vec<[f64; 2]> = fill.iter().flatten().copied().collect();
+    if pts.is_empty() {
+        return Err("its fixture's 2D fill covers nothing".into());
+    }
+    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    for p in &pts {
+        for i in 0..2 {
+            lo[i] = lo[i].min(p[i]);
+            hi[i] = hi[i].max(p[i]);
+        }
+    }
+    let (mut misses, mut first) = (0, None);
+    for k in 0..OUTLINE_SAMPLES {
+        let p = [
+            lo[0] + (hi[0] - lo[0]) * halton(k, 2),
+            lo[1] + (hi[1] - lo[1]) * halton(k, 3),
+        ];
+        let (a, b) = (covered(&outline, rule, p), covered(&fill, fill_rule, p));
+        if a != b && to_edge(&fill, p) > tol {
+            misses += 1;
+            first.get_or_insert_with(|| {
+                format!(
+                    "at ({:.6}, {:.6}) its outline {} what the 2D fill {}",
+                    p[0],
+                    p[1],
+                    if a { "covers" } else { "leaves out" },
+                    if b { "covers" } else { "leaves out" }
+                )
+            });
+        }
+    }
+    Ok((misses, first))
+}
+
+/// An entry's outline covers what its item's 2D fill covers at 1,000 points, holes by its fill
+/// rule; a point where they differ is allowed only within the fixture's `tolerance` (flatten ×
+/// size) of the 2D fill's edge.
+fn outline_covers_fill(v: &Value) -> Result<(), String> {
+    match outline_misses(v)? {
+        (0, _) => Ok(()),
+        (n, first) => Err(format!(
+            "{} {n} of {OUTLINE_SAMPLES} sampled points; {}",
+            v.pointer("/fixture/name")
+                .and_then(Value::as_str)
+                .unwrap_or("its fixture"),
+            first.unwrap_or_default()
+        )),
+    }
+}
+
+/// What `covers_2d_fill` read: its fixture's name, its samples and its misses.
+fn outline_report(v: &Value) -> Value {
+    json!({"fixture": v.pointer("/fixture/name"), "samples": OUTLINE_SAMPLES,
+           "misses": outline_misses(v).map_or(Value::Null, |(n, _)| json!(n))})
+}
+
+fn outline_source() -> RegistryDef {
+    let ring = |x: f64, s: f64| json!([[x, x], [x + s, x], [x + s, x + s], [x, x + s]]);
+    let inner = json!([[0.3, 0.3], [0.3, 0.7], [0.7, 0.7], [0.7, 0.3]]);
+    RegistryDef::new(
+        crate::outline::REGISTRY,
+        obj(
+            json!({"form": {"type": "string", "enum": ["text", "path", "vector"]},
+                   "fixture": {"type": "object"}}),
+            &["form", "fixture"],
+        ),
+        &["module"],
+        "R6",
+    )
+    .rule(
+        "covers_2d_fill",
+        "an entry whose outline covers other than what its item's 2D fill covers, past flatten",
+        outline_covers_fill,
+    )
+    .reported(outline_report)
+    .planted(
+        "drops_counter",
+        json!({"form": "text", "fixture": {"name": "O", "tolerance": 0.001,
+               "outline": {"rule": "nonzero", "contours": [ring(0.0, 1.0)]},
+               "fill2d": {"rule": "nonzero", "contours": [ring(0.0, 1.0), inner]}}}),
+    )
+}
+
 // ---- data.layout@1
 
 /// The verdicts `judged` holds, by asset, for each sha256 in `at`; a missing one is an error.
@@ -1025,6 +1189,7 @@ pub fn registries_with(eases: bool) -> Vec<RegistryDef> {
         logic_service(),
         mark(),
         modifier(),
+        outline_source(),
     ]);
     out
 }
