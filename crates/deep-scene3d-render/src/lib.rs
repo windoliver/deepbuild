@@ -45,6 +45,27 @@ pub const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 pub const FORWARD_FAR: f64 = 10_000.0;
 
 const SHADER: &str = include_str!("scene3d.wgsl");
+const MASK_DUMP: &str = include_str!("mask_dump.wgsl");
+/// The line that plants #425's per-band mask keys.
+const MASKS_SHARED: &str = "const MASKS_INDEPENDENT: bool = false;";
+
+/// The scene shader, with #425's planted masks when asked.
+fn shader(planted: &Planted) -> String {
+    if planted.band_masks_independent {
+        SHADER.replace(MASKS_SHARED, "const MASKS_INDEPENDENT: bool = true;")
+    } else {
+        SHADER.to_string()
+    }
+}
+
+/// A pass whose band masks [`Renderer::mask_dump`] reports (#425).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MaskPass {
+    Color,
+    Depth,
+    Shadow,
+    Ids,
+}
 const OUTPUT: &str = include_str!("output.wgsl");
 const OUTLINE: &str = include_str!("outline.wgsl");
 const BUSY: &str = include_str!("busy.wgsl");
@@ -112,6 +133,8 @@ pub struct Planted {
     /// #1174: screen-size labels draw in the geometry pass at the internal size, before the
     /// upscale, as the base drew them.
     pub labels_before_upscale: bool,
+    /// #425: each band of an item inside its margin keeps pixels by its own hash.
+    pub band_masks_independent: bool,
     /// #424: an additive part writes depth; one draws without the depth test.
     pub add_writes_depth: bool,
     pub add_without_depth_test: bool,
@@ -599,6 +622,11 @@ fn solid_record(
         surface = f([mat.metallic, mat.roughness, mat.specular_level], mat.coat);
         specular = f(mat.specular_color, mat.coat_roughness);
     }
+    // A cast-only level never shades: its surface's w carries its inset (#425).
+    if s.cast_only {
+        flags |= INSET;
+        surface[3] = s.inset as f32;
+    }
     let mut op = s.op.as_ref().map_or([0; 4], |o| {
         let alpha = s.material.map_or(1.0, |m| m.base[3]);
         let opacity = if alpha > 0.0 {
@@ -620,7 +648,7 @@ fn solid_record(
         color: pack(s.color),
         pick,
         flags,
-        tie,
+        tie: tie | mask_code(s.mask) << 20,
         emission: v4(s.emission, s.alpha),
         base,
         surface,
@@ -629,6 +657,51 @@ fn solid_record(
     }
 }
 
+/// A record's flag: a cast-only level drawn inside its surface by its inset (#425).
+const INSET: u32 = 1 << 15;
+
+/// A world matrix's determinant: negative for a mirror.
+fn det(m: &[[f64; 4]; 3]) -> f64 {
+    m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+        - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+        + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+}
+
+/// The key sun's shadow map texels per m at a world point (#425): the cascade that holds the
+/// point's view depth, none where the scene's sun casts no cascaded shadow or none holds it.
+pub fn shadow_texels(scene: &Scene, size: u32) -> impl Fn([f64; 3]) -> Option<f64> {
+    let cascades = scene
+        .sun
+        .as_ref()
+        .filter(|_| scene.cascaded() && scene.camera.perspective)
+        .map(|sun| shadow::cascades(scene, sun.toward, &sun.cascades, size))
+        .unwrap_or_default();
+    let camera = scene.camera.clone();
+    move |p| {
+        let depth = camera.to_view(p)[2];
+        cascades
+            .iter()
+            .find(|c| depth >= c.near && depth <= c.far)
+            .map(|c| f64::from(size) / (2.0 * c.radius.max(1e-9)))
+    }
+}
+
+/// Whether a scene's solids still carry a level of detail to resolve (#425).
+fn leveled(scene: &Scene) -> bool {
+    scene
+        .layers
+        .iter()
+        .flat_map(|l| &l.solids)
+        .any(|s| s.lod.is_some())
+}
+
+/// A band's mask as the shader reads it above the record's rank (#425): bit 8 masked, bit 7 the
+/// less detailed band, bits 0 to 6 the blend level.
+fn mask_code(mask: Option<deep_canvas_scene3d::lod::Mask>) -> u32 {
+    mask.map_or(0, |m| {
+        256 | if m.lower { 128 } else { 0 } | m.level.min(127)
+    })
+}
 /// Whether a solid draws see-through after a depth pass of its own: its item's adjust opacity is
 /// below 1 (#424; Object: adjust).
 fn faded(s: &Solid) -> bool {
@@ -782,9 +855,33 @@ pub(crate) fn pipeline(
     label: &str,
     layout: Option<&wgpu::PipelineLayout>,
     module: &wgpu::ShaderModule,
+    vertex: (&str, &[Option<wgpu::VertexBufferLayout<'_>>]),
+    fragment: Option<(&str, &[Option<wgpu::ColorTargetState>])>,
+    depth_stencil: Option<wgpu::DepthStencilState>,
+) -> wgpu::RenderPipeline {
+    culled(
+        d,
+        label,
+        layout,
+        module,
+        vertex,
+        fragment,
+        depth_stencil,
+        None,
+    )
+}
+
+/// [`pipeline`] culling `cull`'s faces.
+#[allow(clippy::too_many_arguments)]
+fn culled(
+    d: &wgpu::Device,
+    label: &str,
+    layout: Option<&wgpu::PipelineLayout>,
+    module: &wgpu::ShaderModule,
     (vs, buffers): (&str, &[Option<wgpu::VertexBufferLayout<'_>>]),
     fragment: Option<(&str, &[Option<wgpu::ColorTargetState>])>,
     depth_stencil: Option<wgpu::DepthStencilState>,
+    cull: Option<wgpu::Face>,
 ) -> wgpu::RenderPipeline {
     d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some(label),
@@ -795,7 +892,10 @@ pub(crate) fn pipeline(
             compilation_options: Default::default(),
             buffers,
         },
-        primitive: Default::default(),
+        primitive: wgpu::PrimitiveState {
+            cull_mode: cull,
+            ..Default::default()
+        },
         depth_stencil,
         multisample: Default::default(),
         fragment: fragment.map(|(fs, targets)| wgpu::FragmentState {
@@ -855,6 +955,8 @@ struct Set {
     next: Vec<u8>,
     count: usize,
     new_owners: Option<Vec<String>>,
+    /// It holds a less detailed band's draw inside a margin (#425), which draws last.
+    lower: bool,
 }
 
 impl Set {
@@ -862,6 +964,7 @@ impl Set {
         self.next.clear();
         self.count = 0;
         self.new_owners = None;
+        self.lower = false;
     }
 
     fn push(&mut self, owner: &str, record: &[u8]) {
@@ -951,12 +1054,19 @@ impl Set {
 /// record's place in that set, its pick ID and its tie rank.
 type Slot = ((Shape, u32, u64), u32, u32, u32);
 
+/// The bits of a slot's maps word above its maps' group index: which faces its opaque draw culls
+/// (0 none, 1 back, 2 front).
+const CULL_SHIFT: u32 = 30;
+const MAPS_INDEX: u32 = (1 << CULL_SHIFT) - 1;
+
 /// A 3D writer layer's batch: its instance sets and its encoding.
 #[derive(Default)]
 struct Batch {
-    /// The opaque solids by shape, material maps (0: none; #423) and material operator
-    /// ([`op::key`]; 0 for none; #429).
+    /// The opaque solids by shape, material maps (0: none; #423; the faces their draw culls in
+    /// the bits above, #425) and material operator ([`op::key`]; 0 for none; #429).
     solids: BTreeMap<(Shape, u32, u64), Set>,
+    /// Solids only the shadow passes draw: a level the light's projection chose (#425).
+    casters: BTreeMap<(Shape, u32, u64), Set>,
     lines: Set,
     points: Set,
     /// One record per inked glyph of its labels.
@@ -1014,6 +1124,8 @@ struct Cascaded {
     list: Vec<shadow::Cascade>,
     stale: Vec<usize>,
     fade: bool,
+    /// Each layer's side in texels: shadow::SIZE times the renderer's shadow scale.
+    size: u32,
 }
 
 /// The environment's prefilter and what it made (#422).
@@ -1083,6 +1195,8 @@ pub struct Renderer {
     /// the output pass's undithered mask; one clear texel with none (#418).
     covered: (Option<std::sync::Arc<[u8]>>, wgpu::TextureView),
     mesh_pipeline: wgpu::RenderPipeline,
+    /// The opaque material solids' pipelines culling back faces, and front faces (mirrored).
+    mesh_culled: [wgpu::RenderPipeline; 2],
     /// The solids' pipeline in a frame with a capped cutaway, its caps at their plane's depth,
     /// compiled the first time one draws; and whether this frame has one (#424).
     cut_pipeline: Option<wgpu::RenderPipeline>,
@@ -1120,6 +1234,9 @@ pub struct Renderer {
     /// The GPU surface it draws through, and the upscale's pipelines once compiled (#386).
     pub surface: Surface,
     pub upscale: Option<Arc<Upscale>>,
+    /// The key sun's cascade maps at this many times their size: 2 at the climb's top rung
+    /// (#425), else 1.
+    pub shadow_scale: u32,
     /// The frame's full size, and its targets below scale 1.
     size: [u32; 2],
     low: Option<Low>,
@@ -1569,11 +1686,13 @@ const CLEAR_NAMES: [&str; 5] = [
     "scene3d.per_pixel",
 ];
 
+#[allow(clippy::too_many_arguments)]
 fn draw_pipeline(
     d: &wgpu::Device,
     module: &wgpu::ShaderModule,
     layout: &wgpu::PipelineLayout,
     forward_z: bool,
+    cull: Option<wgpu::Face>,
     vs: &str,
     fs: &str,
     buffers: &[Option<wgpu::VertexBufferLayout<'_>>],
@@ -1593,7 +1712,7 @@ fn draw_pipeline(
         target(LINEAR, Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING)),
         target(IDS, None),
     ];
-    pipeline(
+    culled(
         d,
         vs,
         Some(layout),
@@ -1601,6 +1720,7 @@ fn draw_pipeline(
         (vs, buffers),
         Some((fs, &targets)),
         Some(depth),
+        cull,
     )
 }
 
@@ -1693,6 +1813,7 @@ impl Families {
                     module,
                     layout,
                     fz,
+                    None,
                     vs,
                     fs,
                     &[Some(buffer)],
@@ -1720,7 +1841,7 @@ impl Renderer {
         let d = &device.device;
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("scene3d"),
-            source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+            source: wgpu::ShaderSource::Wgsl(shader(&planted).into()),
         });
         let output = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("scene3d output"),
@@ -1907,18 +2028,27 @@ impl Renderer {
         let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
         let mesh_buffers = mesh_buffers();
-        let mesh_pipeline = draw_pipeline(
-            d,
-            &module,
-            &mesh_layout,
-            planted.forward_z,
-            "mesh_vs",
-            "mesh_fs",
-            &mesh_buffers,
-        );
+        let mesh = |cull| {
+            draw_pipeline(
+                d,
+                &module,
+                &mesh_layout,
+                planted.forward_z,
+                cull,
+                "mesh_vs",
+                "mesh_fs",
+                &mesh_buffers,
+            )
+        };
+        // Opaque material solids have their back faces culled before they shade (front faces for
+        // a mirrored one), so no discarded back face shares a pixel quad with a front face's
+        // silhouette and moves its derivatives (#425: one view, one picture).
+        let mesh_pipeline = mesh(None);
+        let mesh_culled = [mesh(Some(wgpu::Face::Back)), mesh(Some(wgpu::Face::Front))];
         // The shadow map: the solids' vertex stage under the light's clip matrix, depth only,
         // nearest the light kept.
-        // Its fragment stage only discards what a cutaway removes (#424).
+        // Its fragment stage only discards what a cutaway removes (#424), and a band's texels
+        // outside its mask (#425).
         let shadow_pipeline = pipeline(
             d,
             SHADOW_PASS,
@@ -2118,6 +2248,7 @@ impl Renderer {
                 list: Vec::new(),
                 stale: Vec::new(),
                 fade: true,
+                size: shadow::SIZE,
             },
             env,
             sky: false,
@@ -2138,6 +2269,7 @@ impl Renderer {
             output_layout,
             covered: (None, uncovered),
             mesh_pipeline,
+            mesh_culled,
             cut_pipeline: None,
             capped: false,
             ao,
@@ -2184,6 +2316,7 @@ impl Renderer {
             profiler: None,
             surface: Surface::default(),
             upscale: None,
+            shadow_scale: 1,
             size: [0, 0],
             low: None,
             low_bytes: None,
@@ -2340,7 +2473,7 @@ impl Renderer {
 
     /// The internal size a frame of `size` draws at.
     pub fn internal_size(&self, size: [u32; 2]) -> [u32; 2] {
-        if self.surface.scale < 1.0 && self.upscale.is_some() {
+        if self.surface.scale != 1.0 && self.upscale.is_some() {
             surface::scaled(size, self.surface.scale)
         } else {
             size
@@ -2357,9 +2490,16 @@ impl Renderer {
     fn prepare_cascades(&mut self, device: &Device, scene: &Scene, frame: &FrameUniform) {
         self.counts.cascades_drawn.clear();
         self.counts.cascade_splits.clear();
+        let size = shadow::SIZE * self.shadow_scale.max(1);
         let c = &mut self.cascaded;
         c.list.clear();
         c.stale.clear();
+        if c.size != size {
+            // A new size draws every layer again into a new texture.
+            c.size = size;
+            c.texture = None;
+            c.keys = [None; 4];
+        }
         let Some(sun) = scene.sun.as_ref().filter(|_| scene.cascaded()) else {
             return;
         };
@@ -2376,7 +2516,7 @@ impl Renderer {
                 .into_iter()
                 .collect();
         } else {
-            c.list = shadow::cascades(scene, sun.toward, &sun.cascades, shadow::SIZE);
+            c.list = shadow::cascades(scene, sun.toward, &sun.cascades, size);
         }
         c.fade = sun.cascades.fade;
         if let Some(first) = c.list.first() {
@@ -2410,6 +2550,20 @@ impl Renderer {
                     v.to_bits().hash(&mut h);
                 }
             }
+            // A level only the shadow passes draw is part of what the cascade reads (#425).
+            for s in scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .filter(|s| s.cast_only)
+            {
+                s.id.hash(&mut h);
+                shape_code(s.shape).hash(&mut h);
+                for v in s.model.iter().flatten() {
+                    v.to_bits().hash(&mut h);
+                }
+                s.mask.map(|m| (m.level, m.lower)).hash(&mut h);
+            }
             // The planes that cut its casters (#424): moving one draws the map again.
             if !self.planted.cuts_color_only {
                 if let Some(cut) = scene.cutaway.as_ref().filter(|c| !c.shadows_whole) {
@@ -2423,7 +2577,7 @@ impl Renderer {
             }
             // The planted wrong program keys a map by the scene's solid count alone.
             let key = if stale_plant { solid_count as u64 } else { h.finish() };
-            let texel = 2.0 * cascade.radius / f64::from(shadow::SIZE);
+            let texel = 2.0 * cascade.radius / f64::from(size);
             self.counts.shadow_maps.push((key, texel));
             if c.keys[i] != Some(key) {
                 c.keys[i] = Some(key);
@@ -2437,8 +2591,8 @@ impl Renderer {
             let t = device.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some(CASCADE_PASS),
                 size: wgpu::Extent3d {
-                    width: shadow::SIZE,
-                    height: shadow::SIZE,
+                    width: size,
+                    height: size,
                     depth_or_array_layers: 4,
                 },
                 mip_level_count: 1,
@@ -2624,7 +2778,10 @@ impl Renderer {
 
     /// The lights the light policy shades at this frame's view, each with its weight (#421).
     fn prepare_lights(&mut self, device: &Device, scene: &Scene) {
-        let policy = light::policy(&scene.lights, &scene.camera);
+        let policy = scene
+            .light_cut
+            .clone()
+            .unwrap_or_else(|| light::policy(&scene.lights, &scene.camera));
         let cam = &scene.camera;
         let view = if cam.perspective {
             [cam.eye[0], cam.eye[1], cam.eye[2], 1.0]
@@ -2651,7 +2808,7 @@ impl Renderer {
                 u.count[3] = self.cascaded.list.len() as u32;
                 for (i, c) in self.cascaded.list.iter().enumerate() {
                     u.splits[i] = c.far.min(f64::from(f32::MAX)) as f32;
-                    u.texels[i] = (2.0 * c.radius / f64::from(shadow::SIZE)) as f32;
+                    u.texels[i] = (2.0 * c.radius / f64::from(self.cascaded.size)) as f32;
                     for col in 0..4 {
                         for r in 0..4 {
                             u.cascades[i][col][r] = c.clip[col * 4 + r] as f32;
@@ -2827,6 +2984,20 @@ impl Renderer {
     /// Takes the frame's scene: the uniforms, each batch's changed records, and the batches
     /// whose draw key changed encoded again. What it did is in [`Renderer::counts`].
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+        // Level of detail at this view (#425): a scene whose solids still carry bands or mesh
+        // levels draws what scene3d's pure choice resolves them to.
+        if leveled(scene) {
+            let mut chosen = scene.clone();
+            let mut choices = deep_canvas_scene3d::lod::select(&chosen);
+            let side = shadow::SIZE * self.shadow_scale.max(1);
+            deep_canvas_scene3d::lod::shadow_levels(
+                &chosen,
+                &mut choices,
+                shadow_texels(&chosen, side),
+            );
+            deep_canvas_scene3d::lod::resolve(&mut chosen, &choices);
+            return self.prepare(device, &chosen, look);
+        }
         self.prepare_frame(device, scene, look);
         // The per-pixel lists' room for this frame (#424).
         let per_pixel = scene
@@ -2879,6 +3050,8 @@ impl Renderer {
                 &self.scene_module,
                 &self.solid_layout,
                 self.planted.forward_z,
+                // Its caps draw from back faces: nothing culls.
+                None,
                 "mesh_vs",
                 "mesh_cut_fs",
                 &mesh_buffers(),
@@ -2921,8 +3094,10 @@ impl Renderer {
         look: &Look3,
         moved: &[(usize, usize)],
     ) {
-        // See-through parts reorder as the camera moves, so a frame holding one prepares whole.
+        // See-through parts reorder as the camera moves, so a frame holding one prepares whole;
+        // so does one whose level of detail the view chooses (#425).
         if self.planted.encodes_every_frame
+            || leveled(scene)
             || self.order.len() != scene.layers.len()
             || self.batches.values().any(|b| !b.clear_draws.is_empty())
             || !self.adjusts.is_empty()
@@ -2955,7 +3130,7 @@ impl Renderer {
                     pick,
                     tie,
                     !self.planted.winding_ignores_determinant,
-                    set_key.1 != 0,
+                    set_key.1 & MAPS_INDEX != 0,
                     0,
                 );
                 set.write(
@@ -3263,7 +3438,24 @@ impl Renderer {
                 );
                 self.op_binds.insert((op, maps), g);
             }
-            slots.push(((s.shape, maps, op), 0, self.pick(&s.id), tie));
+            // Its opaque draw culls back faces, front faces when mirrored, unless its material is
+            // double-sided or it draws see-through (#425).
+            let cull = match &s.material {
+                Some(m) if !m.double_sided && !clear(s) => {
+                    if !self.planted.winding_ignores_determinant && det(&s.model) < 0.0 {
+                        2
+                    } else {
+                        1
+                    }
+                }
+                _ => 0,
+            };
+            slots.push((
+                (s.shape, maps | cull << CULL_SHIFT, op),
+                0,
+                self.pick(&s.id),
+                tie,
+            ));
         }
         for l in &layer.lines {
             self.pick(&l.id);
@@ -3276,7 +3468,7 @@ impl Renderer {
         }
         let picks = &self.picks;
         let batch = self.batches.get_mut(&layer.id).expect("made above");
-        for set in batch.solids.values_mut() {
+        for set in batch.solids.values_mut().chain(batch.casters.values_mut()) {
             set.begin();
         }
         let winding = !self.planted.winding_ignores_determinant;
@@ -3308,7 +3500,8 @@ impl Renderer {
         let mut see_through = Vec::new();
         for (s, slot) in order {
             let adjust = adjust_of(s);
-            let mut record = solid_record(s, slot.2, slot.3, winding, slot.0 .1 != 0, adjust);
+            let mut record =
+                solid_record(s, slot.2, slot.3, winding, slot.0 .1 & MAPS_INDEX != 0, adjust);
             if clear(s) {
                 let c = [s.model[0][3], s.model[1][3], s.model[2][3]];
                 let depth = (0..3)
@@ -3318,7 +3511,13 @@ impl Renderer {
                 slot.1 = u32::MAX;
                 continue;
             }
-            let set = batch.solids.entry(slot.0).or_default();
+            let sets = if s.cast_only {
+                &mut batch.casters
+            } else {
+                &mut batch.solids
+            };
+            let set = sets.entry(slot.0).or_default();
+            set.lower |= s.mask.is_some_and(|m| m.lower);
             slot.1 = set.count as u32;
             // The planted wrong program writes an element's place in its draw as its ID.
             if by_position {
@@ -3336,7 +3535,8 @@ impl Renderer {
         batch.clear.finish(device, &mut next, &mut written);
         batch.solid_slots = slots;
         batch.solids.retain(|_, set| set.count > 0);
-        for set in batch.solids.values_mut() {
+        batch.casters.retain(|_, set| set.count > 0);
+        for set in batch.solids.values_mut().chain(batch.casters.values_mut()) {
             set.finish(device, &mut next, &mut written);
         }
         batch.lines.begin();
@@ -3420,6 +3620,7 @@ impl Renderer {
         for ((shape, maps, op), set) in &batch.solids {
             batch.next_key.extend([
                 shape_code(*shape),
+                u64::from(set.lower),
                 u64::from(*maps),
                 *op,
                 set.generation,
@@ -3527,21 +3728,30 @@ impl Renderer {
         enc.set_bind_group(0, &self.frame_bind, &[]);
         enc.set_bind_group(1, &self.lights_bind, &[]);
         enc.set_bind_group(2, self.ao.shade(), &[]);
-        for ((shape, maps, op), set) in &batch.solids {
+        // Inside a band margin an item's less detailed band (its box, enclosing the full mesh)
+        // draws after its more detailed one (#425): drawn first, its nearer depth would cut the
+        // detailed band's pixel quads and move their shading's derivatives with GPU timing.
+        let (detailed, lower): (Vec<_>, Vec<_>) =
+            batch.solids.iter().partition(|(_, set)| !set.lower);
+        for ((shape, maps, op), set) in detailed.into_iter().chain(lower) {
             let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
                 continue;
             };
-            match (self.materials.get(op), self.op_binds.get(&(*op, *maps))) {
+            let index = *maps & MAPS_INDEX;
+            match (self.materials.get(op), self.op_binds.get(&(*op, index))) {
                 (Some(Ok(m)), Some(g)) => {
                     enc.set_pipeline(&m.pipeline);
                     enc.set_bind_group(3, g, &[]);
                 }
                 _ => {
-                    enc.set_pipeline(match (&self.cut_pipeline, self.capped) {
-                        (Some(cut), true) => cut,
+                    // A capped cutaway draws its caps from back faces, so nothing culls then.
+                    enc.set_pipeline(match (&self.cut_pipeline, self.capped, *maps >> CULL_SHIFT) {
+                        (Some(cut), true, _) => cut,
+                        (_, _, 1) => &self.mesh_culled[0],
+                        (_, _, 2) => &self.mesh_culled[1],
                         _ => &self.mesh_pipeline,
                     });
-                    enc.set_bind_group(3, self.maps.by_index(*maps), &[]);
+                    enc.set_bind_group(3, self.maps.by_index(index), &[]);
                 }
             }
             enc.set_vertex_buffer(0, mesh.vertices.slice(..));
@@ -3653,7 +3863,7 @@ impl Renderer {
         let mut draws = Vec::new();
         for id in &self.order {
             let batch = &self.batches[id];
-            for ((shape, _, _), set) in &batch.solids {
+            for ((shape, _, _), set) in batch.solids.iter().chain(&batch.casters) {
                 if let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) {
                     draws.push((
                         mesh.vertices.clone(),
@@ -4193,6 +4403,108 @@ impl Renderer {
             t.depth_view.texture(),
             self.shadow.view.as_ref().map(|v| v.texture()),
         ))
+    }
+
+    /// Which of an item's two bands keep each pixel of `pass`'s target, as that pass's draws
+    /// evaluate their masks (#425): the item's pick ID `key` and its blend `level`, one byte a
+    /// pixel (bit 0 the more detailed band, bit 1 the less), rows top-down, with the target's
+    /// size; the shadow pass's at its map's size.
+    pub fn mask_dump(
+        &self,
+        device: &Device,
+        pass: MaskPass,
+        key: u32,
+        level: u32,
+    ) -> Option<([u32; 2], Vec<u8>)> {
+        let size = match pass {
+            MaskPass::Shadow => [self.cascaded.size; 2],
+            _ => self.internal(),
+        };
+        let d = &device.device;
+        let scene = shader(&self.planted);
+        let start = scene.find("// Issue #425: a band's mask")?;
+        let end = scene.find("// End of #425's band masks.")?;
+        let source = format!("{}\n{MASK_DUMP}", &scene[start..end]);
+        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("scene3d mask dump"),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
+        });
+        let layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("scene3d mask dump"),
+            entries: &[buffer_entry(
+                0,
+                wgpu::ShaderStages::FRAGMENT,
+                wgpu::BufferBindingType::Uniform,
+            )],
+        });
+        let pl = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("scene3d mask dump"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
+        let format = wgpu::TextureFormat::R8Uint;
+        let pipe = pipeline(
+            d,
+            "scene3d mask dump",
+            Some(&pl),
+            &module,
+            ("dump_vs", &[]),
+            Some(("dump_fs", &[target(format, None)])),
+            None,
+        );
+        let uniform = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("scene3d mask dump"),
+            size: 16,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let code = mask_code(Some(deep_canvas_scene3d::lod::Mask {
+            level,
+            lower: false,
+        }));
+        device
+            .queue
+            .write_buffer(&uniform, 0, bytemuck::cast_slice(&[key, code, 0, 0]));
+        let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("scene3d mask dump"),
+            layout: &layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform.as_entire_binding(),
+            }],
+        });
+        let texture = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("scene3d mask dump"),
+            size: extent(size),
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&Default::default());
+        let mut encoder = d.create_command_encoder(&Default::default());
+        {
+            let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("scene3d mask dump"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            });
+            rp.set_pipeline(&pipe);
+            rp.set_bind_group(0, &bind, &[]);
+            rp.draw(0..3, 0..1);
+        }
+        device.queue.submit([encoder.finish()]);
+        Some((size, read_texture(device, &texture, size, 1)?))
     }
 
     /// The last frame's camera (world to clip, column-major; the eye; the near plane) and its
