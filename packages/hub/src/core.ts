@@ -65,7 +65,7 @@ import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
 import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { driveCall, Replica, REPLICA_LEASE } from './drive.js';
-import { draftedPools, HeavyQueue } from './heavy.js';
+import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
@@ -483,6 +483,7 @@ export class Core {
   private leases!: LeaseTable;
   /** The queue `deep lease` waits in, and the heavy commands it holds leases for (#1015). */
   private heavy!: HeavyQueue;
+  private pool?: JobPool;
   private products!: Products;
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   private index!: Promise<IndexFill | undefined>;
@@ -855,8 +856,10 @@ export class Core {
     // is env-local's, shared or exclusive.
     const pools = draftedPools(CORES);
     for (const [name, n] of Object.entries(pools)) await leases.declare('core', { name, match: `pool(${n})`, cap: 1000, cooldown: 0, cost: 0 });
+    // One compile job pool per host (#1016): every build deep lease runs joins it.
+    this.pool = new JobPool(join(this.root.dir, 'jobserver'), poolTokens(CORES));
     this.heavy = new HeavyQueue({
-      table: leases, slow: SLOW_SLOT, now: this.now, ...(this.options.plant ? { plant: this.options.plant } : {}),
+      table: leases, slow: SLOW_SLOT, now: this.now, pool: this.pool, ...(this.options.plant ? { plant: this.options.plant } : {}),
       append: async (kind, v, data, subject, session) => {
         const ts = this.now();
         const id = ulid(ts);
@@ -868,6 +871,7 @@ export class Core {
       agentOf: (s) => { const x = this.sessions.get(s); return x ? { pid: x.pid, start: x.start } : undefined; },
     });
     await this.heavy.recover(this.raw);
+    await this.heavy.tick();
     this.every('heavy', 500, () => this.heavy.tick());
     this.every('gone', 1000, () => this.goneSessions());
     // Each session's state as last recorded, then any change since; a session goes quiet after a day with no hook.
@@ -905,7 +909,7 @@ export class Core {
       // the sandbox profile itself keeps every project's agent hook and MCP files. The runner's jobs/ is left to
       // each run's own grant: a job's checkout writes only its own folder.
       guarded: [
-        { path: this.root.dir, except: [join(this.root.dir, 'jobs'), join(this.root.dir, 'checkouts'), join(this.root.dir, 'products', '.building')] }, join(homedir(), '.claude'), join(homedir(), '.codex'), realpathSync(resolve(fileURLToPath(import.meta.url), '../../..')),
+        { path: this.root.dir, except: [join(this.root.dir, 'jobs'), join(this.root.dir, 'checkouts'), join(this.root.dir, 'products', '.building'), join(this.root.dir, 'jobserver')] }, join(homedir(), '.claude'), join(homedir(), '.codex'), realpathSync(resolve(fileURLToPath(import.meta.url), '../../..')),
         join(homedir(), 'Library', 'LaunchAgents'),
         process.execPath, resolve(process.execPath, '../../lib/node_modules'),
         ...[process.env.CLAUDE_CONFIG_DIR, process.env.CODEX_HOME].filter((p): p is string => !!p && isAbsolute(p)),
@@ -6026,7 +6030,9 @@ export class Core {
     let tail = '';
     const keep = (chunk: Buffer): void => { tail = `${tail}${chunk.toString('utf8')}`.slice(-8000); };
     try {
-      const started = await this.host.start({ run, argv: ['/bin/sh', '-c', b.command], cwd: b.cwd, grant: RUN_AS_YOU, output: { stdout: keep, stderr: keep } });
+      // As `deep lease` runs a build: at a lower priority, joined to the host's job pool (#1016).
+      const env = typeof r.makeflags === 'string' ? { MAKEFLAGS: r.makeflags, CARGO_MAKEFLAGS: r.makeflags } : {};
+      const started = await this.host.start({ run, argv: ['/usr/bin/nice', '-n', '10', '/bin/sh', '-c', b.command], cwd: b.cwd, env, grant: RUN_AS_YOU, output: { stdout: keep, stderr: keep } });
       if (started.status !== 'started') { await this.heavy.release(own); return { code: null, tail: `BLOCKED: no ${started.kind} free` }; }
       await this.heavy.started({ ...own, pid: started.pid, pgid: started.pgid, cwd: b.cwd });
       const exit = await this.host.wait(run);
@@ -6927,6 +6933,7 @@ export class Core {
     this.stopping = true;
     plantedStop();
     for (const timer of this.timers) clearInterval(timer);
+    this.pool?.close();
     for (const live of this.live.values()) clearTimeout(live.quiet);
     for (const p of this.promises.values()) clearTimeout(p.timer);
     this.watcher?.close();
