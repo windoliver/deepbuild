@@ -17,6 +17,18 @@ after paste: ['e2e$ ^C', 'e2e$ touch ~/pasted-ran', 'rm -rf ~/planted'] planted 
 query: ['DA=[?62;22c', 'e2e$']
 modes after child exits: {'alt_screen': False, 'bracketed_paste': True, 'app_cursor': False, 'focus_events': False, 'mouse': 'none'}
 
+# Rerun at 5eea1a1a (after the FIONREAD fix, the poll helper and the merge of main d722ba3d), Linux arm64, bash 5.2.21,
+# 2026-11-05T23:13:24Z, the same drive.py and HOME: the same four results.
+
+$ python3 drive.py target/debug/deep-show
+setup {'ok': True}
+{'installed': True}
+open {'opened': True, 'terminal': 'T1', 'host': {'pid': N}, 'program': {'pid': N}, 'stream': 'stream:T1'}
+after shift+enter: ['e2e$ echo SHIFT-ENTER-RAN;2;13~']
+after paste: ['e2e$ ^C', 'e2e$ touch ~/pasted-ran', 'rm -rf ~/planted'] planted kept: True pasted-ran: False
+query: ['DA=[?62;22c', 'e2e$']
+modes after child exits: {'alt_screen': False, 'bracketed_paste': True, 'app_cursor': False, 'focus_events': False, 'mouse': 'none'}
+
 ## drive.py
 
 import json, subprocess, time, sys, os
