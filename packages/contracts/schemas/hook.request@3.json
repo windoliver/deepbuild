@@ -1,6 +1,8 @@
 {
   "title": "hook.request@3",
   "description": "deep-hook's request line: the agent's hook JSON, stamped with seq and id; a spooled call let through because the hub was late is marked late, a SessionStart says which billing keys are set, and a matched guard entry can carry a note on what this call does.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "v": {
@@ -67,7 +69,41 @@
         },
         "maxItems": 256
       },
-      "description": "For a matched entry whose match is effect:unknown-reach-delete, by name, the absolute folders the delete names, for the hub to stage as a copy-on-write copy before it runs. An entry with no list here names a value the line can't know: nothing can be staged for it."
+      "description": "For a matched entry the hub stages for, by name: with effect:unknown-reach-delete, the absolute folders the delete names, for a copy-on-write copy before it runs; with effect:discard-edits, the absolute paths under which it discards tracked edits; with effect:drop-stash, the folder it works in, then the entry it drops, or no entry for all of them. An entry with no list here names a value the line can't know: nothing can be staged for it."
+    },
+    "heavy": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The heavy.command@1 entry's name."
+        },
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)*$",
+            "maxLength": 128
+          },
+          "maxItems": 32,
+          "description": "The lease kinds the entry names, beside its cpu.slot."
+        },
+        "form": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "The call's `deep lease` form, as deep-hook writes it: the command the hub rewrites the call to, or names in its deny."
+        }
+      },
+      "required": [
+        "name",
+        "kinds",
+        "form"
+      ],
+      "additionalProperties": false,
+      "description": "For a shell call whose command a heavy.command@1 entry matches (#1015): the entry, so the hub runs the call under `deep lease` with its kinds. Set on a spooled call too, which then ran unleased."
     },
     "payload": {
       "x-opaque": "the agent's hook JSON, unchanged; its adapter reads it",

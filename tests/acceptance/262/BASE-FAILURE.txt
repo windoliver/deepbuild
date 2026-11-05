@@ -1,0 +1,532 @@
+# #262 acceptance tests on the base commit a7e140b2, 2026-11-02, Node v24.22.0, on a reference Mac (Mac15,7, mains power)
+# Expected: every test of the missing #262 surface fails, on an assertion or a missing name; six pass and say why.
+# - TypeError "this.h.viewsShown is not a function": the host has no views/shown (AC3's and AC4's real-host tests, and
+#   day.test.ts's beforeAll, so AC8, AC9, AC14 and AC18's sizes are skipped with the file failed before any of them).
+# - "deep.readNow is not a function": the runtime's API list has no deep.readNow (AC1, AC2).
+# - "deep.schedule: ext.shop.watch_rate a cadence is every so many ms …": a job that checks a notice kind can't be
+#   declared with no cadence of its own, so the shop plug-in with the notice's job doesn't load (AC6, AC7's first).
+# - "a parser returns { value, unit }": a series source's parse answer isn't a reading at the base, so no reading.batch
+#   lands (AC10 to AC13, AC15 to AC17, AC18's timings, which fail at their first landing on this reference Mac).
+# - AC5: both while_shown sources install and load (the base ignores the field), and the control installs.
+# - AC7's second: subscribeNotice ignores its fourth argument, so the panel-only plug-in's notice isn't refused.
+# - appapi.test.ts: the hub answers views.shown with unknown_method.
+# - AC18's merge-base test: benchmarks/budgets.json has neither reading-batch-refresh nor reading-value-at-position.
+# - Passing, as they test the judges on the wrong programs, which are models beside the hub and don't need the new
+#   surface: AC2's readsEverything, AC3's and AC4's model cadences (each also passing the judge with the right rule),
+#   AC13's wrong rollups, AC16's raw value on day 3; and AC15's precondition that the three svc000 figures differ.
+#   The other wrong-program tests (AC6, AC11, AC16's dropsCited, AC17) run on the real scenario and fail with it.
+# tsc fails on the same missing names only (boundValues, viewsShown, viewsHidden, rollup, judgeCheck, listNotices,
+# subscribeNotice's fourth argument, the host's evidence option) and the implicit anys they cause. Against a stub
+# declaring that surface (README, The surface under test), tsc reports no error in these files.
+# Home paths are shown as ~.
+
+## node node_modules/vitest/vitest.mjs run --root tests/acceptance/262 --no-file-parallelism --reporter=verbose
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-262-b3c624/tests/acceptance/262
+
+ × whileshown.test.ts > AC3 #262.19fbe9a5 A source with `while_shown: {every: 10 s}` bound by one view makes 6 calls, plus or minus one, in 60 s while the view is shown, still 6 with two views shown that bind it, and none from 10 s after the last is hidden; a host that keeps calling for a hidden view, or runs one cadence per view, fails, naming the source > AC3 6 calls in the minute one view is shown, 6 in the minute two are, none from 10 s after both are hidden 1988ms
+   → this.h.viewsShown is not a function
+ ✓ whileshown.test.ts > AC3 #262.19fbe9a5 A source with `while_shown: {every: 10 s}` bound by one view makes 6 calls, plus or minus one, in 60 s while the view is shown, still 6 with two views shown that bind it, and none from 10 s after the last is hidden; a host that keeps calling for a hidden view, or runs one cadence per view, fails, naming the source > AC3 (wrong program) a host that keeps calling for a hidden view, or runs one cadence per view, fails, naming the source 127ms
+ × whileshown.test.ts > AC4 #262.457c2b67 With that view's window minimized at 10:00:00, the source's calls stop by 10:00:10; a replica that draws the same view makes none; and with the app's window drawing nothing while its socket stays open, calls stop within 10 s plus one period; a host that counts a minimized window, a replica or a silent app as shown fails, naming the view > AC4 the window minimized at 10:00:00: calls stop by 10:00:10 1435ms
+   → this.h.viewsShown is not a function
+ × whileshown.test.ts > AC4 #262.457c2b67 With that view's window minimized at 10:00:00, the source's calls stop by 10:00:10; a replica that draws the same view makes none; and with the app's window drawing nothing while its socket stays open, calls stop within 10 s plus one period; a host that counts a minimized window, a replica or a silent app as shown fails, naming the view > AC4 a replica that draws the view makes no call 2381ms
+   → this.h.viewsShown is not a function
+ × whileshown.test.ts > AC4 #262.457c2b67 With that view's window minimized at 10:00:00, the source's calls stop by 10:00:10; a replica that draws the same view makes none; and with the app's window drawing nothing while its socket stays open, calls stop within 10 s plus one period; a host that counts a minimized window, a replica or a silent app as shown fails, naming the view > AC4 the app's window draws nothing from 10:00:00 while its socket stays open: calls stop by 10:00:20 2809ms
+   → this.h.viewsShown is not a function
+ ✓ whileshown.test.ts > AC4 #262.457c2b67 With that view's window minimized at 10:00:00, the source's calls stop by 10:00:10; a replica that draws the same view makes none; and with the app's window drawing nothing while its socket stays open, calls stop within 10 s plus one period; a host that counts a minimized window, a replica or a silent app as shown fails, naming the view > AC4 (wrong program) a host that counts a minimized window, a replica or a silent app as shown fails, naming the view 119ms
+ × whileshown.test.ts > AC5 #262.d7c7f941 A source that declares `while_shown: {every: 5 s}` is refused at install, naming the field; one with `while_shown: {every: 10 s}`, 6 calls a minute, under a quota of 5 calls a minute is refused, naming both limits > AC5 while_shown every 5 s is refused at install, naming while_shown 4615ms
+   → expected [ Array(1) ] to deeply equal []
+ × whileshown.test.ts > AC5 #262.d7c7f941 A source that declares `while_shown: {every: 5 s}` is refused at install, naming the field; one with `while_shown: {every: 10 s}`, 6 calls a minute, under a quota of 5 calls a minute is refused, naming both limits > AC5 while_shown every 10 s under a quota of 5 calls a minute is refused, naming both limits; under a quota of 6 it installs 3822ms
+   → expected [ Array(1) ] to deeply equal []
+ × series.test.ts > AC10 #262.e2bdbc81 A call that returns 10,001 values makes no reading and fails, naming the count; one that returns 10,000 lands as one batch > AC10 10,001 values make no reading and fail, naming the count; 10,000 land as one reading.batch 1792ms
+   → its cause names the count: expected 'no reading: a parser returns { value,…' to match /\b10,?001\b/
+ × series.test.ts > AC11 #262.4ba2cfdd A bound value for `reading:metrics#checkout` pinned to the log position of the 10:00:10 batch reads 42.5 live, and 42.5 again on replay after the 10:00:20 batch, 43.0, has landed; a host that resolves on replay to the newest batch shows 43.0 and fails, naming the value > AC11 pinned to the 10:00:10 batch, checkout reads 42.5 live and 42.5 on replay after the 43.0 batch landed 2025ms
+   → the 10:00:10 call: expected 'failed' not to be 'failed' // Object.is equality
+ × series.test.ts > AC11 #262.4ba2cfdd A bound value for `reading:metrics#checkout` pinned to the log position of the 10:00:10 batch reads 42.5 live, and 42.5 again on replay after the 10:00:20 batch, 43.0, has landed; a host that resolves on replay to the newest batch shows 43.0 and fails, naming the value > AC11 (wrong program) a host that resolves on replay to the newest batch shows 43.0 and fails, naming the value 1728ms
+   → the 10:00:10 call: expected 'failed' not to be 'failed' // Object.is equality
+ × series.test.ts > AC12 #262.190cedac A planted batch file whose bytes changed fails its hash; every value bound to it reads missing, naming the batch and the mismatch, and a check that cites it is INVALID > AC12 the 10:00:10 batch's file, its bytes changed: checkout and search read missing, naming the batch and the mismatch, and a check citing it is INVALID 2015ms
+   → the 10:00:10 call: expected 'failed' not to be 'failed' // Object.is equality
+ × appapi.test.ts > AC3 #262.19fbe9a5 A source with `while_shown: {every: 10 s}` bound by one view makes 6 calls, plus or minus one, in 60 s while the view is shown, still 6 with two views shown that bind it, and none from 10 s after the last is hidden; a host that keeps calling for a hidden view, or runs one cadence per view, fails, naming the source > AC3 the hub's app API serves views/shown and views/hidden to the app (views.shown, views.hidden on its socket) 6571ms
+   → views.shown: {"v":1,"id":"views.shown#1","error":{"code":"unknown_method","retryable":false,"remediation":"The hub serves no method views.shown.","path":"/method","actual":"views.shown","evidence":[]}}: expected 'unknown_method' not to be 'unknown_method' // Object.is equality
+ × notice.test.ts > AC6 #262.afbd91fe Creating "tell me when the error rate passes 2%" on a source that runs only while shown, every 10 s, gives the plug-in's checking job a schedule every 10 s, which the notice's sentence names; with every view hidden the job keeps reading the source, and a recorded rate of 3% notifies once; a host that leaves the job unscheduled sends no notice and fails, naming the notice > AC6 the notice's sentence names its 10 s schedule; with no view shown the job reads the source every 10 s and the recorded 3% notifies once 2217ms
+   → /private/tmp/dh262-pkg-shop-8tn1vG installs and loads: expected 'conformance: its code didn\'t registe…' to be null
+ × notice.test.ts > AC6 #262.afbd91fe Creating "tell me when the error rate passes 2%" on a source that runs only while shown, every 10 s, gives the plug-in's checking job a schedule every 10 s, which the notice's sentence names; with every view hidden the job keeps reading the source, and a recorded rate of 3% notifies once; a host that leaves the job unscheduled sends no notice and fails, naming the notice > AC6 (wrong program) a host that leaves the job unscheduled sends no notice and fails, naming the notice 1561ms
+   → /private/tmp/dh262-pkg-shop-IBjgs2 installs and loads: expected 'conformance: its code didn\'t registe…' to be null
+ × notice.test.ts > AC7 #262.96530f6d With the view shown and that schedule running, the source makes 6 calls a minute, not 12; a test plug-in whose only check for the notice is in its panel has the notice refused when it is created, naming the notice > AC7 with the view shown and the notice's schedule running, errors makes 6 calls a minute, not 12 1964ms
+   → /private/tmp/dh262-pkg-shop-aDTJ1l installs and loads: expected 'conformance: its code didn\'t registe…' to be null
+ × notice.test.ts > AC7 #262.96530f6d With the view shown and that schedule running, the source makes 6 calls a minute, not 12; a test plug-in whose only check for the notice is in its panel has the notice refused when it is created, naming the notice > AC7 a plug-in whose only check for the notice is in its panel has the notice refused when it is created, naming the notice 1608ms
+   → creating "tell me when the error rate passes 2%" on test/glance's errors: expected null not to be null
+ × budgets.test.ts > AC18 #262.7859de09 Budgets, on the reference Mac in the local preflight, compared with the merge base: the 500-series day's batch files sum to under 60 MB of file bytes (4,320,000 values at 12 bytes is 51.84 MB); its 8,640 batch and 1,464 rollup events, with their indexes, add under 5 MB to the record, the driver's own events counted apart; a landed batch refreshes its 500 bound values in under 1 ms in all; a value at a past log position resolves in under 1 ms at p50, with p95 reported > AC18 the perf lane has a task for each timing, and the budgets are valid against the merge base's 891ms
+   → timings with no perf-lane task to compare with the merge base: expected [ 'reading-batch-refresh', …(1) ] to deeply equal []
+ × budgets.test.ts > AC18 #262.7859de09 Budgets, on the reference Mac in the local preflight, compared with the merge base: the 500-series day's batch files sum to under 60 MB of file bytes (4,320,000 values at 12 bytes is 51.84 MB); its 8,640 batch and 1,464 rollup events, with their indexes, add under 5 MB to the record, the driver's own events counted apart; a landed batch refreshes its 500 bound values in under 1 ms in all; a value at a past log position resolves in under 1 ms at p50, with p95 reported > AC18 a landed batch refreshes its 500 bound values in under 1 ms in all (five runs of 20 batches after a warm-up) 6458ms
+   → the fleet call made no batch: {"status":"failed","source":"ext.shop.fleet","cause":"no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned {\"values\":{\"svc000\":0,\"svc001\":0.7,\"svc002\":1.4,\"svc003\":2.1,\"svc004\":2.8,\"svc005\":3.5,\"svc006\":4.2,\"svc007\":4.9,\"svc008\":5.6,\"svc009\":6.3,\"svc010\":7,\"svc011\":7.7,\"svc012\":8.4,\"svc013\":9.1,\"svc014\":9."}
+ × budgets.test.ts > AC18 #262.7859de09 Budgets, on the reference Mac in the local preflight, compared with the merge base: the 500-series day's batch files sum to under 60 MB of file bytes (4,320,000 values at 12 bytes is 51.84 MB); its 8,640 batch and 1,464 rollup events, with their indexes, add under 5 MB to the record, the driver's own events counted apart; a landed batch refreshes its 500 bound values in under 1 ms in all; a value at a past log position resolves in under 1 ms at p50, with p95 reported > AC18 a value at a past log position resolves in under 1 ms at p50, with p95 reported (five runs of 200 over 360 batches after a warm-up) 4252ms
+   → the fleet call made no batch: {"status":"failed","source":"ext.shop.fleet","cause":"no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned {\"values\":{\"svc000\":0,\"svc001\":0.7,\"svc002\":1.4,\"svc003\":2.1,\"svc004\":2.8,\"svc005\":3.5,\"svc006\":4.2,\"svc007\":4.9,\"svc008\":5.6,\"svc009\":6.3,\"svc010\":7,\"svc011\":7.7,\"svc012\":8.4,\"svc013\":9.1,\"svc014\":9."}
+ × readnow.test.ts > AC1 #262.9d1a9fcb At 10:00:30, Read now on a view that binds three recorded sources, one answered 1 s before, one whose quota is spent until 10:01 and one ready, makes exactly one call, to the third; the first keeps its answer, the second's values read `quota` with 10:01, and the third's update within one frame of its reading > AC1 Read now at 10:00:30 calls only the ready source; fresh keeps its 10:00:29 answer, spent reads quota until 10:01:00, ready updates as its reading lands 2913ms
+   → Read now on ext.shop.board: {"ok":false,"error":"deep.readNow is not a function"}: expected false to be true // Object.is equality
+ × readnow.test.ts > AC2 #262.acafafac The third also runs on a 5-minute schedule whose next run is 10:05:00, and after Read now it is still 10:05:00; a Read now that calls the first again, or the second inside its quota window, fails, naming the source > AC2 the 5-minute schedule's next run is 10:05:00 before Read now and after it, and it runs then 2086ms
+   → Read now on ext.shop.board: {"ok":false,"error":"deep.readNow is not a function"}: expected false to be true // Object.is equality
+ ✓ readnow.test.ts > AC2 #262.acafafac The third also runs on a 5-minute schedule whose next run is 10:05:00, and after Read now it is still 10:05:00; a Read now that calls the first again, or the second inside its quota window, fails, naming the source > AC2 (wrong program) a Read now that calls every source the view binds fails, naming fresh and spent 12ms
+ × rollups.test.ts > AC13 #262.edf5ecc6 For one series whose values in the 10:00 minute arrive in the order 4, 1, 15, 2, 5 and 3, the minute's rollup is min 1, max 15, mean 5, last 3 and count 6; in the 10:01 minute three calls fail and the values 2, 2 and 2 arrive, so that minute's rollup is mean 2 and count 3, and the 10:00 hour's rollup, with no other values, is min 1, max 15, mean 4, last 2 and count 9; a host that reports the median 3.5 as the mean, the maximum as last, or the hour's mean as the mean of minute means, 3.5, fails, naming the field > AC13 the 10:00 minute: min 1, max 15, mean 5, last 3, count 6; the 10:01 minute: mean 2, count 3; the 10:00 hour: min 1, max 15, mean 4, last 2, count 9 2691ms
+   → the calls that failed: expected [ 1793613600000, 1793613610000, …(10) ] to deeply equal [ 1793613660000, 1793613670000, …(1) ]
+ ✓ rollups.test.ts > AC13 #262.edf5ecc6 For one series whose values in the 10:00 minute arrive in the order 4, 1, 15, 2, 5 and 3, the minute's rollup is min 1, max 15, mean 5, last 3 and count 6; in the 10:01 minute three calls fail and the values 2, 2 and 2 arrive, so that minute's rollup is mean 2 and count 3, and the 10:00 hour's rollup, with no other values, is min 1, max 15, mean 4, last 2 and count 9; a host that reports the median 3.5 as the mean, the maximum as last, or the hour's mean as the mean of minute means, 3.5, fails, naming the field > AC13 (wrong program) a host that reports the median as the mean, the maximum as last, or the hour's mean as the mean of minute means fails, naming the field 1ms
+ ✓ retention.test.ts > AC15 #262.7b9efe91 On a test clock, a notice cites the 14:00:00 batch on day 1 and a decision cites the 15:00:00 batch. On day 3, a value at 10:00:05 on day 1 resolves to the 10:00 minute rollup and shows its `last`, marked rollup, and the notice still opens the 14:00:00 batch; on day 9 that value resolves to the 10:00 hour rollup > AC15 the figures tell the raw value, the minute's last and the hour's last apart 1ms
+ × retention.test.ts > AC15 #262.7b9efe91 On a test clock, a notice cites the 14:00:00 batch on day 1 and a decision cites the 15:00:00 batch. On day 3, a value at 10:00:05 on day 1 resolves to the 10:00 minute rollup and shows its `last`, marked rollup, and the notice still opens the 14:00:00 batch; on day 9 that value resolves to the 10:00 hour rollup > AC15 on day 3 the 10:00:05 value resolves to the 10:00 minute rollup's last, marked rollup, its batch's file gone, and the notice still opens the 14:00:00 batch 3634ms
+   → the fleet call at 2026-11-02T00:00:05.000Z made no batch: {"status":"failed","source":"ext.shop.fleet","cause":"no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned {\"values\":{\"svc000\":86.5,\"svc001\":87.2,\"svc002\":87.9,\"svc003\":88.6,\"svc004\":89.3,\"svc005\":90,\"svc006\":90.7,\"svc007\":91.4,\"svc008\":92.1,\"svc009\":92.8,\"svc010\":93.5,\"svc011\":94.2,\"svc012\":94.9,\"svc013\":"}
+ × retention.test.ts > AC15 #262.7b9efe91 On a test clock, a notice cites the 14:00:00 batch on day 1 and a decision cites the 15:00:00 batch. On day 3, a value at 10:00:05 on day 1 resolves to the 10:00 minute rollup and shows its `last`, marked rollup, and the notice still opens the 14:00:00 batch; on day 9 that value resolves to the 10:00 hour rollup > AC15 on day 9 that value resolves to the 10:00 hour rollup's last, marked rollup 0ms
+   → the fleet call at 2026-11-02T00:00:05.000Z made no batch: {"status":"failed","source":"ext.shop.fleet","cause":"no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned {\"values\":{\"svc000\":86.5,\"svc001\":87.2,\"svc002\":87.9,\"svc003\":88.6,\"svc004\":89.3,\"svc005\":90,\"svc006\":90.7,\"svc007\":91.4,\"svc008\":92.1,\"svc009\":92.8,\"svc010\":93.5,\"svc011\":94.2,\"svc012\":94.9,\"svc013\":"}
+ × retention.test.ts > AC16 #262.ddd70a8f On day 32 that value reads missing, shown as a dash, and the decision still opens the 15:00:00 batch; a host that shows the raw 10:00:05 value on day 3, or drops either cited batch at 24 h, fails, naming it > AC16 on day 32 that value reads missing, shown as a dash, and the decision still opens the 15:00:00 batch 0ms
+   → the fleet call at 2026-11-02T00:00:05.000Z made no batch: {"status":"failed","source":"ext.shop.fleet","cause":"no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned {\"values\":{\"svc000\":86.5,\"svc001\":87.2,\"svc002\":87.9,\"svc003\":88.6,\"svc004\":89.3,\"svc005\":90,\"svc006\":90.7,\"svc007\":91.4,\"svc008\":92.1,\"svc009\":92.8,\"svc010\":93.5,\"svc011\":94.2,\"svc012\":94.9,\"svc013\":"}
+ ✓ retention.test.ts > AC16 #262.ddd70a8f On day 32 that value reads missing, shown as a dash, and the decision still opens the 15:00:00 batch; a host that shows the raw 10:00:05 value on day 3, or drops either cited batch at 24 h, fails, naming it > AC16 (wrong program) a host that shows the raw 10:00:05 value on day 3 fails, naming the value 0ms
+ × retention.test.ts > AC16 #262.ddd70a8f On day 32 that value reads missing, shown as a dash, and the decision still opens the 15:00:00 batch; a host that shows the raw 10:00:05 value on day 3, or drops either cited batch at 24 h, fails, naming it > AC16 (wrong program) a host that drops the cited batches at 24 h fails, naming each 0ms
+   → the fleet call at 2026-11-02T00:00:05.000Z made no batch: {"status":"failed","source":"ext.shop.fleet","cause":"no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned {\"values\":{\"svc000\":86.5,\"svc001\":87.2,\"svc002\":87.9,\"svc003\":88.6,\"svc004\":89.3,\"svc005\":90,\"svc006\":90.7,\"svc007\":91.4,\"svc008\":92.1,\"svc009\":92.8,\"svc010\":93.5,\"svc011\":94.2,\"svc012\":94.9,\"svc013\":"}
+ × retention.test.ts > AC17 #262.ff200c23 30 days of that source add 43,920 rows to `rollups` (43,200 minutes and 720 hours) and keep under 250 MB of rollup evidence (7 days of minute files and 30 of hour files, at 40 bytes a series); a projection with one row per series and window holds 21,960,000 rows and fails, naming the table > AC17 30 days add 43,920 rollups rows and keep under 250 MB of rollup evidence 0ms
+   → the fleet call at 2026-11-02T00:00:05.000Z made no batch: {"status":"failed","source":"ext.shop.fleet","cause":"no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned {\"values\":{\"svc000\":86.5,\"svc001\":87.2,\"svc002\":87.9,\"svc003\":88.6,\"svc004\":89.3,\"svc005\":90,\"svc006\":90.7,\"svc007\":91.4,\"svc008\":92.1,\"svc009\":92.8,\"svc010\":93.5,\"svc011\":94.2,\"svc012\":94.9,\"svc013\":"}
+ × retention.test.ts > AC17 #262.ff200c23 30 days of that source add 43,920 rows to `rollups` (43,200 minutes and 720 hours) and keep under 250 MB of rollup evidence (7 days of minute files and 30 of hour files, at 40 bytes a series); a projection with one row per series and window holds 21,960,000 rows and fails, naming the table > AC17 (wrong program) a projection with one row per series and window holds 21,960,000 rows and fails, naming the table 0ms
+   → the fleet call at 2026-11-02T00:00:05.000Z made no batch: {"status":"failed","source":"ext.shop.fleet","cause":"no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned {\"values\":{\"svc000\":86.5,\"svc001\":87.2,\"svc002\":87.9,\"svc003\":88.6,\"svc004\":89.3,\"svc005\":90,\"svc006\":90.7,\"svc007\":91.4,\"svc008\":92.1,\"svc009\":92.8,\"svc010\":93.5,\"svc011\":94.2,\"svc012\":94.9,\"svc013\":"}
+ ↓ day.test.ts > AC8 #262.2a3a744d One source whose call returns 500 series, read every 10 s with a 5 s timeout by a view kept shown with `while_shown: {every: 10 s}` on a test clock from 00:00:00, adds exactly 8,640 `reading.batch` events for the calls from 00:00:00 to 23:59:50 and, once they have closed, exactly 1,464 `reading.rollup` events for the windows that end by 24:00:00 (1,440 minutes and 24 hours) > AC8 8,640 reading.batch events for the calls from 00:00:00 to 23:59:50, one per call
+ ↓ day.test.ts > AC8 #262.2a3a744d One source whose call returns 500 series, read every 10 s with a 5 s timeout by a view kept shown with `while_shown: {every: 10 s}` on a test clock from 00:00:00, adds exactly 8,640 `reading.batch` events for the calls from 00:00:00 to 23:59:50 and, once they have closed, exactly 1,464 `reading.rollup` events for the windows that end by 24:00:00 (1,440 minutes and 24 hours) > AC8 1,464 reading.rollup events for the windows that end by 24:00:00: 1,440 minutes and 24 hours, one each
+ ↓ day.test.ts > AC9 #262.99400a8b That day adds no event per value or per series; a host that appends one event per value adds 4,320,000 and fails, naming the count > AC9 no event kind has an event per value or per series: none more than three a call, and no reading.recorded of fleet
+ ↓ day.test.ts > AC9 #262.99400a8b That day adds no event per value or per series; a host that appends one event per value adds 4,320,000 and fails, naming the count > AC9 (wrong program) a host that appends one event per value adds 4,320,000 and fails, naming the count
+ ↓ day.test.ts > AC14 #262.2d291fb4 Dropping `rollups` after the 24 h run and rebuilding it from the log gives the same 1,464 rows, byte for byte; a host that writes rollups only into the table loses them on rebuild and fails, naming the table > AC14 the rollups table rebuilt from the log holds the same rows, byte for byte: 1,464 for the day's windows
+ ↓ day.test.ts > AC14 #262.2d291fb4 Dropping `rollups` after the 24 h run and rebuilding it from the log gives the same 1,464 rows, byte for byte; a host that writes rollups only into the table loses them on rebuild and fails, naming the table > AC14 (wrong program) a host that writes rollups only into the table loses them on rebuild and fails, naming the table
+ ↓ day.test.ts > AC18 #262.7859de09 Budgets, on the reference Mac in the local preflight, compared with the merge base: the 500-series day's batch files sum to under 60 MB of file bytes (4,320,000 values at 12 bytes is 51.84 MB); its 8,640 batch and 1,464 rollup events, with their indexes, add under 5 MB to the record, the driver's own events counted apart; a landed batch refreshes its 500 bound values in under 1 ms in all; a value at a past log position resolves in under 1 ms at p50, with p95 reported > AC18 the day's 8,640 batch files sum to under 60 MB of file bytes
+ ↓ day.test.ts > AC18 #262.7859de09 Budgets, on the reference Mac in the local preflight, compared with the merge base: the 500-series day's batch files sum to under 60 MB of file bytes (4,320,000 values at 12 bytes is 51.84 MB); its 8,640 batch and 1,464 rollup events, with their indexes, add under 5 MB to the record, the driver's own events counted apart; a landed batch refreshes its 500 bound values in under 1 ms in all; a value at a past log position resolves in under 1 ms at p50, with p95 reported > AC18 the 8,640 batch and 1,464 rollup events, with their indexes, add under 5 MB to the record, the driver's events apart
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  day.test.ts [ day.test.ts ]
+TypeError: this.h.viewsShown is not a function
+ ❯ App.report helpers.ts:383:32
+    381|       at.last = now;
+    382|       this.sent.push({ at: now, kind: 'shown', report: { ...at.report …
+    383|       if (this.h) await this.h.viewsShown(YOU, { ...at.report });
+       |                                ^
+    384|     }
+    385|   }
+ ❯ day.test.ts:45:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/28]⎯
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 27 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  appapi.test.ts > AC3 #262.19fbe9a5 A source with `while_shown: {every: 10 s}` bound by one view makes 6 calls, plus or minus one, in 60 s while the view is shown, still 6 with two views shown that bind it, and none from 10 s after the last is hidden; a host that keeps calling for a hidden view, or runs one cadence per view, fails, naming the source > AC3 the hub's app API serves views/shown and views/hidden to the app (views.shown, views.hidden on its socket)
+AssertionError: views.shown: {"v":1,"id":"views.shown#1","error":{"code":"unknown_method","retryable":false,"remediation":"The hub serves no method views.shown.","path":"/method","actual":"views.shown","evidence":[]}}: expected 'unknown_method' not to be 'unknown_method' // Object.is equality
+ ❯ appapi.test.ts:27:67
+     25|           const code = (reply.error as { code?: string } | undefined)?…
+     26|           // The view is one no plug-in registered here, so the reply …
+     27|           expect(code, `${method}: ${JSON.stringify(reply)}`).not.toBe…
+       |                                                                   ^
+     28|         }
+     29|       } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/28]⎯
+
+ FAIL  budgets.test.ts > AC18 #262.7859de09 Budgets, on the reference Mac in the local preflight, compared with the merge base: the 500-series day's batch files sum to under 60 MB of file bytes (4,320,000 values at 12 bytes is 51.84 MB); its 8,640 batch and 1,464 rollup events, with their indexes, add under 5 MB to the record, the driver's own events counted apart; a landed batch refreshes its 500 bound values in under 1 ms in all; a value at a past log position resolves in under 1 ms at p50, with p95 reported > AC18 the perf lane has a task for each timing, and the budgets are valid against the merge base's
+AssertionError: timings with no perf-lane task to compare with the merge base: expected [ 'reading-batch-refresh', …(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "reading-batch-refresh",
++   "reading-value-at-position",
++ ]
+
+ ❯ budgets.test.ts:81:138
+     79|     }
+     80|     validateBudgets(current, baseBudgets);
+     81|     expect(TASKS.filter((x) => !current.tasks.some((y) => y.id === x))…
+       |                                                                                                                                          ^
+     82|   });
+     83|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/28]⎯
+
+ FAIL  budgets.test.ts > AC18 #262.7859de09 Budgets, on the reference Mac in the local preflight, compared with the merge base: the 500-series day's batch files sum to under 60 MB of file bytes (4,320,000 values at 12 bytes is 51.84 MB); its 8,640 batch and 1,464 rollup events, with their indexes, add under 5 MB to the record, the driver's own events counted apart; a landed batch refreshes its 500 bound values in under 1 ms in all; a value at a past log position resolves in under 1 ms at p50, with p95 reported > AC18 a landed batch refreshes its 500 bound values in under 1 ms in all (five runs of 20 batches after a warm-up)
+Error: the fleet call made no batch: {"status":"failed","source":"ext.shop.fleet","cause":"no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned {\"values\":{\"svc000\":0,\"svc001\":0.7,\"svc002\":1.4,\"svc003\":2.1,\"svc004\":2.8,\"svc005\":3.5,\"svc006\":4.2,\"svc007\":4.9,\"svc008\":5.6,\"svc009\":6.3,\"svc010\":7,\"svc011\":7.7,\"svc012\":8.4,\"svc013\":9.1,\"svc014\":9."}
+ ❯ land budgets.test.ts:66:62
+     64|   await sleep(2);
+     65|   const r = await h.readSource('ext.shop.fleet');
+     66|   if (r.status === 'failed' || r.status === 'BLOCKED') throw Error(`th…
+       |                                                              ^
+     67| }
+     68|
+ ❯ once budgets.test.ts:90:9
+ ❯ budgets.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/28]⎯
+
+ FAIL  budgets.test.ts > AC18 #262.7859de09 Budgets, on the reference Mac in the local preflight, compared with the merge base: the 500-series day's batch files sum to under 60 MB of file bytes (4,320,000 values at 12 bytes is 51.84 MB); its 8,640 batch and 1,464 rollup events, with their indexes, add under 5 MB to the record, the driver's own events counted apart; a landed batch refreshes its 500 bound values in under 1 ms in all; a value at a past log position resolves in under 1 ms at p50, with p95 reported > AC18 a value at a past log position resolves in under 1 ms at p50, with p95 reported (five runs of 200 over 360 batches after a warm-up)
+Error: the fleet call made no batch: {"status":"failed","source":"ext.shop.fleet","cause":"no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned {\"values\":{\"svc000\":0,\"svc001\":0.7,\"svc002\":1.4,\"svc003\":2.1,\"svc004\":2.8,\"svc005\":3.5,\"svc006\":4.2,\"svc007\":4.9,\"svc008\":5.6,\"svc009\":6.3,\"svc010\":7,\"svc011\":7.7,\"svc012\":8.4,\"svc013\":9.1,\"svc014\":9."}
+ ❯ land budgets.test.ts:66:62
+     64|   await sleep(2);
+     65|   const r = await h.readSource('ext.shop.fleet');
+     66|   if (r.status === 'failed' || r.status === 'BLOCKED') throw Error(`th…
+       |                                                              ^
+     67| }
+     68|
+ ❯ budgets.test.ts:107:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/28]⎯
+
+ FAIL  notice.test.ts > AC6 #262.afbd91fe Creating "tell me when the error rate passes 2%" on a source that runs only while shown, every 10 s, gives the plug-in's checking job a schedule every 10 s, which the notice's sentence names; with every view hidden the job keeps reading the source, and a recorded rate of 3% notifies once; a host that leaves the job unscheduled sends no notice and fails, naming the notice > AC6 the notice's sentence names its 10 s schedule; with no view shown the job reads the source every 10 s and the recorded 3% notifies once
+AssertionError: /private/tmp/dh262-pkg-shop-8tn1vG installs and loads: expected 'conformance: its code didn\'t registe…' to be null
+
+- Expected:
+null
+
++ Received:
+"conformance: its code didn't register in the platform sandbox: deep.schedule: ext.shop.watch_rate a cadence is every so many ms (at least 1000), or a cron line, one of the two"
+
+ ❯ installAndLoad helpers.ts:305:49
+    303| export async function installAndLoad(h: ExtensionHost, from: string): …
+    304|   const { refusal, installed } = await tryInstall(h, from);
+    305|   expect(refusal, `${from} installs and loads`).toBeNull();
+       |                                                 ^
+    306|   return installed!;
+    307| }
+ ❯ metricsWorld helpers.ts:317:3
+ ❯ created notice.test.ts:24:13
+ ❯ notice.test.ts:33:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/28]⎯
+
+ FAIL  notice.test.ts > AC6 #262.afbd91fe Creating "tell me when the error rate passes 2%" on a source that runs only while shown, every 10 s, gives the plug-in's checking job a schedule every 10 s, which the notice's sentence names; with every view hidden the job keeps reading the source, and a recorded rate of 3% notifies once; a host that leaves the job unscheduled sends no notice and fails, naming the notice > AC6 (wrong program) a host that leaves the job unscheduled sends no notice and fails, naming the notice
+AssertionError: /private/tmp/dh262-pkg-shop-IBjgs2 installs and loads: expected 'conformance: its code didn\'t registe…' to be null
+
+- Expected:
+null
+
++ Received:
+"conformance: its code didn't register in the platform sandbox: deep.schedule: ext.shop.watch_rate a cadence is every so many ms (at least 1000), or a cron line, one of the two"
+
+ ❯ installAndLoad helpers.ts:305:49
+    303| export async function installAndLoad(h: ExtensionHost, from: string): …
+    304|   const { refusal, installed } = await tryInstall(h, from);
+    305|   expect(refusal, `${from} installs and loads`).toBeNull();
+       |                                                 ^
+    306|   return installed!;
+    307| }
+ ❯ metricsWorld helpers.ts:317:3
+ ❯ created notice.test.ts:24:13
+ ❯ notice.test.ts:43:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/28]⎯
+
+ FAIL  notice.test.ts > AC7 #262.96530f6d With the view shown and that schedule running, the source makes 6 calls a minute, not 12; a test plug-in whose only check for the notice is in its panel has the notice refused when it is created, naming the notice > AC7 with the view shown and the notice's schedule running, errors makes 6 calls a minute, not 12
+AssertionError: /private/tmp/dh262-pkg-shop-aDTJ1l installs and loads: expected 'conformance: its code didn\'t registe…' to be null
+
+- Expected:
+null
+
++ Received:
+"conformance: its code didn't register in the platform sandbox: deep.schedule: ext.shop.watch_rate a cadence is every so many ms (at least 1000), or a cron line, one of the two"
+
+ ❯ installAndLoad helpers.ts:305:49
+    303| export async function installAndLoad(h: ExtensionHost, from: string): …
+    304|   const { refusal, installed } = await tryInstall(h, from);
+    305|   expect(refusal, `${from} installs and loads`).toBeNull();
+       |                                                 ^
+    306|   return installed!;
+    307| }
+ ❯ metricsWorld helpers.ts:317:3
+ ❯ created notice.test.ts:24:13
+ ❯ notice.test.ts:54:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/28]⎯
+
+ FAIL  notice.test.ts > AC7 #262.96530f6d With the view shown and that schedule running, the source makes 6 calls a minute, not 12; a test plug-in whose only check for the notice is in its panel has the notice refused when it is created, naming the notice > AC7 a plug-in whose only check for the notice is in its panel has the notice refused when it is created, naming the notice
+AssertionError: creating "tell me when the error rate passes 2%" on test/glance's errors: expected null not to be null
+ ❯ notice.test.ts:77:73
+     75|       refused = (e as Error).message;
+     76|     }
+     77|     expect(refused, `creating "${WORDS}" on ${GLANCE_ID}'s errors`).no…
+       |                                                                         ^
+     78|     expect(refused!.includes(kind) || refused!.includes(KEY) || refuse…
+     79|     const subscribed = (await w.events('notice.subscribed')).filter((e…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/28]⎯
+
+ FAIL  readnow.test.ts > AC1 #262.9d1a9fcb At 10:00:30, Read now on a view that binds three recorded sources, one answered 1 s before, one whose quota is spent until 10:01 and one ready, makes exactly one call, to the third; the first keeps its answer, the second's values read `quota` with 10:01, and the third's update within one frame of its reading > AC1 Read now at 10:00:30 calls only the ready source; fresh keeps its 10:00:29 answer, spent reads quota until 10:01:00, ready updates as its reading lands
+AssertionError: Read now on ext.shop.board: {"ok":false,"error":"deep.readNow is not a function"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readnow.test.ts:50:76
+     48|     const { c, h, api } = await upToReadNow();
+     49|     const clicked = await readNow(h, BOARD);
+     50|     expect(clicked.ok, `Read now on ${BOARD}: ${JSON.stringify(clicked…
+       |                                                                            ^
+     51|     // The third's value updates as its reading lands: on the test clo…
+     52|     // reading as of 10:00:30 with no time between them, inside one fr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/28]⎯
+
+ FAIL  readnow.test.ts > AC2 #262.acafafac The third also runs on a 5-minute schedule whose next run is 10:05:00, and after Read now it is still 10:05:00; a Read now that calls the first again, or the second inside its quota window, fails, naming the source > AC2 the 5-minute schedule's next run is 10:05:00 before Read now and after it, and it runs then
+AssertionError: Read now on ext.shop.board: {"ok":false,"error":"deep.readNow is not a function"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readnow.test.ts:73:76
+     71|     expect(await nextOf(h), 'ext.shop.poll\'s next run before Read now…
+     72|     const clicked = await readNow(h, BOARD);
+     73|     expect(clicked.ok, `Read now on ${BOARD}: ${JSON.stringify(clicked…
+       |                                                                            ^
+     74|     await waitUntil(async () => (await value(h, 'reading:ext.shop.read…
+     75|     expect(await nextOf(h), 'ext.shop.poll\'s next run after Read now'…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/28]⎯
+
+ FAIL  retention.test.ts > AC15 #262.7b9efe91 On a test clock, a notice cites the 14:00:00 batch on day 1 and a decision cites the 15:00:00 batch. On day 3, a value at 10:00:05 on day 1 resolves to the 10:00 minute rollup and shows its `last`, marked rollup, and the notice still opens the 14:00:00 batch; on day 9 that value resolves to the 10:00 hour rollup > AC15 on day 3 the 10:00:05 value resolves to the 10:00 minute rollup's last, marked rollup, its batch's file gone, and the notice still opens the 14:00:00 batch
+ FAIL  retention.test.ts > AC15 #262.7b9efe91 On a test clock, a notice cites the 14:00:00 batch on day 1 and a decision cites the 15:00:00 batch. On day 3, a value at 10:00:05 on day 1 resolves to the 10:00 minute rollup and shows its `last`, marked rollup, and the notice still opens the 14:00:00 batch; on day 9 that value resolves to the 10:00 hour rollup > AC15 on day 9 that value resolves to the 10:00 hour rollup's last, marked rollup
+ FAIL  retention.test.ts > AC16 #262.ddd70a8f On day 32 that value reads missing, shown as a dash, and the decision still opens the 15:00:00 batch; a host that shows the raw 10:00:05 value on day 3, or drops either cited batch at 24 h, fails, naming it > AC16 on day 32 that value reads missing, shown as a dash, and the decision still opens the 15:00:00 batch
+ FAIL  retention.test.ts > AC16 #262.ddd70a8f On day 32 that value reads missing, shown as a dash, and the decision still opens the 15:00:00 batch; a host that shows the raw 10:00:05 value on day 3, or drops either cited batch at 24 h, fails, naming it > AC16 (wrong program) a host that drops the cited batches at 24 h fails, naming each
+ FAIL  retention.test.ts > AC17 #262.ff200c23 30 days of that source add 43,920 rows to `rollups` (43,200 minutes and 720 hours) and keep under 250 MB of rollup evidence (7 days of minute files and 30 of hour files, at 40 bytes a series); a projection with one row per series and window holds 21,960,000 rows and fails, naming the table > AC17 30 days add 43,920 rollups rows and keep under 250 MB of rollup evidence
+ FAIL  retention.test.ts > AC17 #262.ff200c23 30 days of that source add 43,920 rows to `rollups` (43,200 minutes and 720 hours) and keep under 250 MB of rollup evidence (7 days of minute files and 30 of hour files, at 40 bytes a series); a projection with one row per series and window holds 21,960,000 rows and fails, naming the table > AC17 (wrong program) a projection with one row per series and window holds 21,960,000 rows and fails, naming the table
+Error: the fleet call at 2026-11-02T00:00:05.000Z made no batch: {"status":"failed","source":"ext.shop.fleet","cause":"no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned {\"values\":{\"svc000\":86.5,\"svc001\":87.2,\"svc002\":87.9,\"svc003\":88.6,\"svc004\":89.3,\"svc005\":90,\"svc006\":90.7,\"svc007\":91.4,\"svc008\":92.1,\"svc009\":92.8,\"svc010\":93.5,\"svc011\":94.2,\"svc012\":94.9,\"svc013\":"}
+ ❯ read retention.test.ts:81:66
+     79|       c.set(at);
+     80|       const r = await h.readSource('ext.shop.fleet');
+     81|       if (r.status === 'failed' || r.status === 'BLOCKED') throw Error…
+       |                                                                  ^
+     82|       await h.tick();
+     83|       await h.idle();
+ ❯ retention.test.ts:105:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/28]⎯
+
+ FAIL  rollups.test.ts > AC13 #262.edf5ecc6 For one series whose values in the 10:00 minute arrive in the order 4, 1, 15, 2, 5 and 3, the minute's rollup is min 1, max 15, mean 5, last 3 and count 6; in the 10:01 minute three calls fail and the values 2, 2 and 2 arrive, so that minute's rollup is mean 2 and count 3, and the 10:00 hour's rollup, with no other values, is min 1, max 15, mean 4, last 2 and count 9; a host that reports the median 3.5 as the mean, the maximum as last, or the hour's mean as the mean of minute means, 3.5, fails, naming the field > AC13 the 10:00 minute: min 1, max 15, mean 5, last 3, count 6; the 10:01 minute: mean 2, count 3; the 10:00 hour: min 1, max 15, mean 4, last 2, count 9
+AssertionError: the calls that failed: expected [ 1793613600000, 1793613610000, …(10) ] to deeply equal [ 1793613660000, 1793613670000, …(1) ]
+
+- Expected
++ Received
+
+  [
++   1793613600000,
++   1793613610000,
++   1793613620000,
++   1793613630000,
++   1793613640000,
++   1793613650000,
+    1793613660000,
+    1793613670000,
+    1793613680000,
++   1793613690000,
++   1793613700000,
++   1793613710000,
+  ]
+
+ ❯ rollups.test.ts:39:45
+     37|       await h.idle();
+     38|     }
+     39|     expect(failed, 'the calls that failed').toEqual([t('10:01:00'), t(…
+       |                                             ^
+     40|     for (let at = t('10:02:00'); at <= t('11:00:00'); at += MINUTE) { …
+     41|     c.set(t('11:00:10'));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/28]⎯
+
+ FAIL  series.test.ts > AC10 #262.e2bdbc81 A call that returns 10,001 values makes no reading and fails, naming the count; one that returns 10,000 lands as one batch > AC10 10,001 values make no reading and fail, naming the count; 10,000 land as one reading.batch
+AssertionError: its cause names the count: expected 'no reading: a parser returns { value,…' to match /\b10,?001\b/
+
+- Expected:
+/\b10,?001\b/
+
++ Received:
+"no reading: a parser returns { value, unit }, one finite number and its unit, and this one returned {\"values\":{\"svc00000\":0,\"svc00001\":0.25,\"svc00002\":0.5,\"svc00003\":0.75,\"svc00004\":1,\"svc00005\":1.25,\"svc00006\":1.5,\"svc00007\":1.75,\"svc00008\":2,\"svc00009\":2.25,\"svc00010\":2.5,\"svc00011\":2.75,\"svc00012"
+
+ ❯ series.test.ts:31:76
+     29|     const over = await h.readSource('ext.shop.wide');
+     30|     expect(over.status, `the 10,001-value call: ${JSON.stringify(over)…
+     31|     expect((over as { cause: string }).cause, 'its cause names the cou…
+       |                                                                            ^
+     32|     expect(await batches(w, 'ext.shop.wide'), 'reading.batch after the…
+     33|     expect((await w.events('reading.recorded')).filter((e) => (e.data …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/28]⎯
+
+ FAIL  series.test.ts > AC11 #262.4ba2cfdd A bound value for `reading:metrics#checkout` pinned to the log position of the 10:00:10 batch reads 42.5 live, and 42.5 again on replay after the 10:00:20 batch, 43.0, has landed; a host that resolves on replay to the newest batch shows 43.0 and fails, naming the value > AC11 pinned to the 10:00:10 batch, checkout reads 42.5 live and 42.5 on replay after the 43.0 batch landed
+AssertionError: the 10:00:10 call: expected 'failed' not to be 'failed' // Object.is equality
+ ❯ twoBatches series.test.ts:48:88
+     46|   async function twoBatches() {
+     47|     const m = await metricsWorld(t('10:00:10'), probe, answers);
+     48|     expect((await m.h.readSource('ext.shop.metrics')).status, 'the 10:…
+       |                                                                                        ^
+     49|     const first = await batchAt(m.w, 'ext.shop.metrics', t('10:00:10')…
+     50|     const live = await value(m.h, CHECKOUT, first.log_pos);
+ ❯ series.test.ts:59:42
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/28]⎯
+
+ FAIL  series.test.ts > AC11 #262.4ba2cfdd A bound value for `reading:metrics#checkout` pinned to the log position of the 10:00:10 batch reads 42.5 live, and 42.5 again on replay after the 10:00:20 batch, 43.0, has landed; a host that resolves on replay to the newest batch shows 43.0 and fails, naming the value > AC11 (wrong program) a host that resolves on replay to the newest batch shows 43.0 and fails, naming the value
+AssertionError: the 10:00:10 call: expected 'failed' not to be 'failed' // Object.is equality
+ ❯ twoBatches series.test.ts:48:88
+     46|   async function twoBatches() {
+     47|     const m = await metricsWorld(t('10:00:10'), probe, answers);
+     48|     expect((await m.h.readSource('ext.shop.metrics')).status, 'the 10:…
+       |                                                                                        ^
+     49|     const first = await batchAt(m.w, 'ext.shop.metrics', t('10:00:10')…
+     50|     const live = await value(m.h, CHECKOUT, first.log_pos);
+ ❯ series.test.ts:67:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/28]⎯
+
+ FAIL  series.test.ts > AC12 #262.190cedac A planted batch file whose bytes changed fails its hash; every value bound to it reads missing, naming the batch and the mismatch, and a check that cites it is INVALID > AC12 the 10:00:10 batch's file, its bytes changed: checkout and search read missing, naming the batch and the mismatch, and a check citing it is INVALID
+AssertionError: the 10:00:10 call: expected 'failed' not to be 'failed' // Object.is equality
+ ❯ series.test.ts:76:86
+     74|   it('AC12 the 10:00:10 batch\'s file, its bytes changed: checkout and…
+     75|     const { w, h } = await metricsWorld(t('10:00:10'), probe, answers);
+     76|     expect((await h.readSource('ext.shop.metrics')).status, 'the 10:00…
+       |                                                                                      ^
+     77|     const batch = await batchAt(w, 'ext.shop.metrics', t('10:00:10'));
+     78|     const file = fileOf(batch);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/28]⎯
+
+ FAIL  whileshown.test.ts > AC3 #262.19fbe9a5 A source with `while_shown: {every: 10 s}` bound by one view makes 6 calls, plus or minus one, in 60 s while the view is shown, still 6 with two views shown that bind it, and none from 10 s after the last is hidden; a host that keeps calling for a hidden view, or runs one cadence per view, fails, naming the source > AC3 6 calls in the minute one view is shown, 6 in the minute two are, none from 10 s after both are hidden
+TypeError: this.h.viewsShown is not a function
+ ❯ App.report helpers.ts:383:32
+    381|       at.last = now;
+    382|       this.sent.push({ at: now, kind: 'shown', report: { ...at.report …
+    383|       if (this.h) await this.h.viewsShown(YOU, { ...at.report });
+       |                                ^
+    384|     }
+    385|   }
+ ❯ run helpers.ts:391:24
+ ❯ play whileshown.test.ts:26:17
+ ❯ ac3 whileshown.test.ts:34:9
+ ❯ whileshown.test.ts:54:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/28]⎯
+
+ FAIL  whileshown.test.ts > AC4 #262.457c2b67 With that view's window minimized at 10:00:00, the source's calls stop by 10:00:10; a replica that draws the same view makes none; and with the app's window drawing nothing while its socket stays open, calls stop within 10 s plus one period; a host that counts a minimized window, a replica or a silent app as shown fails, naming the view > AC4 the window minimized at 10:00:00: calls stop by 10:00:10
+TypeError: this.h.viewsShown is not a function
+ ❯ App.report helpers.ts:383:32
+    381|       at.last = now;
+    382|       this.sent.push({ at: now, kind: 'shown', report: { ...at.report …
+    383|       if (this.h) await this.h.viewsShown(YOU, { ...at.report });
+       |                                ^
+    384|     }
+    385|   }
+ ❯ run helpers.ts:391:24
+ ❯ play whileshown.test.ts:26:17
+ ❯ Object.minimized whileshown.test.ts:75:11
+ ❯ whileshown.test.ts:106:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/28]⎯
+
+ FAIL  whileshown.test.ts > AC4 #262.457c2b67 With that view's window minimized at 10:00:00, the source's calls stop by 10:00:10; a replica that draws the same view makes none; and with the app's window drawing nothing while its socket stays open, calls stop within 10 s plus one period; a host that counts a minimized window, a replica or a silent app as shown fails, naming the view > AC4 a replica that draws the view makes no call
+TypeError: this.h.viewsShown is not a function
+ ❯ App.report helpers.ts:383:32
+    381|       at.last = now;
+    382|       this.sent.push({ at: now, kind: 'shown', report: { ...at.report …
+    383|       if (this.h) await this.h.viewsShown(YOU, { ...at.report });
+       |                                ^
+    384|     }
+    385|   }
+ ❯ run helpers.ts:391:24
+ ❯ play whileshown.test.ts:26:17
+ ❯ Object.replica whileshown.test.ts:84:11
+ ❯ whileshown.test.ts:113:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/28]⎯
+
+ FAIL  whileshown.test.ts > AC4 #262.457c2b67 With that view's window minimized at 10:00:00, the source's calls stop by 10:00:10; a replica that draws the same view makes none; and with the app's window drawing nothing while its socket stays open, calls stop within 10 s plus one period; a host that counts a minimized window, a replica or a silent app as shown fails, naming the view > AC4 the app's window draws nothing from 10:00:00 while its socket stays open: calls stop by 10:00:20
+TypeError: this.h.viewsShown is not a function
+ ❯ App.report helpers.ts:383:32
+    381|       at.last = now;
+    382|       this.sent.push({ at: now, kind: 'shown', report: { ...at.report …
+    383|       if (this.h) await this.h.viewsShown(YOU, { ...at.report });
+       |                                ^
+    384|     }
+    385|   }
+ ❯ run helpers.ts:391:24
+ ❯ play whileshown.test.ts:26:17
+ ❯ Object.silent whileshown.test.ts:91:11
+ ❯ whileshown.test.ts:119:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/28]⎯
+
+ FAIL  whileshown.test.ts > AC5 #262.d7c7f941 A source that declares `while_shown: {every: 5 s}` is refused at install, naming the field; one with `while_shown: {every: 10 s}`, 6 calls a minute, under a quota of 5 calls a minute is refused, naming both limits > AC5 while_shown every 5 s is refused at install, naming while_shown
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "a source declaring while_shown every 5 s installed and loaded; it is refused at install",
++ ]
+
+ ❯ whileshown.test.ts:146:184
+    144|
+    145|   it('AC5 while_shown every 5 s is refused at install, naming while_sh…
+    146|     expect(judgeRefused(await attempt({ while_shown: { every: 5 * SECO…
+       |                                                                                                                                                                                        ^
+    147|   }, 120_000);
+    148|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/28]⎯
+
+ FAIL  whileshown.test.ts > AC5 #262.d7c7f941 A source that declares `while_shown: {every: 5 s}` is refused at install, naming the field; one with `while_shown: {every: 10 s}`, 6 calls a minute, under a quota of 5 calls a minute is refused, naming both limits > AC5 while_shown every 10 s under a quota of 5 calls a minute is refused, naming both limits; under a quota of 6 it installs
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "a source with while_shown every 10 s under a quota of 5 calls a minute installed and loaded; it is refused at install",
++ ]
+
+ ❯ whileshown.test.ts:154:9
+    152|       { label: 'the quota of 5 calls a minute', test: /\b5\b/ },
+    153|       { label: 'the cadence of 6 calls a minute (every 10 s)', test: /…
+    154|     ])).toEqual([]);
+       |         ^
+    155|     expect(await attempt({ quota: { per_minute: 6, per_day: 10_000 } }…
+    156|   }, 120_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/28]⎯
+
+
+ Test Files  9 failed (9)
+      Tests  27 failed | 6 passed | 8 skipped (41)
+   Start at  00:12:40
+   Duration  111.20s (tests 79%, import 20%, transform 1%)
+
+
+## node node_modules/typescript/bin/tsc -p tests/acceptance/262/tsconfig.json
+
+tests/acceptance/262/budgets.test.ts(92,32): error TS2339: Property 'boundValues' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/budgets.test.ts(94,54): error TS7006: Parameter 'v' implicitly has an 'any' type.
+tests/acceptance/262/budgets.test.ts(118,29): error TS2339: Property 'boundValues' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/helpers.ts(165,35): error TS2353: Object literal may only specify known properties, and 'evidence' does not exist in type 'ExtensionHostOptions'.
+tests/acceptance/262/helpers.ts(371,30): error TS2339: Property 'viewsHidden' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/helpers.ts(383,32): error TS2339: Property 'viewsShown' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/helpers.ts(421,23): error TS2339: Property 'boundValues' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/notice.test.ts(25,47): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/262/notice.test.ts(34,28): error TS2339: Property 'listNotices' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/notice.test.ts(34,49): error TS7006: Parameter 'n' implicitly has an 'any' type.
+tests/acceptance/262/notice.test.ts(35,69): error TS2339: Property 'listNotices' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/notice.test.ts(73,47): error TS2554: Expected 3 arguments, but got 4.
+tests/acceptance/262/retention.test.ts(60,73): error TS2339: Property 'boundValues' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/rollups.test.ts(50,16): error TS2339: Property 'rollup' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/rollups.test.ts(51,16): error TS2339: Property 'rollup' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/rollups.test.ts(52,16): error TS2339: Property 'rollup' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/series.test.ts(81,28): error TS2339: Property 'judgeCheck' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/series.test.ts(91,29): error TS2339: Property 'boundValues' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/series.test.ts(96,27): error TS2339: Property 'judgeCheck' does not exist on type 'ExtensionHost'.
+tests/acceptance/262/twins.ts(86,105): error TS2339: Property 'boundValues' does not exist on type 'ExtensionHost'.

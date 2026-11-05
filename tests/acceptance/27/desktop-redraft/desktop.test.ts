@@ -52,7 +52,7 @@ describe(`${ID} The desktop app wakes too, or the fallback is recorded as a know
   it(`${ID} in an app that doesn't wake, the answer reads stalled and the session's record says it goes with the next prompt; the next prompt carries it; the session's next answer goes straight to its next prompt`, async () => {
     const { home } = makeHome();
     const repo = makeRepo(home);
-    const hub = await startHub(home);
+    const hub = await startHub(home, { noAskWait: true, shortHold: true });
     await setup(home);
     const app = Claude.start(home);
     await app.configure({ wake: false });

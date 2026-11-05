@@ -1,0 +1,147 @@
+Base run of tests/acceptance/489 at 692cc5cd (no implementation of #489), on this worktree:
+NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/489 --no-file-parallelism
+
+Per test (× failed, ✓ passed):
+     × criterion 1: constraint@1 holds motion's ten kinds, each motion's first-party entry passing every rule of the constraint kit, and motion fills no other module's kind
+     × criterion 1: the seal refuses a planted kind that iterates to convergence and one that reads its own output from the previous frame, each naming the kind
+     × criterion 1: motion's interface digest is the same in a build with the data module as in one without
+     × criterion 1: on a fixture of each motion kind, seeking to 50 random times equals playing bit for bit, and the op count is the same at every time
+     × criterion 1: a two-item cycle through child_of, look_at, copy and distance is refused at check, naming the chain
+     × criterion 5: a follow spring on a stepping source matches RK4 at 1 µs steps within 1e-6 relative at 1,000 seeded times, under-, critically and over-damped
+     × criterion 5: a critically damped spring never overshoots its target: a follow spring from 10 to 20 and a spring key from 10 to 20, at 1,000 seeded times and every 1/600 s
+     × criterion 10: the 0 → 1 key with {decay: 6.5, omega: 15} and velocity 6.5 reads 1 − e^(−6.5t)·cos(15t) within 1e-12 at 1,000 seeded times after its key, and seeking equals playing
+     × criterion 10: it peaks at 1.2808 at 0.1822 s after its key; a hard range of [0, 1.25] is refused naming the key and that peak, while [0, 1.3] is accepted
+     × criterion 10: with velocity 0 it reads 0.7374 at 0.1 s (the from-rest form within 1e-12), where the velocity form reads 0.9631
+     × criterion 10: the 1 → 1 key with {decay: 7, omega: 17} and velocity 2.21 reads 1 + 0.13·e^(−7t)·sin(17t) within 1e-12 at 1,000 seeded times, and seeking equals playing
+     × criterion 10: spring keys with velocity match an RK4 integration at 1 µs steps within 1e-6 relative at 1,000 seeded times in all three damping regimes, and seeking equals playing
+     × criterion 10: a planted spring that drops velocity reads 0.7374 at 0.1 s and fails the velocity check, naming the key
+     × criterion 3: every playhead path to 200 random times reads the same value, rate and integral, bit for bit
+     × criterion 3: at those times they are the closed form: first order and rate limit as computed here, the spring as RK4 at 1 µs, within 1e-9 relative
+     × criterion 4: at 10,000 random times the clamped auto-tangent channel stays between the values of the two keys of its span
+     × criterion 4: changing key k5 changes the spans from k3 to k7 and leaves every other span bit for bit the same
+     × criterion 8: seeking anywhere on a 10-minute timeline takes under 50 ms (the slowest of 10 seeded seeks, five fresh processes after a warm-up)
+     × criterion 8: evaluating channels for 10,000 items takes under 2 ms per frame (median of frames 10–69 at 60 fps, five fresh processes after a warm-up)
+     × criterion 7: the first pair is accepted and evaluates as A.channels, B.transform, B.constraints, A.driver, A.transform
+     × criterion 7: the first pair reads the same seeked and played at 50 random times
+     × criterion 7: with A's driver reading B's constrained world pose and B's look_at reading A's world pose the pair is refused with cycle, naming both
+     × criterion 7: a planted scheduler that schedules whole items refuses the first pair and fails
+     × criterion 6: scrubbed back and forth 50 times, the follow channel reads at every time what a straight play reads, bit for bit
+     × criterion 6: through the 50 scrubs the input track keeps its hash and its 12 entries, and the follow channel keeps its cached segments, solving none twice
+     × criterion 6: a planted follow channel that steps from the previous frame's value reads a different value after the first backward scrub and fails, naming the channel
+     × criterion 12: the knob reads 17 at 1.0 s, 43.25 at 1.1 s and 47 from 1.2 s
+     × criterion 12: with a second entry back to 17 at 1.1 s it starts from 43.25 and reads 20.28125 at 1.2 s and 17 from 1.3 s
+     × criterion 12: 1,000 seeded times read the same seeked and played
+     × criterion 12: under reduced_motion: hold the knob reads 47 from 1.0 s while an opacity channel on the same source reads 0.875 at 1.1 s
+     × criterion 12: a planted transition that restarts from the old target jumps from 43.25 to 47 at 1.1 s and fails, naming the channel and the flick
+     × criterion 9: at 400 random times both bones scale by max(1, d ÷ (l1 + l2)): the scale within 1e-12, the tip on the goal and the joints s·l1 and s·l2 apart within 1e-9
+     × criterion 9: it never iterates: its op count is the same at every time, in reach or out of it
+     × criterion 9: it keeps no bend side from an earlier frame: the elbow lies on its bend sign's side at every time, mirrored by the opposite sign, and every time reads the same seeked and played
+     × criterion 2: played on their own frames, the 24 fps and 60 fps documents give the same poses and channel values, bit for bit, every 1/12 s
+     × criterion 11: four waves with per_loop 23, 31, 43 and 59 equal their sum of sines of 2π × n × t ÷ 4.7 within 1e-12 at 1,000 seeded times
+     × criterion 11: noise {amplitude: 10, per_loop: 23, seed: 3} reads at 4.7 s, before the wrap, the value and central-difference slope it reads at 0, within 1e-9
+     × criterion 11: a planted per_loop that rounds the period to a whole flick first is 7.4e-9 off the first wave at 4.7 s and fails
+     × criterion 11: per_loop on a document with loop: none is refused, naming the channel
+
+Each failure's first assertion (the FAIL heading, then its AssertionError line):
+FAIL  auto-tangents.test.ts > criterion 4: clamped auto tangents never overshoot, and one key changes only its neighbours' spans > criterion 4: at 10,000 random times the clamped auto-tangent channel stays between the values of the two keys of its span
+  AssertionError: the clamped auto channel is accepted: {"ok":false,"code":"bad_interp","path":"channels/glide/keys/k0/interp"}: expected false to be true // Object.is equality
+FAIL  auto-tangents.test.ts > criterion 4: clamped auto tangents never overshoot, and one key changes only its neighbours' spans > criterion 4: changing key k5 changes the spans from k3 to k7 and leaves every other span bit for bit the same
+  AssertionError: before the change is accepted: {"ok":false,"code":"bad_interp","path":"channels/glide/keys/k0/interp"}: expected false to be true // Object.is equality
+FAIL  budgets.test.ts > criterion 8: budgets on the reference Mac > criterion 8: seeking anywhere on a 10-minute timeline takes under 50 ms (the slowest of 10 seeded seeks, five fresh processes after a warm-up)
+  AssertionError: the seek to 5610835957 is accepted: {"ok":false,"code":"bad_doc","path":"channels/follow0/keys"}: expected false to be true // Object.is equality
+FAIL  budgets.test.ts > criterion 8: budgets on the reference Mac > criterion 8: evaluating channels for 10,000 items takes under 2 ms per frame (median of frames 10–69 at 60 fps, five fresh processes after a warm-up)
+  AssertionError: the 10,000-item play is accepted: {"ok":false,"code":"bad_interp","path":"channels/c0/keys/k3/interp"}: expected false to be true // Object.is equality
+FAIL  constraint-kinds.test.ts > criterion 1: every constraint kind is an entry of constraint@1, passes the constraint kit, and the seal refuses the planted kinds > criterion 1: constraint@1 holds motion's ten kinds, each motion's first-party entry passing every rule of the constraint kit, and motion fills no other module's kind
+  AssertionError: motion's constraint kinds pass the kit:
+FAIL  constraint-kinds.test.ts > criterion 1: every constraint kind is an entry of constraint@1, passes the constraint kit, and the seal refuses the planted kinds > criterion 1: the seal refuses a planted kind that iterates to convergence and one that reads its own output from the previous frame, each naming the kind
+  AssertionError: the seal refuses both planted kinds:
+FAIL  constraint-kinds.test.ts > criterion 1: every constraint kind is an entry of constraint@1, passes the constraint kit, and the seal refuses the planted kinds > criterion 1: motion's interface digest is the same in a build with the data module as in one without
+  AssertionError: the binary builds: deep-show --no-default-features --features full,test-leave-out-data: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+FAIL  constraint-kinds.test.ts > criterion 1: every constraint kind is an entry of constraint@1, passes the constraint kit, and the seal refuses the planted kinds > criterion 1: on a fixture of each motion kind, seeking to 50 random times equals playing bit for bit, and the op count is the same at every time
+  AssertionError: frame 43010468: constraints.c is an object, got undefined: expected false to be true // Object.is equality
+FAIL  constraint-kinds.test.ts > criterion 1: every constraint kind is an entry of constraint@1, passes the constraint kit, and the seal refuses the planted kinds > criterion 1: a two-item cycle through child_of, look_at, copy and distance is refused at check, naming the chain
+  AssertionError: two-item cycles are refused naming the chain:
+FAIL  evaluation-order.test.ts > criterion 7: drivers and constraints scheduled per component, cycles refused naming both items > criterion 7: the first pair is accepted and evaluates as A.channels, B.transform, B.constraints, A.driver, A.transform
+  AssertionError: the answer's order is an array, got undefined: expected false to be true // Object.is equality
+FAIL  evaluation-order.test.ts > criterion 7: drivers and constraints scheduled per component, cycles refused naming both items > criterion 7: the first pair reads the same seeked and played at 50 random times
+  AssertionError: B's look_at turns it as A moves: 1 distinct rotations over 50 times: expected 1 to be greater than 40
+FAIL  evaluation-order.test.ts > criterion 7: drivers and constraints scheduled per component, cycles refused naming both items > criterion 7: with A's driver reading B's constrained world pose and B's look_at reading A's world pose the pair is refused with cycle, naming both
+  AssertionError: the second pair is refused: {"ok":true,"frames":[{"t":0,"doc_t":0,"pass":0,"passes":0,"items":{"knob":{"id":"knob","kind":"rect@1","name":"Rect knob","order":"aknob","params":{"box":[0,0,20,20],"paint":{"fill":{"role":"ink"}}},"at":{"pos":[0,150,0],"rot":[0,0,0],"scale":[1,1,1]}},"gauge":{"id":"gauge","kind":"rect@1","name":"Rect gauge","order":"agauge","params":{"box":[0,0,20,20],
+FAIL  evaluation-order.test.ts > criterion 7: drivers and constraints scheduled per component, cycles refused naming both items > criterion 7: a planted scheduler that schedules whole items refuses the first pair and fails
+  AssertionError: the whole-item scheduler refuses the first pair as a cycle: {"ok":true,"frames":[{"t":4928443,"doc_t":4928443,"pass":0,"passes":0,"items":{"knob":{"id":"knob","kind":"rect@1","name":"Rect knob","order":"aknob","params":{"box":[0,0,20,20],"paint":{"fill":{"role":"ink"}}},"at":{"pos":[0.6984754818594104,150,0],"rot":[0,0,0],"scale":[1,1,1]}},"gauge":{"id":"gauge","kind":"rect@1","nam
+FAIL  follow-exact.test.ts > criterion 3: a follow channel is exact at random times, however the playhead got there > criterion 3: every playhead path to 200 random times reads the same value, rate and integral, bit for bit
+  AssertionError: the straight play is accepted: {"ok":false,"code":"bad_doc","path":"channels/bounce/keys"}: expected false to be true // Object.is equality
+FAIL  follow-exact.test.ts > criterion 3: a follow channel is exact at random times, however the playhead got there > criterion 3: at those times they are the closed form: first order and rate limit as computed here, the spring as RK4 at 1 µs, within 1e-9 relative
+  AssertionError: a shuffled play is accepted: {"ok":false,"code":"bad_doc","path":"channels/bounce/keys"}: expected false to be true // Object.is equality
+FAIL  frame-rates.test.ts > criterion 2: poses at 24 and 60 fps are identical at the times they share > criterion 2: played on their own frames, the 24 fps and 60 fps documents give the same poses and channel values, bit for bit, every 1/12 s
+  AssertionError: the 24 fps play is accepted: {"ok":false,"code":"bad_interp","path":"channels/by/keys/k0/interp"}: expected false to be true // Object.is equality
+FAIL  input-track-scrub.test.ts > criterion 6: a follow channel on appended input entries, scrubbed 50 times, keeps the track and its segments and reads what a straight play reads > criterion 6: scrubbed back and forth 50 times, the follow channel reads at every time what a straight play reads, bit for bit
+  AssertionError: the scrub is accepted: {"ok":false,"code":"bad_doc","path":"channels/dial/keys"}: expected false to be true // Object.is equality
+FAIL  input-track-scrub.test.ts > criterion 6: a follow channel on appended input entries, scrubbed 50 times, keeps the track and its segments and reads what a straight play reads > criterion 6: through the 50 scrubs the input track keeps its hash and its 12 entries, and the follow channel keeps its cached segments, solving none twice
+  AssertionError: the scrub is accepted: {"ok":false,"code":"bad_doc","path":"channels/dial/keys"}: expected false to be true // Object.is equality
+FAIL  input-track-scrub.test.ts > criterion 6: a follow channel on appended input entries, scrubbed 50 times, keeps the track and its segments and reads what a straight play reads > criterion 6: a planted follow channel that steps from the previous frame's value reads a different value after the first backward scrub and fails, naming the channel
+  AssertionError: the planted program answers both lines: expected false to be true // Object.is equality
+FAIL  per-loop.test.ts > criterion 11: waves and noise with per_loop end where they start on a looping document > criterion 11: four waves with per_loop 23, 31, 43 and 59 equal their sum of sines of 2π × n × t ÷ 4.7 within 1e-12 at 1,000 seeded times
+  AssertionError: the four waves at 1,000 seeded times:
+FAIL  per-loop.test.ts > criterion 11: waves and noise with per_loop end where they start on a looping document > criterion 11: noise {amplitude: 10, per_loop: 23, seed: 3} reads at 4.7 s, before the wrap, the value and central-difference slope it reads at 0, within 1e-9
+  AssertionError: the noise moves near 0 (value 0, slope 0); a noise that reads 0 proves nothing: expected false to be true // Object.is equality
+FAIL  per-loop.test.ts > criterion 11: waves and noise with per_loop end where they start on a looping document > criterion 11: a planted per_loop that rounds the period to a whole flick first is 7.4e-9 off the first wave at 4.7 s and fails
+  AssertionError: the planted first wave at 4.7 s is 1.083e-15 off (predicted 7.408e-9): expected '1.1e-15' to be '7.4e-9' // Object.is equality
+FAIL  per-loop.test.ts > criterion 11: waves and noise with per_loop end where they start on a looping document > criterion 11: per_loop on a document with loop: none is refused, naming the channel
+  AssertionError: a wave with per_loop on a document that doesn't loop is refused: {"ok":true,"frames":[{"t":0,"doc_t":0,"pass":0,"passes":0,"items":{"dot":{"id":"dot","kind":"rect@1","name":"Rect dot","order":"adot","params":{"box":[0,0,20,20],"paint":{"fill":{"role":"ink"}}},"at":{"pos":[100,0,0],"rot":[0,0,0],"scale":[1,1,1]}}},"channels":{"tide":{"value":0,"iterations":0}},"placements":{},"valid
+FAIL  reach2-stretch.test.ts > criterion 9: reach2 with stretch: cartoon, in closed form > criterion 9: at 400 random times both bones scale by max(1, d ÷ (l1 + l2)): the scale within 1e-12, the tip on the goal and the joints s·l1 and s·l2 apart within 1e-9
+  AssertionError: frame 59333730: constraints.arm is an object, got undefined: expected false to be true // Object.is equality
+FAIL  reach2-stretch.test.ts > criterion 9: reach2 with stretch: cartoon, in closed form > criterion 9: it never iterates: its op count is the same at every time, in reach or out of it
+  AssertionError: frame 59333730: constraints.arm is an object, got undefined: expected false to be true // Object.is equality
+FAIL  reach2-stretch.test.ts > criterion 9: reach2 with stretch: cartoon, in closed form > criterion 9: it keeps no bend side from an earlier frame: the elbow lies on its bend sign's side at every time, mirrored by the opposite sign, and every time reads the same seeked and played
+  AssertionError: frame 59333730: constraints.arm is an object, got undefined: expected false to be true // Object.is equality
+FAIL  spring-velocity.test.ts > criterion 10: a spring key with velocity, in closed form, its peak checked against the hard range > criterion 10: the 0 → 1 key with {decay: 6.5, omega: 15} and velocity 6.5 reads 1 − e^(−6.5t)·cos(15t) within 1e-12 at 1,000 seeded times after its key, and seeking equals playing
+  AssertionError: the velocity key, played is accepted: {"ok":false,"code":"out_of_range","path":"channels/sc/keys/grow/interp/spring/freq_hz"}: expected false to be true // Object.is equality
+FAIL  spring-velocity.test.ts > criterion 10: a spring key with velocity, in closed form, its peak checked against the hard range > criterion 10: it peaks at 1.2808 at 0.1822 s after its key; a hard range of [0, 1.25] is refused naming the key and that peak, while [0, 1.3] is accepted
+  AssertionError: the velocity key around its peak is accepted: {"ok":false,"code":"out_of_range","path":"channels/sc/keys/grow/interp/spring/freq_hz"}: expected false to be true // Object.is equality
+FAIL  spring-velocity.test.ts > criterion 10: a spring key with velocity, in closed form, its peak checked against the hard range > criterion 10: with velocity 0 it reads 0.7374 at 0.1 s (the from-rest form within 1e-12), where the velocity form reads 0.9631
+  AssertionError: the key with velocity 0 is accepted: {"ok":false,"code":"out_of_range","path":"channels/sc/keys/grow/interp/spring/freq_hz"}: expected false to be true // Object.is equality
+FAIL  spring-velocity.test.ts > criterion 10: a spring key with velocity, in closed form, its peak checked against the hard range > criterion 10: the 1 → 1 key with {decay: 7, omega: 17} and velocity 2.21 reads 1 + 0.13·e^(−7t)·sin(17t) within 1e-12 at 1,000 seeded times, and seeking equals playing
+  AssertionError: the 1 → 1 key is accepted: {"ok":false,"code":"out_of_range","path":"channels/sc/keys/grow/interp/spring/freq_hz"}: expected false to be true // Object.is equality
+FAIL  spring-velocity.test.ts > criterion 10: a spring key with velocity, in closed form, its peak checked against the hard range > criterion 10: spring keys with velocity match an RK4 integration at 1 µs steps within 1e-6 relative at 1,000 seeded times in all three damping regimes, and seeking equals playing
+  AssertionError: under-damped {decay: 6.5, omega: 15}, 0 → 1, velocity 6.5 is accepted: {"ok":false,"code":"out_of_range","path":"channels/sc/keys/grow/interp/spring/freq_hz"}: expected false to be true // Object.is equality
+FAIL  spring-velocity.test.ts > criterion 10: a spring key with velocity, in closed form, its peak checked against the hard range > criterion 10: a planted spring that drops velocity reads 0.7374 at 0.1 s and fails the velocity check, naming the key
+  AssertionError: the planted program answers the document: expected null not to be null
+FAIL  springs-rk4.test.ts > criterion 5: springs and follow channels in closed form match RK4 at 1 µs in each damping regime > criterion 5: a follow spring on a stepping source matches RK4 at 1 µs steps within 1e-6 relative at 1,000 seeded times, under-, critically and over-damped
+  AssertionError: the follow spring, under-damped (ζ 0.3) is accepted: {"ok":false,"code":"bad_doc","path":"channels/trail/keys"}: expected false to be true // Object.is equality
+FAIL  springs-rk4.test.ts > criterion 5: springs and follow channels in closed form match RK4 at 1 µs in each damping regime > criterion 5: a critically damped spring never overshoots its target: a follow spring from 10 to 20 and a spring key from 10 to 20, at 1,000 seeded times and every 1/600 s
+  AssertionError: the critically damped follow spring is accepted: {"ok":false,"code":"bad_doc","path":"channels/trail/keys"}: expected false to be true // Object.is equality
+FAIL  transition.test.ts > criterion 12: a follow channel with a transition moves from the value it holds to each new target over a fixed span > criterion 12: the knob reads 17 at 1.0 s, 43.25 at 1.1 s and 47 from 1.2 s
+  AssertionError: the toggle once is accepted: {"ok":false,"code":"bad_doc","path":"channels/kx/keys"}: expected false to be true // Object.is equality
+FAIL  transition.test.ts > criterion 12: a follow channel with a transition moves from the value it holds to each new target over a fixed span > criterion 12: with a second entry back to 17 at 1.1 s it starts from 43.25 and reads 20.28125 at 1.2 s and 17 from 1.3 s
+  AssertionError: the toggle twice is accepted: {"ok":false,"code":"bad_doc","path":"channels/kx/keys"}: expected false to be true // Object.is equality
+FAIL  transition.test.ts > criterion 12: a follow channel with a transition moves from the value it holds to each new target over a fixed span > criterion 12: 1,000 seeded times read the same seeked and played
+  AssertionError: the toggle once: the play is accepted: {"ok":false,"code":"bad_doc","path":"channels/kx/keys"}: expected false to be true // Object.is equality
+FAIL  transition.test.ts > criterion 12: a follow channel with a transition moves from the value it holds to each new target over a fixed span > criterion 12: under reduced_motion: hold the knob reads 47 from 1.0 s while an opacity channel on the same source reads 0.875 at 1.1 s
+  AssertionError: the toggle under reduced motion is accepted: {"ok":false,"code":"bad_doc","path":"channels/ko/keys"}: expected false to be true // Object.is equality
+FAIL  transition.test.ts > criterion 12: a follow channel with a transition moves from the value it holds to each new target over a fixed span > criterion 12: a planted transition that restarts from the old target jumps from 43.25 to 47 at 1.1 s and fails, naming the channel and the flick
+  AssertionError: the planted program answers the document: expected null not to be null
+
+Test Files  12 failed (12)
+Tests  39 failed | 1 passed (40)
+
+The one passing test (the default reporter lists only failures; springs-rk4.test.ts ran 3 tests, 2 failed):
+     ✓ criterion 5: a spring key from rest matches RK4 at 1 µs steps within 1e-6 relative at 1,000 seeded times, under-, critically and over-damped
+  This is the base's #391 spring key from rest, held to the new RK4 bound (README: What the base already does).
+
+Redraft of spring-velocity.test.ts (Nov 2, the next key written as the literal 2.28s; README: Redrafts), re-run alone at the base:
+NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/489 --no-file-parallelism spring-velocity
+     × criterion 10: the 0 → 1 key with {decay: 6.5, omega: 15} and velocity 6.5 reads 1 − e^(−6.5t)·cos(15t) within 1e-12 at 1,000 seeded times after its key, and seeking equals playing
+     × criterion 10: it peaks at 1.2808 at 0.1822 s after its key; a hard range of [0, 1.25] is refused naming the key and that peak, while [0, 1.3] is accepted
+     × criterion 10: with velocity 0 it reads 0.7374 at 0.1 s (the from-rest form within 1e-12), where the velocity form reads 0.9631
+     × criterion 10: the 1 → 1 key with {decay: 7, omega: 17} and velocity 2.21 reads 1 + 0.13·e^(−7t)·sin(17t) within 1e-12 at 1,000 seeded times, and seeking equals playing
+     × criterion 10: spring keys with velocity match an RK4 integration at 1 µs steps within 1e-6 relative at 1,000 seeded times in all three damping regimes, and seeking equals playing
+     × criterion 10: a planted spring that drops velocity reads 0.7374 at 0.1 s and fails the velocity check, naming the key
+  AssertionError: the velocity key, played is accepted: {"ok":false,"code":"out_of_range","path":"channels/sc/keys/grow/interp/spring/freq_hz"}: expected false to be true // Object.is equality
+  AssertionError: the velocity key around its peak is accepted: {"ok":false,"code":"out_of_range","path":"channels/sc/keys/grow/interp/spring/freq_hz"}: expected false to be true // Object.is equality
+  AssertionError: the key with velocity 0 is accepted: {"ok":false,"code":"out_of_range","path":"channels/sc/keys/grow/interp/spring/freq_hz"}: expected false to be true // Object.is equality
+  AssertionError: the 1 → 1 key is accepted: {"ok":false,"code":"out_of_range","path":"channels/sc/keys/grow/interp/spring/freq_hz"}: expected false to be true // Object.is equality
+  AssertionError: under-damped {decay: 6.5, omega: 15}, 0 → 1, velocity 6.5 is accepted: {"ok":false,"code":"out_of_range","path":"channels/sc/keys/grow/interp/spring/freq_hz"}: expected false to be true // Object.is equality
+  AssertionError: the planted program answers the document: expected null not to be null
+Tests  6 failed (6)
+The base reads the key grow first and refuses its {decay, omega} alias (the new feature), so no test reaches the key rest; its literal 2.28s is accepted at the base (deep-motion eval of the file's freq_hz-form document reads the key rest at 1,608,768,000 flicks), where the first draft's 2.2800000000000002s was bad_time.

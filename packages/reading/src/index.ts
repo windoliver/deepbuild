@@ -5,7 +5,7 @@
 // anything is written, each quote is checked at its handle and each handle against what that job was delivered; a
 // finding that fails either is dropped and logged. The install writes what is kept to the wiki.
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
-import { createServer, type Server } from 'node:http';
+import type { Server } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -89,7 +89,6 @@ const INSTALL = 'What should DeepBuild remember about each project from these se
 const norm = (text: string): string => text.normalize('NFC').replace(/\s+/g, ' ');
 type Obj = { [key: string]: unknown };
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-const sqlText = (text: string): string => `'${text.replace(/'/g, "''")}'`;
 
 function prompt(kind: ReadingKind, question: string, handles: readonly string[]): string {
   return [
@@ -146,6 +145,8 @@ function answerOf(stdout: string): { findings: { text: string; cites: { at: stri
 async function serve(slicer: Slicer, delivered: (handle: string) => boolean, sessions: readonly string[]): Promise<{ socket: string; close(): void }> {
   const dir = realpathSync(mkdtempSync('/tmp/deep-reading-'));
   const socket = join(dir, 's');
+  // node:http is loaded by the one reading job that serves, not by `deep read`, `deep find` or the hub's main thread.
+  const { createServer } = await import('node:http');
   const server: Server = createServer((req, res) => {
     let body = '';
     req.setEncoding('utf8');
@@ -198,12 +199,12 @@ export async function openReading(o: ReadingOptions): Promise<Reading> {
     const projectOf = new Map<string, string | null>();
     for (const f of findings) for (const c of f.cites) {
       const id = /^session:([0-9A-Za-z]+)/.exec(c.at)?.[1];
-      if (id && !projectOf.has(id)) projectOf.set(id, ((await record.raw(`SELECT project_id FROM sessions WHERE id = ${sqlText(id)}`)) as { project_id: string | null }[])[0]?.project_id ?? null);
+      if (id && !projectOf.has(id)) projectOf.set(id, ((await record.raw(`SELECT project_id FROM sessions WHERE id = ?`, [id])) as { project_id: string | null }[])[0]?.project_id ?? null);
     }
     const claims = new Map<string, { claim: Omit<Candidate, 'sources'>; findings: Finding[] }>();
     const covered = async (page: string, f: Finding): Promise<boolean> => {
       for (const c of f.cites) {
-        const held = (await record.raw(`SELECT s.quote FROM wiki_sources s JOIN wiki_claims w ON w.handle = s.claim WHERE w.page = ${sqlText(page)} AND s.at = ${sqlText(c.at)}`)) as { quote: string }[];
+        const held = (await record.raw(`SELECT s.quote FROM wiki_sources s JOIN wiki_claims w ON w.handle = s.claim WHERE w.page = ? AND s.at = ?`, [page, c.at])) as { quote: string }[];
         if (!held.some((h) => norm(withoutQueries(h.quote)) === norm(withoutQueries(c.quote)))) return false;
       }
       return true;
@@ -227,7 +228,7 @@ export async function openReading(o: ReadingOptions): Promise<Reading> {
     const held = new Map<string, Candidate['sources']>();
     // A claim an earlier install wrote keeps its sources: a restatement adds to them, superseding it.
     for (const [key, { claim }] of claims) {
-      const was = (await record.raw(`SELECT s.at, s.quote FROM wiki_sources s JOIN wiki_claims c ON c.handle = s.claim WHERE c.handle = ${sqlText(`wiki:${claim.page}#${claim.id}`)} AND c.state = 'in force' AND s.at IS NOT NULL ORDER BY s.n`)) as { at: string; quote: string }[];
+      const was = (await record.raw(`SELECT s.at, s.quote FROM wiki_sources s JOIN wiki_claims c ON c.handle = s.claim WHERE c.handle = ? AND c.state = 'in force' AND s.at IS NOT NULL ORDER BY s.n`, [`wiki:${claim.page}#${claim.id}`])) as { at: string; quote: string }[];
       if (was.length) held.set(key, was.map((s) => ({ at: s.at, quote: s.quote })));
     }
     for (let turn = 0; ; turn++) {

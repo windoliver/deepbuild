@@ -1,0 +1,14 @@
+{
+  "issue": 419,
+  "criterion": "#419.fc4ea214",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), judging at the owner's request in the session (\"check screeshot for me\"); not the owner's own call",
+  "when": "2026-11-05T00:21:04-08:00",
+  "screenshots": {
+    "car-lines-blur.png": "a189e4feb6dd243e64e6021252322c2c6a7ff7331448c75f1827450101fe1800",
+    "walker-velocity.png": "71515323233701f01231c28e9f15feadcb7250d8799aff1bff2588bfd80aec81",
+    "still-16-samples.png": "def9ba5a1503668a4642e5fba004c836c587094982dce2c48d34b6400949c89b",
+    "blur-move.apng": "92b73525dca1a95cce2bc037bf4f0f2c72d0a77635d0ea50af9ffc837da06544"
+  },
+  "note": "The car stays sharp while every 1 px line spreads into an even 13 px band; inside a band, columns alternate 1 and 2 of 16 samples (codes 71 and 99), the grain 16 samples give. The walker's legs are sharp at the hips and blur toward the feet, the ramp widening a pixel at a time down the leg as the 16-sample render's does. The 16-sample still has smooth edges on the block, ball and shadow. The recording's box blurs on both edges while moving, and on one side only at the move's start and end, where the channel holds."
+}

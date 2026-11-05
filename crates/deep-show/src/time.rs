@@ -9,12 +9,13 @@ use std::collections::BTreeSet;
 
 use deep_canvas::document::frame_rate_of;
 use deep_canvas::grammar::{Seeded, Time, TimeContext, FLICKS_PER_SECOND};
-use deep_canvas::schedule::{default_view, Scheduler, Session as DocSession, Val};
+use deep_canvas::schedule::{default_view, Scheduler, Session as DocSession};
 use deep_canvas::time::{self as clock, Rate, CHECKPOINT_EVERY};
 use deep_canvas_motion::doc::{read as read_motion, Motion};
 use serde_json::{json, Map, Value};
 
 use crate::hub::{Call, EvalTime, Hub, Planted};
+use crate::optional;
 
 /// A `rate` call: the rule for one rate, with no document.
 pub struct RateCall {
@@ -70,10 +71,7 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
                 None => Some(None),
                 Some(v) => v.as_i64().map(Some),
             };
-            let source = match c.get("source") {
-                None => false,
-                Some(b) => b.as_bool()?,
-            };
+            let source = optional(c.get("source"), Value::as_bool)?.unwrap_or(false);
             if source && matches!(rate, Rate::Frame { .. }) {
                 return None;
             }
@@ -89,14 +87,8 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
             text: c.get("text")?.as_str()?.to_string(),
         }),
         "export" => {
-            let frame_rate = match c.get("frame_rate") {
-                None => None,
-                Some(f) => Some(pair(f)?),
-            };
-            let sample_rate = match c.get("audio") {
-                None => None,
-                Some(a) => Some(whole(a.get("sample_rate")?)?),
-            };
+            let frame_rate = optional(c.get("frame_rate"), pair)?;
+            let sample_rate = optional(c.get("audio"), |a| whole(a.get("sample_rate")?))?;
             Some(Call::Export(Export {
                 doc: doc()?,
                 frame_rate,
@@ -277,9 +269,13 @@ fn default_times(doc: &Value, motion: Option<&Motion>) -> Vec<i64> {
 impl Hub<'_> {
     /// The document's current revision, or the `no_revision` refusal.
     fn current_doc(&self, doc: &str) -> Result<Value, Value> {
-        self.current(doc)
+        let mut doc = self
+            .current(doc)
             .map(|r| r.doc.clone())
-            .ok_or_else(|| refused("no_revision"))
+            .ok_or_else(|| refused("no_revision"))?;
+        let _ = self.inline_tables(&mut doc);
+        let _ = self.inline_vectors(&mut doc);
+        Ok(doc)
     }
 
     /// The whole-flick sample at `hz`, or why there is none; the planted check takes every
@@ -427,7 +423,7 @@ impl Hub<'_> {
                 drawn += 1;
                 last = Some(t);
                 let next_motion = match session.value(&self.sched, "motion.next", None) {
-                    Some(Val::Json(v)) => v.as_i64(),
+                    Some(v) => v.as_typed::<Option<i64>>().and_then(|n| *n),
                     _ => None,
                 };
                 let next_step = steps
@@ -504,9 +500,15 @@ impl Hub<'_> {
         }
         let drawing =
             crate::frames::drawing_of(&sched, &session).ok_or_else(|| "no_drawing".to_string())?;
-        let (sha, _, _) = self
-            .canonical_png(&drawing, None)
-            .map_err(|u| u.code.to_string())?;
+        let sha = if deep_canvas_scene3d::scene::has_3d(doc) {
+            // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
+            self.canonical_png3d(doc, times.last().copied().unwrap_or(0), &drawing)
+                .map_err(|u| u.code.to_string())?
+        } else {
+            self.canonical_png(&drawing, None)
+                .map_err(|u| u.code.to_string())?
+                .0
+        };
         let nodes: Vec<Value> = session
             .nodes(&sched)
             .into_iter()

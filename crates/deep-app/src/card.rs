@@ -11,9 +11,9 @@
 use std::cell::RefCell;
 
 use gpui_kit::*;
-use serde_json::Value;
 
 use crate::arming::Source;
+use crate::chrome::Chrome;
 use crate::question::{self, Controller, Did, Input, Phase, Row, Target};
 
 thread_local! {
@@ -76,10 +76,6 @@ pub fn present_question(controller: Controller, window: &mut Window, cx: &mut Ap
         .expect("the prompt builder made the card")
 }
 
-fn events() -> Vec<Value> {
-    crate::record::with_view(|view| view.events.clone()).unwrap_or_default()
-}
-
 pub struct Card {
     question: SharedString,
     options: Vec<SharedString>,
@@ -121,7 +117,8 @@ impl Card {
             return;
         };
         let (t, source) = (crate::views::now(), Source::Synthetic { pid: None });
-        let events = events();
+        // The card reads the record's history from the hub, as it stands at the press.
+        let events = crate::record::history();
         let did = match controller.press(
             Input {
                 t,
@@ -150,7 +147,7 @@ impl Card {
         cx.notify();
     }
 
-    fn row(&self, index: usize, row: &Row, cx: &mut Context<Self>) -> AnyElement {
+    fn row(&self, index: usize, row: &Row, chrome: &Chrome, cx: &mut Context<Self>) -> AnyElement {
         let label: SharedString = row.label().to_owned().into();
         let (id, role, target): (ElementId, Role, Option<Target>) = match row {
             Row::Text(_) => (("card-line", index).into(), Role::Label, None),
@@ -182,7 +179,11 @@ impl Card {
                 .px_3()
                 .py_1()
                 .border_1()
-                .border_color(rgb(if focused { 0x2563EB } else { crate::brand::INK }))
+                .border_color(if focused {
+                    chrome.accent
+                } else {
+                    chrome.ink_primary
+                })
                 .on_click(cx.listener(move |card, _, _, cx| card.pressed(target, cx)))
                 .into_any_element(),
             None => element.into_any_element(),
@@ -204,12 +205,13 @@ impl Render for Card {
         if !self.focus.is_focused(window) {
             window.focus(&self.focus, cx);
         }
+        let chrome = crate::chrome::of(window);
         let rows: Vec<AnyElement> = match &self.controller {
             Some(controller) => {
                 let rows = controller.rows();
                 rows.iter()
                     .enumerate()
-                    .map(|(index, row)| self.row(index, row, cx))
+                    .map(|(index, row)| self.row(index, row, chrome, cx))
                     .collect()
             }
             None => vec![
@@ -226,7 +228,7 @@ impl Render for Card {
                             .px_3()
                             .py_1()
                             .border_1()
-                            .border_color(rgb(crate::brand::INK))
+                            .border_color(chrome.ink_primary)
                             .on_click(
                                 cx.listener(move |_, _, _, cx| cx.emit(PromptResponse(index))),
                             )
@@ -275,10 +277,10 @@ impl Render for Card {
                         .flex_col()
                         .gap_1()
                         .p_4()
-                        .bg(rgb(crate::brand::PAPER))
+                        .bg(chrome.raised)
                         .border_1()
-                        .border_color(rgb(crate::brand::INK))
-                        .text_color(rgb(crate::brand::INK))
+                        .border_color(chrome.ink_primary)
+                        .text_color(chrome.ink_primary)
                         .children(rows),
                 )
                 .child(measure),

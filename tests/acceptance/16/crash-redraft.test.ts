@@ -20,8 +20,8 @@ import type { Ev, HookRequest, HubProc, Ready, Session } from './helpers.ts';
 
 /** The check the in-flight run belongs to (its run.started's `data.check`). */
 const CHECK = 'acceptance16.ac3.sleeper';
-/** The point kinds the README names, and the ones this script must reach (rules.json has no writer in the script). */
-const POINT_KINDS = ['commit', 'log_pos_block', 'spool_read', 'spool_removal', 'evidence_rename', 'rules_rewrite'];
+/** The point kinds the README names (#996 added the journal's and the terminals index's), and the ones this script must reach (rules.json has no writer in the script). */
+const POINT_KINDS = ['commit', 'log_pos_block', 'spool_read', 'spool_removal', 'evidence_rename', 'rules_rewrite', 'journal_rewrite', 'terminals_rewrite'];
 const SCRIPT_REACHES = ['commit:full', 'commit:normal', 'log_pos_block', 'spool_read', 'spool_removal', 'evidence_rename'];
 /** How long the hub may stay busy after the script's last step before its point count is taken as final. */
 const QUIET_MS = 1500;

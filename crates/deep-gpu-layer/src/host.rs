@@ -11,7 +11,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, OnceLock};
 
-use deep_canvas::document::{canonical_in, check_in, Issue};
+use deep_canvas::document::{canonical_in, check_in, shown_inside, Issue};
 use deep_canvas::registry::Sealed;
 use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::look::Look3;
@@ -24,7 +24,9 @@ use sha2::{Digest, Sha256};
 use crate::frames::{hex, Capture};
 use crate::session3::{self, lock};
 use crate::status;
-use crate::view3d::{apply_patch, pair, png, write_named, FLICKS_PER_SECOND};
+use crate::view3d::{
+    apply_patch, pair, picks_json, png, write_final, write_named, FLICKS_PER_SECOND,
+};
 use crate::{effects, plugin, refused, App, Planted};
 
 const KINDS: [&str; 3] = ["return_card", "lod_open", "sheet_cell"];
@@ -135,8 +137,9 @@ fn parse(call: &Value) -> Result<Args, Value> {
     })
 }
 
-/// One revision's check by the host: the document check in the build's sealed set, then its data
-/// roles against the host's status map at the host's distance. The clash is the look's refusal
+/// One revision's check by the host: the document check in the build's sealed set, the story
+/// numbers it may not show inside a host, then its data roles against the host's status map at
+/// the host's distance. The clash is the look's refusal
 /// as a check issue, so a reply can carry it with the rest.
 fn check(
     doc: &Value,
@@ -147,6 +150,8 @@ fn check(
 ) -> (bool, Vec<Value>, Option<Value>) {
     let result = check_in(doc, sealed());
     let mut issues: Vec<Value> = result.issues.iter().map(Issue::to_json).collect();
+    // Shown inside a view of the record, it may show no story number (Honest numbers).
+    issues.extend(shown_inside(doc).iter().map(Issue::to_json));
     let mut clash = None;
     if let Some(r) = status::clash(doc, look_json, roles, status, theme) {
         let role = r["role"].as_str().unwrap_or("").to_string();
@@ -369,26 +374,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             );
             frame.insert("cache".into(), json!({"key": key, "hit": hit}));
             if capture && !shown.bytes.is_empty() && args.targets.contains(&"final".to_string()) {
-                let mut rgba = shown.bytes.clone();
-                for p in rgba.as_chunks_mut::<4>().0 {
-                    p.swap(0, 2);
-                }
-                frame.insert(
-                    "final".into(),
-                    json!(write_named(out, &png(&rgba, size)?, "png")?),
-                );
+                frame.insert("final".into(), json!(write_final(out, &shown.bytes, size)?));
             }
             if let (true, Some((_, ids))) = (capture && wants_targets, &shown.targets) {
                 frame.insert(
                     "ids".into(),
                     json!(write_named(out, &png(ids, size)?, "png")?),
                 );
-                let picks: Map<String, Value> = shown
-                    .picks
-                    .iter()
-                    .map(|(id, p)| (p.to_string(), json!(id)))
-                    .collect();
-                frame.insert("picks".into(), Value::Object(picks));
+                frame.insert("picks".into(), picks_json(&shown.picks));
             }
             frames.push(Value::Object(frame));
         }

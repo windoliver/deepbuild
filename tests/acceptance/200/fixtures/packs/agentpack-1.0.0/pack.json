@@ -1,0 +1,17 @@
+{
+  "name": "agentpack",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #200 acceptance suite that the working agent wrote in its own session: one test.mark@1 entry, agentpack.tiny.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "test.mark": ">=0.0.0"
+    }
+  },
+  "entries": {
+    "test.mark@1": [
+      { "name": "agentpack.tiny", "size": 4 }
+    ]
+  }
+}

@@ -25,6 +25,7 @@ mod fuzz;
 pub mod goldens;
 mod gpu;
 mod instance;
+mod interface;
 pub mod ledger;
 pub mod manifest;
 mod migration;
@@ -39,6 +40,7 @@ use std::path::PathBuf;
 use serde_json::{json, Map, Value};
 
 use crate::hub::{Hub, Planted};
+use crate::optional;
 
 /// The kit's parts, in the order it runs them.
 pub const PARTS: [&str; 13] = [
@@ -56,6 +58,27 @@ pub const PARTS: [&str; 13] = [
     "catalog",
     "migration",
 ];
+
+/// The parts an interface adds (#185): `bit`, a bit implementation against its reference, and
+/// `behavior`, an interface's behavior part on its implementation.
+pub const INTERFACE_PARTS: [&str; 2] = ["bit", "behavior"];
+
+/// sandbox@1's own part (#238): its fixtures on this host's engine, against the reference's results.
+pub const SANDBOX_PART: &str = "sandbox";
+
+/// The part a module that declares registries adds (#200): each kit rule isolated by a planted
+/// wrong entry that breaks it alone.
+pub const REGISTRY_PART: &str = "registries";
+
+/// The kit parts a canvas module's interface lists: every part, and `bit`; an interface with a
+/// behavior part lists it too.
+pub fn interface_parts() -> Vec<String> {
+    PARTS
+        .iter()
+        .chain(&INTERFACE_PARTS[..1])
+        .map(|p| p.to_string())
+        .collect()
+}
 
 /// The backends a case can run on: Vello CPU, wgpu's noop backend and the GPU.
 pub const BACKENDS: [&str; 3] = ["vello_cpu", "noop", "gpu"];
@@ -114,10 +137,14 @@ impl KitCall {
             }
         };
         let parts = list("parts")?;
-        if parts
-            .as_ref()
-            .is_some_and(|p| p.iter().any(|x| !PARTS.contains(&x.as_str())))
-        {
+        if parts.as_ref().is_some_and(|p| {
+            p.iter().any(|x| {
+                !PARTS.contains(&x.as_str())
+                    && !INTERFACE_PARTS.contains(&x.as_str())
+                    && x != REGISTRY_PART
+                    && x != SANDBOX_PART
+            })
+        }) {
             return None;
         }
         let backends = list("backends")?.unwrap_or_else(|| vec!["vello_cpu".into(), "noop".into()]);
@@ -143,10 +170,7 @@ impl KitCall {
             seed: n("seed", 138)?,
             sequences: u32::try_from(n("sequences", u64::from(SEQUENCES))?).ok()?,
             param_sets: u32::try_from(n("param_sets", u64::from(PARAM_SETS))?).ok()?,
-            patch_seed: match c.get("patch_seed") {
-                None => None,
-                Some(v) => Some(v.as_u64()?),
-            },
+            patch_seed: optional(c.get("patch_seed"), Value::as_u64)?,
             replay: path("replay")?,
             corpus: path("corpus")?,
             ledger: path("ledger")?,
@@ -264,7 +288,7 @@ pub fn failure(code: &str, module: &str, part: &str, fields: Value) -> Value {
 /// A seed for one draw, from the kit's seed, a name and an index: replayable, and another seed,
 /// name or index gives another.
 pub fn derive(seed: u64, name: &str, k: u64) -> u64 {
-    let mut h = deep_canvas::schedule::Hasher::new("kit-seed");
+    let mut h = deep_canvas::schedule::Hasher::v1("kit-seed");
     h.int(seed as i64).text(name).int(k as i64);
     let key = h.finish();
     u64::from_le_bytes(key.0[..8].try_into().expect("8 bytes")) >> 11
@@ -371,7 +395,11 @@ impl<'a> Hub<'a> {
             let mut parts = Vec::new();
             let mut module_failures: Vec<Value> = Vec::new();
             let mut verdict = Verdict::Pass;
-            for part in PARTS {
+            for part in PARTS
+                .into_iter()
+                .chain(INTERFACE_PARTS)
+                .chain([REGISTRY_PART, SANDBOX_PART])
+            {
                 if !call.runs(part) {
                     continue;
                 }
@@ -452,14 +480,78 @@ impl<'a> Hub<'a> {
             "contribution" => order::contribution(self, ctx),
             "catalog" => catalog::run(self, ctx),
             "migration" => migration::run(self, ctx),
+            "bit" => interface::bit(self, ctx),
+            "behavior" => interface::behavior(self, ctx),
+            REGISTRY_PART => self.registries_part(ctx.module),
+            SANDBOX_PART => sandbox_part(ctx.module),
             _ => None,
         }
+    }
+
+    /// The registries part (#200): for each registry the module declares, each kit rule must
+    /// have a planted wrong entry that breaks that rule alone and fails with its message; a rule
+    /// no planted entry isolates fails, naming the registry and the rule.
+    fn registries_part(&self, module: &str) -> Option<PartRun> {
+        let regs: Vec<_> = self
+            .startup
+            .sealed
+            .registries
+            .iter()
+            .filter(|r| r.owner == module)
+            .collect();
+        if regs.is_empty() {
+            return None;
+        }
+        let mut run = PartRun::new(regs.iter().map(|r| r.def.kit.len() as u64).sum());
+        for r in regs {
+            let open = deep_canvas::registry::lists::unisolated(&r.def);
+            for k in &r.def.kit {
+                let name = format!("{} {}", r.def.name, k.rule);
+                let case = if open.contains(&k.rule) {
+                    Case::new(name, Verdict::Fail).with(
+                        "failure",
+                        failure(
+                            "rule_not_isolated",
+                            module,
+                            REGISTRY_PART,
+                            json!({"registry": r.def.name, "rule": k.rule,
+                                   "what": format!("no planted entry of `{}` breaks `{}` alone", r.def.name, k.rule)}),
+                        ),
+                    )
+                } else {
+                    Case::new(name, Verdict::Pass)
+                };
+                run.cases.push(case);
+            }
+        }
+        Some(run)
     }
 
     /// Whether the scenario plants this wrong program.
     pub fn planted(&self, p: Planted) -> bool {
         self.scenario.planted == Some(p)
     }
+}
+
+/// sandbox@1's kit part (#238), on the sandbox module alone: each of the interface's fixtures on
+/// this build's engine, a case each, with the fixture's result against the reference's.
+fn sandbox_part(module: &str) -> Option<PartRun> {
+    if module != "sandbox" {
+        return None;
+    }
+    let kit = deep_sandbox_wasmtime::service::Sandbox::default().kit();
+    let cases = kit["cases"].as_array().cloned().unwrap_or_default();
+    let mut run = PartRun::new(cases.len() as u64);
+    for c in cases {
+        let Value::Object(mut fields) = c else { continue };
+        let verdict = match fields.remove("verdict").as_ref().and_then(Value::as_str) {
+            Some("PASS") => Verdict::Pass,
+            _ => Verdict::Fail,
+        };
+        run.cases.push(Case { verdict, fields });
+    }
+    run.failures = kit["failures"].as_array().cloned().unwrap_or_default();
+    Some(run)
 }
 
 /// What every part reads of the run: the call, the module, the manifest, and what the parts

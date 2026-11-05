@@ -1,0 +1,30 @@
+{
+  "claim": "client-token",
+  "diff": "diff --git a/src/config.ts b/src/config.ts\nindex 1de1a9d..c482456 100644\n--- a/src/config.ts\n+++ b/src/config.ts\n@@ -1,4 +1,4 @@\n export const config = {\n   retries: 3,\n-  timeout: 1000,\n+  timeout: 2000,\n };\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [],
+    "overall_correctness": "patch is correct",
+    "overall_explanation": "Only a timeout changed in this commit.",
+    "overall_confidence_score": 0.86
+  },
+  "since": [
+    {
+      "rule": "secret-in-code",
+      "sites": [
+        {
+          "file": "src/client.ts",
+          "line": 3,
+          "quote": "token: 'tok_test_0000',"
+        }
+      ]
+    }
+  ]
+}

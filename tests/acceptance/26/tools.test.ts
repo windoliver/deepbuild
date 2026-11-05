@@ -127,4 +127,15 @@ test('#26.2d751e6d the skill and every tool description follow the Building bloc
   }
   expect(reported.some((line) => line.startsWith('the skill:')), 'a drifted table is reported against the skill').toBe(true);
   expect(drift(rows, tools, `${skill}\nUse deep_frobnicate to finish.\n`), 'a skill naming a tool the list lacks is reported').toContain('the skill: names deep_frobnicate, which the live tool list lacks');
+
+  // A parameter named in the skill's body is reported; the same word as a key of the skill's YAML frontmatter, which
+  // the skill format requires (`name:`), names no parameter.
+  const tool = tools.find((t) => [...propertyNames(t.inputSchema)].some((p) => /^[a-z]+$/.test(p)));
+  expect(tool, 'BLOCKED unless a live tool takes a lower-case parameter').toBeDefined();
+  const param = [...propertyNames(tool!.inputSchema)].find((p) => /^[a-z]+$/.test(p))!;
+  const named = `the skill: names ${tool!.name}'s parameter ${param}`;
+  expect(drift(rows, tools, `${skill}\nPass \`${param}\` to it.\n`), `a body naming \`${param}\` is reported`).toContain(named);
+  expect(drift(rows, tools, `${skill}\n${param}: x\n`), `a body line "${param}: x" is reported`).toContain(named);
+  const withKey = skill.startsWith('---\n') ? skill.replace('---\n', `---\n${param}: deepbuild\n`) : `---\n${param}: deepbuild\n---\n${skill}`;
+  expect(drift(rows, tools, withKey), `a frontmatter key "${param}:" alone is not reported`).toEqual([]);
 }, 120_000);

@@ -63,36 +63,7 @@ mod suite {
         );
     }
 
-    // ---- AC3 #327.f53f09db: with the window hidden, every ask that shows at once notifies.
-
-    fn ac3_with_the_window_hidden_every_ask_notifies_with_its_question_default_and_when() {
-        let mut replica = Replica::open(&fixture("base.events.jsonl"));
-        replica.hide_window(0);
-        let taste = raise_taste(&mut replica, S1, "Which header colour on the checkout total?");
-        let (push, _) = raise_push(&mut replica, S2);
-        replica.advance(ms(1_500));
-        for (ask, question, default, span) in [
-            (&taste, "Which header colour on the checkout total?", "Blue header", "3 d"),
-            (&push, "Push feat/cart to origin?", "Decline", "1 d"),
-        ] {
-            let posts = posts_for(&replica, ask);
-            assert_eq!(posts.len(), 1, "{ask}: with the window hidden, exactly one notification: {posts:?}");
-            let text = &posts[0].text;
-            assert!(text.contains(question), "{ask}: the notification doesn't carry the question: {text:?}");
-            assert!(text.contains(default), "{ask}: the notification doesn't carry the default {default:?}: {text:?}");
-            assert!(text.contains(span), "{ask}: the notification doesn't say when the default applies ({span}): {text:?}");
-        }
-        // Clicking one opens that ask's card, and answers nothing.
-        let posts = posts_for(&replica, &push);
-        replica.click(&posts[0]);
-        assert_eq!(replica.card(0).as_deref(), Some(push.as_str()), "clicking the notification opens its ask's card");
-        assert!(replica.answers().is_empty(), "a notification action wrote an answer: {:?}", replica.answers());
-        assert!(
-            !replica.usage().iter().any(|row| row["row"] == "answered"),
-            "a notification action answered: {:?}",
-            replica.usage()
-        );
-    }
+    // ---- AC3 #327.f53f09db: redrafted blind after a dispute; see ac3_redraft.rs.
 
     // ---- AC4 #327.a3e67d66: a click inside the arm interval never answers; a synthetic click needs the OS.
 
@@ -497,7 +468,6 @@ mod suite {
     pub fn run() -> i32 {
         super::common::run(&[
             ("ac2_a_hardware_click_on_c_sends_option_c_not_the_recommended_b_drawn_first", ac2_a_hardware_click_on_c_sends_option_c_not_the_recommended_b_drawn_first),
-            ("ac3_with_the_window_hidden_every_ask_notifies_with_its_question_default_and_when", ac3_with_the_window_hidden_every_ask_notifies_with_its_question_default_and_when),
             ("ac4_a_click_inside_the_arm_interval_never_answers", ac4_a_click_inside_the_arm_interval_never_answers),
             ("ac4_a_synthetic_click_answers_only_after_the_os_confirms_you", ac4_a_synthetic_click_answers_only_after_the_os_confirms_you),
             ("ac5_an_unknown_client_action_answers_only_after_the_os_confirms_you", ac5_an_unknown_client_action_answers_only_after_the_os_confirms_you),

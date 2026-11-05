@@ -4,6 +4,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use deep_canvas::ops;
 use deep_canvas_effects::emit::Options;
@@ -12,15 +13,16 @@ use deep_canvas_effects::interp::{self, hash1, Image};
 use deep_canvas_effects::{check, shipped};
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
-use deep_effects_render::compile::{compile_with, validate, Compiled};
+use deep_effects_render::compile::{compile_planted, compile_with, validate, Compiled};
 use deep_effects_render::frame::{self as fx, Settings, Sparks};
 use deep_effects_render::reference::{self, Camera};
-use deep_effects_render::runner::{Frame, Runner, LINEAR};
+use deep_effects_render::runner::{dispatch, Frame, Runner, LINEAR};
 use deep_gpu::device::Device;
 use deep_scene3d_render::{draw_offscreen, Planted as Planted3, Post, PostFrame, Renderer};
 use serde_json::{json, Map, Value};
 
 use crate::frames::hex;
+use crate::view3d::write_named;
 use crate::{refused, App, Planted};
 
 /// An item's seed: a hash of the document's seed and its ID (Effect: `seed: item`).
@@ -56,7 +58,7 @@ impl Seeding {
     }
 }
 
-fn linear_of(c: [u8; 3]) -> [f64; 3] {
+pub fn linear_of(c: [u8; 3]) -> [f64; 3] {
     c.map(|v| {
         let x = f64::from(v) / 255.0;
         if x <= 0.04045 {
@@ -89,13 +91,238 @@ fn pair(v: Option<&Value>, default: [f64; 2]) -> [f64; 2] {
     }
 }
 
+/// Where an item stands in world metres: a solid's origin, another module's item's, or none.
+fn item_pos(scene: &Scene, id: &str) -> Option<[f64; 3]> {
+    let id = id.split('#').next().unwrap_or(id);
+    scene
+        .layers
+        .iter()
+        .flat_map(|l| &l.solids)
+        .find(|s| s.id == id)
+        .map(|s| [s.model[0][3], s.model[1][3], s.model[2][3]])
+        .or_else(|| scene.others.iter().find(|o| o.id == id).map(|o| o.pos))
+}
+
+/// A curve's samples resampled to [`shipped::CURVE_POINTS`] points evenly by arc length, and
+/// its length.
+fn resampled(points: &[[f64; 3]]) -> (Vec<[f64; 3]>, f64) {
+    let n = shipped::CURVE_POINTS as usize;
+    let seg = |a: [f64; 3], b: [f64; 3]| {
+        ops::sqrt((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2) + (b[2] - a[2]).powi(2))
+    };
+    let total: f64 = points.windows(2).map(|w| seg(w[0], w[1])).sum();
+    let mut out = Vec::with_capacity(n);
+    for k in 0..n {
+        let mut left = total * k as f64 / (n - 1) as f64;
+        let mut at = *points.last().unwrap_or(&[0.0; 3]);
+        for w in points.windows(2) {
+            let d = seg(w[0], w[1]);
+            if left <= d && d > 0.0 {
+                let f = left / d;
+                at = [0, 1, 2].map(|i| w[0][i] + (w[1][i] - w[0][i]) * f);
+                break;
+            }
+            left -= d;
+        }
+        out.push(at);
+    }
+    (out, total)
+}
+
+/// A channel over life (Particles: `size, opacity: channels over life`): a number, `[birth,
+/// death]`, or keys `[{at, value}]`, as its values at birth and at death.
+fn over_life(v: Option<&Value>, default: f64) -> [f64; 2] {
+    match v {
+        Some(Value::Array(keys)) if keys.iter().all(Value::is_object) && !keys.is_empty() => {
+            let at = |k: &Value| k["value"].as_f64().unwrap_or(default);
+            [at(&keys[0]), at(&keys[keys.len() - 1])]
+        }
+        other => pair(other, [default, default]),
+    }
+}
+
+/// One particles@1 item as the operator and the draw read it: its emitter, motion, life and
+/// look over life (Particles `particles@1`; #420).
+fn sparks_of(
+    scene: &Scene,
+    o: &deep_canvas_scene3d::scene::Other,
+    look: &Look3,
+    seed: u32,
+) -> Sparks {
+    let p = &o.params;
+    let emit = &p["emit"];
+    let count = p["count"]
+        .as_u64()
+        .unwrap_or(256)
+        .min(u64::from(shipped::MAX_PARTICLES_SHOWPIECE)) as u32;
+    let life = pair(p.get("life"), [1.0, 1.0]);
+    let motion = p["motion"]
+        .as_object()
+        .and_then(|m| m.keys().next().cloned())
+        .unwrap_or_else(|| "ballistic".into());
+    let m = &p["motion"][&motion];
+    let ballistic = &p["motion"]["ballistic"];
+    let v0 = pair(ballistic.get("v0"), [1.0, 2.0]);
+    let origin = emit["anchor"]
+        .as_str()
+        .and_then(|a| item_pos(scene, a))
+        .unwrap_or(o.pos);
+    // The emitter's shape, and the curve it or the motion runs along.
+    let (shape, shape_curve) = match &emit["shape"] {
+        Value::Object(s) => match s.get("along").and_then(Value::as_str) {
+            Some(c) => (3, Some(c.to_string())),
+            None => (0, None),
+        },
+        Value::String(s) => (
+            shipped::SHAPES.iter().position(|x| x == s).unwrap_or(0) as u32,
+            None,
+        ),
+        _ => (0, None),
+    };
+    let curve_id = m["curve"].as_str().map(str::to_string).or(shape_curve);
+    let (curve, curve_len) = curve_id
+        .and_then(|c| scene.curves.get(&c))
+        .map(|pts| resampled(pts))
+        .unwrap_or((vec![origin; shipped::CURVE_POINTS as usize], 0.0));
+    let code = shipped::MOTIONS
+        .iter()
+        .position(|x| *x == motion)
+        .unwrap_or(0) as u32;
+    let mut stops: Vec<(f64, [f64; 3])> = p["color"]
+        .as_array()
+        .map(|c| {
+            c.iter()
+                .take(4)
+                .map(|k| {
+                    (
+                        k["at"].as_f64().unwrap_or(0.0),
+                        role(look, k["role"].as_str(), "accent"),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if stops.is_empty() {
+        stops.push((0.0, role(look, None, "accent")));
+    }
+    let params = BTreeMap::from([
+        ("particles.count".to_string(), json!(count)),
+        (
+            "particles.rate".to_string(),
+            json!(emit["rate"].as_f64().unwrap_or(100.0)),
+        ),
+        (
+            "particles.span".to_string(),
+            json!(emit["span"].as_f64().unwrap_or(1e9)),
+        ),
+        ("particles.life_min".to_string(), json!(life[0])),
+        ("particles.life_max".to_string(), json!(life[1])),
+        ("particles.v0_min".to_string(), json!(v0[0])),
+        ("particles.v0_max".to_string(), json!(v0[1])),
+        (
+            "particles.drag".to_string(),
+            json!(ballistic["drag"].as_f64().unwrap_or(0.0)),
+        ),
+        (
+            "particles.gravity".to_string(),
+            ballistic
+                .get("gravity")
+                .cloned()
+                .unwrap_or(json!([0.0, -9.8, 0.0])),
+        ),
+        ("particles.origin".to_string(), json!(origin)),
+        ("particles.motion".to_string(), json!(code)),
+        ("particles.shape".to_string(), json!(shape)),
+        (
+            "particles.radius".to_string(),
+            json!(emit["radius"].as_f64().unwrap_or(0.25)),
+        ),
+        ("particles.curve".to_string(), json!(curve)),
+        ("particles.curve_len".to_string(), json!(curve_len)),
+        (
+            "particles.speed".to_string(),
+            json!(m["speed"].as_f64().unwrap_or(1.0)),
+        ),
+        (
+            "particles.axis".to_string(),
+            m.get("axis").cloned().unwrap_or(json!([0.0, 1.0, 0.0])),
+        ),
+        (
+            "particles.spin".to_string(),
+            json!(ops::rad(m["rate"].as_f64().unwrap_or(0.0))),
+        ),
+        (
+            "particles.amplitude".to_string(),
+            json!(m["amplitude"].as_f64().unwrap_or(0.0)),
+        ),
+        (
+            "particles.frequency".to_string(),
+            json!(m["frequency"].as_f64().unwrap_or(0.0)),
+        ),
+    ]);
+    let draw = ["dot", "spark", "puff", "streak"]
+        .iter()
+        .position(|d| Some(*d) == p["draw"].as_str())
+        .unwrap_or(0) as u32;
+    Sparks {
+        item: o.id.clone(),
+        params,
+        count,
+        seed,
+        size_px: 1.0,
+        // Sparks are emissive, bright enough to glow.
+        opacity: 4.0,
+        size: over_life(p.get("size"), 3.0),
+        fade: over_life(p.get("opacity"), 1.0),
+        stops,
+        draw,
+        half: draw == 2 && p["resolution"].as_str() != Some("full"),
+    }
+}
+
+/// A particles@1 item whose count is past its class's limit (Particles `particles@1`:
+/// `count: u32 ≤ 65,536`, or ≤ 1,048,576 in a showpiece or an export), by its path.
+pub fn count_refusal(scene: &Scene, class: Option<&str>) -> Option<String> {
+    let limit = match class {
+        Some("showpiece" | "export") => shipped::MAX_PARTICLES_SHOWPIECE,
+        _ => shipped::MAX_PARTICLES,
+    };
+    scene
+        .others
+        .iter()
+        .filter(|o| o.kind == "particles@1")
+        .find(|o| {
+            o.params["count"]
+                .as_u64()
+                .is_some_and(|c| c > u64::from(limit))
+        })
+        .map(|o| format!("items/{}/params/count", o.id))
+}
+
 /// The wrong programs the effects run under (frame::Planted).
 pub fn planted_fx(p: Option<Planted>) -> fx::Planted {
     fx::Planted {
         without_karis: p == Some(Planted::BloomWithoutKaris),
         off_by_two: p == Some(Planted::PassOffByTwo),
         slow_glow: p == Some(Planted::SlowGlow),
+        dirt_overlay: p == Some(Planted::DirtOverlay),
     }
+}
+
+/// The bloom's lens dirt image (#418) when `seeded`: made from `seed` (the look's, else the
+/// document's), its low 32 bits, once per seed and kept; `None` otherwise.
+fn dirt_of(dirt: &Value, seed: u64) -> Option<Arc<Image>> {
+    static SEEDED: Mutex<BTreeMap<u32, Arc<Image>>> = Mutex::new(BTreeMap::new());
+    if dirt["texture"] != "seeded" {
+        return None;
+    }
+    let seed = seed as u32;
+    let mut held = SEEDED.lock().unwrap_or_else(|e| e.into_inner());
+    Some(
+        held.entry(seed)
+            .or_insert_with(|| Arc::new(deep_canvas_effects::dirt::seeded(seed)))
+            .clone(),
+    )
 }
 
 /// The settings the look, the scene and the session's selection give a frame at `t`.
@@ -143,67 +370,17 @@ pub fn settings(
             ("ground_3d.fade".to_string(), json!(fade)),
         ])
     });
+    // A scene of materials shades the sun's shadow through its cascades instead (#422).
     let shadow = scene
         .sun
         .as_ref()
-        .filter(|s| s.shadow)
+        .filter(|s| s.shadow && !scene.cascaded())
         .map(|s| (BTreeMap::new(), seeding.key(item_seed(doc_seed, &s.id))));
     let sparks = scene
         .others
         .iter()
         .filter(|o| o.kind == "particles@1")
-        .map(|o| {
-            let p = &o.params;
-            let count = p["count"]
-                .as_u64()
-                .unwrap_or(256)
-                .min(u64::from(shipped::MAX_PARTICLES)) as u32;
-            let life = pair(p.get("life"), [1.0, 1.0]);
-            let ballistic = &p["motion"]["ballistic"];
-            let v0 = pair(ballistic.get("v0"), [1.0, 2.0]);
-            let colors: Vec<&str> = p["color"]
-                .as_array()
-                .map(|c| c.iter().filter_map(|k| k["role"].as_str()).collect())
-                .unwrap_or_default();
-            let params = BTreeMap::from([
-                ("particles.count".to_string(), json!(count)),
-                (
-                    "particles.rate".to_string(),
-                    json!(p["emit"]["rate"].as_f64().unwrap_or(100.0)),
-                ),
-                (
-                    "particles.span".to_string(),
-                    json!(p["emit"]["span"].as_f64().unwrap_or(1e9)),
-                ),
-                ("particles.life_min".to_string(), json!(life[0])),
-                ("particles.life_max".to_string(), json!(life[1])),
-                ("particles.v0_min".to_string(), json!(v0[0])),
-                ("particles.v0_max".to_string(), json!(v0[1])),
-                (
-                    "particles.drag".to_string(),
-                    json!(ballistic["drag"].as_f64().unwrap_or(0.0)),
-                ),
-                (
-                    "particles.gravity".to_string(),
-                    ballistic
-                        .get("gravity")
-                        .cloned()
-                        .unwrap_or(json!([0.0, -9.8, 0.0])),
-                ),
-                ("particles.origin".to_string(), json!(o.pos)),
-            ]);
-            Sparks {
-                item: o.id.clone(),
-                params,
-                count,
-                seed: seeding.key(item_seed(doc_seed, &o.id)),
-                size_px: p["size"].as_f64().unwrap_or(3.0),
-                // Sparks are emissive, bright enough to glow.
-                opacity: 4.0 * p["opacity"].as_f64().unwrap_or(1.0),
-                from: role(look, colors.first().copied(), "accent"),
-                to: role(look, colors.last().copied(), "accent"),
-            }
-        })
+        .map(|o| sparks_of(scene, o, look, seeding.key(item_seed(doc_seed, &o.id))))
         .collect();
     roles.insert("selection".into(), role(look, Some("selection"), "accent"));
     let bloom = look_json["bloom"].as_object().map(|b| {
@@ -211,6 +388,10 @@ pub fn settings(
             .map(|(k, v)| (format!("bloom.{k}"), v.clone()))
             .collect::<BTreeMap<_, _>>()
     });
+    let dirt = bloom
+        .as_ref()
+        .and_then(|b| b.get("bloom.dirt"))
+        .and_then(|d| dirt_of(d, look_json["seed"].as_u64().unwrap_or(doc_seed)));
     Settings {
         grid,
         shadow,
@@ -218,6 +399,7 @@ pub fn settings(
         selection: selection.to_vec(),
         outline_width: 2,
         bloom,
+        dirt,
         roles,
         t,
     }
@@ -289,16 +471,6 @@ fn f32_file(img: &Image) -> Vec<u8> {
         .iter()
         .flat_map(|p| p.iter().flat_map(|v| (*v as f32).to_le_bytes()))
         .collect()
-}
-
-fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, Value> {
-    let name = hex(bytes);
-    std::fs::write(
-        std::path::Path::new(out).join(format!("{name}.{ext}")),
-        bytes,
-    )
-    .map_err(|e| refused("not_written", e.to_string()))?;
-    Ok(name)
 }
 
 /// A frame's inputs at the effects' place: the linear target, depth, object IDs and the shadow
@@ -484,7 +656,7 @@ pub fn reference(app: &mut App, out: &str, call: &Value) -> Value {
                 .stages
                 .iter()
                 .map(|g| {
-                    compile_with(g, &BTreeMap::new(), Options { off_by_two: off })
+                    compile_with(g, &BTreeMap::new(), Options { off_by_two: off, ..Options::default() })
                         .expect("shipped stages check")
                 })
                 .collect();
@@ -618,20 +790,7 @@ fn run_once(device: &Device, c: &Compiled, reached: &mut Reached) -> Result<(), 
     match c.kind() {
         Kind::Compute => runner.dispatch(&mut enc, c.checked.op.elements, &(g0, g1), None),
         _ => {
-            let out = d.create_texture(&wgpu::TextureDescriptor {
-                label: Some("check_operator output"),
-                size: wgpu::Extent3d {
-                    width: size[0],
-                    height: size[1],
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: LINEAR,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
+            let out = output(d, "check_operator output", size);
             runner.encode(
                 &mut enc,
                 &out.create_view(&Default::default()),
@@ -646,7 +805,25 @@ fn run_once(device: &Device, c: &Compiled, reached: &mut Reached) -> Result<(), 
     Ok(())
 }
 
-fn pollster_block<F: std::future::Future>(f: F) -> F::Output {
+/// A linear render target of `size` that nothing reads back.
+fn output(d: &wgpu::Device, label: &str, [width, height]: [u32; 2]) -> wgpu::Texture {
+    d.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: LINEAR,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    })
+}
+
+pub(crate) fn pollster_block<F: std::future::Future>(f: F) -> F::Output {
     // The error scope resolves at once on a device whose work is polled.
     let waker = std::task::Waker::noop();
     let mut cx = std::task::Context::from_waker(waker);
@@ -703,20 +880,7 @@ fn unchecked(device: &Device, op: &Value, reached: &mut Reached) -> Option<Strin
         cache: None,
     });
     reached.pipeline = true;
-    let out = d.create_texture(&wgpu::TextureDescriptor {
-        label: Some("unchecked output"),
-        size: wgpu::Extent3d {
-            width: 64,
-            height: 64,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: LINEAR,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        view_formats: &[],
-    });
+    let out = output(d, "unchecked output", [64, 64]);
     let mut enc = d.create_command_encoder(&Default::default());
     {
         let view = out.create_view(&Default::default());
@@ -754,13 +918,37 @@ pub fn check_operator(app: &mut App, call: &Value) -> Value {
         })
         .unwrap_or_default();
     let skips = app.planted == Some(Planted::SkipsOperatorCheck);
+    let (emit_options, check_options) = operator_plants(app.planted);
+    let ui_thread = std::thread::current()
+        .name()
+        .unwrap_or("main")
+        .to_string();
     app.worker.call(move |state| {
         let device = state.gpu.device();
         let mut reached = Reached::default();
         if skips && unchecked(&device, &op, &mut reached).is_some() {
             return json!({"outcome": "accepted", "issues": [], "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}});
         }
-        let result = compile_with(&op, &assets, Options::default());
+        // The check alone, timed, for the computed class and the estimate.
+        let started = std::time::Instant::now();
+        let alone = graph::read(&op).and_then(|o| check::check_with(&o, check_options));
+        let check_ms = started.elapsed().as_secs_f64() * 1e3;
+        let started = std::time::Instant::now();
+        let result = compile_planted(&op, &assets, emit_options, check_options);
+        let compile_ms = (started.elapsed().as_secs_f64() * 1e3 - check_ms).max(0.0);
+        let thread = std::thread::current()
+            .name()
+            .unwrap_or("render")
+            .to_string();
+        let mut extra = serde_json::Map::new();
+        if let Ok(c) = &alone {
+            extra.insert("class".into(), json!(c.class.name()));
+            extra.insert("estimate_ns".into(), json!(c.estimate));
+        }
+        extra.insert(
+            "timing".into(),
+            json!({"check_ms": check_ms, "compile_ms": compile_ms, "thread": thread, "ui_thread": ui_thread}),
+        );
         let (outcome, issues) = match result {
             Err(issues) => {
                 // A refusal from naga's validation means the module reached naga.
@@ -775,8 +963,44 @@ pub fn check_operator(app: &mut App, call: &Value) -> Value {
                 }
             }
         };
-        json!({"outcome": outcome, "issues": issues, "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}})
+        let mut reply = json!({"outcome": outcome, "issues": issues, "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}});
+        if let Value::Object(o) = &mut reply {
+            o.extend(extra);
+        }
+        reply
     })
+}
+
+/// The emitter's and the check's planted wrong programs (#429), from the binary's `--planted`.
+pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
+    (
+        Options {
+            drops_swizzle_last: p == Some(Planted::DropsSwizzleLast),
+            index_wraps: p == Some(Planted::IndexWraps),
+            ..Options::default()
+        },
+        check::CheckOptions {
+            declared_class: p == Some(Planted::TakesDeclaredClass),
+            exact_f32_compares: p == Some(Planted::F32CompareFloorExact),
+            exact_f32_floor: p == Some(Planted::F32CompareFloorExact),
+            trusts_index: p == Some(Planted::TrustsWriteIndex),
+            noise_weight_halved: p == Some(Planted::NoiseWeightHalved),
+        },
+    )
+}
+
+/// The structural steps' planted programs (#483), as the operators' runtime takes them; the pool
+/// marker is the test hook's, set by check_operator.
+pub fn operator_hooks(p: Option<Planted>) -> deep_effects_render::docops::Hooks {
+    deep_effects_render::docops::Hooks {
+        marker: None,
+        no_clear: p == Some(Planted::PoolWithoutClear),
+        feeds_first: p == Some(Planted::IterateFeedsFirst),
+        level0_only: p == Some(Planted::MipsLevel0Only),
+        old_key: p == Some(Planted::MipsKeptUnderOldKey),
+        ties_decreasing: p == Some(Planted::SortTiesDecreasing),
+        compact_by_atomic: p == Some(Planted::CompactByAtomic),
+    }
 }
 
 /// The compute operator `op` builds: one storage input of 32-bit words per argument, the step
@@ -863,67 +1087,6 @@ fn op_graph(name: &str, types: &[Ty], rows: usize) -> Result<(Value, Ty), Value>
     ))
 }
 
-/// Runs a checked compute operator on the GPU over `inputs` (one buffer of words each, in its
-/// storage inputs' order) and reads back its first storage output.
-fn dispatch(device: &Device, c: &Compiled, inputs: &[Vec<u32>]) -> Vec<u32> {
-    use wgpu::util::DeviceExt as _;
-    let d = &device.device;
-    let runner = Runner::new(d, c.clone(), LINEAR);
-    let ins: Vec<wgpu::Buffer> = inputs
-        .iter()
-        .map(|w| {
-            let bytes: Vec<u8> = w.iter().flat_map(|x| x.to_le_bytes()).collect();
-            d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("op input"),
-                contents: &bytes,
-                usage: wgpu::BufferUsages::STORAGE,
-            })
-        })
-        .collect();
-    let n = c
-        .checked
-        .op
-        .storage
-        .values()
-        .next()
-        .map_or(1, |s| s.count.max(1));
-    let out = d.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("op output"),
-        size: u64::from(n) * 4,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-        mapped_at_creation: false,
-    });
-    let back = d.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("op read back"),
-        size: u64::from(n) * 4,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let mut bufs: Vec<&wgpu::Buffer> = ins.iter().collect();
-    bufs.push(&out);
-    let values = interp::inputs(&c.checked, &BTreeMap::new(), &BTreeMap::new());
-    let (g0, g1, _b) = runner.bind(d, &Frame::default(), [1, 1], &values, &[], &bufs);
-    let mut enc = d.create_command_encoder(&Default::default());
-    runner.dispatch(&mut enc, c.checked.op.elements, &(g0, g1), None);
-    enc.copy_buffer_to_buffer(&out, 0, &back, 0, u64::from(n) * 4);
-    device.queue.submit([enc.finish()]);
-    back.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-    let _ = d.poll(wgpu::PollType::wait_indefinitely());
-    let words = back
-        .slice(..)
-        .get_mapped_range()
-        .map(|v| {
-            v.as_chunks::<4>()
-                .0
-                .iter()
-                .map(|b| u32::from_le_bytes(*b))
-                .collect()
-        })
-        .unwrap_or_default();
-    back.unmap();
-    words
-}
-
 /// `op`: a public step over rows of bits, on this GPU and through the CPU interpreter.
 pub fn op(app: &mut App, call: &Value) -> Value {
     let Some(name) = call["op"].as_str().map(String::from) else {
@@ -986,6 +1149,7 @@ pub fn op(app: &mut App, call: &Value) -> Value {
         eye: [0.0; 4],
         inputs: interp::inputs(&c.checked, &BTreeMap::new(), &BTreeMap::new()),
         textures: BTreeMap::new(),
+        normals: [[0.0; 3]; 3],
     };
     let storage: BTreeMap<String, Vec<f64>> = columns
         .iter()
@@ -1018,7 +1182,7 @@ pub fn op(app: &mut App, call: &Value) -> Value {
 }
 
 /// The Metal GPU family of an Apple-silicon chip, by its name.
-fn family(gpu: &str) -> String {
+pub fn family(gpu: &str) -> String {
     let n = gpu
         .split_whitespace()
         .find_map(|w| w.strip_prefix('M').and_then(|d| d.parse::<u32>().ok()));
@@ -1038,9 +1202,10 @@ fn hash_fixture() -> Vec<u32> {
         .collect()
 }
 
-/// `exact`: every shipped exact operator on its exactness fixture on this GPU, as a record.
-pub fn exact(app: &mut App, out: &str) -> Value {
-    let words = app.worker.call(|state| {
+/// This GPU's name, and the bits of every shipped exact operator on its exactness fixture: the
+/// exact-class fixtures (#140's GPU seam suite compares them across GPU families).
+pub fn exact_bits(app: &mut App) -> (String, BTreeMap<String, String>) {
+    let (info, ops) = app.worker.call(|state| {
         let device = state.gpu.device();
         let info = device.adapter.clone();
         let mut ops = BTreeMap::new();
@@ -1059,16 +1224,23 @@ pub fn exact(app: &mut App, out: &str) -> Value {
         }
         (info, ops)
     });
-    let (info, ops) = words;
     let name = info
         .as_ref()
         .map_or_else(|| "unknown".to_string(), |i| i.name.clone());
+    (name, ops)
+}
+
+/// `exact`: every shipped exact operator on its exactness fixture on this GPU, as a record.
+pub fn exact(app: &mut App, out: &str) -> Value {
+    let (name, ops) = exact_bits(app);
+    let steps = crate::steps_ref::exact_steps(app);
     let record = json!({
         "format": 1,
         "gpu": {"name": name, "family": family(&name)},
         "os": crate::golden::os(),
         "wgpu": env!("DEEP_WGPU_VERSION"),
         "operators": ops,
+        "steps": steps,
     });
     let bytes = serde_json::to_vec_pretty(&record).unwrap_or_default();
     match write_named(out, &bytes, "json") {
@@ -1102,18 +1274,22 @@ pub fn cross_gpu(app: &App, call: &Value) -> Value {
     families.sort();
     families.dedup();
     if families.len() < 2 && app.planted != Some(Planted::PassesOneGpu) {
+        let missing = crate::steps_ref::missing_family(families.first().map_or("", String::as_str));
         return json!({
             "result": "BLOCKED",
             "families": families,
-            "asks": [{"kind": "unblock", "ask": "run deep-gpu's exact call on a GPU of another family (an M1 beside this M3) and compare its record", "needs": "a second GPU family"}],
+            "asks": [{"kind": "unblock", "ask": format!("run deep-gpu's exact call on an {missing} GPU (another family than this one) and compare its record"), "needs": "a second GPU family", "gpu": missing}],
         });
     }
     let mut differs = Vec::new();
     if let Some(first) = records.first() {
-        for (name, bits) in first["operators"].as_object().into_iter().flatten() {
-            for r in &records[1..] {
-                if r["operators"][name] != *bits {
-                    differs.push(json!({"operator": name, "families": [first["gpu"]["family"], r["gpu"]["family"]]}));
+        // Every shipped exact operator's bits, then every exact public step's.
+        for (field, what) in [("operators", "operator"), ("steps", "step")] {
+            for (name, bits) in first[field].as_object().into_iter().flatten() {
+                for r in &records[1..] {
+                    if r[field][name] != *bits {
+                        differs.push(json!({what: name, "families": [first["gpu"]["family"], r["gpu"]["family"]]}));
+                    }
                 }
             }
         }

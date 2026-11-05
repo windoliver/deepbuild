@@ -13,6 +13,8 @@ export type Agent = 'claude' | 'codex-observed' | 'codex-woken';
 export type Origin = 'human' | 'app' | 'answer' | 'continuation' | 'scheduled' | 'subagent' | 'session' | 'unknown';
 export interface Config { budget_ms: number; hold_ms: number; slots: number; grace_ms: number; stop_timeout_ms: number }
 export const DEFAULTS: Config = { budget_ms: 10_000, hold_ms: 60_000, slots: 4, grace_ms: 60_000, stop_timeout_ms: 600_000 };
+/** The longest background work holds a stop's slow checks, from that stop (#907). */
+const BACKGROUND_MS = 30 * 60_000;
 export interface Needs { cores: number; memory_mb: number; stack_slot: number; gpus: number }
 export interface StackStep { name: string; median_ms: number; inputs: string[] }
 export interface StackDef { steps: StackStep[]; per_run_ms: number; wait_ms?: number; kept: boolean; start(ctx: { attempt: number; kept_product: boolean; checkout: string; worktree: string }): StackRecords }
@@ -30,7 +32,8 @@ export interface CheckDef {
   run(ctx: RunContext): { took_ms: number; outcome: 'passed' | 'failed'; load?: number };
 }
 export type SortedAs = 'proceed' | 'provisional_ask' | 'completion_prompt' | 'deep_ask' | 'question_holds';
-export interface LoopFacts { goal: 'none' | 'active' | 'paused' | 'complete'; heartbeat_due: number | null; wakeup_due: number | null; cron_due: number | null; subagent_report_due: number | null }
+/** `background`: the commands and subagents the session started in the background that still run, as its row names them. */
+export interface LoopFacts { goal: 'none' | 'active' | 'paused' | 'complete'; heartbeat_due: number | null; wakeup_due: number | null; cron_due: number | null; subagent_report_due: number | null; background: string[] }
 export type ScriptEvent =
   | { at: number; kind: 'prompt'; origin: Origin }
   | { at: number; kind: 'words'; via: 'typed' | 'app' | 'answer' }
@@ -47,7 +50,8 @@ export type SchedulerPlant =
   | 'stops-run-on-newer-snapshot' | 'queues-every-green-snapshot' | 'ignores-fast-lane-results' | 'starts-on-every-green-stop' | 'starts-beside-fast-lane'
   | 'checks-delivery-at-queue' | 'queues-every-check' | 'finishes-older-runs' | 'runs-in-worktree' | 'reruns-every-check' | 'ignores-loops' | 'waits-grace-not-facts'
   | 'holds-claim-stop-for-loop' | 'words-only-at-turn-start' | 'holds-every-loop-check' | 'starts-at-question-stop' | 'holds-only-the-hold-length'
-  | 'one-reason-per-record' | 'takes-environments-word' | 'sizes-lane-by-run-alone' | 'leaves-host-empty' | 'fast-lane-waits';
+  | 'one-reason-per-record' | 'takes-environments-word' | 'sizes-lane-by-run-alone' | 'leaves-host-empty' | 'fast-lane-waits'
+  | 'holds-background-without-limit';
 
 export interface Held { total: number; question: number; slow: number; fast: number; snapshot_start: number; queue_wait: number }
 export interface StopReply {
@@ -141,7 +145,7 @@ class Sim {
   constructor(private readonly sc: Scenario, private readonly plant: SchedulerPlant | undefined) {
     this.cfg = { ...DEFAULTS, ...sc.config };
     this.sessions = sc.sessions.map((def, i) => ({
-      def, i, facts: { goal: 'none', heartbeat_due: null, wakeup_due: null, cron_due: null, subagent_report_due: null, ...def.facts },
+      def, i, facts: { goal: 'none', heartbeat_due: null, wakeup_due: null, cron_due: null, subagent_report_due: null, background: [], ...def.facts },
       looping: false, origin: null, inTurn: false, lastPrompt: null, words: null, claimVia: null, worktree: [], claims: [], current: new Map(), stops: [],
       pendingDeliveries: [], graceAt: null, promptSinceReply: false,
     }));
@@ -565,7 +569,13 @@ class Sim {
       for (const set of slowSets) {
         if (starter.start) { this.queueSlow(set, starter.by); started.push(set); continue; }
         const fit = this.loopFit(s, set);
-        if (fit.starts) { this.queueSlow(set, 'loop_paused'); started.push(set); } else this.holdSlow(set, fit.reason, fit.grace);
+        if (fit.starts) { this.queueSlow(set, 'loop_paused'); started.push(set); continue; }
+        this.holdSlow(set, fit.reason, fit.grace);
+        // Background work holds it at most 30 minutes from this stop; a newer stop that takes the place has its own.
+        const place = set.place;
+        if (s.facts.background.length && place && this.plant !== 'holds-background-without-limit') {
+          this.timers.push({ at: this.now + BACKGROUND_MS, fn: () => { if (set.place === place) this.releaseHeld(s, (p) => p === place); } });
+        }
       }
       // Held places of this session start too when this stop starts things for your words, a claim or the loop's pause.
       if (starter.start) for (const p of this.places.filter((x) => x.held && x.set.sess === s)) { p.held = null; p.starter = starter.by; p.set.startedBy = starter.by; }
@@ -587,9 +597,9 @@ class Sim {
       if (fits.length) { stop.holdingFor = fits; stop.holdUntil = limit; }
     }
   }
-  /** What starts held and slow checks at a green stop of this session: not looping, a claim, or your words. */
+  /** What starts held and slow checks at a green stop of this session: not looping with nothing in the background, a claim, or your words. */
   private starterAt(s: Sess): { start: true; by: StartedBy } | { start: false } {
-    if (!s.looping) return { start: true, by: 'turn_end' };
+    if (!s.looping && !s.facts.background.length) return { start: true, by: 'turn_end' };
     if (s.claimVia !== null || s.claims[s.claims.length - 1]!.rec.source !== 'stop') {
       if (this.plant !== 'holds-claim-stop-for-loop') return { start: true, by: 'claim' };
     }
@@ -601,7 +611,10 @@ class Sim {
     const f = s.facts;
     const graceAt = this.now + this.cfg.grace_ms;
     let next = Infinity; let reason = 'no prompt foreseen'; let grace = false;
-    if (this.plant === 'waits-grace-not-facts') { next = graceAt; reason = 'no prompt foreseen'; grace = true; } else if (f.goal === 'active') { next = graceAt; reason = 'goal active'; grace = true; } else {
+    if (this.plant === 'waits-grace-not-facts') { next = graceAt; reason = 'no prompt foreseen'; grace = true; } else if (f.background.length) {
+      // Work in the background reports when it ends, which nothing foresees, so no check fits before it.
+      return { starts: false, reason: `${f.background.join(', ')} in the background`, grace: false };
+    } else if (f.goal === 'active') { next = graceAt; reason = 'goal active'; grace = true; } else {
       const due: [number | null, string][] = [[f.wakeup_due, 'wake-up'], [f.heartbeat_due, 'heartbeat'], [f.cron_due, 'cron'], [f.subagent_report_due, 'subagent']];
       const soon = due.filter(([t]) => t !== null).sort((a, b) => a[0]! - b[0]!)[0];
       if (soon) { next = soon[0]!; reason = soon[1]; } else if (s.origin === 'session' || s.origin === 'unknown') { next = graceAt; grace = true; }
@@ -618,7 +631,7 @@ class Sim {
   private recheckHeld(s: Sess): void {
     const f = s.facts;
     if (this.plant === 'waits-grace-not-facts') return;
-    const none = f.goal !== 'active' && [f.wakeup_due, f.heartbeat_due, f.cron_due, f.subagent_report_due].every((t) => t === null);
+    const none = f.goal !== 'active' && !f.background.length && [f.wakeup_due, f.heartbeat_due, f.cron_due, f.subagent_report_due].every((t) => t === null);
     if (none) this.releaseHeld(s, () => true);
   }
   private reply(stop: Stop): void {

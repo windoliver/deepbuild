@@ -6,11 +6,10 @@
 // holds. DeepBuild never stores or sees a card number: a rule names the processor's reference, text that carries
 // a number is refused, and a receipt is kept as evidence with any number in it masked to its last four digits.
 // The receipt's amount is the purchase's cost reading, which charges the budget and releases the reservation.
-import type { PlanStep } from '@deepbuild/asks';
+import type { Asks, PlanStep } from '@deepbuild/asks';
 import type { Ledger } from '@deepbuild/budget';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
-import { ulid, type Connection, type Event, type RecordStore } from '@deepbuild/record';
-import type { Asks } from '@deepbuild/asks';
+import { asCore, ulid, type Connection, type Event, type RecordStore } from '@deepbuild/record';
 
 export interface PurchaseInput {
   /** `run:<ULID>`: a purchase is named as a paid run is. */
@@ -143,7 +142,7 @@ class Buyer implements Buying {
   }
 
   private core(connection: Connection): Connection {
-    return { writer: 'core', actor: connection.actor, scope: connection.scope, ...(connection.session ? { session: connection.session } : {}) };
+    return asCore(connection);
   }
 
   /** Reads the card rules the log gained. */

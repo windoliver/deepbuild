@@ -1,0 +1,30 @@
+{
+  "claim": "report-send",
+  "diff": "diff --git a/src/report.ts b/src/report.ts\nindex 6e4e09d..38d9c80 100644\n--- a/src/report.ts\n+++ b/src/report.ts\n@@ -1,5 +1,8 @@\n export async function send(report: Report) {\n   try {\n     await mailer.send(report);\n-  } catch {}\n+  } catch (err) {\n+    log.error('report send failed', err);\n+    throw err;\n+  }\n }\n",
+  "rubric": [
+    "unchecked-parse: JSON.parse on input that isn't validated or caught",
+    "swallowed-error: a catch block that drops the error",
+    "off-by-one: a loop bound or index that reaches one past the end",
+    "missing-await: a promise used without await where its result or failure matters",
+    "sql-concat: SQL built by concatenating outside input",
+    "secret-in-code: a credential or token written in source"
+  ],
+  "answer": {
+    "findings": [],
+    "overall_correctness": "patch is correct",
+    "overall_explanation": "The catch now logs and rethrows. Looks good.",
+    "overall_confidence_score": 0.86
+  },
+  "since": [
+    {
+      "rule": "swallowed-error",
+      "sites": [
+        {
+          "file": "src/report.ts",
+          "line": 4,
+          "quote": "} catch {}"
+        }
+      ]
+    }
+  ]
+}

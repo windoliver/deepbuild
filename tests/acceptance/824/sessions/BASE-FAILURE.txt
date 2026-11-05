@@ -1,0 +1,131 @@
+# #824 AC4 (#824.85ef3d40) on the base commit 8173fbd2 (origin/main), Linux aarch64, node v24.22.0, 2026-11-03T08:03Z
+# Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/824/tsconfig.json -> exit 0, no diagnostics
+# Run: node node_modules/vitest/vitest.mjs run --root tests/acceptance/824/sessions --no-file-parallelism -> exit 1
+# Expected reason: benchmarks/hub-sessions.mjs does not exist on the base and no lane or perf task names it.
+# budgets.long.test.ts is skipped here as INCONCLUSIVE (platform linux), never passed: that is the "1 passed" file and "1 skipped" test.
+# The plants (mcp-loads-hub, waiter-keeps-transcript, sessions-no-memory-read) are not reached: the benchmark is missing first.
+
+
+ RUN  v5.0.5 tests/acceptance/824/sessions
+
+ ❯ readings.test.ts (4 tests | 4 failed) 41ms
+   ❯ AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB. A planted MCP server that loads the whole hub package for each session fails, and so does a waiter that keeps a copy of its session's transcript, each naming the per-session growth and the process that grew: the per-session reading (4)
+     × AC4 #824.85ef3d40 the local preflight runs it: a lane in scripts/lanes.mjs or a task in benchmarks/budgets.json names benchmarks/hub-sessions.mjs 39ms
+     × AC4 #824.85ef3d40 1, 10 and 30 sessions: every process DeepBuild runs for them read, summed, and the growth per added session computed from them 1ms
+     × AC4 #824.85ef3d40 the sessions it read were open and idle at the hub: started, stopped, not ended, as many as each reading says, each with its 32 MiB transcript 0ms
+     × AC4 #824.85ef3d40 BLOCKED, never PASS, where the platform can't read a process's memory: sessions-no-memory-read 0ms
+ ❯ planted.test.ts (2 tests | 2 failed) 5ms
+   ❯ AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB. A planted MCP server that loads the whole hub package for each session fails, and so does a waiter that keeps a copy of its session's transcript, each naming the per-session growth and the process that grew: the planted wrong programs (2)
+     × AC4 #824.85ef3d40 mcp-loads-hub fails it, naming the per-session growth and deep mcp as the process that grew 4ms
+     × AC4 #824.85ef3d40 waiter-keeps-transcript fails it, naming the per-session growth and waiter as the process that grew 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  planted.test.ts > AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB. A planted MCP server that loads the whole hub package for each session fails, and so does a waiter that keeps a copy of its session's transcript, each naming the per-session growth and the process that grew: the planted wrong programs > AC4 #824.85ef3d40 mcp-loads-hub fails it, naming the per-session growth and deep mcp as the process that grew
+ FAIL  planted.test.ts > AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB. A planted MCP server that loads the whole hub package for each session fails, and so does a waiter that keeps a copy of its session's transcript, each naming the per-session growth and the process that grew: the planted wrong programs > AC4 #824.85ef3d40 waiter-keeps-transcript fails it, naming the per-session growth and waiter as the process that grew
+AssertionError: benchmarks/hub-sessions.mjs exists: the per-session reading of #824's Scope: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bench helpers.ts:51:94
+     49| /** Runs `node benchmarks/hub-sessions.mjs --home <temp home>`, and as…
+     50| export function bench(o: { plant?: string; args?: string[]; timeoutMs?…
+     51|   expect(existsSync(BENCH), `${BENCH_PATH} exists: the per-session rea…
+       |                                                                                              ^
+     52|   const home = makeHome();
+     53|   return new Promise((resolve) => {
+ ❯ planted.test.ts:23:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  readings.test.ts > AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB. A planted MCP server that loads the whole hub package for each session fails, and so does a waiter that keeps a copy of its session's transcript, each naming the per-session growth and the process that grew: the per-session reading > AC4 #824.85ef3d40 the local preflight runs it: a lane in scripts/lanes.mjs or a task in benchmarks/budgets.json names benchmarks/hub-sessions.mjs
+AssertionError: no lane or perf task runs benchmarks/hub-sessions.mjs: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readings.test.ts:27:62
+     25|     const budgets = readFileSync(join(REPO, 'benchmarks/budgets.json')…
+     26|     const named = [JSON.stringify(lanes.checks), JSON.stringify(lanes.…
+     27|     expect(named, `no lane or perf task runs ${BENCH_PATH}`).toBe(true…
+       |                                                              ^
+     28|   });
+     29|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  readings.test.ts > AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB. A planted MCP server that loads the whole hub package for each session fails, and so does a waiter that keeps a copy of its session's transcript, each naming the per-session growth and the process that grew: the per-session reading > AC4 #824.85ef3d40 1, 10 and 30 sessions: every process DeepBuild runs for them read, summed, and the growth per added session computed from them
+AssertionError: benchmarks/hub-sessions.mjs exists: the per-session reading of #824's Scope: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bench helpers.ts:51:94
+     49| /** Runs `node benchmarks/hub-sessions.mjs --home <temp home>`, and as…
+     50| export function bench(o: { plant?: string; args?: string[]; timeoutMs?…
+     51|   expect(existsSync(BENCH), `${BENCH_PATH} exists: the per-session rea…
+       |                                                                                              ^
+     52|   const home = makeHome();
+     53|   return new Promise((resolve) => {
+ ❯ run readings.test.ts:20:32
+ ❯ readings.test.ts:31:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  readings.test.ts > AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB. A planted MCP server that loads the whole hub package for each session fails, and so does a waiter that keeps a copy of its session's transcript, each naming the per-session growth and the process that grew: the per-session reading > AC4 #824.85ef3d40 the sessions it read were open and idle at the hub: started, stopped, not ended, as many as each reading says, each with its 32 MiB transcript
+AssertionError: benchmarks/hub-sessions.mjs exists: the per-session reading of #824's Scope: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bench helpers.ts:51:94
+     49| /** Runs `node benchmarks/hub-sessions.mjs --home <temp home>`, and as…
+     50| export function bench(o: { plant?: string; args?: string[]; timeoutMs?…
+     51|   expect(existsSync(BENCH), `${BENCH_PATH} exists: the per-session rea…
+       |                                                                                              ^
+     52|   const home = makeHome();
+     53|   return new Promise((resolve) => {
+ ❯ run readings.test.ts:20:32
+ ❯ readings.test.ts:82:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  readings.test.ts > AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB. A planted MCP server that loads the whole hub package for each session fails, and so does a waiter that keeps a copy of its session's transcript, each naming the per-session growth and the process that grew: the per-session reading > AC4 #824.85ef3d40 BLOCKED, never PASS, where the platform can't read a process's memory: sessions-no-memory-read
+AssertionError: benchmarks/hub-sessions.mjs exists: the per-session reading of #824's Scope: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bench helpers.ts:51:94
+     49| /** Runs `node benchmarks/hub-sessions.mjs --home <temp home>`, and as…
+     50| export function bench(o: { plant?: string; args?: string[]; timeoutMs?…
+     51|   expect(existsSync(BENCH), `${BENCH_PATH} exists: the per-session rea…
+       |                                                                                              ^
+     52|   const home = makeHome();
+     53|   return new Promise((resolve) => {
+ ❯ readings.test.ts:107:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  6 failed | 1 skipped (7)
+   Start at  00:02:58
+   Duration  354ms (transform 42%, tests 35%, import 18%, worker 4%)
+

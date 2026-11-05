@@ -1,0 +1,105 @@
+{
+  "id": "look-140-glow",
+  "format": 1,
+  "basis": "physical",
+  "license": "Apache-2.0",
+  "description": "The #140 parity look, after #380's acceptance look: the clean look's status map and fonts, a near-black ground, one role per fixture color, tone map none at the exposure whose scale is 1, the finish at identity, no deband, the glow (bloom) on and the ground grid off.",
+  "palette": {
+    "white": "#ffffff",
+    "graphite": "#1b1d22",
+    "slate": "#8b8f97",
+    "lagoon": "#1aa3c8",
+    "night": "#101114",
+    "stone": "#6e6e6e",
+    "warm-white": "#fff4e0",
+    "orange": "#ff8a1e",
+    "red": "#ff2020",
+    "teal": "#20c0b0",
+    "grey-154": "#9a9a9a",
+    "grey-208": "#d0d0d0",
+    "blue": "#4080ff",
+    "amber": "#ffd040",
+    "ember": "#ff6020",
+    "violet": "#8a50ff"
+  },
+  "roles": {
+    "ground": "night",
+    "ink": "graphite",
+    "muted": "slate",
+    "accent": "lagoon",
+    "floor": "stone",
+    "lamp": "warm-white",
+    "block": "orange",
+    "spill": "red",
+    "crate": "teal",
+    "post": "violet",
+    "grid-minor": "grey-154",
+    "grid-major": "grey-208",
+    "grid-axis": "blue",
+    "spark-a": "amber",
+    "spark-b": "ember"
+  },
+  "themes": {
+    "light": {},
+    "dark": {}
+  },
+  "status": {
+    "pass": "#007429",
+    "fail": "#bf232b",
+    "invalid": "#8645b0",
+    "blocked": "#a44700",
+    "inconclusive": "#666600",
+    "running": "#0063b8",
+    "needs_you": "#8a5900",
+    "stale": "#326c6f",
+    "idle": "#636464"
+  },
+  "status_treatment": {
+    "core_min_px": 4,
+    "glyph": {
+      "pass": "✓",
+      "fail": "✗",
+      "invalid": "⊘",
+      "blocked": "■",
+      "inconclusive": "?",
+      "running": "↻",
+      "needs_you": "!",
+      "stale": "◇",
+      "idle": "○"
+    }
+  },
+  "min_distance": 0.1,
+  "attention_treatment": {
+    "line": "dashed",
+    "role": "ink",
+    "glyph": "⚠"
+  },
+  "legend": "auto",
+  "fonts": {
+    "body": {
+      "family": "Inter",
+      "file": "Inter-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "file": "JetBrainsMono-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    }
+  },
+  "tone_map": "none",
+  "exposure": -0.2630344058337938,
+  "finish": [],
+  "deband": "none",
+  "bloom": {
+    "intensity": 0.3,
+    "radius": 0.85
+  },
+  "ground_3d": {
+    "kind": "none"
+  }
+}

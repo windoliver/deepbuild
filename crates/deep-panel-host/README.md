@@ -1,0 +1,22 @@
+# deep-panel-host
+
+## What it is for
+
+The process agent-built panels run in (#358). It loads one panel under the empty policy plus DeepBuild's module and, per invalidation, runs its script on this process's main thread and writes the element tree on stdout, one JSON object a line. It owns no screen and no authority: a focus move it sees is only reported, and undone unless the app grants it. The JIT is denied before any runtime exists, so the shipping host never has one.
+
+`deep-panel-host serve --panel DIR [--draw]` takes the app's commands on stdin; `deep-panel-host run --panel DIR --renders N --out FILE` runs the host alone for the JIT's proof. `deep-panel-host-jit-control` is the same `run` with the switch left alone: the control that proves the switch is what turns the JIT off.
+
+## Where new code goes
+
+- `src/lib.rs`: the panel, its window and render loop, `serve`, `run` and the flag reader.
+- `src/main.rs`: the shipping binary; it denies native code and caps the heap before anything else.
+- `src/jit_control.rs`: the JIT-on control binary, read from `DEEP_358_*` variables.
+- Tests: the acceptance tests in tests/acceptance/358 drive the binaries.
+
+## What it may import
+
+deep-app (the panel runtime, module and tree parser), gpui-kit's headless context, gpui-shell's script view, quickjs-jit-runtime and serde_json. Nothing imports it: the app starts it as a process of its own.
+
+## Deviations
+
+None.

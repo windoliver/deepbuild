@@ -10,7 +10,10 @@
 //! relayout offered beside it, never moving a kept node on its own. R2 lands the memory rules that
 //! place new nodes into a kept picture.
 
+pub mod labels;
 pub mod module;
+pub mod route;
+pub mod view;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -35,6 +38,10 @@ pub struct Node {
     pub id: String,
     pub w: f64,
     pub h: f64,
+    /// The group whose box it lays out in, if any.
+    pub group: Option<String>,
+    /// The item that draws it (a frame, card, icon or recipe instance), if any.
+    pub item: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -60,6 +67,8 @@ pub enum Direction {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Layout {
+    /// `pinned`: every node at its memory's place; otherwise `layered`.
+    pub pinned: bool,
     pub direction: Direction,
     /// Required and non-zero, never the clock's. The basic layered layout draws nothing at random,
     /// so the same graph gives the same picture under any seed.
@@ -78,6 +87,12 @@ pub struct Place {
     pub order: u32,
     pub x: f64,
     pub y: f64,
+}
+
+impl deep_canvas::schedule::Canonical for Place {
+    fn encode(&self, out: &mut Vec<u8>) {
+        deep_canvas::schedule::Canonical::encode(&(&self.rank, &self.order, &self.x, &self.y), out);
+    }
 }
 
 /// The layout memory, by stable node ID.
@@ -111,10 +126,20 @@ pub fn read_graph(value: &Value) -> Result<Graph, Refused> {
         if !ids.insert(id.clone()) {
             return refuse("graph.duplicate_id", id);
         }
+        let group = match n.get("group") {
+            None | Some(Value::Null) => None,
+            some => Some(text(some, &format!("nodes/{i}/group"))?),
+        };
+        let item = match n.get("item") {
+            None | Some(Value::Null) => None,
+            some => Some(text(some, &format!("nodes/{i}/item"))?),
+        };
         read_nodes.push(Node {
             w: size(n.get("w"), &format!("nodes/{i}/w"))?,
             h: size(n.get("h"), &format!("nodes/{i}/h"))?,
             id,
+            group,
+            item,
         });
     }
     let node_ids = ids.clone();
@@ -146,11 +171,13 @@ pub fn read_graph(value: &Value) -> Result<Graph, Refused> {
     })
 }
 
-/// Reads `{algo: "layered", direction?, seed, spacing?}`.
+/// Reads `{algo: "layered" | "pinned", direction?, seed, spacing?}`.
 pub fn read_layout(value: &Value) -> Result<Layout, Refused> {
-    if value.get("algo").and_then(Value::as_str) != Some("layered") {
-        return refuse("layout.algo_unsupported", "algo");
-    }
+    let pinned = match value.get("algo").and_then(Value::as_str) {
+        Some("layered") => false,
+        Some("pinned") => true,
+        _ => return refuse("layout.algo_unsupported", "algo"),
+    };
     let direction = match value.get("direction").map(Value::as_str) {
         None | Some(Some("down")) => Direction::Down,
         Some(Some("right")) => Direction::Right,
@@ -166,6 +193,7 @@ pub fn read_layout(value: &Value) -> Result<Layout, Refused> {
         some => size(some, &format!("spacing/{name}")),
     };
     Ok(Layout {
+        pinned,
         direction,
         seed,
         node: gap("node", 24.0)?,
@@ -421,27 +449,211 @@ fn gap(layout: &Layout, left: Slot, right: Slot) -> f64 {
     }
 }
 
-/// Why a memory can't be kept: the nodes it lacks or whose edges its ranks break, and the full
-/// relayout offered in its place.
+/// A group's box and its title's box, `[x, y, w, h]` in u.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GroupBox {
+    pub rect: [f64; 4],
+    pub title: [f64; 4],
+}
+
+/// The band at a group box's top that holds its title, and the title's height inside it, in u.
+pub const TITLE_BAND: f64 = 20.0;
+pub const TITLE_HEIGHT: f64 = 16.0;
+/// A title's width per character, in u: a 13 px label face's mean advance, rounded up.
+pub const TITLE_ADVANCE: f64 = 7.0;
+
+/// The layered layout with `groups: box` (graph@1, Semantics): the nodes of one group lay out
+/// contiguous in every rank, as a column of its own inside a box the layout sizes around them with
+/// the group's title on top; groups stand side by side in the order of their nodes' mean place in
+/// their ranks, then by name. Nodes in no group share one column with no box.
+pub fn grouped(
+    graph: &Graph,
+    layout: &Layout,
+) -> Result<(Memory, BTreeMap<String, GroupBox>), Refused> {
+    let index: BTreeMap<&str, usize> = graph
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.id.as_str(), i))
+        .collect();
+    let rank = ranks(graph, &index)?;
+    let (slots, rows) = order(graph, &index, &rank);
+    let rows: Vec<Vec<usize>> = rows
+        .iter()
+        .map(|row| {
+            row.iter()
+                .filter_map(|&s| match slots[s] {
+                    Slot::Node(i) => Some(i),
+                    Slot::Pass => None,
+                })
+                .collect()
+        })
+        .collect();
+    let pad = layout.edge;
+    let group = |i: usize| graph.nodes[i].group.as_deref();
+    // Each column's mean place, a node's place in its rank as a fraction of the rank.
+    let mut mean: BTreeMap<Option<&str>, (f64, f64)> = BTreeMap::new();
+    for row in &rows {
+        for (k, &i) in row.iter().enumerate() {
+            let m = mean.entry(group(i)).or_default();
+            m.0 += (k as f64 + 0.5) / row.len() as f64;
+            m.1 += 1.0;
+        }
+    }
+    let mut columns: Vec<(f64, Option<&str>)> =
+        mean.iter().map(|(&g, &(sum, n))| (sum / n, g)).collect();
+    columns.sort_by(|p, q| p.0.total_cmp(&q.0).then(p.1.cmp(&q.1)));
+    let column: BTreeMap<Option<&str>, usize> = columns
+        .iter()
+        .enumerate()
+        .map(|(c, &(_, g))| (g, c))
+        .collect();
+    let rows: Vec<Vec<usize>> = rows
+        .into_iter()
+        .map(|mut row| {
+            row.sort_by_key(|&i| column[&group(i)]);
+            row
+        })
+        .collect();
+    let along = |i: usize| match layout.direction {
+        Direction::Down => graph.nodes[i].h,
+        Direction::Right => graph.nodes[i].w,
+    };
+    let across = |i: usize| match layout.direction {
+        Direction::Down => graph.nodes[i].w,
+        Direction::Right => graph.nodes[i].h,
+    };
+    // Each column's widest rank inside it, then its width with the box's padding.
+    let mut inner = vec![0.0f64; columns.len()];
+    for row in &rows {
+        for (c, (_, g)) in columns.iter().enumerate() {
+            let members: Vec<usize> = row.iter().copied().filter(|&i| group(i) == *g).collect();
+            let w: f64 = members.iter().map(|&i| across(i)).sum::<f64>()
+                + layout.node * members.len().saturating_sub(1) as f64;
+            inner[c] = inner[c].max(w);
+        }
+    }
+    let boxed = |c: usize| columns[c].1.is_some();
+    // The layout keeps one padding clear of its origin, so no box touches the view's edge.
+    let mut left = Vec::with_capacity(columns.len());
+    let mut at = pad;
+    for (c, w) in inner.iter().enumerate() {
+        left.push(at);
+        at += w + if boxed(c) { 2.0 * pad } else { 0.0 } + layout.node;
+    }
+    // Ranks leave room for a title band and a box's padding above and below.
+    let gap = layout.rank.max(TITLE_BAND + 2.0 * pad + layout.edge);
+    let mut start = Vec::with_capacity(rows.len());
+    let mut top = TITLE_BAND + 2.0 * pad;
+    for row in &rows {
+        let depth = row.iter().map(|&i| along(i)).fold(0.0, f64::max);
+        start.push((top, depth));
+        top += depth + gap;
+    }
+    let mut memory = Memory::new();
+    for (r, row) in rows.iter().enumerate() {
+        let (top, depth) = start[r];
+        for (c, (_, g)) in columns.iter().enumerate() {
+            let members: Vec<usize> = row.iter().copied().filter(|&i| group(i) == *g).collect();
+            let width: f64 = members.iter().map(|&i| across(i)).sum::<f64>()
+                + layout.node * members.len().saturating_sub(1) as f64;
+            let mut cross = left[c] + if boxed(c) { pad } else { 0.0 } + (inner[c] - width) / 2.0;
+            for &i in &members {
+                let main = top + (depth - along(i)) / 2.0;
+                let (x, y) = match layout.direction {
+                    Direction::Down => (cross, main),
+                    Direction::Right => (main, cross),
+                };
+                let order = row.iter().position(|&k| k == i).unwrap_or(0) as u32;
+                memory.insert(
+                    graph.nodes[i].id.clone(),
+                    Place {
+                        rank: r as u32,
+                        order,
+                        x,
+                        y,
+                    },
+                );
+                cross += across(i) + layout.node;
+            }
+        }
+    }
+    let mut boxes = BTreeMap::new();
+    for (c, (_, g)) in columns.iter().enumerate() {
+        let Some(name) = g else { continue };
+        // The members' extent along the ranks, from the first's top to the last's bottom.
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for n in graph
+            .nodes
+            .iter()
+            .filter(|n| n.group.as_deref() == Some(*name))
+        {
+            let p = &memory[&n.id];
+            let (main, len) = match layout.direction {
+                Direction::Down => (p.y, n.h),
+                Direction::Right => (p.x, n.w),
+            };
+            lo = lo.min(main);
+            hi = hi.max(main + len);
+        }
+        let (lo, hi) = (lo - pad - TITLE_BAND, hi + pad);
+        let (x0, w) = (left[c], inner[c] + 2.0 * pad);
+        let rect = match layout.direction {
+            Direction::Down => [x0, lo, w, hi - lo],
+            Direction::Right => [lo, x0, hi - lo, w],
+        };
+        let title_w = (name.chars().count() as f64 * TITLE_ADVANCE).min(rect[2] - 2.0 * pad);
+        let title = [
+            rect[0] + pad,
+            rect[1] + (TITLE_BAND - TITLE_HEIGHT) / 2.0,
+            title_w,
+            TITLE_HEIGHT,
+        ];
+        boxes.insert(name.to_string(), GroupBox { rect, title });
+    }
+    Ok((memory, boxes))
+}
+
+/// Why a memory can't be kept: the nodes whose ranks its edges break, and the full relayout
+/// offered in its place.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Relayout {
     pub nodes: Vec<String>,
     pub offered: Memory,
 }
 
-/// The layout of a graph a memory holds: the memory itself for the graph's nodes (each rank's order
-/// renumbered when a removed node leaves a gap), or the relayout it would take.
+/// The layout of a graph against its memory (graph@1, Semantics): kept nodes keep their rank and
+/// order as hard constraints, and their x and y unless their rank changed; a new node takes the
+/// rank its edges ask and its neighbours' barycenter slot, and only the ranks it joins are
+/// re-placed, the fewest moves that keep the spacing. A removed node leaves its rank's order
+/// renumbered and every place kept. When the kept ranks can't hold an edge, or a new node's edges
+/// ask for no rank, it returns the relayout it would take and moves nothing. Beside the layout, the
+/// ranks it re-placed, ascending.
 pub fn keep(
     graph: &Graph,
     layout: &Layout,
     memory: &Memory,
-) -> Result<Result<Memory, Relayout>, Refused> {
-    let mut broken: BTreeSet<String> = graph
+) -> Result<Result<(Memory, Vec<u32>), Relayout>, Refused> {
+    let index: BTreeMap<&str, usize> = graph
         .nodes
         .iter()
-        .filter(|n| !memory.contains_key(&n.id))
-        .map(|n| n.id.clone())
+        .enumerate()
+        .map(|(i, n)| (n.id.as_str(), i))
         .collect();
+    let n = graph.nodes.len();
+    let mut ins: Vec<Vec<(usize, u32)>> = vec![Vec::new(); n];
+    let mut outs: Vec<Vec<(usize, u32)>> = vec![Vec::new(); n];
+    for e in &graph.edges {
+        let (a, b) = (index[e.a.as_str()], index[e.b.as_str()]);
+        outs[a].push((b, e.min_len));
+        ins[b].push((a, e.min_len));
+    }
+    let held: Vec<Option<Place>> = graph
+        .nodes
+        .iter()
+        .map(|node| memory.get(&node.id).copied())
+        .collect();
+    let mut broken = BTreeSet::new();
     for e in &graph.edges {
         if let (Some(a), Some(b)) = (memory.get(&e.a), memory.get(&e.b)) {
             if b.rank < a.rank.saturating_add(e.min_len) {
@@ -449,25 +661,209 @@ pub fn keep(
             }
         }
     }
+    // New nodes in topological order among themselves, by ID where nothing orders them.
+    let fresh: Vec<usize> = (0..n).filter(|&i| held[i].is_none()).collect();
+    let mut waiting: Vec<usize> = (0..n)
+        .map(|i| ins[i].iter().filter(|&&(a, _)| held[a].is_none()).count())
+        .collect();
+    let mut ready: BTreeSet<usize> = fresh.iter().copied().filter(|&i| waiting[i] == 0).collect();
+    let mut topo = Vec::with_capacity(fresh.len());
+    while let Some(i) = ready.pop_first() {
+        topo.push(i);
+        for &(b, _) in &outs[i] {
+            if held[b].is_none() {
+                waiting[b] -= 1;
+                if waiting[b] == 0 {
+                    ready.insert(b);
+                }
+            }
+        }
+    }
+    if topo.len() < fresh.len() {
+        if let Some(&stuck) = fresh.iter().find(|&&i| waiting[i] > 0) {
+            broken.insert(graph.nodes[stuck].id.clone());
+        }
+    }
+    // Each new node's highest rank its kept children allow, then its rank: just below its lowest
+    // parent, or just above its nearest child when it has no parent.
+    let mut upper: Vec<Option<i64>> = vec![None; n];
+    for &i in topo.iter().rev() {
+        upper[i] = outs[i]
+            .iter()
+            .filter_map(|&(b, len)| {
+                held[b]
+                    .map(|p| i64::from(p.rank))
+                    .or(upper[b])
+                    .map(|r| r - i64::from(len))
+            })
+            .min();
+    }
+    let mut rank: Vec<i64> = held
+        .iter()
+        .map(|p| p.map_or(-1, |p| i64::from(p.rank)))
+        .collect();
+    for &i in &topo {
+        let lower = ins[i]
+            .iter()
+            .map(|&(a, len)| rank[a] + i64::from(len))
+            .max();
+        let r = match (lower, upper[i]) {
+            (Some(lo), _) => lo,
+            (None, Some(up)) => up,
+            (None, None) => 0,
+        };
+        if r < 0 || upper[i].is_some_and(|up| r > up) {
+            broken.insert(graph.nodes[i].id.clone());
+        }
+        rank[i] = r.max(0);
+    }
     if !broken.is_empty() {
         return Ok(Err(Relayout {
             nodes: broken.into_iter().collect(),
             offered: layered(graph, layout)?,
         }));
     }
-    let mut kept: Vec<(&String, Place)> =
-        graph.nodes.iter().map(|n| (&n.id, memory[&n.id])).collect();
-    kept.sort_by(|p, q| (p.1.rank, p.1.order, p.0).cmp(&(q.1.rank, q.1.order, q.0)));
-    let mut out = Memory::new();
-    let mut previous = None;
-    let mut order = 0;
-    for (id, place) in kept {
-        if previous != Some(place.rank) {
-            order = 0;
-            previous = Some(place.rank);
+    let along = |i: usize| match layout.direction {
+        Direction::Down => graph.nodes[i].h,
+        Direction::Right => graph.nodes[i].w,
+    };
+    let across = |i: usize| match layout.direction {
+        Direction::Down => graph.nodes[i].w,
+        Direction::Right => graph.nodes[i].h,
+    };
+    let split = |p: &Place| match layout.direction {
+        Direction::Down => (p.x, p.y),
+        Direction::Right => (p.y, p.x),
+    };
+    // Each rank's kept nodes in their kept order, and each rank's centre line along the ranks.
+    let mut rows: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
+    let mut lines: BTreeMap<i64, f64> = BTreeMap::new();
+    for i in 0..n {
+        if let Some(p) = held[i] {
+            rows.entry(rank[i]).or_default().push(i);
+            lines.entry(rank[i]).or_insert(split(&p).1 + along(i) / 2.0);
         }
-        out.insert(id.clone(), Place { order, ..place });
-        order += 1;
     }
-    Ok(Ok(out))
+    for row in rows.values_mut() {
+        row.sort_by_key(|&i| (held[i].map_or(0, |p| p.order), &graph.nodes[i].id));
+    }
+    // Where each node's box starts across the ranks and along them.
+    let mut cross: Vec<f64> = vec![0.0; n];
+    let mut main: Vec<f64> = vec![0.0; n];
+    for i in 0..n {
+        if let Some(p) = held[i] {
+            (cross[i], main[i]) = split(&p);
+        }
+    }
+    let mut placed: Vec<bool> = held.iter().map(Option::is_some).collect();
+    let mut joining: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
+    for &i in &topo {
+        joining.entry(rank[i]).or_default().push(i);
+    }
+    for (&r, newcomers) in &joining {
+        let row = rows.entry(r).or_default();
+        let centre = |i: usize, cross: &[f64]| cross[i] + across(i) / 2.0;
+        for &i in newcomers {
+            let near: Vec<f64> = ins[i]
+                .iter()
+                .chain(&outs[i])
+                .filter(|&&(j, _)| placed[j])
+                .map(|&(j, _)| centre(j, &cross))
+                .collect();
+            let slot = if near.is_empty() {
+                row.len()
+            } else {
+                let bary = near.iter().sum::<f64>() / near.len() as f64;
+                row.iter()
+                    .position(|&k| centre(k, &cross) > bary)
+                    .unwrap_or(row.len())
+            };
+            let desired = if near.is_empty() {
+                row.last()
+                    .map_or(0.0, |&k| cross[k] + across(k) + layout.node)
+            } else {
+                near.iter().sum::<f64>() / near.len() as f64 - across(i) / 2.0
+            };
+            cross[i] = desired;
+            row.insert(slot, i);
+            placed[i] = true;
+        }
+        settle(row, &mut cross, &|i| across(i), layout.node);
+        // The rank's centre line, or a new rank's below the last.
+        let line = match lines.get(&r) {
+            Some(&line) => line,
+            None => {
+                let below = (0..n)
+                    .filter(|&k| placed[k] && rank[k] < r)
+                    .map(|k| main[k] + along(k))
+                    .fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.max(v))));
+                let depth = newcomers.iter().map(|&i| along(i)).fold(0.0, f64::max);
+                let line = below.map_or(depth / 2.0, |b| b + layout.rank + depth / 2.0);
+                lines.insert(r, line);
+                line
+            }
+        };
+        for &i in newcomers {
+            main[i] = line - along(i) / 2.0;
+        }
+    }
+    let mut out = Memory::new();
+    for (&r, row) in &rows {
+        for (order, &i) in row.iter().enumerate() {
+            let (x, y) = match layout.direction {
+                Direction::Down => (cross[i], main[i]),
+                Direction::Right => (main[i], cross[i]),
+            };
+            out.insert(
+                graph.nodes[i].id.clone(),
+                Place {
+                    rank: r as u32,
+                    order: order as u32,
+                    x,
+                    y,
+                },
+            );
+        }
+    }
+    let replaced = joining.keys().map(|&r| r as u32).collect();
+    Ok(Ok((out, replaced)))
+}
+
+/// The fewest moves across a rank that keep its order and spacing: each box keeps where it wants
+/// to start unless a neighbour overlaps it, and boxes that overlap shift together to the mean of
+/// where they want to be (pool-adjacent-violators, so the squared moves are least).
+fn settle(row: &[usize], cross: &mut [f64], across: &dyn Fn(usize) -> f64, gap: f64) {
+    // Each block: its first slot, its slot count, and its start's least-squares place.
+    let mut blocks: Vec<(usize, usize, f64)> = Vec::new();
+    let mut offset = vec![0.0; row.len()];
+    for k in 1..row.len() {
+        offset[k] = offset[k - 1] + across(row[k - 1]) + gap;
+    }
+    for k in 0..row.len() {
+        blocks.push((k, 1, cross[row[k]] - offset[k]));
+        while blocks.len() > 1 {
+            let (s2, n2, p2) = blocks[blocks.len() - 1];
+            let (s1, n1, p1) = blocks[blocks.len() - 2];
+            if p1 <= p2 {
+                break;
+            }
+            blocks.truncate(blocks.len() - 2);
+            let mean = (p1 * n1 as f64 + p2 * n2 as f64) / (n1 + n2) as f64;
+            debug_assert_eq!(s1 + n1, s2);
+            blocks.push((s1, n1 + n2, mean));
+        }
+    }
+    for (start, count, at) in blocks {
+        if count == 1 {
+            continue;
+        }
+        cross[row[start]] = at + offset[start];
+        for k in start + 1..start + count {
+            cross[row[k]] = cross[row[k - 1]] + across(row[k - 1]) + gap;
+        }
+    }
+    // Rounding never lets a gap fall short of the spacing.
+    for k in 1..row.len() {
+        cross[row[k]] = cross[row[k]].max(cross[row[k - 1]] + across(row[k - 1]) + gap);
+    }
 }

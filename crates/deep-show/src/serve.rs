@@ -29,6 +29,8 @@ use std::time::Duration;
 
 use serde_json::{json, Map, Value};
 
+use crate::optional;
+
 /// The most a terminal's stream holds that its host hasn't taken: 16 MiB.
 pub const WINDOW: usize = 16 * 1024 * 1024;
 /// One read of the PTY, and one frame to the host, at most.
@@ -94,7 +96,6 @@ struct Serve {
     panels: BTreeMap<String, [f64; 4]>,
     /// Plug-in panels: which terminal each shows, and whether it takes raw input.
     terminals_of: BTreeMap<String, (String, bool)>,
-    sessions: Vec<String>,
     terms: BTreeMap<String, Term>,
     focus: Option<String>,
     pointer: Option<[f64; 2]>,
@@ -191,11 +192,6 @@ impl Serve {
         Some(Serve {
             panels,
             terminals_of: BTreeMap::new(),
-            sessions: input
-                .get("sessions")
-                .and_then(Value::as_object)
-                .map(|s| s.keys().cloned().collect())
-                .unwrap_or_default(),
             terms: BTreeMap::new(),
             focus: None,
             pointer: None,
@@ -204,10 +200,7 @@ impl Serve {
                 None => String::new(),
                 Some(c) => c.as_str()?.to_string(),
             },
-            record: match input.get("record") {
-                None => None,
-                Some(r) => Some(r.as_str()?.to_string()),
-            },
+            record: optional(input.get("record"), |r| Some(r.as_str()?.to_string()))?,
             plant,
         })
     }
@@ -743,7 +736,6 @@ impl Serve {
             self.write(terminal, bytes.as_bytes());
             return json!({"written": true});
         }
-        let _ = &self.sessions;
         json!({"code": "raw_input_from_agent", "writer": writer,
                "what": format!("raw input comes only from your focused panel; {writer} is an agent's session")})
     }

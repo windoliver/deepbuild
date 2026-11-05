@@ -11,20 +11,30 @@
 //   helper devices <file>       what the policy this process runs under says about each device, from sandbox_check()
 //                               on itself without reporting: one line each for the camera, the microphone, the audio
 //                               output (the audio server's mach-lookup) and a screen capture (the window server's).
+//   helper pty <dir> <cols> <rows> <protocol> <lock> <plants> <program> [<arg>...]
+//                               a hosted terminal's host process (#104, #989), in pty.c, which the Linux helper
+//                               shares.
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <libproc.h>
+#include <limits.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <sys/ioctl.h>
 #include <sys/proc_info.h>
+#include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <util.h>
 
 extern char **environ;
 extern int sandbox_check(pid_t pid, const char *operation, int type, ...);
@@ -130,9 +140,12 @@ static int devices(void) {
   return 0;
 }
 
+#include "pty.c"
+
 int main(int argc, char **argv) {
   if (argc >= 2 && strcmp(argv[1], "scan") == 0) return scan(argc - 2, argv + 2);
-  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | probe <file> <op> <arg>... | devices <file>\n"); return 2; }
+  if (argc >= 9 && strcmp(argv[1], "pty") == 0) return host(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5]), argv[6], argv[7], argv + 8);
+  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | probe <file> <op> <arg>... | devices <file> | pty <dir> <cols> <rows> <protocol> <lock> <plants> <program> [<arg>...]\n"); return 2; }
   out = fopen(argv[2], "a");
   if (!out) { perror(argv[2]); return 2; }
   if (strcmp(argv[1], "devices") == 0) return devices();

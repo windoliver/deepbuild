@@ -5,17 +5,15 @@
 // another key than the one trusted for the package installs only that way.
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { call, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
-import { startOf } from './wire.js';
+import { callAsYou } from './client.js';
+import { deprecatedCalls } from './contracts.js';
 
 const USAGE = 'Usage: deep install [--trust-key] <package folder>';
-/** Refusals that leave nothing installed and nothing decided: not confirmed, an agent's command, or a hub that couldn't. */
-const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);
 
 interface Manifest {
   id?: string; version?: string; digest?: string; publisher_key?: string; access?: { words?: string[] }; notices?: string[]; actions?: string[];
   checks?: string[]; provides?: { interface: string }[]; uses?: { interface: string }[]; replaces?: string[]; conflicts?: string[]; kernel?: string[];
+  calls?: string[];
 }
 
 const list = (values: readonly string[] | undefined): string => (values?.length ? values.join(', ') : 'none');
@@ -49,27 +47,15 @@ export async function installCommand(args: readonly string[]): Promise<number> {
     `  replaces: ${list(m.replaces)}`,
     `  conflicts with: ${list(m.conflicts)}`,
     `  runs on: ${list(m.kernel)}`,
+    // The install check names each deprecated method the manifest calls, served through its adapter until it stops (#139).
+    ...deprecatedCalls(m).map((e) => `  deprecated: ${m.id} calls ${e.method}, deprecated since ${e.deprecated_since}; it is served through ${e.replaced_by}${e.stops_serving ? ` until ${e.stops_serving}` : ''}, so call ${e.replaced_by}`),
     '',
   ].join('\n'));
-  let reply: Reply;
-  try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-    reply = await call(hubAddress().path, token, 'extension.install', { from, ...(trustKey ? { trust_key: true } : {}) }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
-  } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}; nothing was installed\n`);
-    return 3;
-  }
-  if ('error' in reply) {
-    process.stderr.write(`${reply.error.remediation}\n`);
-    return UNDECIDED_CODES.has(reply.error.code) ? 3 : 2;
-  }
-  if (reply.result.status === 'refused') {
-    process.stderr.write(`REFUSED: ${String(reply.result.reason)}\n`);
-    return 1;
-  }
-  process.stdout.write(`Installed ${String(reply.result.id)}@${String(reply.result.version)}\n`);
-  if (typeof reply.result.not_loaded === 'string') {
-    process.stderr.write(`It is not loaded: ${reply.result.not_loaded}\n`);
+  const result = await callAsYou('extension.install', { from, ...(trustKey ? { trust_key: true } : {}) }, 'nothing was installed');
+  if (typeof result === 'number') return result;
+  process.stdout.write(`Installed ${String(result.id)}@${String(result.version)}\n`);
+  if (typeof result.not_loaded === 'string') {
+    process.stderr.write(`It is not loaded: ${result.not_loaded}\n`);
     return 1;
   }
   return 0;

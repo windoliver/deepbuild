@@ -16,10 +16,14 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-/** What the eval replays a change of: instruction files at any depth, skills, and the agents' settings and hooks. */
-const CONFIG = (file) => /(^|\/)(CLAUDE|AGENTS)\.md$/.test(file) || /^(skills|\.claude|\.codex)\//.test(file);
+/**
+ * What the eval replays a change of: instruction files at any depth, skills, and the agents' settings and hooks. The
+ * config eval lane in scripts/lanes.mjs runs for a change to them.
+ */
+export const inputs = (file) => /(^|\/)(CLAUDE|AGENTS)\.md$/.test(file) || /^(skills|\.claude|\.codex)\//.test(file);
 /** Words that would tell an agent it is being evaluated: a task whose own words hold one isn't replayed. */
 const MARKS = /eval|replay|judge|variant|bench|experiment/i;
 
@@ -34,7 +38,7 @@ function variantsOf(cwd, base) {
   const from = base ?? tryGit(top, 'merge-base', 'HEAD', 'origin/main');
   if (!from) return { why: 'no merge base with origin/main; name one with --base' };
   const changed = [...git(top, 'diff', '--name-only', '-z', '--no-renames', from).split('\0'), ...git(top, 'ls-files', '-z', '--others', '--exclude-standard').split('\0')]
-    .filter((f) => f && CONFIG(f)).sort();
+    .filter((f) => f && inputs(f)).sort();
   const files = { base: {}, change: {} };
   for (const file of new Set(changed)) {
     const now = join(top, file);
@@ -139,5 +143,7 @@ function usage(message) {
   return 2;
 }
 
-const [command, ...rest] = process.argv.slice(2);
-process.exitCode = command === 'plan' ? await plan(rest) : command === 'run' ? await run(rest) : command === 'gate' ? gate() : usage(`unknown command ${command ?? '(none)'}`);
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const [command, ...rest] = process.argv.slice(2);
+  process.exitCode = command === 'plan' ? await plan(rest) : command === 'run' ? await run(rest) : command === 'gate' ? gate() : usage(`unknown command ${command ?? '(none)'}`);
+}

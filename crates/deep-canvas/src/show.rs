@@ -117,14 +117,10 @@ impl Band {
 /// `payload` as `writer`'s document `doc`: the envelope with `id`, one layer for the writer,
 /// titled `title`, and every item in it. A payload that names a layer or a writer (a `layers`
 /// map, an item's `layer`, a `writer` field) is refused, each field an `unknown_field` issue: the
-/// layer and its writer come from the connection alone.
-pub fn stamp(
-    payload: &Value,
-    doc: &str,
-    writer: &Writer,
-    title: &str,
-) -> Result<Value, Vec<Issue>> {
-    let Some(envelope) = payload.as_object() else {
+/// layer and its writer come from the connection alone. The payload is moved into the document,
+/// never copied: a 10,000-item payload is checked as it arrives (#386).
+pub fn stamp(payload: Value, doc: &str, writer: &Writer, title: &str) -> Result<Value, Vec<Issue>> {
+    let Value::Object(envelope) = payload else {
         return Err(vec![Issue::envelope(
             "out_of_range",
             String::new(),
@@ -165,7 +161,7 @@ pub fn stamp(
     out.insert("id".into(), json!(doc));
     for (key, value) in envelope {
         if key != "id" {
-            out.insert(key.clone(), value.clone());
+            out.insert(key, value);
         }
     }
     out.insert(
@@ -318,7 +314,7 @@ pub fn unreadable_handles(doc: &Value, can_read: impl Fn(&str) -> bool) -> Vec<I
             let Some(source) = member(binding, "source").and_then(Value::as_str) else {
                 continue;
             };
-            let Ok(handle) = Handle::parse(source) else {
+            let Ok(handle) = Handle::parse_source(source) else {
                 continue;
             };
             if handle.scheme() != Scheme::Doc && !can_read(source) {

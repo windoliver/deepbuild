@@ -1,6 +1,8 @@
 {
   "title": "session.start@3",
   "description": "A session started, with which billing keys its agent had set.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "sessions"
   ],

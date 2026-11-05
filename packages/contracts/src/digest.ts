@@ -4,8 +4,9 @@ import { isObject, resolveRef, type JsonObject, type JsonValue, type Schema, typ
 import { getSchema } from './schemas.js';
 
 // A closure (x-closure) and the adapter rules (x-rules) describe a set's governance, not its shape, so a minor may
-// change them without a new digest.
-const ANNOTATIONS = new Set(['title', 'description', 'examples', '$comment', 'x-closure', 'x-rules']);
+// change them without a new digest; so does an entry's history (#139), and `x-acts`, which marks a field a reader must
+// act on and is read by the contract step, never by a reader of the shape.
+const ANNOTATIONS = new Set(['title', 'description', 'examples', '$comment', 'x-closure', 'x-rules', 'x-since', 'x-stability', 'x-tracking', 'x-deprecated_since', 'x-replaced_by', 'x-acts']);
 const SCHEMA_MAPS = new Set(['properties']);
 const SCHEMA_SLOTS = new Set(['items', 'additionalProperties', 'propertyNames']);
 

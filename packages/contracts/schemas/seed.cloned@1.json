@@ -1,6 +1,8 @@
 {
   "title": "seed.cloned@1",
   "description": "A run's database was cloned from its environment's seed template (#332). It carries the template's seed record, its source, when that source was copied and its migration revision, with the template's digest and when it was cloned. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

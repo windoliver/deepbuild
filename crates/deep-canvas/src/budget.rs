@@ -54,6 +54,32 @@ impl Class {
         CLASSES.into_iter().find(|c| c.name() == name)
     }
 
+    /// The threads a frame's independent nodes run on (#857); `None` for export, which takes the
+    /// machine's performance cores. A live view's count never comes from the machine.
+    pub fn threads(self) -> Option<usize> {
+        match self {
+            Class::CoreView => Some(1),
+            Class::DataView | Class::Figure => Some(2),
+            Class::WorkProduct | Class::Showpiece => Some(4),
+            Class::Export => None,
+        }
+    }
+
+    /// The table's ambient cap: the most frames a second a live view of this class presents;
+    /// `None` for the views that move only on change and for export, which isn't shown.
+    pub fn ambient_fps(self) -> Option<u32> {
+        match self {
+            Class::Figure | Class::WorkProduct | Class::Showpiece => Some(30),
+            Class::CoreView | Class::DataView | Class::Export => None,
+        }
+    }
+
+    /// The table's "when hidden": whether a live view of this class draws in a window that is
+    /// `visible` and `focused`. Every class pauses while hidden; a showpiece also while unfocused.
+    pub fn draws(self, visible: bool, focused: bool) -> bool {
+        visible && (focused || self != Class::Showpiece)
+    }
+
     /// The budget class table's row.
     pub fn limits(self) -> Limits {
         let (gpu_ms, cpu_ms, mb, scale_moving) = match self {
@@ -108,5 +134,21 @@ mod tests {
         );
         assert!(of(&json!({"budget": {"class": "huge"}})).is_none());
         assert!(of(&json!({})).is_none());
+    }
+
+    #[test]
+    fn the_table_caps_ambient_frames_and_pauses_a_showpiece_when_hidden_or_unfocused() {
+        let caps: Vec<_> = CLASSES.iter().map(|c| c.ambient_fps()).collect();
+        assert_eq!(caps, [None, None, Some(30), Some(30), Some(30), None]);
+        for c in CLASSES {
+            assert!(c.draws(true, true), "{} draws while shown", c.name());
+            assert!(!c.draws(false, true), "{} pauses while hidden", c.name());
+            assert_eq!(
+                c.draws(true, false),
+                c != Class::Showpiece,
+                "only a showpiece pauses while unfocused ({})",
+                c.name()
+            );
+        }
     }
 }

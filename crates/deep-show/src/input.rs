@@ -16,6 +16,7 @@ use serde_json::{json, Value};
 
 use crate::hub::{Hub, Planted};
 use crate::placement::Grid;
+use crate::refused;
 use crate::shared::FLICKS;
 
 /// What a frame draws besides the revision: the camera, and the view controls that choose the
@@ -34,7 +35,7 @@ pub struct PanelScope {
     seen: Vec<(i64, Seen)>,
 }
 
-fn point(v: &Value) -> Option<[f64; 2]> {
+pub fn point(v: &Value) -> Option<[f64; 2]> {
     let a = v.as_array().filter(|a| a.len() == 2)?;
     Some([a[0].as_f64()?, a[1].as_f64()?])
 }
@@ -85,10 +86,6 @@ pub fn event(v: &Value) -> Option<Event> {
         },
         _ => return None,
     })
-}
-
-fn refused(code: &str) -> Value {
-    json!({"code": code})
 }
 
 impl Hub<'_> {
@@ -203,7 +200,7 @@ impl Hub<'_> {
     }
 
     /// A popped-out panel's rect in its own window's px, and that window's display size.
-    fn placed(&self, panel: &str) -> Option<([f64; 4], [f64; 2])> {
+    pub(crate) fn placed(&self, panel: &str) -> Option<([f64; 4], [f64; 2])> {
         let w = self.placement.window_of(panel)?;
         if w.view.as_deref() != Some(panel) {
             return None;
@@ -294,6 +291,12 @@ impl Hub<'_> {
 
     /// `input`: one hardware input to a panel's canvas.
     pub fn input(&mut self, panel: &str, event: &Event) -> Value {
+        // #498: a panel that shows no canvas document still takes your input, so a press there
+        // is a gesture (Play on its transport).
+        if self.panel_document(panel).is_none() && self.slot(panel).is_some() {
+            let (serial, _) = self.route(panel, event);
+            return json!({"serial": serial});
+        }
         if let Err(e) = self.panel_scope(panel) {
             return e;
         }
@@ -372,11 +375,7 @@ impl Hub<'_> {
                 &self.scenario.evidence,
             )
             .map_err(|u| json!({"code": u.code, "path": u.path}))?;
-        let [w, h] = drawn.frame.size;
-        let size = size.unwrap_or([
-            w.round().clamp(1.0, 8192.0) as u16,
-            h.round().clamp(1.0, 8192.0) as u16,
-        ]);
+        let size = size.unwrap_or_else(|| crate::snapshot::px(drawn.frame.size));
         let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
         let png = crate::snapshot::png(self.renderer.raster(&drawn, size, Some(ground)), size);
         crate::evidence::put(&self.scenario.evidence, &png)
@@ -608,7 +607,8 @@ impl Hub<'_> {
                     p.evaluate(shows, Validity::Full, &mut state);
                     state.valid_until
                 });
-            let mut frame = json!({"vsync": vsync, "rev": rev, "camera": view.camera});
+            // `t`: the document's time the frame shows (#1162: a readout reads its values there).
+            let mut frame = json!({"vsync": vsync, "rev": rev, "t": shows, "camera": view.camera});
             if let Some(before) = view.compare {
                 frame["before"] = json!(before);
             }

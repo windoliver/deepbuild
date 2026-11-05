@@ -1,0 +1,589 @@
+# #570 acceptance tests: the run on the base
+
+Base d2623d97 (no lifecycle table, no scripts/lifecycle.mjs, no lifecycleGaps/machines/LIFECYCLE_OBJECTS export,
+no task.withdrawn or move.refused kind; the record's asks projection writes an event's status whatever the row held).
+Node 24.22.0, Linux arm64, `npm ci` in the checkout. Paths redacted: the checkout reads <checkout>, temp folders <tmp>.
+
+All 29 tests fail at an assertion; none fails to load. Where they fail:
+- 26 tests stop at their first assertion that the real table they read exists (packages/contracts/schemas/<object>.machine@1.json),
+  or that @deepbuild/contracts exports lifecycleGaps (2 tests).
+- moves.test.ts "a planted handler that moves a defaulted ask to answered is refused": the base is the hub that sets
+  state directly. The core's ask.answered after its ask.defaulted is accepted, and the ask ends "answered"
+  (Expected "defaulted", Received "answered"), with no move.refused in the log.
+- withdrawn.test.ts "your withdrawal from your card (app)" and "(cli)": task.withdrawn is no catalogued kind, so the
+  record refuses it at its schema ("no event kind task.withdrawn is catalogued ...") and the task never reaches withdrawn.
+
+The planted wrong programs (README, Wrong programs) are planted in the tests themselves, except AC6's checker that
+reads only final states, twins/final-states-only. Checked by hand on a scratch copy holding the twin and a sample
+ask.machine@1 (created, then defaulted, then answered): it prints
+  PASS lifecycle replay: <tmp>/log.jsonl: 1 moves
+and exits 0, so replay.test.ts's planted-log test (which requires exit 1 and a FAIL line naming ask.machine@1) fails on it.
+
+$ npx vitest run --root tests/acceptance/570
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/570
+
+ ❯ tables.test.ts (11 tests | 11 failed) 8ms
+   ❯ #570.97e22112 each of the eight objects has its table in the schemas with its states, moves, guards and final states (11)
+     × #570.97e22112 ask has its table, <object>.machine@1, with states, an initial state, final states and moves between them 4ms
+     × #570.97e22112 ask_task has its table, <object>.machine@1, with states, an initial state, final states and moves between them 0ms
+     × #570.97e22112 lease has its table, <object>.machine@1, with states, an initial state, final states and moves between them 0ms
+     × #570.97e22112 claim has its table, <object>.machine@1, with states, an initial state, final states and moves between them 0ms
+     × #570.97e22112 attempt has its table, <object>.machine@1, with states, an initial state, final states and moves between them 0ms
+     × #570.97e22112 waiver has its table, <object>.machine@1, with states, an initial state, final states and moves between them 0ms
+     × #570.97e22112 open_item has its table, <object>.machine@1, with states, an initial state, final states and moves between them 0ms
+     × #570.97e22112 session_binding has its table, <object>.machine@1, with states, an initial state, final states and moves between them 0ms
+     × #570.97e22112 ask.machine@1 and lease.machine@1 are among them, with the states the criteria name: an ask defaulted or answered, a lease held, a claim pending first 0ms
+     × #570.97e22112 the contract test finds a table for every record object with a lifecycle: the eight, and machines() reads each table as its file holds it 1ms
+     × #570.97e22112 a planted record object with a lifecycle and no table fails the contract test, naming it 0ms
+ ❯ replay.test.ts (3 tests | 3 failed) 5ms
+   ❯ #570.2f9f6ed9 recorded logs replay through the lifecycle tables (3)
+     × #570.2f9f6ed9 each recorded session in the fixture corpus, and each seeded run of the hub's simulation harness, replays through the tables with every move allowed 4ms
+     × #570.2f9f6ed9 a planted log that moves an ask from defaulted to answered fails, naming the event and the table 0ms
+     × #570.2f9f6ed9 the same log with the answer before any deadline is a move the table allows, and passes 0ms
+ ❯ world.test.ts (6 tests | 6 failed) 17ms
+   ❯ #570.f58617e9 the enumerator reports how many states it reached; a lease left in held fails it, naming the state and the path (2)
+     × #570.f58617e9 over the real tables, every object of the small world reaches a final state: it reports its state count, walks all eight tables and passes 9ms
+     × #570.f58617e9 a planted lease table with no move out of held leaves the lease short of a final state: FAIL names held and the path that reached it 1ms
+   ❯ #570.98951df5 an ask table whose answer and deadline end apart by arrival order, with no conflict named, fails the enumerator, naming both orders (2)
+     × #570.98951df5 the real ask table names the answer and the deadline's conflict, and the enumerator passes it 1ms
+     × #570.98951df5 a planted ask table with the conflict taken away fails the enumerator, naming both orders 1ms
+   ❯ #570.dfd317ed a crash at each reachable state recovers every object from the log; a claim state kept only in memory recovers as pending and fails (2)
+     × #570.dfd317ed over the real tables, a crash at each reachable state replays from the log to the same state 1ms
+     × #570.dfd317ed a planted claim whose move out of pending is kept only in memory recovers as pending, and the enumerator fails, naming the claim 1ms
+ ❯ moves.test.ts (3 tests | 3 failed) 99ms
+   ❯ #570.23b51af5 a move no table row allows is refused and recorded, naming the object, its state and the event (3)
+     × #570.23b51af5 ask.machine@1 has no row that moves a defaulted ask on ask.answered 9ms
+     × #570.23b51af5 a planted handler that moves a defaulted ask to answered is refused, naming the ask and defaulted, and the refusal is recorded 86ms
+     × #570.23b51af5 an answer to an open ask is a move the table allows: it lands, and nothing is refused 1ms
+ ❯ withdrawn.test.ts (6 tests | 6 failed) 138ms
+   ❯ #570.f596e027 the ask-task table reaches withdrawn only from an event your trusted path appended (6)
+     × #570.f596e027 ask_task.machine@1 has withdrawn among its final states, reached only by task.withdrawn under a guard 9ms
+     × #570.f596e027 your withdrawal from your card (app) moves the task to withdrawn 80ms
+     × #570.f596e027 your withdrawal from the CLI (cli) moves the task to withdrawn 40ms
+     × #570.f596e027 a planted handler that withdraws a task on an agent's message, through the agent's MCP connection, is refused, naming the task and the event 4ms
+     × #570.f596e027 a planted handler that withdraws a task on an agent's message, through the agent's hook connection, is refused, naming the task and the event 1ms
+     × #570.f596e027 a planted handler that withdraws a task on an agent's message, as the core, acting on an agent's message, is refused, naming the task and the event 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 29 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  moves.test.ts > #570.23b51af5 a move no table row allows is refused and recorded, naming the object, its state and the event > #570.23b51af5 ask.machine@1 has no row that moves a defaulted ask on ask.answered
+AssertionError: packages/contracts/schemas/ask.machine@1.json exists: ask's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ moves.test.ts:19:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/29]⎯
+
+ FAIL  moves.test.ts > #570.23b51af5 a move no table row allows is refused and recorded, naming the object, its state and the event > #570.23b51af5 a planted handler that moves a defaulted ask to answered is refused, naming the ask and defaulted, and the refusal is recorded
+AssertionError: the answer is refused: the ask stays defaulted
+{"id":"01K74FKZVKSG3N43T66DAE8V5Y","kind":"authority","key":"aa25bab5b110ee4a5581c310577d1d3b7ad363d77eafb502b243e6f02ee27bba","question":"Merge #215?","options":"[{\"id\":\"merge\",\"label\":\"Merge it\",\"decision\":\"allow\"},{\"id\":\"hold\",\"label\":\"Hold it\",\"decision\":\"deny\"}]","recommended":null,"default_option":"\"hold\"","provisional":"0","session_id":"S1","owner":"you","fallback":"\"you\"","deadline":"1760017051123","later_until":null,"pinned_to":"{\"kind\":\"commit\",\"ref\":\"1b9d9ab15d6372fa7f019e1632f27774fd80212a\"}","status":"answered","outcome":"answered","batch_id":null,"created":"1760013451123","answered":"1760017052124","answer":"\"merge\"","decision":"allow"}: expected 'answered' to be 'defaulted' // Object.is equality
+
+Expected: "defaulted"
+Received: "answered"
+
+ ❯ moves.test.ts:39:146
+     37|
+     38|     const after = (await record.table('asks')).rows.find((r) => r.id =…
+     39|     expect(after?.status, `the answer is refused: the ask stays defaul…
+       |                                                                                                                                                  ^
+     40|
+     41|     const events = await record.read({ after: 0 });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/29]⎯
+
+ FAIL  moves.test.ts > #570.23b51af5 a move no table row allows is refused and recorded, naming the object, its state and the event > #570.23b51af5 an answer to an open ask is a move the table allows: it lands, and nothing is refused
+AssertionError: packages/contracts/schemas/ask.machine@1.json exists: ask's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ moves.test.ts:62:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/29]⎯
+
+ FAIL  replay.test.ts > #570.2f9f6ed9 recorded logs replay through the lifecycle tables > #570.2f9f6ed9 each recorded session in the fixture corpus, and each seeded run of the hub's simulation harness, replays through the tables with every move allowed
+AssertionError: packages/contracts/schemas/ask.machine@1.json exists: ask's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ replay.test.ts:35:72
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/29]⎯
+
+ FAIL  replay.test.ts > #570.2f9f6ed9 recorded logs replay through the lifecycle tables > #570.2f9f6ed9 a planted log that moves an ask from defaulted to answered fails, naming the event and the table
+AssertionError: packages/contracts/schemas/ask.machine@1.json exists: ask's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ replay.test.ts:51:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/29]⎯
+
+ FAIL  replay.test.ts > #570.2f9f6ed9 recorded logs replay through the lifecycle tables > #570.2f9f6ed9 the same log with the answer before any deadline is a move the table allows, and passes
+AssertionError: packages/contracts/schemas/ask.machine@1.json exists: ask's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ replay.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/29]⎯
+
+ FAIL  tables.test.ts > #570.97e22112 each of the eight objects has its table in the schemas with its states, moves, guards and final states > #570.97e22112 ask has its table, <object>.machine@1, with states, an initial state, final states and moves between them
+AssertionError: packages/contracts/schemas/ask.machine@1.json exists: ask's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ tables.test.ts:21:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/29]⎯
+
+ FAIL  tables.test.ts > #570.97e22112 each of the eight objects has its table in the schemas with its states, moves, guards and final states > #570.97e22112 ask_task has its table, <object>.machine@1, with states, an initial state, final states and moves between them
+AssertionError: packages/contracts/schemas/ask_task.machine@1.json exists: ask_task's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ tables.test.ts:21:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/29]⎯
+
+ FAIL  tables.test.ts > #570.97e22112 each of the eight objects has its table in the schemas with its states, moves, guards and final states > #570.97e22112 lease has its table, <object>.machine@1, with states, an initial state, final states and moves between them
+AssertionError: packages/contracts/schemas/lease.machine@1.json exists: lease's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ tables.test.ts:21:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/29]⎯
+
+ FAIL  tables.test.ts > #570.97e22112 each of the eight objects has its table in the schemas with its states, moves, guards and final states > #570.97e22112 claim has its table, <object>.machine@1, with states, an initial state, final states and moves between them
+AssertionError: packages/contracts/schemas/claim.machine@1.json exists: claim's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ tables.test.ts:21:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/29]⎯
+
+ FAIL  tables.test.ts > #570.97e22112 each of the eight objects has its table in the schemas with its states, moves, guards and final states > #570.97e22112 attempt has its table, <object>.machine@1, with states, an initial state, final states and moves between them
+AssertionError: packages/contracts/schemas/attempt.machine@1.json exists: attempt's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ tables.test.ts:21:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/29]⎯
+
+ FAIL  tables.test.ts > #570.97e22112 each of the eight objects has its table in the schemas with its states, moves, guards and final states > #570.97e22112 waiver has its table, <object>.machine@1, with states, an initial state, final states and moves between them
+AssertionError: packages/contracts/schemas/waiver.machine@1.json exists: waiver's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ tables.test.ts:21:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/29]⎯
+
+ FAIL  tables.test.ts > #570.97e22112 each of the eight objects has its table in the schemas with its states, moves, guards and final states > #570.97e22112 open_item has its table, <object>.machine@1, with states, an initial state, final states and moves between them
+AssertionError: packages/contracts/schemas/open_item.machine@1.json exists: open_item's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ tables.test.ts:21:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/29]⎯
+
+ FAIL  tables.test.ts > #570.97e22112 each of the eight objects has its table in the schemas with its states, moves, guards and final states > #570.97e22112 session_binding has its table, <object>.machine@1, with states, an initial state, final states and moves between them
+AssertionError: packages/contracts/schemas/session_binding.machine@1.json exists: session_binding's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ tables.test.ts:21:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/29]⎯
+
+ FAIL  tables.test.ts > #570.97e22112 each of the eight objects has its table in the schemas with its states, moves, guards and final states > #570.97e22112 ask.machine@1 and lease.machine@1 are among them, with the states the criteria name: an ask defaulted or answered, a lease held, a claim pending first
+AssertionError: packages/contracts/schemas/ask.machine@1.json exists: ask's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ tables.test.ts:42:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/29]⎯
+
+ FAIL  tables.test.ts > #570.97e22112 each of the eight objects has its table in the schemas with its states, moves, guards and final states > #570.97e22112 the contract test finds a table for every record object with a lifecycle: the eight, and machines() reads each table as its file holds it
+AssertionError: @deepbuild/contracts exports lifecycleGaps(objects, tables): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ surface tables.test.ts:13:97
+     11| function surface(): { gaps: Gaps; machines: () => Table[]; objects: re…
+     12|   const c = contracts as unknown as Record<string, unknown>;
+     13|   expect(typeof c.lifecycleGaps, '@deepbuild/contracts exports lifecyc…
+       |                                                                                                 ^
+     14|   expect(typeof c.machines, '@deepbuild/contracts exports machines(), …
+     15|   expect(Array.isArray(c.LIFECYCLE_OBJECTS), '@deepbuild/contracts exp…
+ ❯ tables.test.ts:55:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/29]⎯
+
+ FAIL  tables.test.ts > #570.97e22112 each of the eight objects has its table in the schemas with its states, moves, guards and final states > #570.97e22112 a planted record object with a lifecycle and no table fails the contract test, naming it
+AssertionError: @deepbuild/contracts exports lifecycleGaps(objects, tables): expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ surface tables.test.ts:13:97
+     11| function surface(): { gaps: Gaps; machines: () => Table[]; objects: re…
+     12|   const c = contracts as unknown as Record<string, unknown>;
+     13|   expect(typeof c.lifecycleGaps, '@deepbuild/contracts exports lifecyc…
+       |                                                                                                 ^
+     14|   expect(typeof c.machines, '@deepbuild/contracts exports machines(), …
+     15|   expect(Array.isArray(c.LIFECYCLE_OBJECTS), '@deepbuild/contracts exp…
+ ❯ tables.test.ts:67:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/29]⎯
+
+ FAIL  withdrawn.test.ts > #570.f596e027 the ask-task table reaches withdrawn only from an event your trusted path appended > #570.f596e027 ask_task.machine@1 has withdrawn among its final states, reached only by task.withdrawn under a guard
+AssertionError: packages/contracts/schemas/ask_task.machine@1.json exists: ask_task's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ withdrawn.test.ts:28:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/29]⎯
+
+ FAIL  withdrawn.test.ts > #570.f596e027 the ask-task table reaches withdrawn only from an event your trusted path appended > #570.f596e027 your withdrawal from your card (app) moves the task to withdrawn
+ FAIL  withdrawn.test.ts > #570.f596e027 the ask-task table reaches withdrawn only from an event your trusted path appended > #570.f596e027 your withdrawal from the CLI (cli) moves the task to withdrawn
+AssertionError: your withdrawal is appended: expected 'no event kind task.withdrawn is catal…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"no event kind task.withdrawn is catalogued"
+
+ ❯ withdrawn.test.ts:42:60
+     40|     clock.step(1000);
+     41|     const thrown = await tryAppend(record, connection, withdrawal(task…
+     42|     expect(thrown?.message, 'your withdrawal is appended').toBeUndefin…
+       |                                                            ^
+     43|     expect((await record.table('tasks')).rows.find((r) => r.task_ref =…
+     44|     await record.rebuild();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/29]⎯
+
+ FAIL  withdrawn.test.ts > #570.f596e027 the ask-task table reaches withdrawn only from an event your trusted path appended > #570.f596e027 a planted handler that withdraws a task on an agent's message, through the agent's MCP connection, is refused, naming the task and the event
+ FAIL  withdrawn.test.ts > #570.f596e027 the ask-task table reaches withdrawn only from an event your trusted path appended > #570.f596e027 a planted handler that withdraws a task on an agent's message, through the agent's hook connection, is refused, naming the task and the event
+ FAIL  withdrawn.test.ts > #570.f596e027 the ask-task table reaches withdrawn only from an event your trusted path appended > #570.f596e027 a planted handler that withdraws a task on an agent's message, as the core, acting on an agent's message, is refused, naming the task and the event
+AssertionError: packages/contracts/schemas/ask_task.machine@1.json exists: ask_task's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ withdrawn.test.ts:54:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/29]⎯
+
+ FAIL  world.test.ts > #570.f58617e9 the enumerator reports how many states it reached; a lease left in held fails it, naming the state and the path > #570.f58617e9 over the real tables, every object of the small world reaches a final state: it reports its state count, walks all eight tables and passes
+AssertionError: packages/contracts/schemas/ask.machine@1.json exists: ask's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ world.test.ts:21:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/29]⎯
+
+ FAIL  world.test.ts > #570.f58617e9 the enumerator reports how many states it reached; a lease left in held fails it, naming the state and the path > #570.f58617e9 a planted lease table with no move out of held leaves the lease short of a final state: FAIL names held and the path that reached it
+AssertionError: packages/contracts/schemas/lease.machine@1.json exists: lease's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ world.test.ts:35:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/29]⎯
+
+ FAIL  world.test.ts > #570.98951df5 an ask table whose answer and deadline end apart by arrival order, with no conflict named, fails the enumerator, naming both orders > #570.98951df5 the real ask table names the answer and the deadline's conflict, and the enumerator passes it
+AssertionError: packages/contracts/schemas/ask.machine@1.json exists: ask's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ world.test.ts:53:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/29]⎯
+
+ FAIL  world.test.ts > #570.98951df5 an ask table whose answer and deadline end apart by arrival order, with no conflict named, fails the enumerator, naming both orders > #570.98951df5 a planted ask table with the conflict taken away fails the enumerator, naming both orders
+AssertionError: packages/contracts/schemas/ask.machine@1.json exists: ask's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ world.test.ts:62:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/29]⎯
+
+ FAIL  world.test.ts > #570.dfd317ed a crash at each reachable state recovers every object from the log; a claim state kept only in memory recovers as pending and fails > #570.dfd317ed over the real tables, a crash at each reachable state replays from the log to the same state
+AssertionError: packages/contracts/schemas/ask.machine@1.json exists: ask's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ world.test.ts:75:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/29]⎯
+
+ FAIL  world.test.ts > #570.dfd317ed a crash at each reachable state recovers every object from the log; a claim state kept only in memory recovers as pending and fails > #570.dfd317ed a planted claim whose move out of pending is kept only in memory recovers as pending, and the enumerator fails, naming the claim
+AssertionError: packages/contracts/schemas/claim.machine@1.json exists: claim's lifecycle table: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readTable helpers.ts:57:91
+     55| export function readTable(object: string): Table {
+     56|   const path = tableFile(object);
+     57|   expect(existsSync(path), `${relative(ROOT, path)} exists: ${object}'…
+       |                                                                                           ^
+     58|   let table: unknown;
+     59|   try {
+ ❯ world.test.ts:85:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/29]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  29 failed (29)
+   Start at  18:37:15
+   Duration  382ms (transform 38%, tests 32%, import 29%, worker 1%)
+

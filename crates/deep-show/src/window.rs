@@ -22,8 +22,12 @@ const CARD_ORDER: &str = "a0";
 /// The outline around an agent's layer and the height of its name tab, in px.
 const OUTLINE_PX: f32 = 1.;
 const NAME_TAB: f32 = 18.;
+/// The full-screen button's glyph: four corner ticks, inset this far, this long and this thick.
+const TICK_INSET: f32 = 9.;
+const TICK_LONG: f32 = 6.;
+const TICK_THICK: f32 = 2.;
 
-fn hsla(c: Rgb) -> Hsla {
+pub(crate) fn hsla(c: Rgb) -> Hsla {
     Rgba {
         r: f32::from(c[0]) / 255.,
         g: f32::from(c[1]) / 255.,
@@ -33,7 +37,7 @@ fn hsla(c: Rgb) -> Hsla {
     .into()
 }
 
-fn bounds(b: [f64; 4]) -> Bounds<Pixels> {
+pub(crate) fn bounds(b: [f64; 4]) -> Bounds<Pixels> {
     Bounds {
         origin: point(px(b[0] as f32), px(b[1] as f32)),
         size: size(px(b[2] as f32), px(b[3] as f32)),
@@ -42,11 +46,13 @@ fn bounds(b: [f64; 4]) -> Bounds<Pixels> {
 
 /// One thing the window composes.
 enum Entry {
-    /// A writer layer's picture in its panel, outlined with `name` when it's an agent's.
+    /// A writer layer's picture in its panel, outlined with `name` when it's an agent's, and
+    /// the canvas's full-screen button over it.
     Layer {
         picture: Arc<RenderImage>,
         panel: [f64; 4],
         name: Option<String>,
+        button: Option<[f64; 4]>,
     },
     Card,
 }
@@ -90,6 +96,7 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
             picture,
             panel,
             name,
+            button,
         } => {
             let panel = bounds(*panel);
             window.with_content_mask(Some(ContentMask { bounds: panel }), |w| {
@@ -116,6 +123,9 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
                         hsla(scene.ground),
                         w,
                     );
+                }
+                if let Some(b) = button {
+                    full_screen_button(scene, bounds(*b), w);
                 }
             });
         }
@@ -172,6 +182,33 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
     }
 }
 
+/// The full-screen button (#383): a ground square outlined in muted, four ink corner ticks.
+fn full_screen_button(scene: &Scene, b: Bounds<Pixels>, window: &mut Window) {
+    window.paint_quad(quad(
+        b,
+        px(6.),
+        hsla(scene.ground),
+        px(1.),
+        hsla(scene.muted),
+        BorderStyle::Solid,
+    ));
+    let (w, h) = (f32::from(b.size.width), f32::from(b.size.height));
+    for (sx, sy) in [(0., 0.), (1., 0.), (0., 1.), (1., 1.)] {
+        let c = b.origin
+            + point(
+                px(TICK_INSET + sx * (w - 2. * TICK_INSET)),
+                px(TICK_INSET + sy * (h - 2. * TICK_INSET)),
+            );
+        for (long, thick) in [(TICK_LONG, TICK_THICK), (TICK_THICK, TICK_LONG)] {
+            let tick = Bounds {
+                origin: c - point(px(sx * long), px(sy * thick)),
+                size: size(px(long), px(thick)),
+            };
+            window.paint_quad(gpui_kit::fill(tick, hsla(scene.ink)));
+        }
+    }
+}
+
 impl Render for View {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let prepared = self.scene.clone();
@@ -196,7 +233,7 @@ impl Render for View {
 }
 
 /// A straight RGBA raster as the BGRA picture GPUI paints.
-fn picture(mut rgba: Vec<u8>, size: [u16; 2]) -> Option<Arc<RenderImage>> {
+pub(crate) fn picture(mut rgba: Vec<u8>, size: [u16; 2]) -> Option<Arc<RenderImage>> {
     for p in rgba.as_chunks_mut::<4>().0 {
         p.swap(0, 2);
     }
@@ -204,12 +241,14 @@ fn picture(mut rgba: Vec<u8>, size: [u16; 2]) -> Option<Arc<RenderImage>> {
     Some(Arc::new(RenderImage::new([image::Frame::new(frame)])))
 }
 
-fn refused(code: &str) -> Value {
+pub(crate) fn refused(code: &str) -> Value {
     json!({"ok": false, "code": code})
 }
 
-/// Draws the window the scenario's calls left and writes it to `out` as a PNG.
-pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
+/// Draws the window the scenario's calls left and writes it to `out` as a PNG: each document at
+/// `t` (flicks), on a display of `scale` device pixels per point (#1162: the reference window
+/// is 1512 × 982 points at 2×).
+pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f64) -> Value {
     let [w, h] = hub.scenario.window.expect("screen has a window");
     let palette = hub.look.light.clone();
     let role = |name: &str| palette.get(name).copied().unwrap_or([0; 3]);
@@ -238,14 +277,26 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
                 .expect("a revision is an object")
                 .clone(),
         };
-        let panel_id = &hub.scenario.docs[doc];
+        let panel_id = hub.scenario.docs[doc].clone();
         let panel = hub
-            .slot(panel_id)
+            .slot(&panel_id)
             .expect("a document's panel is in the scenario");
-        let size = [
-            panel[2].round().clamp(1., 8192.) as u16,
-            panel[3].round().clamp(1., 8192.) as u16,
-        ];
+        // The canvas's scope (#383): the display's rect once full screen, and its button. A view
+        // popped out into its own window keeps its slot here, with no button.
+        let (panel, button) = match hub.placed(&panel_id) {
+            Some(_) => (panel, None),
+            None => match hub.panel_scope(&panel_id) {
+                Ok(s) => (s.scope.rect(), s.scope.button()),
+                Err(_) => (panel, None),
+            },
+        };
+        let size = crate::snapshot::px([panel[2] * scale, panel[3] * scale]);
+        // A document a session holds draws from it at `t` (its tables and vectors inlined, #1162).
+        let session_drawn = if hub.shown(doc).is_none() {
+            hub.live_drawn(doc, t)
+        } else {
+            None
+        };
         let rgba = if deep_canvas_scene3d::scene::has_3d(&Value::Object(stamped.clone())) {
             // A 3D writer layer draws natively on the GPU (#378), its frame scaled to fit the
             // panel from the top left as a 2D layer's is.
@@ -258,14 +309,20 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
             let Some(gpu) = hub.gpu3() else {
                 return refused("unsupported_platform");
             };
-            let Ok((drawn, scene)) =
-                gpu.draw(&Value::Object(stamped.clone()), 0, &palette, drawn_size)
+            let Ok((mut drawn, scene)) =
+                gpu.draw(&Value::Object(stamped.clone()), t, &palette, drawn_size)
             else {
                 continue;
             };
             for (id, b) in scene.boxes() {
+                let b = b.map(|v| v / scale);
                 let at = [panel[0] + b[0], panel[1] + b[1], b[2], b[3]];
                 items.push(json!({"id": id, "layer": row.layer, "box": at}));
+            }
+            // Its 2D items over the 3D frame, as render-back draws them.
+            if let Some(d) = &session_drawn {
+                let over = hub.renderer.raster(d, drawn_size, None);
+                crate::snapshot::over(&mut drawn, &over);
             }
             let (pw, dw) = (usize::from(size[0]) * 4, usize::from(drawn_size[0]) * 4);
             let mut rgba = vec![0u8; pw * usize::from(size[1])];
@@ -274,18 +331,21 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
             }
             rgba
         } else {
-            let Ok(drawn) = hub.renderer.prepare(
-                &stamped,
-                0,
-                &palette,
-                hub.look.status.as_ref(),
-                &record,
-                &hub.scenario.evidence,
-            ) else {
-                continue;
+            let drawn = match session_drawn {
+                Some(d) => d,
+                None => match hub.renderer.prepare(
+                    &stamped,
+                    t,
+                    &palette,
+                    hub.look.status.as_ref(),
+                    &record,
+                    &hub.scenario.evidence,
+                ) {
+                    Ok(d) => d,
+                    Err(_) => continue,
+                },
             };
-            let [dw, dh] = drawn.frame.size;
-            let scale = (f64::from(size[0]) / dw).min(f64::from(size[1]) / dh);
+            let scale = drawn.scale(size) / scale;
             for (id, b) in drawn.boxes() {
                 let at = [
                     panel[0] + b[0] * scale,
@@ -322,6 +382,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
                 picture,
                 panel,
                 name,
+                button,
             },
         ));
     }
@@ -356,7 +417,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
     }) else {
         return refused("no_window");
     };
-    cx.simulate_scale_factor_change(handle, 1.);
+    cx.simulate_scale_factor_change(handle, scale as f32);
     // Two frames: the first uploads the pictures and glyph pages, the second draws from them warm.
     for _ in 0..2 {
         if cx

@@ -1,6 +1,8 @@
 {
   "title": "permission.answer@1",
   "description": "Your answer to a permission request: allow or deny comes only from its decision, for this call or this session. It carries no rule for the agent's own settings.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "type": "object",
   "properties": {
     "decision": {

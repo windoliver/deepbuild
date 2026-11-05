@@ -134,12 +134,16 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
         continue;
       }
     }
-    if (!isObj(entry) || typeof entry.uuid !== 'string' || !isObj(entry.message)) continue;
+    if (!isObj(entry) || !isObj(entry.message)) continue;
+    // Claude Code's message has its `uuid`, pi's its entry's `id`; a Cursor line has neither, so its line names it (#111).
+    const id = typeof entry.uuid === 'string' ? entry.uuid : entry.type === 'message' && typeof entry.id === 'string' ? entry.id : typeof entry.role === 'string' ? `l${n}` : undefined;
+    if (id === undefined) continue;
+    const role = entry.message.role ?? entry.role;
     const content = entry.message.content;
     const parts: string[] = [];
     // The agent's turns, and what Claude Code writes under the user's role in its stead: a compaction summary,
     // and a subagent's run, whose prompt the agent composed.
-    let outside = entry.message.role === 'assistant' || entry.isCompactSummary === true || entry.isSidechain === true;
+    let outside = role === 'assistant' || entry.isCompactSummary === true || entry.isSidechain === true || entry.isMeta === true;
     // The tool whose result the entry holds ('' for one whose call the transcript doesn't hold).
     let called: string | undefined;
     let answers: string | undefined;
@@ -152,7 +156,7 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
         if (block.type === 'tool_use' && typeof block.id === 'string' && typeof block.name === 'string') {
           tools.set(block.id, block.name);
           // A shell command is quotable: the agent's own turn, which no first-hand source rests on alone (#356).
-          if (block.name === 'Bash' && isObj(block.input) && typeof block.input.command === 'string') { parts.push(block.input.command); calls.set(block.id, entry.uuid); }
+          if (block.name === 'Bash' && isObj(block.input) && typeof block.input.command === 'string') { parts.push(block.input.command); calls.set(block.id, id); }
         }
         if (block.type === 'tool_result') {
           // A result whose call the transcript doesn't hold is nobody's: no first-hand source either.
@@ -166,7 +170,7 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
         }
       }
     }
-    entries.set(entry.uuid, { text: parts.join('\n'), outside, ...(typeof entry.message.role === 'string' ? { role: entry.message.role } : {}), ...(called === undefined ? {} : { tool: called }), ...(answers === undefined ? {} : { of: answers }), ...(failed === undefined ? {} : { error: failed }) });
+    entries.set(id, { text: parts.join('\n'), outside, ...(typeof role === 'string' ? { role } : {}), ...(called === undefined ? {} : { tool: called }), ...(answers === undefined ? {} : { of: answers }), ...(failed === undefined ? {} : { error: failed }) });
   }
   return entries;
 }
@@ -221,6 +225,8 @@ function projectsOf(db: Db, evidence: readonly Quote[]): Set<string> | undefined
     if (file) {
       const kept = q(db, "SELECT project_id FROM events WHERE kind = 'evidence.stored' AND json_extract(data, '$.sha256') = ? AND project_id IS NOT NULL ORDER BY log_pos DESC LIMIT 1").get(file) as { project_id: string } | undefined;
       if (kept) projects.add(kept.project_id);
+      // A memory file you keep for every repo (#111), as the core read it from your home: it covers all of them.
+      else if (q(db, "SELECT 1 FROM events WHERE kind = 'evidence.stored' AND writer = 'core' AND json_extract(data, '$.sha256') = ? AND json_extract(data, '$.kind') = 'user.memory' LIMIT 1").get(file)) projects.add(EVERY);
       continue;
     }
     const decision = /^decision:([0-9A-Za-z]+)$/.exec(at)?.[1];
@@ -455,6 +461,35 @@ const cachedBytes = new WeakMap<Transcripts, Map<string, number>>();
  * A transcript in the store, parsed once by hash, the least recently read dropped first past the byte bound. Only a
  * parsed one is kept: a file the store doesn't hold yet, or a failed read, is asked for again.
  */
+/**
+ * Transcript copies as an ask placing its plan's targets reads them (#1098), by SHA-256: each read as it is archived,
+ * so a raise finds it parsed. Kept apart from the learned layer's, which reads a copy again when it couldn't.
+ */
+export type Placing = Map<string, { bytes: number; messages: Promise<Message[] | undefined> }>;
+/** The placing copy of `sha`, read now when it isn't kept; the oldest go past TRANSCRIPT_BYTES_KEPT. */
+export function placingTranscript(store: EvidenceStore | undefined, placing: Placing, sha: string): Promise<Message[] | undefined> {
+  const kept = placing.get(sha);
+  if (kept) {
+    placing.delete(sha);
+    placing.set(sha, kept);
+    return kept.messages;
+  }
+  const entry = { bytes: 0, messages: Promise.resolve<Message[] | undefined>(undefined) };
+  entry.messages = (async () => (store && (await store.get(sha)) ? store.read(sha) : undefined))().then((b) => {
+    if (!b) { placing.delete(sha); return undefined; }
+    entry.bytes = b.length;
+    let total = 0;
+    for (const e of placing.values()) total += e.bytes;
+    for (const [oldest, e] of placing) {
+      if (total <= TRANSCRIPT_BYTES_KEPT || oldest === sha) break;
+      total -= e.bytes;
+      placing.delete(oldest);
+    }
+    return [...readTranscript(b)].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e }));
+  }, () => { placing.delete(sha); return undefined; });
+  placing.set(sha, entry);
+  return entry.messages;
+}
 function parsedTranscript(store: EvidenceStore | undefined, transcripts: Transcripts, sha: string): Promise<Map<string, Entry> | undefined> {
   let sizes = cachedBytes.get(transcripts);
   if (!sizes) cachedBytes.set(transcripts, (sizes = new Map()));

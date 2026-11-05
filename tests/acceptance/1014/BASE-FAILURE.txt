@@ -1,0 +1,35 @@
+The run on the base, 58862789, trimmed to each result's reason. Node 23.9.0, with the workspaces and deep-hook built.
+
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/1014 --no-file-parallelism --reporter=verbose
+
+projection.test.ts
+ PASS #1014.95b12f36 status working, cause NULL and ended_log_pos NULL until the session's own stop
+ PASS #1014.020f9ec0 one turn, from the prompt to the session's own stop, with every tool call before and after the child's stop in it
+ PASS #1014.1eafe8b1 returns holds one row for the turn, the session's own stop, with its turn number
+ PASS #1014.55bb9354 a rebuild gives the same rows as the live projection did, mid-turn and after the turn
+ FAIL #1014.179e8e0c a planted projection that closes the turn at the child's stop fails these tests naming the turn boundary
+      the plant turn-closes-at-child-stop left the turn open at the child's stop: expected '' to match /^turn boundary: /
+      (the record has no `plant` option yet, so the turn reads right)
+ PASS an agent.stop@1, with no child field, reads as it does today: it ends the session's turn
+ PASS an agent.stop@4, with no child field, reads as it does today: it ends the session's turn
+ PASS a child's stop after the session's own changes nothing of the session: no status, end, cause, return or turn
+
+hub.test.ts
+ PASS the SubagentStop is in the record as the parent session's agent.stop, naming the child
+ PASS #1014.95b12f36 status working, cause NULL and ended_log_pos NULL in sessions until the session's own stop
+ PASS #1014.020f9ec0 one turn, from the prompt to the session's own stop, with every tool call before and after the child's stop in it
+ FAIL #1014.1eafe8b1 returns holds one row for the turn, the session's own stop, with its turn number
+      the session's own stop, turn 1 of a session that ran one turn: expected [ { …(3) } ] to deeply equal [ { …(3) } ]
+      -     "turn": 1,
+      +     "turn": 2,
+ PASS #1014.fe476679 deep status lists working while the child's stop is the newest stop, and finished only after the session's own
+ PASS #1014.55bb9354 a rebuild from the record gives the same rows as the live projection did
+ FAIL #1014.179e8e0c a hub whose projection closes the turn at the child's stop fails these tests naming the turn boundary
+      the hub exited with 1 before it was ready:
+      Error: DEEP_HUB_PLANT=turn-closes-at-child-stop names no planted program
+
+Tests  3 failed | 12 passed (15)
+
+The issue's Proof expects both surfaces to fail as the turn splits. They don't at this base: no turn splits, and the
+sessions row holds. The one behavior that fails is the hub's turn count; the other two failures are the plant's missing
+seam. README, What the base does.

@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "profile": "scene",
+  "title": "A Map's 3D city block",
+  "description": "Four stations as boxes of three heights on a ground slab, a line joining them and a sun that casts the shadow, seen from an orbit camera: a fixture of the Map's 3D for the #200 acceptance suite.",
+  "size": [480, 320],
+  "camera": "cam",
+  "requires": { "modules": { "scene3d": "^1" } },
+  "budget": { "class": "figure" },
+  "items": {
+    "cam": { "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0", "params": { "projection": "perspective", "target": [0, 0, 0], "orbit": { "azimuth": 30, "elevation": 35, "distance": 16 }, "fov": 40 } },
+    "sun": { "id": "sun", "kind": "light.sun@1", "name": "Sun", "order": "a1", "params": { "illuminance": 3.14159, "shadow": true, "angle": 0.53 }, "at": { "rot": [-50, 30, 0] } },
+    "ground": { "id": "ground", "kind": "mark.box@1", "name": "Ground", "order": "b0", "params": { "size": [12, 0.2, 12], "paint": { "fill": { "role": "muted" } } }, "at": { "pos": [0, -0.1, 0] } },
+    "st-1": { "id": "st-1", "kind": "mark.box@1", "name": "Station one", "order": "b1", "params": { "size": [1, 1, 1], "paint": { "fill": { "role": "accent" } } }, "at": { "pos": [-3, 0.5, -2] } },
+    "st-2": { "id": "st-2", "kind": "mark.box@1", "name": "Station two", "order": "b2", "params": { "size": [1, 2, 1], "paint": { "fill": { "role": "accent" } } }, "at": { "pos": [-1, 1, 1] } },
+    "st-3": { "id": "st-3", "kind": "mark.box@1", "name": "Station three", "order": "b3", "params": { "size": [1, 3, 1], "paint": { "fill": { "role": "accent" } } }, "at": { "pos": [1.5, 1.5, -1] } },
+    "st-4": { "id": "st-4", "kind": "mark.cylinder@1", "name": "Station four", "order": "b4", "params": { "size": [1, 1.5, 1], "paint": { "fill": { "role": "accent" } } }, "at": { "pos": [3, 0.75, 2] } },
+    "line": { "id": "line", "kind": "mark.line@1", "name": "Line", "order": "b5", "params": { "points": [[-3, 0.05, -2], [-1, 0.05, 1], [1.5, 0.05, -1], [3, 0.05, 2]], "width": 4, "paint": { "fill": { "role": "muted" } } } }
+  }
+}

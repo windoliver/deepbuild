@@ -252,18 +252,20 @@ ${arms.map((a) => `            Self::${a.variant}(inner) => inner.to_json(),\n`)
       return { key, ident, required: required.has(key), type: required.has(key) ? inner : `Option<${inner}>`, rule: this.rule(s as Schema) };
     });
     const keys = fields.map((f) => literal(f.key)).join(', ');
+    // An object with no properties, as task.withdrawn's data, is still read for members it must not have.
+    const read = fields.length ? `let members = deep_contracts::members(value, at, &[${keys}])?;` : 'deep_contracts::members(value, at, &[])?;';
     this.out.push(`#[derive(Debug, Clone, PartialEq)]
 pub struct ${name} {
 ${fields.map((f) => `    pub ${f.ident}: ${f.type},\n`).join('')}}
 
 impl Contract for ${name} {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &[${keys}])?;
+        ${read}
 ${fields.flatMap((f) => (f.rule ? [`        deep_contracts::check_member(members, at, ${literal(f.key)}, &${f.rule})?;\n`] : [])).join('')}        Ok(Self {
 ${fields.map((f) => `            ${f.ident}: deep_contracts::${f.required ? 'required' : 'optional'}(members, at, ${literal(f.key)})?,\n`).join('')}        })
     }
     fn to_json(&self) -> Value {
-        let mut members = Vec::new();
+        let ${fields.length ? 'mut ' : ''}members = Vec::new();
 ${fields.map((f) => (f.required
     ? `        members.push((${literal(f.key)}.to_string(), self.${f.ident}.to_json()));\n`
     : `        if let Some(value) = &self.${f.ident} {\n            members.push((${literal(f.key)}.to_string(), value.to_json()));\n        }\n`)).join('')}        Value::Object(members)

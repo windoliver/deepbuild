@@ -1,6 +1,8 @@
 {
   "title": "archive.quiet@1",
   "description": "An agent source the archive copies from captured nothing for a day while that agent still worked: capture went quiet.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [],
   "type": "object",
   "properties": {

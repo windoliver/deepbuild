@@ -3,7 +3,7 @@
 //! replacing what's under it; a scene's layers are independent writer layers, each composited over
 //! the ones before it (premultiplied over) and encoded by an encode worker of its own.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use bytemuck::{Pod, Zeroable};
 use deep_gpu::device::Device;
@@ -406,16 +406,27 @@ struct Built {
     bind: wgpu::BindGroup,
     replace: wgpu::RenderPipeline,
     over: wgpu::RenderPipeline,
-    /// A scene of pipelines: one per index it names.
-    named: Vec<(u32, wgpu::RenderPipeline)>,
     /// The regions pass's transient MSAA target, at the size it was made for.
     msaa: Option<([u32; 2], wgpu::TextureView)>,
+}
+
+/// One of a scene's own pipelines: its index, key, the device epoch it was compiled on, and itself.
+pub type Named = (u32, String, u64, wgpu::RenderPipeline);
+
+/// A scene's own pipelines as the view installed them, and the ones the last frame drew with the
+/// epochs they were compiled on (issue #140, criterion 20: a compile-thread job's pipelines reach
+/// the view here, or are dropped).
+#[derive(Default)]
+pub struct Installed {
+    pub pipelines: Vec<Named>,
+    pub drawn: Vec<(String, u64)>,
 }
 
 /// The test render module `test.scene@1`.
 pub struct SceneModule {
     pub scene: Arc<Scene>,
     built: Option<Built>,
+    installed: Arc<Mutex<Installed>>,
     /// The texture fill's bytes, uploaded again after every build.
     texture: Option<Arc<[u8]>>,
     pending_upload: Option<(wgpu::Buffer, Arc<[u8]>)>,
@@ -430,9 +441,15 @@ impl SceneModule {
         Self {
             scene,
             built: None,
+            installed: Arc::default(),
             texture,
             pending_upload: None,
         }
+    }
+
+    /// What the view installs its compile-thread jobs' pipelines into.
+    pub fn installed(&self) -> Arc<Mutex<Installed>> {
+        self.installed.clone()
     }
 }
 
@@ -542,12 +559,19 @@ impl RenderModule for SceneModule {
         let entries = ("region_vertex", "region_fragment");
         let replace = compile(d, Some(&layout), &module, entries, MSAA, false);
         let over = compile(d, Some(&layout), &module, entries, 1, true);
-        let named = self
+        let named: Vec<Named> = self
             .scene
             .pipelines()
             .into_iter()
-            .map(|(k, color)| (k, compile_named(d, k, color).1))
+            .map(|(k, color)| {
+                let (key, p) = compile_named(d, k, color);
+                (k, key, device.epoch, p)
+            })
             .collect();
+        self.installed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pipelines = named;
         if let Some(t) = &self.texture {
             self.pending_upload = Some((texels, t.clone()));
         }
@@ -557,7 +581,6 @@ impl RenderModule for SceneModule {
             bind,
             replace,
             over,
-            named,
             msaa: None,
         });
         Ok(())
@@ -631,20 +654,23 @@ impl RenderModule for SceneModule {
                 b.msaa.as_ref().expect("made above").1.clone(),
             );
             let bind = b.bind.clone();
+            let mut installed = self.installed.lock().unwrap_or_else(|e| e.into_inner());
+            let mut drawn = Vec::new();
             let list: Vec<_> = draws[..regions]
                 .iter()
                 .map(|&(i, s, p)| {
-                    let pipeline = p
-                        .and_then(|p| {
-                            b.named
-                                .iter()
-                                .find(|(k, _)| *k == p)
-                                .map(|(_, x)| x.clone())
-                        })
-                        .unwrap_or_else(|| b.replace.clone());
+                    let named = p.and_then(|p| installed.pipelines.iter().find(|n| n.0 == p));
+                    if let Some((_, key, epoch, _)) = named.filter(|_| s[2] > 0) {
+                        if !drawn.iter().any(|(k, _)| k == key) {
+                            drawn.push((key.clone(), *epoch));
+                        }
+                    }
+                    let pipeline = named.map_or_else(|| b.replace.clone(), |n| n.3.clone());
                     (i, s, pipeline)
                 })
                 .collect();
+            installed.drawn = drawn;
+            drop(installed);
             jobs.push((
                 "regions".into(),
                 Box::new(move |encoder| {

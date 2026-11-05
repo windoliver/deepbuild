@@ -1,0 +1,61 @@
+Acceptance tests for #821 on the base ff81b0d2 (origin/main, no fix), run on 2026-10-30 with Node 23.9.0:
+
+  node --test 'tests/acceptance/821/*.test.mjs'
+
+Trimmed to each test's result and its failing assertion. No local paths appear.
+
+ℹ tests 13
+ℹ pass 5
+ℹ fail 8
+
+✖ #821.c3c2e437 AC1: a committed new crates/deep-app/AGENTS.md runs the config eval lane
+  AssertionError: a change adding crates/deep-app/AGENTS.md must run config eval:
+  SKIP config eval: the change touches none of AGENTS.md, CLAUDE.md, skills/**, .claude/**, .codex/**
+  'SKIP' !== 'RUN'
+
+✖ #821.c3c2e437 AC1: an uncommitted new crates/deep-app/AGENTS.md runs the config eval lane
+  AssertionError: an untracked crates/deep-app/AGENTS.md must run config eval:
+  SKIP config eval: the change touches none of AGENTS.md, CLAUDE.md, skills/**, .claude/**, .codex/**
+  'SKIP' !== 'RUN'
+
+✖ #821.c3c2e437 AC1: an edit to a nested packages/cli/CLAUDE.md runs the config eval lane
+  AssertionError: an edit to packages/cli/CLAUDE.md must run config eval:
+  SKIP config eval: the change touches none of AGENTS.md, CLAUDE.md, skills/**, .claude/**, .codex/**
+  'SKIP' !== 'RUN'
+
+✔ #821.c3c2e437 AC1: a change to docs/notes.md alone still skips the config eval lane, and the root AGENTS.md still runs it
+  (a guard: base behavior that must stay)
+
+✖ #821.77bb6594 AC2: a Lean toolchain bump in lean-toolchain runs the verdict proofs lane
+  AssertionError: a lean-toolchain change must run verdict proofs:
+  SKIP verdict proofs: the change touches none of packages/verdicts/src/**, packages/verdicts/model/**
+  'SKIP' !== 'RUN'
+
+✖ #821.77bb6594 AC2: a change to scripts/verdict-proofs.mjs runs the verdict proofs lane
+  AssertionError: a scripts/verdict-proofs.mjs change must run verdict proofs:
+  SKIP verdict proofs: the change touches none of packages/verdicts/src/**, packages/verdicts/model/**
+  'SKIP' !== 'RUN'
+
+✔ #821.77bb6594 AC2: the engine and the model still run the verdict proofs lane, and docs/notes.md skips it
+  (a guard: base behavior that must stay)
+
+✖ #821.eebd0fa5 AC3: a planted lane whose paths miss a file its script reads fails, naming the lane and the file
+  AssertionError: a lane whose paths miss sub/AGENTS.md, which its script reads, must print a FAIL line naming "planted reader" and sub/AGENTS.md:
+  SKIP planted reader: the change touches none of AGENTS.md
+
+✖ #821.eebd0fa5 AC3: on the probe set, config eval and verdict proofs run exactly for the files their scripts read
+  AssertionError: each lane must RUN for a change to a file its script reads and SKIP for one it never reads
+  + actual - expected
+      'crates/deep-app/AGENTS.md':  { +'config eval': 'SKIP'  -'config eval': 'RUN' }
+      'packages/cli/CLAUDE.md':     { +'config eval': 'SKIP'  -'config eval': 'RUN' }
+      'lean-toolchain':             { +'verdict proofs': 'SKIP'  -'verdict proofs': 'RUN' }
+      'scripts/verdict-proofs.mjs': { +'verdict proofs': 'SKIP'  -'verdict proofs': 'RUN' }
+  (the other 8 probes already agree)
+
+✖ #821.eebd0fa5 AC3: each lane script exports the inputs predicate it judges by, and every lane with paths agrees with it
+  AssertionError: scripts/config-eval.mjs (the config eval lane's script) must export inputs, a (file) => boolean predicate: the module exports no inputs function (exports: )
+
+✔ #821.7e0e2d43 AC4: with no origin/main, both path-gated lanes run, even for a docs/notes.md change
+✔ #821.7e0e2d43 AC4: with an origin/main that shares no history with HEAD, both path-gated lanes run
+✔ #821.7e0e2d43 AC4: in a folder that is not a git repository, both path-gated lanes run
+  (AC4 is today's behavior; these three are regression guards and pass on the base by design)

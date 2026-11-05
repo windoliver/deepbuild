@@ -1,0 +1,942 @@
+#398 criterion 6 (elements.test.ts) at the base, 2026-11-02, on macOS (arm64), node v23.9.0.
+Checkout: 8907ed99 ("Merge pull request #1019 ..."), a descendant of the named base a7e140b2 whose
+crates/deep-marks-render, crates/deep-canvas and docs/canvas-primitives.md are byte-identical to a7e140b2's
+(git diff --stat a7e140b2 8907ed99 over them is empty; only docs/technical-design.md moved by one line).
+
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/398 elements.test.ts --no-file-parallelism
+
+Summary: 43 tests, 43 fail, each for the expected reason: the base's marks2d module refuses vector@1
+(raster and geometry answer module_missing; check answers module_missing and names no element), and the
+base's raster refuses planted "import_skips_clip_path" as bad_input.
+
+=================================================================================================
+1. The run at the base (verbatim)
+=================================================================================================
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-398-d2398a/agent-a0d32e48c7dc0e430/tests/acceptance/398
+
+ ❯ elements.test.ts (43 tests | 43 failed) 26825ms
+   ❯ #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue (7)
+     × AC6 the SVG imports: the raster draws it, and draws something 3000ms
+     × AC6 <clipPath> is drawn as listed or named in an issue 1ms
+     × AC6 <mask> is drawn as listed or named in an issue 2ms
+     × AC6 <pattern> is drawn as listed or named in an issue 1ms
+     × AC6 <marker> is drawn as listed or named in an issue 0ms
+     × AC6 <style> is drawn as listed or named in an issue 0ms
+     × AC6 a planted importer that skips <clipPath> without an issue fails, naming clipPath 232ms
+   ❯ #398 AC6 a rect with rx 4 imports with rounded corners within 0.01 u (1)
+     × AC6 the part r4's outline is the rect [36, 28, 40, 24] u with corners of radius 4, within 0.01 u, and draws so 126ms
+   ❯ #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue (35)
+     × AC6 resvg masking/clipPath/simple-case 261ms
+     × AC6 resvg masking/clipPath/clip-rule=evenodd 265ms
+     × AC6 resvg masking/clipPath/clipPathUnits=objectBoundingBox 263ms
+     × AC6 resvg masking/clipPath/transform-on-clipPath 291ms
+     × AC6 resvg masking/clipPath/with-use-child 327ms
+     × AC6 resvg masking/clipPath/nested-clip-path 329ms
+     × AC6 resvg masking/mask/maskContentUnits=objectBoundingBox 273ms
+     × AC6 resvg masking/mask/on-group-with-transform 280ms
+     × AC6 resvg masking/mask/half-width-region-with-rotation 316ms
+     × AC6 resvg masking/mask/mask-on-self 305ms
+     × AC6 resvg masking/mask/on-a-small-object 315ms
+     × AC6 resvg masking/mask/with-clip-path 311ms
+     × AC6 resvg paint-servers/pattern/simple-case 268ms
+     × AC6 resvg paint-servers/pattern/patternUnits=objectBoundingBox 320ms
+     × AC6 resvg paint-servers/pattern/with-patternTransform 348ms
+     × AC6 resvg paint-servers/pattern/with-viewBox 369ms
+     × AC6 resvg paint-servers/pattern/with-x-and-y 304ms
+     × AC6 resvg paint-servers/pattern/patternContentUnits=objectBoundingBox 302ms
+     × AC6 resvg painting/marker/marker-on-line 307ms
+     × AC6 resvg painting/marker/only-marker-end 416ms
+     × AC6 resvg painting/marker/orient=30 557ms
+     × AC6 resvg painting/marker/marker-on-polyline 416ms
+     × AC6 resvg painting/marker/default-clip 244ms
+     × AC6 resvg painting/marker/with-markerUnits=userSpaceOnUse 282ms
+     × AC6 resvg structure/style/class-selector 265ms
+     × AC6 resvg structure/style/iD-selector 259ms
+     × AC6 resvg structure/style/type-selector 250ms
+     × AC6 resvg structure/style/attribute-selector 274ms
+     × AC6 resvg structure/style/style-inside-CDATA 308ms
+     × AC6 resvg structure/style/resolve-order 304ms
+     × AC6 resvg shapes/rect/simple-case 269ms
+     × AC6 resvg shapes/rect/rounded-rect 273ms
+     × AC6 resvg shapes/rect/rx-attribute-resolving 265ms
+     × AC6 resvg shapes/rect/rx-attribute-clamping 269ms
+     × AC6 resvg shapes/rect/rx-and-ry-attributes-clamping-order 297ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 43 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  elements.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 the SVG imports: the raster draws it, and draws something
+AssertionError: the SVG with the five elements imports and draws: {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check: {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:110:180
+    108|   it('AC6 the SVG imports: the raster draws it, and draws something', …
+    109|     const r = cleanRun();
+    110|     expect(r.report['ok'], `the SVG with the five elements imports and…
+       |                                                                                                                                                                                    ^
+    111|     let ink = 0;
+    112|     for (let y = 0; y < r.image!.height; y++) for (let x = 0; x < r.im…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 <clipPath> is drawn as listed or named in an issue
+AssertionError: <clipPath>: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "<clipPath> is neither drawn nor named in an issue: the raster drew nothing ({\"ok\":false,\"code\":\"module_missing\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"module_missing\",\"severity\":\"error\",\"ids\":[\"art\"],\"path\":\"items/art/kind: vector@1\",\"actual\":null,\"what\":\"marks2d refuses it\",\"fix\":\"Change the item so the 2D marks module can draw it.\"}]}) and no issue of the check names clipPath",
++ ]
+
+ ❯ elements.test.ts:118:52
+    116|   for (const tag of ELEMENTS) {
+    117|     it(`AC6 <${tag}> is drawn as listed or named in an issue`, () => {
+    118|       expect(account(cleanRun())[tag], `<${tag}>`).toEqual([]);
+       |                                                    ^
+    119|     }, 300_000);
+    120|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 <mask> is drawn as listed or named in an issue
+AssertionError: <mask>: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "<mask> is neither drawn nor named in an issue: the raster drew nothing ({\"ok\":false,\"code\":\"module_missing\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"module_missing\",\"severity\":\"error\",\"ids\":[\"art\"],\"path\":\"items/art/kind: vector@1\",\"actual\":null,\"what\":\"marks2d refuses it\",\"fix\":\"Change the item so the 2D marks module can draw it.\"}]}) and no issue of the check names mask",
++ ]
+
+ ❯ elements.test.ts:118:52
+    116|   for (const tag of ELEMENTS) {
+    117|     it(`AC6 <${tag}> is drawn as listed or named in an issue`, () => {
+    118|       expect(account(cleanRun())[tag], `<${tag}>`).toEqual([]);
+       |                                                    ^
+    119|     }, 300_000);
+    120|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 <pattern> is drawn as listed or named in an issue
+AssertionError: <pattern>: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "<pattern> is neither drawn nor named in an issue: the raster drew nothing ({\"ok\":false,\"code\":\"module_missing\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"module_missing\",\"severity\":\"error\",\"ids\":[\"art\"],\"path\":\"items/art/kind: vector@1\",\"actual\":null,\"what\":\"marks2d refuses it\",\"fix\":\"Change the item so the 2D marks module can draw it.\"}]}) and no issue of the check names pattern",
++ ]
+
+ ❯ elements.test.ts:118:52
+    116|   for (const tag of ELEMENTS) {
+    117|     it(`AC6 <${tag}> is drawn as listed or named in an issue`, () => {
+    118|       expect(account(cleanRun())[tag], `<${tag}>`).toEqual([]);
+       |                                                    ^
+    119|     }, 300_000);
+    120|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 <marker> is drawn as listed or named in an issue
+AssertionError: <marker>: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "<marker> is neither drawn nor named in an issue: the raster drew nothing ({\"ok\":false,\"code\":\"module_missing\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"module_missing\",\"severity\":\"error\",\"ids\":[\"art\"],\"path\":\"items/art/kind: vector@1\",\"actual\":null,\"what\":\"marks2d refuses it\",\"fix\":\"Change the item so the 2D marks module can draw it.\"}]}) and no issue of the check names marker",
++ ]
+
+ ❯ elements.test.ts:118:52
+    116|   for (const tag of ELEMENTS) {
+    117|     it(`AC6 <${tag}> is drawn as listed or named in an issue`, () => {
+    118|       expect(account(cleanRun())[tag], `<${tag}>`).toEqual([]);
+       |                                                    ^
+    119|     }, 300_000);
+    120|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 <style> is drawn as listed or named in an issue
+AssertionError: <style>: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "<style> is neither drawn nor named in an issue: the raster drew nothing ({\"ok\":false,\"code\":\"module_missing\",\"issues\":[{\"check\":\"document.validate\",\"code\":\"module_missing\",\"severity\":\"error\",\"ids\":[\"art\"],\"path\":\"items/art/kind: vector@1\",\"actual\":null,\"what\":\"marks2d refuses it\",\"fix\":\"Change the item so the 2D marks module can draw it.\"}]}) and no issue of the check names style",
++ ]
+
+ ❯ elements.test.ts:118:52
+    116|   for (const tag of ELEMENTS) {
+    117|     it(`AC6 <${tag}> is drawn as listed or named in an issue`, () => {
+    118|       expect(account(cleanRun())[tag], `<${tag}>`).toEqual([]);
+       |                                                    ^
+    119|     }, 300_000);
+    120|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 a planted importer that skips <clipPath> without an issue fails, naming clipPath
+AssertionError: the planted importer (planted: "import_skips_clip_path") imports and draws the SVG: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:124:146
+    122|   it('AC6 a planted importer that skips <clipPath> without an issue fa…
+    123|     const r = run(PLANTED);
+    124|     expect(r.report['ok'], `the planted importer (planted: "${PLANTED}…
+       |                                                                                                                                                  ^
+    125|     expect(issuesNaming(r.checked, 'clipPath').map((i) => JSON.stringi…
+    126|     const accounted = account(r);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 a rect with rx 4 imports with rounded corners within 0.01 u > AC6 the part r4's outline is the rect [36, 28, 40, 24] u with corners of radius 4, within 0.01 u, and draws so
+AssertionError: geometry of art refused: {"ok":false,"code":"module_missing","path":"items/art/kind: vector@1"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ geometryParts elements-helpers.ts:245:91
+    243| export function geometryParts(v: VectorDoc, item: string): Part[] {
+    244|   const out = one('geometry', { doc: v.doc, item, store: v.store });
+    245|   expect(out['ok'], `geometry of ${item} refused: ${JSON.stringify(out…
+       |                                                                                           ^
+    246|   return arr(out['parts'], `geometry ${item}: parts`).map((p, i) => {
+    247|     const part = obj(p, `parts[${i}]`);
+ ❯ elements.test.ts:145:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/clipPath/simple-case
+AssertionError: masking/clipPath/simple-case draws through our import, or an issue names <clipPath>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/clipPath/clip-rule=evenodd
+AssertionError: masking/clipPath/clip-rule=evenodd draws through our import, or an issue names <clipPath>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/clipPath/clipPathUnits=objectBoundingBox
+AssertionError: masking/clipPath/clipPathUnits=objectBoundingBox draws through our import, or an issue names <clipPath>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/clipPath/transform-on-clipPath
+AssertionError: masking/clipPath/transform-on-clipPath draws through our import, or an issue names <clipPath>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/clipPath/with-use-child
+AssertionError: masking/clipPath/with-use-child draws through our import, or an issue names <clipPath>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/clipPath/nested-clip-path
+AssertionError: masking/clipPath/nested-clip-path draws through our import, or an issue names <clipPath>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/mask/maskContentUnits=objectBoundingBox
+AssertionError: masking/mask/maskContentUnits=objectBoundingBox draws through our import, or an issue names <mask>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/mask/on-group-with-transform
+AssertionError: masking/mask/on-group-with-transform draws through our import, or an issue names <mask>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/mask/half-width-region-with-rotation
+AssertionError: masking/mask/half-width-region-with-rotation draws through our import, or an issue names <mask>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/mask/mask-on-self
+AssertionError: masking/mask/mask-on-self draws through our import, or an issue names <mask>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/mask/on-a-small-object
+AssertionError: masking/mask/on-a-small-object draws through our import, or an issue names <mask>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/mask/with-clip-path
+AssertionError: masking/mask/with-clip-path draws through our import, or an issue names <clipPath> or <mask>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/simple-case
+AssertionError: paint-servers/pattern/simple-case draws through our import, or an issue names <pattern>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/patternUnits=objectBoundingBox
+AssertionError: paint-servers/pattern/patternUnits=objectBoundingBox draws through our import, or an issue names <pattern>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/with-patternTransform
+AssertionError: paint-servers/pattern/with-patternTransform draws through our import, or an issue names <pattern>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/with-viewBox
+AssertionError: paint-servers/pattern/with-viewBox draws through our import, or an issue names <pattern>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/with-x-and-y
+AssertionError: paint-servers/pattern/with-x-and-y draws through our import, or an issue names <pattern>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/patternContentUnits=objectBoundingBox
+AssertionError: paint-servers/pattern/patternContentUnits=objectBoundingBox draws through our import, or an issue names <pattern>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg painting/marker/marker-on-line
+AssertionError: painting/marker/marker-on-line draws through our import, or an issue names <marker>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg painting/marker/only-marker-end
+AssertionError: painting/marker/only-marker-end draws through our import, or an issue names <marker>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg painting/marker/orient=30
+AssertionError: painting/marker/orient=30 draws through our import, or an issue names <marker>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg painting/marker/marker-on-polyline
+AssertionError: painting/marker/marker-on-polyline draws through our import, or an issue names <marker>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg painting/marker/default-clip
+AssertionError: painting/marker/default-clip draws through our import, or an issue names <marker>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg painting/marker/with-markerUnits=userSpaceOnUse
+AssertionError: painting/marker/with-markerUnits=userSpaceOnUse draws through our import, or an issue names <marker>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg structure/style/class-selector
+AssertionError: structure/style/class-selector draws through our import, or an issue names <style>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg structure/style/iD-selector
+AssertionError: structure/style/iD-selector draws through our import, or an issue names <style>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg structure/style/type-selector
+AssertionError: structure/style/type-selector draws through our import, or an issue names <style>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg structure/style/attribute-selector
+AssertionError: structure/style/attribute-selector draws through our import, or an issue names <style>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg structure/style/style-inside-CDATA
+AssertionError: structure/style/style-inside-CDATA draws through our import, or an issue names <style>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg structure/style/resolve-order
+AssertionError: structure/style/resolve-order draws through our import, or an issue names <style>: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg shapes/rect/simple-case
+AssertionError: shapes/rect/simple-case draws through our import, or an issue names what stops it: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg shapes/rect/rounded-rect
+AssertionError: shapes/rect/rounded-rect draws through our import, or an issue names what stops it: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg shapes/rect/rx-attribute-resolving
+AssertionError: shapes/rect/rx-attribute-resolving draws through our import, or an issue names what stops it: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg shapes/rect/rx-attribute-clamping
+AssertionError: shapes/rect/rx-attribute-clamping draws through our import, or an issue names what stops it: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/43]⎯
+
+ FAIL  elements.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg shapes/rect/rx-and-ry-attributes-clamping-order
+AssertionError: shapes/rect/rx-and-ry-attributes-clamping-order draws through our import, or an issue names what stops it: raster answered {"ok":false,"code":"module_missing","issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}; check answered {"ok":false,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":["art"],"path":"items/art/kind: vector@1","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"notices":[{"code":"unknown_kind","severity":"notice","ids":["art"],"path":"items/art/kind","actual":"vector@1","what":"kind `vector@1` is not registered in this build; the item is skipped"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ elements.test.ts:203:295
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[43/43]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  43 failed (43)
+   Start at  01:56:58
+   Duration  27.00s (tests 100%)
+
+
+=================================================================================================
+2. Every document the suite builds, through the base's check (verbatim lines from a throwaway run):
+   with no look the core check passes each one (ok true, its only notice unknown_kind); with the look
+   and store, only the marks2d module's module_missing stands in the way.
+=================================================================================================
+CORE elements.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 #ffffff #c03020 #7a2a90 #1e7b34 #2050c0 #303030 #e0a000 #208080
+CORE rounded.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 #1e7b34
+CORE masking/clipPath/clip-rule=evenodd.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 green #008000
+CORE masking/clipPath/clipPathUnits=objectBoundingBox.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 green #008000
+CORE masking/clipPath/nested-clip-path.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 green #008000
+CORE masking/clipPath/simple-case.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 green #008000
+CORE masking/clipPath/transform-on-clipPath.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 green #008000
+CORE masking/clipPath/with-use-child.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 green #008000
+CORE masking/mask/half-width-region-with-rotation.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 white #ffffff green #008000
+CORE masking/mask/mask-on-self.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 gray #808080 white #ffffff green #008000
+CORE masking/mask/maskContentUnits=objectBoundingBox.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 gray #808080 green #008000
+CORE masking/mask/on-a-small-object.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 lightgray #d3d3d3 green #008000
+CORE masking/mask/on-group-with-transform.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 white #ffffff green #008000
+CORE masking/mask/with-clip-path.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 gray #808080 green #008000
+CORE paint-servers/pattern/patternContentUnits=objectBoundingBox.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 grey #808080 green #008000 darkblue #00008b
+CORE paint-servers/pattern/patternUnits=objectBoundingBox.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 grey #808080 green #008000 darkblue #00008b
+CORE paint-servers/pattern/simple-case.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 grey #808080 green #008000 darkblue #00008b
+CORE paint-servers/pattern/with-patternTransform.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 grey #808080 green #008000 darkblue #00008b
+CORE paint-servers/pattern/with-viewBox.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 grey #808080 green #008000 darkblue #00008b
+CORE paint-servers/pattern/with-x-and-y.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 grey #808080 green #008000 darkblue #00008b
+CORE painting/marker/default-clip.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 blue #0000ff green #008000
+CORE painting/marker/marker-on-line.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 blue #0000ff green #008000
+CORE painting/marker/marker-on-polyline.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 blue #0000ff green #008000
+CORE painting/marker/only-marker-end.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 blue #0000ff green #008000
+CORE painting/marker/orient=30.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 blue #0000ff green #008000
+CORE painting/marker/with-markerUnits=userSpaceOnUse.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 blue #0000ff green #008000
+CORE structure/style/attribute-selector.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 green #008000
+CORE structure/style/class-selector.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 green #008000
+CORE structure/style/iD-selector.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 green #008000
+CORE structure/style/resolve-order.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 blue #0000ff green #008000
+CORE structure/style/style-inside-CDATA.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 green #008000
+CORE structure/style/type-selector.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 green #008000
+CORE shapes/rect/rounded-rect.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 red #ff0000 green #008000
+CORE shapes/rect/rx-and-ry-attributes-clamping-order.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 red #ff0000 green #008000
+CORE shapes/rect/rx-attribute-clamping.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 red #ff0000 green #008000
+CORE shapes/rect/rx-attribute-resolving.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 red #ff0000 green #008000
+CORE shapes/rect/simple-case.svg no look: true [] notices ["unknown_kind"] | with look: false ["error:module_missing"] notices ["unknown_kind"] | colors black #000000 red #ff0000 green #008000
+
+=================================================================================================
+3. Wrong programs: the suite run against a stand-in deep-canvas-render (README: Wrong programs)
+=================================================================================================
+--- do-nothing: every SVG imports with no issue and draws nothing; geometry answers no parts
+     × AC6 the SVG imports: the raster draws it, and draws something 124ms
+     × AC6 <clipPath> is drawn as listed or named in an issue 3ms
+     × AC6 <mask> is drawn as listed or named in an issue 1ms
+     × AC6 <pattern> is drawn as listed or named in an issue 1ms
+     × AC6 <marker> is drawn as listed or named in an issue 0ms
+     × AC6 <style> is drawn as listed or named in an issue 0ms
+     × AC6 a planted importer that skips <clipPath> without an issue fails, naming clipPath 119ms
+     × AC6 the part r4's outline is the rect [36, 28, 40, 24] u with corners of radius 4, within 0.01 u, and draws so 77ms
+     × AC6 resvg masking/clipPath/simple-case 502ms
+     × AC6 resvg masking/clipPath/clip-rule=evenodd 448ms
+     × AC6 resvg masking/clipPath/clipPathUnits=objectBoundingBox 458ms
+     × AC6 resvg masking/clipPath/transform-on-clipPath 304ms
+     × AC6 resvg masking/clipPath/with-use-child 328ms
+     × AC6 resvg masking/clipPath/nested-clip-path 308ms
+     × AC6 resvg masking/mask/maskContentUnits=objectBoundingBox 351ms
+     × AC6 resvg masking/mask/on-group-with-transform 347ms
+     × AC6 resvg masking/mask/half-width-region-with-rotation 350ms
+     × AC6 resvg masking/mask/mask-on-self 363ms
+     × AC6 resvg masking/mask/on-a-small-object 459ms
+     × AC6 resvg masking/mask/with-clip-path 419ms
+     × AC6 resvg paint-servers/pattern/simple-case 423ms
+     × AC6 resvg paint-servers/pattern/patternUnits=objectBoundingBox 365ms
+     × AC6 resvg paint-servers/pattern/with-patternTransform 504ms
+     × AC6 resvg paint-servers/pattern/with-viewBox 448ms
+     × AC6 resvg paint-servers/pattern/with-x-and-y 343ms
+     × AC6 resvg paint-servers/pattern/patternContentUnits=objectBoundingBox 328ms
+     × AC6 resvg painting/marker/marker-on-line 350ms
+     × AC6 resvg painting/marker/only-marker-end 285ms
+     × AC6 resvg painting/marker/orient=30 347ms
+     × AC6 resvg painting/marker/marker-on-polyline 330ms
+     × AC6 resvg painting/marker/default-clip 362ms
+     × AC6 resvg painting/marker/with-markerUnits=userSpaceOnUse 329ms
+     × AC6 resvg structure/style/class-selector 339ms
+     × AC6 resvg structure/style/iD-selector 343ms
+     × AC6 resvg structure/style/type-selector 334ms
+     × AC6 resvg structure/style/attribute-selector 339ms
+     × AC6 resvg structure/style/style-inside-CDATA 356ms
+     × AC6 resvg structure/style/resolve-order 400ms
+     × AC6 resvg shapes/rect/simple-case 356ms
+     × AC6 resvg shapes/rect/rounded-rect 334ms
+     × AC6 resvg shapes/rect/rx-attribute-resolving 342ms
+     × AC6 resvg shapes/rect/rx-attribute-clamping 386ms
+     × AC6 resvg shapes/rect/rx-and-ry-attributes-clamping-order 288ms
+⎯⎯⎯⎯⎯⎯ Failed Tests 43 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  43 failed (43)
+AssertionError: the imported SVG draws some of its shapes (the line and the styled rect draw whatever else is named in an issue): expected 0 to be greater than 200
+AssertionError: <clipPath>: expected [ …(2) ] to deeply equal []
+AssertionError: <mask>: expected [ …(3) ] to deeply equal []
+AssertionError: <pattern>: expected [ …(4) ] to deeply equal []
+AssertionError: <marker>: expected [ …(4) ] to deeply equal []
+AssertionError: <style>: expected [ …(3) ] to deeply equal []
+AssertionError: the planted importer still accounts for <mask>, as the clean import does: expected [ …(3) ] to deeply equal []
+AssertionError: geometry answers the part r4 (parts: []): expected undefined to be defined
+AssertionError: masking/clipPath/simple-case against resvg's PNG through the perceptual oracle ({"flip":0.9597246527005526,"gmsd":0.33453433108271974,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":14.652407735789854,"iou":0}): expected [ …(4) ] to deeply e
+AssertionError: masking/clipPath/clip-rule=evenodd against resvg's PNG through the perceptual oracle ({"flip":0.959520568180514,"gmsd":0.3518286682219451,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":11.129099976330396,"iou":0}): expected [ …(4) ] to deep
+AssertionError: masking/clipPath/clipPathUnits=objectBoundingBox against resvg's PNG through the perceptual oracle ({"flip":0.9601616902537795,"gmsd":0.30326939970752353,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":21.327929548513588,"iou":0}): expected [ 
+AssertionError: masking/clipPath/transform-on-clipPath against resvg's PNG through the perceptual oracle ({"flip":0.9601482972853319,"gmsd":0.31632258857007733,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":21.322759218485817,"iou":0}): expected [ …(4) ] t
+AssertionError: masking/clipPath/with-use-child against resvg's PNG through the perceptual oracle ({"flip":0.9597246527005526,"gmsd":0.33453433108271974,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":14.652407735789854,"iou":0}): expected [ …(4) ] to deepl
+AssertionError: masking/clipPath/nested-clip-path against resvg's PNG through the perceptual oracle ({"flip":0.9568597861118322,"gmsd":0.3329439538446537,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":9.42914899073609,"iou":0}): expected [ …(4) ] to deeply
+AssertionError: masking/mask/maskContentUnits=objectBoundingBox against resvg's PNG through the perceptual oracle ({"flip":0.9495050539240443,"gmsd":0.31303228201505506,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":20.288977696662602,"iou":0}): expected [ �
+AssertionError: masking/mask/on-group-with-transform against resvg's PNG through the perceptual oracle ({"flip":0.9589185698023401,"gmsd":0.31078394655216063,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":16.661522145874144,"iou":0}): expected [ …(4) ] to 
+AssertionError: masking/mask/half-width-region-with-rotation against resvg's PNG through the perceptual oracle ({"flip":0.9485813743614089,"gmsd":0.2959603418135935,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":6.979323314586324,"iou":0}): expected [ …(4)
+AssertionError: masking/mask/mask-on-self against resvg's PNG through the perceptual oracle ({"flip":0.9478304322095386,"gmsd":0.3001125820986758,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":14.402219512670616,"iou":0}): expected [ …(4) ] to deeply equal
+AssertionError: masking/mask/on-a-small-object against resvg's PNG through the perceptual oracle ({"flip":0.9557673722991081,"gmsd":0.2986483238181855,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":12.43750066945449,"iou":0}): expected [ …(4) ] to deeply e
+AssertionError: masking/mask/with-clip-path against resvg's PNG through the perceptual oracle ({"flip":0.9461755884976524,"gmsd":0.30084975551820997,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":10.82042659002964,"iou":0}): expected [ …(4) ] to deeply equ
+AssertionError: paint-servers/pattern/simple-case against resvg's PNG through the perceptual oracle ({"flip":0.9512301769086712,"gmsd":0.48572190890386524,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":18.021177420083152,"iou":0}): expected [ …(4) ] to dee
+AssertionError: paint-servers/pattern/patternUnits=objectBoundingBox against resvg's PNG through the perceptual oracle ({"flip":0.9052162695893302,"gmsd":0.46191882061336687,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":11.31129916919487,"iou":0}): expected
+AssertionError: paint-servers/pattern/with-patternTransform against resvg's PNG through the perceptual oracle ({"flip":0.9558702912308153,"gmsd":0.46578746620879724,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":17.70928187073227,"iou":0}): expected [ …(4)
+AssertionError: paint-servers/pattern/with-viewBox against resvg's PNG through the perceptual oracle ({"flip":0.8945579014078623,"gmsd":0.4152519278674445,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":5.885442440994281,"iou":0}): expected [ …(4) ] to deep
+AssertionError: paint-servers/pattern/with-x-and-y against resvg's PNG through the perceptual oracle ({"flip":0.9472426002510151,"gmsd":0.4750861223650163,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":15.061256920231175,"iou":0}): expected [ …(4) ] to dee
+AssertionError: paint-servers/pattern/patternContentUnits=objectBoundingBox against resvg's PNG through the perceptual oracle ({"flip":0.9423149219695808,"gmsd":0.47439759500852957,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":13.791178834535406,"iou":0}): 
+AssertionError: painting/marker/marker-on-line against resvg's PNG through the perceptual oracle ({"flip":0.8662094806178963,"gmsd":0.29222601870922005,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":2.965409074930454,"iou":0}): expected [ …(4) ] to deeply 
+AssertionError: painting/marker/only-marker-end against resvg's PNG through the perceptual oracle ({"flip":0.9600771347524641,"gmsd":0.3382596899502369,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":14.824749655113996,"iou":0}): expected [ …(4) ] to deeply
+AssertionError: painting/marker/orient=30 against resvg's PNG through the perceptual oracle ({"flip":0.9612551242135963,"gmsd":0.3519835693452938,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":15.468655955091473,"iou":0}): expected [ …(4) ] to deeply equal
+AssertionError: painting/marker/marker-on-polyline against resvg's PNG through the perceptual oracle ({"flip":0.8856212399915019,"gmsd":0.32754658203590525,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":3.710159173629197,"iou":0}): expected [ …(4) ] to dee
+AssertionError: painting/marker/default-clip against resvg's PNG through the perceptual oracle ({"flip":0.9636317363656366,"gmsd":0.35731068337818617,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":17.8009908056817,"iou":0}): expected [ …(4) ] to deeply equ
+AssertionError: painting/marker/with-markerUnits=userSpaceOnUse against resvg's PNG through the perceptual oracle ({"flip":0.9636317363656366,"gmsd":0.35731068337818617,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":17.8009908056817,"iou":0}): expected [ …
+AssertionError: structure/style/class-selector against resvg's PNG through the perceptual oracle ({"flip":0.9617353930985438,"gmsd":0.3148655634474641,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":29.679063339108342,"iou":0}): expected [ …(4) ] to deeply 
+AssertionError: structure/style/iD-selector against resvg's PNG through the perceptual oracle ({"flip":0.9617353930985438,"gmsd":0.3148655634474641,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":29.679063339108342,"iou":0}): expected [ …(4) ] to deeply equ
+AssertionError: structure/style/type-selector against resvg's PNG through the perceptual oracle ({"flip":0.9636667342916593,"gmsd":0.18050841980831053,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":27.62432445904093,"iou":0}): expected [ …(4) ] to deeply e
+AssertionError: structure/style/attribute-selector against resvg's PNG through the perceptual oracle ({"flip":0.9636667342916593,"gmsd":0.18050841980831053,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":27.62432445904093,"iou":0}): expected [ …(4) ] to dee
+AssertionError: structure/style/style-inside-CDATA against resvg's PNG through the perceptual oracle ({"flip":0.9617353930985438,"gmsd":0.3148655634474641,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":29.679063339108342,"iou":0}): expected [ …(4) ] to dee
+AssertionError: structure/style/resolve-order against resvg's PNG through the perceptual oracle ({"flip":0.9617353930985438,"gmsd":0.3148655634474641,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":29.679063339108342,"iou":0}): expected [ …(4) ] to deeply e
+AssertionError: shapes/rect/simple-case against resvg's PNG through the perceptual oracle ({"flip":0.9617353930985438,"gmsd":0.3148655634474641,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":29.679063339108342,"iou":0}): expected [ …(4) ] to deeply equal [
+AssertionError: shapes/rect/rounded-rect against resvg's PNG through the perceptual oracle ({"flip":0.9616275349338105,"gmsd":0.316197843708046,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":29.552935884958163,"iou":0}): expected [ …(4) ] to deeply equal [
+AssertionError: shapes/rect/rx-attribute-resolving against resvg's PNG through the perceptual oracle ({"flip":0.961635137753997,"gmsd":0.3162008126118289,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":29.551565633200987,"iou":0}): expected [ …(4) ] to deep
+AssertionError: shapes/rect/rx-attribute-clamping against resvg's PNG through the perceptual oracle ({"flip":0.9609527930837307,"gmsd":0.32090208291726235,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":26.686324040130753,"iou":0}): expected [ …(4) ] to dee
+AssertionError: shapes/rect/rx-and-ry-attributes-clamping-order against resvg's PNG through the perceptual oracle ({"flip":0.9586565891727635,"gmsd":0.307157887693253,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":16.78789119772254,"iou":0}): expected [ …(
+
+--- sharp: as do-nothing, except a rect with rx keeps sharp corners in its outline and its drawing
+     × AC6 the SVG imports: the raster draws it, and draws something 209ms
+     × AC6 <clipPath> is drawn as listed or named in an issue 2ms
+     × AC6 <mask> is drawn as listed or named in an issue 1ms
+     × AC6 <pattern> is drawn as listed or named in an issue 1ms
+     × AC6 <marker> is drawn as listed or named in an issue 1ms
+     × AC6 <style> is drawn as listed or named in an issue 1ms
+     × AC6 a planted importer that skips <clipPath> without an issue fails, naming clipPath 105ms
+     × AC6 the part r4's outline is the rect [36, 28, 40, 24] u with corners of radius 4, within 0.01 u, and draws so 53ms
+     × AC6 resvg masking/clipPath/simple-case 368ms
+     × AC6 resvg masking/clipPath/clip-rule=evenodd 434ms
+     × AC6 resvg masking/clipPath/clipPathUnits=objectBoundingBox 560ms
+     × AC6 resvg masking/clipPath/transform-on-clipPath 360ms
+     × AC6 resvg masking/clipPath/with-use-child 500ms
+     × AC6 resvg masking/clipPath/nested-clip-path 653ms
+     × AC6 resvg masking/mask/maskContentUnits=objectBoundingBox 472ms
+     × AC6 resvg masking/mask/on-group-with-transform 323ms
+     × AC6 resvg masking/mask/half-width-region-with-rotation 330ms
+     × AC6 resvg masking/mask/mask-on-self 397ms
+     × AC6 resvg masking/mask/on-a-small-object 426ms
+     × AC6 resvg masking/mask/with-clip-path 366ms
+     × AC6 resvg paint-servers/pattern/simple-case 351ms
+     × AC6 resvg paint-servers/pattern/patternUnits=objectBoundingBox 300ms
+     × AC6 resvg paint-servers/pattern/with-patternTransform 419ms
+     × AC6 resvg paint-servers/pattern/with-viewBox 318ms
+     × AC6 resvg paint-servers/pattern/with-x-and-y 324ms
+     × AC6 resvg paint-servers/pattern/patternContentUnits=objectBoundingBox 330ms
+     × AC6 resvg painting/marker/marker-on-line 279ms
+     × AC6 resvg painting/marker/only-marker-end 287ms
+     × AC6 resvg painting/marker/orient=30 303ms
+     × AC6 resvg painting/marker/marker-on-polyline 271ms
+     × AC6 resvg painting/marker/default-clip 304ms
+     × AC6 resvg painting/marker/with-markerUnits=userSpaceOnUse 303ms
+     × AC6 resvg structure/style/class-selector 290ms
+     × AC6 resvg structure/style/iD-selector 310ms
+     × AC6 resvg structure/style/type-selector 320ms
+     × AC6 resvg structure/style/attribute-selector 339ms
+     × AC6 resvg structure/style/style-inside-CDATA 283ms
+     × AC6 resvg structure/style/resolve-order 328ms
+     × AC6 resvg shapes/rect/simple-case 290ms
+     × AC6 resvg shapes/rect/rounded-rect 323ms
+     × AC6 resvg shapes/rect/rx-attribute-resolving 334ms
+     × AC6 resvg shapes/rect/rx-attribute-clamping 297ms
+     × AC6 resvg shapes/rect/rx-and-ry-attributes-clamping-order 289ms
+⎯⎯⎯⎯⎯⎯ Failed Tests 43 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  43 failed (43)
+AssertionError: the imported SVG draws some of its shapes (the line and the styled rect draw whatever else is named in an issue): expected 0 to be greater than 200
+AssertionError: every point of the outline lies on the rect with corner radius 4 within 0.01 u; the farthest, (36.000, 28.000), is 1.6569 u off: expected 1.6568542494923806 to be less than or equal to 0.01
+AssertionError: shapes/rect/simple-case against resvg's PNG through the perceptual oracle ({"flip":0.9617353930985438,"gmsd":0.3148655634474641,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":29.679063339108342,"iou":0}): expected [ …(4) ] to deeply equal [
+AssertionError: shapes/rect/rounded-rect against resvg's PNG through the perceptual oracle ({"flip":0.3303031890189134,"gmsd":0.2747706679283616,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":6.473977955378896,"iou":0.967170170783153}): expected [ …(3) ] t
+AssertionError: shapes/rect/rx-attribute-resolving against resvg's PNG through the perceptual oracle ({"flip":0.33037049309233846,"gmsd":0.27484654977876594,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":6.470445748923167,"iou":0.9670681091379193}): expected
+AssertionError: shapes/rect/rx-attribute-clamping against resvg's PNG through the perceptual oracle ({"flip":0.4775328988609537,"gmsd":0.34646394869251956,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":11.019935186258742,"iou":0.7717901612573995}): expected 
+AssertionError: shapes/rect/rx-and-ry-attributes-clamping-order against resvg's PNG through the perceptual oracle ({"flip":0.4912480250574654,"gmsd":0.3236999951379136,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":6.456463732544362,"iou":0.758203281312525})
+
+=================================================================================================
+4. The oracle's calibration on the base's own renderer (README: The perceptual oracle; verbatim lines)
+=================================================================================================
+ROUNDED [{"closed":true,"verbs":["M","L","C","L","C","L","C","L","C","Z"],"points":[[40,28],[72,28],[74.2091,28],[76,29.7909],[76,32],[76,48],[76,50.2091],[74.2091,52],[72,52],[40,52],[37.7909,52],[36,50.2091],[36,48],[36,32],[36,29.7909],[37.7909,28],[40,28]]}] worst 0.001078975846558805 missed 0.0009811697292217588 [
+shapes/rect/simple-case {"flip":0.000017332976967466964,"gmsd":0.0001231849618777844,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.00034539651599182624,"iou":0.9999319635324534} []
+ self {"flip":0,"gmsd":0,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0,"iou":1}
+ twin the subject erased to the ground {"flip":0.9617353930985438,"gmsd":0.3148655634474641,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":29.679063339108342,"iou":0}
+ twin the frame moved 4 px right and down {"flip":0.132173045750706,"gmsd":0.3582908473826588,"crushedRef":0.0132,"crushedOurs":0.006544444444444445,"deltaE2000":5.126162809961978,"iou":0.9089247539940273}
+shapes/rect/rounded-rect {"flip":0.0033551769669205376,"gmsd":0.01649342538728706,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.0650099954744939,"iou":0.9991386735572783} []
+ self {"flip":0,"gmsd":0,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0,"iou":1}
+ twin the subject erased to the ground {"flip":0.9616275349338105,"gmsd":0.316197843708046,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":29.552935884958163,"iou":0}
+ twin the frame moved 4 px right and down {"flip":0.12700567482290262,"gmsd":0.35181223132898864,"crushedRef":0.0132,"crushedOurs":0.006544444444444445,"deltaE2000":5.001551111577013,"iou":0.9117242977504841}
+masking/clipPath/simple-case {"flip":0.004015149603048856,"gmsd":0.0002649492462580249,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.012155241675699785,"iou":0.9907984565152864} []
+ self {"flip":0,"gmsd":0,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0,"iou":1}
+ twin the subject erased to the ground {"flip":0.9597246527005526,"gmsd":0.33453433108271974,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":14.652407735789854,"iou":0}
+ twin the frame moved 4 px right and down {"flip":0.29772763519264955,"gmsd":0.33777809820241095,"crushedRef":0.0132,"crushedOurs":0.006544444444444445,"deltaE2000":4.641125719189175,"iou":0.7739063975183204}
+painting/marker/marker-on-line {"flip":0.027550019644759345,"gmsd":0.0004150294201072972,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.019293684871954677,"iou":0.9981973862100045} []
+ self {"flip":0,"gmsd":0,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":7.751380288135255e-19,"iou":1}
+ twin the subject erased to the ground {"flip":0.8662094806178963,"gmsd":0.29222601870922005,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":2.965409074930454,"iou":0}
+ twin the frame moved 4 px right and down {"flip":0.6893464315657947,"gmsd":0.26717375834182183,"crushedRef":0.0132,"crushedOurs":0.006544444444444445,"deltaE2000":3.1303875597289745,"iou":0.25606557377049183}
+WRONG masking/clipPath/simple-case unclipped {"flip":0.7937000358178747,"gmsd":0.25650983145279954,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":32.92654322804405,"iou":0.22253333333333333} 4
+WRONG structure/style/class-selector style ignored {"flip":0.9338934854436658,"gmsd":0.011696478556434006,"crushedRef":0.0132,"crushedOurs":0.6532,"deltaE2000":27.7025899537747,"iou":0.9999319635324534} 3
+WRONG structure/style/class-selector style right {"flip":0.000017332976967466964,"gmsd":0.0001231849618777844,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.00034539651599182624,"iou":0.9999319635324534} 0
+WRONG painting/marker/marker-on-line markers dropped {"flip":0.2615515712753814,"gmsd":0.09009845638521898,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.4720582799695688,"iou":0.7778278503830555} 3
+HAND DONE

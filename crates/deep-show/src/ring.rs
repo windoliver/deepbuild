@@ -15,17 +15,20 @@
 //!   shell's, and chords two plug-ins bind in one context are reported as a conflict;
 //! - a piece you placed stays where you put it, whatever a plug-in or a suggestion asks;
 //! - a bound value draws through the canvas's own bound-value text, from the readings latched by
-//!   the frame, greyed with its age once past its freshness.
+//!   the frame, greyed with its age once past its freshness;
+//! - #629: a bound value on a run's assertion draws the value its record entry holds, read from
+//!   the tool's report when the run was recorded (`runs`).
 
 use std::collections::BTreeMap;
-use std::io::{Read, Write};
-use std::time::Duration;
 
 use deep_canvas::scope::Event;
 use deep_canvas_marks::scene::{bound_text, Record, Shown};
 use serde_json::{json, Map, Value};
 
+use crate::capture::local_http;
 use crate::hub::{Hub, Planted};
+use crate::optional;
+use crate::runs::{self, Resolver, RunCall};
 use crate::shared::FLICKS;
 
 /// How long a plug-in's toast stays up; the design names no number.
@@ -108,17 +111,8 @@ pub enum RingCall {
     Box(String),
     Turns(String),
     Keymap,
-}
-
-fn rect4(v: Option<&Value>) -> Option<[f64; 4]> {
-    let a = v?.as_array().filter(|a| a.len() == 4)?;
-    let r = [
-        a[0].as_f64()?,
-        a[1].as_f64()?,
-        a[2].as_f64()?,
-        a[3].as_f64()?,
-    ];
-    (r.iter().all(|n| n.is_finite()) && r[2] > 0.0 && r[3] > 0.0).then_some(r)
+    /// #629: a run of a check, recorded from its tool's report.
+    Run(RunCall),
 }
 
 /// One of this issue's calls, or `None` for a line that lacks a field it needs.
@@ -135,7 +129,7 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<RingCall> {
         "toasts" => RingCall::Toasts,
         "place" => RingCall::Place {
             piece: s("piece")?,
-            rect: rect4(c.get("rect"))?,
+            rect: crate::rect(c.get("rect"))?,
             by: match (c.get("serial"), c.get("session")) {
                 (Some(n), None) => Placer::You(n.as_u64()?),
                 (None, Some(v)) => {
@@ -155,16 +149,34 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<RingCall> {
         "box" => RingCall::Box(s("session")?),
         "turns" => RingCall::Turns(s("session")?),
         "keymap" => RingCall::Keymap,
+        "run" => RingCall::Run(RunCall {
+            run: s("run")?,
+            check: s("check")?,
+            tool: s("tool")?,
+            report: s("report")?,
+            ended: c.get("ended")?.as_i64()?,
+            summary: optional(c.get("summary"), |v| Some(v.as_str()?.to_string()))?,
+        }),
         _ => return None,
     })
 }
 
-/// A bound value in a panel's element tree: where it draws, what it binds, and its freshness.
+/// A bound value in a panel's element tree: where it draws, what it binds, and what it reads.
 struct Bound {
     element: String,
     bind: Value,
-    source: String,
-    stale_after: i64,
+    source: BoundSource,
+}
+
+enum BoundSource {
+    /// A plug-in's source, and its freshness.
+    Reading { source: String, stale_after: i64 },
+    /// One assertion of a run, and which of its two values (#629).
+    Run {
+        run: String,
+        assertion: String,
+        select: String,
+    },
 }
 
 struct PanelDef {
@@ -253,6 +265,8 @@ pub struct Ring {
     turns: BTreeMap<String, Vec<Value>>,
     boxes: BTreeMap<String, SessionBox>,
     bindings: Vec<Binding>,
+    /// Each run's record entry, with the time the hub recorded it (#629).
+    runs: BTreeMap<String, (i64, Value)>,
 }
 
 impl Ring {
@@ -271,6 +285,15 @@ impl Ring {
                 })
                 .collect(),
             ..Ring::default()
+        }
+    }
+
+    /// The record entries a replay starts from, recorded before its first call.
+    pub fn replay(&mut self, entries: &[Value]) {
+        for e in entries {
+            if let Some((run, _)) = runs::entry(e) {
+                self.runs.insert(run, (i64::MIN, e.clone()));
+            }
         }
     }
 
@@ -305,11 +328,6 @@ impl Ring {
     /// Whether a plug-in's install claimed the panel.
     pub fn owns(&self, panel: &str) -> bool {
         self.panels.contains_key(panel)
-    }
-
-    /// Your press moved keyboard focus to `panel`, a plug-in's or not.
-    pub fn focus(&mut self, panel: &str) {
-        self.kb_focus = Some(panel.to_string());
     }
 
     /// Where the piece is laid out in the main window: its slot until something placed it.
@@ -452,8 +470,14 @@ fn seconds_literal(flicks: i64) -> Option<String> {
 
 /// A bound value as a frame pinned at `pinned` draws it, through the canvas's own bound-value
 /// text (Bound value: stale once past its freshness, greyed with its age).
-fn draw(b: &Bound, reading: Option<&Reading>, pinned: i64) -> Option<Shown> {
-    let handle = format!("reading:{}", b.source);
+fn draw(
+    b: &Bound,
+    source: &str,
+    stale_after: i64,
+    reading: Option<&Reading>,
+    pinned: i64,
+) -> Option<Shown> {
+    let handle = format!("reading:{source}");
     let mut bound = Map::new();
     bound.insert("target".into(), json!("items/v/params/text"));
     bound.insert("source".into(), json!(handle));
@@ -462,7 +486,7 @@ fn draw(b: &Bound, reading: Option<&Reading>, pinned: i64) -> Option<Shown> {
             bound.insert(k.into(), v.clone());
         }
     }
-    bound.insert("stale_after".into(), json!(seconds_literal(b.stale_after)?));
+    bound.insert("stale_after".into(), json!(seconds_literal(stale_after)?));
     let mut doc = Map::new();
     doc.insert("bound_values".into(), json!({ "v": bound }));
     let mut record = Record {
@@ -510,7 +534,7 @@ fn op(v: &Value) -> Option<Op> {
         },
         "place" => Op::Place {
             piece: s("piece")?,
-            rect: rect4(v.get("rect"))?,
+            rect: crate::rect(v.get("rect"))?,
         },
         _ => return None,
     })
@@ -562,27 +586,6 @@ fn check_binding(
     }
 }
 
-/// The wrong program `panel_policy_open`: the script's own HTTP fetch, made.
-fn fetch(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("http://") else {
-        return false;
-    };
-    let (host, path) = match rest.split_once('/') {
-        Some((h, p)) => (h, format!("/{p}")),
-        None => (rest, "/".to_string()),
-    };
-    // Even the wrong program reaches only this machine.
-    if !host.starts_with("127.0.0.1:") && !host.starts_with("localhost:") {
-        return false;
-    }
-    let Ok(mut stream) = std::net::TcpStream::connect(host) else {
-        return false;
-    };
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-    let request = format!("GET {path} HTTP/1.0\r\nHost: {host}\r\n\r\n");
-    stream.write_all(request.as_bytes()).is_ok() && stream.read_to_end(&mut Vec::new()).is_ok()
-}
-
 /// The wrong program `panel_policy_open`: the script's own program, run, if it is the Node the
 /// tests run under (the only program any scenario names).
 fn run_program(argv: &[String]) -> bool {
@@ -597,10 +600,6 @@ fn run_program(argv: &[String]) -> bool {
 }
 
 impl Hub<'_> {
-    fn planted_is(&self, p: Planted) -> bool {
-        self.scenario.planted == Some(p)
-    }
-
     /// One of this issue's calls.
     pub fn ring_call(&mut self, call: &RingCall) -> Value {
         let now = self.now;
@@ -619,7 +618,7 @@ impl Hub<'_> {
                 let showing = card.is_some_and(|c| {
                     matches!(c.states.last(), Some((s, _)) if *s == "presented" || *s == "armed")
                 });
-                let shown = !showing || self.planted_is(Planted::ToastsIgnoreCard);
+                let shown = !showing || self.planted(Planted::ToastsIgnoreCard);
                 let list: Vec<Value> = self
                     .ring
                     .toasts
@@ -641,7 +640,7 @@ impl Hub<'_> {
                         }
                     }
                     Placer::Suggestion => {
-                        let moves = self.planted_is(Planted::PlacementMovesYours);
+                        let moves = self.planted(Planted::PlacementMovesYours);
                         self.ring.place(piece, *rect, "suggestion", moves)
                     }
                 };
@@ -658,6 +657,16 @@ impl Hub<'_> {
                 json!({ "pieces": list })
             }
             RingCall::Drawn(panel) => self.drawn(panel),
+            RingCall::Run(run) if self.ring.runs.contains_key(&run.run) => {
+                json!({"code": "already_recorded", "run": run.run})
+            }
+            RingCall::Run(run) => match runs::record(run, now) {
+                Ok(entry) => {
+                    self.ring.runs.insert(run.run.clone(), (now, entry.clone()));
+                    json!({ "recorded": entry })
+                }
+                Err(refused) => refused,
+            },
             RingCall::Reading(source) => {
                 let Some(s) = self.ring.sources.get(source) else {
                     return json!({"code": "unknown_source"});
@@ -706,7 +715,7 @@ impl Hub<'_> {
     }
 
     fn reported_conflicts(&self) -> Vec<Value> {
-        match self.planted_is(Planted::ConflictsUnreported) {
+        match self.planted(Planted::ConflictsUnreported) {
             true => Vec::new(),
             false => self.ring.conflicts(),
         }
@@ -766,10 +775,7 @@ impl Hub<'_> {
                     .iter()
                     .map(answer)
                     .collect::<Option<Vec<_>>>()?;
-                let then = match s.get("then") {
-                    None => None,
-                    Some(t) => Some(answer(t)?),
-                };
+                let then = optional(s.get("then"), answer)?;
                 Some((fresh, replay, then))
             })();
             let Some((fresh, replay, then)) = parsed else {
@@ -807,7 +813,7 @@ impl Hub<'_> {
                 let Some(chord) = canonical_chord(written) else {
                     return bad(&format!("keymap/{i}/chord"));
                 };
-                if !self.planted_is(Planted::KeymapUnchecked) {
+                if !self.planted(Planted::KeymapUnchecked) {
                     // Judged in its one spelling; the refusal names it as the plug-in wrote it.
                     if let Err(mut refused) = check_binding(&chord, command, &kinds) {
                         refused["chord"] = json!(written);
@@ -882,15 +888,30 @@ impl Hub<'_> {
         }
         let mut bound = Vec::new();
         for (element, bind) in found {
-            let source = bind
-                .get("source")?
-                .as_str()?
-                .strip_prefix("reading:")?
-                .to_string();
-            if !matches!(
-                bind.get("select").and_then(Value::as_str),
-                None | Some("value")
-            ) {
+            let text = bind.get("source")?.as_str()?;
+            let select = bind.get("select").and_then(Value::as_str);
+            if text.starts_with("run:") {
+                // #629: a run's assertion, its expected or received value.
+                let (run, assertion) = deep_canvas_marks::runs::source(text)?;
+                let select = select.filter(|s| matches!(*s, "expected" | "received"))?;
+                if bind.get("stale_after").is_some() {
+                    return None;
+                }
+                let b = Bound {
+                    element,
+                    bind: bind.clone(),
+                    source: BoundSource::Run {
+                        run,
+                        assertion,
+                        select: select.to_string(),
+                    },
+                };
+                deep_canvas_marks::runs::text(bind, text, None, 0)?;
+                bound.push(b);
+                continue;
+            }
+            let source = text.strip_prefix("reading:")?.to_string();
+            if !matches!(select, None | Some("value")) {
                 return None;
             }
             // A binding never shows a reading as live past the source's own freshness.
@@ -902,10 +923,12 @@ impl Hub<'_> {
             let b = Bound {
                 element,
                 bind: bind.clone(),
-                source,
-                stale_after,
+                source: BoundSource::Reading {
+                    source: source.clone(),
+                    stale_after,
+                },
             };
-            draw(&b, None, 0)?;
+            draw(&b, &source, stale_after, None, 0)?;
             bound.push(b);
         }
         Some(PanelDef {
@@ -935,10 +958,7 @@ impl Hub<'_> {
                     panel: panel.to_string(),
                     next,
                     every,
-                    until: match t.get("until") {
-                        None => None,
-                        Some(u) => Some(u.as_i64()?),
-                    },
+                    until: optional(t.get("until"), Value::as_i64)?,
                     ops: ops(t.get("do"))?,
                 })
             })
@@ -976,11 +996,12 @@ impl Hub<'_> {
         let mut failed_read = false;
         let (outcome, serial) = match op {
             // The panel's policy is empty: no network or program of its own.
-            Op::Fetch(url) => match self.planted_is(Planted::PanelPolicyOpen) && fetch(url) {
+            Op::Fetch(url) => match self.planted(Planted::PanelPolicyOpen) && local_http(url, None)
+            {
                 true => ("done", None),
                 false => ("refused", None),
             },
-            Op::Run(argv) => match self.planted_is(Planted::PanelPolicyOpen) && run_program(argv) {
+            Op::Run(argv) => match self.planted(Planted::PanelPolicyOpen) && run_program(argv) {
                 true => ("done", None),
                 false => ("refused", None),
             },
@@ -989,7 +1010,7 @@ impl Hub<'_> {
                 if self.ring.sources.get(source).map(|s| s.plugin.as_str()) != Some(&plugin) {
                     ("refused", None)
                 } else {
-                    let restamp = self.planted_is(Planted::RefreshRestampsCached);
+                    let restamp = self.planted(Planted::RefreshRestampsCached);
                     match self.ring.call_source(source, now, restamp) {
                         true => ("done", None),
                         false => {
@@ -1006,7 +1027,7 @@ impl Hub<'_> {
             } => self.say(&plugin, panel, session, kinds, text),
             _ => {
                 let serial = self.placement.fresh_serial(panel, now, |_| true);
-                let unguarded = self.planted_is(Planted::ScriptOpsNeedNoSerial)
+                let unguarded = self.planted(Planted::ScriptOpsNeedNoSerial)
                     && matches!(op, Op::Focus | Op::PopOut(_) | Op::Clipboard(_));
                 match serial.is_some() || unguarded {
                     true if self.gated(&plugin, panel, op, serial) => ("done", serial),
@@ -1068,7 +1089,7 @@ impl Hub<'_> {
                 return reply.get("window").is_some();
             }
             Op::Place { piece, rect } => {
-                let moves = self.planted_is(Planted::PlacementMovesYours);
+                let moves = self.planted(Planted::PlacementMovesYours);
                 let placed = self.ring.place(piece, *rect, "plugin", moves);
                 self.lay_out(piece);
                 return placed.get("piece").is_some();
@@ -1095,13 +1116,13 @@ impl Hub<'_> {
         let n = self.ring.sends.entry(panel.to_string()).or_default();
         let kind = kinds[*n % kinds.len()].clone();
         *n += 1;
-        let many = self.planted_is(Planted::SerialCarriesManySends);
+        let many = self.planted(Planted::SerialCarriesManySends);
         let spent = &self.ring.spent;
         let serial = self
             .placement
             .fresh_serial(panel, now, |s| many || !spent.contains(&s));
         let by = json!({"plugin": plugin, "panel": panel});
-        if serial.is_some() || self.planted_is(Planted::SendsWithoutSerial) {
+        if serial.is_some() || self.planted(Planted::SendsWithoutSerial) {
             if let Some(s) = serial {
                 self.ring.spent.insert(s);
             }
@@ -1152,13 +1173,13 @@ impl Hub<'_> {
         self.placement.input(now, panel);
         match event {
             Event::Down { .. } => {
-                self.ring.focus(panel);
+                self.ring.kb_focus = Some(panel.to_string());
                 self.placement.gesture(now, panel, serial);
                 (serial, None)
             }
             Event::Key { key, .. } => {
                 let escape = key.eq_ignore_ascii_case(ESCAPE);
-                let takes = self.planted_is(Planted::FocusedPanelTakesEscape);
+                let takes = self.planted(Planted::FocusedPanelTakesEscape);
                 let to = self.ring.key_to(panel, escape, takes).map(str::to_string);
                 if let Some(f) = &to {
                     self.placement.gesture(now, f, serial);
@@ -1189,7 +1210,7 @@ impl Hub<'_> {
             return json!({"code": "not_presented"});
         };
         let lead = self.scenario.clock.map_or(0, |c| c.lead);
-        let late = match self.planted_is(Planted::BoundValueAFrameLate) {
+        let late = match self.planted(Planted::BoundValueAFrameLate) {
             true => grid.period,
             false => 0,
         };
@@ -1197,20 +1218,63 @@ impl Hub<'_> {
         let bound: Vec<Value> = def
             .bound
             .iter()
-            .map(|b| {
-                let reading = self.ring.reading_at(&b.source, latch);
-                let shown = draw(b, reading, vsync);
-                json!({
-                    "element": b.element,
-                    "text": shown.as_ref().map_or("—", |s| s.text.as_str()),
-                    "stale": shown.as_ref().is_some_and(|s| s.stale),
-                    "age": shown.as_ref().and_then(|s| s.age),
-                    "as_of": reading.map(|r| r.as_of),
-                    "source": format!("reading:{}", b.source),
-                })
+            .map(|b| match &b.source {
+                BoundSource::Reading { source, stale_after } => {
+                    let reading = self.ring.reading_at(source, latch);
+                    let shown = draw(b, source, *stale_after, reading, vsync);
+                    json!({
+                        "element": b.element,
+                        "text": shown.as_ref().map_or("—", |s| s.text.as_str()),
+                        "stale": shown.as_ref().is_some_and(|s| s.stale),
+                        "age": shown.as_ref().and_then(|s| s.age),
+                        "as_of": reading.map(|r| r.as_of),
+                        "value": reading.map(|r| r.value),
+                        "missing": reading.is_none().then(|| json!({"cause": "no_reading", "source": format!("reading:{source}")})),
+                        "source": format!("reading:{source}"),
+                    })
+                }
+                BoundSource::Run { run, assertion, select } => self.drawn_run(b, run, assertion, select, latch),
             })
             .collect();
         json!({"vsync": vsync, "bound": bound})
+    }
+
+    /// A bound value on a run's assertion in the frame latched at `latch`: the value the run's
+    /// record entry holds, with the run's end as its as-of time, or missing, naming why.
+    fn drawn_run(&self, b: &Bound, run: &str, assertion: &str, select: &str, latch: i64) -> Value {
+        let entry = self
+            .ring
+            .runs
+            .get(run)
+            .filter(|(made, _)| *made <= latch)
+            .map(|(_, e)| e);
+        let resolver = if self.planted(Planted::ResolverReadsSummary) {
+            Resolver::Summary
+        } else if self.planted(Planted::UnparsableReadsZero) {
+            Resolver::UnparsableZero
+        } else {
+            Resolver::Report
+        };
+        let unit = b.bind.get("format").and_then(|f| f.get("unit")?.as_str());
+        let resolved = runs::resolve(entry, run, assertion, select, unit, resolver);
+        let as_of = entry.and_then(|e| e.get("ended")?.as_i64());
+        let source = format!("{run}#{assertion}");
+        let text = deep_canvas_marks::runs::text(
+            &b.bind,
+            &source,
+            resolved.as_ref().ok().copied(),
+            as_of.unwrap_or(0),
+        );
+        json!({
+            "element": b.element,
+            "text": text.as_deref().unwrap_or("—"),
+            "stale": false,
+            "age": null,
+            "as_of": as_of,
+            "value": resolved.as_ref().ok().map(|(v, _)| v),
+            "missing": resolved.err(),
+            "source": source,
+        })
     }
 }
 

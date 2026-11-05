@@ -1,8 +1,8 @@
-// One canvas workload per run, for the perf lane's budgets (issues #96, #305, #379 and #383): node
+// One canvas workload per run, for the perf lane's budgets (issues #96, #305, #379, #383, #417 and #854): node
 // benchmarks/canvas.mjs <task>. Each drives a built binary over JSON lines, as the acceptance tests do: `deep-show run`
 // for patches and the seal, `deep-canvas merge` for a merge, `deep-gpu run` for the deepest level of a 3D city.
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,8 +20,8 @@ const envelope = { format: 1, profile: 'board', title: 'Bench board', descriptio
 const rect = (id, layer, i) => ({ id, kind: 'rect@1', layer, name: id, order: `b${i}`, params: { box: [0, 0, 8, 8], paint: { fill: { role: 'muted' } } }, at: { pos: [i % 600, 100, 0] } });
 const ulid = (n) => `01JB96P${String(n).padStart(19, '0')}`;
 
-function run(binary, subcommand, lines) {
-  const out = spawnSync(join(root, 'target', 'debug', binary), subcommand.split(' '), { input: `${lines.join('\n')}\n`, encoding: 'utf8', maxBuffer: 1 << 30 });
+function run(binary, subcommand, lines, profile = 'debug') {
+  const out = spawnSync(join(root, 'target', profile, binary), subcommand.split(' '), { input: `${lines.join('\n')}\n`, encoding: 'utf8', maxBuffer: 1 << 30 });
   if (out.status !== 0) throw Error(`${binary} ${subcommand} exited ${out.status}: ${out.stderr}`);
   return out.stdout.trim().split('\n').map((line) => JSON.parse(line));
 }
@@ -147,8 +147,9 @@ workloads['map-deepest-level'] = () => {
   }
 };
 
-// The cost model's micro-benchmark (issue #379): every operator the shipped build seals, timed by `deep-show`'s
-// `costs` call over generated boards, and scene3d's two passes timed by their timestamps on the device through
+// The cost model's micro-benchmark (issue #379): every operator the shipped build seals, timed by an optimized
+// `deep-show`'s `costs` call over generated boards (issue #855: the release build, whose profile and toolchain the
+// file records, since the cost model reads no file a debug build measured), and scene3d's two passes timed by their timestamps on the device through
 // `deep-gpu`'s live window at two sizes and two box counts. It prints the measured terms beside the declared ones
 // with this machine's fingerprint; `--write` on a reference Mac makes them the build's coefficients
 // (crates/deep-canvas/costs.json). Off macOS the passes keep their declared terms.
@@ -156,6 +157,9 @@ const COSTS = join(root, 'crates', 'deep-canvas', 'costs.json');
 const LOOK = join(root, 'tests', 'acceptance', '379', 'fixtures', 'look.json');
 // Bytes per pixel from the passes' formats: the linear, object-ID and depth targets, and three BGRA slots.
 const PASS_BYTES = { 'scene3d.geometry': 16, 'scene3d.output': 12 };
+// Passes the bench doesn't time, which keep their declared terms (#200): the shadow map, which its scenes don't cast,
+// and the object-ID writes, which run and are timed inside scene3d.geometry, whose bytes count the object-ID target.
+const DECLARED_ONLY = ['scene3d.shadow', 'scene3d.object_id'];
 
 function sceneDoc({ title, budgetClass, size, boxes }) {
   const items = { cam: { id: 'cam', kind: 'camera@1', name: 'Camera', order: 'a0', params: { projection: 'perspective', target: [0, 1, 0], orbit: { azimuth: 30, elevation: 25, distance: 14 }, fov: 40 } } };
@@ -171,11 +175,11 @@ function sceneDoc({ title, budgetClass, size, boxes }) {
 /** `deep-gpu run` with one live call per entry of `calls`, each over its own documents: the replies. */
 function liveCalls(dir, calls) {
   const look = JSON.parse(readFileSync(LOOK, 'utf8'));
-  const lines = calls.map(({ docs, ...call }, c) => {
+  const lines = calls.map(({ docs, surface, ...call }, c) => {
     const sessions = docs.map((doc, i) => {
       const path = join(dir, `doc-${c}-${i}.json`);
       writeFileSync(path, JSON.stringify(doc));
-      return { session: `s-${i}`, writer: `agent:bench-${i}`, doc: path };
+      return { session: `s-${i}`, writer: `agent:bench-${i}`, doc: path, ...(surface ? { surface } : {}) };
     });
     return { call: 'live', look, sessions, ...call };
   });
@@ -238,15 +242,18 @@ workloads.costs = () => {
   const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
   let answer;
   try {
-    [answer] = run('deep-show', 'run', [JSON.stringify({ evidence, calls: [{ call: 'costs' }] })]);
+    const built = spawnSync('cargo', ['build', '--locked', '--release', '-p', 'deep-show'], { cwd: root, stdio: 'inherit' });
+    if (built.status !== 0) throw Error(`cargo build --release -p deep-show exited ${built.status}`);
+    [answer] = run('deep-show', 'run', [JSON.stringify({ evidence, calls: [{ call: 'costs' }] })], 'release');
   } finally {
     rmSync(evidence, { recursive: true, force: true });
   }
   const measured = answer.replies?.[0];
-  if (!measured?.terms) throw Error(`deep-show costs answered ${JSON.stringify(answer).slice(0, 1500)}`);
+  if (!measured?.terms || !measured.build?.profile) throw Error(`deep-show costs answered ${JSON.stringify(answer).slice(0, 1500)}`);
   const declared = JSON.parse(readFileSync(COSTS, 'utf8'));
   const terms = { ...measured.terms };
   for (const [pass, bytes] of Object.entries({ ...PASS_BYTES, ...EFFECT_BYTES })) terms[pass] = { ...(declared.terms[pass] ?? {}), bytes_per_px: bytes };
+  for (const pass of DECLARED_ONLY) if (declared.terms[pass]) terms[pass] = declared.terms[pass];
   if (process.platform === 'darwin') {
     const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
     try {
@@ -268,11 +275,11 @@ workloads.costs = () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }
-  const report = { fingerprint: machine, terms, declared: declared.terms, declaredFingerprint: declared.fingerprint };
+  const report = { fingerprint: machine, build: measured.build, terms, declared: declared.terms, declaredFingerprint: declared.fingerprint };
   if (write) {
     if (!['Mac15,7', 'Mac15,12'].includes(machine.model)) throw Error(`coefficients come from a reference Mac; this is ${machine.model}`);
     const { model, chip, memoryBytes, macosBuild } = machine;
-    writeFileSync(COSTS, `${JSON.stringify({ fingerprint: { model, chip, memoryBytes, macosBuild }, terms }, null, 2)}\n`);
+    writeFileSync(COSTS, `${JSON.stringify({ fingerprint: { model, chip, memoryBytes, macosBuild }, build: measured.build, terms }, null, 2)}\n`);
   }
   console.log(JSON.stringify(report));
 };
@@ -318,6 +325,8 @@ workloads.class = () => {
       if (first.sessions[0]?.state !== 'live') throw Error(`${cls}: the fixture isn't live: ${JSON.stringify(first.sessions[0]).slice(0, 800)}`);
     }
     const runs = liveCalls(dir, Array.from({ length: 5 }, () => ({ docs: [doc], frames: WARM_UP + WARM_FRAMES })));
+    // #140: the seams' backends that drew the frames, as the live view names them.
+    report.backends = runs[0]?.backends;
     report.warm = {
       limits: CLASS_LIMITS[cls],
       runs: runs.map((r) => {
@@ -349,6 +358,107 @@ workloads.class = () => {
       });
     }
     console.log(JSON.stringify(report));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #429: a composed operator's GPU time in its class. The data_view fixture with a composed pass that tints the
+// frame (resolution half, the class's), five runs of 300 frames after 30 of warm-up, each run the p95 of the
+// operator's own pass; the perf lane compares it with the merge base, which draws no operator item.
+const OPERATOR_LIMITS = { data_view: 0.5 };
+workloads.operator = () => {
+  const cls = process.argv[3] ?? 'data_view';
+  if (!(cls in OPERATOR_LIMITS)) throw Error(`Unknown class ${cls}; one of: ${Object.keys(OPERATOR_LIMITS).join(', ')}`);
+  const doc = JSON.parse(readFileSync(join(root, 'benchmarks', 'canvas', `${cls}.json`), 'utf8'));
+  doc.requires.modules.effects = '^1';
+  doc.items.tint = { id: 'tint', kind: 'gpu.pass@1', name: 'Tint', order: 'z0', params: {
+    about: 'The #429 benchmark pass: adds 0.6 to the frame\'s red.', origin: 'composed',
+    inputs: { src: { type: 'texture', from: { texture: { target: { op: 'core', output: 'color' } } } } },
+    steps: { uv: { op: 'screen_uv@1', args: {} }, c: { op: 'sample@1', args: { tex: 'src', uv: 'uv', lod: 0 } },
+      red: { op: 'const@1', args: { value: [0.6, 0, 0, 0], type: 'vec4' } }, out: { op: 'add@1', args: { a: 'c', b: 'red' } } },
+    outputs: { color: 'out' }, chain: 'effects', order: 'a0', resolution: 'half', cost: { ns_per_px: 50 }, fallback: 'look' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const runs = liveCalls(dir, Array.from({ length: 5 }, () => ({ docs: [doc], frames: WARM_UP + WARM_FRAMES, report: ['passes'] })));
+    const report = { task: 'operator', class: cls, limit_ms: OPERATOR_LIMITS[cls], fingerprint: fingerprint(), runs: runs.map((r) => {
+      const ms = r.frames.slice(WARM_UP).map((f) => f.passes.filter((p) => p.operator === 'tint').reduce((s, p) => s + (p.end_ns - p.start_ns) / 1e6, 0));
+      return { frames: ms.length, operator_p95_ms: p95(ms) };
+    }) };
+    console.log(JSON.stringify(report));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #483: the structural steps' GPU time. sort_by_key of 1,048,576 keys, scan and compact of 1,048,576 elements,
+// each a check_operator frame dispatched 300 times on the same inputs, five runs after one of warm-up, each run the
+// p95 of the step's GPU time from its passes' own timestamps; the perf lane compares them with the merge base,
+// which has none of these steps.
+workloads.structural = () => {
+  const n = 1_048_576;
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    let x = 4837;
+    const word = () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; return (x >>>= 0); };
+    const file = (name, f) => { const p = join(dir, `${name}.u32`); writeFileSync(p, Buffer.from(Uint32Array.from({ length: n }, (_, i) => f(i)).buffer)); return p; };
+    const data = { keys: file('keys', word), vals: file('vals', (i) => i), xs: file('xs', word), flags: file('flags', () => (word() % 10 < 3 ? 1 : 0)) };
+    const core = (type, name) => ({ type, count: n, from: { storage: { op: 'core', output: name } } });
+    const op = (id, steps, outputs, inputs) => ({ id, kind: 'compute', origin: 'composed', about: `The #483 benchmark ${id}.`, inputs, steps, outputs, elements: n, workgroup: 256, cost: { ns_per_element: 100 } });
+    const operators = [
+      op('srt', { s: { op: 'sort_by_key@1', args: { keys: 'keys', values: 'vals', count: n } } }, { sorted: { storage: { type: 'u32', count: n }, from: 's' } }, { keys: core('u32', 'keys'), vals: core('u32', 'vals') }),
+      op('scn', { sc: { op: 'scan@1', args: { in: 'xs', op: 'add' } } }, { out: { storage: { type: 'u32', count: n }, from: 'sc' } }, { xs: core('u32', 'xs') }),
+      op('cmp', { c: { op: 'compact@1', args: { in: 'vals', flag: 'flags', count: n } } }, { kept: { storage: { type: 'u32', count: n }, from: 'c.out' }, n: { storage: { type: 'u32', count: 1 }, from: 'c.count' } }, { vals: core('u32', 'vals'), flags: core('bool', 'flags') }),
+    ];
+    const calls = Array.from({ length: 6 }, () => ({ call: 'check_operator', operators, data, repeat: 300 }));
+    const [answer] = run('deep-gpu', 'run', [JSON.stringify({ out: dir, calls })]);
+    if (answer.ok !== true || answer.replies.some((r) => r.outcome !== 'accepted')) throw Error(`deep-gpu check_operator answered ${JSON.stringify(answer).slice(0, 1500)}`);
+    const limits = { srt: 2, scn: 0.5, cmp: 0.5 };
+    const report = { task: 'structural', limits_ms: limits, fingerprint: fingerprint(), runs: answer.replies.slice(1).map((r) =>
+      Object.fromEntries(Object.keys(limits).map((k) => [`${k}_p95_ms`, p95(r.timing.gpu_ns[k].map((ns) => ns / 1e6))]))) };
+    console.log(JSON.stringify(report));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #386: the upscale's two passes on a 1080p frame of 12 px labels and thin diagonal lines, drawn at
+// internal scale 0.5 through the edge-adaptive upscale: each frame's time the two passes cover, by their
+// timestamps, five runs after a warm-up one.
+const UPSCALE_PASSES = ['surface.upscale', 'surface.sharpen'];
+function typeDoc() {
+  const items = { cam: { id: 'cam', kind: 'camera@1', name: 'Camera', order: 'a0', params: { projection: 'orthographic', target: [0, 0, 0], orbit: { azimuth: 0, elevation: 0, distance: 20 }, view_width: 32 } } };
+  for (let i = 0; i < 48; i++) {
+    items[`t-${i}`] = { id: `t-${i}`, kind: 'mark.text@1', name: `Label ${i}`, order: `b${String(i).padStart(2, '0')}`,
+      params: { text: `Latency p95 ${i}.${i % 10} ms`, size: 12, font: 'body', paint: { fill: { role: 'ink' } } }, at: { pos: [-13.5 + (i % 6) * 5.4, 7.2 - Math.floor(i / 6) * 2.05, 0] } };
+  }
+  for (let i = 0; i < 24; i++) {
+    const a = ((15 + (i * 60) / 23) * Math.PI) / 180;
+    items[`l-${i}`] = { id: `l-${i}`, kind: 'mark.line@1', name: `Line ${i}`, order: `c${String(i).padStart(2, '0')}`,
+      params: { points: [[0, 0, 0], [5 * Math.cos(a), 5 * Math.sin(a), 0]], width: 2, paint: { fill: { role: 'ink' } } }, at: { pos: [-14 + (i % 8) * 4, -6.5 + Math.floor(i / 8) * 5.5, 0] } };
+  }
+  return { format: 1, profile: 'scene', title: 'Labels and diagonals', description: 'A #386 bench document.', size: [1920, 1080], camera: 'cam',
+    requires: { modules: { scene3d: '^1' } }, budget: { class: 'showpiece' }, transport: { span: '60s' }, items,
+    channels: { slide: { target: 'items/l-0/at/pos/0', type: 'f32', keys: { k0: { t: '0s', value: -14, interp: 'linear' }, k1: { t: '60s', value: -10, interp: 'linear' } } } } };
+}
+workloads.upscale = () => {
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const surface = { internal_scale: 0.5, upscale: 'edge_adaptive', sharpen: 0.2 };
+    const call = () => ({ docs: [typeDoc()], frames: 90, fps: 60, report: ['passes'] });
+    const runs = Array.from({ length: RUNS + 1 }, () => {
+      const [reply] = liveCalls(dir, [call()].map((c) => ({ ...c, surface })));
+      const covered = reply.frames.slice(WARM_UP).map((f) => {
+        const ps = f.passes.filter((p) => UPSCALE_PASSES.includes(p.name)).sort((a, b) => a.start_ns - b.start_ns);
+        if (ps.length !== 2) throw Error(`frame ${f.frame}: the upscale's passes didn't both run: ${JSON.stringify(f.passes).slice(0, 600)}`);
+        let ns = 0;
+        let end = -Infinity;
+        for (const p of ps) { ns += Math.max(0, p.end_ns - Math.max(p.start_ns, end)); end = Math.max(end, p.end_ns); }
+        return ns / 1e6;
+      });
+      return { frames: covered.length, upscale_p95_ms: p95(covered) };
+    }).slice(1);
+    console.log(JSON.stringify({ task: 'upscale', fingerprint: fingerprint(), runs }));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -407,6 +517,7 @@ workloads['panel-pop-out'] = () => {
 
 workloads.judge = () => {
   const { current, base } = JSON.parse(readFileSync(0, 'utf8'));
+  if (EFFICIENCY[current.task]) return judgeEfficiency(current);
   const cls = current.class;
   const limits = CLASS_LIMITS[cls];
   if (!limits) throw Error(`Unknown class ${cls}`);
@@ -453,6 +564,337 @@ const terminal = (repaint) => () => {
 workloads['terminal-60hz'] = terminal(false);
 workloads['cell-grid-60hz'] = terminal(true);
 
+// #854, the efficiency bar for agent work: four tasks that time what an agent's work costs, each on a release build
+// of the binaries it times (`fingerprint.build` names the profile and toolchain), one warm-up run and five runs, each
+// run a fresh process; `--planted <name>` runs the task's wrong program. Each prints its report; `judge` holds it to
+// the task's targets in benchmarks/budgets.json, refusing a reading of any other build. The perf lane compares each
+// command with the merge base as it does every task.
+const RUNS = 5;
+const runs = (once) => {
+  once(true);
+  return Array.from({ length: RUNS }, () => once(false));
+};
+const toolchain = () => spawnSync('rustc', ['-V'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+function release(pkg, bin) {
+  const built = spawnSync('cargo', ['build', '--locked', '--release', '-p', pkg, '--bin', bin], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
+  if (built.status !== 0) throw Error(`cargo build --release -p ${pkg} --bin ${bin} exited ${built.status}`);
+  return { ...fingerprint(), build: { profile: 'release', toolchain: toolchain() } };
+}
+/** One line of `bin args` from target/release: its parsed answer. */
+function once(bin, args, line) {
+  const out = spawnSync(join(root, 'target', 'release', bin), args, { input: `${JSON.stringify(line)}\n`, encoding: 'utf8', maxBuffer: 1 << 30 });
+  if (out.status !== 0) throw Error(`${bin} ${args.join(' ')} exited ${out.status}: ${out.stderr.slice(-2000)}`);
+  return JSON.parse(out.stdout.trim().split('\n').at(-1));
+}
+
+// The board the patch and read tasks share: 10,000 rects of one agent's layer, 100 to a row; #896 also patches it
+// at 1,000.
+const BOARD_ITEMS = 10_000;
+const boardItem = (i) => `r${String(i).padStart(5, '0')}`;
+function board(items = BOARD_ITEMS) {
+  const document = { format: 1, profile: 'board', title: 'Bench board', description: 'The #854 board: 10,000 rects of one agent.', size: [1280, 800],
+    layers: { 'alpha-main': { writer: 'agent:thread-alpha', title: 'Alpha', order: 'a1' } }, items: {} };
+  for (let i = 0; i < items; i++) {
+    const id = boardItem(i);
+    document.items[id] = { id, kind: 'rect@1', layer: 'alpha-main', name: id, order: `b${String(i).padStart(5, '0')}`,
+      params: { box: [0, 0, 8, 6], paint: { fill: { role: 'muted' } } }, at: { pos: [(i % 100) * 12, Math.floor(i / 100) * 8, 0] } };
+  }
+  return document;
+}
+/** `deep-show run` on the board of `items` as a shared document, with `calls`: the replies. */
+function onBoard(calls, items = BOARD_ITEMS) {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const sessions = { 'sess-alpha': { thread: 'thread-alpha', name: 'Alpha', process: { pid: 4100, start: 1000 } } };
+    const scenario = { evidence, sessions, panels: { main: { rect: [0, 0, 1280, 800] } }, docs: { [DOC]: { panel: 'main', document: board(items) } }, calls,
+      ...(planted() ? { planted: planted() } : {}) };
+    const answer = once('deep-show', ['run'], scenario);
+    if (answer.ok !== true) throw Error(`deep-show answered ${JSON.stringify(answer).slice(0, 1500)}`);
+    return answer.replies;
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
+}
+
+// Patch to settled frame: 200 patches a run, each moving one item of the board, each timed from its arrival to the
+// settled frame it causes, the process's CPU plus the frame's GPU time, with the nodes that frame ran by operator and
+// (#896) the time of each stage, the bytes the view uploaded and the marks each operator built.
+const PATCHES = 200;
+const benchPatches = (items) => Array.from({ length: PATCHES }, (_, k) => {
+  const id = boardItem((k * 53) % items);
+  return { patch: ulid(k + 1), doc: DOC, base: k, reason: 'bench', ops: [{ op: 'set', id, path: `items/${id}/at/pos`, value: [k * 6, 790, 0] }] };
+});
+function settle(items) {
+  const [settled] = onBoard([{ call: 'settle', session: 'sess-alpha', doc: DOC, patches: benchPatches(items) }], items);
+  if (settled.outcome !== 'settled') throw Error(`the patches didn't settle: ${JSON.stringify(settled).slice(0, 1500)}`);
+  return settled.samples;
+}
+workloads['patch-settled'] = () => {
+  const fingerprint = release('deep-show', 'deep-show');
+  const measured = runs(() => {
+    const samples = settle(BOARD_ITEMS);
+    return { p95_ms: p95(samples.map((s) => s.ms)), samples };
+  });
+  console.log(JSON.stringify({ task: 'canvas-patch-settled', fingerprint, items: BOARD_ITEMS, patches: PATCHES, runs: measured }));
+};
+
+// #896, patch to settled frame in O(dirty): the same 200 patches on a 1,000-item board, then on the 10,000-item one,
+// each board in a fresh process, so a run's two boards see the same load.
+const DIRTY_BOARDS = [1_000, BOARD_ITEMS];
+workloads['patch-dirty'] = () => {
+  const fingerprint = release('deep-show', 'deep-show');
+  const measured = runs(() => ({ boards: DIRTY_BOARDS.map((items) => ({ items, samples: settle(items) })) }));
+  console.log(JSON.stringify({ task: 'canvas-patch-dirty', fingerprint, patches: PATCHES, runs: measured }));
+};
+
+// A scene read: deep_query's summary of the board and one paged read of 1,000 rows, each timed in the binary, each
+// reply counted in tokens by the tokenizer the codex adapter's facts pin.
+workloads['scene-read'] = async () => {
+  const fingerprint = release('deep-show', 'deep-show');
+  const pinned = JSON.parse(readFileSync(join(root, 'adapters', 'codex.facts.json'), 'utf8')).tokenizer;
+  const installed = JSON.parse(readFileSync(join(root, 'node_modules', pinned.package, 'package.json'), 'utf8')).version;
+  if (installed !== pinned.version) throw Error(`the facts pin ${pinned.package}@${pinned.version}; ${installed} is installed`);
+  const { countTokens } = await import(`${pinned.package}/encoding/${pinned.name}`);
+  const read = (reply, rows) => {
+    if (reply.outcome !== 'answered') throw Error(`deep_query answered ${JSON.stringify(reply).slice(0, 1500)}`);
+    const text = JSON.stringify(reply.result);
+    return { ms: reply.ms, tokens: countTokens(text), bytes: Buffer.byteLength(text), rows };
+  };
+  const measured = runs(() => {
+    const [summary, page] = onBoard([{ call: 'deep_query', doc: DOC }, { call: 'deep_query', doc: DOC, page: { limit: 1000 } }]);
+    return { summary: read(summary, 0), page: { ...read(page, page.result?.rows?.length ?? 0), next: page.result?.next ?? null } };
+  });
+  console.log(JSON.stringify({ task: 'canvas-scene-read', fingerprint, items: BOARD_ITEMS,
+    tokenizer: { adapter: 'codex', name: pinned.name, version: pinned.version }, runs: measured }));
+};
+
+// Idle: a still board held in a window for 60 s of the real clock, its frames, wakeups and CPU read from the process
+// that draws it. The warm-up run holds it 5 s.
+workloads.idle = () => {
+  const fingerprint = release('deep-marks-render', 'deep-canvas-render');
+  const fixture = join('benchmarks', 'canvas', 'still.json');
+  const doc = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+  const look = { light: { ground: [250, 250, 248], ink: [28, 28, 30], muted: [120, 120, 128], accent: [40, 90, 200] } };
+  const measured = runs((warm) => {
+    const answer = once('deep-canvas-render', ['idle'], { doc, look, view: { zoom: 1, theme: 'light' }, seconds: warm ? 5 : 60, ...(planted() ? { planted: planted() } : {}) });
+    if (answer.ok !== true) throw Error(`deep-canvas-render idle answered ${JSON.stringify(answer).slice(0, 1500)}`);
+    const { ok: _, ...run } = answer;
+    return run;
+  });
+  console.log(JSON.stringify({ task: 'canvas-idle', fingerprint, fixture, seconds: 60, runs: measured }));
+};
+
+// A replica's cold start: a fresh process opens a fixture document in the app's headless window, timed from its spawn
+// (as the kernel records it) to its first settled frame, with the pipelines it compiled and whether that frame did.
+workloads['replica-cold-start'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const fixture = join('benchmarks', 'canvas', 'figure.json');
+  const look = JSON.parse(readFileSync(LOOK, 'utf8'));
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const measured = runs(() => {
+      const call = { call: 'view3d', doc: join(root, fixture), look, size: [1280, 800], frames: 1, fps: 60, cold: true };
+      const answer = once('deep-gpu', ['run', ...(planted() ? ['--planted', planted()] : [])], { out: dir, calls: [call] });
+      const cold = answer.replies?.[0]?.cold;
+      if (answer.ok !== true || !Number.isFinite(cold?.since_spawn_ms)) throw Error(`deep-gpu view3d answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      return { ms: cold.since_spawn_ms, pipelines: cold.pipelines };
+    });
+    console.log(JSON.stringify({ task: 'replica-cold-start', fingerprint, fixture, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #896's two boards of a run, the 1,000-item one first; `null` for a run with any other boards.
+const pair = (r) => {
+  const [small, large] = r.boards ?? [];
+  return r.boards?.length === 2 && small?.items === DIRTY_BOARDS[0] && large?.items === DIRTY_BOARDS[1] ? [small, large] : null;
+};
+const p50 = (xs) => [...xs].sort((a, b) => a - b)[Math.max(0, Math.ceil(0.5 * xs.length) - 1)];
+/** The CPU per patch at the last board against the first: the difference of their p50s, over the first's. */
+const cpuGrowth = (r) => {
+  const [a, b] = [r.boards?.[0], r.boards?.at(-1)].map((board) => p50(board?.samples.map((s) => s.cpu_ms) ?? [0]));
+  return a > 0 ? Math.abs(b - a) / a : 0;
+};
+/** The most bytes the view uploaded for one patch of a run, each patch changing one item. */
+const uploadPerItem = (r) => Math.max(0, ...(r.boards ?? []).flatMap((b) => b.samples.map((s) => s.uploaded_bytes)).filter(Number.isInteger));
+/** Why a target can't be judged on a run, if it can't. */
+const unjudged = {
+  cpu_growth: (r) => (pair(r) ? null : `a run patches ${JSON.stringify((r.boards ?? []).map((b) => b.items))} items, not ${DIRTY_BOARDS.join(' then ')}`),
+  upload_bytes_per_item: (r) => ((r.boards ?? []).every((b) => b.samples.every((s) => Number.isInteger(s.uploaded_bytes)))
+    ? null : 'a patch doesn\'t report the bytes it uploaded'),
+};
+
+// Each task's targets: where `judge` reads each from a run, and whether it is a count, judged on any machine.
+const EFFICIENCY = {
+  'canvas-patch-settled': { settled_p95_ms: (r) => r.p95_ms },
+  'canvas-patch-dirty': { cpu_growth: cpuGrowth, upload_bytes_per_item: uploadPerItem },
+  'canvas-scene-read': { summary_ms: (r) => r.summary.ms, summary_tokens: (r) => r.summary.tokens, page_ms: (r) => r.page.ms, page_rows: (r) => r.page.rows },
+  'canvas-idle': { frames: (r) => r.frames, wakeups: (r) => r.wakeups, cpu_fraction: (r) => r.cpu_fraction },
+  'replica-cold-start': { first_settled_ms: (r) => r.ms },
+};
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item']);
+
+/** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
+const costliest = (s) => {
+  const [name, ms] = Object.entries(s.stages ?? {}).reduce((a, e) => (e[1] > a[1] ? e : a), ['', -1]);
+  return name ? `, most of it stage ${name} ${ms.toFixed(3)} ms` : '';
+};
+const grouped = (n) => n.toLocaleString('en-US');
+
+/** What a failed target names, run by run: the frame and the nodes it ran, a reply's size, the frames drawn, the pipelines. */
+const named = {
+  settled_p95_ms: (runs) => runs.map((r, i) => {
+    const worst = r.samples.reduce((a, s) => (s.ms > a.ms ? s : a));
+    const ran = Object.entries(worst.ran).map(([op, n]) => `${op} ${n}`).join(', ');
+    return `run ${i + 1}: patch ${worst.patch} settled in frame ${worst.frame} after ${worst.ms.toFixed(3)} ms${costliest(worst)}, a frame that ran ${ran}`;
+  }),
+  // The operator that built the most marks for one patch on the larger board.
+  cpu_growth: (runs) => runs.map((r, i) => {
+    const large = pair(r)?.[1].samples ?? [];
+    const [op, n] = large.flatMap((s) => Object.entries(s.marks ?? {})).reduce((a, e) => (e[1] > a[1] ? e : a), ['no operator', 0]);
+    return `run ${i + 1}: ${op} built ${grouped(n)} marks for one patch at ${grouped(DIRTY_BOARDS[1])} items`;
+  }),
+  upload_bytes_per_item: (runs, limit) => runs.map((r, i) => {
+    const worst = r.boards.flatMap((b) => b.samples).reduce((a, s) => (s.uploaded_bytes > a.uploaded_bytes ? s : a));
+    return worst.uploaded_bytes > limit ? `run ${i + 1}: patch ${worst.patch} uploaded ${grouped(worst.uploaded_bytes)} B` : null;
+  }).filter(Boolean),
+  summary_tokens: (runs, limit) => runs.filter((r) => r.summary.tokens > limit).map((r) => `summary: ${r.summary.tokens} tokens, ${r.summary.bytes} bytes, ${r.summary.rows} rows`),
+  page_rows: (runs, limit) => runs.filter((r) => r.page.rows > limit).map((r) => `page: ${r.page.rows} rows, ${r.page.tokens} tokens, ${r.page.bytes} bytes${r.page.next === null ? ', unpaged' : ''}`),
+  frames: (runs, limit) => runs.map((r, i) => [r, i]).filter(([r]) => r.frames > limit)
+    .map(([r, i]) => `run ${i + 1} drew ${r.frames} frames while still: ${r.drawn.slice(0, 5).map((d) => `frame ${d.frame} at ${Math.round(d.at_ms)} ms`).join(', ')}${r.frames > 5 ? ', …' : ''}`),
+  first_settled_ms: (runs) => {
+    const first = [...new Set(runs.flatMap((r) => r.pipelines.filter((p) => p.on_first_frame).map((p) => p.name)))];
+    return [first.length ? `pipelines compiled on the first frame: ${first.join(', ')}` : 'no pipeline compiled on the first frame'];
+  },
+};
+
+function judgeEfficiency(current) {
+  const task = current.task;
+  const profile = current.fingerprint?.build?.profile ?? null;
+  if (profile !== 'release') {
+    console.log(JSON.stringify({ task, status: 'INVALID', profile, targets: {},
+      reason: profile === null ? 'the reading names no build profile; only a release build is timed' : `the reading comes from a ${profile} build, not release; only a release build is timed` }));
+    return;
+  }
+  const { targets } = JSON.parse(readFileSync(join(root, 'benchmarks', 'budgets.json'), 'utf8')).tasks.find((t) => t.id === task);
+  const judged = {};
+  const reasons = [];
+  for (const [name, limit] of Object.entries(targets)) {
+    const values = (current.runs ?? []).map(EFFICIENCY[task][name]);
+    const why = (current.runs ?? []).map((r) => unjudged[name]?.(r)).find(Boolean);
+    let verdict;
+    // A pipeline compiled on the first frame stalls it, whatever the time (Meter and degrade ladder: pipelines
+    // compile off-screen), so it fails a cold start on any machine.
+    if (why) {
+      verdict = { status: 'BLOCKED', limit, runs: values, reason: why };
+    } else if (name === 'first_settled_ms' && current.runs.some((r) => r.pipelines.some((p) => p.on_first_frame))) {
+      verdict = { status: 'FAIL', limit, runs: values };
+    } else if (COUNTS.has(name)) {
+      verdict = values.length === RUNS && values.every(Number.isFinite)
+        ? (values.some((v) => v > limit) ? { status: 'FAIL', limit, runs: values } : { status: 'PASS', limit, runs: values })
+        : { status: 'BLOCKED', limit, runs: values, reason: `a count is judged on five runs, got ${JSON.stringify(values)}` };
+    } else {
+      verdict = judgeLimit({ limit, runs: values, fingerprint: current.fingerprint });
+    }
+    if (verdict.status === 'FAIL') {
+      verdict.reason = [`${name} over ${limit}`, ...(named[name]?.(current.runs, limit) ?? [verdict.reason])].join('; ');
+      reasons.push(verdict.reason);
+    } else if (verdict.reason) {
+      reasons.push(`${name}: ${verdict.reason}`);
+    }
+    judged[name] = verdict;
+  }
+  const statuses = Object.values(judged).map((v) => v.status);
+  const status = ['FAIL', 'BLOCKED', 'INCONCLUSIVE'].find((s) => statuses.includes(s)) ?? 'PASS';
+  console.log(JSON.stringify({ task, status, profile, targets: judged, ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
+}
+
+// #417's looks (tests/acceptance/417/README.md, "AC5's reports"): a release `deep-gpu`'s `film2d` plays a 2D film
+// in the app's headless window in a look's light theme, one warm-up run and five, each run a fresh process.
+// `look-frames` plays each shipped look's fixture film, 30 warm frames then 300 timed, each frame's GPU and CPU
+// ms; `look-switch` plays the fixture film and switches between every ordered pair of shipped looks, each switch
+// timed from its request to the new look's first frame read back from the window, with that frame's pixel (4, 4).
+// `--planted stops_at_request` passes deep-gpu's wrong clock, stopped at the request.
+const LOOKS_417 = join('tests', 'acceptance', '417', 'fixtures');
+/** Every shipped look's fixture, `{id, fixture, doc}`: the fixtures and the shipped looks are the same set (#417). */
+function lookFilms() {
+  return readdirSync(join(root, LOOKS_417, 'looks')).filter((f) => f.endsWith('.json')).sort().map((f) => {
+    const fixture = `${LOOKS_417}/looks/${f}`;
+    const { look, film } = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+    return { id: look, fixture, doc: JSON.parse(readFileSync(join(root, LOOKS_417, film), 'utf8')) };
+  });
+}
+/** One fresh release `deep-gpu run` over `calls`: its replies, each a film2d answer. */
+function films(calls) {
+  const [answer] = run('deep-gpu', ['run', ...(planted() ? ['--planted', planted()] : [])].join(' '), [JSON.stringify({ out: tmpdir(), calls })], 'release');
+  const replies = answer.replies ?? [];
+  if (answer.ok !== true || replies.length !== calls.length || replies.some((r) => !Array.isArray(r.frames))) throw Error(`deep-gpu film2d answered ${JSON.stringify(answer).slice(0, 1500)}`);
+  return replies;
+}
+
+workloads['look-frames'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const looks = lookFilms();
+  const measured = runs(() => {
+    const replies = films(looks.map(({ id, doc }) => ({ call: 'film2d', doc, look: id, frames: WARM_UP + WARM_FRAMES })));
+    return { looks: Object.fromEntries(looks.map(({ id, fixture }, i) => [id, {
+      fixture, frames: replies[i].frames.slice(WARM_UP).map(({ gpu_ms, cpu_ms }) => ({ gpu_ms, cpu_ms })),
+    }])) };
+  });
+  console.log(JSON.stringify({ task: 'canvas-look-frames', fingerprint, runs: measured }));
+};
+
+/** A walk through every ordered pair of distinct `ids` once, starting and ending at the first (Hierholzer). */
+function everyPair(ids) {
+  const used = new Set();
+  const walk = [];
+  const visit = (from) => {
+    for (const to of ids) if (to !== from && !used.has(`${from}>${to}`)) { used.add(`${from}>${to}`); visit(to); }
+    walk.push(from);
+  };
+  visit(ids[0]);
+  return walk.reverse();
+}
+const SWITCH_EVERY = 10;
+workloads['look-switch'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const fixture = `${LOOKS_417}/film.json`;
+  const doc = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+  const walk = everyPair(lookFilms().map((l) => l.id));
+  const events = walk.slice(1).map((look, i) => ({ frame: SWITCH_EVERY * (i + 1), look }));
+  const measured = runs(() => {
+    const [reply] = films([{ call: 'film2d', doc, look: walk[0], frames: SWITCH_EVERY * walk.length, events }]);
+    if (reply.switches?.length !== events.length) throw Error(`film2d timed ${reply.switches?.length} of ${events.length} switches`);
+    return { samples: reply.switches.map(({ ms, ground }, i) => ({ from: walk[i], to: walk[i + 1], ms, ground })) };
+  });
+  console.log(JSON.stringify({ task: 'canvas-look-switch', fixture, fingerprint, runs: measured }));
+};
+
+// #105: a bug capture of the second display through `deep-show run` on the virtual clock: picked, the chord held for
+// 119.5 s, released and saved; fails unless the saved asset holds every frame of the hold.
+workloads['capture-save'] = () => {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const displays = RING_DISPLAYS.map((d) => ({ ...d, feed: `feed-${d.uuid}` }));
+    const down = 3 * SEC, up = down + 119.5 * SEC;
+    const calls = [
+      { call: 'capture', at: 2 * SEC, session: 'alpha', source: 'screen', words: 'The legend overlaps the chart' },
+      { call: 'pick', at: 2.5 * SEC, display: 'B' },
+      { call: 'shortcut', at: down, phase: 'down', source: 'hid' },
+      { call: 'shortcut', at: up, phase: 'up', source: 'hid' },
+      { call: 'captures', at: up + SEC },
+    ];
+    const sessions = { alpha: { thread: 'thread-alpha', name: 'Alpha', process: { pid: 4100, start: 1_000 } } };
+    const [answer] = run('deep-show', 'run', [JSON.stringify({ evidence, sessions, clock: { lead: 1_411_200, check: 352_800 }, displays, window: [1200, 700], panels: {}, calls })]);
+    const frames = answer.replies?.[4]?.captures?.[0]?.frames;
+    // B's vsyncs in [down, up): 60 Hz for 119.5 s.
+    if (answer.ok !== true || frames !== 119.5 * 60) throw Error(`the capture didn't keep every frame: ${JSON.stringify(answer).slice(0, 2000)}`);
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
+};
+
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
-workloads[task]();
+await workloads[task]();

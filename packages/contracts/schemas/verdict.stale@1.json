@@ -1,6 +1,8 @@
 {
   "title": "verdict.stale@1",
   "description": "A verdict went stale. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
   "x-feeds": [
     "verdicts"
   ],

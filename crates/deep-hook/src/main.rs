@@ -7,7 +7,7 @@
 //! As `deep-hook statusline`, Claude Code's status line command, it sends the hub the plan windows the
 //! status line reads (#159), then runs your own status line command and prints what it prints. As
 //! `deep-hook <agent> waiter`, Claude Code's background Stop entry, it waits for an answer to its session and
-//! wakes the session with it (#25).
+//! wakes the session with it (#25). As `deep-hook mcp actions`, it is the deep-actions MCP server (actions.rs).
 
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
@@ -22,8 +22,10 @@ use std::{env, io};
 
 use deep_contracts::{parse, Value};
 
-mod matcher;
-mod shell;
+use deep_hook::matcher;
+
+mod actions;
+mod heavy;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -40,8 +42,9 @@ const BILLING_KEYS: &[&str] = &[
 ];
 
 /// Who is calling: Cursor's CLI and Grok run the hooks in Claude Code's settings file, so a hook installed for Claude
-/// Code may come from either. Each sets variables of its own in its hooks' environment, and Claude Code sets
-/// CLAUDECODE; a hook that has another tool's and not Claude Code's is sent under that tool's name.
+/// Code may come from either. Each sets variables of its own in its hooks' environment, and a hook that has another
+/// tool's is sent under that tool's name. Claude Code's CLAUDECODE says nothing here: a tool started from a shell
+/// inside a Claude Code session inherits it (#993). The hub checks the name against the payload's own fields.
 const CALLERS: &[(&str, &[&str])] = &[
     ("grok", &["GROK_HOOK_EVENT", "GROK_SESSION_ID"]),
     ("cursor", &["CURSOR_VERSION", "CURSOR_PROJECT_DIR"]),
@@ -49,7 +52,7 @@ const CALLERS: &[(&str, &[&str])] = &[
 
 /// The agent a hook comes from: the one its command names, unless another tool's variables say it runs it.
 fn caller(agent: &str) -> &str {
-    if agent != "claude-code" || env::var_os("CLAUDECODE").is_some() {
+    if agent != "claude-code" {
         return agent;
     }
     CALLERS
@@ -82,19 +85,8 @@ static CWD: OnceLock<PathBuf> = OnceLock::new();
 /// A worktree named in `hub.use`, `{<worktree>: "unix:<path>"}`, which `deep hub use --root` writes once the OS
 /// confirms you, sends its sessions to that dev hub instead; the longest worktree that holds the folder wins.
 fn address() -> PathBuf {
-    if let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), setting("hub", "use")) {
-        let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());
-        let chosen = uses
-            .iter()
-            .filter_map(|(worktree, value)| match value {
-                Value::String(a) if a.starts_with("unix:") => Some((Path::new(worktree), &a[5..])),
-                _ => None,
-            })
-            .filter(|(worktree, _)| real.starts_with(worktree) || cwd.starts_with(worktree))
-            .max_by_key(|(worktree, _)| worktree.as_os_str().len());
-        if let Some((_, path)) = chosen {
-            return PathBuf::from(path);
-        }
+    if let Some(path) = worktree_hub() {
+        return path;
     }
     match setting("hub", "address") {
         Some(Value::String(address)) if address.starts_with("unix:") => {
@@ -102,6 +94,22 @@ fn address() -> PathBuf {
         }
         _ => home().join("hub.sock"),
     }
+}
+
+/// The dev hub `deep hub use --root` sent this worktree to, the longest such worktree winning.
+fn worktree_hub() -> Option<PathBuf> {
+    let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), setting("hub", "use")) else {
+        return None;
+    };
+    let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());
+    uses.iter()
+        .filter_map(|(worktree, value)| match value {
+            Value::String(a) if a.starts_with("unix:") => Some((Path::new(worktree), &a[5..])),
+            _ => None,
+        })
+        .filter(|(worktree, _)| real.starts_with(worktree) || cwd.starts_with(worktree))
+        .max_by_key(|(worktree, _)| worktree.as_os_str().len())
+        .map(|(_, path)| PathBuf::from(path))
 }
 
 fn member<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
@@ -325,6 +333,60 @@ const READ_TOOLS: &[&str] = &[
     "Grep",
 ];
 
+/// A path as pi's file tools open it (pi's `normalizePath`): its unicode spaces plain, without one leading `@`, a bare
+/// `~` the home folder, and a `file://` URL the path it names.
+fn pi_path(path: &str) -> String {
+    let spaced: String = path
+        .chars()
+        .map(|c| match c {
+            '\u{00A0}' | '\u{2000}'..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}' => ' ',
+            c => c,
+        })
+        .collect();
+    let bare = spaced.strip_prefix('@').unwrap_or(&spaced);
+    if bare == "~" {
+        return "~/".to_string();
+    }
+    match bare.strip_prefix("file://") {
+        Some(url) => file_url_path(url),
+        None => bare.to_string(),
+    }
+}
+
+/// What Node's `fileURLToPath` makes of a `file://` URL's rest: the URL parser ends it at a `?` or `#`, drops tabs and
+/// newlines and what trails it and reads `\` as `/`; then it is percent-decoded. Any host is passed over: Node opens the
+/// path under one that decodes to `localhost` however it is spelled, and throws on the rest, so nothing else opens.
+fn file_url_path(url: &str) -> String {
+    let clean: String = url
+        .trim_end_matches(|c: char| c <= ' ')
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .map(|c| if c == '\\' { '/' } else { c })
+        .collect();
+    let path = clean.split(['?', '#']).next().unwrap_or("");
+    let path = path.find('/').map_or(path, |slash| &path[slash..]);
+    let bytes = path.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = (bytes[i] == b'%')
+            .then(|| path.get(i + 1..i + 3))
+            .flatten()
+            .and_then(|h| u8::from_str_radix(h, 16).ok());
+        match hex {
+            Some(byte) => {
+                out.push(byte);
+                i += 3;
+            }
+            None => {
+                out.push(bytes[i]);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// The call a tool hook makes, as guards read it: a shell command (Bash's `tool_input.command`), a file tool's
 /// path (Edit, MultiEdit, Write, NotebookEdit; Read and Grep read theirs) or a patch's (Codex's apply_patch), and
 /// for every tool, what it counts as: the class `classes` gives it, else change, and destructive for a tool whose
@@ -349,6 +411,16 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
             field("path").map(str::to_string).into_iter().collect(),
             true,
         ),
+        // pi's tools, whose calls name a `path` that may be relative.
+        "bash" => (field("command"), Vec::new(), false),
+        "edit" | "write" => (
+            None,
+            field("path").map(pi_path).into_iter().collect(),
+            false,
+        ),
+        "read" | "grep" | "find" | "ls" => {
+            (None, field("path").map(pi_path).into_iter().collect(), true)
+        }
         _ => (None, Vec::new(), false),
     };
     let cwd = match member(payload, "cwd") {
@@ -382,6 +454,46 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
     Some(call)
 }
 
+/// The heavy.command@1 entry a shell call's command matches (#1015), read from the payload as the agent sent it.
+fn heavy_call(payload: &Value, plant: Option<&str>) -> Option<(heavy::Hit, String)> {
+    let Some(Value::String(tool)) = member(payload, "tool_name") else {
+        return None;
+    };
+    if tool != "Bash" && tool != "bash" {
+        return None;
+    }
+    let Some(Value::String(command)) =
+        member(payload, "tool_input").and_then(|i| member(i, "command"))
+    else {
+        return None;
+    };
+    let cwd = match member(payload, "cwd") {
+        Some(Value::String(cwd)) if Path::new(cwd).is_absolute() => Some(PathBuf::from(cwd)),
+        _ => None,
+    };
+    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
+    heavy::matched(command, cwd.as_deref(), &home, plant).map(|hit| (hit, command.clone()))
+}
+
+/// `deep-hook heavy`: the heavy.command@1 entry a command line on stdin matches in the current folder (#1016), as
+/// `{"name", "jobs", "jobs_flag"}`, or `null`; `deep lease` reads it to know how the command takes jobs.
+fn heavy_entry() -> ExitCode {
+    let mut command = String::new();
+    let _ = io::stdin().read_to_string(&mut command);
+    let cwd = env::current_dir().ok();
+    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
+    match heavy::matched(&command, cwd.as_deref(), &home, None) {
+        Some(hit) => println!(
+            "{{\"name\":{},\"jobs\":{},\"jobs_flag\":{}}}",
+            quoted(&hit.name),
+            quoted(&hit.jobs),
+            hit.jobs_flag.as_deref().map_or("null".to_string(), quoted)
+        ),
+        None => println!("null"),
+    }
+    ExitCode::SUCCESS
+}
+
 /// `deep-hook check`: whether a guard@1 entry matches a call, read on stdin as `{"entry": guard@1, "call":
 /// {"tool_name", "tool_input", "cwd"?}, "classes"?: {<tool>: <class>}}`; prints `{"matched":true}` or
 /// `{"matched":false}`. The hub runs it over each entry's planted call and twin at install, so an entry is matched
@@ -410,6 +522,139 @@ fn check() -> ExitCode {
         "{{\"matched\":{}}}",
         called.matches(&entry.pattern).is_some()
     );
+    ExitCode::SUCCESS
+}
+
+/// Whether a standing rule the hub copied covers the cloud resource this call creates (#23).
+fn covered(parsed: Option<&Value>, rules: &Rules) -> bool {
+    match parsed
+        .and_then(|p| member(p, "tool_input"))
+        .and_then(|i| member(i, "command"))
+    {
+        Some(Value::String(c)) => {
+            cloud_owner(c).is_some_and(|owner| rules.standing.contains(&owner))
+        }
+        _ => false,
+    }
+}
+
+/// What each fail_closed entry a call matched says, denying it with the hub away.
+fn denials(matched: &[(&Guard, matcher::Hit)], covered: bool) -> Vec<String> {
+    matched
+        .iter()
+        .filter(|(g, _)| g.fail_closed && !(covered && g.pattern == "effect:cloud-resource"))
+        .map(|(guard, hit)| {
+            let detail = hit
+                .detail
+                .as_deref()
+                .map(|d| format!(" {d}"))
+                .unwrap_or_default();
+            format!(
+                "DeepBuild blocked this: {} {}{detail} (guard {}, which holds while the hub doesn't answer)",
+                guard.reason, guard.next_step, guard.name
+            )
+        })
+        .collect()
+}
+
+/// The request's fields for what the matcher read of a call: `,"notes":{...}` for an entry's words, so the hub's
+/// denial says them too, and `,"stage":{...}` for what the hub stages before the call runs: the folders a delete whose
+/// reach can't be worked out names (#347), the paths a discard of tracked edits reaches and the stash a drop names (#1294).
+fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)]) -> String {
+    let notes = matched
+        .iter()
+        .filter_map(|(g, hit)| {
+            hit.detail
+                .as_ref()
+                .map(|d| format!("{}:{}", quoted(&g.name), quoted(d)))
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let notes = if notes.is_empty() {
+        notes
+    } else {
+        format!(",\"notes\":{{{notes}}}")
+    };
+    // None when one can't be named, or written exactly.
+    let reach = |pattern: &str| {
+        let called = called?;
+        let paths = match pattern {
+            "effect:unknown-reach-delete" => called.stage(),
+            "effect:discard-edits" => called.edits(),
+            "effect:drop-stash" => called.stash(),
+            _ => None,
+        }?;
+        paths
+            .iter()
+            .map(|p| p.to_str().map(quoted))
+            .collect::<Option<Vec<_>>>()
+    };
+    let stage = matched
+        .iter()
+        .filter_map(|(g, _)| {
+            reach(&g.pattern).map(|f| format!("{}:[{}]", quoted(&g.name), f.join(",")))
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let stage = if stage.is_empty() {
+        stage
+    } else {
+        format!(",\"stage\":{{{stage}}}")
+    };
+    format!("{notes}{stage}")
+}
+
+/// `deep-hook match`: for an agent that runs its hooks in its own process, where a process per call would cost too
+/// much. Each line on stdin is a tool hook's JSON; each line out is what `forward` would have sent the hub of it,
+/// `{"matched":[...],"notes"?,"stage"?}`, and its `"denials"` for the hub away. rules.json is read for every call, so
+/// an entry added mid-session holds the next one. A line it can't read is `{"unread":true}`: that call was checked
+/// against nothing. It ends when stdin closes.
+fn matching() -> ExitCode {
+    let mut out = io::stdout().lock();
+    for input in io::stdin().lock().lines() {
+        let Ok(input) = input else { break };
+        let parsed = parse(&input).ok();
+        if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
+            let _ = CWD.set(PathBuf::from(cwd));
+        }
+        let reply = match rules() {
+            _ if parsed.is_none() => "{\"unread\":true,\"matched\":[],\"denials\":[]}".to_string(),
+            Err(why) => format!(
+                "{{\"matched\":[],\"denials\":[{}]}}",
+                quoted(&format!(
+                    "DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so its guards can't be checked while the hub doesn't answer. Fix that file, then retry."
+                ))
+            ),
+            Ok(rules) => {
+                let called = parsed.as_ref().and_then(|p| call(p, &rules.classes));
+                let matched: Vec<(&Guard, matcher::Hit)> = match &called {
+                    Some(call) => rules
+                        .guards
+                        .iter()
+                        .filter_map(|g| call.matches(&g.pattern).map(|hit| (g, hit)))
+                        .collect(),
+                    None => Vec::new(),
+                };
+                let names = matched
+                    .iter()
+                    .map(|(g, _)| quoted(&g.name))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let denied = denials(&matched, covered(parsed.as_ref(), &rules))
+                    .iter()
+                    .map(|d| quoted(d))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(
+                    "{{\"matched\":[{names}]{},\"denials\":[{denied}]}}",
+                    read_fields(called.as_ref(), &matched)
+                )
+            }
+        };
+        if writeln!(out, "{reply}").and_then(|()| out.flush()).is_err() {
+            break;
+        }
+    }
     ExitCode::SUCCESS
 }
 
@@ -909,34 +1154,10 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         None => Vec::new(),
     };
     // A cloud resource a standing rule the hub copied covers is let through, and spooled like any call (#23).
-    let command = parsed
-        .as_ref()
-        .and_then(|p| member(p, "tool_input"))
-        .and_then(|i| member(i, "command"));
-    let covered = match command {
-        Some(Value::String(c)) => {
-            cloud_owner(c).is_some_and(|owner| rules.standing.contains(&owner))
-        }
-        _ => false,
-    };
     // With the hub away, each fail_closed entry the call matched still denies it, each in its own words.
-    let denials: Vec<String> = matched
-        .iter()
-        .filter(|(g, _)| g.fail_closed && !(covered && g.pattern == "effect:cloud-resource"))
-        .map(|(guard, hit)| {
-            let detail = hit
-                .detail
-                .as_deref()
-                .map(|d| format!(" {d}"))
-                .unwrap_or_default();
-            format!(
-                "DeepBuild blocked this: {} {}{detail} (guard {}, which holds while the hub doesn't answer)",
-                guard.reason, guard.next_step, guard.name
-            )
-        })
-        .collect();
-    if !denials.is_empty() {
-        let _ = DENIAL.set(denials.join("\n"));
+    let denied = denials(&matched, covered(parsed.as_ref(), &rules));
+    if !denied.is_empty() {
+        let _ = DENIAL.set(denied.join("\n"));
     }
     // The planted wrong program for #304's AC1: a rule compiled in, with words of its own.
     if cfg!(feature = "plant-compiled-rule")
@@ -955,43 +1176,30 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         .map(|(g, _)| quoted(&g.name))
         .collect::<Vec<_>>()
         .join(",");
-    // What the matcher read of the call for an entry, so the hub's denial says it too.
-    let notes = matched
-        .iter()
-        .filter_map(|(g, hit)| {
-            hit.detail
-                .as_ref()
-                .map(|d| format!("{}:{}", quoted(&g.name), quoted(d)))
+    let read = read_fields(called.as_ref(), &matched);
+    // A shell call that runs a heavy command (#1015), for the hub to run under `deep lease`; spooled with it, so a
+    // hub that was away reads that it ran unleased.
+    let plant = env::var("DEEP_HUB_PLANT").ok();
+    let heavy = parsed
+        .as_ref()
+        .filter(|_| event == "PreToolUse")
+        .and_then(|p| heavy_call(p, plant.as_deref()));
+    let heavy_field = heavy
+        .as_ref()
+        .map(|(hit, command)| {
+            let kinds = hit
+                .kinds
+                .iter()
+                .map(|k| quoted(k))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!(
+                ",\"heavy\":{{\"name\":{},\"kinds\":[{kinds}],\"form\":{}}}",
+                quoted(&hit.name),
+                quoted(&heavy::form(command, &hit.kinds))
+            )
         })
-        .collect::<Vec<_>>()
-        .join(",");
-    let notes = if notes.is_empty() {
-        notes
-    } else {
-        format!(",\"notes\":{{{notes}}}")
-    };
-    // The folders a delete whose reach can't be worked out names, for the hub to stage before it runs (#347); none
-    // when one can't be named, or written exactly.
-    let folders = called.as_ref().and_then(|c| c.stage()).and_then(|f| {
-        f.iter()
-            .map(|p| p.to_str().map(quoted))
-            .collect::<Option<Vec<_>>>()
-    });
-    let stage = matched
-        .iter()
-        .filter(|(g, _)| g.pattern == "effect:unknown-reach-delete")
-        .filter_map(|(g, _)| {
-            folders
-                .as_ref()
-                .map(|f| format!("{}:[{}]", quoted(&g.name), f.join(",")))
-        })
-        .collect::<Vec<_>>()
-        .join(",");
-    let stage = if stage.is_empty() {
-        stage
-    } else {
-        format!(",\"stage\":{{{stage}}}")
-    };
+        .unwrap_or_default();
     // At SessionStart, whether each billing key is set in the environment the agent gave this process.
     let billing = if event == "SessionStart" {
         let keys = BILLING_KEYS
@@ -1021,11 +1229,11 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             ""
         };
         format!(
-            "{{\"v\":1,\"agent\":{},\"event\":{},\"seq\":\"{seq}\",\"id\":\"{id}\",\"pid\":{},\"ppid\":{},\"matched\":[{names}]{notes}{stage},\"payload\":{payload}{billing}{f_test}}}\n",
+            "{{\"v\":1,\"agent\":{},\"event\":{},\"seq\":\"{seq}\",\"id\":\"{id}\",\"pid\":{},\"ppid\":{},\"matched\":[{names}]{read}{heavy_field},\"payload\":{payload}{billing}{f_test}}}\n",
             quoted(agent),
             quoted(event),
             std::process::id(),
-            std::os::unix::process::parent_id(),
+            agent_pid(),
         )
     };
     let (sent, outcome, last) = exchange(start, &id, line);
@@ -1066,7 +1274,69 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             eprintln!("{denial}");
             ExitCode::from(2)
         }
+        // A heavy command with the hub up but late is leased all the same (#1015): matching never waits on the hub.
+        None if late => leased_alone(agent, parsed.as_ref(), heavy.as_ref(), plant.as_deref()),
         None => ExitCode::SUCCESS,
+    }
+}
+
+/// A heavy call's decision with the hub up but late: rewritten into its `deep lease` form for an agent whose calls
+/// can be rewritten (Claude Code), denied once with that form for one whose calls can't (Codex); any other runs as
+/// written. A call already in its leased form is let through, unless the planted wrong program for AC2 denies it again.
+fn leased_alone(
+    agent: &str,
+    payload: Option<&Value>,
+    heavy: Option<&(heavy::Hit, String)>,
+    plant: Option<&str>,
+) -> ExitCode {
+    let command = payload
+        .and_then(|p| member(p, "tool_input"))
+        .and_then(|i| member(i, "command"))
+        .and_then(|c| match c {
+            Value::String(s) => Some(s.as_str()),
+            _ => None,
+        });
+    if agent == "codex"
+        && plant == Some("denies-every-retry")
+        && command.is_some_and(|c| c.trim_start().starts_with("deep lease"))
+    {
+        let c = command.unwrap_or_default();
+        eprintln!("{}", heavy::denial(c, c, "deep lease"));
+        return ExitCode::from(2);
+    }
+    let Some((hit, command)) = heavy else {
+        return ExitCode::SUCCESS;
+    };
+    if plant == Some("runs-matched-as-written") {
+        return ExitCode::SUCCESS;
+    }
+    let form = heavy::form(command, &hit.kinds);
+    match agent {
+        "codex" => {
+            eprintln!("{}", heavy::denial(command, &form, &hit.name));
+            ExitCode::from(2)
+        }
+        "claude-code" => {
+            let mut input = match payload.and_then(|p| member(p, "tool_input")) {
+                Some(Value::Object(members)) => members.clone(),
+                _ => Vec::new(),
+            };
+            input.retain(|(k, _)| k != "command");
+            input.push(("command".to_string(), Value::String(form)));
+            let out = Value::Object(vec![(
+                "hookSpecificOutput".to_string(),
+                Value::Object(vec![
+                    (
+                        "hookEventName".to_string(),
+                        Value::String("PreToolUse".to_string()),
+                    ),
+                    ("updatedInput".to_string(), Value::Object(input)),
+                ]),
+            )]);
+            println!("{}", deep_contracts::jcs(&out));
+            ExitCode::SUCCESS
+        }
+        _ => ExitCode::SUCCESS,
     }
 }
 
@@ -1259,6 +1529,33 @@ extern "C" {
     ) -> i32;
 }
 
+/// The agent's process, which the hub binds a session to and watches (#992): the hook's parent, or, where the agent
+/// ran the hook through `sh -c <command>` and the shell stayed, as dash (Linux's /bin/sh) does for a lone command, the
+/// shell's. A shell with arguments after its command is the agent itself.
+fn agent_pid() -> u32 {
+    let parent = std::os::unix::process::parent_id();
+    #[cfg(target_os = "linux")]
+    {
+        let args = args_of(parent);
+        let shell = args
+            .first()
+            .and_then(|arg| Path::new(arg).file_name()?.to_str());
+        if matches!(shell, Some("sh" | "dash" | "bash")) && args.len() == 3 && args[1] == "-c" {
+            let above = fs::read_to_string(format!("/proc/{parent}/status"))
+                .ok()
+                .and_then(|status| {
+                    status
+                        .lines()
+                        .find_map(|line| line.strip_prefix("PPid:")?.trim().parse().ok())
+                });
+            if let Some(above) = above {
+                return above;
+            }
+        }
+    }
+    parent
+}
+
 /// A process's arguments, as it was started: macOS's KERN_PROCARGS2 (argc, the executable's path, padding, then
 /// argc strings), or Linux's /proc cmdline. Empty when they can't be read.
 fn args_of(pid: u32) -> Vec<String> {
@@ -1298,8 +1595,11 @@ fn args_of(pid: u32) -> Vec<String> {
             .collect::<Vec<_>>()
     };
     #[cfg(target_os = "linux")]
-    let raw = fs::read(format!("/proc/{pid}/cmdline"))
-        .unwrap_or_default()
+    let cmdline = fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default();
+    #[cfg(target_os = "linux")]
+    let raw = cmdline
+        .strip_suffix(&[0])
+        .unwrap_or(&cmdline)
         .split(|&b| b == 0)
         .map(<[u8]>::to_vec)
         .collect::<Vec<_>>();
@@ -1387,12 +1687,18 @@ fn waiter() -> ExitCode {
     if session.is_empty() {
         return ExitCode::SUCCESS;
     }
+    // #824's planted wrong program: a copy of the session's transcript in the waiter's own memory while it waits.
+    let kept = if env::var("DEEP_HUB_PLANT").as_deref() == Ok("waiter-keeps-transcript") {
+        fs::read(field("transcript_path")).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let request = format!(
         "{{\"v\":1,\"id\":1,\"method\":\"session.wait\",\"params\":{{\"session\":{},\"cwd\":{},\"since\":{since}}}}}\n",
         quoted(&session),
         quoted(&field("cwd"))
     );
-    let agent = std::os::unix::process::parent_id();
+    let agent = agent_pid();
     // A print run (`claude -p`) has no later turn to wake, and it waits for its async Stop entries before it exits,
     // while this waits for it to exit: under one, the waiter is done at once (#668).
     if args_of(agent)
@@ -1404,8 +1710,9 @@ fn waiter() -> ExitCode {
     }
     // Only the planted wrong program waiter-outlives-session doesn't watch its session's agent.
     let watched = env::var("DEEP_HUB_PLANT").as_deref() != Ok("waiter-outlives-session");
-    let gone = || watched && (std::os::unix::process::parent_id() != agent || !alive(agent));
+    let gone = || watched && (agent_pid() != agent || !alive(agent));
     loop {
+        std::hint::black_box(&kept);
         if gone() {
             return ExitCode::SUCCESS;
         }
@@ -1497,10 +1804,12 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
+            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
         ),
         [arg] if arg == "statusline" => return statusline(),
         [arg] if arg == "check" => return check(),
+        [arg] if arg == "heavy" => return heavy_entry(),
+        [arg] if arg == "match" => return matching(),
         [arg, from, to] if arg == "clone" => return clone(Path::new(from), Path::new(to)),
         [arg, line] if arg == "statusline-send" => {
             send(line);
@@ -1512,6 +1821,7 @@ fn main() -> ExitCode {
                 Err(_) => ExitCode::from(1),
             };
         }
+        [arg, server] if arg == "mcp" && server == "actions" => return actions::serve(),
         [agent, event] if !agent.starts_with('-') && event == "waiter" => return waiter(),
         [agent, event] if !agent.starts_with('-') => return forward(agent, event),
         _ => {
@@ -1525,8 +1835,36 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::append;
-    use super::shell::glob;
+    use super::pi_path;
+    use deep_hook::shell::glob;
     use std::fs;
+
+    #[test]
+    fn a_pi_path_is_the_file_pi_opens() {
+        for (given, opened) in [
+            ("@a/b", "a/b"),
+            ("@@a", "@a"),
+            ("a\u{00A0}b\u{3000}c", "a b c"),
+            ("~", "~/"),
+            ("@~", "~/"),
+            ("~/a", "~/a"),
+            ("file:///h/.d/t", "/h/.d/t"),
+            ("@file:///h/t", "/h/t"),
+            ("file://localhost/h/t", "/h/t"),
+            ("file://LOCALHOST/h/t", "/h/t"),
+            ("file://%6Cocalhost/h/t", "/h/t"),
+            ("file://local\u{00AD}host/h/t", "/h/t"),
+            ("file:///h/%2Ed/t%20u", "/h/.d/t u"),
+            ("file:///h/t?x#y", "/h/t"),
+            ("file:///h/t#y?x", "/h/t"),
+            ("file:///h/\tt\n", "/h/t"),
+            ("file:///h\\t", "/h/t"),
+            ("file:///h/t%zz%2", "/h/t%zz%2"),
+            ("file:///h/é%C3%A9", "/h/éé"),
+        ] {
+            assert_eq!(pi_path(given), opened, "{given}");
+        }
+    }
 
     #[test]
     fn a_line_written_to_a_spool_moved_aside_is_written_again_to_the_new_one() {

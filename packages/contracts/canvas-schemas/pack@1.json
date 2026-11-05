@@ -1,0 +1,192 @@
+{
+  "$comment": "The pack format (#306) as a contract entry (#200; canvas primitives: Pack): a pack version's manifest, its recipes, steps and inputs, and the entries it fills into registries. The pack check in crates/deep-canvas/src/document/packs.rs refuses any other key, and its tests keep these keys and lists equal to the ones it reads.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "owner": { "type": "string" },
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "license": { "type": "string" },
+    "description": { "type": "string" },
+    "requires": {
+      "type": "object",
+      "properties": {
+        "core": { "type": "string" },
+        "modules": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "recipes": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/recipe" }
+    },
+    "aliases": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "target": { "type": "string" },
+          "conversion": { "type": "string" },
+          "renamed_from": { "type": "string" }
+        },
+        "required": ["target", "conversion"],
+        "additionalProperties": false
+      }
+    },
+    "assets": { "type": "array", "description": "Files the pack's programs and entries read (#238)." },
+    "providers": { "type": "object", "description": "Programs the sandbox module admits and runs (#238)." },
+    "layouts": { "type": "object", "description": "Layouts whose validators are sandbox programs (#238)." },
+    "entries": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": { "name": { "type": "string" } },
+          "required": ["name"]
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "url": { "type": "string" },
+          "sha256": { "type": "string" },
+          "size": { "type": "integer", "minimum": 0 },
+          "license": {},
+          "upstream": { "type": "object" }
+        },
+        "required": ["path", "sha256", "size"]
+      }
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "program": { "type": "string" },
+          "params": {},
+          "out": { "type": "object" }
+        },
+        "required": ["program", "out"]
+      }
+    },
+    "layouts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "validator": { "type": "string" },
+          "max_bytes": { "type": "integer", "minimum": 0 },
+          "twins": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "doc": { "type": "string", "maxLength": 2000 }
+        },
+        "required": ["validator", "max_bytes", "twins", "doc"]
+      }
+    }
+  },
+  "required": ["id", "name", "version", "license", "description"],
+  "additionalProperties": false,
+  "$defs": {
+    "recipe": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "version": { "type": "string" },
+        "title": { "type": "string" },
+        "catalog": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "license": { "type": "string" },
+        "author": { "type": "string" },
+        "description": { "type": "string" },
+        "preview": {},
+        "inputs": { "type": "object", "additionalProperties": { "$ref": "#/$defs/input" } },
+        "let": { "type": "object" },
+        "steps": { "type": "object", "additionalProperties": { "$ref": "#/$defs/step" } },
+        "outputs": {},
+        "channels": { "type": "object" },
+        "rules": {
+          "$comment": "#490: kind rules the core's kind_rules check reads at rest, each an expression of the closed function list over the recipe's inputs.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "expr": { "type": "string" },
+              "at": {
+                "type": "string",
+                "enum": ["rest"],
+                "x-closure": {
+                  "closed": "record",
+                  "reopens_if": "a kind rule that reads its instance at a time, not at rest",
+                  "mark": "exhaustive"
+                }
+              },
+              "fix": { "type": "string" }
+            },
+            "required": ["code", "expr", "at"]
+          }
+        },
+        "twins": {
+          "$comment": "#490: the kind kit's planted twin per rule: an instance's params that must fail the rule its expect names.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": { "params": { "type": "object" }, "expect": { "type": "string" } },
+            "required": ["params", "expect"]
+          }
+        }
+      },
+      "required": ["version", "steps"],
+      "additionalProperties": false
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["number", "integer", "bool", "choice", "vec3", "range", "text", "ID", "records", "record"],
+          "x-closure": {
+            "closed": "record",
+            "reopens_if": "a recipe input needs a value type the document envelope adds",
+            "mark": "exhaustive"
+          }
+        },
+        "default": {},
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "options": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["type"]
+    },
+    "step": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "enum": ["mark", "item", "builder", "recipe"],
+          "x-closure": {
+            "closed": "record",
+            "reopens_if": "a core release that adds a map the document holds",
+            "mark": "exhaustive"
+          }
+        },
+        "kind": { "type": "string" },
+        "params": {},
+        "at": {},
+        "material": { "type": "string" },
+        "repeat": {},
+        "let": { "type": "object" },
+        "when": {},
+        "channels": { "type": "object" }
+      },
+      "required": ["op"],
+      "additionalProperties": false
+    }
+  },
+  "x-since": "R2",
+  "x-stability": "stable"
+}

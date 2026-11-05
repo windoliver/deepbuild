@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
+use super::core_ops::Edits;
 use super::{Access, Bound, Loaded, Node, OpError, Outside, Session, Tokens, Val, VIEW_INPUTS};
 use crate::registry::{Sealed, SealedOp, TableValue};
 
@@ -35,6 +36,10 @@ pub struct View<'a> {
     noted: Option<(i64, i64)>,
     /// The tails the operator wrote this frame, by key.
     tails: Vec<(String, Val)>,
+    /// [`View::changed`] answers `None` (#896's planted rebuild).
+    forgets_changes: bool,
+    /// A canvas module's planted wrong program by name.
+    planted: Option<&'a str>,
 }
 
 /// What an operator left when its view finished: its writes, its reads, what a step noted and
@@ -56,6 +61,8 @@ impl<'a> View<'a> {
         tables: BTreeMap<String, TableValue>,
         log: bool,
         step: Option<StepCtx<'a>>,
+        forgets_changes: bool,
+        planted: Option<&'a str>,
     ) -> View<'a> {
         let sop = &sealed.ops[node.op];
         View {
@@ -71,7 +78,15 @@ impl<'a> View<'a> {
             step,
             noted: None,
             tails: Vec::new(),
+            forgets_changes,
+            planted,
         }
+    }
+
+    /// The canvas module's planted wrong program, when one is: reachable only through a proof
+    /// surface.
+    pub fn planted(&self) -> Option<&'a str> {
+        self.planted
     }
 
     /// What the operator wrote, in its writes' order, every read it made, what a step noted,
@@ -254,22 +269,18 @@ impl<'a> View<'a> {
         own: impl Iterator<Item = &'c (String, usize)>,
     ) -> Result<Val, OpError> {
         let l = self.l;
-        let mut val = self.output(&l.nodes[w], array)?;
-        let mut folded: Option<Value> = None;
+        let val = self.output(&l.nodes[w], array)?;
+        let mut edits = Vec::new();
         for (c, cn) in own {
             self.note(c);
-            if let Val::Json(edits) = self.output(&l.nodes[*cn], c)? {
-                let base = folded.get_or_insert_with(|| match &val {
-                    Val::Json(v) => (**v).clone(),
-                    _ => Value::Null,
-                });
-                apply_edits(base, &edits);
+            if let Some(e) = self.output(&l.nodes[*cn], c)?.as_typed::<Edits>() {
+                edits.push(e);
             }
         }
-        if let Some(v) = folded {
-            val = Val::json(v);
+        if edits.is_empty() {
+            return Ok(val);
         }
-        Ok(val)
+        Ok(super::core_ops::fold_edits(&val, &edits))
     }
 
     /// An array the operator declared, on its item (or per document, the document's), with
@@ -295,10 +306,7 @@ impl<'a> View<'a> {
 
     /// A typed array the operator declared; `None` where nothing wrote it.
     pub fn typed<T: Any + Send + Sync>(&mut self, name: &str) -> Result<Option<Arc<T>>, OpError> {
-        Ok(match self.array(name)? {
-            Some(Val::Any(v, _)) => v.downcast::<T>().ok(),
-            _ => None,
-        })
+        Ok(self.array(name)?.and_then(|v| v.as_typed::<T>()))
     }
 
     /// Per document: an item array the operator declared, on every item that has it, in ID
@@ -329,6 +337,92 @@ impl<'a> View<'a> {
             out.push((l.items[i].id.as_str(), v));
         }
         Ok(out)
+    }
+
+    /// Per document: the IDs of the items whose `name`, an item array it declared, changed since
+    /// this node last ran, in ID order (#896). With [`View::last`] an operator can replace only
+    /// those items' part of its last result, which must equal what a pass over [`View::every`]
+    /// builds. `None` when that isn't known: before this node ran in the current plan, when the
+    /// change logs were dropped since, in a clean evaluation, or when its contributions changed.
+    pub fn changed(&mut self, name: &str) -> Result<Option<Vec<&'a str>>, OpError> {
+        let k = self.declared(name)?;
+        let (node, l, session) = (self.node, self.l, self.session);
+        let Bound::Array {
+            writers,
+            contributions,
+            ..
+        } = &node.reads[k]
+        else {
+            return Ok(None);
+        };
+        let last = node.last_run;
+        if self.forgets_changes
+            || session.mode != super::Mode::Live
+            || node.item.is_some()
+            || !node.has_run
+            || last < session.log_floor
+            || contributions
+                .iter()
+                .any(|(_, c)| l.nodes[*c].changed_at > last)
+        {
+            return Ok(None);
+        }
+        let Some(op) = writers.first().map(|w| l.nodes[*w].op) else {
+            return Ok(Some(Vec::new()));
+        };
+        let from = session.changes.partition_point(|e| e.0 <= last);
+        let mut ids: Vec<&'a str> = Vec::new();
+        for n in session.changes[from..]
+            .iter()
+            .map(|e| &l.nodes[e.1 as usize])
+        {
+            match n.item {
+                _ if n.op != op => {}
+                Some(i) => ids.push(l.items[i].id.as_str()),
+                // A writer per document changed what every item reads.
+                None => return Ok(None),
+            }
+        }
+        ids.sort_unstable();
+        ids.dedup();
+        Ok(Some(ids))
+    }
+
+    /// Per document: an item array the operator declared, on the item `id`, with its
+    /// contributions folded in; `None` where nothing wrote it there (#896: one item's value,
+    /// found by the item, not a pass over every writer).
+    pub fn at(&mut self, name: &str, id: &str) -> Result<Option<Val>, OpError> {
+        let k = self.declared(name)?;
+        let (node, l) = (self.node, self.l);
+        let Bound::Array {
+            name,
+            writers,
+            contributions,
+        } = &node.reads[k]
+        else {
+            return Ok(None);
+        };
+        let (Some(&i), Some(op)) = (l.index.get(id), writers.first().map(|w| l.nodes[*w].op))
+        else {
+            return Ok(None);
+        };
+        let Some(w) = l.item_nodes.get(i).find(|n| l.nodes[*n].op == op) else {
+            return Ok(None);
+        };
+        let own = contributions
+            .iter()
+            .filter(|(_, cn)| l.nodes[*cn].item == Some(i));
+        self.fold(name, w, own).map(Some)
+    }
+
+    /// This node's own last result for `own`, one of its writes, in the session's own frame;
+    /// `None` before it ran and in a clean evaluation (#896).
+    pub fn last(&self, own: &str) -> Option<Val> {
+        let k = self.sop.op.writes.iter().position(|w| w == own)?;
+        let live = self.session.mode == super::Mode::Live && self.node.err.is_none();
+        (live && self.node.has_run)
+            .then(|| self.node.out.get(k).cloned())
+            .flatten()
     }
 
     /// `parent`: on the item's parent, what this operator wrote there to `own`, one of its
@@ -392,6 +486,12 @@ impl<'a> View<'a> {
         Ok(&self.session.outside)
     }
 
+    /// The build's outline sources (#443): the core's `outline.source@1`, which `extrude` reads
+    /// outlines through without naming the module that fills a form.
+    pub fn outlines(&self) -> &'a [crate::registry::SealedOutline] {
+        &self.sealed.outlines
+    }
+
     /// `table:<name>`: a table's value.
     pub fn table<T: Any + Send + Sync>(&mut self, name: &str) -> Result<Arc<T>, OpError> {
         self.declared(&format!("table:{name}"))?;
@@ -437,39 +537,8 @@ impl<'a> View<'a> {
     }
 }
 
-/// Applies a contribution's edits to the owner's value: each `{op: set | add, path, value}`,
-/// a `set` writing the value at the path and an `add` adding numbers (element by element for
-/// an array) there.
-pub fn apply_edits(base: &mut Value, edits: &Value) {
-    let Some(list) = edits.as_array() else {
-        return;
-    };
-    for e in list {
-        let path: Vec<String> = e
-            .get("path")
-            .and_then(Value::as_array)
-            .map(|p| {
-                p.iter()
-                    .map(|s| match s {
-                        Value::String(s) => s.clone(),
-                        other => other.to_string(),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let value = e.get("value").cloned().unwrap_or(Value::Null);
-        let add = e.get("op").and_then(Value::as_str) == Some("add");
-        let slot = slot_at(base, &path);
-        if add {
-            add_into(slot, &value);
-        } else {
-            *slot = value;
-        }
-    }
-}
-
 /// The value at `path` inside `base`, made where missing.
-fn slot_at<'v>(base: &'v mut Value, path: &[String]) -> &'v mut Value {
+pub(super) fn slot_at<'v>(base: &'v mut Value, path: &[String]) -> &'v mut Value {
     let mut at = base;
     for step in path {
         let index = step
@@ -492,7 +561,7 @@ fn slot_at<'v>(base: &'v mut Value, path: &[String]) -> &'v mut Value {
     at
 }
 
-fn add_into(slot: &mut Value, value: &Value) {
+pub(super) fn add_into(slot: &mut Value, value: &Value) {
     match (slot, value) {
         (Value::Array(xs), Value::Array(ys)) => {
             for (x, y) in xs.iter_mut().zip(ys) {
