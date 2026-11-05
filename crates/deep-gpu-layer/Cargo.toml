@@ -59,6 +59,9 @@ gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d
 image = { version = "0.25", default-features = false, features = ["png"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.11"
+# Issue #425: the simplify job's index-only levels by error (canvas primitives: Level of detail:
+# levels by error, "one meshoptimizer pass per level").
+meshopt = "0.7"
 wgpu = { version = "30", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]

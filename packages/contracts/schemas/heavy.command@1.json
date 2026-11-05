@@ -34,9 +34,15 @@
     },
     "jobs": {
       "type": "string",
-      "pattern": "^(jobserver|none|[1-9][0-9]{0,3})$",
+      "pattern": "^(jobserver|n|none|[1-9][0-9]{0,3})$",
       "maxLength": 16,
-      "description": "How many jobs it runs at once: jobserver (it takes them from a jobserver), a fixed number n, or none of its own."
+      "description": "How many jobs it runs at once: jobserver (it takes them from the host's job pool, #1016), n (a runner whose worker count deep lease sets with jobs_flag to its share of the pool's free tokens), a fixed number, or none of its own."
+    },
+    "jobs_flag": {
+      "type": "string",
+      "pattern": "^-{1,2}[A-Za-z0-9][A-Za-z0-9_.-]*$",
+      "maxLength": 64,
+      "description": "For jobs: n, the runner's flag that sets its worker count, such as --maxWorkers; deep lease adds it as <flag>=<count>."
     }
   },
   "required": [

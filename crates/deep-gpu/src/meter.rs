@@ -69,10 +69,9 @@ impl Rung {
         LADDER.get(self.index() + 1).copied()
     }
 
-    /// One rung up, or none past the base: the climb above it needs coefficients measured on
-    /// this machine at setup (R6), which the meter doesn't have yet.
+    /// One rung up, or none past the top of the climb.
     fn up(self) -> Option<Rung> {
-        (self > Rung::Base).then(|| LADDER[self.index() - 1])
+        self.index().checked_sub(1).map(|i| LADDER[i])
     }
 
     pub fn effects(self) -> bool {
@@ -83,9 +82,14 @@ impl Rung {
         self >= Rung::LodDown
     }
 
-    /// The internal scale at this rung over the class's base scale, never below 0.5.
+    /// The internal scale at this rung over the class's base scale, never below 0.5: the climb
+    /// draws at 1 while moving, and from its 4-samples rung up at 2, four samples a pixel (#425).
     pub fn scale(self, base: f64) -> f64 {
-        if self >= Rung::InternalScaleDown {
+        if self <= Rung::Samples4Moving {
+            2.0
+        } else if self < Rung::Base {
+            1.0
+        } else if self >= Rung::InternalScaleDown {
             (base * 0.5).max(SCALE_FLOOR)
         } else {
             base
@@ -143,12 +147,19 @@ pub struct Planted {
     pub budgets_each_window: bool,
     /// Steps down the main window's costliest writer, whichever window the costly one is in.
     pub steps_main_window: bool,
+    /// #425: a climbed rung is kept whatever the frames after it charge.
+    pub climb_never_steps_down: bool,
+    /// #425: a frame-health drop climbs again after 120 frames of headroom, view changed or not.
+    pub reclimbs_without_view_change: bool,
 }
 
 /// One writer layer's ladder: the degrade level, a transition table stepped frame by frame.
 #[derive(Clone, Debug)]
 pub struct Ladder {
     rung: Rung,
+    /// The climb rungs that apply to this layer (#425): one whose memory wouldn't fit its class's
+    /// cap is skipped.
+    skips: [bool; LADDER.len()],
     reason: Reason,
     over: u32,
     under: u32,
@@ -163,6 +174,7 @@ impl Ladder {
     pub fn new(planted: Planted) -> (Ladder, Step) {
         let ladder = Ladder {
             rung: Rung::Base,
+            skips: [false; LADDER.len()],
             reason: Reason::Initial,
             over: 0,
             under: 0,
@@ -180,6 +192,23 @@ impl Ladder {
 
     pub fn rung(&self) -> Rung {
         self.rung
+    }
+
+    /// The climb rungs that don't apply to this layer, which the climb steps over.
+    pub fn skip(&mut self, rungs: &[Rung]) {
+        self.skips = [false; LADDER.len()];
+        for r in rungs.iter().filter(|r| **r < Rung::Base) {
+            self.skips[r.index()] = true;
+        }
+    }
+
+    /// The next rung up that applies, or none past the top of the climb.
+    fn up(&self) -> Option<Rung> {
+        let mut at = self.rung.up()?;
+        while self.skips[at.index()] {
+            at = at.up()?;
+        }
+        Some(at)
     }
 
     pub fn reason(&self) -> Reason {
@@ -206,19 +235,27 @@ impl Ladder {
         let mut at = self.rung;
         for _ in 0..rungs {
             at = at.down()?;
+            // A climb rung that doesn't apply is stepped over going down too.
+            while self.skips[at.index()] {
+                at = at.down()?;
+            }
         }
         Some(at)
     }
 
     /// One presented frame's charges against the layer's share, its class's frame limits: a
-    /// step down after 30 consecutive frames over, a climb after 120 under once allowed. While the
-    /// app is over its budget (`app_over`) nothing climbs.
+    /// step down after 30 consecutive frames over, a climb after 120 under once allowed; above
+    /// the class's base only frames with headroom, at most half of each limit, count toward the
+    /// climb (#425), and only while the app's whole frame has that headroom too (`app_room`):
+    /// the machine's, not one writer's. While the app is over its budget (`app_over`) nothing
+    /// climbs.
     pub fn frame(
         &mut self,
         gpu_ms: f64,
         cpu_ms: f64,
         limits: &Limits,
         app_over: bool,
+        app_room: bool,
     ) -> Option<Step> {
         let over =
             limits.gpu_ms.is_some_and(|l| gpu_ms > l) || limits.cpu_ms.is_some_and(|l| cpu_ms > l);
@@ -236,14 +273,17 @@ impl Ladder {
             return None;
         }
         self.over = 0;
-        if app_over {
+        let headroom = app_room
+            && limits.gpu_ms.is_some_and(|l| gpu_ms <= l / 2.0)
+            && limits.cpu_ms.is_none_or(|l| cpu_ms <= l / 2.0);
+        if app_over || (self.rung <= Rung::Base && !headroom) {
             self.under = 0;
             return None;
         }
         if self.climbs() {
             self.under += 1;
             if self.under >= UP_AFTER {
-                let to = self.rung.up()?;
+                let to = self.up()?;
                 return self.go(to, Reason::Headroom);
             }
         }
@@ -253,6 +293,9 @@ impl Ladder {
     /// A step down for frame health: one rung (two on the planted ladder), held until the view
     /// changes. The app budget takes it for its costly writer.
     pub fn health_step(&mut self) -> Option<Step> {
+        if self.planted.climb_never_steps_down && self.rung < Rung::Base {
+            return None;
+        }
         let rungs = if self.planted.skips_a_rung { 2 } else { 1 };
         let to = self.below(rungs).or_else(|| self.below(1))?;
         let step = self.go(to, Reason::FrameHealth);
@@ -263,10 +306,13 @@ impl Ladder {
     /// Whether the rung may be climbed now: below the base, not on a low battery, not held by
     /// you, and, after a drop, only once the view has changed.
     fn climbs(&self) -> bool {
-        self.rung.up().is_some()
+        self.up().is_some()
             && !self.battery_low
             && self.reason != Reason::You
-            && (self.view_changed || !matches!(self.reason, Reason::FrameHealth | Reason::Battery))
+            && (self.view_changed
+                || (self.planted.reclimbs_without_view_change
+                    && self.reason == Reason::FrameHealth)
+                || !matches!(self.reason, Reason::FrameHealth | Reason::Battery))
     }
 
     /// The view changed during this frame: climbing may start, counted from the next frame.
@@ -382,6 +428,8 @@ pub struct AppMeter {
     /// The last frame's limit, and whether it was over.
     pub limit: Option<f64>,
     pub last_over: bool,
+    /// Whether the last frame's total was at most half the limit: headroom to climb (#425).
+    pub last_room: bool,
     planted: Planted,
 }
 
@@ -393,6 +441,7 @@ impl AppMeter {
             costs: Vec::new(),
             limit: None,
             last_over: false,
+            last_room: false,
             planted,
         }
     }
@@ -430,6 +479,7 @@ impl AppMeter {
             }
         });
         self.last_over = over;
+        self.last_room = limit.is_some_and(|l| total <= l / 2.0);
         if !over {
             self.restart();
             return None;
@@ -526,7 +576,7 @@ pub fn estimate(view: &Shape, scale: f64, history: u32) -> Estimate {
             0
         },
         targets: internal * (8 + 4 + 4),
-        upscale: if scale < 1.0 {
+        upscale: if scale != 1.0 {
             internal * 4 + full * 4
         } else {
             0
@@ -534,6 +584,22 @@ pub fn estimate(view: &Shape, scale: f64, history: u32) -> Estimate {
         frame_history: u64::from(history) * internal * 8,
         effects: if view.effects { internal * 8 } else { 0 },
     }
+}
+
+/// The climb rungs that don't apply to a view whose base fit is `fit` (#425): the 4-samples rung
+/// when its targets at scale 2 pass the class's cap, and shadow maps at twice their size when
+/// the `shadow_extra` bytes they add do; per-writer memory caps are hard, so the climb steps
+/// over them.
+pub fn climb_skips(view: &Shape, fit: &Estimate, cap: u64, shadow_extra: u64) -> Vec<Rung> {
+    let room = (cap as f64 * FIT_SHARE) as u64;
+    let mut skips = Vec::new();
+    if estimate(view, 2.0, fit.history).bytes() > room {
+        skips.push(Rung::Samples4Moving);
+    }
+    if fit.bytes() + shadow_extra > room {
+        skips.push(Rung::Shadows2x);
+    }
+    skips
 }
 
 /// The internal scale and history window that fit `cap`: the class's base scale first, then
@@ -588,7 +654,7 @@ mod tests {
     ) -> Vec<(u32, Step)> {
         let l = Class::WorkProduct.limits();
         frames
-            .filter_map(|f| ladder.frame(ms, 0.0, &l, false).map(|s| (f, s)))
+            .filter_map(|f| ladder.frame(ms, 0.0, &l, false, false).map(|s| (f, s)))
             .collect()
     }
 
@@ -608,6 +674,24 @@ mod tests {
             up.first().map(|(f, s)| (*f, s.to, s.reason)),
             Some((820, Rung::EffectsOff, Reason::Headroom))
         );
+    }
+
+    #[test]
+    fn the_climb_steps_over_a_rung_that_does_not_fit_and_back_down_over_it() {
+        let (mut l, _) = Ladder::new(Planted::default());
+        l.skip(&[Rung::Samples4Moving]);
+        let limits = Class::Showpiece.limits();
+        let mut climbed = Vec::new();
+        for f in 1..=240 {
+            if let Some(s) = l.frame(5.0, 0.0, &limits, false, true) {
+                climbed.push((f, s.to));
+            }
+        }
+        assert_eq!(
+            climbed,
+            vec![(120, Rung::Scale1Moving), (240, Rung::FullResEffects)]
+        );
+        assert_eq!(l.health_step().map(|s| s.to), Some(Rung::Scale1Moving));
     }
 
     #[test]
@@ -693,9 +777,10 @@ mod tests {
         run(&mut l, 1..=30, 3.0);
         l.view_changed();
         let limits = Class::WorkProduct.limits();
-        assert!((1..=300).all(|_| l.frame(1.0, 0.0, &limits, true).is_none()));
+        assert!((1..=300).all(|_| l.frame(1.0, 0.0, &limits, true, false).is_none()));
         assert_eq!(l.rung(), Rung::EffectsOff);
-        let up = (1..=120).find_map(|f| l.frame(1.0, 0.0, &limits, false).map(|s| (f, s.to)));
+        let up =
+            (1..=120).find_map(|f| l.frame(1.0, 0.0, &limits, false, false).map(|s| (f, s.to)));
         assert_eq!(up, Some((120, Rung::Base)));
     }
 

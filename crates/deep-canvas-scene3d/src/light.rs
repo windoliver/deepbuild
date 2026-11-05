@@ -490,6 +490,36 @@ pub fn material<'a>(
     }))
 }
 
+/// The material operator of the `material@1` item `item` names (#429; Material: `op`): the ID
+/// and item of the `gpu.material@1` its `params.op` names, `None` when it names none.
+pub fn material_op<'a>(
+    item: &Value,
+    named: impl Fn(&str) -> Option<&'a Value>,
+) -> Result<Option<(&'a str, &'a Value)>, Refused> {
+    let Some(m) = item.get("material").and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    let Some(op) = named(m)
+        .and_then(|m| m.get("params"))
+        .and_then(|p| p.get("op"))
+        .filter(|o| !o.is_null())
+    else {
+        return Ok(None);
+    };
+    let found = op.as_str().and_then(|id| {
+        let o = named(id)
+            .filter(|o| o.get("kind").and_then(Value::as_str) == Some("gpu.material@1"))?;
+        Some((o.get("id").and_then(Value::as_str).unwrap_or(id), o))
+    });
+    match found {
+        Some(f) => Ok(Some(f)),
+        None => Err(Refused {
+            code: "ref_unresolved",
+            path: format!("items/{m}/params/op"),
+        }),
+    }
+}
+
 /// A color field's role: a bare name, or `{role}` as #418 reads it.
 fn role_of(v: Option<&Value>) -> Option<&str> {
     match v? {
@@ -662,27 +692,16 @@ pub fn policy_by(lights: &[Light], camera: &Camera, tie: Tie) -> Policy {
     if lights.is_empty() {
         return Policy::default();
     }
-    let planes = frustum(camera);
     let mut scored: Vec<(i64, &str, usize, f64)> = Vec::new();
-    for (i, l) in lights.iter().enumerate() {
-        let score = match l.kind {
-            LightKind::Sun => l.intensity,
-            _ => {
-                let d = sub(l.pos, camera.eye);
-                let d2 = dot(d, d);
-                let inside = planes
-                    .iter()
-                    .all(|(n, w)| dot(*n, l.pos) + w >= -l.range * dot(*n, *n).sqrt());
-                if !inside {
-                    0.0
-                } else {
-                    l.intensity * 4.0 * PI / d2.max(l.radius * l.radius)
-                }
-            }
-        } * l.priority.exp2();
+    for (i, score) in scores(lights, camera).into_iter().enumerate() {
         if score > 0.0 {
             // Eight buckets per stop: a light's rank moves only when its score does.
-            scored.push((-(score.log2() * 8.0).floor() as i64, &l.id, i, score));
+            scored.push((
+                -(score.log2() * 8.0).floor() as i64,
+                &lights[i].id,
+                i,
+                score,
+            ));
         }
     }
     match tie {
@@ -704,6 +723,33 @@ pub fn policy_by(lights: &[Light], camera: &Camera, tie: Tie) -> Policy {
         .map(|s| s.1.to_string())
         .collect();
     Policy { shaded, left_out }
+}
+
+/// Each light's score at the view, in the lights' order (#425 reads them): its estimated
+/// illuminance at the eye (power ÷ max(d², r²), 0 when its range misses the frustum) times
+/// 2^priority; a sun's illuminance times 2^priority.
+pub fn scores(lights: &[Light], camera: &Camera) -> Vec<f64> {
+    let planes = frustum(camera);
+    lights
+        .iter()
+        .map(|l| {
+            (match l.kind {
+                LightKind::Sun => l.intensity,
+                _ => {
+                    let d = sub(l.pos, camera.eye);
+                    let d2 = dot(d, d);
+                    let inside = planes
+                        .iter()
+                        .all(|(n, w)| dot(*n, l.pos) + w >= -l.range * dot(*n, *n).sqrt());
+                    if !inside {
+                        0.0
+                    } else {
+                        l.intensity * 4.0 * PI / d2.max(l.radius * l.radius)
+                    }
+                }
+            }) * l.priority.exp2()
+        })
+        .collect()
 }
 
 /// The camera's six planes (n, w), inside where n·p + w ≥ 0, from its reversed-Z clip matrix.
