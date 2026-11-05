@@ -12,6 +12,7 @@ pub mod env;
 mod glass;
 pub mod maps;
 mod mesh;
+mod motion;
 mod oit;
 mod op;
 pub mod shadow;
@@ -1337,6 +1338,9 @@ pub type Camera = ([f64; 16], [f64; 3], f64);
 
 pub struct Renderer {
     planted: Planted,
+    /// Motion blur by velocity (#419): its pipelines, and this frame's pass when it blurs.
+    motion: motion::MotionPass,
+    motion_frame: Option<motion::Frame>,
     epoch: u64,
     /// The material maps' textures and bind groups (#423), and the look's default taps.
     maps: maps::Store,
@@ -2541,6 +2545,8 @@ impl Renderer {
                 LABEL_PASS,
             ],
             meshes: BTreeMap::new(),
+            motion: motion::MotionPass::default(),
+            motion_frame: None,
             batches: BTreeMap::new(),
             atlas,
             picks: BTreeMap::new(),
@@ -2598,7 +2604,8 @@ impl Renderer {
         let linear = texture(
             "scene3d linear",
             LINEAR,
-            attach | wgpu::TextureUsages::TEXTURE_BINDING,
+            // Motion blur's resolve copies the frame back in (#419).
+            attach | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         );
         // Effects read the object-ID and depth targets after geometry.
         let ids = texture(
@@ -3339,6 +3346,18 @@ impl Renderer {
             let order = &self.order;
             self.batches.retain(|id, _| order.contains(id));
         }
+        // Motion blur by velocity (#419), once every solid's mesh is built.
+        self.motion_frame = match (&scene.motion, self.targets.as_ref()) {
+            (Some(m), Some(t)) => self.motion.prepare(
+                device,
+                scene,
+                m,
+                &self.meshes,
+                &t.linear_view,
+                t.size,
+            ),
+            _ => None,
+        };
     }
 
     /// A solid's lobe table index above the adjust's, 0 without lobes, or `None` when its lobes
@@ -4416,6 +4435,7 @@ impl Renderer {
         };
         let glass_copy = glass.as_ref().and(self.glass.clone());
         let linear_texture = t.linear.clone();
+        let motion = self.motion_frame.take().map(|m| (m, t.linear.clone()));
         let geometry: Job = Box::new(move |encoder| {
             if let Some((heads, ..)) = &resolve {
                 encoder.clear_buffer(heads, 0, None);
@@ -4489,9 +4509,7 @@ impl Renderer {
                 encoder.copy_buffer_to_buffer(info, 0, staging, 0, 16);
             }
             }
-            let (Some((late, pipeline, binds, draws)), Some(copy)) = (&glass, &glass_copy) else {
-                return;
-            };
+            if let (Some((late, pipeline, binds, draws)), Some(copy)) = (&glass, &glass_copy) {
             timed(&profiler, glass::PASS, encoder, |encoder, timestamps| {
                 copy.record(encoder, &linear_texture);
                 glass_pass(
@@ -4504,6 +4522,12 @@ impl Renderer {
                     timestamps,
                 );
             });
+            }
+            // Motion blur by velocity resolves the finished geometry, glass included, before the
+            // effects (#419).
+            if let Some((m, linear)) = &motion {
+                m.record(encoder, linear, &profiler);
+            }
         });
         let mut jobs: Vec<(String, Job)> = Vec::new();
         if let Some(s) = shadow {
