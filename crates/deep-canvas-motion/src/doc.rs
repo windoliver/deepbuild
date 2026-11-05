@@ -1650,8 +1650,9 @@ fn cuts_of(
     Ok(cuts)
 }
 
-/// The marker kinds R1 lands: cue, shot, section and record.
-const MARKER_KINDS: [&str; 4] = ["cue", "shot", "section", "record"];
+/// The marker kinds R1 lands: cue, shot, section and record; and a reading hold (#419), which
+/// motion blur never spans.
+const MARKER_KINDS: [&str; 5] = ["cue", "shot", "section", "record", "hold"];
 
 /// Resolves every marker at check, in dependency order: a marker whose time names another marker
 /// waits for it, so a relative time keeps its offset when its marker moves. One that never

@@ -74,7 +74,7 @@ export interface HookMeta {
   matched: string[];
   /** What deep-hook read of the call for a matched entry, by name, shown with that entry's denial. */
   notes?: Record<string, string>;
-  /** The folders a delete whose reach can't be worked out names, by the entry that matched it, for the hub to stage (#347). */
+  /** What the hub stages before the call runs, by the entry that matched it: the folders a delete whose reach can't be worked out names (#347), the paths a discard of tracked edits reaches, the stash a drop names (#1294). */
   stage?: Record<string, string[]>;
   /** The heavy.command@1 entry a shell call matched in deep-hook (#1015): the hub runs it under `deep lease` with its kinds. */
   heavy?: { name: string; kinds: string[]; form: string };
@@ -141,12 +141,21 @@ export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']
 export const CHROME = 'mcp__claude-in-chrome__';
 /** The prefixes of the agent's tools whose steps act on a screen or in your own browser (#332). */
 export const SCREEN_TOOLS = ['mcp__computer-use__', 'mcp__remote-devices__computer_', CHROME];
+/** What a destructive call reaches; each is null when the line names one nobody can know. */
+export interface StageReach {
+  /** The folders a delete whose reach can't be worked out names (#347). */
+  folders?: string[] | null;
+  /** The paths under which a command discards tracked edits (#1294). */
+  edits?: string[] | null;
+  /** The stash a drop names: the folder it works in, then the entry, or no entry for all of them (#1294). */
+  stash?: string[] | null;
+}
 export interface Gated {
   label: string; classes: string[]; mcp?: { server: string; tool: string }; decided?: string[]; command?: string;
   /** A computer-use step: allowed only on what its session leases (#332). */
   screen?: boolean;
-  /** A delete whose reach can't be worked out (#347): the folders it names, to stage before it runs; null when it names one nobody can know. */
-  stage?: string[] | null;
+  /** What is staged before it runs (#347, #1294). */
+  stage?: StageReach;
   /** A `gh pr create` (#322): its body's `Closes #n` is checked against the issue's task before it runs. */
   pr?: boolean;
   /** A call in a session whose cut-off turn started a send with no recorded end (#85): checked against it first. */

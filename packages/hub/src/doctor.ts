@@ -114,6 +114,12 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
       });
       for (const f of failing) add('hub.jobs', 'deepbuild', 'job_failing', 'warn', `the hub's job ${f.name} failed ${f.failures} times in a row since ${new Date(f.since).toISOString()}: ${f.error}`, 'Read the error; the job runs again on its own, and its next clean run clears this.');
       if (!failing.length) add('hub.jobs', 'deepbuild', 'healthy', 'ok', `none of the hub's ${Object.keys(jobs).length} jobs has failed ${JOB_FAILURES} times in a row`, 'Nothing to do.');
+      // What macOS says of the app's notifications (#994): only the app can read it, so with no reading it isn't checked.
+      const setting = reply.result.notifications;
+      if (setting === 'allowed') add('app.notifications', 'deepbuild', 'healthy', 'ok', 'macOS shows the app\'s notifications', 'Nothing to do.');
+      else if (setting === 'denied') add('app.notifications', 'deepbuild', 'notifications_off', 'fail', 'macOS has Allow notifications off for DeepBuild, so no ask can notify you', 'Turn on Allow notifications for DeepBuild in System Settings > Notifications.');
+      else if (setting === 'alerts_none') add('app.notifications', 'deepbuild', 'notifications_off', 'fail', 'macOS has DeepBuild\'s Alert style set to None, so no ask can notify you', 'Pick an Alert style for DeepBuild in System Settings > Notifications.');
+      else add('app.notifications', 'deepbuild', 'not_checked', 'skip', 'the app hasn\'t reported its notification setting since the hub started', 'Open DeepBuild, then run deep doctor again.');
     } catch (error) {
       add('hub.jobs', 'deepbuild', 'not_checked', 'skip', `the hub's health couldn't be read: ${error instanceof Error ? error.message : String(error)}`, 'Run `deep hub status` by hand.');
     }

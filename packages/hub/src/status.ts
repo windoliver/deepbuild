@@ -78,8 +78,9 @@ export async function sessionStates(query: (sql: string) => Promise<unknown[]>, 
   const watching = new Map(((await query(`SELECT r.session_id, json_extract(r.data, '$.reading') AS text FROM ${events('r')} WHERE r.kind = 'session.reading' AND r.session_id IS NOT NULL${of('r.session_id')} AND json_extract(r.data, '$.reading') LIKE 'Waiting on its monitor%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND (later.kind = 'session.end' OR (later.kind = 'agent.stop' AND json_extract(later.data, '$.child') IS NULL) OR (later.kind = 'session.reading' AND json_extract(later.data, '$.reading') LIKE 'Its monitor%')))`)) as { session_id: string; text: string }[]).map((r) => [r.session_id, r.text]));
   // A turn you interrupted, with no prompt since (#39).
   const interrupted = new Set(((await query(`SELECT e.session_id FROM ${events('e')} WHERE e.kind = 'session.reading'${of('e.session_id')} AND json_extract(e.data, '$.reading') LIKE 'Interrupt:%' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = e.session_id AND a.kind = 'user.ask' AND a.log_pos > e.log_pos)`)) as { session_id: string }[]).map((r) => r.session_id));
-  // Each session's newest stop: a hook after it, such as Claude Code's idle-prompt notification, is no later stop.
-  const stops = new Map(((await query(`SELECT session_id, MAX(ts) AS ts FROM ${events()} WHERE kind = 'agent.stop' AND session_id IS NOT NULL${of('session_id')} GROUP BY session_id`)) as { session_id: string; ts: number }[]).map((r) => [r.session_id, r.ts]));
+  // Each session's newest stop of its own: a hook after it, such as Claude Code's idle-prompt notification, is no later
+  // stop, and nor is a subagent's.
+  const stops = new Map(((await query(`SELECT session_id, MAX(ts) AS ts FROM ${events()} WHERE kind = 'agent.stop' AND json_extract(data, '$.child') IS NULL AND session_id IS NOT NULL${of('session_id')} GROUP BY session_id`)) as { session_id: string; ts: number }[]).map((r) => [r.session_id, r.ts]));
   const ago = (ms: number | null) => (ms === null ? 'a while' : elapsed(now - ms));
   // The planted wrong reading checks a permission prompt before a process gone.
   const waitingFirst = activePlant() === 'waiting-first';

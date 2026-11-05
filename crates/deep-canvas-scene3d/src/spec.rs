@@ -665,6 +665,18 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             ),
             unit("coat", 0.0, 0.0, 1.0),
             unit("coat_roughness", 0.03, 0.03, 0.2),
+            // The extra lobes (#428), each off at its zero.
+            p("sheen", "{weight, color | base, roughness}", "", Value::Null, S, Value::Null, json!({"weight": 1, "color": [1, 1, 1], "roughness": 0.5})),
+            p("anisotropy", "{strength, rotation}", "deg", Value::Null, S, Value::Null, json!({"strength": 0.8, "rotation": 30})),
+            p("translucency", "{kind: thin | wrap, amount, color | base, wrap}", "", Value::Null, S, Value::Null, json!({"kind": "wrap", "amount": 1, "wrap": 0.5})),
+            unit("transmission", 0.0, 0.0, 1.0),
+            p("ior", "f32", "", json!(1.5), S, json!(1.5), json!(1.33)),
+            p("absorption", "{thickness, attenuation: {color, distance}}", "m", Value::Null, S, Value::Null, json!({"thickness": 0.02, "attenuation": {"color": [0.5, 0.8, 1], "distance": 0.02}})),
+            p("dispersion", "f32", "", json!(0), S, json!(0), json!(1)),
+            p("iridescence", "{weight, ior, thickness: nm}", "nm", Value::Null, S, Value::Null, json!({"weight": 1, "ior": 1.3, "thickness": 400})),
+            unit("diffuse_roughness", 0.0, 0.0, 1.0),
+            unit("retroreflection", 0.0, 0.0, 1.0),
+            p("flakes", "{weight, size, tilt, color | base}", "m", Value::Null, S, Value::Null, json!({"weight": 1, "size": 0.001, "tilt": 15})),
             p(
                 "pattern",
                 "none | plaster | stone_courses | roof_tiles | wood | rock | grass | cobbles | glass_curtain | concrete | asphalt",
