@@ -326,7 +326,8 @@ impl Hub<'_> {
         // A vector item's parts, each at its box where the item is placed at t.
         let bytes = |sha: &str| crate::evidence::read(&self.scenario.evidence, sha);
         let whole = doc.as_object().cloned().unwrap_or_default();
-        let (_, imported) = deep_canvas_vector::check(&whole, bytes, false);
+        let (_, imported) =
+            deep_canvas_vector::check(&whole, bytes, deep_canvas_vector::svg::Twin::Honest);
         for (id, found) in &imported {
             let Some(mut item) = items.get(id).cloned() else {
                 continue;
