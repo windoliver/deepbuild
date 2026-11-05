@@ -83,8 +83,24 @@ export async function namesOf(dir: string): Promise<string> {
 /** The stem of a key: everything but the files' contents. */
 export const stemOf = (facts: { repo: string; check: string; approved: string | null; command: string; deadline_ms: number | null; held_out: unknown; references?: unknown; installs: string; names: string | null; base: string | null; session?: string }): string =>
   sha(JSON.stringify([facts.repo, hostname(), facts.check, facts.approved, facts.command, facts.deadline_ms, facts.held_out ?? null, facts.references ?? null, facts.installs, facts.names, facts.base, facts.session ?? null]));
-/** Whether a run's record is whole in run.finished, so a restarted hub may read it again (KeyFacts.plain). */
-export const plain = (r: RecordedRun): boolean => !r.attempts.length && !r.seeded.some((s) => s.standIn) && r.failures.every((f) => f.assertion) && r.contract === null && r.mask === null;
+/** How run.finished names a failure among its findings, at most FINDINGS of them, and how a restarted hub reads one back. */
+export const FINDINGS = 20;
+const FINDING = /^(.*) \(([^()]*):(\d+)\): ([\s\S]*)$/;
+export const findingOf = (f: RecordedRun['failures'][number]): string => `${f.test} (${f.file}:${f.line}): ${f.message}`;
+/** A failure that reads back from its finding as it was. */
+const survives = (f: RecordedRun['failures'][number]): boolean => {
+  const m = FINDING.exec(findingOf(f));
+  return m !== null && m[1] === f.test && m[2] === f.file && Number(m[3]) === f.line && m[4] === f.message;
+};
+/** Whether a test both failed and passed on its attempts: what the verdict engine reads attempts for. */
+const retried = (attempts: RecordedRun['attempts']): boolean => attempts.some((a) => attempts.some((b) => b.test === a.test && b.outcome !== a.outcome));
+/**
+ * Whether a run's record is whole in run.finished, so a restarted hub may read it again (KeyFacts.plain): no test both
+ * failed and passed on its attempts, no stand-in seeded, every failure on an assertion and read back from its finding as
+ * it was, no contract, nothing uncounted.
+ */
+export const plain = (r: RecordedRun): boolean =>
+  !retried(r.attempts) && !r.seeded.some((s) => s.standIn) && r.failures.length <= FINDINGS && r.failures.every((f) => f.assertion && survives(f)) && r.contract === null && r.mask === null;
 
 export class SharedRuns {
   private readonly groups = new Map<string, Group>();
@@ -111,6 +127,11 @@ export class SharedRuns {
     if (!g.runs.some((r) => r.run === run)) g.runs.push({ run, claim: facts.claim, session: facts.session, withheld: facts.withheld });
     return g;
   }
+  /** Takes a run off its key: one pruned with its evidence counts for no claim. */
+  drop(id: string, run: string): void {
+    const g = this.groups.get(id);
+    if (g) g.runs = g.runs.filter((r) => r.run !== run);
+  }
   /** The groups of `check` under `stem` whose files hold in `dir` what they held for the key, the one with most runs first. */
   async find(check: string, stem: string, dir: string): Promise<Group[]> {
     const found: Group[] = [];
@@ -128,7 +149,7 @@ export class SharedRuns {
  */
 export function keptRecord(run: string, d: { outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts }): RecordedRun {
   const failures = d.outcome === 'failed' ? d.findings.flatMap((f) => {
-    const m = /^(.*) \(([^()]*):(\d+)\): ([\s\S]*)$/.exec(f);
+    const m = FINDING.exec(f);
     return m ? [{ test: m[1]!, file: m[2]!, line: Number(m[3]), stack: null, assertion: true, message: m[4]! }] : [];
   }) : [];
   return {
@@ -138,11 +159,13 @@ export function keptRecord(run: string, d: { outcome: string; tests_run: number;
   };
 }
 /**
- * A held-out variant's run as a claim may show it (#1018): its outcome, counts, attempts, seeding and contract counts,
- * never its fixture or output.
+ * A held-out variant's run as a claim may show it (#1018): its outcome, counts, attempts by an unnamed test each,
+ * seeding and contract counts, never its fixture, its tests' names or its output.
  */
 export function withheld(r: RecordedRun): RecordedRun {
   const message = r.outcome === 'missing' ? 'a held-out variant of its fixtures never ran' : 'failed on a held-out variant of its fixtures';
   const failures = r.failures.length ? [{ test: 'held-out variant', file: '.', line: 1, stack: null, assertion: r.failures.every((f) => f.assertion), message }] : [];
-  return { ...r, failures, evidence: [], read: [], output: { stdout: '', stderr: '', sha256: { stdout: EMPTY, stderr: EMPTY } } };
+  const tests = [...new Set(r.attempts.map((a) => a.test))];
+  const attempts = r.attempts.map((a) => ({ ...a, test: `held-out variant's test ${tests.indexOf(a.test) + 1}` }));
+  return { ...r, failures, attempts, evidence: [], read: [], output: { stdout: '', stderr: '', sha256: { stdout: EMPTY, stderr: EMPTY } } };
 }

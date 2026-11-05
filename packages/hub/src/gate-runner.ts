@@ -146,6 +146,8 @@ export class GateRunner {
   /** Every claim's results by key, across sessions (#1018); and each kept run's key. */
   private readonly shared = new SharedRuns();
   private readonly keyOf = new Map<string, string>();
+  /** The keys a restart can't read whole: one of their kept runs lost in the record what makes its verdict, so none carries. */
+  private readonly unread = new Set<string>();
   /** The runs going on a key, by the key (a base run's) or by stem and snapshot (a head run's): a run on an equal key waits for it. */
   private readonly going = new Map<string, { done: Promise<void>; session: string }>();
   /** Each worktree's repo, git's common folder, read once: it never changes under a worktree. */
@@ -176,16 +178,18 @@ export class GateRunner {
     const paths = key.paths ?? (this.o.plant === 'key-leaves-out-reads' ? [] : keyPaths(record.read));
     const id = key.id ?? keyId(key.stem, paths, await contents(key.dir, paths));
     const facts: KeyFacts = { id, stem: key.stem, paths, claim: key.claim, session: key.session, base: key.base, withheld: key.withheld, plain: plain(record) };
-    // A head run that read nothing but its check's own files saw none of the code under test, as a program the tracers
-    // can't see into reads nothing they record: its key can't tell a change to that code, so it never carries.
-    const blind = key.paths === undefined && this.o.plant !== 'key-leaves-out-reads' && !paths.some((p) => !ownRead(p));
+    // A head run that read nothing but its check's own files (its script among them) saw none of the code under test, as
+    // a program the tracers can't see into reads nothing they record: its key can't tell a change to that code, so it never carries.
+    const blind = key.paths === undefined && this.o.plant !== 'key-leaves-out-reads' && !paths.some((p) => p !== key.check && !ownRead(p));
     if (KEPT.has(record.outcome) && !blind) this.keyOf.set(run, this.shared.add(key.check, facts, run).id);
     return facts;
   }
   /** The keys the record keeps, from each run.finished that names one, oldest first: a restarted hub reads them again. */
   kept(rows: { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts }[]): void {
+    // A key with a run that isn't whole in the record is read again for none of its runs: those left would decide alone.
+    for (const r of rows) if (KEPT.has(r.outcome) && !r.key.plain) this.unread.add(`${r.check}\0${r.key.id}`);
     for (const r of rows) {
-      if (!KEPT.has(r.outcome) || !r.key.plain) continue;
+      if (!KEPT.has(r.outcome) || this.unread.has(`${r.check}\0${r.key.id}`)) continue;
       if (!this.records.has(r.run)) this.records.set(r.run, keptRecord(r.run, r));
       this.keyOf.set(r.run, this.shared.add(r.check, r.key, r.run).id);
     }
@@ -215,7 +219,10 @@ export class GateRunner {
    */
   private decided(e: Entry, id: string): boolean {
     const runs = this.runsOn(id);
-    if (runs.filter((s) => s.withheld).length < (e.check.held_out?.length ?? 0)) return false;
+    // A claim runs its check and then each variant once, so a key is whole when one claim's check run and all its variants
+    // are on it: other claims' runs of a variant never stand in for another, and variants never stand in for the check.
+    const variants = e.check.held_out?.length ?? 0;
+    if (!runs.some((s) => !s.withheld && runs.filter((x) => x.withheld && x.claim === s.claim).length >= variants)) return false;
     const outcomes = runs.map((s) => this.records.get(s.run)?.outcome);
     return outcomes.some((o) => o === 'failed' || o === 'overran' || o === 'ran_nothing') || outcomes.filter((o) => o === 'passed').length >= (e.check.runs ?? 1);
   }
@@ -227,9 +234,11 @@ export class GateRunner {
   private async carry(c: Claim, e: Entry, dir: string): Promise<'carried' | { wait: Promise<void> } | null> {
     const stem = await this.stemOf(c, e, null);
     for (const g of await this.shared.find(e.check.check, stem, dir)) {
+      if (this.unread.has(g.id)) continue;
+      await this.prune(g.id);
       // Results are shared across sessions: a later claim of the session that ran a key runs its own, as it did before.
       if (!this.runsOn(g.id).some((s) => s.session !== sessionOf(c.session))) continue;
-      if (!this.decided(e, g.id) || !await this.keptAll(this.runsOn(g.id))) continue;
+      if (!this.decided(e, g.id)) continue;
       e.group = g.id;
       e.outcome = this.runsOn(g.id).every((x) => this.records.get(x.run)?.outcome === 'passed') ? 'passed' : 'carried';
       e.readings = this.saved(c, this.runsOn(g.id));
@@ -237,6 +246,17 @@ export class GateRunner {
     }
     const going = this.going.get(`${stem}\0${c.snapshot}`);
     return going && going.session !== sessionOf(c.session) ? { wait: this.waited(c, going) } : null;
+  }
+  /**
+   * Takes off a key each run whose output is no longer kept, which then counts for its own claim alone: a result is
+   * pruned with its evidence (#1018, under #31's retention).
+   */
+  private async prune(id: string): Promise<void> {
+    for (const s of [...this.shared.group(id)?.runs ?? []]) {
+      if (await this.keptAll([s])) continue;
+      this.shared.drop(id, s.run);
+      this.keyOf.delete(s.run);
+    }
   }
   /** Whether every run's output is still kept: a result is pruned with its evidence (#1018, under #31's retention). */
   private async keptAll(runs: Source[]): Promise<boolean> {
@@ -332,16 +352,18 @@ export class GateRunner {
       if (c.claim !== from && [...c.entries.values()].some((e) => e.group === id)) await this.o.judged?.(c.claim);
     }
   }
+  /** A check's last run on the snapshot; for a carried result, its key's first run of the check itself, never a held-out variant's (#1018). */
+  private headOf(e: Entry): RecordedRun | undefined {
+    const last = e.runs.length ? e.runs[e.runs.length - 1] : e.group ? this.runsOn(e.group).find((s) => !s.withheld)?.run : undefined;
+    return last ? this.records.get(last) : undefined;
+  }
   /** The files a check's last run on the snapshot read under the test, fixture and script folders: its own (#875). */
   private ownOf(e: Entry): string[] {
-    // A carried result's own files are those its key's first run read (#1018).
-    const last = e.runs.length ? e.runs[e.runs.length - 1] : e.group ? this.runsOn(e.group)[0]?.run : undefined;
-    const head = last ? this.records.get(last) : undefined;
-    return head?.read.filter(ownRead) ?? [];
+    return this.headOf(e)?.read.filter(ownRead) ?? [];
   }
   /**
-   * The files the claim's checks read on its snapshot (#324): what a check reaches, from each one's last run there.
-   * Undefined while any of them has no recorded run yet, since a file one would reach can't be told from one it won't;
+   * The files the claim's checks read on its snapshot (#324): what a check reaches, from each one's last run there, or
+   * for a carried result its key's first run (#1018). Undefined while any of them has no recorded run yet, since a file one would reach can't be told from one it won't;
    * none for a claim with no check.
    */
   reached(claim: string): string[] | undefined {
@@ -349,7 +371,7 @@ export class GateRunner {
     if (!c) return undefined;
     const read = new Set<string>();
     for (const e of c.entries.values()) {
-      const last = e.runs.length ? this.records.get(e.runs[e.runs.length - 1]!) : undefined;
+      const last = this.headOf(e);
       if (!last) return undefined;
       for (const path of last.read) read.add(path);
     }
@@ -559,7 +581,9 @@ export class GateRunner {
       } finally {
         e.running = false;
       }
-      if (e.outcome === 'failed' || e.outcome === 'overran') unlocked?.();
+      // A result carried from another session's failed run fails as the check's own would.
+      const failed = (o: string | null | undefined) => o === 'failed' || o === 'overran';
+      if (failed(e.outcome) || (e.outcome === 'carried' && e.group && this.runsOn(e.group).some((s) => failed(this.records.get(s.run)?.outcome)))) unlocked?.();
       await this.o.judged?.(r.claim);
       await e.readings;
     });
