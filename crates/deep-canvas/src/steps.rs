@@ -512,11 +512,20 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
         }
         "compose" => Vf(a.iter().map(V::f).collect::<Result<_, _>>()?),
         "split" => arg(0)?,
+        // A small array's index clamps into [0, n - 1] (structural steps, #483).
         "index" => {
             let v = arg(0)?.lanes()?;
-            let i = arg(1)?.f()? as usize;
-            F(*v.get(i)
-                .ok_or_else(|| format!("index {i} past {}", v.len()))?)
+            let i = (arg(1)?.f()?.max(0.0) as usize).min(v.len().saturating_sub(1));
+            F(*v.get(i).ok_or("index into an empty array")?)
+        }
+        "with" => {
+            let mut v = arg(0)?.lanes()?;
+            let i = (arg(1)?.f()?.max(0.0) as usize).min(v.len().saturating_sub(1));
+            *v.get_mut(i).ok_or("with on an empty array")? = arg(2)?.f()?;
+            Vf(v)
+        }
+        "scan" | "compact" | "sort_by_key" | "iterate" | "load3d" | "sample3d" => {
+            structural(name, a, env, "")?
         }
         "dot" => {
             let (x, y) = (arg(0)?.lanes()?, arg(1)?.lanes()?);
@@ -633,7 +642,7 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
             });
             Buf(b)
         }
-        "write" => {
+        "write" | "store" => {
             let Buf(mut b) = arg(0)? else {
                 return Err("write writes a storage buffer".into());
             };
@@ -646,6 +655,125 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
 }
 
 /// The fixed hash, as the effects module's WGSL writer and CPU reference write it.
+/// The structural steps' meanings on fixture values (canvas primitives: Step and the closed step
+/// list: structural steps, #483), and their planted twins: `scan` an exclusive prefix sum of u32
+/// words wrapping at 2^32 (`inclusive` its twin); `compact` the flagged words in index order
+/// (`atomic_order` keeps them in the order a racing counter might hand out, last first);
+/// `sort_by_key` the values stably by key (`ties_by_decreasing_index` breaks ties the other way);
+/// `iterate` its body (`env.body`, over `prev`) run `count` times, each run reading the last
+/// (`first_run` feeds every run the first run's output); `load3d` and `sample3d` a texel of a
+/// 3D texture of `env.size` held as a flat buffer (sample3d takes the texel nearest `uvw`).
+fn structural(name: &str, a: &[V], env: &Value, twin: &str) -> Result<V, String> {
+    let buf = |i: usize| match a.get(i) {
+        Some(V::Buf(b)) => Ok(b.iter().map(|x| *x as u32).collect::<Vec<u32>>()),
+        other => Err(format!("{name} takes storage, not {other:?}")),
+    };
+    let words = |w: Vec<u32>| V::Buf(w.into_iter().map(f64::from).collect());
+    let count = |i: usize, len: usize| -> Result<usize, String> {
+        Ok(match a.get(i) {
+            Some(x) => (x.f()? as usize).min(len),
+            None => len,
+        })
+    };
+    Ok(match name {
+        "scan" => {
+            let x = buf(0)?;
+            let mut acc = 0u32;
+            words(
+                x.iter()
+                    .map(|v| {
+                        let before = acc;
+                        acc = acc.wrapping_add(*v);
+                        if twin == "inclusive" {
+                            acc
+                        } else {
+                            before
+                        }
+                    })
+                    .collect(),
+            )
+        }
+        "compact" => {
+            let (x, f) = (buf(0)?, buf(1)?);
+            let n = count(2, x.len().min(f.len()))?;
+            let mut kept: Vec<u32> = (0..n).filter(|i| f[*i] != 0).map(|i| x[i]).collect();
+            if twin == "atomic_order" {
+                kept.reverse();
+            }
+            words(kept)
+        }
+        "sort_by_key" => {
+            let (k, v) = (buf(0)?, buf(1)?);
+            let n = count(2, k.len().min(v.len()))?;
+            let mut at: Vec<usize> = (0..n).collect();
+            if twin == "ties_by_decreasing_index" {
+                at.sort_by(|p, q| k[*p].cmp(&k[*q]).then(q.cmp(p)));
+            } else {
+                at.sort_by_key(|i| k[*i]);
+            }
+            words(at.into_iter().map(|i| v[i]).collect())
+        }
+        "iterate" => {
+            let n = a.first().ok_or("iterate takes a count")?.f()? as u32;
+            let mut prev = a.get(1).cloned().ok_or("iterate takes a first input")?;
+            let body = env.get("body").ok_or("iterate's fixture names no body")?;
+            let first = run_body(body, &prev, env)?;
+            for k in 0..n {
+                prev = if twin == "first_run" && k > 0 {
+                    run_body(body, &first, env)?
+                } else {
+                    run_body(body, &prev, env)?
+                };
+            }
+            prev
+        }
+        "load3d" | "sample3d" => {
+            let Some(V::Buf(raw)) = a.first() else {
+                return Err(format!("{name} reads a 3D texture"));
+            };
+            let size: Vec<usize> = env
+                .get("size")
+                .and_then(Value::as_array)
+                .map(|s| s.iter().filter_map(Value::as_u64).map(|x| x as usize).collect())
+                .ok_or_else(|| format!("{name}'s fixture names no size"))?;
+            if size.len() != 3 || raw.len() != size[0] * size[1] * size[2] {
+                return Err(format!("{name}'s texture isn't its size"));
+            }
+            let p = a.get(1).ok_or("a 3D texel's place")?.lanes()?;
+            let at: Vec<usize> = (0..3)
+                .map(|c| {
+                    let x = if name == "load3d" {
+                        p[c]
+                    } else {
+                        (p[c] * size[c] as f64).floor()
+                    };
+                    (x.max(0.0) as usize).min(size[c] - 1)
+                })
+                .collect();
+            V::F(raw[(at[2] * size[1] + at[1]) * size[0] + at[0]])
+        }
+        other => return Err(format!("`{other}` is no structural step")),
+    })
+}
+
+/// A body node over `prev` (iterate's fixture), as an `impl.body` is over ports.
+fn run_body(e: &Value, prev: &V, env: &Value) -> Result<V, String> {
+    match e {
+        Value::String(p) if p == "prev" => Ok(prev.clone()),
+        Value::Number(n) => Ok(V::F(n.as_f64().unwrap_or(0.0))),
+        Value::Array(list) => {
+            let (op, rest) = list.split_first().ok_or("an empty body node")?;
+            let op = op.as_str().ok_or("a body node names a step")?;
+            let vals: Vec<V> = rest
+                .iter()
+                .map(|x| run_body(x, prev, env))
+                .collect::<Result<_, _>>()?;
+            base(&format!("{op}@1"), &vals, env, None)
+        }
+        other => Err(format!("{other} is no body node")),
+    }
+}
+
 pub fn hash1(x: u32) -> u32 {
     let s = x.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
     let w = ((s >> ((s >> 28) + 4)) ^ s).wrapping_mul(277_803_737);
@@ -758,6 +886,14 @@ fn twisted(step: &str, a: &[V], env: &Value, to: Option<&str>, perturb: &str) ->
             _ => V::U(0),
         }),
         ("off_by_one", _, _) => Ok(bump(base(step, a, env, to)?)),
+        ("wraps", "index", [arr, i]) => {
+            let v = arr.lanes()?;
+            let n = v.len().max(1);
+            Ok(V::F(v[(i.f()?.max(0.0) as usize) % n]))
+        }
+        ("ties_by_decreasing_index" | "inclusive" | "atomic_order" | "first_run", _, _) => {
+            structural(name, a, env, perturb)
+        }
         ("", _, _) | ("saturate" | "unmasked", _, _) => base(step, a, env, to),
         (other, _, _) => Err(format!("`{other}` is no twin")),
     }
@@ -880,6 +1016,7 @@ fn twin_of(name: &str) -> &'static str {
     match name {
         "add@1" | "sub@1" | "mul@1" => "saturate",
         "shl@1" | "shr@1" => "unmasked",
+        "index@1" => "wraps",
         _ => "off_by_one",
     }
 }
