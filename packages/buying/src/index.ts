@@ -9,7 +9,7 @@
 import type { Asks, PlanStep } from '@deepbuild/asks';
 import type { Ledger } from '@deepbuild/budget';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
-import { ulid, type Connection, type Event, type RecordStore } from '@deepbuild/record';
+import { asCore, ulid, type Connection, type Event, type RecordStore } from '@deepbuild/record';
 
 export interface PurchaseInput {
   /** `run:<ULID>`: a purchase is named as a paid run is. */
@@ -142,7 +142,7 @@ class Buyer implements Buying {
   }
 
   private core(connection: Connection): Connection {
-    return { writer: 'core', actor: connection.actor, scope: connection.scope, ...(connection.session ? { session: connection.session } : {}) };
+    return asCore(connection);
   }
 
   /** Reads the card rules the log gained. */

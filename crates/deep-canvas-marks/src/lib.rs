@@ -23,6 +23,7 @@ pub mod layout;
 pub mod look;
 pub mod modules;
 pub mod outline;
+pub mod outline_sources;
 pub mod paint;
 pub mod path;
 pub mod pathops;

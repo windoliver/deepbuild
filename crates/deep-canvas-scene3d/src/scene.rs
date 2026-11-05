@@ -1204,13 +1204,22 @@ fn cut(segments: &[Segment], s0: f64, s1: f64) -> Vec<Segment> {
 }
 
 /// A builder's or building kind's mesh after its stack, or why it can't be built.
-fn mesh_of(doc: &Value, id: &str, item: &Value, t: f64) -> Result<crate::geom::Mesh, Refused> {
+fn mesh_of(
+    doc: &Value,
+    id: &str,
+    item: &Value,
+    t: f64,
+    outlines: Outlines<'_>,
+) -> Result<crate::geom::Mesh, Refused> {
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
     let built = if crate::building::KINDS.contains(&kind) {
         crate::building::build(doc, id, item)
     } else {
-        crate::build::built(doc, id, item, &Default::default(), t)
-            .map(|b| b.mesh.unwrap_or_default())
+        let run = crate::stack::Run {
+            outlines: outlines.to_vec(),
+            ..Default::default()
+        };
+        crate::build::built(doc, id, item, &run, t).map(|b| b.mesh.unwrap_or_default())
     };
     built.map_err(|path| Refused {
         code: "out_of_range",
@@ -1226,6 +1235,7 @@ fn edge_line(
     params: &Value,
     look: &Look3,
     seconds: f64,
+    outlines: Outlines<'_>,
 ) -> Result<Line, Refused> {
     let path = format!("items/{id}/params");
     let edges = &params["edges"];
@@ -1246,7 +1256,7 @@ fn edge_line(
             None => return refused("out_of_range", format!("{path}/width")),
         },
     };
-    let mut mesh = mesh_of(doc, target, item, seconds)?;
+    let mut mesh = mesh_of(doc, target, item, seconds, outlines)?;
     if let Some((_, part)) = of.split_once('#') {
         let Some(tris) = mesh
             .parts
@@ -1519,10 +1529,14 @@ pub(crate) fn corners8(model: &Affine3) -> [Vec3; 8] {
 /// Reads a stored asset's bytes by its sha256.
 pub type Assets<'a> = &'a dyn Fn(&str) -> Option<Vec<u8>>;
 
+/// The build's outline sources an `extrude` reads its text, path or vector outline through
+/// (#443): the core's `outline.source@1`, as the sealed set holds it.
+pub type Outlines<'a> = &'a [deep_canvas::registry::SealedOutline];
+
 /// Evaluates `doc` at `t` (flicks) on a frame of its `size`; a `mesh.asset@1` draws only where
 /// [`evaluate_with`] has a store to read it from.
 pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Result<Scene, Refused> {
-    evaluate_any(doc, t, look, labels, None)
+    evaluate_any(doc, t, look, labels, None, &[])
 }
 
 /// [`evaluate`] with the asset store `assets` that `mesh.asset@1` items read their glTF from.
@@ -1533,7 +1547,19 @@ pub fn evaluate_with(
     labels: &mut Labels,
     assets: Assets<'_>,
 ) -> Result<Scene, Refused> {
-    evaluate_any(doc, t, look, labels, Some(assets))
+    evaluate_any(doc, t, look, labels, Some(assets), &[])
+}
+
+/// [`evaluate_with`] whose extrudes read their outlines through `outlines` (#443).
+pub fn evaluate_sourced(
+    doc: &Value,
+    t: i64,
+    look: &Look3,
+    labels: &mut Labels,
+    assets: Assets<'_>,
+    outlines: Outlines<'_>,
+) -> Result<Scene, Refused> {
+    evaluate_any(doc, t, look, labels, Some(assets), outlines)
 }
 
 fn evaluate_any(
@@ -1542,6 +1568,7 @@ fn evaluate_any(
     look: &Look3,
     labels: &mut Labels,
     assets: Option<Assets<'_>>,
+    outlines: Outlines<'_>,
 ) -> Result<Scene, Refused> {
     let Some(map) = doc.as_object() else {
         return refused("out_of_range", "");
@@ -1550,7 +1577,7 @@ fn evaluate_any(
         code: r.code,
         path: r.path,
     })?;
-    evaluate_compiled(map, &program, t, look, labels, assets)
+    evaluate_compiled(map, &program, t, look, labels, assets, outlines)
 }
 
 /// Each item of `doc` at `t` as evaluated, in item order, with its world transform without its
@@ -1890,6 +1917,7 @@ pub(crate) fn evaluate_compiled(
     look: &Look3,
     labels: &mut Labels,
     assets: Option<Assets<'_>>,
+    outlines: Outlines<'_>,
 ) -> Result<Scene, Refused> {
     tones(map)?;
     let mut state = program.state();
@@ -2063,7 +2091,7 @@ pub(crate) fn evaluate_compiled(
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
                     let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
-                    let l = edge_line(doc, &items, id, params, look, seconds)?;
+                    let l = edge_line(doc, &items, id, params, look, seconds, outlines)?;
                     bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
                     layer.lines.push(l);
                 }
@@ -2089,7 +2117,7 @@ pub(crate) fn evaluate_compiled(
                     let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
                     let (mesh, shared) = match (k, assets) {
                         ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params)?,
-                        _ => (mesh_of(doc, id, item, seconds)?, None),
+                        _ => (mesh_of(doc, id, item, seconds, outlines)?, None),
                     };
                     if mesh.triangles() == 0 {
                         continue;

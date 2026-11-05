@@ -25,6 +25,9 @@ vello_cpu = { version = "0.3", default-features = false, features = ["std", "tex
 # atlas rasterizes at that level so every platform computes the same alpha (design: Decided, Goldens).
 fearless_simd = { version = "0.7", features = ["force_support_fallback"] }
 serde_json = "1"
+# Issue #443: the glyph outlines of a shaped run, read unscaled from the face the shaper set each
+# glyph in, the reader parley and Vello CPU already use.
+skrifa = { version = "0.44", default-features = false, features = ["std"] }
 # Issue #140: the fonts seam's backend names itself as the platform seams name every backend.
 deep-canvas-seams = { path = "../deep-canvas-seams" }
 

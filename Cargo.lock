@@ -2192,6 +2192,7 @@ dependencies = [
  "deep-canvas-seams",
  "deep-canvas-sheet",
  "deep-canvas-test-modules",
+ "deep-canvas-vector",
  "deep-codecs",
  "deep-effects-render",
  "deep-gpu",
@@ -2387,6 +2388,7 @@ dependencies = [
  "parley_data",
  "parley_engine",
  "serde_json",
+ "skrifa 0.44.0",
  "vello_cpu",
 ]
 

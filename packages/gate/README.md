@@ -14,7 +14,7 @@ The core's gate runner (#29): which stops and calls make a claim, the floor ever
 
 ## What it may import
 
-Core: only `@deepbuild/contracts`, `@deepbuild/leases`, `@deepbuild/verdicts` and `node:` built-ins, through public entries. The core never imports an extension (checks-command included), nor the hub, CLI or app.
+Core: only `@deepbuild/contracts`, `@deepbuild/leases`, `@deepbuild/verdicts` and `node:` built-ins, through public entries, plus types alone from `@deepbuild/conformance` (the check.kind@1 fill `src/checkouts.ts` runs) and `@deepbuild/supervisor` (the `Supervisor` it is handed). The core never imports an extension (checks-command included), nor the hub, CLI or app.
 
 ## Deviations
 
