@@ -130,30 +130,33 @@ it('a session read back after a restart is on its branch and issue before it hoo
   siblings.stop();
 });
 
-it('after a restart, a loop ask you answered "hold" still holds without asking again, and one your prompt came after holds nothing', async () => {
-  const { wa } = world();
+/** A hub started again on a record of these asks and prompts, with 21 turns of a's started by another session's messages: what a's next such prompt, or `to`'s, is told, and the asks raised. */
+async function restarted(asks: object[], prompts: object[], to: 'a' | 'b' = 'a') {
+  const { wa, wb } = world();
   const now = Date.now();
   const peers = Array.from({ length: 21 }, (_, i) => ({ id: `p${i}`, session_id: 'a', ts: now - 60_000 + i, origin: 'session' }));
-  const restarted = async (asks: object[], prompts: object[]) => {
-    const asked: string[] = [];
-    const siblings = new Siblings(options({
-      ask: async (_s, _a, _c, _source, ask) => { asked.push(String(ask.question)); return 'ask:09'; },
-      raw: async (query, params) => {
-        if (query.includes("kind = 'user.ask' AND ts >=")) return [...peers, ...prompts];
-        if (query.includes('FROM asks WHERE status IN') || query.includes('FROM asks WHERE session_id')) return asks;
-        if (query.startsWith('SELECT status, answer FROM asks')) return (asks as { id: string }[]).filter((a) => a.id === params?.[0]);
-        if (query.includes("IN ('person', 'app')")) return (prompts as { session_id: string; ts: number }[]).filter((p) => p.session_id === params?.[0] && p.ts > Number(params?.[1]));
-        return [];
-      },
-    }));
-    await siblings.restore();
-    const start = hook('a', wa, 'PreToolUse', 'a1');
-    await siblings.hook(start.drafts, start.meta);
-    const told = await siblings.held(hook('a', wa, 'UserPromptSubmit', '').meta, 'session', async () => undefined);
-    await new Promise((done) => setTimeout(done, 0));
-    siblings.stop();
-    return { told, asked };
-  };
+  const asked: string[] = [];
+  const siblings = new Siblings(options({
+    ask: async (_s, _a, _c, _source, ask) => { asked.push(String(ask.question)); return 'ask:09'; },
+    raw: async (query, params) => {
+      if (query.includes("kind = 'user.ask' AND ts >=")) return [...peers, ...prompts];
+      if (query.includes('FROM asks WHERE status IN') || query.includes('FROM asks WHERE session_id')) return asks;
+      if (query.startsWith('SELECT status, answer FROM asks')) return (asks as { id: string }[]).filter((a) => a.id === params?.[0]);
+      if (query.includes("IN ('person', 'app')")) return (prompts as { session_id: string; ts: number }[]).filter((p) => p.session_id === params?.[0] && p.ts > Number(params?.[1]));
+      return [];
+    },
+  }));
+  await siblings.restore();
+  const start = hook('a', wa, 'PreToolUse', 'a1');
+  await siblings.hook(start.drafts, start.meta);
+  const told = await siblings.held(hook(to, to === 'a' ? wa : wb, 'UserPromptSubmit', '').meta, 'session', async () => undefined);
+  await new Promise((done) => setTimeout(done, 0));
+  siblings.stop();
+  return { told, asked };
+}
+
+it('after a restart, a loop ask you answered "hold" still holds without asking again, and one your prompt came after holds nothing', async () => {
+  const now = Date.now();
   const question = 'Session a (claude-code) had 21 turns started by another session\'s messages in the last 10 minutes, with no prompt from you. Let it go on?';
   // Answered "hold" before the restart, no prompt from you since: still held, never asked again.
   const hold = await restarted([{ id: '01', session_id: 'a', created: now - 30_000, status: 'answered', answer: 'hold', question }], []);
@@ -163,4 +166,63 @@ it('after a restart, a loop ask you answered "hold" still holds without asking a
   const prompted = await restarted([{ id: '02', session_id: 'a', created: now - 50_000, status: 'open', answer: null, question }], [{ id: 'you', session_id: 'a', ts: now - 1_000, origin: 'person' }]);
   expect(prompted.told).toBeUndefined();
   expect(prompted.asked).toHaveLength(0);
+});
+
+it('after a restart, a "hold" you gave a pair of sessions still holds the other one too', async () => {
+  const now = Date.now();
+  const question = "Sessions a (claude-code) and b (claude-code) started 21 of a's turns with each other's messages in the last 10 minutes, with no prompt from you. Let them go on?";
+  const toB = await restarted([{ id: '03', key: `loop:a:b:${now - 30_000}`, session_id: 'a', created: now - 30_000, status: 'answered', answer: '"hold"', question }], [], 'b');
+  expect(toB.told).toContain('you said to hold');
+  expect(toB.asked).toHaveLength(0);
+});
+
+/** A live hub where 21 of a's turns came from another session's messages, its loop ask's row as `ask` says. */
+function looping(ask: { status: string; answer: string | null }, sender?: string) {
+  const { wa, wb } = world();
+  const asked: string[] = [];
+  const siblings = new Siblings(options({
+    ask: async (_s, _a, _c, _source, a) => { asked.push(String(a.question)); return `ask:0${asked.length}`; },
+    raw: async (query) => (query.startsWith('SELECT status, answer FROM asks') ? [ask] : []),
+  }));
+  const now = Date.now();
+  for (let i = 0; i < 21; i++) siblings.turn('a', `p${i}`, 'session', now);
+  const held = (session: 'a' | 'b') => siblings.held(hook(session, session === 'a' ? wa : wb, 'UserPromptSubmit', '').meta, 'session', async () => sender);
+  return { siblings, asked, held, now, settle: () => new Promise((done) => setTimeout(done, 0)) };
+}
+
+it('a "hold" for two sessions stops holding the one you prompted, even when the other is held after', async () => {
+  const ask = { status: 'open', answer: null as string | null };
+  const { siblings, held, now, settle } = looping(ask, 'b');
+  expect(await held('a')).toContain('held');
+  await settle();
+  Object.assign(ask, { status: 'answered', answer: '"hold"' });
+  siblings.turn('b', 'you', 'person', now);
+  expect(await held('a')).toContain('you said to hold');
+  expect(await held('b')).toBeUndefined();
+  siblings.stop();
+});
+
+it('a "go on" given after a "hold" lets the sessions go on', async () => {
+  const ask = { status: 'defaulted', answer: '"hold"' as string | null };
+  const { siblings, held, settle } = looping(ask);
+  expect(await held('a')).toContain('held');
+  await settle();
+  expect(await held('a')).toContain('you said to hold');
+  // You undid the default and answered "go on".
+  Object.assign(ask, { status: 'answered', answer: '"go-on"' });
+  expect(await held('a')).toBeUndefined();
+  siblings.stop();
+});
+
+it('a loop ask closed with no answer never says you said to hold: the next such prompt asks you again', async () => {
+  const ask = { status: 'open', answer: null as string | null };
+  const { siblings, asked, held, settle } = looping(ask);
+  expect(await held('a')).toContain('held');
+  await settle();
+  ask.status = 'cancelled';
+  const told = await held('a');
+  await settle();
+  expect(told).toContain("you're asked in your inbox");
+  expect(asked).toHaveLength(2);
+  siblings.stop();
 });
