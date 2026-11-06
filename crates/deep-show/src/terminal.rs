@@ -434,7 +434,42 @@ impl<'a> Hub<'a> {
             .filter(|p| *p <= self.now)
             .max();
         out["vsync"] = json!(vsync);
+        // #1172: what the app's grid paints: its ground and ink, and each row's runs of one foreground and background.
+        // They are the look's (#1003).
+        let colors = Colors::of(&self.look);
+        let [fg, bg] = colors.defaults();
+        out["bg"] = json!(hex(bg));
+        out["fg"] = json!(hex(fg));
+        let rows = (0..t.term.rows())
+            .map(|y| self.color_runs(t, &colors, y))
+            .collect();
+        out["runs"] = Value::Array(rows);
         out
+    }
+
+    /// A cell as drawn: status can show on a session's page; a plug-in's panel draws the cell as asked.
+    fn cell_drawn(&self, t: &Term, drawn: &Colors, cell: &Cell) -> Value {
+        match t.home {
+            Home::Session(_) => {
+                let (colors, min) = self.status_colors();
+                cell_json(cell, drawn, Some((&colors, min)))
+            }
+            Home::Panel(_) => cell_json(cell, drawn, None),
+        }
+    }
+
+    /// A row's cells as `[from, to, fg, bg]` runs of one pair of colors.
+    fn color_runs(&self, t: &Term, colors: &Colors, y: u16) -> Value {
+        let mut runs: Vec<(usize, usize, Value, Value)> = Vec::new();
+        for (x, cell) in t.term.row(y).iter().enumerate() {
+            let drawn = self.cell_drawn(t, colors, cell);
+            let (fg, bg) = (drawn["fg"].clone(), drawn["bg"].clone());
+            match runs.last_mut() {
+                Some(run) if run.2 == fg && run.3 == bg => run.1 = x + 1,
+                _ => runs.push((x, x + 1, fg, bg)),
+            }
+        }
+        json!(runs)
     }
 
     fn cell_reply(&self, target: &Target, x: u16, y: u16) -> Value {
@@ -445,16 +480,7 @@ impl<'a> Hub<'a> {
         if x >= t.term.cols() || y >= t.term.rows() {
             return json!({"code": "out_of_range"});
         }
-        let cell = &t.term.row(y)[usize::from(x)];
-        let drawn = Colors::of(&self.look);
-        // Status can show on a session's page; a plug-in's panel draws the cell as asked.
-        match t.home {
-            Home::Session(_) => {
-                let (colors, min) = self.status_colors();
-                cell_json(cell, &drawn, Some((&colors, min)))
-            }
-            Home::Panel(_) => cell_json(cell, &drawn, None),
-        }
+        self.cell_drawn(t, &Colors::of(&self.look), &t.term.row(y)[usize::from(x)])
     }
 
     fn open(
