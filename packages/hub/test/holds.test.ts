@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openAsks } from '@deepbuild/asks';
 import { openRecord, ulid, type Connection } from '@deepbuild/record';
-import { Holds } from '../src/holds.js';
+import { Holds, pushTargets } from '../src/holds.js';
 import type { HookMeta } from '../src/wire.js';
 import { hookLine, reply, withHub } from './hub.js';
 
@@ -46,6 +46,7 @@ describe('a saved approval of an MCP tool', () => {
     const holds = new Holds({
       raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
       append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
+      archived: async () => undefined,
     });
     const call = (session: string) => holds.gate({ session, agent: 'claude-code', cwd } as HookMeta, { label: 'forge delete_repo', classes: [], mcp: { server: 'forge', tool: 'delete_repo' } });
 
@@ -103,4 +104,64 @@ describe('a call that needs your authority in the turn a proceed starts', () => 
       rmSync(dir, { recursive: true, force: true });
     }
   }, 60_000);
+});
+
+describe('a held push (#1156)', () => {
+  it.each([
+    ['git push origin main', 'origin'],
+    ['git push', 'origin'],
+    ['git push -u --force origin main', 'origin'],
+    ['git -C ../shop push upstream main', 'upstream'],
+    ['git push -o ci.skip upstream main', 'upstream'],
+    ['git push --repo=https://example.com/a/b.git', 'https://example.com/a/b.git'],
+    ['git push --repo mirror', 'mirror'],
+    ['cd web && git push "$REMOTE" main; echo ok', '$REMOTE'],
+    ["sh -c 'git push'", 'origin'],
+  ])('`%s` goes to %s', (line, ref) => {
+    expect(pushTargets(line)).toEqual([{ kind: 'remote', ref }]);
+  });
+  it('names each remote of a line once, and a line that pushes nothing names none', () => {
+    expect(pushTargets('git push a main && git push b main && git push a dev').map((t) => t.ref)).toEqual(['a', 'b']);
+    expect(pushTargets('git status && echo push')).toEqual([]);
+  });
+
+  it("copies the session's transcript before it raises the ask, so what the session read is placed as read", async () => {
+    dir = mkdtempSync(join(tmpdir(), 'holds-'));
+    writeFileSync(join(dir, 'config.json'), JSON.stringify({ asks: { deadline: { authority: '1d' }, default: { authority: 'no' } } }));
+    let t = 1_760_000_000_000;
+    const now = () => (t += 1000);
+    const record = await openRecord({ path: join(dir, 'record.db'), now });
+    const asks = await openAsks({ record, now, deliver: () => undefined, home: dir });
+    const as = (writer: string, session: string): Connection => ({ writer, actor: 'you', scope: 'you', session, agent: 'claude-code' });
+    const seen: string[] = [];
+    const holds = new Holds({
+      raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
+      append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
+      archived: async (session) => { seen.push(`${session} with ${(await record.raw("SELECT id FROM asks")).length} asks`); },
+    });
+    await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Push?', rule: 'r' } });
+    const held = await holds.gate({ session: 's1', agent: 'claude-code', cwd: dir } as HookMeta, { label: 'git push https://example.com/a/b.git main', classes: ['push'] });
+    expect(held, 'the push waits on an ask').toContain('ask:');
+    expect(seen).toEqual(['s1 with 0 asks']);
+  });
+
+  it('still raises its ask when the copy never ends, inside the gate\'s hold', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'holds-'));
+    writeFileSync(join(dir, 'config.json'), JSON.stringify({ asks: { deadline: { authority: '1d' }, default: { authority: 'no' } } }));
+    let t = 1_760_000_000_000;
+    const now = () => (t += 1000);
+    const record = await openRecord({ path: join(dir, 'record.db'), now });
+    const asks = await openAsks({ record, now, deliver: () => undefined, home: dir });
+    const as = (writer: string, session: string): Connection => ({ writer, actor: 'you', scope: 'you', session, agent: 'claude-code' });
+    const holds = new Holds({
+      raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
+      append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
+      archived: () => new Promise(() => undefined),
+    });
+    await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Push?', rule: 'r' } });
+    const started = Date.now();
+    const held = await holds.gate({ session: 's1', agent: 'claude-code', cwd: dir } as HookMeta, { label: 'git push origin main', classes: ['push'] });
+    expect(held, 'the push waits on an ask').toContain('ask:');
+    expect(Date.now() - started).toBeLessThan(5000);
+  }, 20_000);
 });

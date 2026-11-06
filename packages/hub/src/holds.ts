@@ -13,12 +13,13 @@
 // A hold denies the call, naming its ask; once you say yes the same call runs. #84's sort lives in questions.ts; its
 // proceeds are recorded here, and DEEP_HUB_TEST_SORTER, which only tests set, can still plant one.
 import { readFileSync } from 'node:fs';
-import { AskRefused, type Asks, type PlanInput } from '@deepbuild/asks';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { AskRefused, type Asks, type PlanInput, type Target } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { execFile } from 'node:child_process';
 import { countMcp, toolLists, type Listed } from './mcp-servers.js';
-import { namedIn, pushTargets, type Named } from './named.js';
+import { namedIn, pushBranches, type Named } from './named.js';
 import { offerPlan, type Effect } from './questions.js';
 import type { About } from './standing.js';
 import { AUTHORITY, type Gated, type HookMeta, type Plant } from './wire.js';
@@ -41,15 +42,41 @@ export interface HoldOptions {
   pin(cwd: string, question: string): Promise<Obj>;
   /** A session.reading on the session's row. */
   reading(session: string, agent: string, reading: string): Promise<void>;
+  /** Copies the session's transcript into the record, so a target it read is placed as read. */
+  archived(session: string): Promise<void>;
 }
 
 /**
  * The plan an authority ask shows (#69): the one call it holds, what it changes, and its undo. A call the guards class
  * as a delete or a send, or a tool that can destroy, can't be undone from here; a push or a merge reverts.
  */
-function planFor(source: string, does: string, changes: string[]): PlanInput {
+function planFor(source: string, does: string, changes: string[], targets: Target[] = []): PlanInput {
   const undo = /^effect\.(push|pr|merge)$/.test(source) ? 'Revert it with a new commit' : null;
-  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: undo !== null, cost: 0 }], diff: key({ source, does, changes }) };
+  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: undo !== null, cost: 0, ...(targets.length ? { targets } : {}) }], diff: key({ source, does, changes }) };
+}
+/** A `git push`'s words up to the end of its command, git's own flags before `push` skipped. */
+const GIT_PUSH = /\bgit(?:\s+(?:-[cC]\s+\S+|-\S+))*\s+push\b([^;&|)\n]*)/g;
+const VALUED = new Set(['-o', '--push-option', '--receive-pack', '--exec']);
+/** How long a held push waits for its session's transcript, well inside the gate's hold. */
+const ARCHIVE_WAIT_MS = 2000;
+/**
+ * Where a line's pushes go (#1098): each names its remote or URL, the first word after `push` that isn't a flag or
+ * `--repo`'s, and a push that names none goes to git's default, origin. A value the line computes is kept as written,
+ * so it reads unknown on the card.
+ */
+export function pushTargets(line: string): Target[] {
+  const refs = [...line.matchAll(GIT_PUSH)].map(([, rest]) => {
+    const words = (rest ?? '').trim().split(/\s+/).map((w) => w.replace(/^["']|["']$/g, '')).filter(Boolean);
+    for (let at = 0; at < words.length; at++) {
+      const word = words[at]!;
+      if (word === '--repo') return words[at + 1] ?? 'origin';
+      if (word.startsWith('--repo=')) return word.slice('--repo='.length);
+      if (VALUED.has(word)) at++;
+      else if (!word.startsWith('-')) return word;
+    }
+    return 'origin';
+  });
+  return [...new Set(refs)].map((ref): Target => ({ kind: 'remote', ref }));
 }
 
 const DOES: Record<string, string> = { push: 'pushes', pr: 'opens a pull request', merge: 'merges', dispatch: 'dispatches', send: 'sends', delete: 'deletes' };
@@ -209,7 +236,7 @@ export class Holds {
       const asked = await this.askOf(k);
       if (asked?.decision === 'allow') continue;
       const handle = asked ? `ask:${asked.id}` : await this.raise(meta.session, meta.agent, meta.cwd, source, k,
-        `Run \`${call.label}\`? It ${DOES[effect]!}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${DOES[effect]!}`, [call.label]));
+        `Run \`${call.label}\`? It ${DOES[effect]!}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${DOES[effect]!}`, [call.label], effect === 'push' ? pushTargets(call.label) : []));
       return `DeepBuild denied this (guard ${rule}): no request you typed in this thread names it. ${await this.waiting(handle, call.label)}`;
     }
     if (every) return undefined;
@@ -228,7 +255,7 @@ export class Holds {
       if (armed.size) {
         const current = await this.branch(meta.cwd);
         const input = meta.call?.input ?? {};
-        const targets = typeof input.branch === 'string' ? [input.branch] : pushTargets(String(input.command ?? ''), current);
+        const targets = typeof input.branch === 'string' ? [input.branch] : pushBranches(String(input.command ?? ''), current);
         for (const [number, branch] of armed) if (targets.includes(branch)) return `DeepBuild denied this (guard ${rule}): a merge of pull request ${number} armed with --auto is pending, so \`${call.label}\` to ${branch} would change what it merges. Run gh pr merge --disable-auto ${number} first; the new head needs its own verdict.`;
       }
     }
@@ -270,7 +297,10 @@ export class Holds {
     const question = turn
       ? `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`
       : `Run \`${call.label}\`? It replies in your name to a reviewer's thread on the pull request, a send that needs your authority.`;
-    return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label]));
+    const targets = classes.includes('push') ? pushTargets(call.label) : [];
+    // A failed or late copy leaves a target the session read as unknown, which asks you all the same.
+    if (targets.length) await Promise.race([this.o.archived(meta.session).catch(() => undefined), sleep(ARCHIVE_WAIT_MS)]);
+    return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label], targets));
   }
 
   /**

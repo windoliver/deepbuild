@@ -201,6 +201,14 @@
       "next_step": "Name the folder in the plan, or say why it is needed.",
       "fail_closed": false
     },
+    "no-unreadable-push": {
+      "match": "unread:push",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "This call may push, and a push the guard can't read can't be shown on a plan or held for your authority.",
+      "next_step": "Write the push out plainly, and it goes to the authority gate like any other.",
+      "fail_closed": true
+    },
     "authority-push": {
       "match": "effect:push",
       "scope": "all_repos",
@@ -578,6 +586,20 @@
         "tool_name": "Bash",
         "tool_input": {
           "command": "cd \"$REPO\" && git reset --soft HEAD~1"
+        }
+      }
+    },
+    "no-unreadable-push": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "\"$(printf git)\" push origin main"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git push origin main"
         }
       }
     },

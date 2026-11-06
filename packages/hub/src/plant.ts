@@ -66,6 +66,8 @@ export type Plant =
   | 'counts-every-enqueue' | 'slow-brief' | 'app-note-answers-authority'
   // #347's: a stager with no ceiling on files or seconds, and one that stages every shell call whose writes it can't predict.
   | 'stages-without-ceiling' | 'stages-unpredicted-writes'
+  // #1156's: a stager that records its staging and runs the script with no copy behind it.
+  | 'stages-without-copy'
   // #1294's: a stager whose class covers only untracked and ignored files, and one that copies on a clean tree too.
   | 'stages-untracked-only' | 'stages-clean-tree'
   // #356's: pages rewritten each run, a deleted line relearned, values copied, merging by name or never, everything read again, a
@@ -171,7 +173,7 @@ const PLANTS: readonly string[] = [
   'app-note-unrecorded', 'app-note-as-person',
   'brief-full-text', 'brief-at-startup-only', 'queue-shows-newest', 'continuation-as-person', 'continuation-by-likeness',
   'counts-every-enqueue', 'slow-brief', 'app-note-answers-authority',
-  'stages-without-ceiling', 'stages-unpredicted-writes',
+  'stages-without-ceiling', 'stages-unpredicted-writes', 'stages-without-copy',
   'stages-untracked-only', 'stages-clean-tree',
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
   'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',

@@ -24,7 +24,7 @@ export function namedIn(text: string): Set<Named> {
 }
 
 /** Where a shell push goes: its refs' branches, or `current` when it names none or names HEAD. */
-export function pushTargets(command: string, current: string): string[] {
+export function pushBranches(command: string, current: string): string[] {
   const refs = /\bgit\b[^;&|]*?\bpush\b([^;&|]*)/.exec(command)?.[1]?.trim().split(/\s+/).filter((w) => w && !w.startsWith('-')).slice(1) ?? [];
   return refs.length ? refs.map((r) => r.split(':').at(-1)!.replace(/^refs\/heads\//, '')).map((b) => (b === 'HEAD' ? current : b)) : [current];
 }
