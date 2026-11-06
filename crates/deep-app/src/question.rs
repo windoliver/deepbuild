@@ -134,6 +134,60 @@ impl Row {
             Row::Undo => "Undo",
         }
     }
+
+    /// The row with its words through [`visible`].
+    fn marked(self) -> Row {
+        match self {
+            Row::Text(text) => Row::Text(visible(&text)),
+            Row::Option {
+                index,
+                label,
+                focused,
+            } => Row::Option {
+                index,
+                label: visible(&label),
+                focused,
+            },
+            Row::Step { index, label, on } => Row::Step {
+                index,
+                label: visible(&label),
+                on,
+            },
+            row => row,
+        }
+    }
+}
+
+/// Issue #1510: text from the record as the card draws it. A question quotes the call, so the call chooses its
+/// characters, and one such as U+202E reverses what follows it: what you read must be what is held. Each control
+/// character, line separator, direction mark, embedding, override or isolate, and each character that shows as
+/// nothing, is drawn as its escape (`\x1b`, `\u{202e}`) in the card's own font; the record keeps the characters. The
+/// joiners U+200C and U+200D and the variation selectors stay: they shape emoji and scripts. `deep inbox` marks the
+/// same set (packages/hub/src/visible.ts).
+pub fn visible(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{0}'..='\u{1f}' | '\u{7f}'..='\u{9f}' => {
+                out.push_str(&format!("\\x{:02x}", c as u32))
+            }
+            '\u{61c}'
+            | '\u{200b}'
+            | '\u{200e}'
+            | '\u{200f}'
+            | '\u{2028}'..='\u{202e}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{206f}'
+            | '\u{feff}'
+            | '\u{fff9}'..='\u{fffb}'
+            | '\u{e0000}'..='\u{e007f}' => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 /// The answered card's one-line receipt, kept in the slot with Undo.
@@ -306,8 +360,12 @@ impl Controller {
         std::mem::take(&mut self.usage)
     }
 
-    /// Everything the card draws, in reading order.
+    /// Everything the card draws, in reading order, each row's words through [`visible`].
     pub fn rows(&self) -> Vec<Row> {
+        self.unmarked_rows().into_iter().map(Row::marked).collect()
+    }
+
+    fn unmarked_rows(&self) -> Vec<Row> {
         let mut rows = vec![
             Row::Text(self.model.kind.name().to_owned()),
             Row::Text(self.model.question.clone()),

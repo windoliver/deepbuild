@@ -6,7 +6,13 @@
 
 /// What the prompt says: the question and the option, so you confirm one answer, never a blank yes.
 pub fn reason(question: &str, option: &str) -> String {
-    let short = |text: &str, at: usize| text.chars().take(at).collect::<String>();
+    // The OS draws its prompt from the record's text too, so it shows the card's marks (#1510).
+    let short = |text: &str, at: usize| {
+        crate::question::visible(text)
+            .chars()
+            .take(at)
+            .collect::<String>()
+    };
     format!(
         "answer “{}” with “{}”",
         short(question, 120),
