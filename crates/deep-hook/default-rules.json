@@ -161,6 +161,22 @@
       "next_step": "Delete the paths by name, or ask the person to run it, or retry once the hub is up.",
       "fail_closed": true
     },
+    "no-discarding-edits": {
+      "match": "effect:discard-edits",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "This discards uncommitted edits to tracked files, which git can't restore, and with the hub down nothing can stage them first or ask you.",
+      "next_step": "Commit the edits first, or retry once the hub is up, or ask the person to run it.",
+      "fail_closed": true
+    },
+    "no-dropping-stash": {
+      "match": "effect:drop-stash",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "This drops a stash entry's uncommitted edits, which git can't restore, and with the hub down nothing can stage them first or ask you.",
+      "next_step": "Retry once the hub is up, or ask the person to run it.",
+      "fail_closed": true
+    },
     "record-new-dependency": {
       "match": "effect:dependency",
       "scope": "all_repos",
@@ -516,6 +532,34 @@
         "tool_name": "Bash",
         "tool_input": {
           "command": "rm -rf build"
+        }
+      }
+    },
+    "no-discarding-edits": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "cd \"$REPO\" && git reset --hard"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "cd \"$REPO\" && git reset --soft HEAD~1"
+        }
+      }
+    },
+    "no-dropping-stash": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "cd \"$REPO\" && git stash drop"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "cd \"$REPO\" && git stash list"
         }
       }
     }

@@ -1,0 +1,200 @@
+The suite's run at the base, e2e6e1cc ("Merge pull request #1211 from windoliver/claude/issue-324-e6e855"), on Linux,
+before any implementation of #629. Home paths are redacted to ~.
+
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/629 --no-file-parallelism
+
+All 8 tests fail, each for the missing behavior:
+
+- values.test.ts (AC1, AC2 x2), playwright.test.ts (AC3 x2), summary.test.ts (AC5): `deep-show run` answers the
+  scenario {"ok": false, "code": "bad_input"}: the base has no `run` call (and no scenario `record`). Control, run by
+  hand at the base with the same helpers: the same world with no `run` call and no bound value answers ok, the
+  plug-in installs, and `drawn` answers; with the `run` call alone added it answers bad_input; with `record` alone
+  added it answers bad_input; and a panel text bound to `run:<id>#cart total` is refused at install, bad_manifest at
+  panels/cart. So the world is sound and the failures are the missing run call, record and run-handle bound values.
+- honest.test.ts (AC4): the typed figure is already refused number_unsourced naming expected-total (that half
+  holds at the base), but the bound figure is refused too: bad_handle at bound_values/expected/source, because the
+  base's handle grammar takes no assertion name such as `cart total` as a fragment.
+- screens.test.ts (AC6): INCONCLUSIVE off macOS, as it is on any machine but the reference Mac, and without a
+  recorded taste call; it never passes here.
+
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-324-e6e855/tests/acceptance/629
+
+ ❯ screens.test.ts (1 test | 1 failed) 171ms
+   ❯ AC6 the screenshots on the return card and in a panel, and the one taste call on them (1)
+     × AC6 the run draws expected 18.01 and received 18, and the missing case, on the return card and in a panel at the reference window, and the owner's recorded call on exactly those screenshots says they look right 90ms
+ ❯ values.test.ts (3 tests | 3 failed) 4663ms
+   ❯ AC1 a failing Vitest assertion's expected and received numbers, read from its report (1)
+     × AC1 the run recorded from Vitest's JSON report holds cart total's expected 18.01 and received 18 as printed, and the panel's bound values show 18.01 and 18 with the run as source and the run's end as as-of (fails on a resolver that swaps Vitest's "expected <received> to be <expected>", or stamps the as-of when the hub recorded the run) 268ms
+   ❯ AC2 a replay from the record shows the same, and a run that passed reads missing (2)
+     × AC2 replayed from the record entry alone, with the report deleted, the panel shows the same two values, sources and as-of times at the same frames (fails on a replay that re-reads the report, or one whose as-of is the replay's load time) 268ms
+     × AC2 a bound value on a run that passed reads missing with not_reported, naming the run and the assertion, and shows no number (fails on a resolver that shows the expected value of a passed assertion, or 0) 336ms
+ ❯ playwright.test.ts (2 tests | 2 failed) 8019ms
+   ❯ AC3 a Playwright toHaveText assertion's dollar amounts, and a received value that isn't a number (2)
+     × AC3 received "$18.00" against "$18.01" with format.unit USD: the record entry holds both as printed, and the bound values show 18.01 and 18.00 in dollars (fails on a resolver that drops the cents the report printed, or reads the locator's call log) 844ms
+     × AC3 a received value "N/A" reads missing with not_reported, naming the run and the assertion, never 0, while the expected 18.01 still shows; the planted resolver that turns an unparsable value into 0 fails, naming the bound value 401ms
+ ❯ summary.test.ts (1 test | 1 failed) 4977ms
+   ❯ AC5 a resolver that reads the agent's summary instead of the tool's report fails, naming the bound value (1)
+     × AC5 with the agent's summary saying 18.10 beside the report, the bound values show the report's 18.01 and 18; the planted resolver_reads_summary shows 18.10, which the report doesn't hold, and fails naming bound value received 534ms
+ ❯ honest.test.ts (1 test | 1 failed) 8841ms
+   ❯ AC4 a typed total beside a status binding to the same run is refused by honest numbers; the bound value passes (1)
+     × AC4 the figure typing 18.01 is refused number_unsourced naming expected-total, and the same figure with the bound value on run:<id>#cart total, select expected, passes (fails on a check that skips texts beside a run's status, or one that refuses a run assertion's bound value) 328ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  honest.test.ts > AC4 a typed total beside a status binding to the same run is refused by honest numbers; the bound value passes > AC4 the figure typing 18.01 is refused number_unsourced naming expected-total, and the same figure with the bound value on run:<id>#cart total, select expected, passes (fails on a check that skips texts beside a run's status, or one that refuses a run assertion's bound value)
+AssertionError: the bound figure raises no error: [{"code":"bad_handle","ids":["expected","expected-total"],"path":"bound_values/expected/source","actual":"run:01JB6290000000000000000001#cart total"}]: expected [ { code: 'bad_handle', …(3) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "code": "bad_handle",
++     "ids": [
++       "expected",
++       "expected-total",
++     ],
++     "raw": {
++       "actual": "run:01JB6290000000000000000001#cart total",
++       "check": "document.validate",
++       "code": "bad_handle",
++       "fix": "Write the handle as <scheme>:<id>[#<fragment>].",
++       "ids": [
++         "expected",
++         "expected-total",
++       ],
++       "path": "bound_values/expected/source",
++       "severity": "error",
++       "what": "`run:01JB6290000000000000000001#cart total`: fragment `cart total` must be 1 to 128 characters of [A-Za-z0-9_.-], starting with [A-Za-z0-9]",
++     },
++     "severity": "error",
++   },
++ ]
+
+ ❯ honest.test.ts:37:87
+     35|     expect(typed!.ok, `the typed figure is refused: ${shownErrors(type…
+     36|     expect(typed!.errors.some((e) => e.code === 'number_unsourced' && …
+     37|     expect(bound!.errors, `the bound figure raises no error: ${shownEr…
+       |                                                                                       ^
+     38|     expect(bound!.ok, 'the bound figure passes').toBe(true);
+     39|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  playwright.test.ts > AC3 a Playwright toHaveText assertion's dollar amounts, and a received value that isn't a number > AC3 received "$18.00" against "$18.01" with format.unit USD: the record entry holds both as printed, and the bound values show 18.01 and 18.00 in dollars (fails on a resolver that drops the cents the report printed, or reads the locator's call log)
+AssertionError: the failing Playwright run: deep-show run answers the scenario ok (#401's `install` and `drawn` calls with a bound value on `run:<id>#<assertion>`, the `run` call, the scenario's `record` (README: The surfaces under test)); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:205:191
+
+ ❯ playwright.test.ts:30:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  playwright.test.ts > AC3 a Playwright toHaveText assertion's dollar amounts, and a received value that isn't a number > AC3 a received value "N/A" reads missing with not_reported, naming the run and the assertion, never 0, while the expected 18.01 still shows; the planted resolver that turns an unparsable value into 0 fails, naming the bound value
+AssertionError: the N/A Playwright run: deep-show run answers the scenario ok (#401's `install` and `drawn` calls with a bound value on `run:<id>#<assertion>`, the `run` call, the scenario's `record` (README: The surfaces under test)); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:205:191
+
+ ❯ notApplicable playwright.test.ts:47:21
+ ❯ playwright.test.ts:61:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  screens.test.ts > AC6 the screenshots on the return card and in a panel, and the one taste call on them > AC6 the run draws expected 18.01 and received 18, and the missing case, on the return card and in a panel at the reference window, and the owner's recorded call on exactly those screenshots says they look right
+AssertionError: INCONCLUSIVE: deep-replica draws the app headless at the reference window, which runs on macOS only; this is linux
+ ❯ inconclusive helpers.ts:330:10
+    328| /** Fails the test with a message that starts `INCONCLUSIVE:`; such a …
+    329| export function inconclusive(why: string): never {
+    330|   expect.fail(`INCONCLUSIVE: ${why}`);
+       |          ^
+    331| }
+    332| export function requireMac(what: string): void {
+ ❯ requireMac helpers.ts:333:38
+ ❯ screens.test.ts:73:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  summary.test.ts > AC5 a resolver that reads the agent's summary instead of the tool's report fails, naming the bound value > AC5 with the agent's summary saying 18.10 beside the report, the bound values show the report's 18.01 and 18; the planted resolver_reads_summary shows 18.10, which the report doesn't hold, and fails naming bound value received
+AssertionError: the Vitest run with the agent's summary: deep-show run answers the scenario ok (#401's `install` and `drawn` calls with a bound value on `run:<id>#<assertion>`, the `run` call, the scenario's `record` (README: The surfaces under test)); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:205:191
+
+ ❯ fromReport summary.test.ts:28:30
+ ❯ summary.test.ts:43:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  values.test.ts > AC1 a failing Vitest assertion's expected and received numbers, read from its report > AC1 the run recorded from Vitest's JSON report holds cart total's expected 18.01 and received 18 as printed, and the panel's bound values show 18.01 and 18 with the run as source and the run's end as as-of (fails on a resolver that swaps Vitest's "expected <received> to be <expected>", or stamps the as-of when the hub recorded the run)
+AssertionError: the failing Vitest run: deep-show run answers the scenario ok (#401's `install` and `drawn` calls with a bound value on `run:<id>#<assertion>`, the `run` call, the scenario's `record` (README: The surfaces under test)); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:205:191
+
+ ❯ values.test.ts:39:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  values.test.ts > AC2 a replay from the record shows the same, and a run that passed reads missing > AC2 replayed from the record entry alone, with the report deleted, the panel shows the same two values, sources and as-of times at the same frames (fails on a replay that re-reads the report, or one whose as-of is the replay's load time)
+AssertionError: the live run: deep-show run answers the scenario ok (#401's `install` and `drawn` calls with a bound value on `run:<id>#<assertion>`, the `run` call, the scenario's `record` (README: The surfaces under test)); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:205:191
+
+ ❯ values.test.ts:60:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  values.test.ts > AC2 a replay from the record shows the same, and a run that passed reads missing > AC2 a bound value on a run that passed reads missing with not_reported, naming the run and the assertion, and shows no number (fails on a resolver that shows the expected value of a passed assertion, or 0)
+AssertionError: the passing Vitest run: deep-show run answers the scenario ok (#401's `install` and `drawn` calls with a bound value on `run:<id>#<assertion>`, the `run` call, the scenario's `record` (README: The surfaces under test)); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:205:191
+
+ ❯ values.test.ts:78:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  8 failed (8)
+   Start at  12:01:55
+   Duration  36.84s (tests 85%, transform 11%, import 3%, worker 1%)
+
+    Isolate  5 workers spawned · ~923ms startup each (spawn + environment, per file)
+             at least ~3.69s faster with isolate: false — reuses workers across files instead of one per file
+
