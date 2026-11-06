@@ -1,0 +1,8 @@
+// A test package (#67): the settings source, registered through `deep.registerStateSource` under the name settings,
+// as source.json configures it.
+import { readFileSync } from 'node:fs';
+import { settingsSource } from './source.mjs';
+
+export default function (deep: any): void {
+  deep.registerStateSource('settings', settingsSource(JSON.parse(readFileSync(new URL('./source.json', import.meta.url), 'utf8'))));
+}

@@ -342,6 +342,7 @@ export default function (deep: Deep) {
   deep.registerEnvironment(name, env)  // env.up(spec, lease, checkout) → handle · env.down(handle)
                                      // checkout: the folder to start from; the core works out the tree a stack served from the supervisor's records
   deep.registerStateSource(name, source) // read() → items · compare(item, expected) → diff · undo(change) → plan | cannot (R2)
+                                     // fixture: { start, make, run }: the source's own world, where its kit makes and undoes changes, since a kit can't change a real host
   deep.lease(resource, mode)            // resource: { kind, key }, its kind a lease.kind@1 a plug-in declares as data; mode: exclusive | shared
                                      // → a lease held by the caller, or a refusal naming the holder; it ends only on proof, never on its expiry
   deep.registerView(name, panel, area) // a JavaScript panel in the app, hosted by gpui-shell
@@ -742,7 +743,8 @@ Code has a home: the repo holds the specs, git holds the history, and a diff sho
 - **State source.** Everything a workspace touches has a way to read what it is now, compare that with what should hold, and say how to undo a change: git for files, the change log for a host, an API snapshot for an account's settings, versions for a document. A state source is a plug-in, registered with `deep.registerStateSource` and filling the hub slot `state-source@1`, and a change it can't undo says so before your yes.
 - **The same loop.** What done means, the checks, the asks and tasks, and the receipt work the same as for code. A project's identity is its repo root and remote, or its workspace's id.
 - **Pinned to a state.** A code verdict pins to its commit; a verdict on a workspace pins to its commit and the digests of what its state sources read. When a host or an account drifts, the verdicts that read it go stale and only the checks whose inputs changed run again, the way a parametric model recomputes only what depends on a change.
-- **Packs come with the project.** A repo or workspace names the packs its work needs, such as hosts, check kinds and views. They load once you trust the project, and the app shows their views and commands while you're in it.
+- **Packs come with the project.** A repo or workspace names the packs its work needs, such as hosts, check kinds and views, in `.deepbuild/packs.json`. They load once you trust the project, and the app shows their views and commands while you're in it. A workspace is trusted by being made, so it can only be made in an empty folder.
+- **What it looks like.** `.deepbuild/workspace.json` names what a workspace touches, each touch with its state source and settings, and a requirement names the touches its check reads with `reads`. A check's checkout holds each reading as `.deepbuild/state/<touch>.json`; its run on the base commit reads the one pinned at the lock, so a check of state can be proven. `state.read` records each reading's digest, and the evidence store keeps its items under that digest. `deep workspace new, move, revert, diff and drift` are its commands, and a topic typed outside any repo makes one with no question. The session stays where it is, so the hub commits its work there at each stop. In a workspace another task's stop doesn't claim a task that passed: its verdict stands until a drift or a claim of its own.
 
 <a id="check-kinds"></a>
 
@@ -829,7 +831,7 @@ Composition is a first-class part of the design. The system is a small set of bl
 | `deep.registerIndex` | `index@1` | one | an index that keeps a dropped source's hits; one that returns a hit with no source | R1 |
 | `deep.registerChannel` | `channel@1` | many | a channel that reports delivered with no acknowledgement; one that returns an answer marked as signed with no valid signature | R2 |
 | `deep.registerAction` | `action@1` | many | a handler that writes nothing but reports a change; one that returns no report | R2 |
-| `deep.registerStateSource` | `state-source@1` | many, one per kind of thing | a source that calls a change undoable when its undo fails | R2 |
+| `deep.registerStateSource` | `state-source@1` | many, one per kind of thing | a source that calls a change undoable when its undo fails; one whose `read` keeps its first answer; one whose `compare` sees nothing | R2 |
 | `deep.registerLayer` | `map.layer@1` | many | a row citing nothing; rows that all cite one reading naming none of them; a row painted in a status color | R2 |
 | `deep.registerFacts` | `repo.facts@1` | many | a reader that reports a route at a line that holds none | R2 |
 | `deep.registerModel` | `model@1` | one per name | a model that returns canned text on timeout; one whose answer is submitted as a verdict | R3 |
