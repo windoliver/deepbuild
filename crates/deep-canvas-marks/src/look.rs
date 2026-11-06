@@ -63,7 +63,7 @@ const CHROME: [&str; 7] = [
 const FOCUS_FLOOR: f64 = 3.0;
 
 /// A look's terminal colors by ANSI index, and how far each keeps from the terminal background (#1003).
-pub const TERMINAL: [&str; 16] = [
+const TERMINAL: [&str; 16] = [
     "term_black",
     "term_red",
     "term_green",
@@ -898,7 +898,7 @@ pub fn clash_of(look: &Look, min: Option<f64>) -> Option<Refusal> {
 /// The chrome's half of the guard for one theme (#882): a role at an alpha is the one ink's color,
 /// and keeps the status distance (`status`, where it holds) over the ground and the raised ground; each ink tier keeps its
 /// contrast floor on the ground, the raised ground and hover over either. A look without chrome
-/// roles has nothing here to hold.
+/// roles or a focus ring has nothing here to hold.
 fn chrome(
     theme: &'static str,
     palette: &Palette,
@@ -944,7 +944,7 @@ fn chrome(
         }
     }
     // The focus ring reads on every fill, so a focused row shows beside a selected one (#1003).
-    if CHROME.iter().any(|r| color(r).is_some()) {
+    if CHROME.iter().any(|r| color(r).is_some()) || color("focus").is_some() {
         let focus = color("focus").ok_or_else(|| Refusal::Bad(format!("roles/focus ({theme})")))?;
         for (on, surface) in &surfaces {
             let ratio = contrast(over(focus, *surface), *surface);
@@ -1122,6 +1122,20 @@ mod tests {
             resolve(&def),
             Err(Refusal::Bad("attention_treatment/line".into()))
         );
+    }
+
+    #[test]
+    fn a_focus_ring_is_held_in_a_look_without_other_chrome_roles() {
+        let mut def = shipped("chalk").unwrap();
+        def["roles"]["focus"] = def["roles"]["ground"].clone();
+        assert!(matches!(
+            resolve(&def),
+            Err(Refusal::FocusContrast {
+                theme: "light",
+                on: "ground",
+                ..
+            })
+        ));
     }
 
     #[test]

@@ -112,8 +112,8 @@ mod spike {
             (w, view.expect("the grid view"))
         });
         let mut term = Terminal::new(COLS, ROWS, 0);
-        // The 16 ANSI colors are the look's, as the app draws them (#1003).
-        let (ansi, ..) = deep_app::chrome::terminal(false);
+        // The 16 ANSI colors are the look's dark ones, as the app draws them on a dark grid (#1003).
+        let (ansi, ..) = deep_app::chrome::terminal(true);
         let mut feed_ms = Vec::new();
         let mut frame_ms = Vec::new();
         let mut failures = Vec::new();
