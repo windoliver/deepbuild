@@ -4,17 +4,21 @@
 // `bays.mjs <base|change> -- <command>` claims a pair, replaces that role's bay to the tree of the worktree it runs
 // from, runs the command there, seals the bay, releases the pair and exits with the command's status. A proof claims
 // one pair for its base and change bays with `claimPair` (#1118), and every copy it makes is a use of one of them.
-import { spawn, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync, writeSync } from 'node:fs';
 import { constants, homedir, tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { git, listFiles } from './proof-change.mjs';
 import { acquire, holds, release } from './throttle.mjs';
 
 // What a bay keeps across runs: its builds, and the git folder it gets anew each run.
 const KEPT = ['.git', 'target', 'node_modules'];
+// Git as proof-change.mjs reads it, and the files it lists there. That module loads TypeScript, and perf imports
+// replace and walk from a checkout or a test's fixture that may have no node_modules, so bays reads git itself.
+const git = (root, args, options = {}) => execFileSync('git', ['-c', 'core.quotePath=false', ...args], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 30, stdio: ['ignore', 'pipe', 'pipe'], ...options });
+const listFiles = (root) => [...new Set(git(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).split('\0').filter(Boolean))]
+  .filter((path) => { try { return !lstatSync(join(root, path)).isDirectory(); } catch { return false; } });
 const bays = () => join(homedir(), 'deepbuild-bays');
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const real = (path) => {
@@ -49,7 +53,7 @@ function refusal(root) {
 }
 
 /** The files under `folder`, as paths relative to it, not following links. */
-function walk(folder, at = '', found = []) {
+export function walk(folder, at = '', found = []) {
   for (const entry of readdirSync(join(folder, at), { withFileTypes: true })) {
     const path = at ? `${at}/${entry.name}` : entry.name;
     if (entry.isDirectory()) walk(folder, path, found);
@@ -88,9 +92,9 @@ function treeOf(root, role) {
  * Replaces the bay in place to the tree: deletes what the tree lacks, outside what a bay keeps, and writes each file
  * whose bytes, mode or link differ from the bay's, as a new file, so its mtime is now's and nothing it was linked
  * to changes. A file whose bytes match is left as it is, so cargo and tsc rebuild nothing for it. Returns the paths
- * it wrote and how many it deleted.
+ * it wrote and how many it deleted. perf's kept copies are replaced by it too.
  */
-function replace(bay, { from, paths }) {
+export function replace(bay, { from, paths }) {
   const wanted = new Set(paths);
   const folders = new Set(paths.flatMap((path) => path.split('/').slice(0, -1).map((_, at, parts) => parts.slice(0, at + 1).join('/'))));
   const written = [];
