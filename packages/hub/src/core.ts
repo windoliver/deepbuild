@@ -6667,7 +6667,8 @@ export class Core {
     this.stopping = true;
     plantedStop();
     for (const timer of this.timers) clearInterval(timer);
-    this.pool?.close();
+    // The pool's pipe goes with the hub, as its socket does: left in the root with no writer, any read of it blocks.
+    this.pool?.close(true);
     for (const live of this.live.values()) clearTimeout(live.quiet);
     for (const p of this.promises.values()) clearTimeout(p.timer);
     this.watcher?.close();
