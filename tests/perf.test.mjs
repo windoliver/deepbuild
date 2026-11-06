@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { chmodSync, closeSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, readdirSync, rmSync, symlinkSync, writeFileSync, writeSync } from 'node:fs';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -181,21 +181,69 @@ test('the merge base builds at one path every run, outside the checkout, from fi
   for (const { mtimeMs } of runs) assert.ok(mtimeMs >= started - 1000, `the merge base kept its commit time ${new Date(mtimeMs).toISOString()}, which Cargo reads as fresh`);
 });
 
-// The directory perf keeps this machine's copies in, under the fixture's cache directory.
-const keptRoot = (cache) => join(cache, 'deepbuild-perf', hostname().replace(/[^\w.-]/g, '_'));
+// The directory perf keeps this clone's copies in on this machine, under the fixture's cache directory.
+const keptRoot = (cache, cwd) => join(cache, 'deepbuild-perf', `${hostname().replace(/\.local$/, '').replace(/[^\w.-]/g, '_')}-${createHash('sha256').update(realpathSync(join(cwd, '.git'))).digest('hex').slice(0, 12)}`);
 
 test('kept copies another user could write to are refused, since perf runs what it builds there', (t) => {
   const { cwd, perf, cache } = repository(t, () => '');
-  mkdirSync(keptRoot(cache), { recursive: true });
-  chmodSync(keptRoot(cache), 0o777);
+  mkdirSync(keptRoot(cache, cwd), { recursive: true });
+  chmodSync(keptRoot(cache, cwd), 0o777);
   const result = perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /BLOCKED perf: .+ is not a directory only this user can use\n\s+Fix: Remove it/);
 });
 
+test('another repository on the machine keeps copies and a lock of its own: a fixture\'s perf never blocks or replaces a clone\'s', async (t) => {
+  // Each run's base checks record where they ran; the first run's wait in its checks, holding its lock, until told to go
+  // or until the test's folder is gone.
+  // They burn 50 ms of CPU, which GNU time's 10 ms steps never read as none.
+  const workload = (root) => `
+    import { appendFileSync, existsSync } from 'node:fs';
+    for (const start = process.cpuUsage(); process.cpuUsage(start).user < 50_000;);
+    appendFileSync(${JSON.stringify(join(root, 'base-cwd'))}, process.cwd() + '\\n');
+    while (!existsSync(${JSON.stringify(join(root, 'go'))}) && existsSync(${JSON.stringify(root)})) await new Promise((done) => setTimeout(done, 20));
+  `;
+  const one = repository(t, workload), other = repository(t, workload);
+  writeFileSync(join(other.cwd, 'go'), '');
+  const observation = JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
+  const first = spawn(process.execPath, ['scripts/perf.mjs', observation], { cwd: one.cwd, env: one.env });
+  let output = '';
+  first.stdout.on('data', (chunk) => { output += chunk; });
+  const closed = new Promise((done) => first.on('close', (status) => done(status)));
+  for (const until = Date.now() + 120_000; !existsSync(join(one.cwd, 'base-cwd'));) {
+    assert.ok(Date.now() < until, `the first run's checks didn't start within 120 s\n${output}`);
+    await new Promise((done) => setTimeout(done, 20));
+  }
+  // The same machine and cache, from another repository, while the first run holds its copies.
+  const second = spawnSync(process.execPath, ['scripts/perf.mjs', observation], { cwd: other.cwd, encoding: 'utf8', env: { ...other.env, XDG_CACHE_HOME: one.cache } });
+  writeFileSync(join(one.cwd, 'go'), '');
+  assert.equal(await closed, 0, output);
+  assert.equal(second.status, 0, second.stdout + second.stderr);
+  const [mine] = readFileSync(join(one.cwd, 'base-cwd'), 'utf8').trim().split('\n'), [theirs] = readFileSync(join(other.cwd, 'base-cwd'), 'utf8').trim().split('\n');
+  assert.notEqual(theirs, mine, 'the other repository\'s perf ran its checks in this clone\'s kept copy');
+});
+
+test('a Mac that adds .local to its name on some networks keeps one folder: a run under either name uses the same copies', (t) => {
+  const { cwd, cache, env } = repository(t, (root) => `
+    import { appendFileSync } from 'node:fs';
+    for (const start = process.cpuUsage(); process.cpuUsage(start).user < 50_000;);
+    appendFileSync(${JSON.stringify(join(root, 'base-cwd'))}, process.cwd() + '\\n');
+  `);
+  // The machine's name is the OS's to give; the preload gives the one each run names.
+  const named = join(cache, '..', 'hostname.cjs');
+  writeFileSync(named, "const os = require('node:os'); os.hostname = () => process.env.FIXTURE_HOSTNAME; require('node:module').syncBuiltinESMExports();");
+  for (const name of ['fixture-mac.local', 'fixture-mac']) {
+    const result = spawnSync(process.execPath, ['-r', named, 'scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })], { cwd, encoding: 'utf8', env: { ...env, FIXTURE_HOSTNAME: name } });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  }
+  const copies = readFileSync(join(cwd, 'base-cwd'), 'utf8').trim().split('\n');
+  assert.equal(copies.length, 2, copies.join('\n'));
+  assert.equal(copies[1], copies[0], 'the copies moved when the machine\'s name lost .local');
+});
+
 test('one perf run per machine at a time: a live run\'s lock blocks, a killed run\'s is taken over and released', (t) => {
   const { cwd, perf, cache } = repository(t, () => '');
-  const kept = keptRoot(cache);
+  const kept = keptRoot(cache, cwd);
   mkdirSync(kept, { recursive: true, mode: 0o700 });
   writeFileSync(join(kept, 'lock'), String(process.pid));
   const held = perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
@@ -296,7 +344,7 @@ test('perf runs racing for a killed run\'s lock never check at the same time', a
     await new Promise((done) => setTimeout(done, 300));
     appendFileSync(${JSON.stringify(join(root, 'base-spans'))}, JSON.stringify([start, Date.now()]) + '\\n');
   `);
-  const kept = keptRoot(cache);
+  const kept = keptRoot(cache, cwd);
   mkdirSync(kept, { recursive: true, mode: 0o700 });
   writeFileSync(join(kept, 'lock'), String(spawnSync(process.execPath, ['-e', '']).pid));
   const once = () => new Promise((done) => {
@@ -323,7 +371,7 @@ test('perf runs racing for a killed run\'s lock never check at the same time, ho
     await new Promise((done) => setTimeout(done, 1000));
     appendFileSync(${JSON.stringify(join(root, 'base-spans'))}, JSON.stringify([start, Date.now()]) + '\\n');
   `);
-  const kept = keptRoot(cache);
+  const kept = keptRoot(cache, cwd);
   mkdirSync(kept, { recursive: true, mode: 0o700 });
   writeFileSync(join(kept, 'lock'), String(spawnSync(process.execPath, ['-e', '']).pid));
   const preload = fileURLToPath(new URL('fixtures/slow-lock.cjs', import.meta.url));
@@ -352,7 +400,7 @@ test('a run paused while making the takeover mark keeps it: a second run that fi
     await new Promise((done) => setTimeout(done, 8000));
     appendFileSync(${JSON.stringify(join(root, 'base-spans'))}, JSON.stringify([start, Date.now()]) + '\\n');
   `);
-  const kept = keptRoot(cache);
+  const kept = keptRoot(cache, cwd);
   mkdirSync(kept, { recursive: true, mode: 0o700 });
   writeFileSync(join(kept, 'lock'), String(spawnSync(process.execPath, ['-e', '']).pid));
   const preload = fileURLToPath(new URL('fixtures/slow-lock.cjs', import.meta.url));
