@@ -21,7 +21,8 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # The live capture asks AppKit for the window's accessibility children and their frames.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSGeometry", "NSDate", "NSRunLoop"] }
+# Issue #990 adds NSRange: the text area's line of its insertion point, read as an assistive client reads it.
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSGeometry", "NSDate", "NSRunLoop", "NSRange"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSWindow", "NSView", "NSResponder", "NSRunningApplication", "NSPasteboard", "NSSound"] }
 
 [[bin]]
@@ -61,6 +62,12 @@ harness = false
 [[test]]
 name = "acceptance_326_panels"
 path = "../../tests/acceptance/326/panels/panels.rs"
+harness = false
+
+# AC4's app half, redrafted blind for #1172: Needs you's rows read as questions, not handles.
+[[test]]
+name = "acceptance_326_panels_redraft"
+path = "../../tests/acceptance/326/panels/redraft/panels_redraft.rs"
 harness = false
 
 [[test]]

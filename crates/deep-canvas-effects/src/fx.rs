@@ -19,7 +19,11 @@ pub struct Named {
 
 /// The pack's operators, in name order.
 pub fn library() -> Vec<Named> {
-    let pack: Value = serde_json::from_str(PACK).expect("fx@1's manifest is JSON");
+    named(&serde_json::from_str(PACK).expect("fx@1's manifest is JSON"))
+}
+
+/// The named operators of a pack's manifest, in name order.
+pub fn named(pack: &Value) -> Vec<Named> {
     let mut out: Vec<Named> = pack["operators"]
         .as_object()
         .into_iter()

@@ -649,6 +649,18 @@ impl Ctx<'_> {
                 Some("object" | "world" | "view") => Ty::V(Sc::F32, 3),
                 _ => return Err(bad("normal takes space: object, world or view".into())),
             },
+            "blend" => {
+                let mode = s.fields.get("mode").and_then(Value::as_str);
+                if mode.and_then(deep_canvas::blend::step_mode).is_none() {
+                    return Err(bad("blend takes a mode: a group's blend modes but dissolve".into()));
+                }
+                for port in ["base", "over"] {
+                    if float(&need(port)?).map_err(bad)? != Ty::V(Sc::F32, 3) {
+                        return Err(bad(format!("blend's {port} is a vec3")));
+                    }
+                }
+                Ty::V(Sc::F32, 3)
+            }
             "luminance" => {
                 match float(&need("rgb")?).map_err(bad)? {
                     Ty::V(Sc::F32, 3) => {}
@@ -1428,12 +1440,14 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
             outputs: it.outputs.clone(),
             storage: BTreeMap::new(),
             textures: BTreeMap::new(),
+            instances: BTreeMap::new(),
             blend: graph::Blend::Replace,
             declared: None,
             fallback: op.fallback,
             cost: None,
             size: it.resolution.clone(),
             elements: 0,
+            counted: false,
             workgroup: 64,
             source: None,
             uses: Vec::new(),
@@ -1567,6 +1581,34 @@ fn check_inner(
                 "workgroup",
                 "workgroup is 64, 128 or 256",
             ));
+        }
+        // An instances output draws what a compact step of this operator kept (#484): the step's
+        // rows and its count are storage outputs, which the draw reads.
+        for (name, i) in &op.instances {
+            let path = format!("outputs/{name}");
+            if !i.columns.is_empty() {
+                issues.push(Issue::at_path(
+                    "operator_type",
+                    &path,
+                    "an instances output draws the instancer's own columns; it writes none yet",
+                ));
+            }
+            let held = |port: &str| {
+                let want = Arg::Ref(i.count.clone().unwrap_or_default(), Some(port.to_string()));
+                op.storage.values().any(|o| o.from.as_ref() == Some(&want))
+            };
+            let compact = i
+                .count
+                .as_ref()
+                .and_then(|c| op.steps.get(c))
+                .is_some_and(|s| s.op == "compact@1");
+            if i.instancer.is_empty() || !compact || !held("out") || !held("count") {
+                issues.push(Issue::at_path(
+                    "operator_type",
+                    &path,
+                    "instances is {instancer, columns, count: a compact step whose out and count are storage outputs}",
+                ));
+            }
         }
         if op.storage.is_empty() && op.textures.is_empty() {
             issues.push(Issue::at_path(

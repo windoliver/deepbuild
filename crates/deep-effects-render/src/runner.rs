@@ -306,6 +306,18 @@ impl Runner {
         groups: &(wgpu::BindGroup, wgpu::BindGroup),
         timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
+        self.encode_within(encoder, target, groups, timestamps, None);
+    }
+
+    /// [`Runner::encode`] within `scissor`, `[x, y, w, h]` in the target's px.
+    pub fn encode_within(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        groups: &(wgpu::BindGroup, wgpu::BindGroup),
+        timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+        scissor: Option<[u32; 4]>,
+    ) {
         let Pipeline::Render(pipeline) = &self.pipeline else {
             unreachable!("a pass operator encodes a render pass")
         };
@@ -326,6 +338,9 @@ impl Runner {
         pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &groups.0, &[]);
         pass.set_bind_group(1, &groups.1, &[]);
+        if let Some([x, y, w, h]) = scissor {
+            pass.set_scissor_rect(x, y, w, h);
+        }
         pass.draw(0..3, 0..1);
     }
 
@@ -352,6 +367,27 @@ impl Runner {
             1,
             1,
         );
+    }
+
+    /// An indirect dispatch (#484): the workgroups come from `args`, which the GPU wrote.
+    pub fn dispatch_indirect(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        args: &wgpu::Buffer,
+        groups: &(wgpu::BindGroup, wgpu::BindGroup),
+        timestamps: Option<wgpu::ComputePassTimestampWrites<'_>>,
+    ) {
+        let Pipeline::Compute(pipeline) = &self.pipeline else {
+            unreachable!("a compute operator dispatches")
+        };
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some(&self.compiled.checked.op.id),
+            timestamp_writes: timestamps,
+        });
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, &groups.0, &[]);
+        pass.set_bind_group(1, &groups.1, &[]);
+        pass.dispatch_workgroups_indirect(args, 0);
     }
 }
 
