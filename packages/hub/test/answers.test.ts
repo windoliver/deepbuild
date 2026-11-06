@@ -15,7 +15,7 @@ it('offers only unanswered deliveries in the same thread, with words and images 
   const delivered: string[] = [];
   const pin = { kind: 'commit', ref: 'a'.repeat(40) };
   try {
-    for (const [session, thread] of [['S1', 'T1'], ['S2', 'T1'], ['S3', 'T3']]) {
+    for (const [session, thread] of [['S1', 'T1'], ['S2', 'T1'], ['S3', 'T3']] as const) {
       await record.append({ ...core, writer: 'hook', session }, {
         v: 1, id: ulid(++now), kind: 'session.start', ts: now,
         data: { agent: 'claude-code', worktree: dir, branch: 'main', thread },
