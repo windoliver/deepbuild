@@ -469,6 +469,8 @@ pub fn primitives(bytes: &[u8], node: &Value) -> Result<Primitives, Fault> {
 /// by its SHA-256; and what the maps can't hold, per material.
 pub struct Imported {
     pub nodes: Vec<Node>,
+    /// The scene's KHR_lights_punctual lights: each one's node's world matrix and its light.
+    pub lights: Vec<([[f64; 4]; 3], Value)>,
     pub materials: Vec<ImportedMaterial>,
     pub images: Vec<(String, Vec<u8>)>,
     pub dropped: Vec<(usize, String)>,
@@ -562,6 +564,87 @@ fn wrap_name(v: Option<&Value>) -> &'static str {
 /// The material extensions whose fields the import maps (beside the texture transform, read on
 /// each texture).
 const READ: [&str; 2] = ["KHR_materials_emissive_strength", "KHR_materials_unlit"];
+
+/// #428's planted `drops_dispersion`: the import leaves KHR_materials_dispersion in `dropped`
+/// and draws dispersion 0. Set only by `deep-gpu --planted`.
+pub static DROPS_DISPERSION: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// The lobe extensions whose factors the import maps to their fields (#428); a texture inside
+/// one is still listed in `dropped`.
+const LOBES: [&str; 10] = [
+    "KHR_materials_sheen",
+    "KHR_materials_anisotropy",
+    "KHR_materials_diffuse_transmission",
+    "KHR_materials_transmission",
+    "KHR_materials_ior",
+    "KHR_materials_volume",
+    "KHR_materials_dispersion",
+    "KHR_materials_iridescence",
+    "KHR_materials_specular",
+    "KHR_materials_diffuse_roughness",
+];
+
+/// A material's lobe extensions as `material@1` fields (#428; Material): `m` the glTF material.
+fn lobe_params(m: &Value, p: &mut Value) {
+    let x = |e: &str, k: &str| m.pointer(&format!("/extensions/{e}/{k}"));
+    let f = |e: &str, k: &str, d: f64| x(e, k).and_then(Value::as_f64).unwrap_or(d);
+    let c = |e: &str, k: &str, d: [f64; 3]| x(e, k).cloned().unwrap_or_else(|| json!(d));
+    let has = |e: &str| m.pointer(&format!("/extensions/{e}")).is_some();
+    if has("KHR_materials_sheen") {
+        let color = c("KHR_materials_sheen", "sheenColorFactor", [0.0; 3]);
+        p["sheen"] = json!({"weight": 1.0, "color": color,
+            "roughness": f("KHR_materials_sheen", "sheenRoughnessFactor", 0.0)});
+    }
+    if has("KHR_materials_anisotropy") {
+        p["anisotropy"] = json!({
+            "strength": f("KHR_materials_anisotropy", "anisotropyStrength", 0.0),
+            "rotation": f("KHR_materials_anisotropy", "anisotropyRotation", 0.0).to_degrees(),
+        });
+    }
+    if has("KHR_materials_diffuse_transmission") {
+        let e = "KHR_materials_diffuse_transmission";
+        p["translucency"] = json!({"kind": "thin", "amount": f(e, "diffuseTransmissionFactor", 0.0),
+            "color": c(e, "diffuseTransmissionColorFactor", [1.0; 3])});
+    }
+    if has("KHR_materials_transmission") {
+        p["transmission"] = json!(f("KHR_materials_transmission", "transmissionFactor", 0.0));
+    }
+    if has("KHR_materials_ior") {
+        p["ior"] = json!(f("KHR_materials_ior", "ior", 1.5));
+    }
+    if has("KHR_materials_volume") {
+        let e = "KHR_materials_volume";
+        let mut att = json!({"color": c(e, "attenuationColor", [1.0; 3])});
+        if let Some(d) = x(e, "attenuationDistance").and_then(Value::as_f64) {
+            att["distance"] = json!(d);
+        }
+        p["absorption"] = json!({"thickness": f(e, "thicknessFactor", 0.0), "attenuation": att});
+    }
+    if has("KHR_materials_dispersion")
+        && !DROPS_DISPERSION.load(std::sync::atomic::Ordering::Relaxed)
+    {
+        p["dispersion"] = json!(f("KHR_materials_dispersion", "dispersion", 0.0));
+    }
+    if has("KHR_materials_iridescence") {
+        let e = "KHR_materials_iridescence";
+        p["iridescence"] = json!({"weight": f(e, "iridescenceFactor", 0.0),
+            "ior": f(e, "iridescenceIor", 1.3), "thickness": f(e, "iridescenceThicknessMaximum", 400.0)});
+    }
+    if has("KHR_materials_specular") {
+        let e = "KHR_materials_specular";
+        // glTF's specular strength 1 is our level 0.5 (Material).
+        p["specular_level"] = json!(0.5 * f(e, "specularFactor", 1.0));
+        p["specular_color"] = c(e, "specularColorFactor", [1.0; 3]);
+    }
+    if has("KHR_materials_diffuse_roughness") {
+        p["diffuse_roughness"] = json!(f(
+            "KHR_materials_diffuse_roughness",
+            "diffuseRoughnessFactor",
+            0.0
+        ));
+    }
+}
 
 /// Whether node `node` (its index or name) has a primitive that names a material.
 pub fn node_materials(bytes: &[u8], node: &Value) -> bool {
@@ -716,6 +799,7 @@ pub fn import(
             p["occlusion_strength"] =
                 json!(o.get("strength").and_then(Value::as_f64).unwrap_or(1.0));
         }
+        lobe_params(m, &mut p);
         // Anything else the material uses is listed, never dropped silently: each texture inside
         // an extension the maps can't hold, and each extension the import doesn't read.
         for (name, body) in m
@@ -727,7 +811,11 @@ pub fn import(
             if READ.contains(&name.as_str()) {
                 continue;
             }
-            dropped.push((i, name.clone()));
+            let planted = name == "KHR_materials_dispersion"
+                && DROPS_DISPERSION.load(std::sync::atomic::Ordering::Relaxed);
+            if !LOBES.contains(&name.as_str()) || planted {
+                dropped.push((i, name.clone()));
+            }
             for (k, v) in body.as_object().into_iter().flatten() {
                 if v.get("index").is_some_and(Value::is_u64) {
                     dropped.push((i, format!("{name}/{k}")));
@@ -757,12 +845,21 @@ pub fn import(
     let mut stack: Vec<(usize, [[f64; 4]; 3], usize)> =
         roots.iter().rev().map(|r| (*r, identity, 0)).collect();
     let mut nodes = Vec::new();
+    let mut lights = Vec::new();
     while let Some((i, parent, depth)) = stack.pop() {
         let n = nodes_json.get(i).ok_or_else(|| bad("a missing node"))?;
         if depth > 64 {
             return Err(bad("a node tree deeper than 64"));
         }
         let world = mul(&parent, &local(n));
+        // KHR_lights_punctual: a node's light at its world transform (#428).
+        if let Some(l) = n
+            .pointer("/extensions/KHR_lights_punctual/light")
+            .and_then(Value::as_u64)
+            .and_then(|l| doc.pointer(&format!("/extensions/KHR_lights_punctual/lights/{l}")))
+        {
+            lights.push((world, l.clone()));
+        }
         for c in n
             .get("children")
             .and_then(Value::as_array)
@@ -807,6 +904,7 @@ pub fn import(
     }
     Ok(Imported {
         nodes,
+        lights,
         materials,
         images,
         dropped,

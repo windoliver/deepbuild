@@ -1123,6 +1123,7 @@ pub fn inputs(
     for (name, input) in &c.op.inputs {
         let v = match &input.from {
             From::Target { .. }
+            | From::Texture3d { .. }
             | From::Storage { .. }
             | From::Column { .. }
             | From::Attribute { .. } => Val::T(name.clone()),

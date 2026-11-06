@@ -324,6 +324,27 @@
     }
   },
   {
+    "method": "deep.registerStateSource",
+    "variants": null,
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67",
+    "digest": "d1:c058219725adc036392edfdede34b6f708551a262e0d146b5676bc45a1870025",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "method": "deep.registerChannel",
     "variants": null,
     "since": "R2",
