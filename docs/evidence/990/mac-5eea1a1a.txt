@@ -1,0 +1,16 @@
+commit 5eea1a1ab20124200e97243719b7657008edb538 (PR #1276; branch head is now 82ede3e4, which adds only evidence)
+hw.model Mac15,12; macOS 14.7.7
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/990 --no-file-parallelism (automated only, DEEP_990_LIVE unset)
+
+Result: 18 passed, 4 failed (22); 5 of 8 files pass. Same counts as 3f472b68 (run K).
+The 4 failures are all INCONCLUSIVE, none a FAIL:
+  INCONCLUSIVE: the VoiceOver test needs a person at the reference Mac with VoiceOver on; run with DEEP_990_LIVE=1 (README: The live runs); this is not a pass
+  INCONCLUSIVE: no bash 5.1 or newer (readline with bracketed paste) at /bin, /usr/bin, /opt/homebrew/bin or /usr/local/bin; this is not a pass
+  INCONCLUSIVE: no bash 5.1 or newer (readline with bracketed paste) at /bin, /usr/bin, /opt/homebrew/bin or /usr/local/bin; this is not a pass
+  INCONCLUSIVE: no taste call is recorded: attach the screenshots to the PR, show them to the owner
+  (AC7 live VoiceOver, AC2 x2 needing bash >= 5.1, which this Mac lacks and the owner declined to install, AC8 taste)
+
+PNG sha256 (AC8 screenshots):
+  143993728f66982c9fa0339be09ba5f6c2a19512b7aebb65a593c0adf96510b1  composition-at-cursor.png
+  303428b16ed944ac978b87da36f457a95f9b070130b32d4c82dbe8444515a075  session-row-readings.png
+  (at 3f472b68 they were composition d8331858..., session-row 94347d66...)

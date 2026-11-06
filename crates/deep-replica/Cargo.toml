@@ -21,7 +21,8 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # The live capture asks AppKit for the window's accessibility children and their frames.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSGeometry", "NSDate", "NSRunLoop"] }
+# Issue #990 adds NSRange: the text area's line of its insertion point, read as an assistive client reads it.
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSGeometry", "NSDate", "NSRunLoop", "NSRange"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSWindow", "NSView", "NSResponder", "NSRunningApplication", "NSPasteboard", "NSSound"] }
 
 [[bin]]
