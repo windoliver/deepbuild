@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { RecordedRun } from '@deepbuild/gate';
-import { GateRunner, type DefinitionState, type GateOptions, type RunKey } from '../src/gate-runner.js';
+import { GateRunner, type DefinitionState, type GateOptions, type RunKey, type StatePin } from '../src/gate-runner.js';
 import type { KeyFacts } from '../src/shared-runs.js';
 
 const dirs: string[] = [];
@@ -23,12 +23,13 @@ const record = (run: string, read = ['src/a.ts']): RecordedRun => ({
  */
 function world(o: {
   kept?: boolean | ((evidence: string[]) => boolean); hold?: boolean; dir?: string; read?: string[]; variants?: 'none' | 'unstartable' | 'second-unstartable';
-  records?: (n: number, variant: boolean) => Partial<RecordedRun>; runs?: number; definition?: DefinitionState;
+  records?: (n: number, variant: boolean) => Partial<RecordedRun>; runs?: number; definition?: DefinitionState; onBase?: 'fails'; state?: (session: string) => StatePin;
 } = {}) {
   const started: { check: string; claim: string }[] = [];
   const finished: { run: string; check: string; key: KeyFacts }[] = [];
   const readings: { source: string; value: number; unit: string }[] = [];
   const keys = new Map<string, RunKey>();
+  const bases: string[] = [];
   const held: (() => void)[] = [];
   const checkout = o.dir ?? mkdtempSync(join(tmpdir(), 'dh1018-unit-'));
   if (!o.dir) {
@@ -44,13 +45,14 @@ function world(o: {
       if (o.variants === 'second-unstartable' && r.runs.some((t) => t.endsWith('variant 2'))) throw Error('the snapshot is gone');
       return { dir: checkout, commit: 'c1' };
     },
+    baseCheckout: async () => ({ dir: checkout, commit: 'b', standIns: [] }),
     ended: async () => undefined,
   };
   let now = 0;
   const gate: GateRunner = new GateRunner({
     raw: async (q) => (q.includes('FROM runs WHERE id') ? [{ ms: 4000 }] : []), now: () => now, core: {} as GateOptions['core'],
     append: async (_c, e) => { if (e.kind === 'reading.recorded') { const d = e.data as { source: string; value: number; unit: string }; readings.push({ source: d.source, value: d.value, unit: d.unit }); } },
-    start: async (r) => { started.push({ check: r.check, claim: r.claim }); const run = `run:${started.length}`; keys.set(run, r.key!); return run; },
+    start: async (r) => { started.push({ check: r.check, claim: r.claim }); const run = `run:${started.length}`; keys.set(run, r.key!); if (r.key?.base) bases.push(r.claim); return run; },
     ended: async (run) => {
       if (o.hold) await new Promise<void>((done) => held.push(done));
       now += 1500;
@@ -65,12 +67,13 @@ function world(o: {
   });
   const claim = (session: string, n: number) => gate.stop({
     session, claim: `claim:${n}`, task: 'task:1', cwd: checkout, base: 'b', requirements: [], stopAt: now, ...(o.definition ? { definition: o.definition } : {}),
+    ...(o.state ? { state: o.state(session) } : {}),
     checks: [{
-      check: 'c.sh', approved: 'a', command: "sh 'c.sh'", covers: ['R1'], depth: 'unit', on_base: 'passes', asserts: [], expected_ms: 1, ...(o.runs ? { runs: o.runs } : {}),
+      check: 'c.sh', approved: 'a', command: "sh 'c.sh'", covers: ['R1'], depth: 'unit', on_base: o.onBase ?? 'passes', asserts: [], expected_ms: 1, ...(o.runs ? { runs: o.runs } : {}),
       ...(o.variants ? { held_out: o.variants === 'second-unstartable' ? [{ files: { 'test/fixture.json': SHA } }, { files: { 'test/fixture.json': 'b'.repeat(64) } }] : [{ files: { 'test/fixture.json': SHA } }] } : {}),
     }],
   });
-  return { gate, started, finished, readings, held, claim, checkout };
+  return { gate, started, finished, readings, held, claim, checkout, bases };
 }
 
 describe('#1018 readings, per repo', () => {
@@ -106,6 +109,25 @@ describe('#1018 a result is pruned with its evidence', () => {
     await w.claim('s2', 2);
     expect(w.started.map((s) => s.claim)).toEqual(['claim:1', 'claim:2']);
     expect(w.readings).toEqual([]);
+  });
+});
+
+describe('#1018 a workspace\'s state reading (#67) is part of the key', () => {
+  const pin = (reading: string) => (): StatePin => ({ digests: [reading], files: { 'state/now.json': reading }, pinned: { 'state/lock.json': reading } });
+
+  it('a base run on another reading pinned at the lock never carries: each claim runs its own base', async () => {
+    const readings: Record<string, string> = { s1: '{"open":1}', s2: '{"open":2}' };
+    const w = world({ onBase: 'fails', read: ['c.sh', 'src/a.ts'], state: (session) => pin(readings[session]!)() });
+    await w.claim('s1', 1);
+    await w.claim('s2', 2);
+    expect(w.bases).toEqual(['claim:1', 'claim:2']);
+  });
+
+  it('a base run on the same pinned reading still runs once for both sessions', async () => {
+    const w = world({ onBase: 'fails', read: ['c.sh', 'src/a.ts'], state: pin('{"open":1}') });
+    await w.claim('s1', 1);
+    await w.claim('s2', 2);
+    expect(w.bases).toEqual(['claim:1']);
   });
 });
 
