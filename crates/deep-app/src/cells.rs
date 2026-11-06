@@ -12,7 +12,7 @@
 
 use std::ops::Range;
 
-use deep_canvas_cells::emulator::{Cell, Terminal};
+use deep_canvas_cells::emulator::{Cell, Terminal, G};
 use deep_canvas_cells::palette::resolve;
 use deep_text_gpui::{Label, Role};
 use gpui_kit::*;
@@ -42,19 +42,31 @@ pub struct Screen {
     pub fg: [u8; 3],
     /// The program's cursor cell, shown or not.
     pub cursor: (u16, u16),
+    /// The cursor's place in its row's text, in characters: a cell can hold more than one.
+    pub caret: usize,
 }
 
 impl Screen {
     /// The terminal's screen as it stands, colors resolved against `fg` and `bg`.
     pub fn of(term: &Terminal, revision: u64, fg: [u8; 3], bg: [u8; 3]) -> Screen {
         let rows = (0..term.rows()).map(|y| row(term.row(y), fg, bg)).collect();
+        let (x, y) = term.cursor();
+        let before = &term.row(y)[..usize::from(x).min(usize::from(term.cols()))];
+        let caret = before
+            .iter()
+            .map(|c| match &c.g {
+                G::Many(t) => t.chars().count(),
+                _ => 1,
+            })
+            .sum();
         Screen {
             revision,
             cols: term.cols(),
             rows,
             bg,
             fg,
-            cursor: term.cursor(),
+            cursor: (x, y),
+            caret,
         }
     }
 
@@ -170,13 +182,14 @@ pub fn terminal(
 ) -> Stateful<Div> {
     let lines: Vec<String> = screen.rows.iter().map(|r| r.text.clone()).collect();
     let (x, y) = screen.cursor;
+    let caret = screen.caret;
     let (fg, bg) = (screen.fg, screen.bg);
     div()
         .id(SharedString::from(format!("{id}:text")))
         .track_focus(focus)
         .role(gpui_kit::Role::MultilineTextInput)
         .aria_label("Terminal")
-        .a11y_synthetic_children(move |builder| lines_and_caret(builder, &lines, x, y))
+        .a11y_synthetic_children(move |builder| lines_and_caret(builder, &lines, caret, y))
         .relative()
         // The whole tab in the grid's background, past the last column and row too.
         .size_full()
@@ -236,11 +249,11 @@ fn width(c: char) -> usize {
 }
 
 /// The text area's lines as text runs, one a row, each but the last ending in its line break, and
-/// the caret at the cursor's cell: on the row's line break when the cursor is past its text.
-fn lines_and_caret(builder: &mut A11ySubtreeBuilder, lines: &[String], x: u16, y: u16) {
+/// the caret `caret` characters into row `y`: on the row's line break when that is past its text.
+fn lines_and_caret(builder: &mut A11ySubtreeBuilder, lines: &[String], caret: usize, y: u16) {
     use gpui_kit::accesskit::{Node, Role as A11y, TextPosition, TextSelection};
     let last = lines.len().saturating_sub(1);
-    let mut caret = None;
+    let mut at = None;
     for (i, line) in lines.iter().enumerate() {
         let id = builder.synthetic_node_id(i);
         let mut text = line.clone();
@@ -250,9 +263,9 @@ fn lines_and_caret(builder: &mut A11ySubtreeBuilder, lines: &[String], x: u16, y
         let lengths: Vec<u8> = text.chars().map(|c| c.len_utf8() as u8).collect();
         if i == usize::from(y) {
             let end = lengths.len() - usize::from(i < last);
-            caret = Some(TextPosition {
+            at = Some(TextPosition {
                 node: id,
-                character_index: usize::from(x).min(end),
+                character_index: caret.min(end),
             });
         }
         let mut node = Node::new(A11y::TextRun);
@@ -260,7 +273,7 @@ fn lines_and_caret(builder: &mut A11ySubtreeBuilder, lines: &[String], x: u16, y
         node.set_character_lengths(lengths);
         builder.push_child(id, node);
     }
-    if let Some(at) = caret {
+    if let Some(at) = at {
         builder.parent_node().set_text_selection(TextSelection {
             anchor: at,
             focus: at,
@@ -296,5 +309,16 @@ mod tests {
             )]
         );
         assert_eq!(s.rows[1].text, "");
+    }
+
+    #[::core::prelude::v1::test]
+    fn the_caret_counts_every_character_a_cell_before_the_cursor_holds() {
+        // #990: "e" and a combining acute are one cell and two characters, so the cursor on "x",
+        // its third cell, comes after three characters.
+        let mut t = Terminal::new(10, 2, 0);
+        t.feed("e\u{301} x\x1b[1;3H".as_bytes());
+        let s = Screen::of(&t, 1, [200; 3], [0; 3]);
+        assert_eq!(s.cursor, (2, 0));
+        assert_eq!(s.rows[0].text.chars().nth(s.caret), Some('x'));
     }
 }
