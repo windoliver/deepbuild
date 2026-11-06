@@ -1787,7 +1787,7 @@ fn cuts_of(
 /// The marker kinds (canvas primitives: Marker), with a reading hold (#419), which motion blur
 /// never spans. Stage markers wait on present mode (Marker: present mode), which motion doesn't
 /// land yet, so they are refused rather than played through.
-const MARKER_KINDS: [&str; 8] = ["cue", "shot", "section", "beat", "word", "moment", "record", "hold"];
+pub(crate) const MARKER_KINDS: [&str; 8] = ["cue", "shot", "section", "beat", "word", "moment", "record", "hold"];
 
 /// Resolves every marker at check, in dependency order: a marker whose time names another marker
 /// waits for it, so a relative time keeps its offset when its marker moves. One that never
@@ -1841,6 +1841,7 @@ fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, V
         let notices = ctx.notices.borrow().len();
         ctx.markers.clear();
         done = resolve_markers(pending, ctx, &pins)?;
+        crate::cue::landed(doc, &done, ctx.tempo.as_ref(), &pins)?;
         ctx.notices.borrow_mut().truncate(notices);
     }
     ctx.notices.borrow_mut().extend(moved);

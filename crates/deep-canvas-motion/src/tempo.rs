@@ -2,7 +2,8 @@
 //! starting where the previous one ends, and hold whole bars, so each boundary lands on a downbeat.
 //! Beat to time is closed form: 60·x ÷ b0 for a constant tempo, exact in integers when the BPM is,
 //! and t0 + 60·N ÷ (b1 − b0) · ln(bpm(x) ÷ b0) for a ramp linear in beats, in pinned math; both
-//! round to the nearest flick.
+//! round to the nearest flick. Section starts are kept to 2⁻³² flick, so a beat rounds once, at
+//! the end, rather than once per section before it.
 
 use deep_canvas::grammar::{Time, TimeContext, FLICKS_PER_SECOND};
 use deep_canvas::ops;
@@ -14,6 +15,14 @@ use crate::doc::Refused;
 fn milli(x: f64) -> Option<i128> {
     let m = x * 1000.0;
     (m.is_finite() && m.abs() < 1e15 && m == m.round()).then_some(m as i128)
+}
+
+/// A section start's units: 2⁻³² flick.
+const SUB: i128 = 1 << 32;
+
+/// `sub` rounded to the nearest flick, if it is on the clock.
+fn flick(sub: i128) -> Option<i64> {
+    i64::try_from(round_div(sub, SUB)).ok()
 }
 
 /// n ÷ d rounded to the nearest integer, a half away from zero (d > 0).
@@ -32,7 +41,8 @@ struct Section {
     bar: u64,
     /// Beats in a bar (the meter's upper number).
     per_bar: u64,
-    start: i64,
+    /// In [`SUB`] units.
+    start: i128,
     bpm: f64,
     /// The BPM at its end: `bpm` without a ramp.
     to_bpm: f64,
@@ -57,30 +67,36 @@ fn bad(code: &'static str, path: String, detail: Value) -> Refused {
 }
 
 impl Section {
-    /// Flicks from the section's start to `x` beats into it.
-    fn offset(&self, x: f64, f32_seconds: bool) -> i64 {
-        let f = FLICKS_PER_SECOND as f64;
+    /// [`SUB`] units from the section's start to `x` beats into it, or `None` past any clock.
+    fn offset(&self, x: f64, f32_seconds: bool) -> Option<i128> {
+        let f = FLICKS_PER_SECOND as f64 * SUB as f64;
+        let sub = |v: f64| (v.is_finite() && v.abs() < (1u128 << 120) as f64).then(|| v.round() as i128);
         if self.to_bpm != self.bpm {
             // ∫ 60 ÷ bpm(b) db over [0, x], bpm(b) = b0 + (b1 − b0)·b ÷ N.
             let (b0, b1, n) = (self.bpm, self.to_bpm, self.span);
-            let s = 60.0 * n / (b1 - b0) * ops::log1p((b1 - b0) * x / (n * b0));
-            return (s * f).round() as i64;
+            return sub(60.0 * n / (b1 - b0) * ops::log1p((b1 - b0) * x / (n * b0)) * f);
         }
         if f32_seconds {
             let s = (x as f32) * ((60.0 / self.bpm) as f32);
-            return (s * FLICKS_PER_SECOND as f32).round() as i64;
+            return sub(f64::from((s * FLICKS_PER_SECOND as f32).round()))
+                .and_then(|v| v.checked_mul(SUB));
         }
         match (milli(x), milli(self.bpm)) {
-            (Some(xm), Some(bm)) if bm > 0 => {
-                round_div(60 * i128::from(FLICKS_PER_SECOND) * xm, bm) as i64
-            }
-            _ => (60.0 * x / self.bpm * f).round() as i64,
+            (Some(xm), Some(bm)) if bm > 0 => (60 * i128::from(FLICKS_PER_SECOND) * SUB)
+                .checked_mul(xm)
+                .map(|n| round_div(n, bm)),
+            _ => sub(60.0 * x / self.bpm * f),
         }
+    }
+
+    /// Its start in flicks (on the clock, as [`Tempo::read`] checks).
+    fn at(&self) -> i64 {
+        flick(self.start).unwrap_or(i64::MAX)
     }
 
     /// The beats from the section's start to `t`, inverted from `offset` (for the notice's fix).
     fn beats_at(&self, t: i64) -> f64 {
-        let s = (t - self.start) as f64 / FLICKS_PER_SECOND as f64;
+        let s = (t as f64 - self.start as f64 / SUB as f64) / FLICKS_PER_SECOND as f64;
         if self.to_bpm != self.bpm {
             let (b0, b1, n) = (self.bpm, self.to_bpm, self.span);
             return n * b0 / (b1 - b0) * ops::expm1(s * (b1 - b0) / (60.0 * n));
@@ -119,7 +135,9 @@ impl Tempo {
             };
             let (bpm, span) = (num("bpm")?, num("span")?);
             let per_bar = match s.get("meter") {
-                Some(Value::Array(m)) if m.len() == 2 => m[0].as_u64().filter(|&n| n > 0),
+                Some(Value::Array(m)) if m.len() == 2 && m[1].as_u64().is_some_and(|u| u > 0) => {
+                    m[0].as_u64().filter(|&n| n > 0)
+                }
                 _ => None,
             }
             .ok_or_else(|| bad("bad_doc", format!("{path}/meter"), json!({})))?;
@@ -146,7 +164,7 @@ impl Tempo {
                         .map_err(|_| {
                             bad("bad_time", format!("{path}/at"), json!({"time": text}))
                         })?;
-                    (1, t)
+                    (1, i128::from(t) * SUB)
                 }
                 Some(prev) => {
                     // Each section holds whole bars, so the next starts on a downbeat.
@@ -158,14 +176,39 @@ impl Tempo {
                             json!({"span": prev.span, "meter": prev.per_bar}),
                         ));
                     }
-                    let bar = prev.bar + bars as u64;
-                    let chained = prev.start + prev.offset(prev.span, f32_seconds);
-                    (
+                    let past = || {
+                        bad(
+                            "out_of_range",
+                            format!("tempo_map/segments/{}/span", i - 1),
+                            json!({}),
+                        )
+                    };
+                    let bar = prev.bar.checked_add(bars as u64).ok_or_else(past)?;
+                    let chained =
+                        prev.start + prev.offset(prev.span, f32_seconds).ok_or_else(past)?;
+                    let explicit = tempo.chained_at(
+                        s.get("at"),
                         bar,
-                        tempo.chained_at(s.get("at"), bar, chained, ctx, &path)?,
-                    )
+                        flick(chained).ok_or_else(past)?,
+                        ctx,
+                        &path,
+                    )?;
+                    (bar, explicit.map_or(chained, |t| i128::from(t) * SUB))
                 }
             };
+            // The section ends on the clock, so every beat in it does.
+            let end = Section {
+                bar,
+                per_bar,
+                start,
+                bpm,
+                to_bpm,
+                span,
+            }
+            .offset(span, f32_seconds);
+            if end.and_then(|e| flick(start + e)).is_none() {
+                return Err(bad("out_of_range", format!("{path}/span"), json!({})));
+            }
             tempo.sections.push(Section {
                 bar,
                 per_bar,
@@ -178,7 +221,8 @@ impl Tempo {
         Ok(Some(tempo))
     }
 
-    /// A later segment's start: its chained start, checked against the `at` it gives.
+    /// A later segment's explicit start, checked against its chained start; `None` when it gives
+    /// none, or gives it as the chained bar.
     fn chained_at(
         &self,
         at: Option<&Value>,
@@ -186,13 +230,13 @@ impl Tempo {
         chained: i64,
         ctx: &TimeContext,
         path: &str,
-    ) -> Result<i64, Refused> {
+    ) -> Result<Option<i64>, Refused> {
         let Some(at) = at else {
-            return Ok(chained);
+            return Ok(None);
         };
         let text = at.as_str().unwrap_or_default();
         match Time::parse(text) {
-            Ok(Time::Beats { bar: b, beat }) if b == bar && beat == 1 => Ok(chained),
+            Ok(Time::Beats { bar: b, beat }) if b == bar && beat == 1 => Ok(None),
             Ok(Time::Beats { .. }) => Err(bad(
                 "tempo_off_chain",
                 format!("{path}/at"),
@@ -209,7 +253,7 @@ impl Tempo {
                         json!({"at": text, "explicit": explicit, "chained": chained}),
                     ));
                 }
-                Ok(explicit)
+                Ok(Some(explicit))
             }
             Err(_) => Err(bad("bad_time", format!("{path}/at"), json!({"time": text}))),
         }
@@ -226,16 +270,22 @@ impl Tempo {
         if beat == 0 || beat > s.per_bar {
             return Err(format!("beat {beat} is not in a bar of {}", s.per_bar));
         }
-        let x = ((bar - s.bar) * s.per_bar + beat - 1) as f64;
+        let past = || format!("{bar}:{beat}b is past the tempo map's end");
+        let x = (bar - s.bar)
+            .checked_mul(s.per_bar)
+            .and_then(|x| x.checked_add(beat - 1))
+            .ok_or_else(past)? as f64;
         if x > s.span {
-            return Err(format!("{bar}:{beat}b is past the tempo map's end"));
+            return Err(past());
         }
-        Ok(s.start + s.offset(x, self.f32_seconds))
+        s.offset(x, self.f32_seconds)
+            .and_then(|o| flick(s.start + o))
+            .ok_or_else(past)
     }
 
     /// The bar:beat that lands exactly on `t`, if one does.
     pub fn beat_on(&self, t: i64) -> Option<String> {
-        let s = self.sections.iter().rev().find(|s| s.start <= t)?;
+        let s = self.sections.iter().rev().find(|s| s.at() <= t)?;
         let x = s.beats_at(t).round().max(0.0) as u64;
         (x.saturating_sub(1)..=x + 1).find_map(|x| {
             let (bar, beat) = (s.bar + x / s.per_bar, x % s.per_bar + 1);
@@ -245,11 +295,7 @@ impl Tempo {
 
     /// The beat nearest `t`, in flicks, on the map (ties to the earlier).
     pub fn nearest_beat(&self, t: i64) -> Option<i64> {
-        let i = self
-            .sections
-            .iter()
-            .rposition(|s| s.start <= t)
-            .unwrap_or(0);
+        let i = self.sections.iter().rposition(|s| s.at() <= t).unwrap_or(0);
         let mut candidates = Vec::new();
         for s in &self.sections[i..(i + 2).min(self.sections.len())] {
             let x = s.beats_at(t).floor().max(0.0) as u64;
@@ -265,7 +311,7 @@ impl Tempo {
 
     /// The nearest bar:beat at or before `t`, for a literal no beat lands on.
     pub fn beat_before(&self, t: i64) -> Option<String> {
-        let s = self.sections.iter().rev().find(|s| s.start <= t)?;
+        let s = self.sections.iter().rev().find(|s| s.at() <= t)?;
         let x = s.beats_at(t).floor().max(0.0) as u64;
         Some(format!("{}:{}b", s.bar + x / s.per_bar, x % s.per_bar + 1))
     }
@@ -307,5 +353,39 @@ mod tests {
             json!([{"bpm": 96, "meter": [4, 4], "span": 6}, {"bpm": 120, "meter": [4, 4], "span": 8}]),
         );
         assert_eq!(r.unwrap_err().code, "tempo_not_whole_bars");
+    }
+
+    #[test]
+    fn a_beat_past_a_chained_start_rounds_once() {
+        // 4 beats at 74 BPM end at 2,288,432,432.43 flicks, and a 110 BPM beat is 384,872,727.27:
+        // 2:2b is 2,673,305,159.70, nearest 2,673,305,160, not the sum of the two roundings.
+        let t = tempo(json!([{"at": "0s", "bpm": 74, "meter": [4, 4], "span": 4}, {"at": "2:1b", "bpm": 110, "meter": [4, 4], "span": 4}]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(t.beat(2, 2), Ok(2_673_305_160));
+    }
+
+    #[test]
+    fn a_map_past_the_clock_or_with_no_beat_unit_is_refused() {
+        for (segments, code) in [
+            (
+                json!([{"bpm": 120, "meter": [4, 4], "span": 1e300}, {"at": "2:1b", "bpm": 120, "meter": [4, 4], "span": 4}]),
+                "out_of_range",
+            ),
+            (
+                json!([{"bpm": 0.001, "meter": [4, 4], "span": 4_000_000}]),
+                "out_of_range",
+            ),
+            (
+                json!([{"bpm": 120, "meter": [4, "x"], "span": 4}]),
+                "bad_doc",
+            ),
+        ] {
+            assert_eq!(
+                tempo(segments.clone()).map(|_| ()).unwrap_err().code,
+                code,
+                "{segments}"
+            );
+        }
     }
 }

@@ -387,10 +387,22 @@ impl Program {
             motion: motion.clone(),
         };
         // Only a document with frames is laid out; it is refused here only when a key glides
-        // its layout, since the layout is otherwise not motion's to check.
+        // its layout, since the layout is otherwise not motion's to check. A glide needs a frame
+        // to lay out and a host that lays it out, or the layout would hold and the glide be lost.
         let frames = items_json.values().any(|i| i.get("kind").and_then(Value::as_str) == Some("frame@1"));
+        let glides = motion.channels.iter().filter(|c| c.glide.is_some());
+        for c in glides.clone() {
+            let frame = items_json.get(&c.target.owner).and_then(|i| i.get("kind")).and_then(Value::as_str) == Some("frame@1");
+            if !frame || program.options.layout.is_none() {
+                return Err(Refused {
+                    code: "layout_refused",
+                    path: format!("channels/{}/target", c.id),
+                    detail: Some(Box::new(json!({"why": if frame { "this host has no auto layout solve to glide it" } else { "only a frame@1 is laid out" }, "item": c.target.owner}))),
+                });
+            }
+        }
         if let (Some(solve), true) = (program.options.layout, frames) {
-            let glides = motion.channels.iter().any(|c| c.glide.is_some());
+            let glides = glides.count() > 0;
             match layouts(doc, &motion, solve) {
                 Ok(l) => program.layout = Some(l),
                 Err(r) if glides => return Err(r),
@@ -556,9 +568,10 @@ impl Program {
             let Some(glide) = &self.motion.channels[*c].glide else { continue };
             let mut u = [0.0];
             glide.sample_into(doc_t, &mut u);
-            let i = (u[0].floor().max(0.0) as usize).min(at_keys.len().saturating_sub(1));
+            let Some(last) = at_keys.len().checked_sub(1) else { continue };
+            let i = (u[0].floor().max(0.0) as usize).min(last);
             let s = u[0] - i as f64;
-            let next = &at_keys[(i + 1).min(at_keys.len() - 1)];
+            let next = &at_keys[(i + 1).min(last)];
             for (id, from) in &at_keys[i] {
                 let to = next.get(id).unwrap_or(from);
                 out.insert(id.clone(), std::array::from_fn(|k| from[k] + (to[k] - from[k]) * s));
@@ -1417,7 +1430,7 @@ impl Program {
             let Some((_, doc::DriverInput::List(filter))) = driver.inputs.iter().find(|(n, _)| *n == f.list) else {
                 continue;
             };
-            let entries = self.occurrences(filter).ok_or_else(|| Refused {
+            let entries = self.occurrences(filter, controls).ok_or_else(|| Refused {
                 code: "ref_unresolved",
                 path: format!("{path}/vars/{}/list", f.list),
                 detail: Some(Box::new(json!({"driver": driver.id, "list": filter.list}))),
@@ -1551,9 +1564,13 @@ impl Program {
 
     /// The occurrences a list names: `markers.<kind>`, or `input.<control>`, the input track's
     /// entries for a control, each a match whose payload is `{value}`.
-    fn occurrences(&self, filter: &crate::occurrence::Filter) -> Option<Vec<crate::occurrence::Occurrence>> {
+    fn occurrences(&self, filter: &crate::occurrence::Filter, controls: Option<&Map<String, Value>>) -> Option<Vec<crate::occurrence::Occurrence>> {
         use crate::occurrence::Occurrence;
+        // A list names a marker kind or a declared control; any other would read empty forever.
         if let Some(kind) = filter.list.strip_prefix("markers.") {
+            if !doc::MARKER_KINDS.contains(&kind) {
+                return None;
+            }
             return Some(
                 self.motion
                     .markers
@@ -1572,6 +1589,9 @@ impl Program {
             );
         }
         let control = filter.list.strip_prefix("input.")?;
+        if !controls.is_some_and(|c| c.contains_key(control)) {
+            return None;
+        }
         Some(
             self.options
                 .input
