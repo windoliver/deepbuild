@@ -1,0 +1,7 @@
+{
+  "id": "deepbuild/runbook",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "actions": ["ext.runbook.restart"],
+  "requires": { "preview": ["deep.registerView", "deep.registerAction"] }
+}
