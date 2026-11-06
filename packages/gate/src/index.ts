@@ -25,8 +25,8 @@ export type { StallCount, StallRule } from './stalls.js';
 export type { ClaimedCheck, ClaimedRuns, ClaimRequirement, RecordedFailure, RecordedRun, VerdictPlant } from './claim.js';
 export { addedLines, endsEmpty, errorShape, leftOpen, limitsIn, openTasks, placeholders, solveLine, toldToRun, unitless } from './open.js';
 export type { LeftOpen, TaskListFacts } from './open.js';
-export { attributeStack } from './stack.js';
-export type { Served, StackRecords, Trees } from './stack.js';
+export { attributeStack, environmentFindings } from './stack.js';
+export type { RunFacts, Served, StackRecords, Trees } from './stack.js';
 export { DEFAULTS, simulate } from './scheduler.js';
 export type {
   Agent, CheckDef, CheckOnClaim, ClaimRecord, Config, Delivery, Held, HeldRecord, LoopFacts, Needs, Origin, QueueEvent, RunContext, RunRecord,
