@@ -40,6 +40,8 @@ function get(url, from) {
 }
 
 async function service() {
+  // No request sent shows nothing about the endpoint: the run ran nothing, never a pass.
+  if (!(Number.isInteger(spec.requests) && spec.requests > 0)) return done(0, 'ran_nothing');
   const answers = [];
   const started = performance.now();
   for (let i = 0; i < spec.requests; i++) {
@@ -144,6 +146,15 @@ function document() {
       const line = p.lineOf[base] ?? 1;
       const cites = [...claim.matchAll(CITE)].map((c) => ({ at: c.index, end: c.index + c[0].length, path: c[1], pointer: c[2] }));
       if (!cites.length) { at('document: cited', spec.document, line, `line ${line}: the claim "${claim.trim()}" cites no source`); continue; }
+      // A citation cites only what is there: a file that exists, and a pointer that names something in it.
+      const cited = new Set();
+      for (const c of cites) {
+        const where = `${c.path}#${c.pointer}`;
+        if (cited.has(where)) continue;
+        cited.add(where);
+        try { statSync(join(checkout, c.path)); } catch { at('document: cited', spec.document, line, `line ${line}: the claim "${claim.trim()}" cites ${where}, and ${c.path} isn't there`); continue; }
+        if (pointed(source(c.path), c.pointer) === undefined) at('document: cited', spec.document, line, `line ${line}: the claim "${claim.trim()}" cites ${where}, which names nothing in ${c.path}`);
+      }
       const outside = (i) => !cites.some((c) => i >= c.at && i < c.end);
       for (const n of claim.matchAll(NUMBER)) {
         if (!outside(n.index)) continue;

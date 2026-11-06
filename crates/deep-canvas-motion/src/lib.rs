@@ -10,6 +10,7 @@
 mod canonical;
 pub mod clock;
 pub mod constraint;
+mod cue;
 pub mod curve;
 pub mod doc;
 pub mod eval;
@@ -18,7 +19,9 @@ pub mod input;
 pub mod insert;
 pub mod kit;
 pub mod modifier;
+mod occurrence;
 pub mod module;
 pub mod program;
 pub mod schedule;
 pub mod spring;
+mod tempo;

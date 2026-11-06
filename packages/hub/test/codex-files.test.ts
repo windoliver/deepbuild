@@ -2,6 +2,7 @@
 // file, a goal record joined to its tool call, a store row newer than the rollout, a row's readings, the row's reason,
 // a stale slow check beside a failed one.
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { writeThrough } from '../src/agent-files.js';
 import { codexReadings, heartbeatsGone, rowReadings, standingReadings } from '../src/codex-loops.js';
 import { readTrust, tomlTables, withoutServer, withServer } from '../src/codex-settings.js';
+import { openCheckouts, type Checkouts, type CheckoutsOptions, type RecordedRun } from '@deepbuild/gate';
 import { GateRunner } from '../src/gate-runner.js';
 import { answerWaitMs } from '../src/mcp.js';
 import { render } from '../src/status.js';
@@ -173,6 +175,21 @@ describe('the status text', () => {
   });
 });
 
+/** The base-commit service (#31) beside a repo, as the hub opens it: every claim's snapshot and checkout come from it. */
+const checkoutsBeside = (repo: string): Promise<Checkouts> =>
+  openCheckouts({ store: `${repo}-store`, root: `${repo}-checkouts`, kinds: [], host: {} as CheckoutsOptions['host'], leases: {} as CheckoutsOptions['leases'], now: Date.now });
+
+/** A run's record as the hub's runner keeps it with the gate before the run ends (runs.ts, #30): what the verdict judges. */
+const ran = (gate: GateRunner, run: string, outcome: 'passed' | 'failed'): 'passed' | 'failed' => {
+  const sha = createHash('sha256').update('').digest('hex');
+  gate.recorded(run, {
+    run, outcome, testsRun: 1, evidence: [], read: [], mask: null, exit: { code: outcome === 'passed' ? 0 : 1, signal: null, cause: 'exit' },
+    failures: outcome === 'failed' ? [{ test: run, file: 'f', line: 1, stack: null, assertion: true, message: 'expected 1 to be 2' }] : [],
+    output: { stdout: '', stderr: '', sha256: { stdout: sha, stderr: sha } }, attempts: [], seeded: [], contract: null,
+  } as RecordedRun);
+  return outcome;
+};
+
 describe('a slow check that can\'t start', () => {
   it('is BLOCKED, never pending, and the next one still runs', async () => {
     const repo = temp();
@@ -181,14 +198,17 @@ describe('a slow check that can\'t start', () => {
     writeFileSync(join(repo, 'f'), '1\n');
     git('add', '.');
     git('commit', '-qm', 'base');
-    const gate = new GateRunner({
+    const checkouts = await checkoutsBeside(repo);
+    const gate: GateRunner = new GateRunner({
       raw: async () => [], now: Date.now, append: async () => undefined, core: undefined as never,
-      start: async (r) => { if (r.check === 'x') throw Error('no start'); return `run:${r.check}`; }, ended: async () => 'passed', slots: () => ({ free: 1 }), budget_ms: 0, hold_ms: 1000,
+      start: async (r) => { if (r.check === 'x') throw Error('no start'); return `run:${r.check}`; }, ended: async (run): Promise<string> => ran(gate, run, 'passed'), slots: () => ({ free: 1 }), budget_ms: 0, hold_ms: 1000,
+      checkouts: () => checkouts, invalid: async () => undefined, stopping: () => false, stoodIn: async () => undefined,
     });
-    const check = (name: string) => ({ check: name, approved: name, on_base: 'fails' as const, expected_ms: 60_000 });
-    await gate.stop({ session: 's', claim: 'claim:a', cwd: repo, checks: [check('x'), check('y')], stopAt: Date.now() });
+    const check = (name: string) => ({ check: name, approved: name, command: `sh '${name}'`, covers: [], depth: 'unit' as const, on_base: 'fails' as const, asserts: [], expected_ms: 60_000 });
+    await gate.stop({ session: 's', claim: 'claim:a', task: 'task:1', cwd: repo, base: 'b', requirements: [], checks: [check('x'), check('y')], stopAt: Date.now() });
     await gate.turnEnded('claim:a');
-    await new Promise((done) => setTimeout(done, 50));
+    // The base runs a fix check takes are made with real git: wait, bounded, until no slow check is still to end.
+    for (let i = 0; i < 200 && gate.slowStanding('claim:a').pending; i++) await new Promise((done) => setTimeout(done, 50));
     expect(gate.slowStanding('claim:a')).toEqual({ pending: false, failed: ['x BLOCKED'] });
   });
 });
@@ -201,19 +221,22 @@ describe('a stale slow check', () => {
     writeFileSync(join(repo, 'f'), '1\n');
     git('add', '.');
     git('commit', '-qm', 'base');
+    const checkouts = await checkoutsBeside(repo);
     let free = 0;
-    const gate = new GateRunner({
+    const gate: GateRunner = new GateRunner({
       raw: async () => [], now: Date.now, append: async () => undefined, core: undefined as never,
-      start: async (r) => `run:${r.check}`, ended: async () => 'failed', slots: () => ({ free }), budget_ms: 0, hold_ms: 1000,
+      start: async (r) => `run:${r.check}`, ended: async (run): Promise<string> => ran(gate, run, 'failed'), slots: () => ({ free }), budget_ms: 0, hold_ms: 1000,
+      checkouts: () => checkouts, invalid: async () => undefined, stopping: () => false, stoodIn: async () => undefined,
     });
-    const check = (name: string) => ({ check: name, approved: name, on_base: 'fails' as const, expected_ms: 60_000 });
-    await gate.stop({ session: 's', claim: 'claim:a', cwd: repo, checks: [check('x'), check('y')], stopAt: Date.now() });
+    const check = (name: string) => ({ check: name, approved: name, command: `sh '${name}'`, covers: [], depth: 'unit' as const, on_base: 'fails' as const, asserts: [], expected_ms: 60_000 });
+    await gate.stop({ session: 's', claim: 'claim:a', task: 'task:1', cwd: repo, base: 'b', requirements: [], checks: [check('x'), check('y')], stopAt: Date.now() });
     await gate.turnEnded('claim:a');
-    await gate.stop({ session: 's', claim: 'claim:b', cwd: repo, checks: [check('x')], stopAt: Date.now() });
+    await gate.stop({ session: 's', claim: 'claim:b', task: 'task:1', cwd: repo, base: 'b', requirements: [], checks: [check('x')], stopAt: Date.now() });
     free = 1;
     // The newer claim's x stays out of the queue, so only y of the older claim runs.
     await gate.turnEnded('claim:a');
-    await new Promise((done) => setTimeout(done, 50));
+    // The base runs a fix check takes are made with real git: wait, bounded, until no slow check is still to end.
+    for (let i = 0; i < 200 && gate.slowStanding('claim:a').pending; i++) await new Promise((done) => setTimeout(done, 50));
     expect(gate.slowStanding('claim:a')).toEqual({ pending: false, failed: ['y FAIL'] });
   });
 });

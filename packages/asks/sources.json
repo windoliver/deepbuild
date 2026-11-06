@@ -36,6 +36,78 @@
     }
   },
   {
+    "source": "effect.pr",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Open a pull request from this branch?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Open it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Hold the PR",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "3422314410c7336bcce4f5e07eff6ad39cb9eb58032c239b352d000a270d1053",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "effect.commit",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Commit this?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Merge it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Hold the merge",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "3422314410c7336bcce4f5e07eff6ad39cb9eb58032c239b352d000a270d1053",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
     "source": "effect.merge",
     "kind": "authority",
     "fixture": {
@@ -605,6 +677,11 @@
           {
             "id": "wait",
             "label": "Leave it blocked",
+            "decision": "none"
+          },
+          {
+            "id": "agent",
+            "label": "The agent can do it",
             "decision": "none"
           }
         ],
@@ -1481,6 +1558,82 @@
         "pinned_to": {
           "kind": "evidence",
           "ref": "5d1c0b0a3f2e4d6c8b7a9e1f0d2c3b4a5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "question.unblock",
+    "kind": "unblock",
+    "fixture": {
+      "ask": {
+        "kind": "unblock",
+        "question": "Sign in to GitHub in your own terminal?",
+        "options": [
+          {
+            "id": "done",
+            "label": "I did it",
+            "decision": "none"
+          }
+        ],
+        "recommended": "done",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "done",
+        "provisional": false,
+        "owner": "you",
+        "key": "aa25bab5b110ee4a5581c310577d1d3b7ad363d77eafb502b243e6f02ee27bba",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "1b9d9ab15d6372fa7f019e1632f27774fd80212ad1e822ad8153f4b23f21dfca"
+        },
+        "steps": [
+          "Run gh auth login in your own terminal"
+        ],
+        "where": "your terminal",
+        "why": "the push needs a GitHub token",
+        "unblocks": [
+          "task:01K74FX2B4D6F8H0K2M4P6R8T0"
+        ],
+        "proves": "auth.unit"
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "question.choice",
+    "kind": "choice",
+    "fixture": {
+      "ask": {
+        "kind": "choice",
+        "question": "Keep the store on SQLite or plain files?",
+        "options": [
+          {
+            "id": "sqlite",
+            "label": "SQLite",
+            "decision": "none"
+          },
+          {
+            "id": "files",
+            "label": "Plain files",
+            "decision": "none"
+          }
+        ],
+        "recommended": "sqlite",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "sqlite",
+        "provisional": false,
+        "owner": "you",
+        "key": "0b68e2ff8a1045d156e9951dd26f8eea9f25a65e1a0ec365cf0a65364ad31b03",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "f99b1a47a7b50a87a18927c5d036025fb3dd80eb3de61100ac280b79467654ac"
         }
       },
       "at_deadline": {
