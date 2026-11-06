@@ -5,6 +5,7 @@
 //! and the lint lane (`scripts/canvas-lint.mjs`) refuses anything else.
 
 pub mod base64;
+pub mod blend;
 pub mod budget;
 pub mod camera;
 pub mod canon;

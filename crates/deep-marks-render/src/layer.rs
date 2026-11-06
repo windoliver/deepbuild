@@ -62,6 +62,32 @@ pub fn gpui(
     crate::macos::picture(cx, &marks, size, planted)
 }
 
+fn status_look(look: &Value) -> Result<(crate::Look, Value), Value> {
+    match crate::look(Some(look), deep_canvas_marks::look::Distance::Everywhere) {
+        Some(Ok(found)) => Ok(found),
+        Some(Err(refusal)) => Err(refusal.to_json()),
+        None => Err(refused("bad_input", "look")),
+    }
+}
+
+/// `look`'s status map, if it has one.
+pub fn status_map(look: &Value) -> Result<Option<deep_canvas_marks::look::Status>, Value> {
+    Ok(status_look(look)?.0.status)
+}
+
+/// A document's status marks at `t` under `look`.
+pub fn status_marks(
+    doc: &serde_json::Map<String, Value>,
+    items: &serde_json::Map<String, Value>,
+    record: &deep_canvas_marks::scene::Record,
+    look: &Value,
+) -> Result<Vec<deep_canvas_marks::scene::StatusMark>, Value> {
+    let (look, _) = status_look(look)?;
+    let palette = palette_of(&look, Theme::Light);
+    deep_canvas_marks::scene::status_marks(doc, items, record, look.status.as_ref(), palette)
+        .map_err(|r| refused(r.code, &r.path))
+}
+
 /// A document's status marks and their legend at `t`, alone over transparent black, as GPUI
 /// draws them after every writer layer of `frame` (#385's window); straight alpha.
 #[cfg(target_os = "macos")]
@@ -73,16 +99,9 @@ pub fn status(
     look: &Value,
     frame: &deep_canvas_marks::scene::Frame,
 ) -> Result<image::RgbaImage, Value> {
-    let (look, _) = match crate::look(Some(look), deep_canvas_marks::look::Distance::Everywhere) {
-        Some(Ok(found)) => found,
-        Some(Err(refusal)) => return Err(refusal.to_json()),
-        None => return Err(refused("bad_input", "look")),
-    };
-    let palette = palette_of(&look, Theme::Light);
-    let marks =
-        deep_canvas_marks::scene::status_marks(doc, items, record, look.status.as_ref(), palette)
-            .map_err(|r| refused(r.code, &r.path))?;
-    crate::macos::status_picture(cx, &marks, frame, palette)
+    let marks = status_marks(doc, items, record, look)?;
+    let (look, _) = status_look(look)?;
+    crate::macos::status_picture(cx, &marks, frame, palette_of(&look, Theme::Light))
 }
 
 /// The first item of `marks` GPUI's paths can't draw exactly (#385): a gradient past R1's two

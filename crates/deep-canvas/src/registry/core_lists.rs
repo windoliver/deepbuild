@@ -281,7 +281,7 @@ fn gpu_function() -> RegistryDef {
     )
     .planted(
         "calls_no_step",
-        json!({"exact": false, "body": ["blend", "a", "b"]}),
+        json!({"exact": false, "body": ["no_such_step", "a", "b"]}),
     )
 }
 
