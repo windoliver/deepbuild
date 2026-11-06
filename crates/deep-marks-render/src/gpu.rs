@@ -258,6 +258,11 @@ impl Vello2d {
         }
     }
 
+    /// The format it draws into.
+    pub fn format(&self) -> wgpu::TextureFormat {
+        self.format
+    }
+
     /// `marks` at zoom 1 over transparent black into `view`, `size` px, encoded on `encoder`.
     #[allow(clippy::too_many_arguments)]
     pub fn draw<'d>(
@@ -361,50 +366,67 @@ impl Vello2d {
             &view,
             options,
         )?;
-        let row = (size[0] * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("vello_gpu picture read back"),
-            size: u64::from(row) * u64::from(size[1]),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        encoder.copy_texture_to_buffer(
-            texture.as_image_copy(),
-            wgpu::TexelCopyBufferInfo {
-                buffer: &buffer,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(row),
-                    rows_per_image: None,
-                },
-            },
-            extent,
-        );
-        queue.submit([encoder.finish()]);
-        let (tx, rx) = std::sync::mpsc::channel();
-        buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
-        });
-        let _ = device.poll(wgpu::PollType::wait_indefinitely());
-        if !matches!(rx.recv(), Ok(Ok(()))) {
-            return Err(refused("no_read_back", "vello_gpu picture"));
-        }
-        let data = buffer
-            .slice(..)
-            .get_mapped_range()
-            .map_err(|_| refused("no_read_back", "vello_gpu picture"))?;
-        let bgra = self.format == wgpu::TextureFormat::Bgra8Unorm;
-        let mut out = Vec::with_capacity((size[0] * size[1] * 4) as usize);
-        for y in 0..size[1] as usize {
-            let at = y * row as usize;
-            for p in data[at..at + size[0] as usize * 4].as_chunks::<4>().0 {
-                let (r, b) = if bgra { (p[2], p[0]) } else { (p[0], p[2]) };
-                out.extend_from_slice(&straight([r, p[1], b, p[3]]));
-            }
-        }
-        image::RgbaImage::from_raw(size[0], size[1], out)
-            .ok_or_else(|| refused("not_written", "vello_gpu picture"))
+        read_back(device, queue, encoder, &texture, size, self.format)
     }
+}
+
+/// `texture` read back as straight RGBA after `encoder`'s work.
+pub fn read_back(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    mut encoder: wgpu::CommandEncoder,
+    texture: &wgpu::Texture,
+    size: [u32; 2],
+    format: wgpu::TextureFormat,
+) -> Result<image::RgbaImage, Value> {
+    let extent = wgpu::Extent3d {
+        width: size[0],
+        height: size[1],
+        depth_or_array_layers: 1,
+    };
+    let row = (size[0] * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("vello_gpu picture read back"),
+        size: u64::from(row) * u64::from(size[1]),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    encoder.copy_texture_to_buffer(
+        texture.as_image_copy(),
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buffer,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(row),
+                rows_per_image: None,
+            },
+        },
+        extent,
+    );
+    queue.submit([encoder.finish()]);
+    let (tx, rx) = std::sync::mpsc::channel();
+    buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+        let _ = tx.send(r);
+    });
+    let _ = device.poll(wgpu::PollType::wait_indefinitely());
+    if !matches!(rx.recv(), Ok(Ok(()))) {
+        return Err(refused("no_read_back", "vello_gpu picture"));
+    }
+    let data = buffer
+        .slice(..)
+        .get_mapped_range()
+        .map_err(|_| refused("no_read_back", "vello_gpu picture"))?;
+    let bgra = format == wgpu::TextureFormat::Bgra8Unorm;
+    let mut out = Vec::with_capacity((size[0] * size[1] * 4) as usize);
+    for y in 0..size[1] as usize {
+        let at = y * row as usize;
+        for p in data[at..at + size[0] as usize * 4].as_chunks::<4>().0 {
+            let (r, b) = if bgra { (p[2], p[0]) } else { (p[0], p[2]) };
+            out.extend_from_slice(&straight([r, p[1], b, p[3]]));
+        }
+    }
+    image::RgbaImage::from_raw(size[0], size[1], out)
+        .ok_or_else(|| refused("not_written", "vello_gpu picture"))
 }
 
 /// A premultiplied pixel as straight alpha, as Vello CPU's pixmap gives it.

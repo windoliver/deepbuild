@@ -89,6 +89,7 @@ pub const TABLE: &[Def] = &[
     d("atomic_or@1", W, 2.0, true, COMPUTE),
     d("atomic_xor@1", W, 2.0, true, COMPUTE),
     d("bitcast@1", X, 0.0, true, ALL),
+    d("blend@1", &["base", "over"], 20.0, false, MATERIAL | PASS),
     d("camera@1", NONE, 0.0, false, MATERIAL | PASS),
     d("ceil@1", X, 1.0, true, ALL),
     d("clamp@1", &["x", "lo", "hi"], 2.0, true, ALL),
@@ -562,6 +563,15 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
                 .collect()),
             x => return Err(format!("transpose takes a matrix, not {x:?}")),
         },
+        "blend" => {
+            let (b, s) = (arg(0)?.lanes()?, arg(1)?.lanes()?);
+            let (Ok(b), Ok(s)) = (<[f64; 3]>::try_from(b), <[f64; 3]>::try_from(s)) else {
+                return Err("blend takes two rgbs".into());
+            };
+            let mode = env["mode"].as_str().and_then(crate::blend::step_mode);
+            let mode = mode.ok_or("blend's mode is every group mode but dissolve")?;
+            Vf(crate::blend::mix(mode, b, s).to_vec())
+        }
         "luminance" => {
             let c = arg(0)?.lanes()?;
             if c.len() < 3 {

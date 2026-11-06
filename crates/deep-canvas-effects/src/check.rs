@@ -649,6 +649,18 @@ impl Ctx<'_> {
                 Some("object" | "world" | "view") => Ty::V(Sc::F32, 3),
                 _ => return Err(bad("normal takes space: object, world or view".into())),
             },
+            "blend" => {
+                let mode = s.fields.get("mode").and_then(Value::as_str);
+                if mode.and_then(deep_canvas::blend::step_mode).is_none() {
+                    return Err(bad("blend takes a mode: a group's blend modes but dissolve".into()));
+                }
+                for port in ["base", "over"] {
+                    if float(&need(port)?).map_err(bad)? != Ty::V(Sc::F32, 3) {
+                        return Err(bad(format!("blend's {port} is a vec3")));
+                    }
+                }
+                Ty::V(Sc::F32, 3)
+            }
             "luminance" => {
                 match float(&need("rgb")?).map_err(bad)? {
                     Ty::V(Sc::F32, 3) => {}
