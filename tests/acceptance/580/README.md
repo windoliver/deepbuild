@@ -201,6 +201,16 @@ the issue says. A hub that doesn't list the plant is BLOCKED, never a pass. Beyo
 come from what the sample logged and what Docker shows, so a hub that writes the record and does nothing fails: a
 `reused` step logged by the sample, an app in the wrong folder, a clone still in `pg_database`.
 
+## Redrafts
+
+- **AC1's wrong-program test** is replaced by `start-steps-redraft.test.ts`, written blind on a dispute, from the issue,
+  the design and this README, with no implementation read. The `(wrong program)` test in `start-steps.test.ts` stays in
+  that file unchanged, and no longer counts. It could pass on no program: `criterion()` reaches `passed(third)`, whose
+  first assertion is `expect(environmentFailures(...)).toEqual([])`, and Vitest prints that list as `[ Array(1) ]`, so the
+  message it read could never hold `install` or the keys. The redraft runs the same scenario and reads the third run's
+  `run.finished.findings` directly, as AC2's plants do: a line holding `environment@1`, `install`, the key the second run
+  recorded for install, and a second, different key. AC1's main test is unchanged.
+
 ## What this doesn't test
 
 - **Not yet run past the base:** each session, claim, task and journey ran on the base up to the missing `stack.served`
