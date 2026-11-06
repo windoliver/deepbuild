@@ -103,6 +103,8 @@ const LOOP_TURNS = 20;
 const LOOP_MS = 10 * 60_000;
 /** What a prompt held because you answered to hold the loop says. */
 const HOLDING = "DeepBuild held this prompt: you said to hold this session's turns that another session's messages start until you prompt it.";
+/** What a prompt held because its loop ask closed with no answer says. */
+const CLOSED = "DeepBuild held this prompt: the ask about this session's turns that another session's messages start closed with no answer, so they wait until you prompt it.";
 /** How long after a session is first seen its issue is compared, so its process's lead is linked first. */
 const ISSUE_SETTLE_MS = 5_000;
 /** A session with no hook for this long is no longer in the repo. */
@@ -152,11 +154,13 @@ export class Siblings {
   private async restoreLoops(): Promise<void> {
     const rows = (await this.o.raw(`SELECT id, session_id, ts, json_extract(data, '$.from') AS origin FROM events WHERE kind = 'user.ask' AND ts >= ? AND session_id IS NOT NULL ORDER BY log_pos`, [this.o.now() - LOOP_MS])) as { id: string; session_id: string; ts: number; origin: string }[];
     for (const r of rows) this.turn(r.session_id, r.id, r.origin, r.ts);
-    // A loop ask still open, or answered to hold them, holds its session's next such prompt again, unless you prompted it since.
-    const open = (await this.o.raw(`SELECT id, key, session_id, created FROM asks WHERE session_id IS NOT NULL AND (status IN ('open', 'later') OR answer NOT LIKE '%go-on%') AND (question LIKE '% Let them go on?' OR question LIKE '% Let it go on?')`)) as { id: string; key: string | null; session_id: string; created: number }[];
+    // A loop ask still open, answered to hold them or closed with no answer holds its sessions' next such prompts again,
+    // each unless you prompted it since.
+    const open = (await this.o.raw(`SELECT id, session_id, created, question FROM asks WHERE session_id IS NOT NULL AND (status IN ('open', 'later') OR answer IS NULL OR answer NOT LIKE '%go-on%') AND (question LIKE '% Let them go on?' OR question LIKE '% Let it go on?')`)) as { id: string; session_id: string; created: number; question: string }[];
     for (const a of open) {
-      // Its key, loop:<sessions>:<when>, names the pair it holds.
-      const pair = a.key?.startsWith('loop:') ? a.key.split(':').slice(1, -1) : [a.session_id];
+      // The record holds its key hashed: its question names the pair.
+      const named = /^Sessions (\S+) \(.+?\) and (\S+) \(/.exec(a.question);
+      const pair = named ? [named[1]!, named[2]!] : [a.session_id];
       const held = { ask: `ask:${a.id}`, pair, at: a.created };
       for (const id of pair) {
         const yours = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'user.ask' AND session_id = ? AND ts > ? AND json_extract(data, '$.from') IN ('person', 'app') LIMIT 1`, [id, a.created]);
@@ -194,18 +198,16 @@ export class Siblings {
       // Read each time: an undone default can be answered again.
       const [row] = (await this.o.raw(`SELECT status, answer FROM asks WHERE id = ?`, [open.ask.slice(4)])) as { status: string; answer: string | null }[];
       if (row && row.status !== 'open' && row.status !== 'later') {
-        if (row.answer === null) {
-          // Closed with no answer: nothing waits on it, and a loop still going asks you again.
-          for (const id of open.pair) if (this.loops.get(id) === open) this.loops.delete(id);
-          open = undefined;
-        } else if (row.answer.includes('go-on')) {
-          for (const id of open.pair) this.loops.delete(id);
-          for (const id of open.pair) this.turns.set(id, (this.turns.get(id) ?? []).filter((t) => t.at > now));
-          return undefined;
-        } else {
-          // You said to hold them: held until you prompt the session, never asked again.
-          return HOLDING;
+        // Closed with no answer, or answered to hold them: held until you prompt the session, never asked again.
+        if (row.answer === null) return CLOSED;
+        if (!row.answer.includes('go-on')) return HOLDING;
+        // Your "go on" lets go the sessions this ask still holds; one another ask holds since stays with that one.
+        for (const id of open.pair) {
+          if (this.loops.get(id) !== open) continue;
+          this.loops.delete(id);
+          this.turns.set(id, (this.turns.get(id) ?? []).filter((t) => t.at > now));
         }
+        return undefined;
       }
     }
     if (!open && !this.looping(meta.session)) return undefined;
@@ -227,7 +229,8 @@ export class Siblings {
     const from = await sender().catch(() => undefined);
     if (from && from !== meta.session) {
       held.pair.push(from);
-      this.loops.set(from, held);
+      // A sender another loop ask holds stays held by that one.
+      if (!this.loops.has(from)) this.loops.set(from, held);
     }
     const count = (this.turns.get(meta.session) ?? []).filter((t) => t.peer && held.at - t.at < LOOP_MS).length;
     const names = held.pair.map((id) => `${id} (${this.map.get(id)?.agent ?? meta.agent})`).join(' and ');
