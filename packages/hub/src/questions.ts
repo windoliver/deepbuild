@@ -29,8 +29,8 @@ export type Read =
 
 /** Each effect by the words of the step an offer names: the call it would lead to, classed as the guard engine does. */
 const EFFECTS: [Effect, RegExp][] = [
-  ['merge', /\bmerge\b/i], ['pr', /\b(?:prs?|pull requests?)\b/i], ['push', /\bpush\b/i],
-  ['dispatch', /\b(?:dispatch|workflow|deploy|release|publish|ship)\b/i], ['send', /\b(?:post|send|email|reply)\b/i],
+  ['merge', /\bmerge\b(?! requests?\b)/i], ['pr', /\b(?:prs?|mrs?|pull requests?|merge requests?)\b/i], ['push', /\bpush\b/i],
+  ['dispatch', /\b(?:dispatch|workflow|deploy|release|publish|ship)\b/i], ['send', /\b(?:post|send|email|reply|file\b[^?]*\bissue)\b/i],
   ['delete', /\b(?:delete|drop the|remove the (?:branch|repo))\b/i], ['spend', /\b(?:spend|buy|pay|purchase)\b/i], ['commit', /\bcommit\b/i],
 ];
 const OFFER = /\b(?:want me to|like me to|should i|shall i|can i|may i|could i|ok to|okay to)\s+(.+?)[?.]*$/i;
