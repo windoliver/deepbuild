@@ -71,9 +71,9 @@ pub const FIRST_SCREEN: &str = "first-screen";
 
 /// `--view <id> --out <out>` from the command line, the view a shipped one (or `--first-screen`), and where `replica`
 /// takes them, `--appearance <light|dark>` as whether macOS is set to dark (#882) and `--bound <file>`, the runs and
-/// bound values to draw (#629); else the usage error is printed under `bin`'s name and the exit code is 2.
+/// bound values to draw (#629), and `--click <button>` on the first screen (#1556); else the usage error is printed under `bin`'s name and the exit code is 2.
 pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
-    let (mut view, mut path, mut dark, mut bound) = (None, None, None, None);
+    let (mut view, mut path, mut dark, mut bound, mut click) = (None, None, None, None, None);
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -82,6 +82,7 @@ pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
             "--first-screen" => view = Some(FIRST_SCREEN.to_owned()),
             "--out" => path = args.next().map(PathBuf::from),
             "--bound" if replica => bound = args.next().map(PathBuf::from),
+            "--click" if replica => click = args.next(),
             "--appearance" if replica => match args.next().as_deref() {
                 Some("light") => dark = Some(false),
                 Some("dark") => dark = Some(true),
@@ -105,11 +106,21 @@ pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
         eprintln!("{bin}: {view} is not a shipped view; the views are {shipped:?}");
         return Err(2);
     }
-    Ok((view, path, dark, bound))
+    if click.is_some() && view != FIRST_SCREEN {
+        eprintln!("{bin}: --click clicks a button on the --first-screen");
+        return Err(2);
+    }
+    Ok((view, path, dark, bound, click))
 }
 
-/// What `view_args` reads: the view, where to write, the appearance and the bound values' file.
-pub type ViewArgs = (String, PathBuf, Option<bool>, Option<PathBuf>);
+/// What `view_args` reads: the view, where to write, the appearance, the bound values' file and the button to click.
+pub type ViewArgs = (
+    String,
+    PathBuf,
+    Option<bool>,
+    Option<PathBuf>,
+    Option<String>,
+);
 
 /// Issue #629: `--bound <file>`, `{"runs": [{run, check, tool, report}], "card": [{id, bind}], "panel": [{id,
 /// bind}]}`: each run recorded from its tool's report, as the hub records it, and each bound value resolved by the
