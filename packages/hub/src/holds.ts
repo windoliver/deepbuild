@@ -241,7 +241,9 @@ export class Holds {
       const tool = call.mcp && await this.heldTool(meta, call.mcp.server, call.mcp.tool);
       if (tool) return await this.waiting(tool, call.label);
       if (call.named) {
-        const denied = await this.namedDefaults(meta, call);
+        // The planted wrong program lets a proceed cover every call of its turn, these too.
+        const covered = this.o.plant === 'proceed-covers-turn' && await this.proceeding(meta.session);
+        const denied = covered ? undefined : await this.namedDefaults(meta, call);
         if (denied) return denied;
       }
       // What the defaults settled needs no proceed's hold: a request you typed, or your yes, covers it.

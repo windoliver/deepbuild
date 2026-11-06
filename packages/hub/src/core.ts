@@ -6027,7 +6027,9 @@ export class Core {
       // An option that needs a tool the agent lacks is struck before you see it (#84).
       const reach = await this.reachOfSession(session);
       const options = (args.options as { id: string; label: string }[]).filter((o) => !struck(o.label, reach)).map((o) => ({ ...o, decision: 'none' }));
-      raised = { kind, question, options, recommended: options.some((o) => o.id === args.recommended) ? args.recommended : null };
+      const recommended = options.some((o) => o.id === args.recommended) ? args.recommended : null;
+      // With no recommendation nothing goes on: the question waits for you, its first option the default at its deadline.
+      raised = { kind, question, options, recommended, ...(recommended === null && options[0] ? { default: options[0].id } : {}) };
     }
     const pinned = await this.pinOf(s.cwd, question);
     // A question that names what it is about is keyed by the asks core from that alone (#23); one that names
