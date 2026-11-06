@@ -1,0 +1,55 @@
+#84 guard acceptance suite on the base commit d722ba3d (origin/main), 2026-11-05, before any #84 code.
+Run: npx vitest run --root tests/acceptance/84/guard --no-file-parallelism --testTimeout=600000
+     (Node 24.22.0, target/debug/deep-hook built from the base; 1-minute load 39 to 64 on 12 cores)
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/84/guard/tsconfig.json -> no errors.
+Result: Test Files 6 failed (6); Tests 11 failed (11); 44 s. Every test fails at a named assertion, or BLOCKED on a
+plant the base doesn't list. None crashes the runner. Trimmed to each test's failing assertion.
+
+After that run the load rule was narrowed and extended to `could not spool` (README, Load); asked.test.ts and
+hubside.test.ts ran again alone at load 60 to 84. Their failures below are unchanged, except that AC9's first test then
+read INCONCLUSIVE: its `git push origin HEAD` hit `could not spool` under that load, so the base's allow was not a
+reading of the hub. Its line below is from the full run. The setup behind the merge tests was proven separately on the
+base: the delivered thread reaches PASS on its head, and after "merge PR 12" and a new commit, PASS on the new head.
+
+asked.test.ts (AC9 #84.2ff63a22)
+  x in a thread whose ask names none of them, git push origin HEAD, gh pr create --fill and gh pr merge 12 are each denied ...
+    Error: AC9 #84.2ff63a22 `git push origin HEAD` must be denied; deep-hook allowed it: exit 0 after 68 ms, stdout "",
+    stderr "deep-hook: could not spool 01M6Q0DD4X84DQY5CQCS5VJ07N within the hook's 50 ms"
+  x an ask that names the push lets git push origin HEAD through and not gh pr create --fill; ...
+    Error: AC9 #84.2ff63a22 a request authorizes exactly what it names: `gh pr create --fill` must be denied; deep-hook
+    allowed it: exit 0 after 15 ms, stdout "", stderr ""
+
+mcp.test.ts (AC10 #84.a97b10d7)
+  x merge_pull_request and gh pr merge 12, in a thread whose ask names no merge, are denied naming one entry; ...
+    Error: AC10 #84.a97b10d7 `gh pr merge 12` must be denied; deep-hook allowed it: exit 0 after 23 ms, stdout "", stderr ""
+
+create-pr.test.ts (AC11 #84.b2639179)
+  x git push origin HEAD and gh pr create --fill go through, gh pr merge 12 is denied naming the rule ...
+    Error: AC11 #84.b2639179 `gh pr merge 12` must be denied; deep-hook allowed it: exit 0 after 10 ms, stdout "", stderr ""
+  x (wrong program) ... (DEEP_HUB_PLANT=ask-covers-every-effect) ...
+    Error: BLOCKED: plant ask-covers-every-effect not listed in packages/hub/src/plant.ts
+
+hubside.test.ts (AC12 #84.53261593)
+  x with the hub up gh pr merge 12 is denied and echo 'gh pr merge 12' allowed, ...
+    Error: AC12 #84.53261593 `gh pr merge 12` must be denied; deep-hook allowed it: exit 0 after 33 ms, stdout "", stderr ""
+  x (wrong program) ... (DEEP_HUB_PLANT=defaults-match-text) ...
+    Error: BLOCKED: plant defaults-match-text not listed in packages/hub/src/plant.ts
+
+from.test.ts (AC13 #84.3e19f28f)
+  x git push origin HEAD is denied naming the rule while only a subagent's report says "create PR", ...
+    Error: AC13 #84.3e19f28f with only the subagent's report saying "create PR", `git push origin HEAD` must be denied;
+    deep-hook allowed it: exit 0 after 20 ms, stdout "", stderr ""
+    -> it got past its BLOCKED step: the report is recorded from: subagent on the base.
+  x (wrong program) ... (DEEP_HUB_PLANT=reads-every-from) ...
+    Error: BLOCKED: plant reads-every-from not listed in packages/hub/src/plant.ts
+
+head-commit.test.ts (AC29 #84.1337e21d)
+  x a merge with no commit or another is denied naming the PASS's commit, through gh, MCP and the API; ...
+    Error: AC29 #84.1337e21d `gh pr merge 12` must be denied; deep-hook allowed it: exit 0 after 9 ms, stdout "", stderr ""
+    -> it got past `delivered`: the push and the PR went through and the claim was PASS on its head.
+  x (wrong program) ... (DEEP_HUB_PLANT=auto-merge-unpinned) ...
+    Error: BLOCKED: plant auto-merge-unpinned not listed in packages/hub/src/plant.ts
+
+Not run on the base: everything past each first failure, since no program yet denies these calls. AC10's rule match,
+AC12's check-mode and hub-stopped steps, AC13's typed step and AC29's allowed forms, --auto hold, --disable-auto, new
+head and `deep guard add` steps have never run; the implementer's run is their first.
