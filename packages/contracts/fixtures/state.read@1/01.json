@@ -1,0 +1,30 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8H4",
+  "kind": "state.read",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017111123,
+  "data": {
+    "workspace": "Weeklyreport3fa9c1d2",
+    "task_ref": "session:0192a3b4#1",
+    "claim": null,
+    "readings": [
+      {
+        "touch": "sales",
+        "source": "host",
+        "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "reads": [
+      {
+        "req": "R1",
+        "check": ".deepbuild/checks/total.sh",
+        "touches": [
+          "sales"
+        ]
+      }
+    ]
+  }
+}

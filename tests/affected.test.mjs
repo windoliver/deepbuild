@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -123,7 +124,7 @@ test('results come from the runners\' reports and cargo\'s lines, each by an ID 
     { type: 'fail', file: join(root, 'tests/x.test.mjs'), name: 'suite', nesting: 0, suite: true, error: { message: '1 subtest failed' } },
     { type: 'pass', file: join(root, 'tests/y.test.ts'), name: 'top › inner' },
   ].map((row) => JSON.stringify(row)).join('\n');
-  assert.deepEqual(reportResults(root, report), { failures: [{ id: 'tests/x.test.mjs › suite › budget', state: 'BLOCKED', message: 'Error: BLOCKED: on battery' }], passed: ['tests/y.test.ts › top › inner'] });
+  assert.deepEqual(reportResults(root, report, 'node'), { failures: [{ id: 'tests/x.test.mjs › suite › budget', state: 'BLOCKED', message: 'Error: BLOCKED: on battery' }], passed: ['tests/y.test.ts › top › inner'] });
   const output = ['     Running unittests src/lib.rs (target/debug/deps/r1-0123abcd)', 'test tests::a ... ok', 'test tests::b ... FAILED', 'error: test failed, to rerun pass `-p r1 --lib`',
     '     Running ../../tests/acceptance/8/card.rs (target/debug/deps/acceptance_8-89abcdef)', 'error: test failed, to rerun pass `-p r2 --test acceptance_8`'].join('\n');
   assert.deepEqual(cargoResults(output, 101, crates(root)), {
@@ -147,4 +148,48 @@ test('a failure main already has reads apart from a new one, and a timing budget
   // Clippy and rustfmt findings key by file without lines, as lint findings do.
   assert.deepEqual(lintFindings('/repo', 'clippy', 'error: this `map_or` can be simplified\n   --> crates/r/../../tests/acceptance/327/card.rs:452:17\nDiff in /repo/tests/acceptance/327/common.rs:3:\n', 101).map(({ key }) => key),
     ['clippy: tests/acceptance/327/card.rs this `map_or` can be simplified', 'fmt: tests/acceptance/327/common.rs']);
+});
+
+test('a report line that can\'t be parsed, such as a record a full disk cut short with the next glued on, reads INCONCLUSIVE for each file it names, and the rest still reads', (t) => {
+  const { root } = repo(t, {});
+  const record = (type, file, name) => JSON.stringify({ type, file: join(root, file), name });
+  const cut = record('skip', 'tests/b.test.ts', 'two');
+  const report = [record('pass', 'tests/a.test.ts', 'one'), cut.slice(0, cut.indexOf('"name"') + 10) + record('fail', 'tests/c.test.ts', 'three'), '{"type":"pass","fi',
+    record('pass', 'tests/e.test.ts', 'five').slice(0, -20) + record('fail', 'tests/f.test.ts', 'six'), record('pass', 'tests/d.test.ts', 'four')].join('\n');
+  const { failures, passed } = reportResults(root, report, 'node');
+  // A cut inside a record's file names no file of its own, so the line answers for it.
+  assert.deepEqual(failures.map(({ id, state }) => `${state} ${id}`), ['INCONCLUSIVE tests/b.test.ts › (file)', 'INCONCLUSIVE tests/c.test.ts › (file)', 'INCONCLUSIVE report line 3', 'INCONCLUSIVE report line 4', 'INCONCLUSIVE tests/f.test.ts › (file)']);
+  assert.deepEqual(passed, ['tests/a.test.ts › one', 'tests/d.test.ts › four']);
+});
+
+// A file-size limit cuts a write short at the limit and refuses the next, as a full disk does; prlimit lifts it mid-run.
+test('the vitest reporter finishes a record a full disk cut short once space is back, and a record that never lands leaves its report unfinished, never a pass', { skip: process.platform !== 'linux' && 'prlimit is Linux\'s' }, (t) => {
+  const { root } = repo(t, {});
+  const report = join(root, 'vitest.jsonl');
+  // The first record runs past the limit, or with fit it ends exactly at it, so the next is refused whole.
+  const first = (fit) => 'a'.repeat(fit ? 4096 - Buffer.byteLength(`${JSON.stringify({ type: 'pass', file: join(root, 'tests/a.test.ts'), name: '' })}\n`) : 6000);
+  const child = (name, lift) => {
+    rmSync(report, { force: true });
+    return spawnSync('prlimit', ['--fsize=4096:unlimited', process.execPath, '--input-type=module', '-e', `
+      import { spawnSync } from 'node:child_process';
+      const { default: Reporter } = await import(${JSON.stringify(new URL('../scripts/proof-vitest-reporter.mjs', import.meta.url).href)});
+      const reporter = new Reporter();
+      const result = (file, name, state) => { try { reporter.onTestCaseResult({ name, parent: { type: 'module' }, module: { moduleId: ${JSON.stringify(root)} + file }, result: () => ({ state, errors: [] }) }); } catch {} };
+      result('/tests/a.test.ts', ${JSON.stringify(name)}, 'passed');
+      if (${lift}) spawnSync('prlimit', ['--pid', String(process.pid), '--fsize=unlimited']);
+      result('/tests/b.test.ts', 'b', 'failed');
+      reporter.onTestRunEnd([], []);
+    `], { env: { ...process.env, DEEP_PROOF_VITEST_REPORT: report }, encoding: 'utf8' });
+  };
+  assert.equal(child(first(false), true).status, 0);
+  assert.deepEqual(reportResults(root, readFileSync(report, 'utf8'), 'vitest'), { failures: [{ id: 'tests/b.test.ts › b', state: 'FAIL', message: '' }], passed: [`tests/a.test.ts › ${first(false)}`] });
+  // Space that never comes back fails the run naming the report, and the part that landed reads INCONCLUSIVE, never a pass.
+  const full = child(first(false), false);
+  assert.notEqual(full.status, 0);
+  assert.match(full.stderr, /vitest\.jsonl/);
+  assert.deepEqual(reportResults(root, readFileSync(report, 'utf8'), 'vitest').failures.map(({ id, state }) => `${state} ${id}`), ['INCONCLUSIVE tests/a.test.ts › (file)', 'INCONCLUSIVE vitest report']);
+  // A failure refused whole leaves no part to read, and the report that never finished still holds the run unknown.
+  child(first(true), false);
+  assert.equal(readFileSync(report).length, 4096);
+  assert.deepEqual(reportResults(root, readFileSync(report, 'utf8'), 'vitest').failures.map(({ id, state }) => `${state} ${id}`), ['INCONCLUSIVE vitest report']);
 });
