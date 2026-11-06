@@ -1,0 +1,57 @@
+#84 sort suite on the base commit d722ba3d (origin/main), Node 24.22.0, target/debug/deep-hook built from it.
+
+  npx vitest run --root tests/acceptance/84/sort --no-file-parallelism --testTimeout=600000
+  node node_modules/typescript/bin/tsc -p tests/acceptance/84/sort/tsconfig.json     -> no errors
+
+The machine was shared and heavily loaded the whole time (12 cores; 1-minute load 32 to 91). Two kinds of run, 15:28-15:33
+and 15:43-15:46. The first ran every file. The second reran held, sendback, queued and typed after harness fixes: `deep
+setup` in the worlds that call deep_ask (its relation exists only after setup, and setup's batch had to be undone), the
+Codex home made before setup, the PR body listing what's left (the first body was refused by #322's rule, not an
+authority rule), and the journey's wait moved into its test file (a `sleep` in the script left its run uncounted). A run
+between them, at load 85, skipped five tests as INCONCLUSIVE; its readings are not used. After the second run, ride.test.ts's
+smallest-case reading and held.test.ts's no-line INCONCLUSIVE rule changed; both sit behind assertions that fail first on the
+base, so neither file was run again with those bytes.
+
+budgets.test.ts's item 95 passed in the first run, on a hub that sorts nothing, so it read no sorter. It then gained the
+checks that each stop was sorted. At 15:48, with those bytes, it was INCONCLUSIVE: "deep-hook couldn't hand PostToolUse to the
+hub within its budget". Its new checks are not yet seen failing on the base, and no test here has ever passed a sorter.
+
+Result: 19 tests. 17 fail, 1 INCONCLUSIVE (AC24's item 95), 1 pass (AC24's planted reading). 5 of the 17 are BLOCKED on plants
+the base doesn't list.
+
+PASS on the base:
+  AC24 budgets.test.ts   (wrong program) the 20 ms reading fails on a planted reading that adds 25 ms.
+
+FAIL on the base, each at its first failing assertion:
+  AC1  proceed.test.ts   the stop ending "want me to run the tests?" goes back to the agent with "proceed":
+                         exit 0 after 2832 ms, stdout {"systemMessage":"PASS 1/1 · 2 tests · next: you · receipt"}
+  AC23 proceed.test.ts   the same assertion, the same stop.
+  AC23 proceed.test.ts   BLOCKED: plant proceed-unrecorded not listed in packages/hub/src/plant.ts
+  AC8  authority.test.ts (control) the in-scope "Want me to run the tests?" is answered "proceed", so a sorter that proceeds
+                         on nothing fails here: exit 0 after 2597 ms, record none
+  AC17 stillopen.test.ts the stop whose list names the unstarted "A dropped connection is retried", inside the ask, goes back
+                         with "proceed": a plain send-back on R2, the word absent, and nothing on the line for the billing item
+  AC25 nokey.test.ts     the stop ending "Should it be blue?" goes back asking for deep_ask: exit 0, PASS 1/1
+  AC25 nokey.test.ts     BLOCKED: plant keys-ask-from-words not listed in packages/hub/src/plant.ts
+  AC28 ride.test.ts      the stop ending "want me to run the e2e suite?" gets a reply carrying the proceed: a plain send-back
+  AC28 ride.test.ts      BLOCKED: plant proceed-alone not listed in packages/hub/src/plant.ts
+  AC4  queued.test.ts    item 51: the question raised while "Use the sandbox model instead, it needs no license." sat in the
+                         queue is held, after deep_ask: it reached you: status "shown", age 3070 ms
+  AC5  typed.test.ts     typing "use option B" closes the choice as answered: none. The asks core marks typed text, but the
+                         hub appends nothing until its next deadline tick.
+  AC26 held.test.ts      item 71: the stop isn't blocked and no claim.sent_back is recorded, as #325 left it, but its verdict
+                         line doesn't name the FAIL. First run: "sent back 1/3 · 2 tests · next: agent · receipt". Second
+                         run, with deep_ask returning at once: an empty line after the stop's 30 s hold, at load 60+, the stop
+                         not yet in the record. That reading would now be INCONCLUSIVE (a loaded machine and no line).
+  AC26 held.test.ts      item 72: replied 73.2 s after the stop, after the journey ended: run.finished passed before the reply.
+                         The observed Codex stop is held for its journey with the unit check failing.
+  AC26 held.test.ts      BLOCKED: plant sends-back-held-stop not listed in packages/hub/src/plant.ts
+  AC27 sendback.test.ts  item 81: the stop is sent back naming R1, then the PR call is held until you answer: `gh pr create`
+                         went through, exit 0 after 23 ms.
+  AC27 sendback.test.ts  item 82: a choice with a recommended option is provisional: ask.created says provisional false.
+  AC27 sendback.test.ts  BLOCKED: plant holds-every-ask not listed in packages/hub/src/plant.ts
+
+Not reached on the base, since an earlier assertion stops the test:
+  AC8's five offers (the control fails first). AC26's later stops and the send-back after your answer, and item 73.
+  AC4's item 52. AC5's push half. AC27's yes on the PR ask. AC28's smallest case. AC25's second stop.
+  Each plant's own failure: a test that names a plant can't show its message until the implementer lists the plant.

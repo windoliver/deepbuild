@@ -18,7 +18,7 @@
         "search_code": { "counts": "read" },
         "search_repositories": { "counts": "read" },
         "list_commits": { "counts": "read" },
-        "create_pull_request": { "counts": "change" },
+        "create_pull_request": { "counts": "change", "effect": "pr" },
         "update_pull_request": { "counts": "change" },
         "create_issue": { "counts": "change" },
         "add_issue_comment": { "counts": "send", "effect": "send" },

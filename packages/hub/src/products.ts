@@ -336,6 +336,79 @@ export class Products {
     return undefined;
   }
 
+  // ---- A check's stack (#580): its install and a worktree's come from the same kept copy.
+
+  /** The products the checkout's done.yaml lists among `paths`, each with the key its files make there. */
+  async declared(folder: string, paths: readonly string[]): Promise<{ name: string; path: string; key: string }[]> {
+    const listed = this.productsAt(folder).filter((p) => paths.includes(p.path));
+    return Promise.all(listed.map(async (p) => ({ name: p.name, path: p.path, key: await keyIn(p, folder, fileIn(folder)) })));
+  }
+  private async repoId(worktree: string): Promise<string | undefined> { return (await this.repoAt(worktree))?.id; }
+  async holds(worktree: string, name: string, key: string): Promise<boolean> {
+    await this.ready;
+    const repo = await this.repoId(worktree);
+    const e = repo && this.found(repo, name, key);
+    return !!e && existsSync(this.productDir(e));
+  }
+  /** Clones the entry to `dst`, never linked; why it couldn't. */
+  async placeIn(worktree: string, name: string, key: string, dst: string): Promise<string | undefined> {
+    const repo = await this.repoId(worktree);
+    const e = repo && this.found(repo, name, key);
+    if (!e) return `no entry of ${name} holds key ${key}`;
+    const r = await cloneTree(this.productDir(e), dst);
+    if (!r.cloned) return r.why;
+    e.used = this.o.now();
+    e.served += 1;
+    this.save();
+    return undefined;
+  }
+  /** Keeps a folder a check's install left, cloned, under its key: a product like any built from the default branch. */
+  async keep(worktree: string, name: string, path: string, key: string, src: string): Promise<void> {
+    await this.ready;
+    const repo = await this.repoId(worktree);
+    if (!repo || !existsSync(src)) return;
+    const stage = join(this.store, '.building', `${repo}-${name}-${randomBytes(4).toString('hex')}`);
+    const dst = join(stage, 'src', path);
+    mkdirSync(dirname(dst), { recursive: true });
+    try {
+      const r = await cloneTree(src, dst);
+      if (!r.cloned) return;
+      const now = this.o.now();
+      const entry: Entry = { repo, name, path, key, commit: '', built: now, finished: now, used: now, served: 0, bytes: await sizeOf(dst) };
+      mkdirSync(join(this.store, repo), { recursive: true });
+      if (this.found(repo, name, key)) { this.found(repo, name, key)!.used = now; this.save(); return; }
+      renameSync(stage, this.entryDir(entry));
+      this.index.entries = [...this.index.entries, entry];
+      this.save();
+      await this.prune(repo, name);
+    } finally {
+      rmSync(stage, { recursive: true, force: true });
+    }
+  }
+  /** A declared cache's kept copy, by the install key it was left on; a folder of the store's, gone when the repo's entry on that key goes. */
+  private cacheDir(repo: string, key: string, path: string): string { return join(this.store, repo, `caches@${key}`, path); }
+  async placeCache(worktree: string, key: string, path: string, dst: string): Promise<boolean> {
+    const repo = await this.repoId(worktree);
+    const src = repo && this.cacheDir(repo, key, path);
+    if (!src || !existsSync(src)) return false;
+    rmSync(dst, { recursive: true, force: true });
+    mkdirSync(dirname(dst), { recursive: true });
+    return (await cloneTree(src, dst)).cloned;
+  }
+  async keepCache(worktree: string, key: string, path: string, src: string): Promise<void> {
+    const repo = await this.repoId(worktree);
+    if (!repo) return;
+    const dst = this.cacheDir(repo, key, path);
+    rmSync(dst, { recursive: true, force: true });
+    mkdirSync(dirname(dst), { recursive: true });
+    await cloneTree(src, dst);
+    // At most the two most recent install keys' caches stay, as their installs do.
+    const kept = this.index.entries.filter((e) => e.repo === repo).map((e) => e.key);
+    for (const d of await readdir(join(this.store, repo))) {
+      if (d.startsWith('caches@') && d !== `caches@${key}` && !kept.includes(d.slice('caches@'.length))) await rm(join(this.store, repo, d), { recursive: true, force: true });
+    }
+  }
+
   // ---- The default branch's entries.
 
   /** Builds each product's entry for the default branch as last fetched, once per new key; never fetches. */
