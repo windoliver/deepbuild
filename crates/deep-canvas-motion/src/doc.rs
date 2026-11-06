@@ -1237,6 +1237,8 @@ fn modifier_of(
     transport: &Transport,
     path: &str,
     channel: &str,
+    // The channel's id when its times are on the timeline (not in a clip), for the literal notice.
+    placed: Option<&str>,
 ) -> Result<Modifier, Refused> {
     let Value::Object(m) = m else {
         return refuse("bad_doc", path);
@@ -1315,7 +1317,10 @@ fn modifier_of(
                 Some(e) => named_of(e, &format!("{at}/ease"))?,
             };
             ModKind::Pulse {
-                at: time_of(body.get("at"), ctx, &format!("{at}/at"))?,
+                at: match placed {
+                    Some(id) => placed_time_of(body.get("at"), ctx, &format!("{at}/at"), id)?,
+                    None => time_of(body.get("at"), ctx, &format!("{at}/at"))?,
+                },
                 span: time_of(body.get("span"), ctx, &format!("{at}/span"))?,
                 amount: num("amount", 1.0)?,
                 shape,
@@ -1461,7 +1466,10 @@ fn channel_of(
         Some(Value::Array(list)) => list
             .iter()
             .enumerate()
-            .map(|(i, m)| modifier_of(m, ctx, transport, &format!("{path}/modifiers/{i}"), path))
+            .map(|(i, m)| {
+                let at = format!("{path}/modifiers/{i}");
+                modifier_of(m, ctx, transport, &at, path, (!in_clip).then_some(id))
+            })
             .collect::<Result<_, _>>()?,
         Some(_) => return refuse("bad_doc", format!("{path}/modifiers")),
     };
@@ -2027,7 +2035,7 @@ fn placement_of(
         }
     }
     let start = match (p.get("start"), p.get("after")) {
-        (Some(t), None) => Start::At(time_of(Some(t), ctx, &format!("{path}/start"))?),
+        (Some(t), None) => Start::At(placed_time_of(Some(t), ctx, &format!("{path}/start"), id)?),
         (None, Some(Value::String(after))) => Start::After {
             placement: after.clone(),
             offset: match p.get("offset") {

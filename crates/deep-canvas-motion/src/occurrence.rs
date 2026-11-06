@@ -2,7 +2,8 @@
 //! closed function list, Occurrence lists). A driver var binds a list with an optional filter
 //! (`kinds`, `a`, `b`, `tags`, `where`), filtered once at check; `count`, `last`, `since`, `next`,
 //! `rank` and `inside` read the matches at or before t, and a payload field reads as
-//! `last(list).field` or `next(list).field`. Times read in seconds, as a driver's `time` does.
+//! `last(list).field` or `next(list).field`. Times read in seconds from the transport's start,
+//! held to its span, as a driver's `time` does.
 //!
 //! Each read is written into the driver's expression as one var the core evaluates, so the core's
 //! closed function list and its interval forms are unchanged.
@@ -64,7 +65,8 @@ pub struct Read {
 const F: f64 = FLICKS_PER_SECOND as f64;
 
 impl Read {
-    /// The read at `t`, or `None` where no match gives one (the driver then takes its fallback).
+    /// The read at `t` on the driver's clock, or `None` where no match gives one (the driver then
+    /// takes its fallback).
     pub fn at(&self, t: i64) -> Option<f64> {
         let n = self.times.partition_point(|&x| x <= t);
         let latest = n.checked_sub(1);
@@ -108,7 +110,11 @@ impl Read {
             How::Between(lo, hi) => Iv::new(0.0, (hi + 1 - lo) as f64),
             How::Inside => Iv::new(0.0, 1.0),
             How::Rank => Iv::new(0.0, (n - 1.0).max(0.0)),
-            How::Since => Iv::new(0.0, span),
+            // The latest since is from the first match to the span's end.
+            How::Since => Iv::new(
+                0.0,
+                (span - self.times.first().map_or(0.0, |&x| x as f64 / F)).max(0.0),
+            ),
             How::Last | How::Next => hull(&mut self.times.iter().map(|&x| x as f64 / F)),
             How::LastField(v) | How::NextField(v) => {
                 hull(&mut v.iter().copied().filter(|v| v.is_finite()))
