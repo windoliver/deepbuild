@@ -26,9 +26,11 @@ function value(q) {
   return v;
 }
 const shown = (n) => n.toLocaleString('en-US', { maximumFractionDigits: 6 });
+/** A number as people write it: digits, optionally grouped by commas in threes, and a decimal part. */
+const WRITTEN = /^-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?$/;
 
 for (const n of spec.numbers) {
-  const stated = Number(n.stated.replace(/,/g, ''));
+  const stated = WRITTEN.test(n.stated) ? Number(n.stated.replace(/,/g, '')) : NaN;
   if (!Number.isFinite(stated)) throw new Error(`${n.where}: ${JSON.stringify(n.stated)} isn't a number`);
   // Held to the decimals written: 1.8 holds for 1.79, 1,500 doesn't for 1499.
   const decimals = n.stated.split('.')[1]?.length ?? 0;

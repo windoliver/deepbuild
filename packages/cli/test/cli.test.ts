@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +21,12 @@ describe('deep checkout command', () => {
     expect(result.status).toBe(0);
     expect(result.stdout.split('\n')[0]).toBe('DeepBuild 0.0.0');
     expect(result.stdout).not.toContain('\x1b');
+  });
+
+  it.each(['help', '-h'])('shows the same help for deep %s as for --help', (word) => {
+    const result = run(word);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(run('--help').stdout);
   });
 
   it('prints its checkout version', () => {
@@ -50,6 +56,32 @@ describe('deep checkout command', () => {
       const result = spawnSync(process.execPath, [cli, 'env', ...args(home)], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
       expect(existsSync(join(home, '.deepbuild')), `deep env set the home up (${result.stderr.trim().slice(0, 300)})`).toBe(false);
       expect(result.status, why).toBe(status);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 70_000);
+});
+
+describe('deep on a Node older than its engines field', () => {
+  // A real older Node, as Homebrew installs one; none on this machine leaves the check unrun, never passed.
+  const older = ['/opt/homebrew/bin/node', '/usr/local/bin/node', '/usr/bin/node'].find((node) => {
+    const v = spawnSync(node, ['-p', 'process.versions.node'], { encoding: 'utf8' }).stdout?.trim();
+    return v && v.localeCompare('24.22.0', undefined, { numeric: true }) < 0;
+  });
+  it('names the Node it needs and the one it found, and exits 2 before anything runs', () => {
+    if (!older) throw Error('BLOCKED: no Node older than 24.22.0 on this machine to run the CLI with');
+    const home = realpathSync(mkdtempSync(join(tmpdir(), 'deep-cli-node-')));
+    try {
+      const found = spawnSync(older, ['-p', 'process.versions.node'], { encoding: 'utf8' }).stdout.trim();
+      // A wrong program that sets up anyway must never reach the real service manager: launchctl here only fails.
+      mkdirSync(join(home, 'bin'));
+      for (const name of ['launchctl', 'systemctl']) { writeFileSync(join(home, 'bin', name), '#!/bin/sh\nexit 1\n'); chmodSync(join(home, 'bin', name), 0o755); }
+      const result = spawnSync(older, [fileURLToPath(new URL('../dist/main.js', import.meta.url)), 'status'], { encoding: 'utf8', env: { HOME: home, PATH: `${join(home, 'bin')}:/usr/bin:/bin`, DEEP_HUB_LAUNCHER: join(home, 'bin', 'launchctl') }, timeout: 60_000 });
+      expect(result.stderr).toContain('Node 24.22.0 or newer');
+      expect(result.stderr).toContain(found);
+      expect(result.status).toBe(2);
+      expect(existsSync(join(home, '.deepbuild')), 'nothing was set up').toBe(false);
+      expect(existsSync(join(home, '.claude')), 'no agent settings were written').toBe(false);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

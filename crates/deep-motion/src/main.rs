@@ -17,8 +17,19 @@ use deep_canvas_motion::eval::{frame_with, position, Validity};
 use deep_canvas_motion::follow::Source;
 use deep_canvas_motion::input::Entry;
 use deep_canvas_motion::insert::insert;
-use deep_canvas_motion::program::{track_hash, Options, Planted, Program};
+use deep_canvas_motion::program::{track_hash, Boxes, Layout, Options, Planted, Program};
 use serde_json::{json, Map, Value};
+
+/// #491: the canvas's auto layout (deep-canvas-marks, through its one shaper), which a frame's
+/// layout glide reads.
+fn solve_layout(doc: &Value) -> Result<Boxes, (String, String)> {
+    thread_local! {
+        static SHAPER: std::cell::RefCell<deep_text::Shaper> = std::cell::RefCell::new(deep_text::Shaper::new());
+    }
+    SHAPER
+        .with(|s| deep_canvas_marks::layout::solve(doc, &mut s.borrow_mut()))
+        .map_err(|r| (r.code.to_string(), r.item))
+}
 
 fn bad_input() -> Value {
     json!({"ok": false, "code": "bad_input"})
@@ -51,6 +62,7 @@ fn planted_of(v: Option<&Value>) -> Option<Planted> {
             "table_form_samples_8" => Planted::TableFormSamples8,
             "pulse_leaves_residue" => Planted::PulseLeavesResidue,
             "back_ignores_params" => Planted::BackIgnoresParams,
+            "beat_grid_f32_seconds" => Planted::BeatGridF32,
             _ => return None,
         },
         Some(_) => return None,
@@ -145,6 +157,7 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         planted,
         unwrap: flag("unwrap").unwrap_or(false),
         scope,
+        layout: Some(Layout(solve_layout)),
     };
     let program = match Program::compile_with(doc, options) {
         Ok(p) => p,
@@ -267,6 +280,10 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         if let Some(track) = &track {
             frame["input"] = track.clone();
         }
+        // #491: each laid-out item's box at this time, where the document lays any out.
+        if let Some(boxes) = program.boxes(f.doc_t).filter(|b| !b.is_empty()) {
+            frame["boxes"] = json!(boxes);
+        }
         frames.push(frame);
         previous = Some(t);
     }
@@ -286,6 +303,10 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         .map(|c| json!({"id": c.id, "from": c.from, "to": c.to, "t": c.at}))
         .collect();
     let mut answer = json!({"ok": true, "order": program.order_names, "frames": frames, "markers": markers, "cuts": cuts, "hash": hash});
+    // #491: the notices the check raised, such as literal_time_with_tempo_map.
+    if !motion.notices.is_empty() {
+        answer["notices"] = json!(motion.notices);
+    }
     // #490: each channel's and driver's bound, the one the hard-range check reads.
     if flag("bounds") == Some(true) {
         let bound = |b: Option<(f64, f64)>| match b {
