@@ -438,12 +438,12 @@ impl Table {
         }
     }
 
-    /// Every session in the record, in the order each first appears, with its task's title and its state.
     /// A session's newest readings, oldest first, at most [`READINGS`].
     pub fn readings(&self, session: &str) -> &[String] {
         self.sessions.get(session).map_or(&[], |s| &s.readings)
     }
 
+    /// Every session in the record, in the order each first appears, with its task's title and its state.
     pub fn every_session(&self) -> Vec<(String, String, State)> {
         self.order
             .iter()

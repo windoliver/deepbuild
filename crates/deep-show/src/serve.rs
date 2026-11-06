@@ -46,6 +46,8 @@ use crate::shared::ulid_of;
 pub const WINDOW: usize = 16 * 1024 * 1024;
 /// One read of the PTY, and one frame to the host, at most.
 const CHUNK: usize = 64 * 1024;
+/// The host's answers to a program's queries waiting for it to read its input, at most.
+const ANSWERS: usize = 64;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Plant {
@@ -585,14 +587,18 @@ impl Serve {
         };
         let pid = child.id();
         {
-            let mut f = t.stream.flow.lock().expect("flow");
-            if self.plant != Plant::ModesLeftOn {
-                f.queue.push_back(Item::Reset);
+            // Under the reading lock, so no byte the old program left is read after the reset.
+            let _held = t.stream.reading.lock().expect("reading");
+            {
+                let mut f = t.stream.flow.lock().expect("flow");
+                if self.plant != Plant::ModesLeftOn {
+                    f.queue.push_back(Item::Reset);
+                }
+                f.closed = false;
+                t.stream.wake.notify_all();
             }
-            f.closed = false;
-            t.stream.wake.notify_all();
+            *t.master.lock().expect("master") = Arc::new(master);
         }
-        *t.master.lock().expect("master") = Arc::new(master);
         self.spawn_reader(Arc::clone(&t.master), pid, Arc::clone(&t.stream));
         if let Some(t) = self.terms.get_mut(&id) {
             t.program = reaped(child);
@@ -779,12 +785,21 @@ impl Serve {
                 }
             });
         }
+        // The answers to the program's queries are written on a thread of their own, so a
+        // program that reads none of its input stalls only them, never the host's other lines;
+        // past ANSWERS waiting, more are dropped.
+        let (answers, to_write) = std::sync::mpsc::sync_channel::<Vec<u8>>(ANSWERS);
+        thread::spawn(move || {
+            for bytes in to_write {
+                let m = Arc::clone(&master.lock().expect("master"));
+                let _ = (&*m).write_all(&bytes);
+            }
+        });
         thread::spawn(move || {
             for line in BufReader::new(out).lines() {
                 let Ok(line) = line else { break };
                 let to_program = |bytes: &[u8]| {
-                    let m = Arc::clone(&master.lock().expect("master"));
-                    let _ = (&*m).write_all(bytes);
+                    let _ = answers.try_send(bytes.to_vec());
                 };
                 if let Some(n) = line.strip_prefix("A ") {
                     let mut f = stream.flow.lock().expect("flow");
