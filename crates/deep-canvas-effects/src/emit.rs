@@ -697,6 +697,18 @@ impl W<'_> {
                 Some("position") => "frame.eye.xyz".into(),
                 _ => "frame.eye.w".into(),
             },
+            "blend" => {
+                if !self.globals.contains("fn blend_mix") {
+                    self.globals.push_str(deep_canvas::blend::WGSL);
+                }
+                let mode = s.fields.get("mode").and_then(Value::as_str);
+                format!(
+                    "blend_mix({}u, {}, {})",
+                    mode.and_then(deep_canvas::blend::step_mode).unwrap_or(0),
+                    self.arg_as(s, "base", &Ty::V(Sc::F32, 3)),
+                    self.arg_as(s, "over", &Ty::V(Sc::F32, 3))
+                )
+            }
             "luminance" => format!(
                 "dot({}, vec3<f32>(0.2126, 0.7152, 0.0722))",
                 self.arg_as(s, "rgb", &Ty::V(Sc::F32, 3))

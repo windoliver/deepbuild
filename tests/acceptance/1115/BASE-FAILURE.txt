@@ -1,0 +1,314 @@
+# #1115 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (58862789; no skips key, no evidence record, lanes.mjs reads no test's state)
+
+$ node --test 'tests/acceptance/1115/*.test.mjs'
+(the checkout's path reads <checkout>, temporary folders <tmp>, home paths ~; each failure shows its assertion's message,
+without the output of the run it dumps)
+
+Run with the machine loaded: load averages: 57.96 68.21 68.84, on 12 cores. No test needs an idle machine, and none skipped.
+
+ℹ tests 49
+ℹ pass 7
+ℹ fail 42
+ℹ cancelled 0
+ℹ skipped 0
+ℹ duration_ms 28423.102875
+
+Node counts the 41 tests and 8 subtests together. 35 tests and 7 subtests fail, which is the 42. Of the 35, two fail only
+through their subtests, so 40 assertions are shown below; none is an import error or a timeout. The 7 that pass, 6 tests and
+1 subtest, are marked ✔ and explained after the list.
+
+✖ #1115.0eeb3f9a with --timed, a run in which a vitest budget skips INCONCLUSIVE summarises INCONCLUSIVE, never PASS
+✖ #1115.0eeb3f9a with --timed, a run in which a node --test budget skips INCONCLUSIVE summarises INCONCLUSIVE, never PASS
+✖ #1115.0eeb3f9a with no flag too, an unlisted skip in an untimed file summarises INCONCLUSIVE and is listed
+✖ #1115.67b0561c in affected.mjs a listed skip leaves the summary PASS and is printed; under a different note it summarises INCONCLUSIVE
+✖ #1115.dbbdd753 [owner answer 1(a)] a skips entry listing an approved BLOCKED-by-design test leaves the lane the state its other tests give, and the summary prints the listed BLOCKED test
+✖ #1115.67b0561c [owner answer 2(a)] a reading-only skip is listable, keyed on its test id and its full note
+✖ #1115.67b0561c [owner answer 2(a)] a reading-only entry holding only a prefix of the note does not cover it: the key is the full note
+✖ #1115.67b0561c [owner answer 2(a)] a reading-only entry is refused for a file in the timed list
+✖ #1115.67b0561c [owner answer 2(a)] a reading-only entry is refused for a test carrying a criterion tag
+✖ #1115.b81207df the unit lane's evidence record names host, platform, tree hash and every test's state, from vitest, node --test and cargo
+✖ #1115.b81207df a passing unit lane's record holds each of its tests PASS
+✖ #1115.b81207df each lane writes a record, a lane that fails and one that ran nothing too, with no test list to fill
+✖ #1115.3a2181d7 a vitest test failing with INCONCLUSIVE: … reads INCONCLUSIVE in lanes.mjs, not FAIL
+✖ #1115.3a2181d7 a node --test test failing with INCONCLUSIVE: … reads INCONCLUSIVE in lanes.mjs, not FAIL
+✖ #1115.3a2181d7 a test failing with BLOCKED: … takes that state in lanes.mjs too
+✔ #1115.3a2181d7 a real failure beside a test failing with INCONCLUSIVE: … leaves the lane FAIL
+✔ #1115.07ca71fc failures on main equal today's: affected.mjs with the merge base's scripts and with the change's, on one fixture set, list the same FAIL ids
+✔ #1115.07ca71fc failures on main equal today's: the unit lane with the merge base's scripts and with the change's reads FAIL on one fixture set, and each names the failing tests
+✔ #1115.07ca71fc failures on main equal today's: known-failures.json keeps the merge base's failures, lint and timing
+▶ #1115.82b1c824 a change to the skips key with no approval tag fails the guard: an entry added, removed or changed, the key added or removed, the file deleted
+  ✖ an added entry
+  ✖ a removed entry
+  ✖ an entry's note changed
+  ✖ the key added to a file without it
+  ✖ the key removed
+  ✖ the file deleted
+✖ #1115.82b1c824 a change to the skips key with no approval tag fails the guard: an entry added, removed or changed, the key added or removed, the file deleted
+✖ #1115.82b1c824 a change to the skips key with an unsigned approval tag fails the guard
+✖ #1115.82b1c824 a change to the skips key with a tag signed by a key the approvers file does not list fails the guard
+✖ #1115.82b1c824 a change to the skips key under a signed approval tag naming the file passes the guard, by that approved proposal
+✖ #1115.82b1c824 a signed approval does not stretch to a commit that also carries a file it does not name
+✖ #1115.82b1c824 an uncommitted change to the skips key fails the guard
+▶ #1115.82b1c824 a merge that resolves a conflict in known-failures.json by editing skips fails the guard; one that keeps skips passes
+  ✔ the resolution keeps skips
+  ✖ the resolution adds an entry
+✖ #1115.82b1c824 a merge that resolves a conflict in known-failures.json by editing skips fails the guard; one that keeps skips passes
+✔ #1115.82b1c824 an affected.mjs --record rewrite of the other keys passes the guard with no tag
+✖ #1115.1f2f1fa0 a vitest job ended with no grant reads INCONCLUSIVE, not FAIL: its files read so in affected.mjs, and a later run with a grant passes
+✖ #1115.1f2f1fa0 a vitest job ended with no grant reads INCONCLUSIVE when a line of output came before the throttle's
+✔ #1115.1f2f1fa0 a unit lane whose vitest job ended with no grant reads INCONCLUSIVE, not FAIL
+✖ #1115.67b0561c a listed id skipping under a different note than its entry's makes the lane INCONCLUSIVE and is listed
+✖ #1115.67b0561c an entry with another id does not cover a skip under its note
+✖ #1115.67b0561c a skip whose id and exact note prefix are listed leaves the lane PASS, and the summary prints it
+✖ #1115.67b0561c a listed skip leaves a lane another skip makes INCONCLUSIVE as it is, and both are printed
+✖ #1115.67b0561c a noteless entry covers a noteless skip, and a listed id skipping under a note is a different note
+✖ #1115.67b0561c with DEEP_880_TOUCH_ID set on a machine that is not the reference Mac, 880's listed opt-in entry does not cover its notReference() skip and the lane is INCONCLUSIVE
+✖ #1115.dbbdd753 a lanes.mjs unit run with an unlisted vitest skip reports the lane INCONCLUSIVE and lists the skip
+✖ #1115.dbbdd753 a lanes.mjs unit run with an unlisted node --test skip reports the lane INCONCLUSIVE and lists the skip
+✖ #1115.dbbdd753 a node --test suite skipped whole reports the lane INCONCLUSIVE and lists the suite
+✖ #1115.dbbdd753 an unlisted vitest skip whose note starts with BLOCKED reports the lane BLOCKED, beside an INCONCLUSIVE one
+✖ #1115.dbbdd753 an unlisted node --test skip whose note starts with BLOCKED reports the lane BLOCKED
+
+## Each failure's assertion
+
+tests/acceptance/1115/affected.test.mjs:10:1
+✖ #1115.0eeb3f9a with --timed, a run in which a vitest budget skips INCONCLUSIVE summarises INCONCLUSIVE, never PASS
+  AssertionError: a budget skipped INCONCLUSIVE and the summary reads otherwise
+
+tests/acceptance/1115/affected.test.mjs:25:1
+✖ #1115.0eeb3f9a with --timed, a run in which a node --test budget skips INCONCLUSIVE summarises INCONCLUSIVE, never PASS
+  AssertionError: a budget skipped INCONCLUSIVE and the summary reads otherwise
+
+tests/acceptance/1115/affected.test.mjs:40:1
+✖ #1115.0eeb3f9a with no flag too, an unlisted skip in an untimed file summarises INCONCLUSIVE and is listed
+  AssertionError: an unlisted skip and the summary reads otherwise
+
+tests/acceptance/1115/affected.test.mjs:51:1
+✖ #1115.67b0561c in affected.mjs a listed skip leaves the summary PASS and is printed; under a different note it summarises INCONCLUSIVE
+  AssertionError: the summary does not print the listed skip with its note
+
+tests/acceptance/1115/decisions.test.mjs:10:1
+✖ #1115.dbbdd753 [owner answer 1(a)] a skips entry listing an approved BLOCKED-by-design test leaves the lane the state its other tests give, and the summary prints the listed BLOCKED test
+  AssertionError: the summary does not print the listed BLOCKED test
+
+tests/acceptance/1115/decisions.test.mjs:24:1
+✖ #1115.67b0561c [owner answer 2(a)] a reading-only skip is listable, keyed on its test id and its full note
+  AssertionError: the summary does not print the listed reading
+
+tests/acceptance/1115/decisions.test.mjs:33:1
+✖ #1115.67b0561c [owner answer 2(a)] a reading-only entry holding only a prefix of the note does not cover it: the key is the full note
+  AssertionError: a prefix covered a reading-only note, leaving the lane's state at PASS
+
+tests/acceptance/1115/decisions.test.mjs:41:1
+✖ #1115.67b0561c [owner answer 2(a)] a reading-only entry is refused for a file in the timed list
+  AssertionError: an entry covered a reading-only skip of a timed file, leaving the lane's state at PASS
+
+tests/acceptance/1115/decisions.test.mjs:51:1
+✖ #1115.67b0561c [owner answer 2(a)] a reading-only entry is refused for a test carrying a criterion tag
+  AssertionError: an entry covered a reading-only skip of a tagged test, leaving the lane's state at PASS
+
+tests/acceptance/1115/evidence.test.mjs:37:1
+✖ #1115.b81207df the unit lane's evidence record names host, platform, tree hash and every test's state, from vitest, node --test and cargo
+  AssertionError: no evidence record of the lane "unit" under ~/.deepbuild/lanes/ (records there: 0)
+
+tests/acceptance/1115/evidence.test.mjs:75:1
+✖ #1115.b81207df a passing unit lane's record holds each of its tests PASS
+  AssertionError: no evidence record of the lane "unit" under ~/.deepbuild/lanes/ (records there: 0)
+
+tests/acceptance/1115/evidence.test.mjs:88:1
+✖ #1115.b81207df each lane writes a record, a lane that fails and one that ran nothing too, with no test list to fill
+  AssertionError: no evidence record of the lane "fixture passes" under ~/.deepbuild/lanes/ (records there: 0)
+
+tests/acceptance/1115/failing-states.test.mjs:10:1
+✖ #1115.3a2181d7 a vitest test failing with INCONCLUSIVE: … reads INCONCLUSIVE in lanes.mjs, not FAIL
+  AssertionError: tests failing with INCONCLUSIVE: left the lane's state at FAIL
+
+tests/acceptance/1115/failing-states.test.mjs:23:1
+✖ #1115.3a2181d7 a node --test test failing with INCONCLUSIVE: … reads INCONCLUSIVE in lanes.mjs, not FAIL
+  AssertionError: a test failing with INCONCLUSIVE: left the lane's state at FAIL
+
+tests/acceptance/1115/failing-states.test.mjs:33:1
+✖ #1115.3a2181d7 a test failing with BLOCKED: … takes that state in lanes.mjs too
+  AssertionError: a test failing with BLOCKED: left the lane's state at FAIL
+
+tests/acceptance/1115/guard.test.mjs:37:13
+✖ an added entry
+  AssertionError: an added entry, with no tag, passed the guard
+
+tests/acceptance/1115/guard.test.mjs:37:13
+✖ a removed entry
+  AssertionError: a removed entry, with no tag, passed the guard
+
+tests/acceptance/1115/guard.test.mjs:37:13
+✖ an entry's note changed
+  AssertionError: an entry's note changed, with no tag, passed the guard
+
+tests/acceptance/1115/guard.test.mjs:37:13
+✖ the key added to a file without it
+  AssertionError: the key added to a file without it, with no tag, passed the guard
+
+tests/acceptance/1115/guard.test.mjs:37:13
+✖ the key removed
+  AssertionError: the key removed, with no tag, passed the guard
+
+tests/acceptance/1115/guard.test.mjs:37:13
+✖ the file deleted
+  AssertionError: the file deleted, with no tag, passed the guard
+
+tests/acceptance/1115/guard.test.mjs:46:1
+✖ #1115.82b1c824 a change to the skips key with an unsigned approval tag fails the guard
+  AssertionError: an edit of skips under an unsigned tag passed the guard
+
+tests/acceptance/1115/guard.test.mjs:54:1
+✖ #1115.82b1c824 a change to the skips key with a tag signed by a key the approvers file does not list fails the guard
+  AssertionError: an edit of skips under a stranger's tag passed the guard
+
+tests/acceptance/1115/guard.test.mjs:62:1
+✖ #1115.82b1c824 a change to the skips key under a signed approval tag naming the file passes the guard, by that approved proposal
+  AssertionError: the guard did not judge the edit by its approval
+
+tests/acceptance/1115/guard.test.mjs:72:1
+✖ #1115.82b1c824 a signed approval does not stretch to a commit that also carries a file it does not name
+  AssertionError: an approved skips edit carrying another file passed the guard
+
+tests/acceptance/1115/guard.test.mjs:80:1
+✖ #1115.82b1c824 an uncommitted change to the skips key fails the guard
+  AssertionError: an uncommitted edit of skips passed the guard
+
+tests/acceptance/1115/guard.test.mjs:110:11
+✖ the resolution adds an entry
+  AssertionError: a merge editing skips in its conflict passed the guard
+
+tests/acceptance/1115/no-grant.test.mjs:29:1
+✖ #1115.1f2f1fa0 a vitest job ended with no grant reads INCONCLUSIVE, not FAIL: its files read so in affected.mjs, and a later run with a grant passes
+  AssertionError: no INCONCLUSIVE line names tests/fixture-1115/one.test.ts
+
+tests/acceptance/1115/no-grant.test.mjs:45:1
+✖ #1115.1f2f1fa0 a vitest job ended with no grant reads INCONCLUSIVE when a line of output came before the throttle's
+  AssertionError: the job with no grant reads as failures
+
+tests/acceptance/1115/notes.test.mjs:14:1
+✖ #1115.67b0561c a listed id skipping under a different note than its entry's makes the lane INCONCLUSIVE and is listed
+  AssertionError: an entry with another note left the lane's state at PASS
+
+tests/acceptance/1115/notes.test.mjs:22:1
+✖ #1115.67b0561c an entry with another id does not cover a skip under its note
+  AssertionError: an entry with another id left the lane's state at PASS
+
+tests/acceptance/1115/notes.test.mjs:29:1
+✖ #1115.67b0561c a skip whose id and exact note prefix are listed leaves the lane PASS, and the summary prints it
+  AssertionError: the summary does not print the listed skip with its note
+
+tests/acceptance/1115/notes.test.mjs:38:1
+✖ #1115.67b0561c a listed skip leaves a lane another skip makes INCONCLUSIVE as it is, and both are printed
+  AssertionError: the lane's state is PASS
+
+tests/acceptance/1115/notes.test.mjs:52:1
+✖ #1115.67b0561c a noteless entry covers a noteless skip, and a listed id skipping under a note is a different note
+  AssertionError: the summary does not print the listed noteless skip
+
+tests/acceptance/1115/notes.test.mjs:74:1
+✖ #1115.67b0561c with DEEP_880_TOUCH_ID set on a machine that is not the reference Mac, 880's listed opt-in entry does not cover its notReference() skip and the lane is INCONCLUSIVE
+  AssertionError: scripts/known-failures.json does not hold one skips entry for each of tests/acceptance/880/touch-id.test.ts and tests/acceptance/880/redraft/touch-id.test.ts: [[],[]]
+
+tests/acceptance/1115/skips.test.mjs:11:1
+✖ #1115.dbbdd753 a lanes.mjs unit run with an unlisted vitest skip reports the lane INCONCLUSIVE and lists the skip
+  AssertionError: an unlisted vitest skip left the lane's state at PASS
+
+tests/acceptance/1115/skips.test.mjs:26:1
+✖ #1115.dbbdd753 a lanes.mjs unit run with an unlisted node --test skip reports the lane INCONCLUSIVE and lists the skip
+  AssertionError: an unlisted node --test skip left the lane's state at PASS
+
+tests/acceptance/1115/skips.test.mjs:44:1
+✖ #1115.dbbdd753 a node --test suite skipped whole reports the lane INCONCLUSIVE and lists the suite
+  AssertionError: a suite skipped whole left the lane's state at PASS
+
+tests/acceptance/1115/skips.test.mjs:54:1
+✖ #1115.dbbdd753 an unlisted vitest skip whose note starts with BLOCKED reports the lane BLOCKED, beside an INCONCLUSIVE one
+  AssertionError: a skip noted BLOCKED left the lane's state at PASS
+
+tests/acceptance/1115/skips.test.mjs:66:1
+✖ #1115.dbbdd753 an unlisted node --test skip whose note starts with BLOCKED reports the lane BLOCKED
+  AssertionError: a skip noted BLOCKED left the lane's state at PASS
+
+## The tests that pass on the base, and why
+
+Each can only pass here. The wrong program named is run below.
+
+- #1115.07ca71fc (all three): on the base the merge base's scripts and this checkout's are one program, so "before" and
+  "after" can't differ. Wrong programs: unanchored-state, quiet-reporter, moved-a-failure. The real run on main is by hand.
+- #1115.3a2181d7 a real failure beside a test failing with INCONCLUSIVE: every failure reads FAIL on the base. Wrong program:
+  first-state-wins.
+- #1115.82b1c824 a --record rewrite passes the guard: the base's guard doesn't read known-failures.json. Wrong programs:
+  whole-file-rule, line-rule.
+- #1115.82b1c824 subtest "the resolution keeps skips": the same reason, as the control beside "the resolution adds an entry",
+  which fails on the base. Wrong program: whole-file-rule.
+- #1115.1f2f1fa0 a unit lane with no grant: runLanes finds the throttle's line in the output on the base. Wrong program:
+  empty-report-fails.
+
+## The planted wrong programs
+
+No implementation is in the repo. To tell a test bug from a real failure, this job wrote a throwaway implementation in its
+scratch folder. The suite passed 49 of 49 on it, on the same files as the run above. Each program below is that
+implementation with one planted fault, run with the one test file that should catch it. Each failed the tests listed; I
+read the assertion only for quiet-reporter, not for the rest. The throwaway copy isn't kept, so these runs show the tests aren't vacuous
+and say nothing about the real change.
+
+first-state-wins: an INCONCLUSIVE test stands for the lane over a real failure (scripts/lanes.mjs)
+    ✖ #1115.3a2181d7 a real failure beside a test failing with INCONCLUSIVE: … leaves the lane FAIL
+unanchored-state: affected.mjs's stateOf matches the state anywhere in a message (scripts/affected.mjs)
+    ✖ #1115.07ca71fc failures on main equal today's: affected.mjs with the merge base's scripts and with the change's, on one fixture set, list the same FAIL ids
+quiet-reporter: the new vitest reporter replaces the runner's output, so the lane names only its first failure (scripts/lanes.mjs)
+    ✖ #1115.07ca71fc failures on main equal today's: the unit lane with the merge base's scripts and with the change's reads FAIL on one fixture set, and each names the failing tests
+empty-report-fails: a vitest command with no report reads FAIL, as "reported no test" (scripts/lanes.mjs)
+    ✖ #1115.1f2f1fa0 a unit lane whose vitest job ended with no grant reads INCONCLUSIVE, not FAIL
+whole-file-rule: the guard refuses any edit of known-failures.json (scripts/proof-guard.mjs)
+    ✖ #1115.82b1c824 a merge that resolves a conflict in known-failures.json by editing skips fails the guard; one that keeps skips passes
+    ✖ #1115.82b1c824 an affected.mjs --record rewrite of the other keys passes the guard with no tag
+    ✖ the resolution keeps skips
+line-rule: the guard compares the bytes from "skips" on, not the parsed key (scripts/proof-guard.mjs)
+    ✖ #1115.82b1c824 an affected.mjs --record rewrite of the other keys passes the guard with no tag
+ignores-conflicts: the rule walks only the files git merged, so a conflict resolution escapes it (scripts/proof-guard.mjs)
+    ✖ #1115.82b1c824 a merge that resolves a conflict in known-failures.json by editing skips fails the guard; one that keeps skips passes
+    ✖ the resolution adds an entry
+empty-prefix-covers-all: an entry with an empty note, as a prefix, covers every note (scripts/skip-rules.mjs)
+    ✖ #1115.67b0561c a noteless entry covers a noteless skip, and a listed id skipping under a note is a different note
+id-only: an entry covers by its id alone (scripts/skip-rules.mjs)
+    ✖ #1115.67b0561c a listed id skipping under a different note than its entry's makes the lane INCONCLUSIVE and is listed
+    ✖ #1115.67b0561c a noteless entry covers a noteless skip, and a listed id skipping under a note is a different note
+    ✖ #1115.67b0561c with DEEP_880_TOUCH_ID set on a machine that is not the reference Mac, 880's listed opt-in entry does not cover its notReference() skip and the lane is INCONCLUSIVE
+unlisted-not-printed: only listed skips are printed (scripts/lanes.mjs)
+    ✖ #1115.dbbdd753 a lanes.mjs unit run with an unlisted node --test skip reports the lane INCONCLUSIVE and lists the skip
+    ✖ #1115.dbbdd753 a lanes.mjs unit run with an unlisted vitest skip reports the lane INCONCLUSIVE and lists the skip
+    ✖ #1115.dbbdd753 a node --test suite skipped whole reports the lane INCONCLUSIVE and lists the suite
+    ✖ #1115.dbbdd753 an unlisted node --test skip whose note starts with BLOCKED reports the lane BLOCKED
+    ✖ #1115.dbbdd753 an unlisted vitest skip whose note starts with BLOCKED reports the lane BLOCKED, beside an INCONCLUSIVE one
+blocked-note-ignored: a BLOCKED note reads INCONCLUSIVE (scripts/skip-rules.mjs)
+    ✖ #1115.dbbdd753 an unlisted node --test skip whose note starts with BLOCKED reports the lane BLOCKED
+    ✖ #1115.dbbdd753 an unlisted vitest skip whose note starts with BLOCKED reports the lane BLOCKED, beside an INCONCLUSIVE one
+suite-skip-dropped: a suite skipped whole is dropped, as the base drops suites (scripts/skip-rules.mjs)
+    ✖ #1115.dbbdd753 a node --test suite skipped whole reports the lane INCONCLUSIVE and lists the suite
+marker-unread: affected.mjs doesn't read the marker, and falls back on the output's first line (scripts/affected.mjs)
+    ✖ #1115.1f2f1fa0 a vitest job ended with no grant reads INCONCLUSIVE when a line of output came before the throttle's
+    ✖ #1115.1f2f1fa0 a vitest job ended with no grant reads INCONCLUSIVE, not FAIL: its files read so in affected.mjs, and a later run with a grant passes
+evidence-commit-hash: the record's tree is the commit's hash (scripts/lanes.mjs)
+    ✖ #1115.b81207df a passing unit lane's record holds each of its tests PASS
+    ✖ #1115.b81207df each lane writes a record, a lane that fails and one that ran nothing too, with no test list to fill
+    ✖ #1115.b81207df the unit lane's evidence record names host, platform, tree hash and every test's state, from vitest, node --test and cargo
+evidence-no-cargo: the record leaves out cargo's tests (scripts/lanes.mjs)
+    ✖ #1115.b81207df the unit lane's evidence record names host, platform, tree hash and every test's state, from vitest, node --test and cargo
+timed-skip-dropped: a timed job's skips aren't counted (scripts/affected.mjs)
+    ✖ #1115.0eeb3f9a with --timed, a run in which a node --test budget skips INCONCLUSIVE summarises INCONCLUSIVE, never PASS
+    ✖ #1115.0eeb3f9a with --timed, a run in which a vitest budget skips INCONCLUSIVE summarises INCONCLUSIVE, never PASS
+blocked-by-design-refused: a listed BLOCKED entry is ignored (answer 1(a)) (scripts/skip-rules.mjs)
+    ✖ #1115.dbbdd753 [owner answer 1(a)] a skips entry listing an approved BLOCKED-by-design test leaves the lane the state its other tests give, and the summary prints the listed BLOCKED test
+reading-only-timed-allowed: a reading-only entry covers a timed file (answer 2(a)) (scripts/skip-rules.mjs)
+    ✖ #1115.67b0561c [owner answer 2(a)] a reading-only entry is refused for a file in the timed list
+reading-only-tag-allowed: a reading-only entry covers a tagged test (answer 2(a)) (scripts/skip-rules.mjs)
+    ✖ #1115.67b0561c [owner answer 2(a)] a reading-only entry is refused for a test carrying a criterion tag
+reading-only-prefix: a reading-only entry matches by prefix, not the full note (answer 2(a)) (scripts/skip-rules.mjs)
+    ✖ #1115.67b0561c [owner answer 2(a)] a reading-only entry holding only a prefix of the note does not cover it: the key is the full note
+moved-a-failure: an entry leaves failures in known-failures.json (scripts/known-failures.json)
+    ✖ #1115.07ca71fc failures on main equal today's: known-failures.json keeps the merge base's failures, lint and timing

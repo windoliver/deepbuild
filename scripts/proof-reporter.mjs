@@ -29,7 +29,7 @@ export default async function* reporter(source) {
     // The test's own error, under the runner's wrapper; an Error's fields aren't enumerable.
     const cause = innermost(error);
     yield `${JSON.stringify({
-      type: type.slice(5), file: data.file, name: data.name, nesting: data.nesting, suite: data.details?.type === 'suite', skip: Boolean(data.skip), todo: Boolean(data.todo), message: data.message,
+      type: type.slice(5), file: data.file, name: data.name, nesting: data.nesting, suite: data.details?.type === 'suite', skip: Boolean(data.skip), todo: Boolean(data.todo), note: [data.skip, data.todo].find((note) => typeof note === 'string'), message: data.message,
       error: error && { name: cause?.name, code: cause?.code, message: String(cause?.message ?? ''), stack: String(cause?.stack ?? ''), thrown: thrown(cause) },
     })}\n`;
   }

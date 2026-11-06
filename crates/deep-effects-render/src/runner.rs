@@ -306,6 +306,18 @@ impl Runner {
         groups: &(wgpu::BindGroup, wgpu::BindGroup),
         timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
+        self.encode_within(encoder, target, groups, timestamps, None);
+    }
+
+    /// [`Runner::encode`] within `scissor`, `[x, y, w, h]` in the target's px.
+    pub fn encode_within(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        groups: &(wgpu::BindGroup, wgpu::BindGroup),
+        timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+        scissor: Option<[u32; 4]>,
+    ) {
         let Pipeline::Render(pipeline) = &self.pipeline else {
             unreachable!("a pass operator encodes a render pass")
         };
@@ -326,6 +338,9 @@ impl Runner {
         pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &groups.0, &[]);
         pass.set_bind_group(1, &groups.1, &[]);
+        if let Some([x, y, w, h]) = scissor {
+            pass.set_scissor_rect(x, y, w, h);
+        }
         pass.draw(0..3, 0..1);
     }
 

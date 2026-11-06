@@ -1003,6 +1003,12 @@ impl<'a> Prog<'a> {
                 let n3 = self.normal_at.unwrap_or(self.env.normals[k]);
                 V::N(Sc::F32, L::of(&n3))
             }
+            "blend" => {
+                let (b, s) = (as_l(g("base"), Sc::F32, 3).v, as_l(g("over"), Sc::F32, 3).v);
+                let mode = p.s.fields.get("mode").and_then(Value::as_str);
+                let mode = mode.and_then(deep_canvas::blend::step_mode).unwrap_or(0);
+                V::N(Sc::F32, L::of(&deep_canvas::blend::mix(mode, [b[0], b[1], b[2]], [s[0], s[1], s[2]])))
+            }
             "luminance" => {
                 let c = as_l(g("rgb"), Sc::F32, 3).v;
                 one(Sc::F32, 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2])
