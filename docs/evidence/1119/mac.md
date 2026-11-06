@@ -76,3 +76,45 @@ overlapping by 0.45 s.
   and rebuilt it all: `wrote 6391 files, deleted 0`, `ETIMEDOUT`, 2095 s / 3843 s / 335 s, 2835 built. The earlier
   runs in this file were also under `MacBook-Air-97`, and the settle run under `MacBook-Air-97.local`: macOS's name
   changes with the network.
+
+## The key per machine and clone, at `c815c505` and `75b3b1ad`
+
+Mac15,12 (M3, 8 cores), macOS 14.7.7. Worktrees t3-a and t3-b at `c815c505` after `npm ci`, in a new kept folder
+(`deepbuild-perf/<host>-<clone>` is a new name). With the owner's OK the old `MacBook-Air-97` folder (47 GB) was
+deleted first. Files are in `~/deepbuild-handoffs/1119-mac/c815c505/` on the Spark.
+
+**Why the key changed.** Suites 246, 568 and 583 spawn `scripts/perf.mjs` in fixture repositories with the user's
+real cache. Keyed by machine alone, they shared the clone's folder and lock: they could block a real preflight, be
+blocked by one, and replace the real base copy with their fixture, so the next real run rebuilt every crate. On the
+Spark, suite 246 run with a scratch HOME kept its fixture's copies at `<HOME>/.cache/deepbuild-perf/spark-c89f`, the
+real clone's name; at `c815c505` it keeps them at `spark-c89f-37241af8fb39`, beside the clone's `spark-c89f-4e3e746b8b7a`.
+
+**Fail first, then pass:**
+- `tests/perf.test.mjs` with `4b65552d`'s perf.mjs (`t3-key-unfixed.txt`, load 3.5): 13 of 20 pass. The two new
+  tests fail at their assertions: "another repository on the machine…" with `BLOCKED perf: another perf run
+  (process 66316) is using …/deepbuild-perf/MacBook-Air-97.local`, and "a Mac that adds .local…" with "the copies
+  moved when the machine's name lost .local". Five lock tests fail too: they plant their lock at the new name.
+- With the fix, `tests/acceptance/1119/*.test.mjs tests/perf.test.mjs`: 23 of 23, three times (load 3.3 to 4.7).
+- At `75b3b1ad` (the host's first label, after the Mac's name became `MacBook-Air-97.attlocal.net`, a domain its
+  router's DHCP gives): the domain test with `c815c505`'s perf.mjs fails, "the copies moved when the machine's name
+  gained or lost a domain: …/fixture-mac-08fe51149fb8/…, …/fixture-mac.attlocal.net-08fe51149fb8/…"
+  (`t3-domain-unfixed.txt`); with the fix, 23 of 23 (`t3-final.txt`).
+
+**Settle runs at `c815c505`**, one at a time, each after no checks, perf, lanes, cargo or rustc process was left and
+the 1-minute load was below 8. Every run's hostname was `MacBook-Air-97.attlocal.net` and its kept folder
+`MacBook-Air-97.attlocal.net-dd61c41bd5e8`, one folder for both worktrees.
+
+| Run | Load (1/5/15 min) | Record | Verdict | Wall / user / sys | Built |
+|---|---|---|---|---|---|
+| a1 (t3-a, cold) | 4.8 / 4.6 / 3.7 | `wrote 6929 files, deleted 0; … nothing` | `BLOCKED perf: spawnSync /usr/bin/time ETIMEDOUT` | 1981 s / 3558 s / 285 s | 2563 |
+| a2 (t3-a) | 6.8 / 30.8 / 30.5 | `wrote 0 files, deleted 33; … nothing` | same | 1409 s / 99 s / 19 s | 172 |
+| a3 (t3-a) | 5.3 / 27.3 / 38.4 | `wrote 0 files, deleted 33; … nothing` | same | 1464 s / 140 s / 32 s | 163 |
+| b (t3-b) | 6.1 / 10.7 / 17.5 | `wrote 0 files, deleted 33; … nothing` | same | 1469 s / 170 s / 33 s | 116 |
+
+- **No run rebuilt what another built.** a2 and a3 have 1 artifact file in common, a3 and b 1; 5 to 8 unit names
+  repeat. Nearly all are `.rmeta` of third-party crates (gpui, wgpu, cranelift, toml, …). Each run carries on the
+  base side's first build, which main's allowance for the copy's checks (1350 s, the frozen `preflight` budget's
+  900 s × 1.5) stops every time on this Mac. So none of these is an AC1 count: the base side has never finished.
+- b's second worktree did land on a's copy: `wrote 0 files`, the same folder, and only artifacts never built before.
+- `deleted 33` is perf pruning what the last run's checks left in the copy; it starts no rebuild.
+- user/sys time after `ETIMEDOUT` counts only what `/usr/bin/time` reaped, not the stopped checks' tree.
