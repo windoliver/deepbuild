@@ -8,7 +8,7 @@ export interface Locator { role?: string; name?: string; label?: string; testId?
 /** The driver's locator: `within` as the container it looks inside. */
 export interface DriverLocator { role?: string; name?: string; label?: string; testId?: string; exact?: boolean; container?: DriverLocator }
 export interface MotionReq { target: Locator; property: string; from: string; to: string; duration: number; delay: number; easing: string }
-export interface Action { line: number | null; goto?: string; click?: DriverLocator; fill?: DriverLocator; text?: string; secret?: string; scrollIntoView?: DriverLocator; press?: string; wait?: number }
+export interface Action { line: number | null; goto?: string; click?: DriverLocator; fill?: DriverLocator; text?: string; secret?: string; scrollIntoView?: DriverLocator; hover?: DriverLocator; press?: string; wait?: number }
 export interface Expect { line: number | null; locator?: DriverLocator; text?: string; visible?: boolean; until?: { evaluate: string; equals: string } }
 export interface Request { line: number | null; method: string; path: string; body?: unknown; status: number }
 /** `timeoutMs` bounds each expect and each wait on an element, kept under the step's deadline; a navigation is bounded by the deadline alone. */
@@ -19,6 +19,9 @@ export interface Journey { id: string; feature: string | null; depth: 'journey' 
 export type Review = { ok: true } | { ok: false; reasons: string[] };
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** The keys a step and an end-state check may carry; any other is refused, never skipped, so nothing named goes unrun. */
+const STEP_KEYS = new Set(['id', 'deadline', 'timeout', 'goto', 'click', 'fill', 'scroll_into_view', 'hover', 'press', 'wait', 'expect', 'motion', 'request', 'status']);
+const END_KEYS = new Set(['id', 'oracle', 'locator', 'text', 'visible', 'readback', 'equals', 'count', 'requirement']);
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : undefined);
 
@@ -64,6 +67,7 @@ export function parseJourney(text: string): Journey {
     const keyLine = (key: string): number | null => (isMap(node) ? lineAt(node.items.find((p) => String((p.key as { value?: unknown })?.value ?? p.key) === key)?.key as Node | undefined) ?? lineAt(node) : null);
     const sid = str(raw.id);
     if (!sid) throw Error(`step ${i + 1} has an id`);
+    for (const k of Object.keys(raw)) if (!STEP_KEYS.has(k)) throw Error(`step ${sid}: ${k} is not a step key`);
     const deadlineMs = Number(raw.deadline);
     if (!(deadlineMs > 0)) throw Error(`step ${sid} has a deadline in ms`);
     const timeoutMs = timeoutUnder(deadlineMs, typeof raw.timeout === 'number' ? raw.timeout : undefined);
@@ -77,6 +81,7 @@ export function parseJourney(text: string): Journey {
       const d = toDriver(l)!;
       if (k === 'click') actions.push({ line: keyLine('click'), click: d });
       else if (k === 'scroll_into_view') actions.push({ line: keyLine('scroll_into_view'), scrollIntoView: d });
+      else if (k === 'hover') actions.push({ line: keyLine('hover'), hover: d });
       else if (k === 'fill') {
         const f = raw.fill as Record<string, unknown>;
         actions.push({ line: keyLine('fill'), fill: d, ...(str(f.secret) !== undefined ? { secret: str(f.secret)! } : { text: str(f.text) ?? '' }) });
@@ -110,6 +115,7 @@ export function parseJourney(text: string): Journey {
     if (!isObj(raw)) throw Error(`end_state ${i + 1} is a map`);
     const node = (isSeq(endNodes) ? endNodes.items[i] : undefined) as Node | undefined;
     const eid = str(raw.id) ?? `end-${i + 1}`;
+    for (const k of Object.keys(raw)) if (!END_KEYS.has(k)) throw Error(`end_state ${eid}: ${k} is not an end-state key`);
     const oracle = raw.oracle === 'model' || raw.oracle === 'person' ? raw.oracle : 'code';
     const locator = locatorOf(raw.locator);
     const check: EndCheck = { id: eid, line: lineAt(node), oracle };
@@ -143,13 +149,24 @@ export function refusals(journey: Journey): string[] {
   if (journey.baseline) reasons.push(`baseline: ${journey.baseline} names an image to compare with; a screen's only baseline is the same step rendered from the merge base here, so no committed image is ever compared`);
   return reasons;
 }
-/** Review of a journey file as data: end state required, no credential, no baseline image; what a proposal fails on. */
+/** What a run can't drive, so a run on it is refused rather than passing with it unrun: no end state, an API journey's
+ * step without a request or end-state check without a readback, and a readback that checks nothing in what it reads. */
+export function unrunnable(journey: Journey): string[] {
+  const reasons: string[] = [];
+  if (!journey.endState.length) reasons.push('an end state is required: end_state names at least one check of what the system holds once the journey is done, and this journey names none');
+  if (journey.api) {
+    for (const s of journey.steps) if (!s.request) reasons.push(`step ${s.id} of an API journey makes no request, so it would never run`);
+    for (const c of journey.endState) if (!c.readback) reasons.push(`end_state ${c.id} of an API journey reads nothing back from the system, so it would never run`);
+  }
+  for (const c of journey.endState) if (c.readback && c.equals === undefined && !c.count) reasons.push(`end_state ${c.id} reads back ${c.readback.path} but checks nothing in it: name equals or count`);
+  return reasons;
+}
+/** Review of a journey file as data: end state required, nothing it can't run, no credential, no baseline image; what a proposal fails on. */
 export function reviewJourney(text: string): Review {
   let journey: Journey;
   try { journey = parseJourney(text); } catch (error) { return { ok: false, reasons: [(error as Error).message] }; }
-  const reasons: string[] = [];
-  if (!journey.endState.length) reasons.push('an end state is required: end_state names at least one check of what the system holds once the journey is done, and this journey names none');
-  else if (!journey.endState.some((c) => c.oracle !== 'model')) reasons.push('an end state is required: a model reading alone is no end state a journey can rest on; name a check whose oracle is code or a person');
+  const reasons = unrunnable(journey);
+  if (journey.endState.length && !journey.endState.some((c) => c.oracle !== 'model')) reasons.push('an end state is required: a model reading alone is no end state a journey can rest on; name a check whose oracle is code or a person');
   reasons.push(...refusals(journey));
   if (!journey.api && !journey.steps.length) reasons.push('a journey has at least one step');
   return reasons.length ? { ok: false, reasons } : { ok: true };
