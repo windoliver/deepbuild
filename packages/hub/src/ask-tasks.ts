@@ -37,9 +37,11 @@ import type { PaidKind } from '@deepbuild/gate';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { RecordError, ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { solveLine } from '@deepbuild/gate';
-import type { ClaimCheck, DefinitionState, Surface } from './gate-runner.js';
+import { renamedSince } from '@deepbuild/workspaces';
+import type { ClaimCheck, DefinitionState, StatePin, Surface } from './gate-runner.js';
 import { ISSUE_LINK, liveFetch, readIssue, recordedFetch, type Reading } from './github-source.js';
 import { headOf } from './session-facts.js';
+import type { Workspaces } from './workspaces.js';
 import { derivedId, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -203,11 +205,13 @@ export interface AskTaskOptions {
    * `definition` says whether the task's definition is locked; `joins` that the claim's checks already started once,
    * before its definition locked, and these join them.
    */
-  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean }): Promise<void>;
+  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean; state?: StatePin }): Promise<void>;
   /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
   invalid(claim: string, commit: string, reason: string): Promise<void>;
   /** The targets of a claim's requirements that didn't resolve before its runs (#323): each verdict made on it is INVALID, naming them. */
   unresolved(claim: string, targets: { req: string; reason: string }[]): void;
+  /** Where work outside a repo lives (#67). */
+  spaces: Pick<Workspaces, 'land' | 'fill' | 'pin' | 'keep' | 'claimState' | 'folderOf'>;
 }
 
 export class AskTasks {
@@ -267,7 +271,8 @@ export class AskTasks {
     // the same events, which the record holds once.
     await this.o.append(connection, { v: 1, id: derivedId(t.at, `${t.prompt}:task`), kind: 'task.created', ts: t.at, data: { task_ref: t.task_ref, thread: t.thread, owner: connection.actor, title: (t.item?.title ?? t.text).slice(0, 200) || '-' } });
     // Off the hook's path, but a stop that follows at once claims against the definition, never ahead of it.
-    const locked = this.lock(t).catch((error: unknown) => this.unlocked(t.task_ref, error));
+    // A task from outside any repo lands in a workspace first (#67), with git to run, so off the hook's path too.
+    const locked = this.o.spaces.land(t).then((folder) => this.lock(folder ? { ...t, cwd: folder } : t)).catch((error: unknown) => this.unlocked(t.task_ref, error));
     const all = Promise.all([this.locking.get(t.session), locked]).then(() => { if (this.locking.get(t.session) === all) this.locking.delete(t.session); });
     this.locking.set(t.session, all);
   }
@@ -347,6 +352,7 @@ export class AskTasks {
       this.waiting.set(t.task_ref, { opening: t, why });
       return;
     }
+    await this.o.spaces.fill(t.cwd, handed as unknown as Obj);
     const head = await headOf(t.cwd).catch(() => undefined);
     if (!head) return;
     // A drafted check is kept under .deepbuild/, behind its guard: a draft naming one elsewhere doesn't lock, and the record says why.
@@ -403,6 +409,8 @@ export class AskTasks {
       issue_rev: revision ?? sha256Hex(new TextEncoder().encode(t.text)), base_commit: head.sha, budget: handed.budget ?? null,
     };
     const digest = sha256Hex(canonicalize(handed as unknown as JsonValue));
+    // Before the lock lands, so what changes after it is what a diff names (#67).
+    await this.o.spaces.pin(t.task_ref, t.cwd, handed.requirements as readonly Obj[]);
     // The early question (#874): a check whose surface has no fixed form has nothing to stand in for it on a base with
     // nothing to start, so its definition waits for your one answer too, in the same ask.
     const formless = requirements.filter((r) => r.surface && !hasForm(r.surface));
@@ -517,6 +525,30 @@ export class AskTasks {
     const defines = new RegExp(`\\b(?:function\\*?|class|const|let|var|def|fn|struct|enum|trait|type|interface)\\s+${s}\\b|^\\s*(?:export\\s+)?(?:static\\s+)?(?:async\\s+)?['"]?${s}['"]?\\s*(?::|=(?!=)|\\([^)]*\\)\\s*\\{)|\\bexports\\.${s}\\s*=(?!=)`, 'm');
     return defines.test(new TextDecoder().decode(bytes)) ? null : `${target} doesn't resolve: ${file} no longer defines ${symbol}`;
   }
+  /** A task's folder: its workspace's, or the session's. A session outside the workspace has no git of its own there, so its work is kept first. */
+  private async homeOf(task_ref: string, cwd: string): Promise<string> {
+    const home = this.o.spaces.folderOf(task_ref);
+    if (!home || home === cwd) return cwd;
+    await this.o.spaces.keep(home, task_ref);
+    return home;
+  }
+  /** The file a target's file was renamed to since the definition's base, when its symbol resolves there. */
+  private async followed(cwd: string, base: string, target: string): Promise<string | undefined> {
+    const [file, symbol] = target.split('#') as [string, string | undefined];
+    const now = await renamedSince(cwd, base, file);
+    return now && !(await this.unresolvedTarget(cwd, symbol ? `${now}#${symbol}` : now)) ? now : undefined;
+  }
+  /** One proposed diff of a definition for the renames a claim followed; the definition changes only on your approval. */
+  private async proposeRenames(connection: Connection, session: string, task_ref: string, id: string, renames: Map<string, string>): Promise<void> {
+    const pairs = [...renames].map(([from, to]) => `${from} → ${to}`).sort();
+    const diff = `targets of ${task_ref}: ${pairs.join(', ')}`;
+    if ((await this.o.raw(`SELECT 1 FROM events WHERE kind = 'learn.proposed' AND json_extract(data, '$.diff') = ? LIMIT 1`, [diff])).length) return;
+    const at = this.o.now();
+    await this.o.append(connection, {
+      v: 1, id: ulid(at), kind: 'learn.proposed', ts: at,
+      data: { layer: 'learned', target: task_ref, diff, scope: `session:${letters(session)}`, replay: null, applied_by: null, supersedes: null, evidence: [{ at: `claim:${id}`, quote: `the claim followed ${pairs.join(', ')}, by the file's history` }] },
+    });
+  }
   /** The bytes of a file the folder holds, by its real path: a link out of the folder, a folder and a missing file are undefined. */
   private async bytesOf(cwd: string, check: string): Promise<Uint8Array | undefined> {
     const path = normalize(check);
@@ -559,6 +591,7 @@ export class AskTasks {
     const made: string[] = [];
     for (const row of await this.lockedIn(session)) {
       const task_ref = String(row.task_ref);
+      if (o.task && task_ref !== o.task && await this.standsInWorkspace(task_ref)) continue;
       try {
         made.push(await this.judge(session, agent, cwd, task_ref));
       } catch (error) {
@@ -575,8 +608,18 @@ export class AskTasks {
     }
     return made;
   }
+  /**
+   * Whether a workspace task's verdict stands (#67). Another task's stop doesn't claim it again: a workspace runs again
+   * only the checks whose inputs changed, which a drift finds, and its passed verdict stands until then.
+   */
+  private async standsInWorkspace(task_ref: string): Promise<boolean> {
+    if (!this.o.spaces.folderOf(task_ref)) return false;
+    const [newest] = (await this.o.raw(`SELECT v.outcome AS outcome, v.stale AS stale FROM verdicts v JOIN claims c ON c.id = v.claim_id WHERE c.subject_ref = ? ORDER BY v.created DESC LIMIT 1`, [task_ref])) as { outcome: string; stale: number }[];
+    return newest?.outcome === 'PASS' && !newest.stale;
+  }
   /** A claim on a task whose definition hasn't locked: judged on the repo's spec, its definition pending, or held by the plan window. */
-  private async claimEarly(session: string, agent: string, cwd: string, task_ref: string): Promise<string> {
+  private async claimEarly(session: string, agent: string, from: string, task_ref: string): Promise<string> {
+    const cwd = await this.homeOf(task_ref, from);
     const head = await headOf(cwd).catch(() => undefined);
     const commit = head?.sha ?? '0'.repeat(40);
     const [{ n } = { n: 0 }] = await this.o.raw(`SELECT COUNT(*) AS n FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = ?`, [task_ref]) as { n: number }[];
@@ -597,7 +640,8 @@ export class AskTasks {
    * A claim on a task with a locked definition: a new claim.made, or, at the lock, the early claim given (`joins`),
    * which then runs the definition's checks beside the spec's it already ran.
    */
-  private async judge(session: string, agent: string, cwd: string, task_ref: string, existing?: string): Promise<string> {
+  private async judge(session: string, agent: string, from: string, task_ref: string, existing?: string): Promise<string> {
+    const cwd = await this.homeOf(task_ref, from);
     const [row] = (await this.o.raw(`SELECT task_ref, requirements, deliverables, issue_rev, base_commit, budget, hash FROM definitions WHERE task_ref = ? AND state = 'locked' LIMIT 1`, [task_ref])) as Obj[];
     if (!row) throw Error('its definition is not locked');
     const head = await headOf(cwd).catch(() => undefined);
@@ -662,13 +706,26 @@ export class AskTasks {
     }
     // Each target its requirements name is resolved in the folder the claim's snapshot is taken from, before any run (#323).
     const unresolved: { req: string; reason: string }[] = [];
+    const renames = new Map<string, string>();
     for (const [i, r] of stored.entries()) {
       for (const target of r.targets ?? []) {
         const reason = await this.unresolvedTarget(cwd, target);
-        if (reason) unresolved.push({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, reason: `${r.id}'s target ${reason}` });
+        // A target its history shows was renamed is the same target: followed here, and offered as one diff below (#67).
+        const renamed = reason ? await this.followed(cwd, definition.base_commit, target) : undefined;
+        if (renamed) renames.set(target.split('#')[0]!, renamed);
+        else if (reason) unresolved.push({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, reason: `${r.id}'s target ${reason}` });
       }
     }
     if (unresolved.length) this.o.unresolved(`claim:${id}`, unresolved);
+    if (renames.size) await this.proposeRenames(connection, session, task_ref, id, renames);
+    // What a workspace's checks read is read now, and pinned to the claim; one that can't be read proves nothing (#67).
+    let state: StatePin | undefined;
+    try {
+      state = await this.o.spaces.claimState(task_ref, cwd, `claim:${id}`);
+    } catch (error) {
+      await this.o.invalid(`claim:${id}`, commit, `what its checks read couldn't be read: ${error instanceof Error ? error.message : String(error)}`);
+      return `claim:${id}`;
+    }
     // Its checks start last, so a slow start holds up neither the claim nor its proposals.
     const onBase = (r: Requirement) => (r.on_base === 'passes' ? 'passes' as const : 'fails' as const);
     // Each with the requirement it judges and the surface it declares, for a stand-in on the base (#874), and the expected outputs it references by their approved digests.
@@ -679,7 +736,7 @@ export class AskTasks {
     }] : []));
     // Each requirement by its handle (req:<task>#R<n>, as verdict.made names them), with the check that covers it.
     const handles = stored.map((r, i) => ({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, id: r.id, text: r.criterion ? `${r.criterion}, ${r.text}` : r.text, depth: r.depth, oracle: r.oracle, on_base: onBase(r), check: r.check }));
-    await this.o.run({ claim: `claim:${id}`, session, task: task_ref, commit, base: definition.base_commit, cwd, deliverables: definition.deliverables, requirements: handles, checks, definition: 'locked', ...(existing ? { joins: true } : {}) });
+    await this.o.run({ claim: `claim:${id}`, session, task: task_ref, commit, base: definition.base_commit, cwd, deliverables: definition.deliverables, requirements: handles, checks, definition: 'locked', ...(existing ? { joins: true } : {}), ...(state ? { state } : {}) });
     return `claim:${id}`;
   }
 
