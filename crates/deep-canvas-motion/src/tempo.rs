@@ -70,7 +70,8 @@ impl Section {
     /// [`SUB`] units from the section's start to `x` beats into it, or `None` past any clock.
     fn offset(&self, x: f64, f32_seconds: bool) -> Option<i128> {
         let f = FLICKS_PER_SECOND as f64 * SUB as f64;
-        let sub = |v: f64| (v.is_finite() && v.abs() < (1u128 << 120) as f64).then(|| v.round() as i128);
+        let sub =
+            |v: f64| (v.is_finite() && v.abs() < (1u128 << 120) as f64).then(|| v.round() as i128);
         if self.to_bpm != self.bpm {
             // ∫ 60 ÷ bpm(b) db over [0, x], bpm(b) = b0 + (b1 − b0)·b ÷ N.
             let (b0, b1, n) = (self.bpm, self.to_bpm, self.span);
@@ -94,14 +95,17 @@ impl Section {
         flick(self.start).unwrap_or(i64::MAX)
     }
 
-    /// The beats from the section's start to `t`, inverted from `offset` (for the notice's fix).
+    /// The beats from the section's start to `t`, inverted from `offset` (for the notice's fix),
+    /// held to the section so a time past the map's end reads its last beat.
     fn beats_at(&self, t: i64) -> f64 {
         let s = (t as f64 - self.start as f64 / SUB as f64) / FLICKS_PER_SECOND as f64;
-        if self.to_bpm != self.bpm {
+        let x = if self.to_bpm != self.bpm {
             let (b0, b1, n) = (self.bpm, self.to_bpm, self.span);
-            return n * b0 / (b1 - b0) * ops::expm1(s * (b1 - b0) / (60.0 * n));
-        }
-        s * self.bpm / 60.0
+            n * b0 / (b1 - b0) * ops::expm1(s * (b1 - b0) / (60.0 * n))
+        } else {
+            s * self.bpm / 60.0
+        };
+        x.clamp(0.0, self.span)
     }
 }
 
@@ -158,7 +162,13 @@ impl Tempo {
             };
             let (bar, start) = match tempo.sections.last() {
                 None => {
-                    let text = s.get("at").and_then(Value::as_str).unwrap_or("0s");
+                    let text = match s.get("at") {
+                        None => "0s",
+                        Some(Value::String(text)) => text.as_str(),
+                        Some(at) => {
+                            return Err(bad("bad_time", format!("{path}/at"), json!({"time": at})))
+                        }
+                    };
                     let t = Time::parse(text)
                         .and_then(|t| t.resolve(ctx))
                         .map_err(|_| {
@@ -286,7 +296,7 @@ impl Tempo {
     /// The bar:beat that lands exactly on `t`, if one does.
     pub fn beat_on(&self, t: i64) -> Option<String> {
         let s = self.sections.iter().rev().find(|s| s.at() <= t)?;
-        let x = s.beats_at(t).round().max(0.0) as u64;
+        let x = s.beats_at(t).round() as u64;
         (x.saturating_sub(1)..=x + 1).find_map(|x| {
             let (bar, beat) = (s.bar + x / s.per_bar, x % s.per_bar + 1);
             (self.beat(bar, beat) == Ok(t)).then(|| format!("{bar}:{beat}b"))
@@ -298,21 +308,19 @@ impl Tempo {
         let i = self.sections.iter().rposition(|s| s.at() <= t).unwrap_or(0);
         let mut candidates = Vec::new();
         for s in &self.sections[i..(i + 2).min(self.sections.len())] {
-            let x = s.beats_at(t).floor().max(0.0) as u64;
+            let x = s.beats_at(t).floor() as u64;
             for x in x.saturating_sub(1)..=x + 2 {
                 let (bar, beat) = (s.bar + x / s.per_bar, x % s.per_bar + 1);
                 candidates.extend(self.beat(bar, beat).ok());
             }
         }
-        candidates
-            .into_iter()
-            .min_by_key(|&b| ((b - t).unsigned_abs(), b))
+        candidates.into_iter().min_by_key(|&b| (b.abs_diff(t), b))
     }
 
     /// The nearest bar:beat at or before `t`, for a literal no beat lands on.
     pub fn beat_before(&self, t: i64) -> Option<String> {
         let s = self.sections.iter().rev().find(|s| s.at() <= t)?;
-        let x = s.beats_at(t).floor().max(0.0) as u64;
+        let x = s.beats_at(t).floor() as u64;
         Some(format!("{}:{}b", s.bar + x / s.per_bar, x % s.per_bar + 1))
     }
 }
@@ -387,5 +395,20 @@ mod tests {
                 "{segments}"
             );
         }
+        // The first segment's `at` is a time, as every other time field is.
+        let at = tempo(json!([{"at": 2, "bpm": 120, "meter": [4, 4], "span": 4}]));
+        assert_eq!(at.map(|_| ()).unwrap_err().code, "bad_time");
+    }
+
+    #[test]
+    fn a_time_far_past_a_ramp_finds_the_map_end() {
+        // A 16-beat 90 → 150 BPM ramp ends at 8.1732 s, so 700 s is far past its last beat.
+        let t = tempo(json!([{"at": "0s", "bpm": 90, "meter": [4, 4], "span": 16, "ramp": {"to_bpm": 150, "shape": "linear_in_beats"}}]))
+            .unwrap()
+            .unwrap();
+        let far = 700 * FLICKS_PER_SECOND;
+        assert_eq!(t.beat_on(far), None);
+        assert_eq!(t.nearest_beat(far), t.beat(5, 1).ok());
+        assert_eq!(t.beat_before(far).as_deref(), Some("5:1b"));
     }
 }

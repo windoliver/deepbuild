@@ -557,7 +557,6 @@ impl Program {
         Ok(program)
     }
 
-    /// `items/<id>/world/<group>/<k>`: the item and the component of its world pose.
     /// Each laid-out item's box at `doc_t` (#491): the document's layout, where a key on a frame's
     /// layout mixes each box between the layouts of the keys before and after by the key's
     /// interpolation, so a row glides into a grid; `None` without a layout solve.
@@ -699,6 +698,7 @@ impl Program {
         })
     }
 
+    /// `items/<id>/world/<group>/<k>`: the item and the component of its world pose.
     fn world_read(&self, owner: &str, field: &[String]) -> Option<(usize, usize)> {
         let [w, g, k] = field else { return None };
         if w != "world" {
@@ -1435,6 +1435,16 @@ impl Program {
                 path: format!("{path}/vars/{}/list", f.list),
                 detail: Some(Box::new(json!({"driver": driver.id, "list": filter.list}))),
             })?;
+            // Occurrences read on the driver's clock, from the transport's start as `time` reads.
+            let start = self.motion.transport.start;
+            let entries = entries
+                .into_iter()
+                .map(|o| crate::occurrence::Occurrence {
+                    t: o.t.saturating_sub(start),
+                    end: o.end.saturating_sub(start),
+                    ..o
+                })
+                .collect();
             // Inputs after t don't exist yet, so nothing looks ahead on a list they feed.
             if f.function == "next" && filter.list.starts_with("input.") {
                 return Err(refused(
@@ -1525,24 +1535,22 @@ impl Program {
     /// A core driver's value over the slots at `doc_t`.
     fn evaluate_core(&self, c: usize, slots: &[f64], doc_t: i64) -> f64 {
         let core = &self.cores[c];
+        // The document's time from the transport's start, held to its span, the range its
+        // bound reads.
+        let transport = &self.motion.transport;
+        let t = doc_t
+            .saturating_sub(transport.start)
+            .clamp(0, transport.span.unwrap_or(i64::MAX));
         let mut vals = [0.0f64; DRIVER_OPS];
         for (v, input) in vals.iter_mut().zip(&core.inputs) {
             *v = match input {
-                CoreInput::Occurrence(read) => match read.at(doc_t) {
+                CoreInput::Occurrence(read) => match read.at(t) {
                     Some(v) => v,
                     None => return core.fallback.unwrap_or(f64::NAN),
                 },
                 CoreInput::Slot(s) => slots[*s],
                 CoreInput::World(i, k) => self.world(slots, *i)[*k],
-                // The document's time, held to its span, the range its bound reads.
-                CoreInput::Time => {
-                    let s = (doc_t - self.motion.transport.start) as f64
-                        / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
-                    let span = self.motion.transport.span.map_or(f64::INFINITY, |sp| {
-                        sp as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
-                    });
-                    s.clamp(0.0, span)
-                }
+                CoreInput::Time => t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64,
                 // A control's value, held to its declared range.
                 CoreInput::Control {
                     entries,

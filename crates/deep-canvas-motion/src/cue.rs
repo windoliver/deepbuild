@@ -55,7 +55,7 @@ fn flicks(v: Option<&Value>, id: &str, field: &str) -> Result<Option<i64>, Refus
 
 /// The anchor nearest `t` among `times`.
 fn nearest(t: i64, times: impl Iterator<Item = i64>) -> Option<i64> {
-    times.min_by_key(|&a| ((a - t).unsigned_abs(), a))
+    times.min_by_key(|&a| (a.abs_diff(t), a))
 }
 
 /// Each cue's marker and where it lands, and the notices for those that moved.
@@ -94,12 +94,15 @@ pub fn align(
             return Err(bad(id, "cue"));
         };
         let Some(marker) = markers.iter().find(|m| m.id == target) else {
-            return Err(blocked(
-                id,
+            // A first marker isn't placed yet when cues align: it solves once they have.
+            let why = if doc.get("markers").and_then(|m| m.get(target)).is_some() {
+                format!("`{target}` is a first marker, which solves after cues align")
+            } else {
                 format!(
                     "`{target}` is not a marker: a strip cue aligns sound, which lands with strips"
-                ),
-            ));
+                )
+            };
+            return Err(blocked(id, why));
         };
         // One cue per marker: two would pull it two ways.
         if cued.iter().filter(|&&c| c == target).count() > 1 {
@@ -132,6 +135,8 @@ pub fn align(
             Some(_) => return Err(bad(id, "snap")),
         };
         let t = marker.start;
+        // The anchor is sought at the marker less its offset, so an offset past the clock is bad.
+        let from = t.checked_sub(offset).ok_or_else(|| bad(id, "offset"))?;
         let others = || {
             markers
                 .iter()
@@ -139,7 +144,7 @@ pub fn align(
         };
         let at = match anchor.as_str() {
             "beat" => match tempo {
-                Some(tempo) => tempo.nearest_beat(t - offset),
+                Some(tempo) => tempo.nearest_beat(from),
                 None => {
                     return Err(blocked(
                         id,
@@ -148,10 +153,10 @@ pub fn align(
                 }
             },
             "moment" => nearest(
-                t - offset,
+                from,
                 others().filter(|m| m.kind == "moment").map(|m| m.start),
             ),
-            "marker" => nearest(t - offset, others().map(|m| m.start)),
+            "marker" => nearest(from, others().map(|m| m.start)),
             "word" | "onset" | "peak" | "occurrence" => {
                 return Err(blocked(
                     id,
@@ -173,11 +178,11 @@ pub fn align(
                 format!("no {anchor} anchor to align `{target}` to"),
             ));
         };
-        let to = at + offset;
-        if tolerance.is_some_and(|tol| (to - t).abs() > tol) {
+        let to = at.checked_add(offset).ok_or_else(|| bad(id, "offset"))?;
+        if tolerance.is_some_and(|tol| to.abs_diff(t) > tol.unsigned_abs()) {
             return Err(blocked(
                 id,
-                format!("`{target}` at {t} flicks is {} flicks from its {anchor} anchor's {to}, past its tolerance", (to - t).abs()),
+                format!("`{target}` at {t} flicks is {} flicks from its {anchor} anchor's {to}, past its tolerance", to.abs_diff(t)),
             ));
         }
         if !snap {
@@ -307,5 +312,28 @@ mod tests {
         let d =
             doc(json!({"c": {"cue": "hit", "anchor": "beat", "snap": false, "tolerance": "0.2s"}}));
         assert_eq!(start(&d, "hit"), 11 * F / 10);
+    }
+
+    #[test]
+    fn an_offset_past_the_clock_is_refused() {
+        let d = doc(json!({"c": {"cue": "hit", "anchor": "moment", "offset": i64::MIN}}));
+        let r = read(d.as_object().unwrap()).unwrap_err();
+        assert_eq!((r.code, r.path.as_str()), ("bad_doc", "cue_align/c/offset"));
+    }
+
+    #[test]
+    fn a_cue_on_a_first_marker_says_it_solves_after() {
+        let mut d = doc(json!({"c": {"cue": "cross", "anchor": "beat"}}));
+        d["markers"]["cross"] = json!({"kind": "moment", "t": {"first": {"expr": "t - 1", "vars": {"t": "time"}, "after": "0s", "before": "4s"}}});
+        let r = read(d.as_object().unwrap()).unwrap_err();
+        let why = r
+            .detail
+            .as_ref()
+            .map(|d| d["why"].to_string())
+            .unwrap_or_default();
+        assert!(
+            r.code == "cue_blocked" && why.contains("first marker"),
+            "{why}"
+        );
     }
 }
