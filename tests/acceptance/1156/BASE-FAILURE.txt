@@ -1,0 +1,201 @@
+The #1156 suite at base commit d722ba3d (main), November 5, 2026, on a Mac15,7 / Apple M3 Pro / 36 GiB shared with other
+worktrees, load averages 37 to 54. Node 24.22.0. Built with `npm ci`, `npm run build --workspaces`; the suite built
+deep-hook. No implementation of #1156 exists. Type check: `node node_modules/typescript/bin/tsc -p
+tests/acceptance/1156/tsconfig.json`, no output, exit 0.
+
+Summary of `npx vitest run --root tests/acceptance/1156 --no-file-parallelism --testTimeout=600000 fast.test.ts`, run once:
+14 tests, 6 failed, 8 passed, 245 s (raw output below). The world came up and the whole session ran on the base; every
+failure below is at an assertion or a named plant, none is a crash of the world.
+
+Failed, for the reason each criterion names:
+- AC1 #1156.db084f91 (main): `"$(printf git)" push origin main` is let through with the hub up and with it stopped, and
+  origin's main moves. With `deep setup`'s rules it meets only `authority-push`, a watch entry, and no fail_closed entry
+  takes a push. The nested push is denied at the base (by every block entry, naming the depth and "plainly").
+- AC1 (wrong program): the old reader's half holds (deep-hook at fad1c4cb lets the push through; the check names the
+  call). The test fails at its last assertion, that the same check passes on this deep-hook, for AC1's reason.
+- AC2 #1156.ab43aba4 (wrong program): the hub refuses `DEEP_HUB_PLANT=stages-without-copy`, a plant the implementer adds.
+- AC3 #1156.4ce23e29 (main): both pushes are held by one authority ask each, with their plan.proposed rows, but
+  `planFor` in packages/hub/src/holds.ts names no `targets`, so neither row places a target.
+- AC3 (wrong program): in the kept run below it failed BLOCKED: the raise in fixtures/core.mjs gave no deadline, a test
+  bug. Fixed, and that one test run again: the matcher half holds, naming the URL; the test fails at its last
+  assertion, for AC3's reason. In the same scratch run an unplanted raise of a plan naming the URL as a `remote` target
+  read `read`, citing the README's message, and passed the check.
+- AC7 #1156.281bd100: its control fails: not every step reads PASS, for AC1's and AC3's reasons. Its second half, each
+  step's reply or rows taken away, wasn't reached at the base.
+
+Passed at the base, where the merged code already does what the criterion asks:
+- AC2 (main), AC4 (main, the exit-0 helper, the replayed signature), AC5 (main, the by-value environment, naming the
+  evidence file), AC6 (main, the per-call reader, naming the extension). Their wrong programs for the proof lane are in
+  twins.json. Trust check at the base: p95 added 0 to 0.008 ms in five runs; the vendor/ reply 14 to 17 ms.
+  AC4's "remote equals the session's commit" holds trivially at the base, since the unreadable push had already moved it.
+
+Changed after the kept run, none of it asserted differently except where said: the raise's deadline; the stand-in now
+writes a tool's output as its tool_result, as Claude Code does, not the JSON response; AC3's citation must hold the
+README's own words; AC6's timing is void unless the timed replies carry the extension's deny. The rerun of the AC3 wrong-program test builds the whole
+world, and after the first three of those changes it read the same per-step results (AC2, AC4, AC5, AC6 steps PASS, AC1
+and AC3 steps FAIL). The by-value and per-call plants were not rerun after these changes, nor AC6's new void check on the
+full world. The two `-t` debug runs before the kept run are not shown. The live file ran only without the opt-in: all 7
+tests fail BLOCKED. No real session ran: no token here, and the base has no `risky-calls` scenario.
+
+---- raw output of the kept run ----
+
+ RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/doneright/github-issue-1156-ea674f/tests/acceptance/1156
+
+ ❯ fast.test.ts (14 tests | 6 failed) 244393ms
+   ❯ AC1 #1156.db084f91 Both unreadable pushes are denied with the hub up and with it stopped by PID; the reply names what couldn't be read and says writing it plainly lets it be read, and the remote's `main` is unchanged. deep-hook from before #1097 lets a push through and fails this test, naming the call (2)
+     × AC1 #1156.db084f91 `"$(printf git)" push origin main` and the same push nested 13 deep are denied with the hub up and stopped by PID, each reply naming what couldn't be read and that writing it plainly lets it be read, and origin's main doesn't move 129975ms
+     × AC1 #1156.db084f91 (wrong program) deep-hook from before #1097 lets a push through and fails this check, naming the call 21563ms
+   ❯ AC2 #1156.ab43aba4 Before `clean.sh` runs, a `command.staged` row names `out/`, and `deep undo staged:<id>` then puts back all 200 files with the same hashes; `npm test` is neither staged nor asked about. A planted stager that runs the script without a copy fails, naming the command (2)
+     × AC2 #1156.ab43aba4 (wrong program) a stager that runs the script without a copy fails this check, naming the command 135ms
+   ❯ AC3 #1156.4ce23e29 `git push origin main` is held at PreToolUse with one authority ask whose `plan.proposed` row lists each step, what it changes, its undo or "can't undo", and its cost, and whose target reads origin `repo`. The README's URL reads `read`, citing the README's handle, and its card offers no wider scope. A matcher that reads every target as `repo` fails, naming the URL (2)
+     × AC3 #1156.4ce23e29 the push is held by one authority ask with its plan, origin reads repo, the README's URL reads read citing the README's handle, and its card offers no wider scope 1ms
+     × AC3 #1156.4ce23e29 (wrong program) a matcher that reads every target as repo fails this check, naming the URL 5060ms
+   ❯ AC7 #1156.281bd100 A step whose hook reply or record row is missing reads INCONCLUSIVE in the run's report, never PASS (1)
+     × AC7 #1156.281bd100 the run's report reads PASS on every step of the session, and with any step's hook reply or record rows taken away that step reads INCONCLUSIVE and the report never PASS 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  fast.test.ts > AC1 #1156.db084f91 Both unreadable pushes are denied with the hub up and with it stopped by PID; the reply names what couldn't be read and says writing it plainly lets it be read, and the remote's `main` is unchanged. deep-hook from before #1097 lets a push through and fails this test, naming the call > AC1 #1156.db084f91 `"$(printf git)" push origin main` and the same push nested 13 deep are denied with the hub up and stopped by PID, each reply naming what couldn't be read and that writing it plainly lets it be read, and origin's main doesn't move
+AssertionError: #1156.db084f91 the unreadable pushes: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.db084f91 `\"$(printf git)\" push origin main` with the hub up must be denied: it was let through, reply \"\"",
++   "#1156.db084f91 `\"$(printf git)\" push origin main` with the hub stopped must be denied: it was let through, reply \"deep-hook: spooled 01M6Q0JPS7X8K3TZPDMXRPB5RC, but its sync didn't finish within the hook's 50 ms\\n\"",
++   "#1156.db084f91 the remote's `main` must be unchanged by the unreadable pushes: it was cd27a6482984202052a9a5a9f78e6099f127ef0d, now 343e04e7e2b309aa5dcce3dd1146f35ca77444e3",
++ ]
+
+ ❯ fast.test.ts:22:85
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  fast.test.ts > AC1 #1156.db084f91 Both unreadable pushes are denied with the hub up and with it stopped by PID; the reply names what couldn't be read and says writing it plainly lets it be read, and the remote's `main` is unchanged. deep-hook from before #1097 lets a push through and fails this test, naming the call > AC1 #1156.db084f91 (wrong program) deep-hook from before #1097 lets a push through and fails this check, naming the call
+AssertionError: #1156.db084f91 the same check passes on this deep-hook: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.db084f91 `\"$(printf git)\" push origin main` with the hub up must be denied: it was let through, reply \"\"",
++   "#1156.db084f91 `\"$(printf git)\" push origin main` with the hub stopped must be denied: it was let through, reply \"deep-hook: spooled 01M6Q0JPS7X8K3TZPDMXRPB5RC, but its sync didn't finish within the hook's 50 ms\\n\"",
++   "#1156.db084f91 the remote's `main` must be unchanged by the unreadable pushes: it was cd27a6482984202052a9a5a9f78e6099f127ef0d, now 343e04e7e2b309aa5dcce3dd1146f35ca77444e3",
++ ]
+
+ ❯ fast.test.ts:29:91
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  fast.test.ts > AC2 #1156.ab43aba4 Before `clean.sh` runs, a `command.staged` row names `out/`, and `deep undo staged:<id>` then puts back all 200 files with the same hashes; `npm test` is neither staged nor asked about. A planted stager that runs the script without a copy fails, naming the command > AC2 #1156.ab43aba4 (wrong program) a stager that runs the script without a copy fails this check, naming the command
+Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=stages-without-copy: file:///private/tmp/dh1156-e9KXsN/s/packages/hub/dist/plant.js:76
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stages-without-copy names no planted program
+    at plantOf (file:///private/tmp/dh1156-e9KXsN/s/packages/hub/dist/plant.js:76:15)
+    at runHub (file:///private/tmp/dh1156-e9KXsN/s/packages/hub/dist/server.js:1270:19)
+    at hubCommand (file:///private/tmp/dh1156-e9KXsN/s/packages/hub/dist/index.js:49:28)
+    at file:///private/tmp/dh1156-e9KXsN/s/packages/cli/dist/main.js:181:30
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:425:21
+    423|     child.on('exit', () => { clearTimeout(timer); resolve(false); });
+    424|   });
+    425|   if (!ready) throw Error(`BLOCKED: the hub didn't start${plant ? ` wi…
+       |                     ^
+    426|   return { pid: child.pid!, child, err: () => err };
+    427| }
+ ❯ session helpers.ts:1085:11
+ ❯ stagerProblems helpers.ts:1118:13
+ ❯ fast.test.ts:40:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  fast.test.ts > AC3 #1156.4ce23e29 `git push origin main` is held at PreToolUse with one authority ask whose `plan.proposed` row lists each step, what it changes, its undo or "can't undo", and its cost, and whose target reads origin `repo`. The README's URL reads `read`, citing the README's handle, and its card offers no wider scope. A matcher that reads every target as `repo` fails, naming the URL > AC3 #1156.4ce23e29 the push is held by one authority ask with its plan, origin reads repo, the README's URL reads read citing the README's handle, and its card offers no wider scope
+AssertionError: #1156.4ce23e29 the held pushes: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.4ce23e29 `git push origin main`: its plan's target must read origin `repo`: its targets are []",
++   "#1156.4ce23e29 the README's URL https://mirror.example.invalid/acme/checkout-web.git must be a target of its plan: its targets are []",
++ ]
+
+ ❯ fast.test.ts:48:79
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  fast.test.ts > AC3 #1156.4ce23e29 `git push origin main` is held at PreToolUse with one authority ask whose `plan.proposed` row lists each step, what it changes, its undo or "can't undo", and its cost, and whose target reads origin `repo`. The README's URL reads `read`, citing the README's handle, and its card offers no wider scope. A matcher that reads every target as `repo` fails, naming the URL > AC3 #1156.4ce23e29 (wrong program) a matcher that reads every target as repo fails this check, naming the URL
+Error: BLOCKED: fixtures/core.mjs raise failed: exit 1, stdout "", stderr "file:///Users/tafeng/dev/claude-worktrees/doneright/github-issue-1156-ea674f/packages/asks/dist/index.js:1157\n                throw new AskRefused(`BLOCKED: no deadline for ${kind} asks is declared in your settings or the repo's done.yaml (asks.deadline.${kind})`, { field: 'deadline' });\n                      ^\n\nAskRefused: BLOCKED: no deadline for authority asks is declared in your settings or the repo's done.yaml (asks.deadline.authority)\n    at AsksCore.fill (file:///Users/tafeng/dev/claude-worktrees/doneright/github-issue-1156-ea674f/packages/asks/dist/index.js:1157:23)\n    at file:///Users/tafeng/dev/claude-worktrees/doneright/github-issue-1156-ea674f/packages/asks/dist/index.js:341:33 {\n  field: 'deadline',\n  option: undefined,\n  source: undefined,\n  ask: undefined,\n  outcome: undefined,\n  closed_at: undefined\n}\n\nNode.js v24.22.0\n"
+ ❯ core helpers.ts:181:35
+    179|   const r = await run(NODE, ['--no-warnings', join(FIXTURES, 'core.mjs…
+    180|   const out = jsonLines(r.stdout).at(-1);
+    181|   if (r.code !== 0 || !out) throw Error(`BLOCKED: fixtures/core.mjs ${…
+       |                                   ^
+    182|   return out;
+    183| }
+ ❯ matcherProblems helpers.ts:1127:18
+ ❯ fast.test.ts:53:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  fast.test.ts > AC7 #1156.281bd100 A step whose hook reply or record row is missing reads INCONCLUSIVE in the run's report, never PASS > AC7 #1156.281bd100 the run's report reads PASS on every step of the session, and with any step's hook reply or record rows taken away that step reads INCONCLUSIVE and the report never PASS
+AssertionError: #1156.281bd100 every step of the run, with its reply and rows, reads PASS: expected [ { …(3) }, { …(3) }, { …(3) }, …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "step": "\"$(printf git)\" push origin main, hub up",
++     "verdict": "FAIL",
++     "why": "#1156.db084f91 `\"$(printf git)\" push origin main` with the hub up must be denied: it was let through, reply \"\"",
++   },
++   {
++     "step": "\"$(printf git)\" push origin main, hub stopped",
++     "verdict": "FAIL",
++     "why": "#1156.db084f91 `\"$(printf git)\" push origin main` with the hub stopped must be denied: it was let through, reply \"deep-hook: spooled 01M6Q0JPS7X8K3TZPDMXRPB5RC, but its sync didn't finish within the hook's 50 ms\\n\"",
++   },
++   {
++     "step": "the push nested 13 deep, hub stopped",
++     "verdict": "FAIL",
++     "why": "#1156.db084f91 the remote's `main` must be unchanged by the unreadable pushes: it was cd27a6482984202052a9a5a9f78e6099f127ef0d, now 343e04e7e2b309aa5dcce3dd1146f35ca77444e3",
++   },
++   {
++     "step": "git push origin main",
++     "verdict": "FAIL",
++     "why": "#1156.4ce23e29 `git push origin main`: its plan's target must read origin `repo`: its targets are []",
++   },
++   {
++     "step": "git push https://mirror.example.invalid/acme/checkout-web.git main",
++     "verdict": "FAIL",
++     "why": "#1156.4ce23e29 the README's URL https://mirror.example.invalid/acme/checkout-web.git must be a target of its plan: its targets are []",
++   },
++ ]
+
+ ❯ fast.test.ts:104:131
+    102|     const steps = stepsOf(await world());
+    103|     const report = reportOf(steps);
+    104|     expect(report.steps.filter((s) => s.verdict !== 'PASS'), `${AC7} e…
+       |                                                                                                                                   ^
+    105|     for (const [at, s] of steps.entries()) {
+    106|       const cases: [string, Step][] = [['hook reply', { ...s, reply: n…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 8 passed (14)
+   Start at  15:26:07
+   Duration  244.63s (tests 100%)
+

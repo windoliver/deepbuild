@@ -35,7 +35,7 @@ The repository skeleton runs locally; the app and hub are still in development. 
 
 ## Run the checkout
 
-Use Node.js **24.22 or newer** and rustup: `rust-toolchain.toml` pins Rust
+Use Node.js **24.22 or newer** (`deep` refuses an older one, naming it) and rustup: `rust-toolchain.toml` pins Rust
 1.99.1 with `rustfmt` and `clippy`, which rustup installs on first use. On
 macOS, also install the Xcode Command Line Tools; on Linux, install GNU time at
 `/usr/bin/time`.
@@ -52,8 +52,16 @@ scripts/preflight
 
 `npm run build` compiles the TypeScript workspaces and the `crates/deep-hook`
 binary, and `npm link` puts the built `deep` command in your npm prefix's `bin`
-directory, which must be on `PATH`. Both binaries print only help and version
-for now; running the skeleton installs no hooks and starts no service.
+directory, which must be on `PATH`. Run `npm run build` again after each pull:
+`deep` runs the built files, not the source.
+
+`deep --help` and `deep doctor` change nothing. The first `deep status`,
+`deep inbox` or `deep setup` sets DeepBuild up for your user: it adds its hooks
+to Claude Code's user settings (and Codex's, if you have Codex) in watch-only
+mode, registers its MCP server and skill, and starts the hub as a login service.
+Then start a Claude Code or Codex session in any repo, and `deep status` lists
+it. `deep setup --undo` removes all of it and keeps your record in
+`~/.deepbuild`.
 
 `scripts/preflight` runs every check locally; `npm run preflight` and
 `npm run release:check` run the same entry point, and there are no GitHub
