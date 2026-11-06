@@ -5,7 +5,7 @@
 //! its fallback (nothing) in every canonical render; one whose pipeline the device rejected draws
 //! its fallback everywhere. Material operators are the 3D renderer's (`material@1`'s `op`).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use deep_canvas_effects::check::{CheckOptions, Checked};
@@ -17,6 +17,7 @@ use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::program::Program;
 use deep_gpu::device::Device;
 use serde_json::{json, Value};
+use wgpu::util::DeviceExt as _;
 
 use crate::compile::{compile_planted, compile_with, Compiled};
 use crate::mips::{Chain, Fill, Fills, Mips};
@@ -54,6 +55,8 @@ pub struct Hooks {
     pub old_key: bool,
     pub ties_decreasing: bool,
     pub compact_by_atomic: bool,
+    /// #484: an indirect dispatch runs `max` invocations, with no guard against its count.
+    pub dispatch_without_guard: bool,
 }
 
 /// One iterate step of a pass operator: its body's pipeline and its two ping-pong targets.
@@ -150,6 +153,37 @@ pub fn mark_of(item: &str) -> &'static str {
 
 /// The marks a document's pass and compute operator items run under, with their declared costs,
 /// before they are built.
+/// The operators that feed an instances output, directly or through what they read: they run in
+/// the frame's compute place, before anything draws (#484). The rest run in the effects chain,
+/// where a compute operator may read what the frame drew.
+pub fn feeders(doc: &Value) -> BTreeSet<String> {
+    let items = doc["items"].as_object();
+    let mut early: BTreeSet<String> = items
+        .into_iter()
+        .flatten()
+        .filter(|(_, item)| {
+            item["kind"] == "gpu.compute@1"
+                && item["params"]["outputs"]
+                    .as_object()
+                    .is_some_and(|o| o.values().any(|v| v.get("instances").is_some()))
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for id in early.clone() {
+            let inputs = doc["items"][&id]["params"]["inputs"].as_object();
+            for i in inputs.into_iter().flat_map(|m| m.values()) {
+                if let Some(op) = i["from"]["storage"]["op"].as_str() {
+                    grew |= items.is_some_and(|m| m.contains_key(op)) && early.insert(op.to_string());
+                }
+            }
+        }
+    }
+    early
+}
+
 pub fn marks(doc: &Value) -> Vec<(String, f64)> {
     doc["items"]
         .as_object()
@@ -199,6 +233,8 @@ pub struct OutTex {
 /// A document's operators.
 pub struct DocOps {
     pub ops: Vec<Op>,
+    /// The operators that run before the frame's draws (#484: [`feeders`]).
+    pub early: BTreeSet<String>,
     /// Each compute operator's storage outputs, by (item, output), and the core's storage inputs
     /// by ("core", name).
     storage: BTreeMap<(String, String), wgpu::Buffer>,
@@ -210,6 +246,11 @@ pub struct DocOps {
     drawn: BTreeMap<String, String>,
     /// Each multi-dispatch operator's plan, made once its buffers are known.
     plans: BTreeMap<String, (Option<Arc<Pre>>, Arc<Plan>)>,
+    /// Each indirect dispatch's arguments and the plan that writes them (#484).
+    counted: BTreeMap<String, (Arc<Plan>, wgpu::Buffer)>,
+    /// The word each storage output with a declared clear starts the frame at, as a buffer to
+    /// copy from (#484).
+    clears: BTreeMap<(String, String), wgpu::Buffer>,
     blit: Option<Arc<Runner>>,
     kernels: Option<Arc<(Structural, Mips, Fills)>>,
     doc_seed: u64,
@@ -262,6 +303,9 @@ impl DocOps {
             targets: BTreeMap::new(),
             drawn: BTreeMap::new(),
             plans: BTreeMap::new(),
+            early: BTreeSet::new(),
+            counted: BTreeMap::new(),
+            clears: BTreeMap::new(),
             blit: None,
             kernels: None,
             doc_seed: 0,
@@ -417,6 +461,7 @@ impl DocOps {
                 .as_object()
                 .and_then(|m| Program::compile(m).ok());
         }
+        out.early = feeders(doc);
         // Compute first, each after what it reads; then passes by their order key, then ID.
         let mut placed: Vec<String> = Vec::new();
         let mut computes: Vec<String> = out
@@ -445,6 +490,32 @@ impl DocOps {
                 &b.item,
             ))
         });
+        out
+    }
+
+    /// Each instances output with a count: the rows its compact step keeps and that count, which
+    /// the instancer draws from (#484).
+    pub fn sources(&self) -> Vec<deep_scene3d_render::cull::Source> {
+        let mut out = Vec::new();
+        for op in &self.ops {
+            let Some(runner) = &op.runner else { continue };
+            let o = &runner.compiled.checked.op;
+            for i in o.instances.values() {
+                let Some(step) = &i.count else { continue };
+                let buffer = |port: &str| {
+                    let want = graph::Arg::Ref(step.clone(), Some(port.to_string()));
+                    let (name, _) = o.storage.iter().find(|(_, s)| s.from.as_ref() == Some(&want))?;
+                    self.storage.get(&(op.item.clone(), name.clone())).cloned()
+                };
+                if let (Some(rows), Some(count)) = (buffer("out"), buffer("count")) {
+                    out.push(deep_scene3d_render::cull::Source {
+                        instancer: i.instancer.clone(),
+                        rows,
+                        count,
+                    });
+                }
+            }
+        }
         out
     }
 
@@ -784,6 +855,19 @@ impl DocOps {
                         for b in &outs {
                             parts.push(Part::ClearBuffer(b.clone()));
                         }
+                        for (n, s) in c.op.storage.iter().filter(|(_, s)| s.clear != 0) {
+                            let key = (item.clone(), n.clone());
+                            let words = vec![s.clear; s.count.max(1) as usize];
+                            let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+                            let from = self.clears.entry(key.clone()).or_insert_with(|| {
+                                device.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                    label: Some("operator clear"),
+                                    contents: &bytes,
+                                    usage: wgpu::BufferUsages::COPY_SRC,
+                                })
+                            });
+                            parts.push(Part::CopyBuffer(from.clone(), self.storage[&key].clone()));
+                        }
                         let mut views = Vec::new();
                         let mut chains = Vec::new();
                         let names: Vec<String> = c.op.textures.keys().cloned().collect();
@@ -820,7 +904,31 @@ impl DocOps {
                         let vrefs: Vec<&wgpu::TextureView> = views.iter().collect();
                         let (g0, g1, keep) =
                             runner.bind_with(&device.device, &f, [1, 1], &values, &trefs, &all, &vrefs);
-                        parts.push(Part::Dispatch(runner.clone(), (g0, g1), keep, c.op.elements));
+                        // An indirect dispatch: the GPU writes its arguments from its count.
+                        let count = c
+                            .storage_inputs
+                            .iter()
+                            .position(|n| n == graph::DISPATCH_COUNT)
+                            .and_then(|k| storage.get(k))
+                            .filter(|_| c.op.counted && !self.hooks.dispatch_without_guard);
+                        match count {
+                            Some(count) => {
+                                let d = &device.device;
+                                let (plan, buffer) = self.counted.entry(item.clone()).or_insert_with(|| {
+                                    let buffer = d.create_buffer(&wgpu::BufferDescriptor {
+                                        label: Some("operator indirect dispatch"),
+                                        size: 12,
+                                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT,
+                                        mapped_at_creation: false,
+                                    });
+                                    let plan = kern.0.dispatch_args(d, count, &buffer, c.op.workgroup, c.op.elements);
+                                    (Arc::new(plan), buffer)
+                                });
+                                parts.push(Part::Plan(plan.clone()));
+                                parts.push(Part::DispatchIndirect(runner.clone(), (g0, g1), keep, buffer.clone()));
+                            }
+                            None => parts.push(Part::Dispatch(runner.clone(), (g0, g1), keep, c.op.elements)),
+                        }
                         parts.extend(chains.into_iter().map(Part::Mips));
                     }
                     (_, Some(storage)) => {
@@ -945,7 +1053,9 @@ enum Part {
     ClearTarget(wgpu::TextureView, [f32; 4]),
     Clears(Arc<Plan>),
     Fill(Arc<Fill>),
+    CopyBuffer(wgpu::Buffer, wgpu::Buffer),
     Dispatch(Arc<Runner>, Groups, [wgpu::Buffer; 2], u32),
+    DispatchIndirect(Arc<Runner>, Groups, [wgpu::Buffer; 2], wgpu::Buffer),
     Draw(Arc<Runner>, Groups, [wgpu::Buffer; 2], wgpu::TextureView),
     Blit(Blit),
     Pre(Arc<Pre>),
@@ -968,6 +1078,9 @@ impl Rec {
         for p in &self.parts {
             match p {
                 Part::ClearBuffer(b) => encoder.clear_buffer(b, 0, None),
+                Part::CopyBuffer(from, to) => {
+                    encoder.copy_buffer_to_buffer(from, 0, to, 0, None);
+                }
                 Part::Clears(plan) => plan.clear(encoder),
                 Part::Fill(f) => f.record(encoder),
                 Part::ClearTarget(v, c) => {
@@ -1020,6 +1133,18 @@ impl Rec {
                     r.dispatch(encoder, *n, g, writes);
                     times.end(i, encoder);
                 }
+                Part::DispatchIndirect(r, g, _, args) => {
+                    let i = times.start(self.mark, encoder);
+                    let writes = match pair(used) {
+                        Some((s, at)) => {
+                            used += 2;
+                            Some(wgpu::ComputePassTimestampWrites { query_set: s, beginning_of_pass_write_index: Some(at), end_of_pass_write_index: Some(at + 1) })
+                        }
+                        None => times.compute(i),
+                    };
+                    r.dispatch_indirect(encoder, args, g, writes);
+                    times.end(i, encoder);
+                }
                 Part::Draw(r, g, _, into) => {
                     let i = times.start(self.mark, encoder);
                     let writes = match pair(used) {
@@ -1064,7 +1189,7 @@ impl Rec {
         self.parts
             .iter()
             .map(|p| match p {
-                Part::Dispatch(..) | Part::Draw(..) => 2,
+                Part::Dispatch(..) | Part::DispatchIndirect(..) | Part::Draw(..) => 2,
                 Part::Pre(pre) => pre.queries(),
                 Part::Plan(plan) => plan.queries(),
                 _ => 0,

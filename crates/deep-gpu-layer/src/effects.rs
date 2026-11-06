@@ -978,6 +978,7 @@ pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
         Options {
             drops_swizzle_last: p == Some(Planted::DropsSwizzleLast),
             index_wraps: p == Some(Planted::IndexWraps),
+            no_count_guard: p == Some(Planted::DispatchWithoutGuard),
             ..Options::default()
         },
         check::CheckOptions {
@@ -1001,6 +1002,7 @@ pub fn operator_hooks(p: Option<Planted>) -> deep_effects_render::docops::Hooks 
         old_key: p == Some(Planted::MipsKeptUnderOldKey),
         ties_decreasing: p == Some(Planted::SortTiesDecreasing),
         compact_by_atomic: p == Some(Planted::CompactByAtomic),
+        dispatch_without_guard: p == Some(Planted::DispatchWithoutGuard),
     }
 }
 
