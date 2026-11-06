@@ -20,6 +20,7 @@ const actionCode = (a: Action, scrub: (s: string) => string): string => {
   if (a.click) return `await ${locatorCode(a.click)}.click();`;
   if (a.fill) return a.secret !== undefined ? `await ${locatorCode(a.fill)}.fill(secret(${js(a.secret)}));` : `await ${locatorCode(a.fill)}.fill(${js(scrub(a.text ?? ''))});`;
   if (a.scrollIntoView) return `await ${locatorCode(a.scrollIntoView)}.scrollIntoViewIfNeeded();`;
+  if (a.hover) return `await ${locatorCode(a.hover)}.hover();`;
   if (a.press !== undefined) return `await page.keyboard.press(${js(a.press)});`;
   if (a.wait !== undefined) return `await page.waitForTimeout(${a.wait});`;
   return '';

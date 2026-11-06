@@ -21,7 +21,7 @@ import { parse, stringify } from 'yaml';
 import { runApiJourney } from './api.js';
 import { firstDiffering } from './compare.js';
 import { listFeatures as readFeatures, selectJourneys as select } from './features.js';
-import { parseJourney, refusals, timeoutUnder, toDriver, type Journey, type Locator as JourneyLocator } from './journey.js';
+import { parseJourney, refusals, timeoutUnder, toDriver, unrunnable, type Journey, type Locator as JourneyLocator } from './journey.js';
 import { judgeLatency } from './latency.js';
 import { assertMotion, assertReducedMotion } from './motion.js';
 import { comparePixels as compareImages, decodePng, encodePng, highlight, paintMasks, type Box, type Image } from './png.js';
@@ -226,10 +226,9 @@ async function runInternal(o: JourneyRunOptions, extra: Internal): Promise<Ran> 
   try { text = journeyText(o.checkout, o.journey); } catch (error) { return { run: { ...empty(o.run, { depth: 'journey', reducedMotion }), outcome: 'missing', cause: (error as Error).message }, report: null, render: null }; }
   let journey: Journey;
   try { journey = parseJourney(text); } catch (error) { return { run: { ...empty(o.run, { depth: 'journey', reducedMotion }), outcome: 'failed', cause: (error as Error).message, failures: [{ test: o.journey, file: o.journey, line: 0, stack: null, assertion: false, message: (error as Error).message }] }, report: null, render: null }; }
-  const refused = refusals(journey);
-  if (!journey.endState.length) refused.push('an end state is required: end_state names at least one check of what the system holds once the journey is done, and this journey names none');
+  const refused = [...unrunnable(journey), ...refusals(journey)];
   if (refused.length) {
-    // A file that carries a credential never runs: no stack starts for it, and the refusal names the step, never a value.
+    // A file that carries a credential, or names what a run can't drive, never runs: no stack starts for it, and the refusal names the step, never a value.
     return { run: { ...empty(o.run, { depth: journey.depth, reducedMotion }), outcome: 'failed', cause: refused.join('; '), failures: refused.map((r) => ({ test: journey.id, file: o.journey, line: 0, stack: null, assertion: false, message: r })) }, report: null, render: null };
   }
   if (extra.masks) journey.masks = extra.masks;
@@ -476,6 +475,8 @@ async function record(o: JourneyRunOptions, journey: Journey, text: string, url:
   } else if (run.failures.length || endFailures.length) run.outcome = 'failed';
   else if (!run.video) { run.outcome = 'failed'; run.cause = 'the run kept no video'; fail(journey.id, null, false, run.cause); }
   else if (!journey.steps.length && !journey.endState.length) { run.outcome = 'ran_nothing'; run.cause = 'the journey has no step and no end-state check'; }
+  // A model's reading and a person's answer to come are never a pass: with no code check of the end state, nothing counted.
+  else if (!run.endState.some((e) => e.oracle === 'code' && e.outcome === 'passed')) { run.outcome = 'uncounted'; run.mask = 'no code check of the end state ran: a model\'s reading or a person\'s answer never passes a journey on its own'; run.cause = run.mask; }
   else run.outcome = 'passed';
   run.failures.push(...endFailures);
   if (uncounted && run.outcome !== 'stopped') { run.outcome = 'uncounted'; run.mask = `the stack served another tree: ${run.served.served === 'checkout' ? '' : run.served.named}`; run.cause = run.mask; }
