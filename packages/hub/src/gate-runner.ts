@@ -217,6 +217,12 @@ export class GateRunner {
     });
     return v.outcome === 'INVALID' && whys.length ? { ...v, reasons: [...whys, ...v.reasons] } : v;
   }
+  /** A check whose run couldn't start, its snapshot's checkout or its start refused: one missing run, naming why (#31). */
+  private cantStart(e: Entry, error: unknown): void {
+    const run = `run:${ulid(this.o.now())}`;
+    this.records.set(run, missingRun(run, `${e.check.check} couldn't start: ${error instanceof Error ? error.message : String(error)}`));
+    e.runs.push(run);
+  }
   private claimOf(claim: string): Claim | undefined {
     for (const list of this.claims.values()) { const c = list.find((x) => x.claim === claim); if (c) return c; }
     return undefined;
@@ -361,8 +367,10 @@ export class GateRunner {
         e.runs.push(run);
         e.outcome = await this.retried(claim, e, checkout!, await this.o.ended(run));
         await this.onBase(claim, e);
-      } catch {
+      } catch (error) {
         e.outcome = 'missing';
+        // A run that never started is missing, named, so the check is BLOCKED, never pending with no run to come.
+        if (!e.runs.length) this.cantStart(e, error);
       } finally {
         e.running = false;
       }
@@ -678,9 +686,10 @@ export class GateRunner {
           void this.pump();
           this.cleanup(c);
         });
-      } catch {
+      } catch (error) {
         e.outcome = 'missing';
         e.running = false;
+        if (!e.runs.length) this.cantStart(e, error);
         await this.o.judged?.(e.claim);
         this.cleanup(c);
       }
