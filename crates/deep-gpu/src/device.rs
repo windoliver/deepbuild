@@ -140,7 +140,13 @@ impl Device {
         let mut name = String::from("noop");
         let mut info = None;
         let (device, queue) = match backend {
-            Backend::Noop => wgpu::Device::noop(&wgpu::DeviceDescriptor::default()),
+            Backend::Noop => wgpu::Device::noop(&wgpu::DeviceDescriptor {
+                required_limits: wgpu::Limits {
+                    max_bind_groups: 5,
+                    ..Default::default()
+                },
+                ..Default::default()
+            }),
             Backend::Gpu => {
                 let choice = choice.ok_or("no GPU adapter")?;
                 let adapter = &choice.raw;
@@ -156,6 +162,9 @@ impl Device {
                     required_limits: wgpu::Limits {
                         max_storage_buffer_binding_size: limits.max_storage_buffer_binding_size,
                         max_buffer_size: limits.max_buffer_size,
+                        // A culled element's vertex stage reads its record from a group of its
+                        // own, the fifth (#484).
+                        max_bind_groups: limits.max_bind_groups,
                         ..Default::default()
                     },
                     ..Default::default()

@@ -156,7 +156,8 @@ fn light_frame(toward: [f64; 3]) -> [[f64; 3]; 3] {
 pub fn caster_corners(scene: &Scene) -> Vec<(String, [[f64; 3]; 8])> {
     let mut out = Vec::new();
     for s in scene.layers.iter().flat_map(|l| &l.solids) {
-        if !s.cast_shadow {
+        // A culled element is the GPU's to test (#484).
+        if !s.cast_shadow || s.batch != 0 {
             continue;
         }
         let [lo, hi] = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
