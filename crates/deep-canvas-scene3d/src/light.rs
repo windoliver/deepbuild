@@ -383,9 +383,33 @@ pub struct Light {
     /// A spot's cone: cos of its outer and inner half angles.
     pub cone: [f64; 2],
     pub area: Option<Area>,
-    /// Whether it asks for a shadow (a sun's or a spot's; the policy's budget decides).
+    /// Whether it asks for a shadow (the policy's budget decides).
     pub shadow: bool,
     pub priority: f64,
+    /// Its local +X and +Y in the world, unit: the frame its distribution and its area's cube
+    /// turn in.
+    pub axes: [Vec3; 2],
+    /// A sun's apparent diameter in degrees (Light policy: soft shadows).
+    pub angle: f64,
+    /// The collections it lights and that shadow it, by name; empty for all.
+    pub receivers: Vec<String>,
+    pub casters: Vec<String>,
+    /// Its receiver and caster sets' bits (Light: receivers, casters), 0 for all, which
+    /// [`crate::sets::compile`] fills.
+    pub receiver_bit: u32,
+    pub caster_bit: u32,
+    /// Its IES distribution (Light: IES distribution).
+    pub distribution: Option<LampTable>,
+}
+
+/// A light's IES table: its layer in the scene's distributions, what its values are multiplied by
+/// so its flux holds (a spot's table is normalized over its cone), and the share of the file's
+/// flux a spot's cone clips.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LampTable {
+    pub layer: u32,
+    pub scale: f64,
+    pub clipped: f64,
 }
 
 /// The light policy's budget per view (Light and the light policy).
@@ -468,7 +492,9 @@ pub fn material<'a>(
         _ => return Err(bad("out_of_range", "alpha_mode")),
     };
     let casts = match word("shadow", "auto") {
-        Some("auto") => !alpha_mode.see_through(),
+        // Glass lets light through: `auto` also writes nothing for a transmissive part, which
+        // the lobes below read (#446).
+        Some("auto") => !alpha_mode.see_through() && at("transmission", 0.0) <= 0.0,
         Some("cast") => alpha_mode != AlphaMode::Add,
         Some("none") => false,
         // A see-through part's transmittance in the shadow maps lands with colored shadows
@@ -750,37 +776,132 @@ pub fn light(
             .and_then(Value::as_bool)
             .unwrap_or(false),
         priority: at("priority", 0.0),
+        axes,
+        angle: at("angle", 0.53).max(0.0),
+        receivers: Vec::new(),
+        casters: Vec::new(),
+        receiver_bit: 0,
+        caster_bit: 0,
+        distribution: None,
     })
 }
 
-/// The shadow budget per view (Light and the light policy: `shadowed`): one sun and two spots.
-pub const SHADOWED_SPOTS: usize = 2;
+/// PCSS or Castaño's filter (Light policy: soft shadows).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Soft {
+    pub pcss: bool,
+    pub blocker_taps: u32,
+    pub filter_taps: u32,
+    /// The most a penumbra spreads, in shadow map texels.
+    pub max_penumbra: f64,
+}
 
-/// The lights `policy` shades that cast a shadow this view, by index: the first sun asking for
-/// one, and the two highest-scoring spots asking for one by the policy's order; and, by ID, the
-/// ones asking whose shadow the budget dropped (reported, never silent).
-pub fn shadowed(lights: &[Light], policy: &Policy) -> (Vec<usize>, Vec<String>) {
-    let (mut kept, mut dropped, mut sun, mut spots) = (Vec::new(), Vec::new(), false, 0);
-    for &(i, _) in &policy.shaded {
+/// Screen-space contact shadows for the key light.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Contact {
+    pub length: f64,
+    pub samples: u32,
+}
+
+/// The light policy's shadow fields (Light policy: soft shadows, local shadows).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Shadowing {
+    pub soft: Option<Soft>,
+    pub contact: Option<Contact>,
+    pub spots: usize,
+    /// Point lights and area lights with a shadow.
+    pub points: usize,
+    /// A spot's map's side and each cube face's, in texels.
+    pub local_map: u32,
+    /// `cache: static`: a map holds until its key changes.
+    pub cache: bool,
+}
+
+/// The most spots a policy may shadow; points take four, which the budget class never raises.
+pub const MOST_SPOTS: usize = 8;
+pub const MOST_POINTS: usize = 4;
+
+impl Default for Shadowing {
+    /// A document that names no `light_policy`: the key sun's tent alone, as before it had one.
+    fn default() -> Shadowing {
+        Shadowing {
+            soft: None,
+            contact: None,
+            spots: 0,
+            points: 0,
+            local_map: 512,
+            cache: true,
+        }
+    }
+}
+
+impl Shadowing {
+    /// A `light_policy`'s fields before it names any: PCSS and two shadowed spots.
+    pub fn named() -> Shadowing {
+        Shadowing {
+            soft: Some(Soft {
+                pcss: true,
+                blocker_taps: 16,
+                filter_taps: 16,
+                max_penumbra: 32.0,
+            }),
+            spots: 2,
+            ..Shadowing::default()
+        }
+    }
+}
+
+/// The shadows a view keeps: each light by its index with the share of its shadow the policy
+/// keeps, and the ones asking that lost theirs, by ID.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Shadowed {
+    pub kept: Vec<(usize, f64)>,
+    pub dropped: Vec<String>,
+}
+
+/// The lights `policy` shades that cast a shadow this view, by the policy's order: the first sun
+/// asking for one, and the top spots and the top point and area lights the budget holds. A shadow
+/// near its cap fades by score across the margin, and a light the cut has begun to dim loses its
+/// shadow first; either way it's reported by ID, never silent.
+pub fn shadowed(lights: &[Light], policy: &Policy, budget: &Shadowing, scores: &[f64]) -> Shadowed {
+    let mut out = Shadowed::default();
+    let (mut sun, mut spots, mut points) = (false, Vec::new(), Vec::new());
+    let mut cuts = [None, None];
+    for &(i, weight) in &policy.shaded {
         let l = &lights[i];
         if !l.shadow {
             continue;
         }
-        let room = match l.kind {
-            LightKind::Sun => !std::mem::replace(&mut sun, true),
-            LightKind::Spot if spots < SHADOWED_SPOTS => {
-                spots += 1;
-                true
+        let (list, cap, group): (&mut Vec<usize>, usize, usize) = match l.kind {
+            LightKind::Sun => {
+                if std::mem::replace(&mut sun, true) {
+                    out.dropped.push(l.id.clone());
+                } else {
+                    out.kept.push((i, 1.0));
+                }
+                continue;
             }
-            _ => false,
+            LightKind::Spot => (&mut spots, budget.spots, 0),
+            _ => (&mut points, budget.points, 1),
         };
-        if room {
-            kept.push(i);
+        if weight >= 1.0 && list.len() < cap {
+            list.push(i);
         } else {
-            dropped.push(l.id.clone());
+            out.dropped.push(l.id.clone());
+            cuts[group] = cuts[group].or(Some(scores[i]));
         }
     }
-    (kept, dropped)
+    for (list, cut) in [spots, points].iter().zip(cuts) {
+        for &i in list {
+            let share = cut.map_or(1.0, |c| ((scores[i] - c) / (c * MARGIN)).clamp(0.0, 1.0));
+            if share > 0.0 {
+                out.kept.push((i, share));
+            } else {
+                out.dropped.push(lights[i].id.clone());
+            }
+        }
+    }
+    out
 }
 
 /// The lights a view shades, with each one's weight, and the ones its budget left out, by ID.
@@ -1016,7 +1137,10 @@ mod tests {
             point("p", [0.0, 1.0, 0.0], 800.0),
         ];
         let p = policy(&lights, &cam);
-        let (kept, dropped) = shadowed(&lights, &p);
+        let budget = Shadowing::named();
+        let got = shadowed(&lights, &p, &budget, &scores(&lights, &cam));
+        let kept: Vec<usize> = got.kept.iter().map(|k| k.0).collect();
+        let dropped = got.dropped;
         let ids: Vec<&str> = kept.iter().map(|&i| lights[i].id.as_str()).collect();
         assert_eq!(ids, ["sun-a", "s-hot", "s-mid"]);
         assert_eq!(dropped, ["sun-b", "s-dim"]);

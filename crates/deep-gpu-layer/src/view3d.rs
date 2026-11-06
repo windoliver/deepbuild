@@ -110,6 +110,8 @@ struct Args {
     hidden: BTreeSet<String>,
     /// Each frame reports the key sun's cascade splits (#422).
     cascades: bool,
+    /// Each frame reports its shadow passes and local maps (#446).
+    shadows: bool,
     /// Each frame reports its level-of-detail rows and its light cut, and each captured frame
     /// its band masks (#425).
     lod: bool,
@@ -406,7 +408,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
         capture,
         read: call["read"]
             .as_array()
-            .map(|r| r.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+            .map(|r| {
+                r.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default(),
         cull_on_cpu: match call["cull"].as_str() {
             None => false,
@@ -470,6 +476,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
             .map(str::to_string)
             .collect(),
         cascades: call["cascades"].as_bool().unwrap_or(false),
+        shadows: call["shadows"].as_bool().unwrap_or(false),
         lod: call["lod"].as_bool().unwrap_or(false),
         light_cut: call["light_cut"].as_bool().unwrap_or(false),
         masks: call["masks"].as_bool().unwrap_or(false),
@@ -491,10 +498,19 @@ fn install(packs: &[(Option<String>, std::path::PathBuf)]) -> Result<Packs, Valu
     for (id, dir) in packs {
         let mut manifest = read(&dir.join("pack.json"))?;
         let Some(fields) = manifest.as_object_mut() else {
-            return Err(refused("bad_input", format!("{}: a pack is an object", dir.display())));
+            return Err(refused(
+                "bad_input",
+                format!("{}: a pack is an object", dir.display()),
+            ));
         };
         let id = id.clone().unwrap_or_else(|| {
-            format!("deepbuild/{}", fields.get("name").and_then(Value::as_str).unwrap_or_default())
+            format!(
+                "deepbuild/{}",
+                fields
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+            )
         });
         fields.insert("id".into(), json!(id));
         if let Some(Value::Object(recipes)) = fields.get_mut("recipes") {
@@ -1085,7 +1101,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
             levels.collect();
-            let (mut composed, resident) = levels.compose(lowered_doc.as_ref().unwrap_or(&args.doc));
+            let (mut composed, resident) =
+                levels.compose(lowered_doc.as_ref().unwrap_or(&args.doc));
             if !args.hidden.is_empty() {
                 composed = without_layers(&composed, &args.hidden);
             }
@@ -1402,6 +1419,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 sc.motion = Some(Arc::new(motion));
                 moving = Arc::new(sc);
             }
+            let noise_from_frame = app.planted == Some(Planted::SoftNoiseFromFrame);
             let sub_scene = |k: usize| -> Arc<Scene> {
                 let mut sc = if timed.is_empty() {
                     (*moving).clone()
@@ -1409,6 +1427,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     timed[k].clone()
                 };
                 sc.jitter = plan[k].offset;
+                // Under samples per frame the point on the light moves with the sample's index
+                // (#446; Light policy: soft shadows).
+                sc.sample_turn = (plan.len() > 1).then(|| {
+                    deep_canvas_scene3d::samples::r2(k as u32 + 13)[0] * std::f64::consts::TAU
+                });
+                if noise_from_frame {
+                    sc.sample_turn = Some(n as f64 * 2.399963);
+                }
                 Arc::new(sc)
             };
             // The viewer's marks draw over the frame, never in it: its selection, hover and
@@ -1640,13 +1666,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     let read = app.worker.call(move |state| -> Result<Value, Value> {
                         let device = state.gpu.device();
                         let fx = lock(&fx2);
-                        let ops = fx
-                            .docops
-                            .as_ref()
-                            .ok_or_else(|| refused("bad_input", "read names an operator output, and the document runs no operator"))?;
+                        let ops = fx.docops.as_ref().ok_or_else(|| {
+                            refused(
+                                "bad_input",
+                                "read names an operator output, and the document runs no operator",
+                            )
+                        })?;
                         let mut m = serde_json::Map::new();
                         for k in &keys {
-                            m.insert(k.clone(), crate::opframe::read_one(&device, ops, &Default::default(), k, &dir)?);
+                            m.insert(
+                                k.clone(),
+                                crate::opframe::read_one(
+                                    &device,
+                                    ops,
+                                    &Default::default(),
+                                    k,
+                                    &dir,
+                                )?,
+                            );
                         }
                         Ok(Value::Object(m))
                     })?;
@@ -1759,12 +1796,34 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     .counts
                     .shadow_maps
                     .iter()
-                    .map(|(key, texel)| json!({"key": format!("{key:016x}"), "texel_m": texel}))
+                    .enumerate()
+                    .map(|(i, (key, texel, clip))| {
+                        let drawn = drawn.counts.cascades_drawn.contains(&(i as u32));
+                        json!({"key": format!("{key:016x}"), "texel_m": texel, "clip": clip, "drawn": drawn})
+                    })
                     .collect();
                 frame.insert(
                     "cascades".into(),
                     json!({"splits": drawn.counts.cascade_splits, "maps": maps}),
                 );
+            }
+            if args.shadows {
+                let counts = &drawn.counts;
+                let mut passes = counts.cascades_drawn.len() as u32;
+                let maps: Vec<Value> = counts
+                    .local_maps
+                    .iter()
+                    .map(|m| {
+                        passes += if m.drawn { m.faces } else { 0 };
+                        let kind = match m.faces {
+                            1 => "spot",
+                            5 => "area",
+                            _ => "point",
+                        };
+                        json!({"light": m.light, "kind": kind, "key": format!("{:016x}", m.key), "drawn": m.drawn})
+                    })
+                    .collect();
+                frame.insert("shadows".into(), json!({"passes": passes, "maps": maps}));
             }
             if let Some((gpu_ms, passes)) = &drawn.timing {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
