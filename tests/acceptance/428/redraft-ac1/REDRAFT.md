@@ -245,7 +245,7 @@ $ node_modules/.bin/tsc -p tests/acceptance/428/redraft-ac1/tsconfig.json
 (no output; exit 0)
 
 $ node node_modules/vitest/vitest.mjs run --root tests/acceptance/428/redraft-ac1 --no-file-parallelism
- RUN  v5.0.5 /home/jing/deepbuild/.claude/worktrees/agent-a239f2dc9a80ea53c/tests/acceptance/428/redraft-ac1
+ RUN  v5.0.5 <worktree>/tests/acceptance/428/redraft-ac1
 
  ❯ ac1.test.ts (8 tests | 8 failed) 134ms
    ❯ AC1 #428.df10ac08: Khronos lobe samples, their CPU reference, the anisotropic highlight, wrap and the furnace (8)
