@@ -17,4 +17,6 @@ deep-canvas = { path = "../deep-canvas" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 # Issue #417: `deep-motion eval` takes a shipped look by its ID, for its time feel.
 deep-canvas-marks = { path = "../deep-canvas-marks" }
+# Issue #491: the shaper the auto layout measures text with, for a frame's layout glide.
+deep-text = { path = "../deep-text" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

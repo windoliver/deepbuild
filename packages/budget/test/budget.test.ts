@@ -61,6 +61,7 @@ const wrap = (store: RecordStore): RecordStore => ({
   startSlice: (id) => store.startSlice(id),
   loadLearned: (id) => store.loadLearned(id),
   resolve: (handle) => store.resolve(handle),
+  transcript: (session) => store.transcript(session),
   keep: (connection, file) => store.keep(connection, file),
   rollBack: (connection, what) => store.rollBack(connection, what),
   backup: (path) => store.backup(path),

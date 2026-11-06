@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160">
+  <style id="style">.tinted { fill: #208080; }</style>
+  <clipPath id="clip">
+    <rect x="20" y="20" width="20" height="20"/>
+  </clipPath>
+  <mask id="mask" maskUnits="userSpaceOnUse" x="80" y="0" width="80" height="80">
+    <rect x="90" y="10" width="30" height="60" fill="#ffffff"/>
+    <rect x="120" y="10" width="30" height="60" fill="#000000"/>
+  </mask>
+  <pattern id="pattern" patternUnits="userSpaceOnUse" x="0" y="0" width="20" height="20">
+    <rect x="0" y="0" width="10" height="10" fill="#c03020"/>
+  </pattern>
+  <marker id="marker" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="0">
+    <rect x="0" y="0" width="12" height="12" fill="#7a2a90"/>
+  </marker>
+  <rect id="clipped" x="10" y="10" width="60" height="60" fill="#1e7b34" clip-path="url(#clip)"/>
+  <rect id="masked" x="90" y="10" width="60" height="60" fill="#2050c0" mask="url(#mask)"/>
+  <rect id="patterned" x="180" y="20" width="40" height="40" fill="url(#pattern)"/>
+  <path id="line" d="M 20 120 L 80 120" fill="none" stroke="#303030" stroke-width="2" marker-end="url(#marker)"/>
+  <rect id="styled" class="tinted" x="140" y="100" width="40" height="40" fill="#e0a000"/>
+</svg>

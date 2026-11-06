@@ -12,8 +12,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  FIXTURES, PLANTED, check, codeDistance, drawn, geometryParts, issuesNaming, perceptual, pixel, plantedMismatches, raster,
-  readPng, roundedRectBoundary, roundedRectDistance, sample, scratch, useRenderBinary, vectorDoc,
+  FIXTURES, PLANTED, check, codeDistance, decodePng, drawn, geometryParts, issuesNaming, perceptual, pixel, plantedMismatches,
+  raster, roundedRectBoundary, roundedRectDistance, sample, scratch, sha256, useRenderBinary, vectorDoc,
   type Checked, type Image, type JsonObject, type Rgb, type VectorDoc,
 } from './elements-helpers.ts';
 
@@ -184,13 +184,29 @@ const PAIRS: Record<string, { tag: Tag | 'rect'; names: string[] }> = {
   'shapes/rect': { tag: 'rect', names: ['simple-case', 'rounded-rect', 'rx-attribute-resolving', 'rx-attribute-clamping', 'rx-and-ry-attributes-clamping-order'] },
 };
 
+/**
+ * Redraft 2 (REDRAFT-AC6.md): four pattern pairs whose resvg PNG snaps tile edges that fall on half pixels at 300 × 300
+ * are judged against the pinned headless Chrome's render of the same SVG instead (Chrome for Testing 156.0.8078.4,
+ * made by chrome-reference.mjs, checked in under fixtures/chrome/), each PNG pinned by its sha256.
+ */
+const CHROME_REFERENCES: Record<string, string> = {
+  'paint-servers/pattern/with-x-and-y': '8611e4742c2c35f2c1d64f23d8939e75cbf39bf65843ab1a38694ac1b8befed4',
+  'paint-servers/pattern/patternUnits=objectBoundingBox': '7d4ad317d49a29966f41e69799d947b33178b23679b9b13452ffd50d827dc8e6',
+  'paint-servers/pattern/patternContentUnits=objectBoundingBox': 'f72952fb5a1e57855424680fd5372a75d43874e1f42f0f8214a2806b99b778ff',
+  'paint-servers/pattern/with-viewBox': '967242db11283df50cb8f23b7e86993a0861180e5684a380f9264564bd53aef4',
+};
+
 describe('#398 AC6 resvg 77b12f4951\'s pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue', () => {
   for (const [folder, { tag, names }] of Object.entries(PAIRS)) {
     for (const name of names) {
       it(`AC6 resvg ${folder}/${name}`, () => {
         const svg = readFileSync(join(FIXTURES, 'resvg', folder, `${name}.svg`));
-        const reference = readPng(join(FIXTURES, 'resvg', folder, `${name}.png`));
-        expect([reference.width, reference.height], 'resvg drew the 200-unit viewBox at 300 × 300').toEqual([300, 300]);
+        const pinned = CHROME_REFERENCES[`${folder}/${name}`];
+        const by = pinned ? 'the pinned Chrome\'s PNG' : 'resvg\'s PNG';
+        const bytes = readFileSync(join(FIXTURES, pinned ? 'chrome' : 'resvg', folder, `${name}.png`));
+        if (pinned) expect(sha256(bytes), `${by} for ${folder}/${name} is the one chrome-reference.mjs made`).toBe(pinned);
+        const reference = decodePng(bytes);
+        expect([reference.width, reference.height], `${by} draws the 200-unit viewBox at 300 × 300`).toEqual([300, 300]);
         const v = vectorDoc(dir, svg, { id: 'v398-resvg', title: name, alt: `resvg ${folder}/${name}`, docSize: [300, 300], pos: [0, 0], size: [300, 300] });
         // The elements outside the list this SVG holds; a rect is on the list and must draw.
         const text = svg.toString('utf8');
@@ -202,7 +218,7 @@ describe('#398 AC6 resvg 77b12f4951\'s pairs run on our code: each drawn to its 
         const { report, image } = raster(dir, v);
         expect(report['ok'], `${folder}/${name} draws through our import, or an issue names ${tag === 'rect' ? 'what stops it' : outside.map((t) => `<${t}>`).join(' or ')}: raster answered ${JSON.stringify(report).slice(0, 1500)}; check answered ${JSON.stringify(checked.raw).slice(0, 1500)}`).toBe(true);
         const verdict = perceptual(reference, image!, `${folder}/${name}`);
-        expect(verdict.problems, `${folder}/${name} against resvg's PNG through the perceptual oracle (${JSON.stringify(verdict.numbers)})`).toEqual([]);
+        expect(verdict.problems, `${folder}/${name} against ${by} through the perceptual oracle (${JSON.stringify(verdict.numbers)})`).toEqual([]);
         // The comparison's planted-mismatch twins: the oracle rejects the reference with its subject erased or moved.
         for (const twin of plantedMismatches(reference)) {
           expect(perceptual(reference, twin.image, twin.name).problems.length, `the oracle rejects ${folder}/${name}'s reference with ${twin.name}`).toBeGreaterThan(0);

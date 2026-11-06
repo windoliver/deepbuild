@@ -122,17 +122,19 @@ export interface Parts {
   receipt: string;
   smallest: string | null;
 }
-/** The checker refused something: failed; else a theorem proves nothing: ran_nothing; else one it stopped short of deciding: stopped; else passed. */
-export function outcomeOf(failures: readonly Failure[], causes: readonly Cause[]): ProofResult['outcome'] {
+/** The checker refused something: failed; else a theorem proves nothing: ran_nothing; else one it stopped short of deciding: stopped; else passed, once it checked one. */
+export function outcomeOf(failures: readonly Failure[], causes: readonly Cause[], testsRun: number): ProofResult['outcome'] {
   if (failures.length) return 'failed';
   if (causes.some((c) => c.why !== 'bound')) return 'ran_nothing';
-  return causes.length ? 'stopped' : 'passed';
+  if (causes.length) return 'stopped';
+  // A run that checked no theorem proves nothing.
+  return testsRun > 0 ? 'passed' : 'ran_nothing';
 }
 export function finish(p: Parts): Checked {
   const reasons = [...p.causes.map((c) => c.line), ...p.failures.map((f) => `${f.test} failed at ${f.file}:${f.line}: ${f.message}`)];
   return {
     result: {
-      outcome: outcomeOf(p.failures, p.causes), testsRun: p.testsRun, failures: p.failures, evidence: p.evidence, read: p.read, mask: null,
+      outcome: outcomeOf(p.failures, p.causes, p.testsRun), testsRun: p.testsRun, failures: p.failures, evidence: p.evidence, read: p.read, mask: null,
       reasons, receipt: p.receipt, proposals: p.proposals, tools: p.tools, smallest: p.smallest,
     },
     causes: p.causes,
