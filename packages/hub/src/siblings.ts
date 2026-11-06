@@ -125,8 +125,8 @@ export class Siblings {
   private timer: NodeJS.Timeout | undefined;
   /** Each session's turns since your last prompt to it: when each began, and whether another session's message began it. */
   private readonly turns = new Map<string, { id: string; at: number; peer: boolean }[]>();
-  /** The loop asks waiting on you, by each session they hold; `hold` once you answered to hold them until you prompt them. */
-  private readonly loops = new Map<string, { ask: string; pair: string[]; at: number; hold?: boolean }>();
+  /** The loop asks that hold sessions, by each session they hold, until you answer one to go on or prompt the session. */
+  private readonly loops = new Map<string, { ask: string; pair: string[]; at: number }>();
   constructor(private readonly o: SiblingOptions) {}
 
   /** The map and what was delivered, read back from the record at the hub's start; nothing is queued from them. */
@@ -153,10 +153,15 @@ export class Siblings {
     const rows = (await this.o.raw(`SELECT id, session_id, ts, json_extract(data, '$.from') AS origin FROM events WHERE kind = 'user.ask' AND ts >= ? AND session_id IS NOT NULL ORDER BY log_pos`, [this.o.now() - LOOP_MS])) as { id: string; session_id: string; ts: number; origin: string }[];
     for (const r of rows) this.turn(r.session_id, r.id, r.origin, r.ts);
     // A loop ask still open, or answered to hold them, holds its session's next such prompt again, unless you prompted it since.
-    const open = (await this.o.raw(`SELECT id, session_id, created, status, answer FROM asks WHERE session_id IS NOT NULL AND (status IN ('open', 'later') OR answer NOT LIKE '%go-on%') AND (question LIKE '% Let them go on?' OR question LIKE '% Let it go on?')`)) as { id: string; session_id: string; created: number; status: string }[];
+    const open = (await this.o.raw(`SELECT id, key, session_id, created FROM asks WHERE session_id IS NOT NULL AND (status IN ('open', 'later') OR answer NOT LIKE '%go-on%') AND (question LIKE '% Let them go on?' OR question LIKE '% Let it go on?')`)) as { id: string; key: string | null; session_id: string; created: number }[];
     for (const a of open) {
-      const yours = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'user.ask' AND session_id = ? AND ts > ? AND json_extract(data, '$.from') IN ('person', 'app') LIMIT 1`, [a.session_id, a.created]);
-      if (!yours.length) this.loops.set(a.session_id, { ask: `ask:${a.id}`, pair: [a.session_id], at: a.created, ...(a.status !== 'open' && a.status !== 'later' ? { hold: true } : {}) });
+      // Its key, loop:<sessions>:<when>, names the pair it holds.
+      const pair = a.key?.startsWith('loop:') ? a.key.split(':').slice(1, -1) : [a.session_id];
+      const held = { ask: `ask:${a.id}`, pair, at: a.created };
+      for (const id of pair) {
+        const yours = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'user.ask' AND session_id = ? AND ts > ? AND json_extract(data, '$.from') IN ('person', 'app') LIMIT 1`, [id, a.created]);
+        if (!yours.length) this.loops.set(id, held);
+      }
     }
   }
   /** A prompt's origin, by its event: yours starts the count again; another session's adds one, once, however often its hook is read. */
@@ -185,19 +190,22 @@ export class Siblings {
     if (origin !== 'session') return undefined;
     const now = this.o.now();
     let open = this.loops.get(meta.session);
-    if (open?.hold) return HOLDING;
     if (open?.ask) {
+      // Read each time: an undone default can be answered again.
       const [row] = (await this.o.raw(`SELECT status, answer FROM asks WHERE id = ?`, [open.ask.slice(4)])) as { status: string; answer: string | null }[];
       if (row && row.status !== 'open' && row.status !== 'later') {
-        if (String(row.answer).includes('go-on')) {
+        if (row.answer === null) {
+          // Closed with no answer: nothing waits on it, and a loop still going asks you again.
+          for (const id of open.pair) if (this.loops.get(id) === open) this.loops.delete(id);
+          open = undefined;
+        } else if (row.answer.includes('go-on')) {
           for (const id of open.pair) this.loops.delete(id);
           for (const id of open.pair) this.turns.set(id, (this.turns.get(id) ?? []).filter((t) => t.at > now));
           return undefined;
+        } else {
+          // You said to hold them: held until you prompt the session, never asked again.
+          return HOLDING;
         }
-        // You said to hold them: held until you prompt the session, never asked again.
-        const held = { ...open, hold: true };
-        for (const id of open.pair) this.loops.set(id, held);
-        return HOLDING;
       }
     }
     if (!open && !this.looping(meta.session)) return undefined;
