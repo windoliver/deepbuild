@@ -526,20 +526,28 @@ fn the_shipped_rules_carry_a_workflow_dispatch_to_the_authority_gate() {
 }
 
 /// The waiter under an agent with `flag` in its argv: a shell that runs it as its child and stays (`exit $?` keeps the
-/// shell from exec'ing it), with the Stop payload on stdin and no hub. Returns the shell and when it started.
-fn waiter_under(home: &std::path::Path, flag: &str) -> (std::process::Child, std::time::Instant) {
+/// shell from exec'ing it), with the Stop payload on stdin and no hub. With `entry_shell` the agent runs it the way
+/// Claude Code runs an entry, as a lone command under `/bin/sh -c`, which dash keeps as the waiter's parent and macOS's
+/// sh execs (#992). The agent leads a process group of its own. Returns the agent and when it started.
+fn waiter_under(
+    home: &std::path::Path,
+    flag: &str,
+    entry_shell: bool,
+) -> (std::process::Child, std::time::Instant) {
     use std::io::Write;
+    use std::os::unix::process::CommandExt;
     let bin = env!("CARGO_BIN_EXE_deep-hook");
+    let waiter = if entry_shell {
+        format!("/bin/sh -c ''\\''{bin}'\\'' claude-code waiter'; exit $?")
+    } else {
+        format!("'{bin}' claude-code waiter; exit $?")
+    };
     let mut agent = Command::new("/bin/sh")
-        .args([
-            "-c",
-            &format!("'{bin}' claude-code waiter; exit $?"),
-            "claude",
-            flag,
-        ])
+        .args(["-c", &waiter, "claude", flag])
         .env_clear()
         .env("HOME", home)
         .stdin(std::process::Stdio::piped())
+        .process_group(0)
         .spawn()
         .unwrap();
     let mut stdin = agent.stdin.take().unwrap();
@@ -556,7 +564,7 @@ fn a_print_mode_agents_waiter_exits_at_once() {
     // run has no later turn to wake, so its waiter must not wait, hub or no hub (#668).
     let home = short_home("print");
     for flag in ["-p", "--print"] {
-        let (mut agent, started) = waiter_under(&home, flag);
+        let (mut agent, started) = waiter_under(&home, flag, false);
         let exited = exit_within(&mut agent, started, std::time::Duration::from_secs(3));
         assert_eq!(
             exited.and_then(|s| s.code()),
@@ -565,7 +573,7 @@ fn a_print_mode_agents_waiter_exits_at_once() {
         );
     }
     // An interactive agent's waiter keeps waiting for an answer to wake its session.
-    let (mut agent, _) = waiter_under(&home, "--model");
+    let (mut agent, _) = waiter_under(&home, "--model", false);
     std::thread::sleep(std::time::Duration::from_millis(1500));
     let waiting = agent.try_wait().unwrap().is_none();
     let _ = agent.kill();
@@ -606,5 +614,49 @@ fn a_hook_the_agent_runs_through_sh_names_the_agent_as_its_parent() {
     assert!(
         spooled.contains(&format!("\"ppid\":{},", std::process::id())),
         "the spooled request names this process as the agent: {spooled}"
+    );
+}
+
+extern "C" {
+    fn kill(pid: i32, sig: i32) -> i32;
+}
+
+/// SIGKILLs the process group `leader` leads, by the syscall: `/usr/bin/kill -KILL -<pgid>` without `--` reads the
+/// group as -1 on Linux and ends every process of the user.
+fn kill_group(leader: u32) {
+    let pgid = i32::try_from(leader).unwrap();
+    assert!(pgid > 1, "a process group to end, not {pgid}");
+    // SAFETY: kill(2) takes plain integers; a negative pid names one process group.
+    unsafe { kill(-pgid, 9) };
+}
+
+#[test]
+fn a_print_runs_waiter_under_its_entrys_shell_exits_at_once() {
+    // `claude -p` -> `/bin/sh -c '<waiter>'` -> the waiter: where the entry's shell stays, as dash does, the print run is
+    // the shell's parent, not the waiter's (#668, #992).
+    let home = short_home("printsh");
+    let (mut agent, started) = waiter_under(&home, "-p", true);
+    let exited = exit_within(&mut agent, started, std::time::Duration::from_secs(3));
+    // Timed out, the agent is gone but its group isn't: the entry's shell and the waiter still in it go too.
+    if exited.is_none() {
+        kill_group(agent.id());
+    }
+    // An interactive agent's waiter, under its entry's shell too, keeps waiting for an answer to wake its session.
+    let (mut interactive, _) = waiter_under(&home, "--model", true);
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+    let waiting = interactive.try_wait().unwrap().is_none();
+    if waiting {
+        kill_group(interactive.id());
+    }
+    let _ = interactive.wait();
+    let _ = std::fs::remove_dir_all(&home);
+    assert_eq!(
+        exited.and_then(|s| s.code()),
+        Some(0),
+        "under `claude -p` and its entry's shell the waiter must exit 0 at once; it was still waiting after 3 s"
+    );
+    assert!(
+        waiting,
+        "under an interactive `claude` and its entry's shell the waiter must keep waiting"
     );
 }

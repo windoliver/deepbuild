@@ -1,0 +1,185 @@
+#398 criterion 6, Redraft 2 (pattern pairs vs Chrome; REDRAFT-AC6.md), elements-redraft.test.ts at the base,
+2026-11-04, on Linux (arm64), node v24.22.0, Chrome for Testing 156.0.8078.4 (chrome-headless-shell).
+Checkout: e2e6e1cc ("Merge pull request #1211 ..."), detached, with only this redraft's files added.
+
+Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/398 elements-redraft.test.ts --no-file-parallelism --reporter=verbose
+
+Summary: 43 tests, 43 pass, none fails. This base already holds #398's import, which names every element outside
+the closed list in an `svg_unsupported` warning (section 2), so each pair, the four redrafted pattern pairs among
+them, is accounted for by the "named in an issue" escape before any drawing is compared. That is the criterion as
+written (#1175 owns drawing them). What the redraft changes is reached at the base only up to the escape: each
+pattern pair reads its pinned Chrome PNG and checks its sha256 and size first, which section 3 shows failing on a
+swapped reference. The comparison against Chrome and its twins, which no pair reaches here, are calibrated in
+section 4 on the same tooling.
+
+=================================================================================================
+1. The run at the base (verbatim, paths redacted)
+=================================================================================================
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/398
+
+ ✓ elements-redraft.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 the SVG imports: the raster draws it, and draws something 326ms
+ ✓ elements-redraft.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 <clipPath> is drawn as listed or named in an issue 2ms
+ ✓ elements-redraft.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 <mask> is drawn as listed or named in an issue 4ms
+ ✓ elements-redraft.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 <pattern> is drawn as listed or named in an issue 5ms
+ ✓ elements-redraft.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 <marker> is drawn as listed or named in an issue 1ms
+ ✓ elements-redraft.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 <style> is drawn as listed or named in an issue 0ms
+ ✓ elements-redraft.test.ts > #398 AC6 an SVG with a clipPath, a mask, a pattern fill, a marker and a style block imports with each drawn as listed or named in an issue > AC6 a planted importer that skips <clipPath> without an issue fails, naming clipPath 252ms
+ ✓ elements-redraft.test.ts > #398 AC6 a rect with rx 4 imports with rounded corners within 0.01 u > AC6 the part r4's outline is the rect [36, 28, 40, 24] u with corners of radius 4, within 0.01 u, and draws so 236ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/clipPath/simple-case 50ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/clipPath/clip-rule=evenodd 15ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/clipPath/clipPathUnits=objectBoundingBox 16ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/clipPath/transform-on-clipPath 44ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/clipPath/with-use-child 26ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/clipPath/nested-clip-path 30ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/mask/maskContentUnits=objectBoundingBox 84ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/mask/on-group-with-transform 34ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/mask/half-width-region-with-rotation 38ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/mask/mask-on-self 39ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/mask/on-a-small-object 25ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg masking/mask/with-clip-path 21ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/simple-case 44ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/patternUnits=objectBoundingBox 75ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/with-patternTransform 35ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/with-viewBox 28ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/with-x-and-y 34ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/patternContentUnits=objectBoundingBox 109ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg painting/marker/marker-on-line 34ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg painting/marker/only-marker-end 14ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg painting/marker/orient=30 11ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg painting/marker/marker-on-polyline 12ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg painting/marker/default-clip 24ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg painting/marker/with-markerUnits=userSpaceOnUse 43ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg structure/style/class-selector 116ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg structure/style/iD-selector 48ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg structure/style/type-selector 49ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg structure/style/attribute-selector 43ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg structure/style/style-inside-CDATA 130ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg structure/style/resolve-order 199ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg shapes/rect/simple-case 3153ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg shapes/rect/rounded-rect 1650ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg shapes/rect/rx-attribute-resolving 1713ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg shapes/rect/rx-attribute-clamping 2213ms
+ ✓ elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg shapes/rect/rx-and-ry-attributes-clamping-order 1577ms
+
+ Test Files  1 passed (1)
+      Tests  43 passed (43)
+   Start at  13:03:34
+   Duration  14.90s (tests 99%, import 1%)
+
+exit 0
+
+=================================================================================================
+2. Why every pattern pair takes the escape: the base's check on the four redrafted SVGs (a scratch probe calling
+   `deep-canvas-render check` with the suite's own document; not part of the suite)
+=================================================================================================
+with-x-and-y ok true issues naming pattern: [{"code":"svg_unsupported","severity":"warning"}]
+patternUnits=objectBoundingBox ok true issues naming pattern: [{"code":"svg_unsupported","severity":"warning"}]
+patternContentUnits=objectBoundingBox ok true issues naming pattern: [{"code":"svg_unsupported","severity":"warning"}]
+with-viewBox ok true issues naming pattern: [{"code":"svg_unsupported","severity":"warning"}]
+
+=================================================================================================
+3. A planted wrong reference: fixtures/chrome/paint-servers/pattern/with-viewBox.png replaced by resvg's PNG for
+   the run only, then restored (its sha256 checked afterwards: 967242db...aef4)
+   Command: as above, with -t "paint-servers/pattern" and the default reporter
+=================================================================================================
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/398
+
+ ❯ elements-redraft.test.ts (43 tests | 1 failed | 37 skipped) 2460ms
+   ❯ #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue (35)
+     × AC6 resvg paint-servers/pattern/with-viewBox 38ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  elements-redraft.test.ts > #398 AC6 resvg 77b12f4951's pairs run on our code: each drawn to its PNG through the perceptual oracle, or its element named in an issue > AC6 resvg paint-servers/pattern/with-viewBox
+AssertionError: the pinned Chrome's PNG for paint-servers/pattern/with-viewBox is the one chrome-reference.mjs made: expected '3a3369be28bc08528e05de5b671c2340ea24c…' to be '967242db11283df50cb8f23b7e86993a08611…' // Object.is equality
+
+Expected: "967242db11283df50cb8f23b7e86993a0861180e5684a380f9264564bd53aef4"
+Received: "3a3369be28bc08528e05de5b671c2340ea24cbccff708ae703197c29dddde83b"
+
+ ❯ elements-redraft.test.ts:207:111
+    205|         const by = pinned ? 'the pinned Chrome\'s PNG' : 'resvg\'s PNG…
+    206|         const bytes = readFileSync(join(FIXTURES, pinned ? 'chrome' : …
+    207|         if (pinned) expect(sha256(bytes), `${by} for ${folder}/${name}…
+       |                                                                                                               ^
+    208|         const reference = decodePng(bytes);
+    209|         expect([reference.width, reference.height], `${by} draws the 2…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed | 37 skipped (43)
+   Start at  13:04:09
+   Duration  2.90s (tests 94%, import 5%, transform 1%)
+
+exit 1
+
+=================================================================================================
+4. Calibration on the base's tooling (REDRAFT-AC6.md, Redraft 2; a scratch test calling elements-helpers.ts's
+   perceptual(), plantedMismatches() and codeDistance(), not part of the suite; verbatim lines)
+   agree4: share of the 90 000 pixels whose channels all lie within 4 codes. problems: the oracle's problem count
+   (0 passes). "fresh": Chrome run again with chrome-reference.mjs's flags into a scratch folder.
+=================================================================================================
+PAIR paint-servers/pattern/with-x-and-y (redrafted)
+  agree4 resvg~chrome 96.48%
+  before: Chrome's render as ours against resvg's PNG {"flip":0.1391,"gmsd":0.129,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.7441,"iou":0.9444} problems=3
+  after: a fresh Chrome render as ours against the checked-in Chrome PNG {"flip":0,"gmsd":0,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0,"iou":1} problems=0 agree4 100.00%
+  after: resvg's PNG as ours against the Chrome PNG {"flip":0.1391,"gmsd":0.129,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.8143,"iou":0.9444} problems=4
+  after: twin the subject erased to the ground against the Chrome PNG {"flip":0.9534,"gmsd":0.4758,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":14.99,"iou":0} problems=4
+  after: twin the frame moved 4 px right and down against the Chrome PNG {"flip":0.8016,"gmsd":0.4495,"crushedRef":0.0132,"crushedOurs":0.006544,"deltaE2000":13,"iou":0.2807} problems=4
+PAIR paint-servers/pattern/patternUnits=objectBoundingBox (redrafted)
+  agree4 resvg~chrome 96.11%
+  before: Chrome's render as ours against resvg's PNG {"flip":0.1218,"gmsd":0.08315,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.385,"iou":1} problems=2
+  after: a fresh Chrome render as ours against the checked-in Chrome PNG {"flip":0,"gmsd":0,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0,"iou":1} problems=0 agree4 100.00%
+  after: resvg's PNG as ours against the Chrome PNG {"flip":0.1218,"gmsd":0.08315,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.434,"iou":1} problems=2
+  after: twin the subject erased to the ground against the Chrome PNG {"flip":0.9112,"gmsd":0.4606,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":11.25,"iou":0} problems=4
+  after: twin the frame moved 4 px right and down against the Chrome PNG {"flip":0.833,"gmsd":0.4209,"crushedRef":0.0132,"crushedOurs":0.006544,"deltaE2000":11.26,"iou":0.07499} problems=4
+PAIR paint-servers/pattern/patternContentUnits=objectBoundingBox (redrafted)
+  agree4 resvg~chrome 92.79%
+  before: Chrome's render as ours against resvg's PNG {"flip":0.1244,"gmsd":0.08383,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.5529,"iou":0.9793} problems=2
+  after: a fresh Chrome render as ours against the checked-in Chrome PNG {"flip":0,"gmsd":0,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0,"iou":1} problems=0 agree4 100.00%
+  after: resvg's PNG as ours against the Chrome PNG {"flip":0.1244,"gmsd":0.08383,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.61,"iou":0.9793} problems=2
+  after: twin the subject erased to the ground against the Chrome PNG {"flip":0.9442,"gmsd":0.4709,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":13.75,"iou":0} problems=4
+  after: twin the frame moved 4 px right and down against the Chrome PNG {"flip":0.8329,"gmsd":0.4359,"crushedRef":0.0132,"crushedOurs":0.006544,"deltaE2000":13.64,"iou":0.2114} problems=4
+PAIR paint-servers/pattern/with-viewBox (redrafted)
+  agree4 resvg~chrome 99.67%
+  before: Chrome's render as ours against resvg's PNG {"flip":0.01454,"gmsd":0.002763,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.0205,"iou":0.95} problems=1
+  after: a fresh Chrome render as ours against the checked-in Chrome PNG {"flip":0,"gmsd":0,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0,"iou":1} problems=0 agree4 100.00%
+  after: resvg's PNG as ours against the Chrome PNG {"flip":0.01454,"gmsd":0.002763,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.02142,"iou":0.95} problems=1
+  after: twin the subject erased to the ground against the Chrome PNG {"flip":0.8933,"gmsd":0.4152,"crushedRef":0.0132,"crushedOurs":0,"deltaE2000":5.888,"iou":0} problems=4
+  after: twin the frame moved 4 px right and down against the Chrome PNG {"flip":0.8273,"gmsd":0.392,"crushedRef":0.0132,"crushedOurs":0.006544,"deltaE2000":7.265,"iou":0.06653} problems=4
+PAIR paint-servers/pattern/simple-case (kept on resvg)
+  agree4 resvg~chrome 99.69%
+  before: Chrome's render as ours against resvg's PNG {"flip":0.003641,"gmsd":0.001999,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.01832,"iou":0.9987} problems=0
+PAIR paint-servers/pattern/with-patternTransform (kept on resvg)
+  agree4 resvg~chrome 96.54%
+  before: Chrome's render as ours against resvg's PNG {"flip":0.03212,"gmsd":0.002066,"crushedRef":0.0132,"crushedOurs":0.0132,"deltaE2000":0.1674,"iou":0.9988} problems=0
+
+=================================================================================================
+5. The references and their pin: chrome-reference.mjs run twice (byte-identical PNGs), then with CHROME_BIN at a
+   missing path and at a binary of another version (verbatim; Chrome's own stderr warnings dropped)
+=================================================================================================
+$ ~/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux-arm64/chrome-headless-shell --version
+Google Chrome for Testing 156.0.8078.4
+$ node tests/acceptance/398/chrome-reference.mjs
+8611e4742c2c35f2c1d64f23d8939e75cbf39bf65843ab1a38694ac1b8befed4  paint-servers/pattern/with-x-and-y.png
+7d4ad317d49a29966f41e69799d947b33178b23679b9b13452ffd50d827dc8e6  paint-servers/pattern/patternUnits=objectBoundingBox.png
+f72952fb5a1e57855424680fd5372a75d43874e1f42f0f8214a2806b99b778ff  paint-servers/pattern/patternContentUnits=objectBoundingBox.png
+967242db11283df50cb8f23b7e86993a0861180e5684a380f9264564bd53aef4  paint-servers/pattern/with-viewBox.png
+exit 0
+$ node tests/acceptance/398/chrome-reference.mjs
+8611e4742c2c35f2c1d64f23d8939e75cbf39bf65843ab1a38694ac1b8befed4  paint-servers/pattern/with-x-and-y.png
+7d4ad317d49a29966f41e69799d947b33178b23679b9b13452ffd50d827dc8e6  paint-servers/pattern/patternUnits=objectBoundingBox.png
+f72952fb5a1e57855424680fd5372a75d43874e1f42f0f8214a2806b99b778ff  paint-servers/pattern/patternContentUnits=objectBoundingBox.png
+967242db11283df50cb8f23b7e86993a0861180e5684a380f9264564bd53aef4  paint-servers/pattern/with-viewBox.png
+exit 0
+$ CHROME_BIN=/nonexistent node tests/acceptance/398/chrome-reference.mjs
+BLOCKED: no headless Chrome at /nonexistent (set CHROME_BIN to Google Chrome for Testing 156.0.8078.4)
+exit 2
+$ CHROME_BIN=/bin/true node tests/acceptance/398/chrome-reference.mjs
+BLOCKED: /bin/true answers "true (GNU coreutils) 9.4", not Google Chrome for Testing 156.0.8078.4
+exit 2

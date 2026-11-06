@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 -90 470 90" role="img" focusable="false">
+  <!-- "x + 1 = 1 + x" written by hand as MathJax writes a formula: glyph outlines once in defs, each glyph a use of
+       one, fill currentColor with no color set, scale(1,-1). The right-hand side is clipped (a clipPath on the term
+       group) at x = 430, through its last glyph, as a reveal would leave it. No text element. -->
+  <defs>
+    <path id="MJX-2-TEX-I-1D465" d="M 0 0 L 12 0 L 30 24 L 48 0 L 60 0 L 36 32 L 60 64 L 48 64 L 30 40 L 12 64 L 0 64 L 24 32 Z"></path>
+    <path id="MJX-2-TEX-N-2B" d="M 20 7 L 30 7 L 30 27 L 50 27 L 50 37 L 30 37 L 30 57 L 20 57 L 20 37 L 0 37 L 0 27 L 20 27 Z"></path>
+    <path id="MJX-2-TEX-N-31" d="M 4 0 L 28 0 L 28 8 L 20 8 L 20 64 L 13 64 L 2 54 L 6 49 L 12 54 L 12 8 L 4 8 Z"></path>
+    <path id="MJX-2-TEX-N-3D" d="M 0 0 L 50 0 L 50 8 L 0 8 Z M 0 20 L 50 20 L 50 28 L 0 28 Z"></path>
+    <clipPath id="MJX-2-clip-rhs">
+      <rect x="270" y="0" width="160" height="90"></rect>
+    </clipPath>
+  </defs>
+  <g stroke="currentColor" fill="currentColor" stroke-width="0" transform="scale(1,-1)">
+    <g data-mml-node="math">
+      <g data-mml-node="mi" id="term-x1"><use data-c="1D465" xlink:href="#MJX-2-TEX-I-1D465" transform="translate(10,10)"></use></g>
+      <g data-mml-node="mo" id="term-plus1"><use data-c="2B" xlink:href="#MJX-2-TEX-N-2B" transform="translate(90,10)"></use></g>
+      <g data-mml-node="mn" id="term-one1"><use data-c="31" xlink:href="#MJX-2-TEX-N-31" transform="translate(160,10)"></use></g>
+      <g data-mml-node="mo" id="term-eq"><use data-c="3D" xlink:href="#MJX-2-TEX-N-3D" transform="translate(210,28)"></use></g>
+      <g data-mml-node="mrow" id="term-rhs" clip-path="url(#MJX-2-clip-rhs)">
+        <use data-c="31" xlink:href="#MJX-2-TEX-N-31" transform="translate(280,10)"></use>
+        <use data-c="2B" xlink:href="#MJX-2-TEX-N-2B" transform="translate(330,10)"></use>
+        <use data-c="1D465" xlink:href="#MJX-2-TEX-I-1D465" transform="translate(400,10)"></use>
+      </g>
+    </g>
+  </g>
+</svg>

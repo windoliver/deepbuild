@@ -311,6 +311,8 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
     let mut first: Option<(String, f64)> = None;
     let mut items = Map::new();
     let mut counts: BTreeMap<String, u32> = BTreeMap::new();
+    // The elements the check costs each compute operator at: an indirect dispatch's max (#484).
+    let mut costed = Map::new();
     for op in &ops {
         let id = op["id"].as_str().unwrap_or("").to_string();
         match compile_planted(op, &BTreeMap::new(), options, check_options) {
@@ -320,6 +322,9 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
                 }
                 for (n, s) in &c.checked.op.storage {
                     counts.insert(format!("{id}.{n}"), s.count);
+                }
+                if c.checked.op.kind == graph::Kind::Compute {
+                    costed.insert(id.clone(), json!(c.checked.op.elements));
                 }
             }
             Err(e) => issues.extend(e.into_iter().map(|i| {
@@ -350,6 +355,7 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
         reply["class"] = json!(class);
         reply["estimate_ns"] = json!(est);
     }
+    reply["costed_elements"] = Value::Object(costed);
     if !issues.is_empty() {
         return reply;
     }
