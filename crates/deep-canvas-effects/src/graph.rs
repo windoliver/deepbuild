@@ -525,6 +525,8 @@ const LITERAL_FIELDS: &[&str] = &[
     "gain",
     // scan's operator (#483).
     "op",
+    // blend's mode (#430).
+    "mode",
 ];
 /// The look's status roles: no operator reads or writes one (Status guard).
 pub const STATUS_ROLES: &[&str] = &[
