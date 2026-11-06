@@ -171,7 +171,8 @@ it('after a restart, a loop ask you answered "hold" still holds without asking a
 it('after a restart, a "hold" you gave a pair of sessions still holds the other one too', async () => {
   const now = Date.now();
   const question = "Sessions a (claude-code) and b (claude-code) started 21 of a's turns with each other's messages in the last 10 minutes, with no prompt from you. Let them go on?";
-  const toB = await restarted([{ id: '03', key: `loop:a:b:${now - 30_000}`, session_id: 'a', created: now - 30_000, status: 'answered', answer: '"hold"', question }], [], 'b');
+  // The core raises every ask with its key hashed, so the record names the pair only in the question.
+  const toB = await restarted([{ id: '03', key: '5f2c8e0d9a7b4c1e3f6a8d2b0c4e7f9a1b3d5c7e9f0a2b4c6d8e0f1a3b5c7d9e', session_id: 'a', created: now - 30_000, status: 'answered', answer: '"hold"', question }], [], 'b');
   expect(toB.told).toContain('you said to hold');
   expect(toB.asked).toHaveLength(0);
 });
@@ -214,15 +215,71 @@ it('a "go on" given after a "hold" lets the sessions go on', async () => {
   siblings.stop();
 });
 
-it('a loop ask closed with no answer never says you said to hold: the next such prompt asks you again', async () => {
+it('a loop ask closed with no answer holds until you prompt the session, never says you said to hold, and never asks again', async () => {
   const ask = { status: 'open', answer: null as string | null };
-  const { siblings, asked, held, settle } = looping(ask);
+  const { siblings, asked, held, now, settle } = looping(ask);
   expect(await held('a')).toContain('held');
   await settle();
   ask.status = 'cancelled';
   const told = await held('a');
   await settle();
-  expect(told).toContain("you're asked in your inbox");
-  expect(asked).toHaveLength(2);
+  expect(told).toContain('closed with no answer');
+  expect(told).not.toContain('you said');
+  expect(asked).toHaveLength(1);
+  siblings.turn('a', 'you', 'person', now);
+  expect(await held('a')).toBeUndefined();
+  siblings.stop();
+});
+
+it('after a restart, a loop ask closed with no answer still holds, never asking again', async () => {
+  const now = Date.now();
+  const question = 'Session a (claude-code) had 21 turns started by another session\'s messages in the last 10 minutes, with no prompt from you. Let it go on?';
+  const closed = await restarted([{ id: '04', session_id: 'a', created: now - 30_000, status: 'cancelled', answer: null, question }], []);
+  expect(closed.told).toContain('closed with no answer');
+  expect(closed.asked).toHaveLength(0);
+});
+
+/** A live hub whose loop asks' rows are `rows`, by ask ID, each raised as ask:01, ask:02, ...; `loop(s)` gives s 21 turns from other sessions' messages. */
+function asksWorld() {
+  const { wa, wb } = world();
+  const rows = new Map<string, { status: string; answer: string | null }>();
+  const asked: string[] = [];
+  const siblings = new Siblings(options({
+    ask: async (_s, _a, _c, _source, a) => { asked.push(String(a.question)); const id = `0${asked.length}`; rows.set(id, { status: 'open', answer: null }); return `ask:${id}`; },
+    raw: async (query, params) => (query.startsWith('SELECT status, answer FROM asks') ? [rows.get(String(params?.[0]))].filter(Boolean) : []),
+  }));
+  const now = Date.now();
+  const loop = (session: string) => { for (let i = 0; i < 21; i++) siblings.turn(session, `${session}${i}`, 'session', now); };
+  const held = (session: string, sender?: string) => siblings.held(hook(session, session === 'a' ? wa : wb, 'UserPromptSubmit', '').meta, 'session', async () => sender);
+  return { siblings, rows, asked, loop, held, now, settle: () => new Promise((done) => setTimeout(done, 0)) };
+}
+
+it('"go on" to one loop ask lets go only the sessions that ask still holds, not one another loop ask holds since', async () => {
+  const { siblings, rows, loop, held, now, settle } = asksWorld();
+  loop('a');
+  expect(await held('a', 'b')).toContain('held');
+  await settle();
+  // You prompt b, then b and c loop: their ask holds b.
+  siblings.turn('b', 'you', 'person', now);
+  loop('b');
+  expect(await held('b', 'c')).toContain('held');
+  await settle();
+  rows.set('01', { status: 'answered', answer: '"go-on"' });
+  expect(await held('a')).toBeUndefined();
+  expect(await held('b')).toContain('held');
+  siblings.stop();
+});
+
+it('a loop ask naming a sender another loop ask holds leaves that hold to its own ask', async () => {
+  const { siblings, rows, loop, held, settle } = asksWorld();
+  loop('b');
+  expect(await held('b', 'c')).toContain('held');
+  await settle();
+  loop('a');
+  expect(await held('a', 'b')).toContain('held');
+  await settle();
+  rows.set('02', { status: 'answered', answer: '"go-on"' });
+  expect(await held('a')).toBeUndefined();
+  expect(await held('b')).toContain('held');
   siblings.stop();
 });
