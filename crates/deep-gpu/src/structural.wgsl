@@ -503,3 +503,19 @@ fn sort_scatter(@builtin(local_invocation_index) t: u32, @builtin(workgroup_id) 
         }
     }
 }
+
+// ---- an indirect dispatch's arguments (#484): the workgroups its count needs, capped at `max` ----
+//
+// `n` holds the workgroup's invocations and `arg` the dispatch's max, so the count never reaches
+// the CPU.
+
+@group(0) @binding(1) var<storage, read> args_count: array<u32>;
+@group(0) @binding(2) var<storage, read_write> args_out: array<u32>;
+
+@compute @workgroup_size(1)
+fn dispatch_args() {
+    let count = min(args_count[0], p.arg);
+    args_out[0] = count / p.n + select(0u, 1u, count % p.n != 0u);
+    args_out[1] = 1u;
+    args_out[2] = 1u;
+}
