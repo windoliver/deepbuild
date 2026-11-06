@@ -225,6 +225,14 @@ mod suite {
 
     fn session_view_snapshot() {
         let snapshot = view_snapshot("session");
+        // Issue #1172: the page is titled as its sidebar row is: by its task, or by the short name a session
+        // without one has. Never by its whole id.
+        let nodes = snapshot.flatten();
+        let by_id = nodes
+            .iter()
+            .filter_map(|node| node.name.as_deref())
+            .find(|name| name.strip_prefix("Session ").is_some_and(|id| id.len() > 8));
+        assert_eq!(by_id, None, "the session's page is titled by its id");
         assert!(
             snapshot
                 .items

@@ -798,7 +798,7 @@ impl Render for Shipped {
                         }))
                 });
                 let grid = terminal.map(|tab| terminal_view(tab, chrome));
-                page.child(title("session-title", format!("Session {session}")))
+                page.child(title("session-title", task.clone()))
                     // The return card: what came back from the session's last stop, with the
                     // values bound to its runs' assertions (#629).
                     .child(
