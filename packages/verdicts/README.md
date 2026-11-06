@@ -13,7 +13,7 @@ The verdict engine (#28): a claim's run records, coverage and definition become 
 
 ## What it may import
 
-Core: only `@deepbuild/record` and `node:` built-ins, through public entries. The gate stands on it, so it never imports the gate, an extension, or the hub, CLI or app.
+Core: only `@deepbuild/contracts` (`stableText`, the key-sorted JSON its hashes are taken over), `@deepbuild/record` and `node:` built-ins, through public entries. The gate stands on it, so it never imports the gate, an extension, or the hub, CLI or app.
 
 ## Deviations
 

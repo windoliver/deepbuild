@@ -5,9 +5,10 @@
 //!
 //! `deep-app --set-up` runs the first launch's Set up click with no window and prints its one line (#326).
 //!
-//! Issue #883: with a hub to read, the window's app posts each ask to Notification Center and withdraws it once the
+//! Issue #883: the window's app posts each ask to Notification Center and withdraws it once the
 //! record says it closed (`notifications`, below); macOS shows them only from the app bundle `scripts/app-bundle`
-//! builds. `--notification-center`, run from that bundle, prints what Notification Center holds from the app, one
+//! builds. Issue #994: a second launch brings the first window forward and exits, and the notifier keeps trying a hub
+//! that isn't answering. `--notification-center`, run from that bundle, prints what Notification Center holds from the app, one
 //! JSON line per notification (`{"tag","title","body"}`), and quits.
 //!
 //! With `DEEP_APP_EXIT_AFTER_FIRST_FRAME` set it prints `first-frame-ms N` once the window
@@ -139,13 +140,24 @@ fn main() {
         });
         return;
     }
+    // One app per user (#994). A window for a panel or a view is a tool beside it, and runs no notifier.
+    let mut held = None;
+    if mode == Mode::Window && panel_dir.is_none() && view.is_none() {
+        match deep_app::single::claim(&deep_app::hub::root()) {
+            Ok(deep_app::single::Claim::Second) => return,
+            Ok(deep_app::single::Claim::First(claim)) => held = Some(claim),
+            Err(error) => {
+                eprintln!("deep-app: couldn't claim the app, so no notifications: {error}")
+            }
+        }
+    }
     application().run(move |cx| {
         gpui_kit::init(cx);
         init(cx);
         menu_bar::set_dock_icon();
         menu_bar::show_title(&menu_bar_line(&sessions()));
-        if mode == Mode::Window {
-            notifications::start(cx);
+        if let Some(held) = held {
+            notifications::start(held, cx);
         }
 
         let runtime = deep_app::new_runtime().expect("panel runtime");
@@ -618,6 +630,10 @@ mod trusted {
     pub fn start(_: super::Mode, _: &mut gpui_kit::App) {
         eprintln!("deep-app: the cursor window and the probes run on macOS only");
     }
+
+    pub fn post_forged(_: u64) {
+        eprintln!("deep-app: the probes run on macOS only");
+    }
 }
 
 /// `--color-check` (#140): every layer the app presents through, read back and asked its colorspace.
@@ -984,26 +1000,48 @@ mod color_check {
 /// Notification Center, tagged with its session so a newer one replaces it in place, and withdraws one whose ask the
 /// record says closed. The reader starts from the inbox and the stream after it, so what was in the record before
 /// the app or the hub started never reaches the notifier as new.
+///
+/// Issue #994: the loop outlives a late or lost hub, trying it on [`HubWatch`]'s schedule, and is the one notifier: a
+/// later launch calls this app forward through `held`. It reads the notification setting at start and each time the
+/// app becomes active, and an ask macOS wouldn't show is logged as not notified, never as notified.
 mod notifications {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use deep_app::{
         hub,
-        notify::{Notifier, NOTIFY_AFTER},
-        record::{self, RecordReader},
+        notify::{self, NotificationSetting, Notifier, NOTIFY_AFTER},
+        record::{self, HubWatch, RecordReader},
+        single::Held,
     };
-    use gpui_kit::{App, SystemNotification};
+    use gpui_kit::{App, AsyncApp, SystemNotification};
 
     const TICK: Duration = Duration::from_millis(250);
 
-    pub fn start(cx: &mut App) {
-        let reader = RecordReader::open(&hub::address(), &hub::root().join("control.token"));
-        let Ok(reader) = reader else {
-            eprintln!("deep-app: no hub to read, so no notifications");
-            return;
-        };
-        record::install(reader);
-        let mut notifier = Notifier::new(NOTIFY_AFTER);
+    fn now() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |since| since.as_millis() as u64)
+    }
+
+    /// What the OS says now: the test's stand-in if set, else the bundle's setting; `None` when neither answers.
+    fn setting() -> Option<NotificationSetting> {
+        match std::env::var("DEEP_APP_NOTIFICATION_SETTING") {
+            Ok(name) => NotificationSetting::parse(&name),
+            Err(_) => super::notification_center::setting(),
+        }
+    }
+
+    fn read_setting(notifier: &mut Notifier) {
+        if let Some(setting) = setting() {
+            record::report_setting(setting.name());
+            if !cfg!(feature = "plant-posts-unchecked") {
+                notifier.set_setting(setting, now());
+            }
+        }
+    }
+
+    /// The notifier starts on the record it first reads and what Notification Center still holds.
+    fn begin(notifier: &mut Notifier, cx: &mut AsyncApp) {
         let held = super::notification_center::delivered().unwrap_or_default();
         let stale = record::with_view(|view| {
             // What Notification Center still holds from before: each is its session's open ask whose question it
@@ -1031,56 +1069,109 @@ mod notifications {
         .unwrap_or_default();
         // What the reads hold, the notifier has started on.
         record::take_unseen();
-        for notification in stale {
-            eprintln!("deep-app: withdrew {}", notification.session);
-            cx.dismiss_system_notification(&notification.session);
-        }
-        cx.spawn(async move |cx| loop {
-            cx.background_executor().timer(TICK).await;
-            let _ = record::poll(Duration::from_millis(5));
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_or(0, |since| since.as_millis() as u64);
-            let before: Vec<String> = notifier
-                .delivered()
-                .iter()
-                .map(|notification| notification.session.clone())
-                .collect();
-            for event in record::take_unseen() {
-                notifier.saw(&event, now);
+        cx.update(|cx| {
+            for notification in stale {
+                eprintln!("deep-app: withdrew {}", notification.session);
+                cx.dismiss_system_notification(&notification.session);
             }
-            let posted =
-                record::with_view(|view| notifier.due(view, now, None, true)).unwrap_or_default();
-            cx.update(|cx| {
-                for session in before.iter().filter(|session| {
-                    !notifier
-                        .delivered()
-                        .iter()
-                        .any(|notification| &notification.session == *session)
-                }) {
-                    eprintln!("deep-app: withdrew {session}");
-                    cx.dismiss_system_notification(session);
-                }
-                for notification in posted {
-                    let body = notification
-                        .text
-                        .split_once('\n')
-                        .map_or("", |(_, body)| body);
-                    eprintln!(
-                        "deep-app: notified {} {}",
-                        notification.session,
-                        notification.ask.as_deref().unwrap_or("notice")
-                    );
-                    cx.show_system_notification(SystemNotification {
-                        tag: notification.session.into(),
-                        title: notification.title.into(),
-                        body: body.to_owned().into(),
-                        actions: Vec::new(),
+        });
+    }
+
+    pub fn start(held: Held, cx: &mut App) {
+        record::install(RecordReader::unopened(
+            &hub::address(),
+            &hub::root().join("control.token"),
+        ));
+        cx.spawn(async move |cx| {
+            let mut notifier = Notifier::new(NOTIFY_AFTER);
+            let mut watch = HubWatch::default();
+            let (mut begun, mut active) = (false, false);
+            read_setting(&mut notifier);
+            loop {
+                cx.background_executor().timer(TICK).await;
+                if held.called() {
+                    eprintln!("deep-app: brought forward");
+                    cx.update(|cx| {
+                        cx.activate(true);
+                        if let Some(window) = cx.windows().first() {
+                            let _ = window.update(cx, |_, window, _| window.activate_window());
+                        }
                     });
                 }
-            });
+                let was_active = std::mem::replace(&mut active, super::menu_bar::app_active());
+                if active && !was_active {
+                    read_setting(&mut notifier);
+                }
+                let now = now();
+                watch.tick(now, || record::read(Duration::from_millis(5)));
+                if !begun && record::connected() {
+                    begin(&mut notifier, cx);
+                    begun = true;
+                }
+                if begun {
+                    post(&mut notifier, now, cx);
+                }
+                let reach = notifier.reach(watch.down());
+                if reach != notify::reach() {
+                    notify::publish(reach);
+                    let line = deep_app::menu_bar_line(&deep_app::sessions());
+                    super::menu_bar::show_title(&line);
+                    cx.update(|cx| cx.refresh_windows());
+                }
+            }
         })
         .detach();
+    }
+
+    /// One tick's work: what the record brought, what came due, what left.
+    fn post(notifier: &mut Notifier, now: u64, cx: &mut AsyncApp) {
+        let before: Vec<String> = notifier
+            .delivered()
+            .iter()
+            .map(|notification| notification.session.clone())
+            .collect();
+        for event in record::take_unseen() {
+            notifier.saw(&event, now);
+        }
+        let posted =
+            record::with_view(|view| notifier.due(view, now, None, true)).unwrap_or_default();
+        for (ask, session) in notifier.newly_missed() {
+            eprintln!(
+                "deep-app: not notified {session} {ask}: {}",
+                notifier.reach(false).setting.name()
+            );
+        }
+        cx.update(|cx| {
+            for session in before.iter().filter(|session| {
+                !notifier
+                    .delivered()
+                    .iter()
+                    .any(|notification| &notification.session == *session)
+            }) {
+                eprintln!("deep-app: withdrew {session}");
+                cx.dismiss_system_notification(session);
+            }
+            for notification in posted {
+                let body = notification
+                    .text
+                    .split_once('\n')
+                    .map_or("", |(_, body)| body);
+                eprintln!(
+                    "deep-app: notified {} {}",
+                    notification.session,
+                    notification.ask.as_deref().unwrap_or("notice")
+                );
+                if notification.sound.is_some() {
+                    super::menu_bar::play_question();
+                }
+                cx.show_system_notification(SystemNotification {
+                    tag: notification.session.into(),
+                    title: notification.title.into(),
+                    body: body.to_owned().into(),
+                    actions: Vec::new(),
+                });
+            }
+        });
     }
 }
 
@@ -1089,9 +1180,36 @@ mod notification_center {
     use std::{ptr::NonNull, sync::mpsc, time::Duration};
 
     use block2::RcBlock;
-    use deep_app::notify::Notification;
+    use deep_app::notify::{Notification, NotificationSetting};
     use objc2_foundation::{NSArray, NSBundle};
-    use objc2_user_notifications::{UNNotification, UNUserNotificationCenter};
+    use objc2_user_notifications::{
+        UNAlertStyle, UNAuthorizationStatus, UNNotification, UNNotificationSettings,
+        UNUserNotificationCenter,
+    };
+
+    /// What macOS says of the app's notifications; `None` outside the bundle, or when the OS doesn't answer.
+    pub fn setting() -> Option<NotificationSetting> {
+        NSBundle::mainBundle().bundleIdentifier()?;
+        let (sender, receiver) = mpsc::channel();
+        let read = RcBlock::new(move |settings: NonNull<UNNotificationSettings>| {
+            // SAFETY: the OS passes valid settings for the call's duration.
+            let settings = unsafe { settings.as_ref() };
+            let _ = sender.send(
+                if settings.authorizationStatus() == UNAuthorizationStatus::Denied {
+                    NotificationSetting::Denied
+                } else if settings.authorizationStatus() != UNAuthorizationStatus::NotDetermined
+                    && settings.alertStyle() == UNAlertStyle::None
+                {
+                    NotificationSetting::AlertsNone
+                } else {
+                    NotificationSetting::Allowed
+                },
+            );
+        });
+        UNUserNotificationCenter::currentNotificationCenter()
+            .getNotificationSettingsWithCompletionHandler(&read);
+        receiver.recv_timeout(Duration::from_secs(2)).ok()
+    }
 
     /// What Notification Center holds from the app's bundle, as the OS lists it: each one's tag as its session and
     /// no ask, which only the record can name. `None` outside the bundle, where the center aborts the process, as
@@ -1533,6 +1651,10 @@ mod notification_center {
         None
     }
 
+    pub fn setting() -> Option<deep_app::notify::NotificationSetting> {
+        None
+    }
+
     pub fn print() {
         eprintln!("deep-app: --notification-center runs on macOS only");
         std::process::exit(1);
@@ -1551,10 +1673,16 @@ mod menu_bar {
     use deep_app::brand;
     use objc2::{rc::Retained, AllocAnyThread as _, MainThreadMarker};
     use objc2_app_kit::{
-        NSApplication, NSBitmapImageRep, NSCellImagePosition, NSImage, NSStatusBar,
-        NSVariableStatusItemLength,
+        NSApplication, NSBitmapImageRep, NSCellImagePosition, NSImage, NSSound, NSStatusBar,
+        NSStatusItem, NSVariableStatusItemLength,
     };
     use objc2_foundation::{NSData, NSSize, NSString};
+
+    thread_local! {
+        /// The count's one status item, kept for the life of the process.
+        static ITEM: Retained<NSStatusItem> =
+            NSStatusBar::systemStatusBar().statusItemWithLength(NSVariableStatusItemLength);
+    }
 
     /// The kit's menu-bar template as one image with both scales, 16 pt, marked as a template
     /// so macOS tints it for the light and the dark menu bar.
@@ -1583,19 +1711,33 @@ mod menu_bar {
         unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(image.as_deref()) };
     }
 
-    /// gpui-kit has no menu-bar item, so the count is one `NSStatusItem`, kept for the life
-    /// of the process, with the template mark before the count.
+    /// gpui-kit has no menu-bar item, so the count is one `NSStatusItem`, with the template mark before the count.
     pub fn show_title(title: &str) {
         let mtm = MainThreadMarker::new().expect("the menu bar is set from the main thread");
-        let item = NSStatusBar::systemStatusBar().statusItemWithLength(NSVariableStatusItemLength);
-        if let Some(button) = item.button(mtm) {
-            if let Some(image) = template() {
-                button.setImage(Some(&image));
-                button.setImagePosition(NSCellImagePosition::ImageLeading);
+        ITEM.with(|item| {
+            if let Some(button) = item.button(mtm) {
+                if button.image().is_none() {
+                    if let Some(image) = template() {
+                        button.setImage(Some(&image));
+                        button.setImagePosition(NSCellImagePosition::ImageLeading);
+                    }
+                }
+                button.setTitle(&NSString::from_str(title));
             }
-            button.setTitle(&NSString::from_str(title));
+        });
+    }
+
+    /// Whether the app is the active one.
+    pub fn app_active() -> bool {
+        let mtm = MainThreadMarker::new().expect("read from the main thread");
+        NSApplication::sharedApplication(mtm).isActive()
+    }
+
+    /// A question sounds like a question: gpui's post carries no sound, so the app plays it.
+    pub fn play_question() {
+        if let Some(sound) = NSSound::soundNamed(&NSString::from_str("Ping")) {
+            sound.play();
         }
-        std::mem::forget(item);
     }
 }
 
@@ -1603,4 +1745,8 @@ mod menu_bar {
 mod menu_bar {
     pub fn set_dock_icon() {}
     pub fn show_title(_: &str) {}
+    pub fn app_active() -> bool {
+        false
+    }
+    pub fn play_question() {}
 }

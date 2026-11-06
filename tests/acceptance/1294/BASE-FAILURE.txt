@@ -1,0 +1,94 @@
+#1294 acceptance suite on the base commit 58862789 (origin/main), 2026-11-05, before any #1294 code.
+Built first: npm ci; npm run build --workspaces; cargo build --locked -q -p deep-hook (Node 24.22.0).
+Run: node node_modules/vitest/vitest.mjs run --root tests/acceptance/1294 --no-file-parallelism --testTimeout=600000
+     --reporter=verbose
+Result: Test Files 6 failed (6); Tests 13 failed, 3 skipped (16); 254 s; 1-minute load 68.3 before and 78.8 after, on
+12 cores. The 3 skipped were AC1 tests read INCONCLUSIVE: deep-hook decided them alone at that load.
+Second run: the same with `commands.test.ts -t "is staged before it runs, its record"`, for those 3: Tests 4 failed,
+2 filtered out; 1-minute load 85.1 before and 81.4 after. All 4 failed at their assertion, none INCONCLUSIVE.
+So every test fails at a named assertion on the base, or BLOCKED on a plant the base doesn't list. None crashes the
+runner. tsc -p tests/acceptance/1294/tsconfig.json: exit 0.
+
+A suite bug the first runs showed, now fixed: the hub runs `claude auth status` from PATH at a session's start, which
+ran the installed claude inside the world and left a folder cleanup couldn't remove. A child's PATH now holds no
+claude (README, How to run). The output below is from the runs after that fix. Trimmed to each test's failing assertion.
+
+commands.test.ts (AC1 #1294.0d52ea18; 1 to 4 from the second run)
+  x AC1 `git reset --hard` is staged before it runs ...
+    Error: AC1 #1294.0d52ea18 `git reset --hard` ran with no copy of src/a.ts: at deep-hook's allow (exit 0 after 13 ms,
+    stdout "", stderr "") no clone shares its blocks; run as Claude Code runs it (exit 0 after 42 ms, stdout "HEAD is now
+    at df72ed3 add b\n", stderr ""), its edit is lost, and the record holds no staging for the call
+    -> the base has no destructive class for tracked edits: the reset runs and the edit is gone.
+  x AC1 `git checkout -- .` is staged before it runs ...
+    Error: AC1 #1294.0d52ea18 `git checkout -- .` ran with no copy of src/a.ts: ... its edit is lost, and the record holds
+    no staging for the call
+  x AC1 `git restore --staged --worktree .` is staged before it runs ...
+    Error: AC1 #1294.0d52ea18 `git restore --staged --worktree .` ran with no copy of src/a.ts: ... its edit is lost, and
+    the record holds no staging for the call
+  x AC1 `git switch -f main` is staged before it runs ...
+    Error: AC1 #1294.0d52ea18 `git switch -f main` ran with no copy of src/a.ts: ... stderr "Switched to branch 'main'\n"),
+    its edit is lost, and the record holds no staging for the call
+  x AC1 an uncommitted edit already added to the index is staged the same ...
+    Error: AC1 #1294.0d52ea18 `git reset --hard` ran with no copy of src/a.ts: ... its edit is lost, and the record holds
+    no staging for the call
+  x AC1 (wrong program) a stager whose class covers only untracked and ignored files
+    (DEEP_HUB_PLANT=stages-untracked-only) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stages-untracked-only did not start: ...
+    Error: DEEP_HUB_PLANT=stages-untracked-only names no planted program
+    -> the implementer adds the plant.
+
+stash.test.ts (AC2 #1294.27ece250)
+  x AC2 `git stash drop` stages the entry's src/a.ts with its digest before it runs ...
+    Error: AC2 #1294.27ece250 `git stash drop` ran with no copy of src/a.ts: at deep-hook's allow (exit 0 after 21 ms,
+    stdout "", stderr "") no file in the world holds its bytes; run as Claude Code runs it (exit 0 after 32 ms, stdout
+    "Dropped refs/stash@{0} (...)\n", stderr ""), its edit is lost, and the record holds no staging for the call
+  x AC2 `git stash clear` stages the entry's src/a.ts with its digest before it runs ...
+    Error: AC2 #1294.27ece250 `git stash clear` ran with no copy of src/a.ts: at deep-hook's allow (exit 0 after 13 ms,
+    ...) no file in the world holds its bytes; ... its edit is lost, and the record holds no staging for the call
+
+clean.test.ts (AC3 #1294.68f6f52b)
+  x AC3 `git reset --hard` on a clean tree runs with no staging and no ask, while the same command in the same session,
+    once src/a.ts is edited, is staged and can be undone
+    Error: AC3 #1294.68f6f52b `git reset --hard` ran with no copy of src/a.ts: at deep-hook's allow (exit 0 after 9 ms, ...)
+    no clone shares its blocks; ... its edit is lost, and the record holds no staging for the call
+    -> a contrast the base already satisfies: the clean-tree part passes. The test fails at the second part, the same
+       command once src/a.ts is edited (helpers.ts expectStaged, clean.test.ts line 32).
+  x AC3 (wrong program) a stager that copies on a clean tree (DEEP_HUB_PLANT=stages-clean-tree) fails, naming the call
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=stages-clean-tree did not start: ...
+    Error: DEEP_HUB_PLANT=stages-clean-tree names no planted program
+
+hub-stopped.test.ts (AC4 #1294.4cf10768, and Scope's fourth bullet)
+  x AC4 `git reset --hard` is denied by deep-hook alone, naming the command for you to run, and didn't run (the edit is
+    still there); `git reset --soft HEAD~1` is allowed and runs, keeping the edit
+    Error: AC4 #1294.4cf10768 `git reset --hard` must be denied with the hub stopped: deep-hook's PreToolUse allowed it
+    (exit 0 after 39 ms, stdout "", stderr "deep-hook: spooled 01M6PMCTJEAMVZH045FK48K41M, but its sync didn't finish
+    within the hook's 50 ms\n"); run as Claude Code runs it (exit 0 after 51 ms, stdout "HEAD is now at b25e35e add
+    b\n", stderr ""), src/a.ts lost its edit
+    -> a contrast the base already satisfies: `git reset --soft HEAD~1` allowed with the hub stopped. The test fails
+       first, on the hard reset, so the soft reset isn't reached on the base.
+  x Scope git checkout -- ., git restore --staged --worktree ., git switch -f main, git stash drop, git stash clear: with
+    tracked edits and a stash entry, each is denied, naming itself
+    Error: Scope #1294 `git checkout -- .` must be denied with the hub stopped: deep-hook's PreToolUse ended allow ...;
+    `git restore --staged --worktree .` must be denied with the hub stopped: deep-hook's PreToolUse ended allow ...;
+    `git switch -f main` must be denied with the hub stopped: ...; `git stash drop` must be denied ...
+
+spellings.test.ts (AC5 #1294.17b207b0)
+  x AC5 `git -c core.pager=cat reset --hard` is staged before it runs ...
+    Error: AC5 #1294.17b207b0 `git -c core.pager=cat reset --hard` ran with no copy of src/a.ts: ... its edit is lost, and
+    the record holds no staging for the call
+  x AC5 `sh -c 'git checkout -- .'` is staged before it runs ...
+    Error: AC5 #1294.17b207b0 `sh -c 'git checkout -- .'` ran with no copy of src/a.ts: ... its edit is lost, and the
+    record holds no staging for the call
+  x AC5 a heredoc running `git restore .` is staged before it runs, and deep undo restores src/a.ts by digest, while the
+    same words in a heredoc written to a file run free
+    Error: AC5 #1294.17b207b0 `bash <<'EOF'
+    git restore .
+    EOF` ran with no copy of src/a.ts: ... its edit is lost, and the record holds no staging for the call
+    -> a contrast the base already satisfies: the heredoc written to a file runs free. The test fails on the heredoc
+       that runs.
+
+ceiling.test.ts (Scope's second bullet)
+  x Scope with staging.files 2 and 3 modified tracked files, `git reset --hard` becomes an authority ask naming it ...
+    Error: Scope #1294 `git reset --hard` ran with no ask: deep-hook's PreToolUse allowed it (exit 0 after 21 ms, stdout
+    "", stderr ""); run as Claude Code runs it (exit 0 after 77 ms, stdout "HEAD is now at dde0e0f add b\n", stderr ""),
+    3 of its 3 edits are gone

@@ -475,6 +475,25 @@ fn heavy_call(payload: &Value, plant: Option<&str>) -> Option<(heavy::Hit, Strin
     heavy::matched(command, cwd.as_deref(), &home, plant).map(|hit| (hit, command.clone()))
 }
 
+/// `deep-hook heavy`: the heavy.command@1 entry a command line on stdin matches in the current folder (#1016), as
+/// `{"name", "jobs", "jobs_flag"}`, or `null`; `deep lease` reads it to know how the command takes jobs.
+fn heavy_entry() -> ExitCode {
+    let mut command = String::new();
+    let _ = io::stdin().read_to_string(&mut command);
+    let cwd = env::current_dir().ok();
+    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
+    match heavy::matched(&command, cwd.as_deref(), &home, None) {
+        Some(hit) => println!(
+            "{{\"name\":{},\"jobs\":{},\"jobs_flag\":{}}}",
+            quoted(&hit.name),
+            quoted(&hit.jobs),
+            hit.jobs_flag.as_deref().map_or("null".to_string(), quoted)
+        ),
+        None => println!("null"),
+    }
+    ExitCode::SUCCESS
+}
+
 /// `deep-hook check`: whether a guard@1 entry matches a call, read on stdin as `{"entry": guard@1, "call":
 /// {"tool_name", "tool_input", "cwd"?}, "classes"?: {<tool>: <class>}}`; prints `{"matched":true}` or
 /// `{"matched":false}`. The hub runs it over each entry's planted call and twin at install, so an entry is matched
@@ -539,7 +558,8 @@ fn denials(matched: &[(&Guard, matcher::Hit)], covered: bool) -> Vec<String> {
 }
 
 /// The request's fields for what the matcher read of a call: `,"notes":{...}` for an entry's words, so the hub's
-/// denial says them too, and `,"stage":{...}` for the folders a delete whose reach can't be worked out names (#347).
+/// denial says them too, and `,"stage":{...}` for what the hub stages before the call runs: the folders a delete whose
+/// reach can't be worked out names (#347), the paths a discard of tracked edits reaches and the stash a drop names (#1294).
 fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)]) -> String {
     let notes = matched
         .iter()
@@ -556,18 +576,23 @@ fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)
         format!(",\"notes\":{{{notes}}}")
     };
     // None when one can't be named, or written exactly.
-    let folders = called.and_then(|c| c.stage()).and_then(|f| {
-        f.iter()
+    let reach = |pattern: &str| {
+        let called = called?;
+        let paths = match pattern {
+            "effect:unknown-reach-delete" => called.stage(),
+            "effect:discard-edits" => called.edits(),
+            "effect:drop-stash" => called.stash(),
+            _ => None,
+        }?;
+        paths
+            .iter()
             .map(|p| p.to_str().map(quoted))
             .collect::<Option<Vec<_>>>()
-    });
+    };
     let stage = matched
         .iter()
-        .filter(|(g, _)| g.pattern == "effect:unknown-reach-delete")
         .filter_map(|(g, _)| {
-            folders
-                .as_ref()
-                .map(|f| format!("{}:[{}]", quoted(&g.name), f.join(",")))
+            reach(&g.pattern).map(|f| format!("{}:[{}]", quoted(&g.name), f.join(",")))
         })
         .collect::<Vec<_>>()
         .join(",");
@@ -1779,10 +1804,11 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
+            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
         ),
         [arg] if arg == "statusline" => return statusline(),
         [arg] if arg == "check" => return check(),
+        [arg] if arg == "heavy" => return heavy_entry(),
         [arg] if arg == "match" => return matching(),
         [arg, from, to] if arg == "clone" => return clone(Path::new(from), Path::new(to)),
         [arg, line] if arg == "statusline-send" => {

@@ -114,7 +114,7 @@ impl Labels {
     }
 
     /// `text`'s run in `role` at `size` px, shaped on first sight: its box in px, and its glyphs.
-    pub(crate) fn run(&mut self, text: &str, role: Role, size: f32) -> ([f64; 2], Vec<Glyph>) {
+    pub fn run(&mut self, text: &str, role: Role, size: f32) -> ([f64; 2], Vec<Glyph>) {
         let size = if self.fixed_em { MASK_EM_PX } else { size };
         let spec = Spec {
             family: role.family(),
