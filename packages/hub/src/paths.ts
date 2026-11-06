@@ -6,6 +6,14 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repos = new Map<string, string | undefined>();
+/** The workspaces the record holds, by real path (#67): a project id the core gave, never one a folder's files claim. */
+const workspaces = new Map<string, string>();
+/** Names a folder as a workspace's, or takes the name back; a folder may have been read before it became one. */
+export function nameWorkspace(folder: string, id: string | undefined): void {
+  if (id === undefined) workspaces.delete(folder);
+  else workspaces.set(folder, id);
+  repos.clear();
+}
 /**
  * The repo a folder is in, as a decision's scope names it (`repo:<id>`, #23): its main checkout's folder name and a
  * digest of its path, the same from every worktree of it. Undefined outside a git repo. Read once per folder.
@@ -30,7 +38,7 @@ export function repoOf(cwd: string): string | undefined {
   if (found) {
     let real = found;
     try { real = realpathSync(found); } catch { /* as found */ }
-    id = `${basename(real).replace(/[^0-9A-Za-z]/g, '')}${createHash('sha256').update(real).digest('hex').slice(0, 8)}`;
+    id = workspaces.get(real) ?? `${basename(real).replace(/[^0-9A-Za-z]/g, '')}${createHash('sha256').update(real).digest('hex').slice(0, 8)}`;
   }
   repos.set(cwd, id);
   return id;
@@ -38,6 +46,15 @@ export function repoOf(cwd: string): string | undefined {
 
 /** The installed hub's root: ~/.deepbuild. A dev hub's is the folder given to --root. */
 export const installedRoot = (): string => join(homedir(), '.deepbuild');
+/** The Node path to write into a file that outlives this run: a login service, an MCP server entry. Homebrew's
+ * Cellar path names one version, which the next `brew upgrade` deletes, and every entry naming it then fails to
+ * start; its `opt/<formula>` link names the version installed now, so it is written instead, when it runs this Node. */
+export function lastingNode(node: string = process.execPath): string {
+  const at = /^(.*)\/Cellar\/([^/]+)\/[^/]+\/bin\/node$/.exec(node);
+  if (!at) return node;
+  const opt = join(at[1]!, 'opt', at[2]!, 'bin', 'node');
+  try { return realpathSync(opt) === realpathSync(node) ? opt : node; } catch { return node; }
+}
 
 export interface Root {
   dir: string;
