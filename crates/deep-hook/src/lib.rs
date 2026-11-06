@@ -2,5 +2,6 @@
 //! the local preflight's cargo-semver-checks can diff its public items against the merge base (#139), and a change
 //! to them shows in the pull request that made it.
 
+mod inline;
 pub mod matcher;
 pub mod shell;

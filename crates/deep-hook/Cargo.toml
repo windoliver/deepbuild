@@ -27,3 +27,7 @@ plant-compiled-rule = []
 plant-listed-kinds-only = []
 # The planted wrong program for #1097's AC4: a reader that reads a program the line computes as no program at all.
 plant-computed-misses = []
+# The planted wrong programs for #1503: a reader that counts an interpreter or a shell reading a pipe as unread even
+# when its program is the inline text (AC4), and one that counts every run fed from a pipe as unread (AC5).
+plant-any-pipe-unread = []
+plant-every-pipe-unread = []
