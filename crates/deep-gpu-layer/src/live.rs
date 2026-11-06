@@ -16,6 +16,7 @@ use std::time::Instant;
 use deep_canvas::budget::{self, Class, Limits};
 use deep_canvas::camera::Offsets;
 use deep_canvas::document::check_in;
+use deep_effects_render::docops::{self, item_of_mark, DocOps, Drew};
 use deep_canvas::registry::{BuildSet, Registry, Sealed};
 use deep_canvas::show::{stamp, Writer, WriterKind};
 use deep_canvas_scene3d::frames::Frames;
@@ -65,6 +66,13 @@ pub struct Plants {
     /// #420 AC7's wrong cache: a result's memory goes back when a revision drops its last
     /// reader, while a frame that binds it is still in flight.
     releases_at_revision: bool,
+    /// #425: canonical renders draw at the live view's rung once it has climbed.
+    canonical_climbs: bool,
+    /// #429's: the emitter's and the check's planted programs; a render-back that draws
+    /// live-only operators; a core that calls a frame drawn with a fallback settled.
+    ops: (deep_canvas_effects::emit::Options, deep_canvas_effects::check::CheckOptions),
+    render_back_live_only: bool,
+    settles_with_fallback: bool,
 }
 
 impl Plants {
@@ -75,7 +83,10 @@ impl Plants {
                 skips_a_rung: p == Some(Planted::SkipsARung),
                 budgets_each_window: p == Some(Planted::BudgetsEachWindow),
                 steps_main_window: p == Some(Planted::StepsMainWindow),
+                climb_never_steps_down: p == Some(Planted::ClimbNeverStepsDown),
+                reclimbs_without_view_change: p == Some(Planted::ReclimbsWithoutViewChange),
             },
+            canonical_climbs: p == Some(Planted::CanonicalClimbs),
             tells_first_step_only: p == Some(Planted::TellsFirstStepOnly),
             steps_every_writer: p == Some(Planted::StepsEveryWriter),
             sums_pass_intervals: p == Some(Planted::SumsPassIntervals),
@@ -89,18 +100,20 @@ impl Plants {
             shares_meter_with_worker: p == Some(Planted::SharesMeterWithWorker),
             exports_live_surface: p == Some(Planted::ExportsLiveSurface),
             upscale: crate::session3::upscale_planted(p),
+            ops: crate::effects::operator_plants(p),
+            render_back_live_only: p == Some(Planted::RenderBackDrawsLiveOnly),
+            settles_with_fallback: p == Some(Planted::SettlesWithFallback),
         }
     }
 }
 
-/// The build's sealed set: every shipped canvas module except effects, which the live path draws
-/// none of; in a `test-meter` build, also `test.gpu`.
+/// The build's sealed set: every shipped canvas module; in a `test-meter` build, also `test.gpu`.
 pub fn sealed() -> &'static Sealed {
     static SEALED: OnceLock<Sealed> = OnceLock::new();
     SEALED.get_or_init(|| {
+        // Effects is in the set for its operator items (#429), which the live path draws.
         let registry = crate::plugin::shipped_modules()
             .into_iter()
-            .filter(|m| m.manifest.name != "effects")
             .fold(Registry::new(BuildSet::Full), Registry::with);
         #[cfg(feature = "test-meter")]
         let registry = registry.with(deep_canvas_test_modules::test_gpu());
@@ -129,6 +142,8 @@ enum Purpose {
     RenderBack,
     Export,
     FrameBudget,
+    /// A check that needs the frame (#429).
+    PixelCheck,
 }
 
 impl Purpose {
@@ -137,6 +152,7 @@ impl Purpose {
             "render_back" => Purpose::RenderBack,
             "export" => Purpose::Export,
             "frame_budget" => Purpose::FrameBudget,
+            "pixel_check" => Purpose::PixelCheck,
             _ => return None,
         })
     }
@@ -146,6 +162,7 @@ impl Purpose {
             Purpose::RenderBack => "render_back",
             Purpose::Export => "export",
             Purpose::FrameBudget => "frame_budget",
+            Purpose::PixelCheck => "pixel_check",
         }
     }
 }
@@ -215,6 +232,12 @@ struct Args {
     stub: Option<Stub>,
     battery: Vec<(u64, f64, bool)>,
     assets: BTreeMap<String, PathBuf>,
+    /// The frames whose views are written as PNGs, as presented (#425's taste call).
+    capture: BTreeSet<u64>,
+    /// Where the captured PNGs go.
+    out: String,
+    /// #429's test hook: the operator items whose pipelines the device rejects.
+    fail_pipelines: Vec<String>,
 }
 
 fn pair(v: &Value) -> Option<[u32; 2]> {
@@ -265,7 +288,7 @@ fn history_of(look: &Value) -> Result<u32, String> {
     }
 }
 
-fn parse(call: &Value) -> Result<Args, Value> {
+fn parse(call: &Value, out: &str) -> Result<Args, Value> {
     let bad = |what: &str| refused("bad_input", what);
     let test_build = cfg!(feature = "test-meter");
     let frames = call["frames"]
@@ -425,6 +448,16 @@ fn parse(call: &Value) -> Result<Args, Value> {
             }
         }
     }
+    let fail_pipelines: Vec<String> = match call.get("fail_pipelines") {
+        None => Vec::new(),
+        Some(_) if !test_build => return Err(bad("fail_pipelines is a test build's")),
+        Some(f) => f
+            .as_array()
+            .ok_or_else(|| bad("fail_pipelines is a list of operator items"))?
+            .iter()
+            .filter_map(|x| x.as_str().map(String::from))
+            .collect(),
+    };
     let mut assets = BTreeMap::new();
     for (sha, path) in call["assets"].as_object().into_iter().flatten() {
         assets.insert(
@@ -433,6 +466,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         );
     }
     Ok(Args {
+        fail_pipelines,
         named: call.get("windows").is_some(),
         windows,
         look,
@@ -444,6 +478,13 @@ fn parse(call: &Value) -> Result<Args, Value> {
         stub,
         battery,
         assets,
+        capture: call["capture"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_u64)
+            .collect(),
+        out: out.to_string(),
     })
 }
 
@@ -506,6 +547,7 @@ struct Rev {
     class: Option<Class>,
     limits: Limits,
     fit: Estimate,
+    skips: Vec<Rung>,
     #[cfg(feature = "test-meter")]
     placed: Vec<crate::testgpu::Placed>,
     #[cfg(feature = "test-meter")]
@@ -544,6 +586,10 @@ struct Session {
     view_changed: bool,
     over_ops: u32,
     ops_resolution: f64,
+    /// Each composed operator's resolution (1, 0.5, 0.25 or 0) and its frames over twice its
+    /// declared cost in a row (#429).
+    op_resolution: BTreeMap<String, f64>,
+    op_over: BTreeMap<String, u32>,
     surface: Surface,
     /// Each revision's check time, ms, from receipt to its verdict (#386).
     checks: BTreeMap<u64, f64>,
@@ -589,6 +635,8 @@ struct Admitted {
     limits: Limits,
     fit: Estimate,
     size: [u32; 2],
+    /// The climb rungs that don't fit its memory cap (#425).
+    skips: Vec<Rung>,
 }
 
 /// A writer's payload checked as its session's next revision, before it shows: stamped by the
@@ -692,6 +740,9 @@ fn admit(
             ),
         })]
     })?;
+    // The cascades' four layers at twice their size add three times their bytes.
+    let side = u64::from(deep_scene3d_render::shadow::SIZE);
+    let skips = meter::climb_skips(&shape, &fit, limits.gpu_bytes, 3 * side * side * 4 * 4);
     Ok(Admitted {
         doc,
         frames,
@@ -699,6 +750,7 @@ fn admit(
         limits,
         fit,
         size,
+        skips,
     })
 }
 
@@ -735,6 +787,10 @@ struct ViewRow {
     scale: f64,
     upscale: &'static str,
     history: u32,
+    /// Whether the frame is settled: never while an operator draws its fallback.
+    settled: bool,
+    /// Each composed operator: its item, resolution and what it drew.
+    ops: Vec<(String, f64, &'static str)>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -775,8 +831,7 @@ struct ChangeRow {
 }
 
 pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
-    let _ = out;
-    let args = match parse(call) {
+    let args = match parse(call, out) {
         Ok(a) => a,
         Err(e) => return e,
     };
@@ -825,6 +880,8 @@ struct Live {
     changes: Vec<ChangeRow>,
     app: AppMeter,
     canonicals: Vec<Value>,
+    /// Each operator step-down, told to its writer (#429).
+    op_told: Vec<Value>,
     planted_log: Vec<Vec<f64>>,
     /// Each window's (visible, focused), by index in `args.windows`.
     shown: Vec<(bool, bool)>,
@@ -870,6 +927,7 @@ impl Live {
             changes: Vec::new(),
             app: AppMeter::new(plants.ladder),
             canonicals: Vec::new(),
+            op_told: Vec::new(),
             planted_log: Vec::new(),
             shown: vec![(true, true); args.windows.len()],
             device,
@@ -914,7 +972,9 @@ impl Live {
     /// takes effect on the first frame after they're ready.
     fn decide(&mut self, frame: u64, session: usize, step: Step, scope: Option<&'static str>) {
         let change = self.record_change(frame, session, step, scope);
-        let needs = step.to.scale(1.0) < 1.0 && self.kit.upscale.is_none();
+        // A rung off scale 1 draws through the upscale's pipelines: below it to upscale, at the
+        // 4-samples rung to filter four samples into each pixel (#425).
+        let needs = step.to.scale(1.0) != 1.0 && self.kit.upscale.is_none();
         let compiling = (needs && !self.plants.compiles_at_swap).then(|| {
             self.changes[change].pipelines =
                 vec![crate::liveview::UPSCALE, crate::liveview::SHARPEN];
@@ -997,6 +1057,8 @@ impl Live {
             view_changed: false,
             over_ops: 0,
             ops_resolution: 1.0,
+            op_resolution: BTreeMap::new(),
+            op_over: BTreeMap::new(),
             surface: o.surface,
             checks: BTreeMap::new(),
         });
@@ -1008,6 +1070,15 @@ impl Live {
         self.revise(n, &o.doc);
         // The first revision latches as the session opens.
         self.latch(n);
+        // A view whose class draws below scale 1 while moving has the upscale's pipelines before
+        // its first frame too (#425: a showpiece's live view starts at its base, 0.5).
+        let below = self.sessions[n]
+            .view
+            .as_ref()
+            .is_some_and(|v| v.scale < 1.0);
+        if below && self.kit.upscale.is_none() {
+            self.kit.upscale = Some(Arc::new(compile_upscale(&self.device)));
+        }
         let s = &mut self.sessions[n];
         if s.current.is_none() {
             s.state = State::Refused;
@@ -1047,6 +1118,7 @@ impl Live {
                 limits,
                 fit,
                 size,
+                skips,
             }) => {
                 #[cfg(feature = "test-meter")]
                 let (placed, loops) = match crate::testgpu::items(&doc) {
@@ -1080,6 +1152,7 @@ impl Live {
                     class,
                     limits,
                     fit,
+                    skips,
 
                     #[cfg(feature = "test-meter")]
                     placed,
@@ -1179,6 +1252,19 @@ impl Live {
                 rev.loops,
                 &self.results,
             );
+        }
+        ses.ladder.skip(&rev.skips);
+        // The revision's composed operators (#429): built here, off the frame, each pipeline
+        // checked on the device; one the device rejects raises operator_compile to its writer.
+        if let Some(v) = ses.view.as_mut() {
+            let (options, planted) = self.plants.ops;
+            v.ops = DocOps::new(&self.device, &rev.doc, options, planted, &self.args.fail_pipelines);
+            v.canonical_draws_live_only = self.plants.render_back_live_only;
+            for i in v.ops.issues() {
+                if !ses.issues.contains(&i) {
+                    ses.issues.push(i);
+                }
+            }
         }
         let old = ses.current.replace(rev);
         if let Some(old) = old {
@@ -1314,6 +1400,81 @@ impl Live {
         {
             let _ = (s, charges, passes_start);
             None
+        }
+    }
+
+    /// Whether the device rejected the pipeline of operator `item` in session `s`'s view.
+    fn failed(&self, s: usize, item: &str) -> bool {
+        self.sessions[s].view.as_ref().is_some_and(|v| {
+            v.ops
+                .ops
+                .iter()
+                .any(|o| o.item == item && o.failed.is_some())
+        })
+    }
+
+    /// The operator meter (#429): each composed operator the view drew is measured against its
+    /// declared cost (the stub's factor, or its pass charge against its declared ns per pixel at
+    /// its resolution); one over twice its declaration for 30 frames in a row steps its own
+    /// resolution down a rung (half, quarter, off), told to its writer. Other writers' operators
+    /// and views are untouched.
+    fn operator_meter(&mut self, v: usize, frame: u64, charges: &[f64], passes_start: usize) {
+        let s = self.views[v].session;
+        if !self.views[v].drawn {
+            return;
+        }
+        let size = self.sessions[s].size.unwrap_or([1, 1]);
+        let rows = self.views[v].ops.clone();
+        for (item, res, drew) in rows {
+            if drew != Drew::Operator.name() {
+                continue;
+            }
+            let stub = self
+                .args
+                .stub
+                .as_ref()
+                .and_then(|st| st.operators.get(&item).copied());
+            let factor = stub.or_else(|| {
+                let declared = self.sessions[s]
+                    .view
+                    .as_ref()?
+                    .ops
+                    .ops
+                    .iter()
+                    .find(|o| o.item == item)?
+                    .declared_ns;
+                let mark = docops::mark_of(&item);
+                let px = f64::from(size[0]) * f64::from(size[1]) * res * res;
+                let measured: f64 = self.passes[passes_start..]
+                    .iter()
+                    .zip(charges)
+                    .filter(|(p, _)| p.session == Some(s) && p.name == mark)
+                    .map(|(_, c)| *c)
+                    .sum();
+                let want = declared * px / 1e6;
+                (want > 0.0 && measured > 0.0).then(|| measured / want)
+            });
+            let Some(f) = factor else {
+                continue;
+            };
+            let ses = &mut self.sessions[s];
+            let over = ses.op_over.entry(item.clone()).or_insert(0);
+            *over = if f > 2.0 { *over + 1 } else { 0 };
+            if *over >= meter::DOWN_AFTER {
+                *over = 0;
+                let (next, rung) = if res > 0.5 {
+                    (0.5, "half")
+                } else if res > 0.25 {
+                    (0.25, "quarter")
+                } else {
+                    (0.0, "off")
+                };
+                ses.op_resolution.insert(item.clone(), next);
+                self.op_told.push(json!({
+                    "frame": frame, "session": ses.id, "writer": ses.writer, "scope": "operator",
+                    "operator": item, "rung": rung, "reason": "operator_cost", "factor": f,
+                }));
+            }
         }
     }
 
@@ -1464,12 +1625,20 @@ impl Live {
                 let drawing = Drawing {
                     rung,
                     offsets: ses.offsets,
-                    effects_resolution: ses.ops_resolution,
+                    // The climb's full-resolution effects rung (#425) overrides the operator
+                    // meter's half resolution.
+                    effects_resolution: if rung <= Rung::FullResEffects {
+                        1.0
+                    } else {
+                        ses.ops_resolution
+                    },
                     canonical: false,
                     settles: self.in_flight.is_empty(),
                 };
+                let res = &ses.op_resolution;
                 let (scale, upscale, history) = match ses.view.as_mut() {
                     Some(view) => {
+                        view.op_resolution.clone_from(res);
                         if drawn {
                             let (enc, tim) = match held.as_mut() {
                                 Some((e, t)) => {
@@ -1516,6 +1685,18 @@ impl Live {
                     _ if drawn => drew.push(s),
                     _ => {}
                 }
+                let ops: Vec<(String, f64, &'static str)> = self.sessions[s]
+                    .view
+                    .as_ref()
+                    .map(|v| {
+                        v.op_rows
+                            .iter()
+                            .map(|r| (r.item.clone(), r.resolution, r.drew.name()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let settled = self.plants.settles_with_fallback
+                    || !ops.iter().any(|o| o.2 == Drew::Fallback.name() && self.failed(s, &o.0));
                 self.views.push(ViewRow {
                     session: s,
                     binds,
@@ -1527,6 +1708,8 @@ impl Live {
                     scale,
                     upscale,
                     history,
+                    settled,
+                    ops,
                 });
             }
             timer.resolve(&mut encoder);
@@ -1725,6 +1908,7 @@ impl Live {
                         ses.ops_resolution = 0.5;
                     }
                 }
+                self.operator_meter(v, frame, &charges[..n], passes_start);
             }
             // The app's frame is every window's views; its limit the loosest class among them
             // (none if one has none), so no writer is held to a tighter class's share of the app.
@@ -1743,7 +1927,7 @@ impl Live {
                     limit,
                 )
             };
-            let app_over = self.app.last_over;
+            let (app_over, app_room) = (self.app.last_over, self.app.last_room);
             let mut stepped_for_health = false;
             for v in views_start..views_end {
                 if self.views[v].paused {
@@ -1751,7 +1935,10 @@ impl Live {
                 }
                 let (s, gpu, cpu) = (self.views[v].session, self.views[v].gpu, self.views[v].cpu);
                 let limits = self.sessions[s].limits();
-                if let Some(step) = self.sessions[s].ladder.frame(gpu, cpu, &limits, app_over) {
+                if let Some(step) = self.sessions[s]
+                    .ladder
+                    .frame(gpu, cpu, &limits, app_over, app_room)
+                {
                     stepped_for_health = true;
                     let scope = (step.reason == Reason::FrameHealth).then_some("writer");
                     self.decide(frame, s, step, scope);
@@ -1821,6 +2008,23 @@ impl Live {
                 }
                 extra.insert("hashes".into(), Value::Object(hashes));
             }
+            if self.args.capture.contains(&frame) && !self.noop {
+                let mut finals = Map::new();
+                for v in &self.views[views_start..views_end] {
+                    let Some(view) = self.sessions[v.session].view.as_ref().filter(|_| v.drawn)
+                    else {
+                        continue;
+                    };
+                    if let Some(bgra) = view.pixels() {
+                        if let Ok(name) =
+                            crate::view3d::write_final(&self.args.out, &bgra, view.size)
+                        {
+                            finals.insert(v.session.to_string(), json!(name));
+                        }
+                    }
+                }
+                extra.insert("finals".into(), Value::Object(finals));
+            }
             if self.args.reports.memory {
                 extra.insert("memory".into(), self.memory());
             }
@@ -1883,9 +2087,8 @@ impl Live {
         let Some(rev) = ses.current.as_ref() else {
             return refused("no_revision", "the session has no current revision");
         };
-        let live = self
-            .plants
-            .shares_meter_with_worker
+        let live = (self.plants.shares_meter_with_worker
+            || (self.plants.canonical_climbs && ses.drawn < Rung::Base))
             .then_some((ses.drawn, ses.ops_resolution));
         // The planted render takes the live session's surface; a canonical render never does.
         let surface = self
@@ -1905,6 +2108,8 @@ impl Live {
             surface,
             &self.args.assets,
             &mut self.labels,
+            &self.plants,
+            &self.args.fail_pipelines,
         );
         if let Some(o) = c.as_object_mut() {
             o.insert("frame".into(), json!(frame));
@@ -1933,9 +2138,14 @@ impl Live {
                             "rung": v.rung.unwrap_or(Rung::Base).name(),
                             "drawn": v.drawn, "paused": v.paused, "charged_gpu_ms": v.gpu, "charged_cpu_ms": v.cpu,
                             "internal_scale": v.scale, "upscale": v.upscale, "history_frames": v.history,
+                            "settled": v.settled,
+                            "operators": v.ops.iter().map(|(item, res, drew)| json!({"operator": item, "item": item, "resolution": res, "drew": drew})).collect::<Vec<_>>(),
                         });
                         if let Some(h) = f.extra.get("hashes") {
                             o["pixel_hash"] = h.get(v.session.to_string()).cloned().unwrap_or(Value::Null);
+                        }
+                        if let Some(name) = f.extra.get("finals").and_then(|h| h.get(v.session.to_string())) {
+                            o["final"] = name.clone();
                         }
                         if self.args.reports.binds {
                             o["binds"] = json!(v.binds);
@@ -1964,6 +2174,7 @@ impl Live {
                             let mut o = json!({
                                 "name": name, "session": p.session.map(|s| sessions[s].id.clone()), "source": source,
                                 "start_ns": p.start_ns, "end_ns": p.end_ns, "charged_ms": p.charged_ms,
+                                "operator": item_of_mark(&name),
                             });
                             if !shares.is_null() {
                                 o["shares"] = shares;
@@ -2017,6 +2228,8 @@ impl Live {
                 })
             })
             .collect();
+        let mut told = told;
+        told.extend(self.op_told.iter().cloned());
         let session_rows: Vec<Value> = sessions
             .iter()
             .map(|s| {
@@ -2096,6 +2309,8 @@ fn render_canonical(
     surface: Option<Surface>,
     assets: &BTreeMap<String, PathBuf>,
     labels: &mut Labels,
+    plants: &Plants,
+    fail: &[String],
 ) -> Value {
     let _ = assets;
     let mut doc = doc.clone();
@@ -2131,6 +2346,9 @@ fn render_canonical(
         }
         view.test.set(device, kit, &placed, loops, &results);
     }
+    let (options, planted) = plants.ops;
+    view.ops = DocOps::new(device, &doc, options, planted, fail);
+    view.canonical_draws_live_only = plants.render_back_live_only;
     let (rung, resolution) = live.unwrap_or((Rung::Base, 1.0));
     let drawing = Drawing {
         rung,
@@ -2157,8 +2375,10 @@ fn render_canonical(
     }
     device.queue.submit([encoder.finish()]);
     memory::drain(device);
+    // A canonical render reads its frame through a copy slot, which holds the frame's pixels
+    // only once it is finished (before #429 every canonical render hashed an empty slot).
     let pixels = (device.backend != Backend::Noop)
-        .then(|| view.pixels())
+        .then(|| view.finish(device).ok().and_then(|()| view.pixels()))
         .flatten();
     let mut operators: Vec<Value> = Vec::new();
     let mut seen = BTreeSet::new();
@@ -2172,8 +2392,29 @@ fn render_canonical(
             operators.push(json!({"operator": m.name, "resolution": res}));
         }
     }
+    // A frame drawn with an operator's fallback, its pipeline rejected, is still settling: a
+    // render-back of it is not presented, and a check that needs it is BLOCKED (#429).
+    let failed: Vec<&str> = view
+        .ops
+        .ops
+        .iter()
+        .filter(|o| o.failed.is_some())
+        .map(|o| o.item.as_str())
+        .collect();
+    let presented = failed.is_empty() || plants.settles_with_fallback;
+    let reason = (!presented).then(|| {
+        format!(
+            "settling: operator {} draws its fallback (operator_compile)",
+            failed.join(", ")
+        )
+    });
+    let verdict = match purpose {
+        Purpose::PixelCheck => Some(if presented { "PASS" } else { "BLOCKED" }),
+        _ => None,
+    };
     json!({
         "purpose": purpose.name(),
+        "presented": presented, "reason": reason, "verdict": verdict,
         "pixel_hash": pixels.map(|p| hex(&p)),
         "rung": rung.name(),
         "internal_scale": if live.is_some() { rung.scale(1.0) } else { view.drew.0 },
@@ -2200,6 +2441,7 @@ pub fn canonical(app: &mut App, call: &Value) -> Value {
         Err(e) => return bad(&format!("look: {e}")),
     };
     let fps = call["fps"].as_u64().unwrap_or(60).max(1) as i64;
+    let plants = Plants::of(app.planted);
     app.worker.call(move |state| {
         let device = match state.gpu.recover() {
             Ok(d) => d,
@@ -2233,6 +2475,8 @@ pub fn canonical(app: &mut App, call: &Value) -> Value {
             None,
             &BTreeMap::new(),
             &mut labels,
+            &plants,
+            &[],
         );
         if let Some(o) = c.as_object_mut() {
             o.insert("frame".into(), json!(frame));

@@ -17,6 +17,13 @@ export interface Deep {
             at?: Array<string>;
         };
     }): Promise<unknown>;
+    "channel.fetch"(params: {
+        call: string;
+        request: {
+            method: "GET" | "POST";
+            path: string;
+        };
+    }): Promise<unknown>;
     "config.get"(params: {
         key: string;
     }): Promise<unknown>;
@@ -55,6 +62,9 @@ export interface Deep {
         kind: string;
         key: string;
         value: unknown;
+    }): Promise<unknown>;
+    "terminal.close"(params: {
+        terminal: string;
     }): Promise<unknown>;
     "terminal.list"(params: {
     }): Promise<unknown>;
@@ -128,6 +138,14 @@ export interface Deep {
             };
         };
     }): Promise<unknown>;
+    registerChannel(params: {
+        name: string;
+        channel: {
+            slot: "channel@1";
+            revision: number;
+            kind: "device" | "chat" | "email" | "text";
+        };
+    }): Promise<unknown>;
     registerCheck(params: {
         type: string;
     }): Promise<unknown>;
@@ -147,6 +165,9 @@ export interface Deep {
         source: {
         };
     }): Promise<unknown>;
+    registerStateSource(params: {
+        name: string;
+    }): Promise<unknown>;
     registerView(params: {
         name: string;
         panel: string;
@@ -161,6 +182,7 @@ export interface Deep {
                 name: string;
                 action: string;
             }>;
+            binds?: Array<string>;
         };
     }): Promise<unknown>;
     schedule(params: {

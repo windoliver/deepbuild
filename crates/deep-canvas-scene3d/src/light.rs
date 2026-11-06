@@ -39,6 +39,61 @@ pub struct Material {
     pub catch: Option<f64>,
     pub unlit: bool,
     pub double_sided: bool,
+    /// Its extra lobes (#428), each off at its zero.
+    pub lobes: Lobes,
+}
+
+/// A material's extra lobes (#428; Material): each a feature only the parts that use it pay
+/// for, off while [`Lobes::on`] is false. Colors are linear, already times their weight.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Lobes {
+    /// The cloth lobe's color (times its weight) and roughness.
+    pub sheen: Vec3,
+    pub sheen_roughness: f64,
+    /// The highlight's stretch along uv0's u direction, −1 to 1, turned by `rotation` (rad).
+    pub anisotropy: f64,
+    pub anisotropy_rotation: f64,
+    /// Translucency's color and amount; `wrap` is `Some(w)` for wrap, `None` for thin.
+    pub translucency: Vec3,
+    pub amount: f64,
+    pub wrap: Option<f64>,
+    pub transmission: f64,
+    pub ior: f64,
+    /// Absorption: the thickness in the part's own space (m) and the attenuation coefficient
+    /// per m, −ln(color) ÷ distance.
+    pub thickness: f64,
+    pub attenuation: Vec3,
+    pub dispersion: f64,
+    /// The thin film: its weight, ior and thickness in nm.
+    pub iridescence: f64,
+    pub film_ior: f64,
+    pub film_nm: f64,
+    pub diffuse_roughness: f64,
+    pub retroreflection: f64,
+    /// Flakes: their color, weight, cell size in m and the cosine of their tilt.
+    pub flakes: Vec3,
+    pub flake_weight: f64,
+    pub flake_size: f64,
+    pub flake_cos_tilt: f64,
+    /// Whether the specular color leaves white, which is a feature too (Material).
+    pub tinted: bool,
+}
+
+impl Lobes {
+    /// Whether any lobe is on, so the part shades through the lobes at all.
+    pub fn on(&self) -> bool {
+        let lit = |c: Vec3| c.iter().any(|x| *x > 0.0);
+        lit(self.sheen)
+            || self.anisotropy != 0.0
+            || self.amount > 0.0
+            || self.ior != 1.5
+            || self.tinted
+            || self.transmission > 0.0
+            || self.iridescence > 0.0
+            || self.diffuse_roughness > 0.0
+            || self.retroreflection > 0.0
+            || self.flake_weight > 0.0
+    }
 }
 
 /// How a material's alpha draws (Material: `alpha_mode`).
@@ -468,6 +523,7 @@ pub fn material<'a>(
     let strength = at("emission_strength", 1.0);
     let emission = color3(p.get("emission")).unwrap_or([0.0; 3]);
     let flag = |k: &str| p.get(k).and_then(Value::as_bool).unwrap_or(false);
+    let lobes = lobes(p, [base[0], base[1], base[2]]).map_err(|k| bad("out_of_range", k))?;
     Ok(Some(Material {
         base: [base[0], base[1], base[2], alpha],
         metallic: at("metallic", 0.0).clamp(0.0, 1.0),
@@ -487,7 +543,103 @@ pub fn material<'a>(
         catch,
         unlit: flag("unlit"),
         double_sided: flag("double_sided"),
+        lobes,
     }))
+}
+
+/// A material's extra lobes from its params (#428), each color `base` unless set; `Err` names
+/// the field out of its range.
+fn lobes(p: &serde_json::Map<String, Value>, base: Vec3) -> Result<Lobes, &'static str> {
+    let sub = |k: &str, f: &str| p.get(k).and_then(|o| o.get(f));
+    let at = |k: &str, f: &str, d: f64| num(sub(k, f)).unwrap_or(d);
+    let color = |k: &str| match sub(k, "color") {
+        None | Some(Value::Null) => Some(base),
+        Some(Value::String(s)) if s == "base" => Some(base),
+        v => color3(v),
+    };
+    let unit = |v: f64, k: &'static str| (0.0..=1.0).contains(&v).then_some(v).ok_or(k);
+    let scaled = |c: Vec3, w: f64| c.map(|x| x * w);
+    let sheen_w = unit(at("sheen", "weight", 0.0), "sheen/weight")?;
+    let anisotropy = at("anisotropy", "strength", 0.0);
+    if !(-1.0..=1.0).contains(&anisotropy) {
+        return Err("anisotropy/strength");
+    }
+    let amount = unit(at("translucency", "amount", 0.0), "translucency/amount")?;
+    let wrap = match sub("translucency", "kind").map_or(Some("thin"), Value::as_str) {
+        Some("thin") => None,
+        Some("wrap") => Some(unit(at("translucency", "wrap", 0.5), "translucency/wrap")?),
+        _ => return Err("translucency/kind"),
+    };
+    let top = |k: &str| num(p.get(k));
+    let thickness = at("absorption", "thickness", 0.0).max(0.0);
+    let att = p.get("absorption").and_then(|a| a.get("attenuation"));
+    let att_color = color3(att.and_then(|a| a.get("color"))).unwrap_or([1.0; 3]);
+    let distance = num(att.and_then(|a| a.get("distance"))).unwrap_or(f64::INFINITY);
+    let attenuation = att_color.map(|c| {
+        if distance.is_finite() && distance > 0.0 {
+            -c.max(1e-6).ln() / distance
+        } else {
+            0.0
+        }
+    });
+    let flake_w = unit(at("flakes", "weight", 0.0), "flakes/weight")?;
+    Ok(Lobes {
+        sheen: scaled(color("sheen").ok_or("sheen/color")?, sheen_w),
+        sheen_roughness: at("sheen", "roughness", 0.5).clamp(0.0, 1.0),
+        anisotropy,
+        anisotropy_rotation: at("anisotropy", "rotation", 0.0).to_radians(),
+        translucency: color("translucency").ok_or("translucency/color")?,
+        amount,
+        wrap,
+        transmission: unit(top("transmission").unwrap_or(0.0), "transmission")?,
+        ior: top("ior").unwrap_or(1.5).max(1.0),
+        thickness,
+        attenuation,
+        dispersion: top("dispersion").unwrap_or(0.0).max(0.0),
+        iridescence: unit(at("iridescence", "weight", 0.0), "iridescence/weight")?,
+        film_ior: at("iridescence", "ior", 1.3).max(1.0),
+        film_nm: at("iridescence", "thickness", 400.0).max(0.0),
+        diffuse_roughness: unit(top("diffuse_roughness").unwrap_or(0.0), "diffuse_roughness")?,
+        retroreflection: unit(top("retroreflection").unwrap_or(0.0), "retroreflection")?,
+        flakes: color("flakes").ok_or("flakes/color")?,
+        flake_weight: flake_w,
+        flake_size: at("flakes", "size", 0.001).max(1e-5),
+        flake_cos_tilt: at("flakes", "tilt", 15.0)
+            .clamp(0.0, 90.0)
+            .to_radians()
+            .cos(),
+        tinted: color3(p.get("specular_color")).is_some_and(|c| c != [1.0; 3]),
+    })
+}
+
+/// The material operator of the `material@1` item `item` names (#429; Material: `op`): the ID
+/// and item of the `gpu.material@1` its `params.op` names, `None` when it names none.
+pub fn material_op<'a>(
+    item: &Value,
+    named: impl Fn(&str) -> Option<&'a Value>,
+) -> Result<Option<(&'a str, &'a Value)>, Refused> {
+    let Some(m) = item.get("material").and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    let Some(op) = named(m)
+        .and_then(|m| m.get("params"))
+        .and_then(|p| p.get("op"))
+        .filter(|o| !o.is_null())
+    else {
+        return Ok(None);
+    };
+    let found = op.as_str().and_then(|id| {
+        let o = named(id)
+            .filter(|o| o.get("kind").and_then(Value::as_str) == Some("gpu.material@1"))?;
+        Some((o.get("id").and_then(Value::as_str).unwrap_or(id), o))
+    });
+    match found {
+        Some(f) => Ok(Some(f)),
+        None => Err(Refused {
+            code: "ref_unresolved",
+            path: format!("items/{m}/params/op"),
+        }),
+    }
 }
 
 /// A color field's role: a bare name, or `{role}` as #418 reads it.
@@ -662,27 +814,16 @@ pub fn policy_by(lights: &[Light], camera: &Camera, tie: Tie) -> Policy {
     if lights.is_empty() {
         return Policy::default();
     }
-    let planes = frustum(camera);
     let mut scored: Vec<(i64, &str, usize, f64)> = Vec::new();
-    for (i, l) in lights.iter().enumerate() {
-        let score = match l.kind {
-            LightKind::Sun => l.intensity,
-            _ => {
-                let d = sub(l.pos, camera.eye);
-                let d2 = dot(d, d);
-                let inside = planes
-                    .iter()
-                    .all(|(n, w)| dot(*n, l.pos) + w >= -l.range * dot(*n, *n).sqrt());
-                if !inside {
-                    0.0
-                } else {
-                    l.intensity * 4.0 * PI / d2.max(l.radius * l.radius)
-                }
-            }
-        } * l.priority.exp2();
+    for (i, score) in scores(lights, camera).into_iter().enumerate() {
         if score > 0.0 {
             // Eight buckets per stop: a light's rank moves only when its score does.
-            scored.push((-(score.log2() * 8.0).floor() as i64, &l.id, i, score));
+            scored.push((
+                -(score.log2() * 8.0).floor() as i64,
+                &lights[i].id,
+                i,
+                score,
+            ));
         }
     }
     match tie {
@@ -704,6 +845,33 @@ pub fn policy_by(lights: &[Light], camera: &Camera, tie: Tie) -> Policy {
         .map(|s| s.1.to_string())
         .collect();
     Policy { shaded, left_out }
+}
+
+/// Each light's score at the view, in the lights' order (#425 reads them): its estimated
+/// illuminance at the eye (power ÷ max(d², r²), 0 when its range misses the frustum) times
+/// 2^priority; a sun's illuminance times 2^priority.
+pub fn scores(lights: &[Light], camera: &Camera) -> Vec<f64> {
+    let planes = frustum(camera);
+    lights
+        .iter()
+        .map(|l| {
+            (match l.kind {
+                LightKind::Sun => l.intensity,
+                _ => {
+                    let d = sub(l.pos, camera.eye);
+                    let d2 = dot(d, d);
+                    let inside = planes
+                        .iter()
+                        .all(|(n, w)| dot(*n, l.pos) + w >= -l.range * dot(*n, *n).sqrt());
+                    if !inside {
+                        0.0
+                    } else {
+                        l.intensity * 4.0 * PI / d2.max(l.radius * l.radius)
+                    }
+                }
+            }) * l.priority.exp2()
+        })
+        .collect()
 }
 
 /// The camera's six planes (n, w), inside where n·p + w ≥ 0, from its reversed-Z clip matrix.

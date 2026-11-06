@@ -233,8 +233,9 @@ fn through_op(op: &mut Value) -> &mut Value {
 /// The frame's `valid_until`: the earliest `t` at which anything it shows changes next.
 pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validity) -> Option<i64> {
     let channels = motion.channels.iter().filter_map(|c| {
-        // A modified channel may change at every flick.
-        if c.modifiers.is_empty() {
+        // A modified channel may change at every flick, and so may a remapped one, whose
+        // child time runs other than the timeline.
+        if c.modifiers.is_empty() && !motion.remapped(&c.target.owner) {
             c.curve.next_change(doc_t)
         } else {
             Some(doc_t + 1)

@@ -21,9 +21,10 @@ import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
 import { installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
+import { heavyDenial } from './heavy.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
 import { plantedStart } from './plant.js';
-import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type VfsSettings } from './wire.js';
+import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
@@ -43,13 +44,15 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['hub.health', ['app', 'cli']], ['health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
   ['inbox.read', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
-  ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['confirm.enroll', ['app']],
+  ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
   // A run of a destructive command undone from the copy staged before it ran (#347).
   ['staged.undo', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
-  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
+  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']],
+  // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
+  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
   // Setup reads your history into the wiki (#356).
   ['wiki.build', ['cli']],
@@ -58,8 +61,12 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
+  // `deep workspace` (#67), and the views of the projects you're in.
+  ['workspace.new', ['cli']], ['workspace.move', ['cli']], ['workspace.revert', ['cli']], ['workspace.diff', ['cli']], ['workspace.drift', ['cli']], ['project.views', ['app', 'cli']],
   // The app API's views/shown and views/hidden (#262): the views the app shows, repeated every 5 s while shown.
   ['views.shown', ['app']], ['views.hidden', ['app']],
+  // What macOS says of the app's notifications (#994), when the app connects and when it changes.
+  ['notifications.report', ['app']],
   // The canvas side (#806): `deep show` from the CLI; revisions and messages read; the app's input and what it draws.
   ['canvas.show', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
@@ -87,8 +94,11 @@ const PASEO_PERMISSION_HOLD_MS = 24 * 3600_000;
 const PERMISSION_TIMEOUT_MS = 60_000;
 /** The guard entries a standing rule decides with the hub up (#23): dependencies and cloud resources the plan doesn't name. */
 const DECIDED_MATCH = /^effect:(dependency|cloud-resource)$/;
-/** The guard entry whose delete the hub stages before it runs with the hub up, or asks about (#347). */
+/** The guard entries whose calls the hub stages before they run with the hub up, or asks about (#347, #1294). */
 const STAGED_MATCH = 'effect:unknown-reach-delete';
+const DISCARD_MATCH = 'effect:discard-edits';
+const STASH_MATCH = 'effect:drop-stash';
+const STAGED_MATCHES: unknown[] = [STAGED_MATCH, DISCARD_MATCH, STASH_MATCH];
 /** The permission modes in which Claude Code denies what isn't allowed already: a standing rule never allows past them. */
 const DENYING_MODES = new Set(['dontAsk', 'plan']);
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
@@ -161,7 +171,7 @@ const versionRefusal = (value: Obj): Refusal =>
 
 
 interface CoreLink {
-  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' }): void;
+  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' | 'notifier-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' }): void;
   request(request: CoreRequest): Promise<unknown>;
   /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
   started: Promise<{ hooks: string[] }>;
@@ -214,6 +224,7 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
     post: (message) => {
       if (message.op === 'hook') void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined);
       else if (message.op === 'waiter-gone') core.waiterGone(message.key);
+      else if (message.op === 'notifier-gone') void core.notifierGone();
       else if (message.op === 'hook-gone') core.hookGone(message.id, message.session);
       else if (message.op === 'overrun') void core.overrun(message).catch(() => undefined);
       else if (message.op === 'later') core.later(message.session, message.cwd, message.text);
@@ -309,6 +320,8 @@ interface Guard { match?: unknown; scope?: unknown; mode?: unknown; reason?: unk
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
   private readonly conns = new Set<Conn>();
+  /** The connection that last reported the app's notification setting. */
+  private notifier: Conn | undefined;
   private readonly subs = new Map<string, Sub>();
   private core!: CoreLink;
   private parsers!: Parsers;
@@ -356,6 +369,7 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_FORGE ? { forge: process.env.DEEP_HUB_TEST_FORGE } : {}),
       ...(process.env.DEEP_HUB_TEST_SORTER ? { sorter: process.env.DEEP_HUB_TEST_SORTER } : {}),
       ...(process.env.DEEP_HUB_TEST_DRAFTS ? { drafts: process.env.DEEP_HUB_TEST_DRAFTS } : {}),
+      ...(process.env.DEEP_HUB_TEST_ACCEPTED ? { accepted: process.env.DEEP_HUB_TEST_ACCEPTED } : {}),
       ...(process.env.DEEP_HUB_TEST_WORK ? { work: process.env.DEEP_HUB_TEST_WORK } : {}),
       ...(process.env.DEEP_HUB_TEST_PRICES ? { prices: process.env.DEEP_HUB_TEST_PRICES } : {}),
       ...(process.env.DEEP_HUB_TEST_GITHUB ? { github: process.env.DEEP_HUB_TEST_GITHUB } : {}),
@@ -424,6 +438,31 @@ class Hub {
 
   // ---- Long waits (#120): the lines at each hook, the in-call route, and the timer for what is due.
 
+  /**
+   * A heavy command (#1015), which deep-hook matched against the heavy.command@1 entries, runs under `deep lease`:
+   * rewritten where the agent's adapter can rewrite a call, otherwise denied once with the leased command to run
+   * instead, which deep-hook matches no more. A reply that already denies the call stands, and `deep off` leaves it.
+   */
+  private leased(meta: HookMeta, ruled: string): string {
+    if (meta.event !== 'PreToolUse' || this.off) return ruled;
+    const command = typeof meta.call?.input.command === 'string' ? meta.call.input.command : undefined;
+    const rewrites = this.rewrites(meta.agent);
+    // The planted wrong program for AC2 denies the leased form too, so the agent's retry is denied again.
+    const retried = this.plant === 'denies-every-retry' && !rewrites && command !== undefined && /^\s*deep lease\b/.test(command);
+    if ((!meta.heavy && !retried) || command === undefined || this.plant === 'runs-matched-as-written') return ruled;
+    const reply = ruled === EMPTY_REPLY ? { exit: 0, stdout: '', stderr: '' } : JSON.parse(ruled) as { exit: number; stdout: string; stderr: string };
+    if (reply.exit !== 0) return ruled;
+    const form = retried ? command : meta.heavy!.form;
+    if (!rewrites) {
+      return line({ exit: 2, stdout: '', stderr: `${heavyDenial(command, form, meta.heavy?.name ?? 'deep lease')}\n` });
+    }
+    const out = reply.stdout ? JSON.parse(reply.stdout) as Record<string, unknown> : {};
+    const specific = isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : { hookEventName: 'PreToolUse' };
+    specific.updatedInput = { ...meta.call!.input, ...(isObj(specific.updatedInput) ? specific.updatedInput : {}), command: form };
+    out.hookSpecificOutput = specific;
+    return line({ exit: 0, stdout: JSON.stringify(out), stderr: reply.stderr });
+  }
+
   /** Whether an agent's adapter can rewrite a call's input, so a deadline can be attached to a command that never ends. */
   private rewrites(agent: string): boolean {
     try { return registry().get(agent === 'claude-code' ? 'claude' : agent).caps.rewrite; } catch { return false; }
@@ -491,6 +530,10 @@ class Hub {
       this.conns.delete(conn);
       for (const sub of conn.subs) this.unsubscribe(conn, sub);
       if (conn.waiter) this.core.post({ op: 'waiter-gone', key: conn.id });
+      if (conn === this.notifier) {
+        this.notifier = undefined;
+        this.core.post({ op: 'notifier-gone' });
+      }
     });
     sock.on('data', (chunk: Buffer) => this.read(conn, chunk));
     sock.write(this.helloLine);
@@ -644,6 +687,7 @@ class Hub {
       if (wait.message) this.core.post({ op: 'line', session: meta.session, agent: meta.agent, text: wait.message });
       ruled = withWaits(ruled, meta.event, wait);
       this.arm();
+      ruled = this.leased(meta, ruled);
     }
     // A call that may need your authority, or that a standing rule decides, and no guard entry blocks, is held for
     // the core's gate first (#321, #23); a warn entry's words go out with the gate's reply.
@@ -690,11 +734,16 @@ class Hub {
     const authority = [...new Set(classes.filter((c) => AUTHORITY.has(c)))];
     const decided = [...new Set(meta.matched.filter((n) => DECIDED_MATCH.test(String(entries[n]?.match ?? ''))).map((n) => String(entries[n]!.match).slice('effect:'.length)))];
     const mcp = data.kind === 'mcp' && typeof data.server === 'string' && typeof data.tool === 'string' ? { server: data.server, tool: data.tool } : undefined;
-    // A delete whose reach can't be worked out is staged first (#347): the folders deep-hook read, or null when it
-    // couldn't name them. The planted stager stages the working folder of every shell call.
-    const staged = meta.matched.find((n) => entries[n]?.match === STAGED_MATCH);
-    const stage = staged !== undefined ? meta.stage?.[staged] ?? null
-      : this.plant === 'stages-unpredicted-writes' && data.kind === 'shell' && typeof data.command === 'string' ? [meta.cwd] : undefined;
+    // A destructive call is staged first (#347, #1294): what deep-hook read of its reach, or null when it couldn't
+    // name it. The planted stager stages the working folder of every shell call.
+    const reach = (match: string) => {
+      const n = meta.matched.find((m) => entries[m]?.match === match);
+      return n === undefined ? undefined : meta.stage?.[n] ?? null;
+    };
+    const [folders, edits, stash] = [reach(STAGED_MATCH), this.plant === 'stages-untracked-only' ? undefined : reach(DISCARD_MATCH), reach(STASH_MATCH)];
+    const stage: StageReach | undefined = folders !== undefined || edits !== undefined || stash !== undefined
+      ? { ...(folders !== undefined ? { folders } : {}), ...(edits !== undefined ? { edits } : {}), ...(stash !== undefined ? { stash } : {}) }
+      : this.plant === 'stages-unpredicted-writes' && data.kind === 'shell' && typeof data.command === 'string' ? { folders: [meta.cwd] } : undefined;
     // A computer-use or Chrome step is checked against the screens and windows its session leases (#332).
     const screen = SCREEN_TOOLS.some((prefix) => meta.call?.tool.startsWith(prefix));
     // A shell or MCP call in a session whose cut-off turn started a send with no recorded end is checked against it (#85).
@@ -897,8 +946,8 @@ class Hub {
     const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
     // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
     // standing rule or asked at the gate (#23), after every other guard.
-    // A delete whose reach can't be worked out is staged or asked about at the gate (#347), never blocked outright.
-    const decided = (n: string) => !this.off && (DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (entries[n]?.match === STAGED_MATCH && !meta.stamp));
+    // A destructive command is staged or asked about at the gate (#347, #1294), never blocked outright.
+    const decided = (n: string) => !this.off && (DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
     const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!this.off || floor(n)));
     if (blocks.length) {
       meta.blockedBy = blocks;
@@ -1008,6 +1057,9 @@ class Hub {
           return { off };
         }));
       }
+      case 'notifications.report':
+        this.notifier = conn;
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }));
       case 'hub.health':
       case 'health':
         return void reply(this.core.request({ op: 'health' }).then((health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj) })));

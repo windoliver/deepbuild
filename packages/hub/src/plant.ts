@@ -48,6 +48,10 @@ export type Plant =
   | 'new-run-is-evidence' | 'counts-waiting-stops'
   // #120's: the long-wait lines wait for the turn's stop, so a long turn of short calls shows none while it runs.
   | 'line-at-stop'
+  // #1014's: the record's turn walk takes a subagent's stop as a turn end.
+  | 'turn-closes-at-child-stop'
+  // #67's: a workspace verdict's key of only the commit, document revisions, check digests, environment and tools.
+  | 'state-left-out-of-key'
   // #340's: a note the waiter delivered recorded as nothing, and the app's words taken for yours with no request ID.
   | 'app-note-unrecorded' | 'app-note-as-person'
   // #340's: a brief with the requirements' text or only at startup, a queue line of the newest message alone,
@@ -56,6 +60,8 @@ export type Plant =
   | 'counts-every-enqueue' | 'slow-brief' | 'app-note-answers-authority'
   // #347's: a stager with no ceiling on files or seconds, and one that stages every shell call whose writes it can't predict.
   | 'stages-without-ceiling' | 'stages-unpredicted-writes'
+  // #1294's: a stager whose class covers only untracked and ignored files, and one that copies on a clean tree too.
+  | 'stages-untracked-only' | 'stages-clean-tree'
   // #356's: pages rewritten each run, a deleted line relearned, values copied, merging by name or never, everything read again, a
   // contradicted claim deleted.
   | 'rewrites' | 'resurrects' | 'copies-values' | 'merge-by-name' | 'never-merge' | 'rereads-all' | 'deletes-contradicted'
@@ -78,6 +84,9 @@ export type Plant =
   | 'any-nonzero-base-exit'
   // #124's: deep_drive launching replicas without the replica lease.
   | 'deep-drive-no-lease'
+  // #82's: a stop rule that drops the one send-back of every stop with no work in it, and one that reads every turn a
+  // prompt began as an answer.
+  | 'no-work-never-sent-back' | 'skips-prompt-turns'
   // #55's: an answer handed to paseo's plugin while deep-hook's waiter for the session is live, so it goes in twice.
   | 'paseo-delivers-beside-waiter'
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
@@ -90,6 +99,13 @@ export type Plant =
   | 'git-inherits-env'
   // #907's: a cpu.slot pool slow runs may fill, and loop facts that count background subagents but not commands.
   | 'fills-every-slot' | 'background-subagents-only'
+  // #1015's: matched commands left as written, a Codex retry denied again, every cargo call leased, a release on the
+  // parent's exit, memory pressure ignored, an exclusive GPU lease beside shared ones, and scripts/lease run directly.
+  | 'runs-matched-as-written' | 'denies-every-retry' | 'leases-every-cargo' | 'releases-on-parent-exit' | 'ignores-memory-pressure'
+  | 'exclusive-beside-shared' | 'lease-script-runs-directly'
+  // #1017's: a store that links its folders in, a manifest that knows only Cargo and npm, the nearest key cloned, a clone
+  // placed whatever the worktree's sources, a store sessions can write, and a reclaim that ignores open files.
+  | 'product-symlinks' | 'product-hard-links' | 'products-cargo-npm-only' | 'nearest-key' | 'places-stale' | 'store-writable' | 'reclaims-open-worktree'
   // #874's: a declared surface never carried to the base checkout, a stand-in's hash never recorded, a stand-in built
   // where the part already starts, and a pass on a stand-in taken as proof.
   | 'stand-in-surface-dropped' | 'stand-in-unrecorded' | 'stand-in-always' | 'stand-in-pass-proves'
@@ -112,7 +128,12 @@ export type Plant =
   | 'normalizer-drops-numbers' | 'pr-body-only' | 'resolved-counts-closed' | 'completed-closes-item'
   // #669's: a command check's runner that reads a masked exit as a clean pass, a stop reply whose line says PASS with no
   // verdict behind it, and a status question sent on to the model.
-  | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model';
+  | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model'
+  // #1016's: a jobserver of its own for each build, a pipe topped up while a build runs, and a runner's share that
+  // ignores the builds running beside it.
+  | 'jobserver-per-build' | 'refills-while-running' | 'share-ignores-running-build'
+  // #65's: channels that take a channel's word, or cross one channel's trouble over to another.
+  | 'trusts-channel-proof' | 'last-writer-wins' | 'live-buttons-after-answer' | 'closes-on-failed-send' | 'takes-turns-at-token' | 'reconnects-every-channel' | 'buttons-for-authority' | 'keeps-unpaired-key';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -139,10 +160,13 @@ const PLANTS: readonly string[] = [
   'runs-disk-bytes',
   'new-run-is-evidence', 'counts-waiting-stops',
   'line-at-stop',
+  'turn-closes-at-child-stop',
+  'state-left-out-of-key',
   'app-note-unrecorded', 'app-note-as-person',
   'brief-full-text', 'brief-at-startup-only', 'queue-shows-newest', 'continuation-as-person', 'continuation-by-likeness',
   'counts-every-enqueue', 'slow-brief', 'app-note-answers-authority',
   'stages-without-ceiling', 'stages-unpredicted-writes',
+  'stages-untracked-only', 'stages-clean-tree',
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
   'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',
   'churn-no-full-collection', 'churn-no-resident-read',
@@ -152,11 +176,15 @@ const PLANTS: readonly string[] = [
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
   'silent-deprecated',
   'deep-drive-no-lease',
+  'no-work-never-sent-back', 'skips-prompt-turns',
   'paseo-delivers-beside-waiter',
   'signature-covers-anything',
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
+  'runs-matched-as-written', 'denies-every-retry', 'leases-every-cargo', 'releases-on-parent-exit', 'ignores-memory-pressure',
+  'exclusive-beside-shared', 'lease-script-runs-directly',
+  'product-symlinks', 'product-hard-links', 'products-cargo-npm-only', 'nearest-key', 'places-stale', 'store-writable', 'reclaims-open-worktree',
   'any-nonzero-base-exit',
   'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
@@ -167,6 +195,8 @@ const PLANTS: readonly string[] = [
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
+  'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
+  'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

@@ -92,6 +92,78 @@ pub struct Solid {
     pub emission: [f64; 3],
     /// Its material's texture maps (#423), which the renderer samples from the scene's `texels`.
     pub maps: Option<Arc<crate::light::Maps>>,
+    /// Its level of detail (#425): bands by projected size and its mesh's levels by error, which
+    /// [`crate::lod::resolve`] turns into what a view draws.
+    pub lod: Option<Arc<crate::lod::Lod>>,
+    /// Inside a band margin, the mask its band's draw keeps pixels by (#425).
+    pub mask: Option<crate::lod::Mask>,
+    /// It draws only in the shadow passes: a level the light's projection chose (#425).
+    pub cast_only: bool,
+    /// How far a cast-only level is drawn inside its surface, along its normals, in its own m.
+    pub inset: f64,
+    /// The material operator its material names (#429), which shades it per pixel.
+    pub op: Option<SolidOp>,
+    /// Whether the scene's cutaway reaches it (#424).
+    pub cut: bool,
+    /// Object: see-through order's `resolve: per_pixel` (#424): its fragments join per-pixel
+    /// lists and composite by depth per pixel, back faces included.
+    pub per_pixel: bool,
+    /// Its item's adjust (#424): its colour adjustments apply to its lit color before fog, and
+    /// an opacity below 1 draws it see-through after a depth pass of its own; `None` at the
+    /// identity.
+    pub adjust: Option<Adjust3>,
+}
+
+/// An item's adjust as a 3D item takes it in shading (Object: adjust; Item and kind: adjust):
+/// its tint in linear RGB.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Adjust3 {
+    pub opacity: f64,
+    pub exposure: f64,
+    pub contrast: f64,
+    pub gamma: f64,
+    pub hue: f64,
+    pub saturation: f64,
+    pub brightness: f64,
+    pub tint: Option<[f64; 3]>,
+    pub invert: bool,
+}
+
+impl Adjust3 {
+    /// Whether it changes no color (its opacity aside).
+    pub fn colors(&self) -> bool {
+        self.exposure != 0.0
+            || self.contrast != 1.0
+            || self.gamma != 1.0
+            || self.hue != 0.0
+            || self.saturation != 1.0
+            || self.brightness != 1.0
+            || self.tint.is_some()
+            || self.invert
+    }
+}
+
+/// A material operator on one solid (#429): the `gpu.material@1` item as evaluated, and the
+/// solid's own time, which its `t@1` reads: inside a time-remapped recipe instance, child time.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SolidOp {
+    pub id: String,
+    pub item: Arc<Value>,
+    /// Seconds from the document's start, on the item's own clock.
+    pub t: f64,
+    /// The document's seed, which with the solid's ID keys its `seed@1`.
+    pub doc_seed: u64,
+}
+
+impl Solid {
+    /// Where it reaches in world space: a builder's mesh's vertices through its model, or the
+    /// unit shape's eight corners (#1162).
+    pub fn points(&self) -> Vec<Vec3> {
+        match &self.mesh {
+            Some(m) => m.positions.iter().map(|p| apply(&self.model, *p)).collect(),
+            None => corners(&self.model),
+        }
+    }
 }
 
 /// An object's outline: its silhouette drawn `width` device px wide in `color`, which a status
@@ -325,6 +397,24 @@ impl Camera {
         [dot(d, self.right), dot(d, self.up), dot(d, self.forward)]
     }
 
+    /// The world point at frame px (`sx`, `sy`) and depth `vz` along the forward axis: the
+    /// inverse of [`Camera::project`].
+    pub fn unproject(&self, sx: f64, sy: f64, vz: f64) -> Vec3 {
+        let [c, sn] = self.roll;
+        let (dx, dy) = (sx - self.centre[0], sy - self.centre[1]);
+        let (x, y) = (dx * c + dy * sn, -dx * sn + dy * c);
+        let s = if self.perspective {
+            self.scale / vz
+        } else {
+            self.scale
+        };
+        let (vx, vy) = (x / s, -y / s);
+        add(
+            add(add(self.eye, mul(self.right, vx)), mul(self.up, vy)),
+            mul(self.forward, vz),
+        )
+    }
+
     /// Where a point lands in px (x right, y down) with its depth, or `None` behind a
     /// perspective eye.
     pub fn project(&self, p: Vec3) -> Option<[f64; 3]> {
@@ -508,6 +598,29 @@ pub struct Other {
     pub pos: Vec3,
 }
 
+/// Motion blur by velocity (#419; Motion blur: velocity): the cameras at t − s/2 and t + s/2, each
+/// solid's world at both times by ID, and, for a solid whose surface deforms with its topology
+/// held, its mesh at both times; with the reconstruction's taps, travel cap and tile.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Motion {
+    pub open: Camera,
+    pub close: Camera,
+    pub solids: BTreeMap<String, MotionSolid>,
+    pub taps: u32,
+    pub max_px: f64,
+    pub tile_px: u32,
+}
+
+/// One solid's place at t − s/2 and t + s/2.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MotionSolid {
+    pub open: Affine3,
+    pub close: Affine3,
+    /// Its pre-skins at both times, vertex for vertex with its mesh at t; `None` reads its mesh at
+    /// t at both times (a rigid item, or one whose topology changed inside the shutter).
+    pub meshes: Option<(Arc<crate::geom::Mesh>, Arc<crate::geom::Mesh>)>,
+}
+
 /// A document at t, as the GPU layer draws it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scene {
@@ -529,14 +642,39 @@ pub struct Scene {
     pub curves: BTreeMap<String, Vec<Vec3>>,
     /// The core's glyph atlas pages the labels' glyphs sample, by page number.
     pub pages: Vec<AtlasPage>,
+    /// Motion blur by velocity this frame (#419): the evaluations at t ± half the shutter that the
+    /// renderer's velocity target reads, or `None`.
+    pub motion: Option<Arc<Motion>>,
+    /// Each `overlay.text@1` readout (#419): drawn by the view after the frame's samples and
+    /// motion blur resolve, over the frame, never into the frame itself.
+    pub readouts: Vec<Label>,
     /// The texels of every map the solids sample, by the image's SHA-256, as the host had the
     /// decode worker make them (#423); a map whose texels aren't here draws without it.
     pub texels: BTreeMap<String, Arc<crate::light::Texels>>,
     /// The frame's sub-pixel offset, px right and down (#423: Look: samples).
     pub jitter: [f64; 2],
+    /// The light cut to draw in place of the policy's at this view: only #425's planted session
+    /// hysteresis sets one.
+    pub light_cut: Option<crate::light::Policy>,
+    /// The first `cutaway@1` (#424), which the solids it reaches are cut by in every pass.
+    pub cutaway: Option<crate::cut::Cutaway>,
+    /// The per-pixel resolve's room (#424): the view's `max_fragments`, and the most fragments
+    /// the class's GPU memory holds at 16 B each.
+    pub fragments: [u64; 2],
 }
 
 impl Scene {
+    /// Cuts the scene by `cutaway` (#424): a view input in session state replaces the
+    /// document's, and reaches the solids its `applies_to` names.
+    pub fn set_cutaway(&mut self, cutaway: Option<crate::cut::Cutaway>) {
+        for s in self.layers.iter_mut().flat_map(|l| &mut l.solids) {
+            s.cut = cutaway
+                .as_ref()
+                .is_some_and(|c| !c.planes.is_empty() && c.reaches(&s.id));
+        }
+        self.cutaway = cutaway;
+    }
+
     /// Whether the key sun's shadow is drawn through its cascades (#422): a shadowed sun over a
     /// scene whose solids name materials, which shade it per pixel. A scene of painted solids
     /// alone keeps the single fitted map the effects' shadow reads (#380).
@@ -1113,13 +1251,22 @@ fn cut(segments: &[Segment], s0: f64, s1: f64) -> Vec<Segment> {
 }
 
 /// A builder's or building kind's mesh after its stack, or why it can't be built.
-fn mesh_of(doc: &Value, id: &str, item: &Value, t: f64) -> Result<crate::geom::Mesh, Refused> {
+fn mesh_of(
+    doc: &Value,
+    id: &str,
+    item: &Value,
+    t: f64,
+    outlines: Outlines<'_>,
+) -> Result<crate::geom::Mesh, Refused> {
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
     let built = if crate::building::KINDS.contains(&kind) {
         crate::building::build(doc, id, item)
     } else {
-        crate::build::built(doc, id, item, &Default::default(), t)
-            .map(|b| b.mesh.unwrap_or_default())
+        let run = crate::stack::Run {
+            outlines: outlines.to_vec(),
+            ..Default::default()
+        };
+        crate::build::built(doc, id, item, &run, t).map(|b| b.mesh.unwrap_or_default())
     };
     built.map_err(|path| Refused {
         code: "out_of_range",
@@ -1135,6 +1282,7 @@ fn edge_line(
     params: &Value,
     look: &Look3,
     seconds: f64,
+    outlines: Outlines<'_>,
 ) -> Result<Line, Refused> {
     let path = format!("items/{id}/params");
     let edges = &params["edges"];
@@ -1155,7 +1303,7 @@ fn edge_line(
             None => return refused("out_of_range", format!("{path}/width")),
         },
     };
-    let mut mesh = mesh_of(doc, target, item, seconds)?;
+    let mut mesh = mesh_of(doc, target, item, seconds, outlines)?;
     if let Some((_, part)) = of.split_once('#') {
         let Some(tris) = mesh
             .parts
@@ -1428,10 +1576,14 @@ pub(crate) fn corners8(model: &Affine3) -> [Vec3; 8] {
 /// Reads a stored asset's bytes by its sha256.
 pub type Assets<'a> = &'a dyn Fn(&str) -> Option<Vec<u8>>;
 
+/// The build's outline sources an `extrude` reads its text, path or vector outline through
+/// (#443): the core's `outline.source@1`, as the sealed set holds it.
+pub type Outlines<'a> = &'a [deep_canvas::registry::SealedOutline];
+
 /// Evaluates `doc` at `t` (flicks) on a frame of its `size`; a `mesh.asset@1` draws only where
 /// [`evaluate_with`] has a store to read it from.
 pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Result<Scene, Refused> {
-    evaluate_any(doc, t, look, labels, None)
+    evaluate_any(doc, t, look, labels, None, &[])
 }
 
 /// [`evaluate`] with the asset store `assets` that `mesh.asset@1` items read their glTF from.
@@ -1442,7 +1594,19 @@ pub fn evaluate_with(
     labels: &mut Labels,
     assets: Assets<'_>,
 ) -> Result<Scene, Refused> {
-    evaluate_any(doc, t, look, labels, Some(assets))
+    evaluate_any(doc, t, look, labels, Some(assets), &[])
+}
+
+/// [`evaluate_with`] whose extrudes read their outlines through `outlines` (#443).
+pub fn evaluate_sourced(
+    doc: &Value,
+    t: i64,
+    look: &Look3,
+    labels: &mut Labels,
+    assets: Assets<'_>,
+    outlines: Outlines<'_>,
+) -> Result<Scene, Refused> {
+    evaluate_any(doc, t, look, labels, Some(assets), outlines)
 }
 
 fn evaluate_any(
@@ -1451,6 +1615,7 @@ fn evaluate_any(
     look: &Look3,
     labels: &mut Labels,
     assets: Option<Assets<'_>>,
+    outlines: Outlines<'_>,
 ) -> Result<Scene, Refused> {
     let Some(map) = doc.as_object() else {
         return refused("out_of_range", "");
@@ -1459,7 +1624,7 @@ fn evaluate_any(
         code: r.code,
         path: r.path,
     })?;
-    evaluate_compiled(map, &program, t, look, labels, assets)
+    evaluate_compiled(map, &program, t, look, labels, assets, outlines)
 }
 
 /// Each item of `doc` at `t` as evaluated, in item order, with its world transform without its
@@ -1570,6 +1735,50 @@ fn asset_mesh(
     Ok((mesh, Some(format!("{sha}#{node}"))))
 }
 
+/// An item's level of detail (#425): its `lod` bands and, for a mesh the simplify job gave
+/// levels, those levels keyed off its `hash`; none when it has neither.
+fn lod_of(
+    item: &Value,
+    path: &str,
+    bounds: [Vec3; 2],
+    mesh: Option<(&crate::geom::Mesh, u64)>,
+    doc: &Map<String, Value>,
+) -> Result<Option<Arc<crate::lod::Lod>>, Refused> {
+    let bands = crate::lod::bands_of(item, path.trim_end_matches("/params"))?;
+    let leveled = mesh.filter(|(m, _)| !m.lods.is_empty());
+    if bands.is_none() && leveled.is_none() {
+        return Ok(None);
+    }
+    let crate::lod::Bands {
+        bands,
+        margin,
+        proxy,
+    } = bands.unwrap_or(crate::lod::Bands {
+        bands: Vec::new(),
+        margin: 0.1,
+        proxy: None,
+    });
+    let (levels, extent) = match leveled {
+        Some((m, h)) => (crate::lod::levels(&Arc::new(m.clone()), h), m.lod_extent),
+        None => (Vec::new(), 0.0),
+    };
+    // A mesh without levels takes its proxy from the simplify step, once per content key.
+    let proxy_mesh = match (proxy, mesh) {
+        (Some(p), Some((m, h))) if levels.is_empty() => crate::lod::proxy_of(m, h, p),
+        _ => None,
+    };
+    Ok(Some(Arc::new(crate::lod::Lod {
+        bands,
+        margin,
+        bounds,
+        levels,
+        extent,
+        lod_px: crate::lod::lod_px(doc),
+        proxy,
+        proxy_mesh,
+    })))
+}
+
 /// A built solid's world bounds' corners.
 fn corners_of(s: &Solid) -> Vec<Vec3> {
     let Some(mesh) = &s.mesh else {
@@ -1608,7 +1817,7 @@ fn asset_scene(
     params: &Value,
     model: &Affine3,
     look: &Look3,
-) -> Result<Vec<Solid>, Refused> {
+) -> Result<(Vec<Solid>, Vec<([[f64; 4]; 3], Value)>), Refused> {
     let path = format!("items/{id}/params/sha256");
     let Some(sha) = params.get("sha256").and_then(Value::as_str) else {
         return refused("out_of_range", path);
@@ -1626,6 +1835,12 @@ fn asset_scene(
         path: format!("items/{id}/{p}"),
     })?;
     let mut out = Vec::new();
+    // The file's punctual lights at their world transforms under the item's (#428).
+    let lights = imported
+        .lights
+        .iter()
+        .map(|(w, l)| (matmul(model, w), l.clone()))
+        .collect();
     for (k, node) in imported.nodes.iter().enumerate() {
         let named = |n: &Value| match n {
             Value::Number(i) => i.as_u64() == Some(node.index as u64),
@@ -1677,6 +1892,10 @@ fn asset_scene(
                     .map_or([204; 3], |m| [m.base[0], m.base[1], m.base[2]].map(encode8)),
                 stroke: None,
                 mesh: Some(Arc::new(prim.mesh.clone())),
+                lod: None,
+                mask: None,
+                cast_only: false,
+                inset: 0.0,
                 cast_shadow: true,
                 receive_shadow: true,
                 emission: material.as_ref().map_or([0.0; 3], |m| m.emission),
@@ -1684,10 +1903,15 @@ fn asset_scene(
                 sort_bias: 0.0,
                 alpha,
                 maps,
+                // An imported material names no operator.
+                op: None,
+                cut: false,
+                per_pixel: false,
+                adjust: None,
             });
         }
     }
-    Ok(out)
+    Ok((out, lights))
 }
 
 /// A figure lights one item at most (Object: `tone`, "one lit per figure"), and every tone is
@@ -1715,6 +1939,29 @@ fn tones(map: &Map<String, Value>) -> Result<(), Refused> {
     Ok(())
 }
 
+/// The material operator a solid's material names, on the solid's own clock (#429): inside a
+/// time-remapped recipe instance, child time.
+fn solid_op(
+    items: &Items<'_>,
+    map: &Map<String, Value>,
+    program: &Program,
+    t: i64,
+    id: &str,
+    item: &Value,
+) -> Result<Option<SolidOp>, Refused> {
+    let Some((op, op_item)) = light::material_op(item, |m| items.get(m))? else {
+        return Ok(None);
+    };
+    let motion = &program.motion;
+    let own = motion.item_time(id, eval::position(motion, t).0) - motion.transport.start;
+    Ok(Some(SolidOp {
+        id: op.to_string(),
+        item: Arc::new(op_item.clone()),
+        t: own as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64,
+        doc_seed: map.get("seed").and_then(Value::as_u64).unwrap_or(0),
+    }))
+}
+
 /// [`evaluate`] of a document whose motion program is compiled already.
 pub(crate) fn evaluate_compiled(
     map: &Map<String, Value>,
@@ -1723,6 +1970,7 @@ pub(crate) fn evaluate_compiled(
     look: &Look3,
     labels: &mut Labels,
     assets: Option<Assets<'_>>,
+    outlines: Outlines<'_>,
 ) -> Result<Scene, Refused> {
     tones(map)?;
     let mut state = program.state();
@@ -1780,6 +2028,7 @@ pub(crate) fn evaluate_compiled(
 
     let mut layers = Vec::new();
     let mut overlay_items = Vec::new();
+    let mut readout_items: Vec<(String, Value)> = Vec::new();
     // The document as builders read it (the curves they name), made once when one draws.
     let mut doc_value: Option<Value> = None;
     let mut bounds: Vec<Vec3> = Vec::new();
@@ -1789,6 +2038,26 @@ pub(crate) fn evaluate_compiled(
     let mut puffs = 0u64;
     let mut others = Vec::new();
     let mut curves = BTreeMap::new();
+    // #424: the prototypes instancers name, whose solids are kept in their own space whether or
+    // not they draw themselves; the instancers, placed once every layer is read; the cutaway.
+    let mut protos_wanted: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    for (id, item) in items.iter() {
+        if item.get("kind").and_then(Value::as_str) == Some("instance@1") && shown(&items, id) {
+            for p in item
+                .pointer("/params/of")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                if let Some(p) = p.as_str() {
+                    protos_wanted.insert(p);
+                }
+            }
+        }
+    }
+    let mut protos: HashMap<String, Vec<Solid>> = HashMap::new();
+    let mut instancers: Vec<(usize, String)> = Vec::new();
+    let mut cutaway = None;
     for layer_id in &order {
         let Some(list) = by_layer.get_mut(layer_id) else {
             continue;
@@ -1801,6 +2070,14 @@ pub(crate) fn evaluate_compiled(
         };
         for &(_, id, item) in list.iter() {
             let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+            // An item draws when it and every parent are visible (Item: `visible`, inherited);
+            // a prototype is read either way, for its instancers.
+            let visible = shown(&items, id);
+            let proto = protos_wanted.contains(id.as_str());
+            if !visible && !proto {
+                continue;
+            }
+            let before = layer.solids.len();
             let path = format!("items/{id}/params");
             let empty = Value::Object(Map::new());
             let params = item.get("params").unwrap_or(&empty);
@@ -1850,17 +2127,25 @@ pub(crate) fn evaluate_compiled(
                             &path,
                         )?,
                         mesh: None,
+                        lod: lod_of(item, &path, [[-0.5; 3], [0.5; 3]], None, map)?,
+                        mask: None,
+                        cast_only: false,
+                        inset: 0.0,
                         cast_shadow: casts(item, &material),
                         receive_shadow: shadows(item, "receive_shadow"),
                         material,
                         sort_bias: num(item.get("sort_bias")).unwrap_or(0.0),
                         alpha: surface.alpha,
                         emission: surface.emission,
+                        op: solid_op(&items, map, program, t, id, item)?,
+                        cut: false,
+                        per_pixel: false,
+                        adjust: None,
                     });
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
                     let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
-                    let l = edge_line(doc, &items, id, params, look, seconds)?;
+                    let l = edge_line(doc, &items, id, params, look, seconds, outlines)?;
                     bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
                     layer.lines.push(l);
                 }
@@ -1874,19 +2159,102 @@ pub(crate) fn evaluate_compiled(
                 {
                     let read = assets.expect("matched above");
                     let model = world(&items, id);
-                    for s in asset_scene(read, id, params, &model, look)? {
+                    let (solids, file_lights) = asset_scene(read, id, params, &model, look)?;
+                    for s in solids {
                         bounds.extend(corners_of(&s));
                         layer.solids.push(s);
+                    }
+                    // A directional KHR_lights_punctual light lights the view as a sun of its
+                    // intensity in lx and its color (#428).
+                    for (k, (m, l)) in file_lights.iter().enumerate() {
+                        if l.get("type").and_then(Value::as_str) != Some("directional") {
+                            continue;
+                        }
+                        let lid = format!("{id}#light{k}");
+                        let p = serde_json::json!({
+                            "illuminance": num(l.get("intensity")).unwrap_or(1.0),
+                            "color": l.get("color").cloned().unwrap_or(serde_json::json!([1, 1, 1])),
+                        });
+                        let dir = normalize(turn(m, [0.0, 0.0, -1.0]));
+                        lights.extend(light::light(
+                            &lid,
+                            "light.sun@1",
+                            &p,
+                            origin(m),
+                            dir,
+                            axes(m),
+                            1.0,
+                        ));
+                        if sun.is_none() {
+                            sun = Some(Sun {
+                                id: lid,
+                                toward: normalize(turn(m, [0.0, 0.0, 1.0])),
+                                illuminance: num(p.get("illuminance")).unwrap_or(1.0),
+                                shadow: false,
+                                cascades: cascades(&p, &path)?,
+                            });
+                        }
+                    }
+                }
+                "mesh.sequence@1" if assets.is_none() => {}
+                // #419's stand-in for the physics module: each body a sphere at the bake's
+                // position at t, read from the bake, never stepped.
+                "fixture.world@1" => {
+                    let w = crate::fixtures::bake(params, &path)?;
+                    let material = light::material(item, |m| items.get(m), look, id)?;
+                    let surface = surface(&items, look, id, item)?;
+                    for (b, p) in w.bodies.iter().zip(w.at(t)) {
+                        let r = 2.0 * b.radius;
+                        let model = [
+                            [r, 0.0, 0.0, p[0]],
+                            [0.0, r, 0.0, p[1]],
+                            [0.0, 0.0, r, p[2]],
+                        ];
+                        bounds.extend(corners(&model));
+                        layer.solids.push(Solid {
+                            maps: None,
+                            id: format!("{id}#{}", b.id),
+                            shape: Shape::Sphere,
+                            model,
+                            color: match (&surface.color, &material) {
+                                (Some(c), _) => *c,
+                                (None, Some(m)) => [m.base[0], m.base[1], m.base[2]].map(encode8),
+                                (None, None) => paint(look, params, &path)?,
+                            },
+                            stroke: None,
+                            mesh: None,
+                            lod: None,
+                            mask: None,
+                            cast_only: false,
+                            inset: 0.0,
+                            cast_shadow: casts(item, &material),
+                            receive_shadow: shadows(item, "receive_shadow"),
+                            material: material.clone(),
+                            sort_bias: 0.0,
+                            alpha: surface.alpha,
+                            emission: surface.emission,
+                            op: None,
+                            cut: false,
+                            per_pixel: false,
+                            adjust: None,
+                        });
                     }
                 }
                 k if crate::builders::KINDS.contains(&k)
                     || crate::building::KINDS.contains(&k)
-                    || k == "mesh.asset@1" =>
+                    || k == "mesh.asset@1"
+                    || k == "mesh.sequence@1"
+                    || k == "fixture.skin@1" =>
                 {
                     let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
                     let (mesh, shared) = match (k, assets) {
                         ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params)?,
-                        _ => (mesh_of(doc, id, item, seconds)?, None),
+                        // #419's stand-ins: a pre-skin per time, and a sequence's frame at t.
+                        ("fixture.skin@1", _) => (crate::fixtures::skin(params, &path)?, None),
+                        ("mesh.sequence@1", Some(read)) => {
+                            (crate::fixtures::sequence(params, t, &path, read)?, None)
+                        }
+                        _ => (mesh_of(doc, id, item, seconds, outlines)?, None),
                     };
                     if mesh.triangles() == 0 {
                         continue;
@@ -1931,13 +2299,21 @@ pub(crate) fn evaluate_compiled(
                             (None, _) => paint_or_muted(look, params, &path)?,
                         },
                         stroke: inked(None, &material, Shape::Built(hash), &path)?,
+                        lod: lod_of(item, &path, mesh.bounds(), Some((&mesh, hash)), map)?,
                         mesh: Some(Arc::new(mesh)),
+                        mask: None,
+                        cast_only: false,
+                        inset: 0.0,
                         cast_shadow: casts(item, &material),
                         receive_shadow: shadows(item, "receive_shadow"),
                         material,
                         sort_bias: num(item.get("sort_bias")).unwrap_or(0.0),
                         alpha: surface.alpha,
                         emission: surface.emission,
+                        op: solid_op(&items, map, program, t, id, item)?,
+                        cut: false,
+                        per_pixel: false,
+                        adjust: None,
                     });
                 }
                 // A curve draws nothing; what follows it (particles along it, #420) reads it
@@ -2025,6 +2401,7 @@ pub(crate) fn evaluate_compiled(
                     });
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
+                "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
                 "puff@1" => {
                     let m = world(&items, id);
                     layer.puffs.push(puff(id, params, origin(&m), &path)?);
@@ -2072,8 +2449,25 @@ pub(crate) fn evaluate_compiled(
                         flicker,
                     ));
                 }
-                // A material draws nothing itself; the objects naming it read it (#418).
-                "camera@1" | "sky@1" | "material@1" => {}
+                // A material draws nothing itself; the objects naming it read it (#418). A group
+                // draws nothing either: its children take its transform and its `visible` (#424).
+                "camera@1" | "sky@1" | "material@1" | "group@1" => {}
+                // #424: an instancer's elements, placed once its prototypes are read.
+                "instance@1" => instancers.push((layers.len(), id.clone())),
+                "cutaway@1" if cutaway.is_none() => {
+                    cutaway = Some(crate::cut::cutaway(
+                        id,
+                        params,
+                        &path,
+                        |r| {
+                            look.role(r).map(|c| {
+                                c.map(|v| deep_canvas::color::srgb_decode(f64::from(v) / 255.0))
+                            })
+                        },
+                        look.basis == crate::look::Basis::Physical,
+                    )?);
+                }
+                "cutaway@1" => {}
                 _ => others.push(Other {
                     id: id.clone(),
                     kind: kind.to_string(),
@@ -2081,11 +2475,76 @@ pub(crate) fn evaluate_compiled(
                     pos: origin(&world(&items, id)),
                 }),
             }
+            if proto {
+                protos.insert(id.clone(), layer.solids[before..].to_vec());
+            }
+            if !visible {
+                layer.solids.truncate(before);
+            }
         }
-        if !layer.items().is_empty() {
+        if !layer.items().is_empty() || instancers.iter().any(|(l, _)| *l == layers.len()) {
             layers.push(layer);
         }
     }
+    // Each element: its prototype's solids moved from the prototype's world to the instancer's
+    // world × the element's own transform, addressed `<instancer>#<id>` (Instance `instance@1`).
+    for (l, id) in &instancers {
+        let path = format!("items/{id}/params");
+        let empty = Value::Object(Map::new());
+        let params = items[id.as_str()].get("params").unwrap_or(&empty);
+        let (of, elements) = crate::cut::elements(params, &path)?;
+        let at = world(&items, id);
+        let from: Vec<Affine3> = of
+            .iter()
+            .map(|p| crate::cut::inverse(&world(&items, p)))
+            .collect();
+        for e in elements {
+            let Some(solids) = protos.get(&of[e.proto]) else {
+                return refused("ref_unresolved", format!("{path}/of"));
+            };
+            let place = matmul(&matmul(&at, &e.at), &from[e.proto]);
+            for (k, s) in solids.iter().enumerate() {
+                let mut s = s.clone();
+                s.id = if solids.len() == 1 {
+                    format!("{id}#{}", e.id)
+                } else {
+                    format!("{id}#{}#{k}", e.id)
+                };
+                s.model = matmul(&place, &s.model);
+                s.op = None;
+                bounds.extend(s.points());
+                layers[*l].solids.push(s);
+            }
+        }
+    }
+    layers.retain(|l| !l.items().is_empty());
+    let mut max_fragments: u64 = 8_388_608;
+    // Each solid's adjust past opacity, by its item (an element's, its instancer's), and how it
+    // resolves (#424).
+    for s in layers.iter_mut().flat_map(|l| &mut l.solids) {
+        let owner = s.id.split('#').next().unwrap_or(&s.id);
+        s.adjust = items.get(owner).and_then(|i| adjust3(look, i));
+        let item = items.get(owner);
+        s.per_pixel =
+            item.and_then(|i| i.get("resolve")).and_then(Value::as_str) == Some("per_pixel");
+        if s.per_pixel {
+            if let Some(m) = item
+                .and_then(|i| i.get("max_fragments"))
+                .and_then(Value::as_u64)
+            {
+                max_fragments = max_fragments.min(m.max(1));
+            }
+        }
+    }
+    // The class's GPU memory, at 16 B a fragment (Object: see-through order).
+    let budget = Value::Object(
+        map.get("budget")
+            .map(|b| ("budget".to_string(), b.clone()))
+            .into_iter()
+            .collect(),
+    );
+    let gpu = deep_canvas::budget::of(&budget).map_or(512 << 20, |(_, l)| l.gpu_bytes);
+    let fragments = [max_fragments, (gpu / 16).max(max_fragments)];
 
     let camera_id = map.get("camera").and_then(Value::as_str);
     let Some(cam_item) = camera_id.and_then(|c| items.get(c)) else {
@@ -2104,11 +2563,49 @@ pub(crate) fn evaluate_compiled(
         &cam_path,
     )?;
 
+    // A readout sits in the view's top-left corner, its text the template's (#419).
+    let mut readouts = Vec::new();
+    for (id, params) in &readout_items {
+        let text = params.get("template").and_then(Value::as_str).unwrap_or("");
+        let size = num(params.get("size")).unwrap_or(13.0);
+        let (run_box, glyphs) = labels.run(text, Role::Body, size as f32);
+        let shaped_at = glyphs.first().map_or(size as f32, |g| g.size);
+        let quad = [
+            run_box[0] * size / f64::from(shaped_at),
+            run_box[1] * size / f64::from(shaped_at),
+        ];
+        let depth = if camera.perspective {
+            2.0 * camera.near
+        } else {
+            camera.near + 0.01
+        };
+        readouts.push(Label {
+            id: id.clone(),
+            text: text.to_string(),
+            role: Role::Body,
+            glyphs,
+            bounds: run_box,
+            pos: camera.unproject(12.0 + quad[0] / 2.0, 12.0 + quad[1] / 2.0, depth),
+            em: size,
+            quad,
+            world: false,
+            facing: Facing::Camera,
+            axes: [camera.right, camera.up],
+            color: look
+                .role("stone")
+                .or(look.role("ink"))
+                .unwrap_or([255, 255, 255]),
+        });
+    }
     // Each label's glyphs from the atlas at its size on screen; a frame that found the atlas full
     // starts it over and places them all again.
     labels.begin();
     for pass in 0..2 {
-        for l in layers.iter_mut().flat_map(|layer| layer.labels.iter_mut()) {
+        for l in layers
+            .iter_mut()
+            .flat_map(|layer| layer.labels.iter_mut())
+            .chain(readouts.iter_mut())
+        {
             let em_px = if l.world {
                 l.em * camera.px_per_m(camera.to_view(l.pos)[2])
             } else {
@@ -2134,7 +2631,7 @@ pub(crate) fn evaluate_compiled(
     if puffs > cap {
         return refused("out_of_range", "budget/puffs");
     }
-    Ok(Scene {
+    let mut scene = Scene {
         size,
         camera,
         ground: look.ground,
@@ -2144,11 +2641,60 @@ pub(crate) fn evaluate_compiled(
         lights,
         sky,
         others,
+        light_cut: None,
         curves,
         pages: labels.pages(),
+        motion: None,
+        readouts,
         texels: BTreeMap::new(),
         jitter: [0.0; 2],
-    })
+        cutaway: None,
+        fragments,
+    };
+    scene.set_cutaway(cutaway);
+    Ok(scene)
+}
+
+/// Whether `id` and each of its parents are visible (Item: `visible`, inherited).
+fn shown(items: &Items<'_>, id: &str) -> bool {
+    let mut at = Some(id);
+    let mut seen = 0;
+    while let Some(i) = at {
+        let Some(item) = items.get(i) else {
+            return true;
+        };
+        if item.get("visible") == Some(&Value::Bool(false)) {
+            return false;
+        }
+        at = item.get("parent").and_then(Value::as_str);
+        seen += 1;
+        if seen > 64 {
+            return true;
+        }
+    }
+    true
+}
+
+/// An item's adjust (Item and kind: adjust), `None` at the identity (#424).
+fn adjust3(look: &Look3, item: &Value) -> Option<Adjust3> {
+    let m = item.get("adjust")?.as_object()?;
+    let n = |k: &str, d: f64| num(m.get(k)).unwrap_or(d);
+    let a = Adjust3 {
+        opacity: n("opacity", 1.0).clamp(0.0, 1.0),
+        tint: m
+            .get("tint")
+            .and_then(|t| t.as_str().or_else(|| t.get("role").and_then(Value::as_str)))
+            .and_then(|r| look.role(r))
+            .map(|c| c.map(|v| deep_canvas::color::srgb_decode(f64::from(v) / 255.0))),
+        hue: n("hue", 0.0),
+        saturation: n("saturation", 1.0),
+        brightness: n("brightness", 1.0),
+        contrast: n("contrast", 1.0),
+        exposure: n("exposure", 0.0),
+        gamma: n("gamma", 1.0),
+        invert: m.get("invert") == Some(&Value::Bool(true)),
+    };
+    (a.colors() || a.opacity < 1.0).then_some(a)
 }
 
 fn xy(v: Option<&Value>) -> Option<[f64; 2]> {
@@ -2331,7 +2877,7 @@ impl Scene {
         let proj = |p: Vec3| cam.project(p).map(|q| [q[0], q[1]]);
         for layer in &self.layers {
             for s in &layer.solids {
-                let pts: Vec<[f64; 2]> = corners(&s.model).into_iter().filter_map(proj).collect();
+                let pts: Vec<[f64; 2]> = s.points().into_iter().filter_map(proj).collect();
                 if let Some(b) = boxed(&pts) {
                     out.push((s.id.clone(), b));
                 }

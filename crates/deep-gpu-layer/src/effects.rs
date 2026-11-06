@@ -13,7 +13,7 @@ use deep_canvas_effects::interp::{self, hash1, Image};
 use deep_canvas_effects::{check, shipped};
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
-use deep_effects_render::compile::{compile_with, validate, Compiled};
+use deep_effects_render::compile::{compile_planted, compile_with, validate, Compiled};
 use deep_effects_render::frame::{self as fx, Settings, Sparks};
 use deep_effects_render::reference::{self, Camera};
 use deep_effects_render::runner::{dispatch, Frame, Runner, LINEAR};
@@ -58,7 +58,7 @@ impl Seeding {
     }
 }
 
-fn linear_of(c: [u8; 3]) -> [f64; 3] {
+pub fn linear_of(c: [u8; 3]) -> [f64; 3] {
     c.map(|v| {
         let x = f64::from(v) / 255.0;
         if x <= 0.04045 {
@@ -656,7 +656,7 @@ pub fn reference(app: &mut App, out: &str, call: &Value) -> Value {
                 .stages
                 .iter()
                 .map(|g| {
-                    compile_with(g, &BTreeMap::new(), Options { off_by_two: off })
+                    compile_with(g, &BTreeMap::new(), Options { off_by_two: off, ..Options::default() })
                         .expect("shipped stages check")
                 })
                 .collect();
@@ -918,13 +918,37 @@ pub fn check_operator(app: &mut App, call: &Value) -> Value {
         })
         .unwrap_or_default();
     let skips = app.planted == Some(Planted::SkipsOperatorCheck);
+    let (emit_options, check_options) = operator_plants(app.planted);
+    let ui_thread = std::thread::current()
+        .name()
+        .unwrap_or("main")
+        .to_string();
     app.worker.call(move |state| {
         let device = state.gpu.device();
         let mut reached = Reached::default();
         if skips && unchecked(&device, &op, &mut reached).is_some() {
             return json!({"outcome": "accepted", "issues": [], "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}});
         }
-        let result = compile_with(&op, &assets, Options::default());
+        // The check alone, timed, for the computed class and the estimate.
+        let started = std::time::Instant::now();
+        let alone = graph::read(&op).and_then(|o| check::check_with(&o, check_options));
+        let check_ms = started.elapsed().as_secs_f64() * 1e3;
+        let started = std::time::Instant::now();
+        let result = compile_planted(&op, &assets, emit_options, check_options);
+        let compile_ms = (started.elapsed().as_secs_f64() * 1e3 - check_ms).max(0.0);
+        let thread = std::thread::current()
+            .name()
+            .unwrap_or("render")
+            .to_string();
+        let mut extra = serde_json::Map::new();
+        if let Ok(c) = &alone {
+            extra.insert("class".into(), json!(c.class.name()));
+            extra.insert("estimate_ns".into(), json!(c.estimate));
+        }
+        extra.insert(
+            "timing".into(),
+            json!({"check_ms": check_ms, "compile_ms": compile_ms, "thread": thread, "ui_thread": ui_thread}),
+        );
         let (outcome, issues) = match result {
             Err(issues) => {
                 // A refusal from naga's validation means the module reached naga.
@@ -939,8 +963,44 @@ pub fn check_operator(app: &mut App, call: &Value) -> Value {
                 }
             }
         };
-        json!({"outcome": outcome, "issues": issues, "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}})
+        let mut reply = json!({"outcome": outcome, "issues": issues, "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}});
+        if let Value::Object(o) = &mut reply {
+            o.extend(extra);
+        }
+        reply
     })
+}
+
+/// The emitter's and the check's planted wrong programs (#429), from the binary's `--planted`.
+pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
+    (
+        Options {
+            drops_swizzle_last: p == Some(Planted::DropsSwizzleLast),
+            index_wraps: p == Some(Planted::IndexWraps),
+            ..Options::default()
+        },
+        check::CheckOptions {
+            declared_class: p == Some(Planted::TakesDeclaredClass),
+            exact_f32_compares: p == Some(Planted::F32CompareFloorExact),
+            exact_f32_floor: p == Some(Planted::F32CompareFloorExact),
+            trusts_index: p == Some(Planted::TrustsWriteIndex),
+            noise_weight_halved: p == Some(Planted::NoiseWeightHalved),
+        },
+    )
+}
+
+/// The structural steps' planted programs (#483), as the operators' runtime takes them; the pool
+/// marker is the test hook's, set by check_operator.
+pub fn operator_hooks(p: Option<Planted>) -> deep_effects_render::docops::Hooks {
+    deep_effects_render::docops::Hooks {
+        marker: None,
+        no_clear: p == Some(Planted::PoolWithoutClear),
+        feeds_first: p == Some(Planted::IterateFeedsFirst),
+        level0_only: p == Some(Planted::MipsLevel0Only),
+        old_key: p == Some(Planted::MipsKeptUnderOldKey),
+        ties_decreasing: p == Some(Planted::SortTiesDecreasing),
+        compact_by_atomic: p == Some(Planted::CompactByAtomic),
+    }
 }
 
 /// The compute operator `op` builds: one storage input of 32-bit words per argument, the step
@@ -1089,6 +1149,7 @@ pub fn op(app: &mut App, call: &Value) -> Value {
         eye: [0.0; 4],
         inputs: interp::inputs(&c.checked, &BTreeMap::new(), &BTreeMap::new()),
         textures: BTreeMap::new(),
+        normals: [[0.0; 3]; 3],
     };
     let storage: BTreeMap<String, Vec<f64>> = columns
         .iter()
@@ -1172,12 +1233,14 @@ pub fn exact_bits(app: &mut App) -> (String, BTreeMap<String, String>) {
 /// `exact`: every shipped exact operator on its exactness fixture on this GPU, as a record.
 pub fn exact(app: &mut App, out: &str) -> Value {
     let (name, ops) = exact_bits(app);
+    let steps = crate::steps_ref::exact_steps(app);
     let record = json!({
         "format": 1,
         "gpu": {"name": name, "family": family(&name)},
         "os": crate::golden::os(),
         "wgpu": env!("DEEP_WGPU_VERSION"),
         "operators": ops,
+        "steps": steps,
     });
     let bytes = serde_json::to_vec_pretty(&record).unwrap_or_default();
     match write_named(out, &bytes, "json") {
@@ -1211,18 +1274,22 @@ pub fn cross_gpu(app: &App, call: &Value) -> Value {
     families.sort();
     families.dedup();
     if families.len() < 2 && app.planted != Some(Planted::PassesOneGpu) {
+        let missing = crate::steps_ref::missing_family(families.first().map_or("", String::as_str));
         return json!({
             "result": "BLOCKED",
             "families": families,
-            "asks": [{"kind": "unblock", "ask": "run deep-gpu's exact call on a GPU of another family (an M1 beside this M3) and compare its record", "needs": "a second GPU family"}],
+            "asks": [{"kind": "unblock", "ask": format!("run deep-gpu's exact call on an {missing} GPU (another family than this one) and compare its record"), "needs": "a second GPU family", "gpu": missing}],
         });
     }
     let mut differs = Vec::new();
     if let Some(first) = records.first() {
-        for (name, bits) in first["operators"].as_object().into_iter().flatten() {
-            for r in &records[1..] {
-                if r["operators"][name] != *bits {
-                    differs.push(json!({"operator": name, "families": [first["gpu"]["family"], r["gpu"]["family"]]}));
+        // Every shipped exact operator's bits, then every exact public step's.
+        for (field, what) in [("operators", "operator"), ("steps", "step")] {
+            for (name, bits) in first[field].as_object().into_iter().flatten() {
+                for r in &records[1..] {
+                    if r[field][name] != *bits {
+                        differs.push(json!({what: name, "families": [first["gpu"]["family"], r["gpu"]["family"]]}));
+                    }
                 }
             }
         }

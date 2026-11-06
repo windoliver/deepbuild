@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "24c0d4e750b52c3daff4b6d091b8352e0b09a88593a439ae409a4c84192726c0",
+  "set_digest": "d080da7e5294b75ea897c36c01b14d540783b4a8c6132ddc78275e75f0f4b16f",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -92,7 +92,7 @@
       }
     },
     "effects@1": {
-      "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+      "digest": "a5c48d2d39ec542b3e471645b597ed286640f2114a2e8ccd3b7d82c360e22324",
       "reference": "effects",
       "kit": [
         "fixtures",
@@ -179,7 +179,7 @@
       }
     },
     "marks2d@1": {
-      "digest": "27ecdd230bbf0b037234c96bf88d8c3e6e2c92aeeaa34df2bc5c6c12a091daea",
+      "digest": "22c7f31ba14211509ab4750264aba6d121993e871b48845c8cca0702a6fec2c3",
       "reference": "marks2d",
       "kit": [
         "fixtures",
@@ -306,7 +306,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "73b4b3f5c3013115637da8ecdcee94b264979b94e781a8116ffb17596a5fc675",
+      "digest": "06336effe820630c6b21b7c10341baaacb5ab1c23bf396f4c2dccceeb7e5d937",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -364,7 +364,7 @@
       }
     },
     "text@1": {
-      "digest": "9fcb8911f7ca77eeed73bb877c0d12a266135d4e332f406e7ec0e5cea552bd61",
+      "digest": "d0fa45f80320dad79a56bf5abe27513ede63bb9084ab6ac0c87c56f9de47048f",
       "reference": "text",
       "kit": [
         "fixtures",
@@ -393,7 +393,7 @@
       }
     },
     "vector@1": {
-      "digest": "9562a2c63d098fcdd42fad55cebcbc5ea742203ee4488eca36925762d425f996",
+      "digest": "0158aea41637608890c4b742799200c23bc3e5f1aef98adb9c0e56b1d4b48a40",
       "reference": "vector",
       "kit": [
         "fixtures",
@@ -534,7 +534,8 @@
         "reads": [
           "motion.program",
           "t",
-          "view(reduced_motion)"
+          "view(reduced_motion)",
+          "self"
         ],
         "writes": [
           "motion.at",
@@ -741,7 +742,7 @@
         "module": "text",
         "version": "1.0.0",
         "reads": [
-          "core.lowered",
+          "core.fields",
           "refs",
           "reading",
           "view(locale)"

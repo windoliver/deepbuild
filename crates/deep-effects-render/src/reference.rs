@@ -388,6 +388,7 @@ impl Camera {
             eye: f.eye.map(f64::from),
             inputs,
             textures,
+            normals: [[0.0; 3]; 3],
         }
     }
 }

@@ -495,6 +495,11 @@ pub fn own_box(kind: &str, params: &Map<String, Value>) -> Option<Box4> {
             Some([x - r, y - r, 2.0 * r, 2.0 * r])
         }
         "path@1" => tight(&crate::path::parse(params.get("d")?.as_str()?)?),
+        // A vector's box is its `size` from its origin (Vector and formula `vector@1`).
+        "vector@1" => {
+            let s = params.get("size")?.as_array()?;
+            Some([0.0, 0.0, num(s.first())?, num(s.get(1))?])
+        }
         _ => None,
     }
 }

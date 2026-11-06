@@ -1,0 +1,11 @@
+{
+  "criterion": "#429.49543705",
+  "by": "you",
+  "delegated": "On 2026-11-04 the owner asked Claude, in session, to make this call on their behalf. Claude checked each screenshot against its fixture: the tint adds 0.6 to red in linear space, the material shows |object normal| per face, and the compute ramp repeats every 64 px.",
+  "screenshots": [
+    "424e05c57ca9eabaea29a34e4e595a86df21d5304d053bf9d6879900498240fd",
+    "f7cb39d6da3b8e1e1b92884b559e5e7b2d176222c91ec241e0c9e6d02173e4c0",
+    "5823190508cff87674307f7911dce0879fea302ddba24fbc10b3158695c938d8"
+  ],
+  "call": "looks_right"
+}

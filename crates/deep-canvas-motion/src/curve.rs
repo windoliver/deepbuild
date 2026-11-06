@@ -3,9 +3,10 @@
 //! values mix per component, which for a color channel is in its OKLab space.
 
 use deep_canvas::grammar::FLICKS_PER_SECOND;
+use std::sync::Arc;
 
+use deep_canvas::table::EaseTable;
 
-use crate::ease::Named;
 use crate::spring::Spring;
 
 /// The Bézier timing solver's step count: Newton steps, each replaced by a bisection step where
@@ -28,8 +29,10 @@ pub enum Interp {
     /// A damped spring toward the next key's value from this key's, starting at the key's
     /// `velocity`, in closed form; the next key's value shows from its time on.
     Spring(Spring),
-    /// An entry of `ease@1`.
-    Ease(Named),
+    /// A first-party entry of `ease@1`.
+    Ease(deep_canvas::ease::Entry),
+    /// A pack's ease table, an entry of `ease@1`, held in the key's `table`.
+    Table,
     /// Handles computed at check from the neighboring keys (Channel and key: auto tangents),
     /// each `smoothness` of the span long; with `clamp`, a local extreme is flat and no handle
     /// passes the next key's value, so no span overshoots its keys.
@@ -50,6 +53,9 @@ pub struct Key {
     /// An auto or Catmull-Rom segment's slopes, per component, in value per unit of the
     /// segment's progress: at this key and at the next. Computed by [`Curve::new`].
     pub slopes: Vec<[f64; 2]>,
+    /// A `Table` key's ease table: its `<pack>.<name>`, and the table once the program resolves
+    /// it from the document's packs.
+    pub table: Option<(String, Option<Arc<EaseTable>>)>,
 }
 
 impl Key {
@@ -61,6 +67,32 @@ impl Key {
             interp,
             velocity: Vec::new(),
             slopes: Vec::new(),
+            table: None,
+        }
+    }
+
+    /// The ease a key's segment follows, when it follows one: a named ease or its ease table.
+    pub fn ease_at(&self, u: f64) -> Option<f64> {
+        match self.interp {
+            Interp::Ease(e) => Some(e.ease.at(u)),
+            Interp::Table => Some(match &self.table {
+                Some((_, Some(t))) => t.at(u),
+                _ => u,
+            }),
+            _ => None,
+        }
+    }
+
+    /// The least and greatest share of the value change the key's ease reads over its segment,
+    /// from its interval form; `None` for a key that follows no ease.
+    pub fn ease_extremes(&self) -> Option<(f64, f64)> {
+        match self.interp {
+            Interp::Ease(e) => Some(e.ease.extremes()),
+            Interp::Table => match &self.table {
+                Some((_, Some(t))) => Some(t.extremes()),
+                _ => Some((0.0, 1.0)),
+            },
+            _ => None,
         }
     }
 }
@@ -308,8 +340,8 @@ pub fn segment_into(a: &Key, b: &Key, t: i64, out: &mut [f64]) -> u32 {
             mix(solved.y, out);
             solved.steps
         }
-        Interp::Ease(e) => {
-            mix(e.at(u), out);
+        Interp::Ease(_) | Interp::Table => {
+            mix(a.ease_at(u).unwrap_or(u), out);
             0
         }
         Interp::Spring(spring) => {
@@ -566,7 +598,7 @@ mod tests {
 
     #[test]
     fn a_newton_step_that_converges_on_the_bracket_end_is_kept() {
-        // Blender's subdivision curve at 3.3 s: Newton lands exactly on the end it just set.
+        // A subdivision curve at 3.3 s: Newton lands exactly on the end it just set.
         let b = Bezier::new(1.0 / 12.0, 2.0, 1.0, -1.0);
         let u = 1_622_880_000.0 / 8_467_200_000.0;
         let solved = b.solve(u);

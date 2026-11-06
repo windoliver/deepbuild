@@ -1,0 +1,18 @@
+[
+  { "name": "cargo build", "argv_prefix": ["cargo", "build"], "kinds": [], "jobs": "jobserver" },
+  { "name": "cargo test", "argv_prefix": ["cargo", "test"], "kinds": [], "jobs": "jobserver" },
+  { "name": "cargo clippy", "argv_prefix": ["cargo", "clippy"], "kinds": [], "jobs": "jobserver" },
+  { "name": "cargo nextest", "argv_prefix": ["cargo", "nextest", "run"], "kinds": [], "jobs": "jobserver" },
+  { "name": "npm test", "argv_prefix": ["npm", "test"], "kinds": [], "jobs": "none" },
+  { "name": "npm run build", "argv_prefix": ["npm", "run", "build"], "kinds": [], "jobs": "none" },
+  { "name": "pnpm test", "argv_prefix": ["pnpm", "test"], "kinds": [], "jobs": "none" },
+  { "name": "pnpm run build", "argv_prefix": ["pnpm", "run", "build"], "kinds": [], "jobs": "none" },
+  { "name": "bun test", "argv_prefix": ["bun", "test"], "kinds": [], "jobs": "none" },
+  { "name": "bun run build", "argv_prefix": ["bun", "run", "build"], "kinds": [], "jobs": "none" },
+  { "name": "playwright test", "argv_prefix": ["npx", "playwright", "test"], "kinds": ["browser"], "jobs": "none" },
+  { "name": "pytest", "argv_prefix": ["pytest"], "kinds": [], "jobs": "none" },
+  { "name": "go test", "argv_prefix": ["go", "test"], "kinds": [], "jobs": "none" },
+  { "name": "go test all", "argv_prefix": ["go", "test", "./..."], "kinds": [], "jobs": "none" },
+  { "name": "make", "argv_prefix": ["make"], "kinds": [], "jobs": "jobserver" },
+  { "name": "tsc build", "argv_prefix": ["tsc", "-b"], "kinds": [], "jobs": "none" }
+]

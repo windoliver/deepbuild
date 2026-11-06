@@ -45,6 +45,11 @@ test-check-kind = ["dep:deep-canvas-test-modules"]
 test-leave-out-logic = []
 # Issue #489: the full set without the data module, so motion@1's digest is compared without it.
 test-leave-out-data = []
+# Issue #490: the full set without the motion module; the planted layout that declares ease@1 in
+# the motion module; and the planted opening that renumbers ease@1's entries.
+test-leave-out-motion = []
+test-ease-in-motion = []
+test-ease-renumbered = []
 # Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
 # deep-show): the full set without sandbox; test.mesh, whose kind takes a provider's mesh at check;
 # test.prog, whose registry packs fill with programs; a planted sandbox module that requires logic;
@@ -162,6 +167,10 @@ test-gpu-second-backend = []
 # Issue #421: a planted implementation of scene3d@1, declared bit, whose light policy breaks a tie
 # by registration order instead of by ID; the kit fails it and a release build refuses it.
 test-scene3d-tie-by-order = []
+# Issue #443: the full set without the vector module, and a planted scene3d whose extrude reads
+# vector@1's items itself (an operator reading vector's array), an edge the seal refuses.
+test-leave-out-vector = []
+test-scene3d-reads-vector = []
 # Issue #200: the test canvas modules of the #200 acceptance README, the build without effects,
 # and the planted layout in which the effects module fills the op table's base steps.
 test-mark = ["dep:deep-canvas-test-modules"]

@@ -11,6 +11,11 @@
       "development": "./src/index.ts",
       "default": "./dist/index.js"
     },
+    "./lease": {
+      "types": "./src/heavy.ts",
+      "development": "./src/heavy.ts",
+      "default": "./dist/heavy.js"
+    },
     "./mcp": {
       "types": "./src/mcp.ts",
       "development": "./src/mcp.ts",
@@ -38,6 +43,7 @@
     "@deepbuild/supervisor": "0.0.0",
     "@deepbuild/verdicts": "0.0.0",
     "@deepbuild/wiki": "0.0.0",
+    "@deepbuild/workspaces": "0.0.0",
     "better-sqlite3": "13.0.3",
     "yaml": "2.9.1"
   }
