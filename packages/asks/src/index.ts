@@ -604,6 +604,10 @@ class AsksCore implements Asks {
   private queue: Promise<unknown> = Promise.resolve();
   /** Sessions with a message you typed that the agent hasn't read yet. */
   private readonly unread = new Set<string>();
+  /** Sessions whose turn is running: a tool call since their last stop. */
+  private readonly running = new Set<string>();
+  /** Sessions whose unread message you typed while a turn ran: a deep_ask of that turn hasn't read it (#84). */
+  private readonly midTurn = new Set<string>();
   /** The asks each batch showed, by its name. */
   private readonly shownIn = new Map<string, string[]>();
   /** How many asks batches showed each UTC day, by day number. */
@@ -1734,6 +1738,8 @@ class AsksCore implements Asks {
       for (const kept of [this.stops, this.typedAt, this.continued, this.ended, this.replaced, this.done]) kept.delete(session);
       this.attempts.delete(session);
       this.unread.delete(session);
+      this.running.delete(session);
+      this.midTurn.delete(session);
       this.sessions.delete(session);
       this.endOrder.delete(session);
       this.forgot = true;
@@ -1812,6 +1818,7 @@ class AsksCore implements Asks {
         return;
       case 'agent.stop': {
         for (const a of this.open()) if (a.session === e.session && a.recheck) a.pending.dropped = true;
+        if (e.session) this.running.delete(e.session);
         // The hook's record of a stop: its cause from the closed set and, from the adapter's facts, who owns the block
         // and its signature. A stop without a signature is its own block, by cause.
         if (!e.session || e.writer !== 'hook') return;
@@ -2002,15 +2009,18 @@ class AsksCore implements Asks {
         if (target && !target.closed && e.writer === 'core' && target.who.actor === e.actor && target.who.scope === e.scope && typeof d.until === 'number' && d.until < this.dueBy(target)) target.later = d.until;
         return;
       case 'tool.before':
-        // A deep_ask is what the turn that hadn't read you raises: it is no step that reads your message.
-        if (d.kind === 'mcp' && d.server === 'deep') return;
+        if (e.session) this.running.add(e.session);
+        // A deep_ask is what a turn that hadn't read your mid-turn message raises: it is no step that reads it.
+        if (d.kind === 'mcp' && d.server === 'deep' && e.session && this.midTurn.has(e.session)) return;
         // The agent's next step reads what you typed: asks held for it wait like any other now, if they still stand.
         if (!e.session || !this.unread.delete(e.session)) return;
+        this.midTurn.delete(e.session);
         for (const a of this.open()) if (a.session === e.session && a.unread) [a.unread, a.since, a.recheck] = [false, e.ts, true];
         return;
       case 'user.ask': {
         if (d.from === 'person' && e.session) {
           this.unread.add(e.session);
+          if (this.running.has(e.session)) this.midTurn.add(e.session);
           this.typedAt.set(e.session, Math.max(this.typedAt.get(e.session) ?? -Infinity, e.ts));
         }
         if (d.from !== 'person' || typeof d.text !== 'string') return;

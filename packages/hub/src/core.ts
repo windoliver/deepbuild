@@ -3966,7 +3966,7 @@ export class Core {
         block = [delivered, lane?.sendBack, carried, sized].filter(Boolean).join('\n\n');
       }
       else if (block) this.askingSoon();
-      else if ((questionHeld && lane) || sorted?.noHold) {
+      else if ((questionHeld && lane?.fast.length) || sorted?.noHold) {
         // A judged stop whose checks ran waits no longer for them: no send-back follows, so it isn't held for your answer (#84); one already given goes with it.
         block = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
       } else if (!r.places) {
