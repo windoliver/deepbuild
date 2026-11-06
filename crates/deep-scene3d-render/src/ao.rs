@@ -5,6 +5,7 @@
 //! three passes again from that frame's depth alone.
 
 use bytemuck::{Pod, Zeroable};
+use deep_canvas_scene3d::light::Contact;
 use deep_canvas_scene3d::look::Ao;
 use deep_gpu::device::Device;
 
@@ -16,7 +17,8 @@ pub const BLUR: &str = "scene3d.ao_blur";
 
 const SHADER: &str = include_str!("ao.wgsl");
 const NORMAL: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
-const VISIBILITY: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
+/// Occlusion in r; the key light's contact shadow in g (#446).
+const VISIBILITY: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -26,6 +28,9 @@ struct AoUniform {
     size: [f32; 4],
     opts: [u32; 4],
     scale: [f32; 4],
+    /// Toward the key light and the contact shadow's length in m, and its samples in `steps`.
+    contact: [f32; 4],
+    steps: [u32; 4],
 }
 
 struct Pipes {
@@ -156,8 +161,9 @@ impl Passes {
             VISIBILITY,
             wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         );
-        // 1.0 as an f16.
-        crate::write_texture(&device.queue, &white, 0, &0x3c00u16.to_le_bytes(), 2, [1, 1]);
+        // 1.0 as an f16, twice.
+        let one = [0x00, 0x3c, 0x00, 0x3c];
+        crate::write_texture(&device.queue, &white, 0, &one, 4, [1, 1]);
         let white = white.create_view(&Default::default());
         let off = bind_group(
             d,
@@ -206,9 +212,21 @@ impl Passes {
         ao: Option<Ao>,
         size: [u32; 2],
         clip: &[f64; 16],
+        contact: Option<(Contact, [f64; 3])>,
     ) -> u32 {
         let was = self.on.map(|(_, s)| s);
         let mut compiled = 0;
+        // A contact shadow marches the prepass's depth at full size; without ao it reads the
+        // prepass alone, an occlusion of strength 0.
+        let ao = match (ao, contact) {
+            (Some(a), Some(_)) => Some(Ao { half: false, ..a }),
+            (None, Some(_)) => Some(Ao {
+                strength: 0.0,
+                half: false,
+                ..Ao::default()
+            }),
+            (a, None) => a,
+        };
         let Some(ao) = ao else {
             if was.is_some() {
                 self.generation += 1;
@@ -299,6 +317,10 @@ impl Passes {
                 0.0,
                 0.0,
             ],
+            contact: contact.map_or([0.0; 4], |(c, l)| {
+                [l[0] as f32, l[1] as f32, l[2] as f32, c.length as f32]
+            }),
+            steps: [contact.map_or(0, |(c, _)| c.samples); 4],
         };
         deep_gpu::alloc::outside(|| {
             device

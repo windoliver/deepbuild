@@ -927,15 +927,37 @@ fn set(
             item.insert(steps[0].to_string(), value);
         }
         ["params", path @ ..] if !path.is_empty() => {
+            // A `<sub>` is a nested key or a list index (The path grammar).
             let (last, parents) = path.split_last().expect("not empty");
-            let mut at = object_at(item, "params");
+            let mut at = item
+                .entry("params".to_string())
+                .or_insert_with(|| Value::Object(Map::new()));
             for step in parents {
-                let slot = at
-                    .entry((*step).to_string())
-                    .or_insert_with(|| Value::Object(Map::new()));
-                at = slot.as_object_mut().ok_or_else(|| unresolved(&id, op))?;
+                at = match at {
+                    Value::Object(m) => m
+                        .entry((*step).to_string())
+                        .or_insert_with(|| Value::Object(Map::new())),
+                    Value::Array(list) => step
+                        .parse::<usize>()
+                        .ok()
+                        .and_then(|i| list.get_mut(i))
+                        .ok_or_else(|| unresolved(&id, op))?,
+                    _ => return Err(unresolved(&id, op)),
+                };
             }
-            at.insert((*last).to_string(), value);
+            match at {
+                Value::Object(m) => {
+                    m.insert((*last).to_string(), value);
+                }
+                Value::Array(list) => {
+                    let Some(slot) = last.parse::<usize>().ok().and_then(|i| list.get_mut(i))
+                    else {
+                        return Err(unresolved(&id, op));
+                    };
+                    *slot = value;
+                }
+                _ => return Err(unresolved(&id, op)),
+            }
         }
         ["at", name] if AT_VECTORS.contains(name) || *name == "shear" => {
             object_at(item, "at").insert((*name).to_string(), value);
