@@ -46,6 +46,15 @@ export function repoOf(cwd: string): string | undefined {
 
 /** The installed hub's root: ~/.deepbuild. A dev hub's is the folder given to --root. */
 export const installedRoot = (): string => join(homedir(), '.deepbuild');
+/** The Node path to write into a file that outlives this run: a login service, an MCP server entry. Homebrew's
+ * Cellar path names one version, which the next `brew upgrade` deletes, and every entry naming it then fails to
+ * start; its `opt/<formula>` link names the version installed now, so it is written instead, when it runs this Node. */
+export function lastingNode(node: string = process.execPath): string {
+  const at = /^(.*)\/Cellar\/([^/]+)\/[^/]+\/bin\/node$/.exec(node);
+  if (!at) return node;
+  const opt = join(at[1]!, 'opt', at[2]!, 'bin', 'node');
+  try { return realpathSync(opt) === realpathSync(node) ? opt : node; } catch { return node; }
+}
 
 export interface Root {
   dir: string;

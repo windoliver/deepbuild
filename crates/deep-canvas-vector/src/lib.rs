@@ -13,7 +13,7 @@ pub mod outline_source;
 pub mod svg;
 
 pub use lower::Write;
-use svg::{Color, Svg};
+use svg::{Color, Svg, Twin};
 
 /// One vector item's import: what the SVG holds and its colors' roles.
 #[derive(Clone, Debug)]
@@ -43,11 +43,12 @@ fn issue(
 
 /// Every `vector@1` item of `doc` imported, with its issues: a refused SVG (one error naming what
 /// refused it), each element or attribute it didn't read (a warning naming it), a color
-/// `colors` doesn't map, and a part target naming no part. `bytes` reads an SVG by its sha256.
+/// `colors` doesn't map, and a part target naming no part. `bytes` reads an SVG by its sha256;
+/// `twin` is the importer, honest or planted.
 pub fn check(
     doc: &Map<String, Value>,
     bytes: impl Fn(&str) -> Option<Vec<u8>>,
-    skips_clip_path: bool,
+    twin: Twin,
 ) -> (Vec<Issue>, BTreeMap<String, Imported>) {
     let mut issues = Vec::new();
     let mut imported = BTreeMap::new();
@@ -94,7 +95,7 @@ pub fn check(
                     .collect()
             })
             .unwrap_or_default();
-        let svg = match svg::import(&found, &classes, skips_clip_path) {
+        let svg = match svg::import(&found, &classes, twin) {
             Ok(svg) => svg,
             Err(r) => {
                 issues.push(issue(
@@ -270,16 +271,7 @@ pub fn bounds(item: &Value, found: &Imported, part: Option<&str>) -> Option<[f64
             .into_iter()
             .find(|(id, _, _)| id == part)
             .map(|(_, b, _)| b),
-        None => {
-            let place = lower::placement(&found.svg, item);
-            let verbs: Vec<_> = found
-                .svg
-                .paths
-                .iter()
-                .flat_map(|p| p.verbs.iter().map(|v| place.verb(*v)))
-                .collect();
-            deep_canvas_marks::relations::tight(&verbs)
-        }
+        None => lower::bounds(&found.svg, item),
     }
 }
 

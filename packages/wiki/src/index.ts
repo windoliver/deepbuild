@@ -131,8 +131,10 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
       return { known, kept: { at: source.at, quote, ...(source.file ? { file: source.file } : {}), ...(entry.role ? { role: entry.role } : {}) }, evidence: pieces(source.quote).map((q) => ({ at: source.at, quote: q })) };
     }
     let bytes: Buffer;
+    // An object name only: a commit read as an option, such as `--output=<file>`, would have git write a file.
+    if (!/^[0-9a-f]{7,64}$/.test(source.commit)) return `${source.commit} isn't a commit's object name`;
     try {
-      bytes = execFileSync('git', ['-C', source.repo, 'show', `${source.commit}:${source.path}`], { stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024 });
+      bytes = execFileSync('git', ['-C', source.repo, 'show', '--end-of-options', `${source.commit}:${source.path}`], { stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024 });
     } catch {
       return `${source.path} at ${source.commit} in ${source.repo} can't be read`;
     }

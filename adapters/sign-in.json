@@ -1,0 +1,4 @@
+{
+  "readBy": "the sign-in command a task offers when it names an agent's own sign-in: the trusted path's way there, never a URL an agent wrote",
+  "commands": { "codex": "codex login", "claude": "claude auth login" }
+}

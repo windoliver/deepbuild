@@ -248,6 +248,38 @@
       "reason": "This call deletes on a remote service, which needs your authority: no \"proceed\" covers it, so in the turn a proceed starts it is held with an authority ask.",
       "next_step": "Wait for the answer to the authority ask that names it; once you say yes, the same call runs.",
       "fail_closed": false
+    },
+    "push-needs-ask": {
+      "match": "effect:push",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "Pushing goes ahead only when the thread's ask names it: a request authorizes exactly what it names.",
+      "next_step": "Wait for the answer to the authority ask that names this call, or for your words in this thread; once you say yes, the same call runs.",
+      "fail_closed": false
+    },
+    "pr-needs-ask": {
+      "match": "effect:pr",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "Opening a pull request goes ahead only when the thread's ask names it: a request authorizes exactly what it names.",
+      "next_step": "Wait for the answer to the authority ask that names this call, or for your words in this thread; once you say yes, the same call runs.",
+      "fail_closed": false
+    },
+    "merge-needs-ask": {
+      "match": "effect:merge",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "Merging goes ahead only when the thread's ask names it: \"create PR\" covers the push and the PR, not the merge.",
+      "next_step": "Wait for the answer to the authority ask that names this call, or for your words in this thread; once you say yes, the same call runs.",
+      "fail_closed": false
+    },
+    "merge-names-head": {
+      "match": "effect:merge",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "Merge authority covers one head commit: a merge goes through only naming the commit the claim's PASS is pinned to, and while a merge armed with --auto is pending, a push to its branch waits.",
+      "next_step": "Name the PASS's commit, --match-head-commit <sha> for gh pr merge, sha for the API and the MCP tool; for a pending merge run gh pr merge --disable-auto first.",
+      "fail_closed": false
     }
   },
   "proofs": {
@@ -582,6 +614,62 @@
         "tool_name": "Bash",
         "tool_input": {
           "command": "cd \"$REPO\" && git stash list"
+        }
+      }
+    },
+    "push-needs-ask": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git push origin HEAD"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo 'git push origin HEAD'"
+        }
+      }
+    },
+    "pr-needs-ask": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "gh pr create --fill"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo 'gh pr create --fill'"
+        }
+      }
+    },
+    "merge-needs-ask": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "gh pr merge 12"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo 'gh pr merge 12'"
+        }
+      }
+    },
+    "merge-names-head": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "gh pr merge 12 --auto"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "gh pr view 12"
         }
       }
     }
