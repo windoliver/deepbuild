@@ -51,6 +51,68 @@ end_state:
 `)).toThrow(/end_state stored: equal is not an end-state key/);
 });
 
+it('refuses a key it does not know inside a step\'s locator, expect, fill or request, an end state\'s readback, an expected error or the journey itself', () => {
+  const at = (step: string, top = ''): () => unknown => () => parseJourney(`journey: typo
+${top}steps:
+  - id: s
+    deadline: 5000
+${step}
+${END}`);
+  expect(at('    expect: { role: status, name: Total, txt: "$18.00" }')).toThrow(/step s expect: txt is not an expect key/);
+  expect(at('    fill: { label: Email, txt: a@b.c }')).toThrow(/step s fill: txt is not a fill key/);
+  expect(at('    click: { role: button, name: Pay, within: { role: form, nam: Card } }')).toThrow(/step s click within: nam is not a locator key/);
+  expect(at('    request: { method: POST, pth: /api/cart }', 'api: true\n')).toThrow(/step s request: pth is not a request key/);
+  expect(at('    goto: /', 'expected_errors:\n  - { step: s, mesage: boom }\n')).toThrow(/expected_errors 1: mesage is not an expected-error key/);
+  expect(at('    goto: /', 'step: []\n')).toThrow(/journey typo: step is not a journey key/);
+  expect(() => parseJourney(`journey: typo
+steps:
+  - id: s
+    deadline: 5000
+    goto: /
+end_state:
+  - id: stored
+    readback: { method: GET, pth: /api/cart }
+    equals: { total: "$18.00" }
+`)).toThrow(/end_state stored readback: pth is not a readback key/);
+});
+
+it('refuses a browser step that makes a request, an API step that drives a page, a check that reads back and looks, and a readback not read by code', () => {
+  const browser = reasons(`journey: shapes
+steps:
+  - id: add
+    deadline: 5000
+    request: { method: POST, path: /api/cart }
+end_state:
+  - id: both
+    oracle: code
+    readback: { path: /api/cart }
+    equals: { total: "$18.00" }
+    locator: { role: status, name: Total }
+  - id: asked
+    oracle: person
+    readback: { path: /api/cart }
+    equals: { total: "$18.00" }
+`);
+  expect(browser).toContain('step add of a browser journey makes a request, which only an API journey makes, so it would never run');
+  expect(browser).toContain('end_state both both reads back and looks at the page; name each as its own check, so neither half goes unrun');
+  expect(browser).toContain('end_state asked reads back with a person oracle; a readback is read by code');
+  const api = reasons(`journey: shapes
+api: true
+steps:
+  - id: add
+    deadline: 5000
+    request: { method: POST, path: /api/cart }
+    goto: /cart
+end_state:
+  - id: stored
+    oracle: code
+    readback: { path: /api/cart }
+    equals: { total: "$18.00" }
+`);
+  expect(api).toEqual(['step add of an API journey drives a page, which only a browser journey does, so it would never run']);
+  expect(reasons('journey: none\nend_state:\n  - { id: shown, oracle: code, locator: { role: status, name: Total } }\n')).toContain('a journey has at least one step');
+});
+
 it('refuses an API journey whose step makes no request, whose end-state check reads nothing back, or whose readback checks nothing', () => {
   const r = reasons(`journey: api
 api: true
