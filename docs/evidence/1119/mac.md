@@ -118,3 +118,18 @@ the 1-minute load was below 8. Every run's hostname was `MacBook-Air-97.attlocal
 - b's second worktree did land on a's copy: `wrote 0 files`, the same folder, and only artifacts never built before.
 - `deleted 33` is perf pruning what the last run's checks left in the copy; it starts no rebuild.
 - user/sys time after `ETIMEDOUT` counts only what `/usr/bin/time` reaped, not the stopped checks' tree.
+
+**R3, an uncapped settle at `c815c505`: INCONCLUSIVE, the Mac's disk filled.** It was the base side's full build with no
+allowance (`node scripts/checks.mjs` in the kept base copy, `CARGO_TARGET_DIR` its target), then b in t3-b again (b2).
+Its files are in the handoff folder `c815c505/r3/`.
+- The settle started at 00:20 with load 3.6. Its parallel vitest ended after 1593 s, and its serial lane ran under
+  `deep lease`, unleased because no hub was running.
+- That vitest died at 06:28 with no error text. By then the disk was full: 430 MB free of 460 GB. The kept base
+  target alone was 77 GB.
+- `deep lease` then waited on the dead leader's group, whose pool worker and test children lived on. It hung until
+  13:56, when the Mac session stopped it (exit 143). The Mac session reproduced the hang, and the fix is on its own
+  branch (`claude/lease-leader-exit`), apart from this PR.
+- The kept target was then deleted to free the disk, so b2's built list can't be made. b2 got only as far as its
+  first lines.
+- So AC1 `#1119.a84127b8` is still unproven on real crates. A rerun needs about 80 GB free on the Mac and the
+  `deep lease` fix, or a settle that skips the serial lane.
