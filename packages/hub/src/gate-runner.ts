@@ -691,7 +691,7 @@ export class GateRunner {
             .catch(() => 'missing');
           e.outcome = outcome;
           if (own) {
-            if (outcome === 'passed' || outcome === 'failed') this.pinned.set(`${e.commit}\0${e.check.check}`, { run, outcome });
+            if (outcome === 'passed' || outcome === 'failed') this.pinned.set(`${e.commit}\0${e.check.check}`, { run: e.runs.at(-1)!, outcome });
             await this.o.checkouts().ended(own, token).catch(() => undefined);
           }
           await this.onBase(c, e);
