@@ -32,6 +32,7 @@ interface Manifest {
   notices?: string[];
   actions?: string[];
   environments?: string[];
+  state_sources?: string[];
 }
 
 /** Whether a name is the plug-in's own: ext.<plugin>.<name>, with `@major` allowed for an interface. */
@@ -63,9 +64,9 @@ function checkTemplates(templates: unknown): ContractIssue[] {
 
 /** The environments a package registers through `deep.registerEnvironment` (#331): a list of names. */
 const ENVIRONMENT_NAME = /^[a-z][a-z0-9_.-]*$/;
-function checkEnvironments(environments: unknown): ContractIssue[] {
-  if (!Array.isArray(environments)) return [issue('type', '/environments', environments)];
-  return environments.flatMap((name, i): ContractIssue[] => (typeof name === 'string' && ENVIRONMENT_NAME.test(name) ? [] : [issue('pattern', `/environments/${i}`, name)]));
+function checkEnvironments(environments: unknown, field = 'environments'): ContractIssue[] {
+  if (!Array.isArray(environments)) return [issue('type', `/${field}`, environments)];
+  return environments.flatMap((name, i): ContractIssue[] => (typeof name === 'string' && ENVIRONMENT_NAME.test(name) ? [] : [issue('pattern', `/${field}/${i}`, name)]));
 }
 
 /**
@@ -103,7 +104,7 @@ function checkSources(sources: unknown, plugin: string): ContractIssue[] {
 /** The manifest contract as one Validation: the schema's refusals, or else the rules the schema can't hold. */
 export function checkManifest(value: unknown): Validation {
   // Read beside extension.manifest@1, whose frozen shape doesn't list them: `templates` is hook.template@1's,
-  // `environments` the environment slot's (#331), `conflicts` and `kernel` are extension.edges@1's and `signature` is
+  // `environments` the environment slot's (#331), `state_sources` the state-source slot's (#67), `conflicts` and `kernel` are extension.edges@1's and `signature` is
   // package.signature@1's (#351), `leases` is an array here, each item held to lease.kind@1 and to the names
   // other packages declared once the host declares it in the lease table (#44), and `host` is extension.host@1's (#104).
   // `stability`, `requires` and `calls` are extension.contract@1's (#139), and so is a `provides` row's `adapter`, the
@@ -112,7 +113,7 @@ export function checkManifest(value: unknown): Validation {
   // `replaces` are extension.compose@1's (#103). Each sits at the manifest's root, or in its row, so its issues' paths
   // are the manifest's.
   const object = typeof value === 'object' && value !== null && !Array.isArray(value);
-  const { templates, environments, secrets, sources, conflicts, kernel, signature, leases, host, stability, requires, calls, ...rest } = object ? value as Record<string, unknown> : {};
+  const { templates, environments, state_sources, secrets, sources, conflicts, kernel, signature, leases, host, stability, requires, calls, ...rest } = object ? value as Record<string, unknown> : {};
   const adapters: { at: number; adapter: unknown }[] = [];
   /** Each row's fields beside it, out of the row, by the row's position. */
   const besideRows = (rows: unknown, fields: string[]): unknown[] | undefined => {
@@ -153,6 +154,7 @@ export function checkManifest(value: unknown): Validation {
   const issues: ContractIssue[] = [
     ...(templates === undefined ? [] : checkTemplates(templates)),
     ...(environments === undefined ? [] : checkEnvironments(environments)),
+    ...(state_sources === undefined ? [] : checkEnvironments(state_sources, 'state_sources')),
     ...(secrets === undefined ? [] : checkSecrets(secrets)),
     ...(sources === undefined ? [] : checkSources(sources, (value as Manifest).id.slice((value as Manifest).id.indexOf('/') + 1))),
     ...(leases === undefined || Array.isArray(leases) ? [] : [issue('type', '/leases', leases)]),

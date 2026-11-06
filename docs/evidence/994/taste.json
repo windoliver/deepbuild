@@ -1,0 +1,17 @@
+{
+  "criterion": "#994.f8ef6a91",
+  "call": "looks right",
+  "by": "Claude, delegated by the owner",
+  "at": "2026-11-05",
+  "delegated": "On 2026-11-05 the owner asked Claude in session, \"can you judge for me\". Claude viewed all three screenshots. What #994 adds reads right: the count says \"The hub isn't answering\" where a number would be, the row says \"not notified\" after the ask, and the notification gives the question, the default and its time.",
+  "not_from_this_change": [
+    "The notification's icon is a blank placeholder: scripts/app-bundle gives the bundle no icon.",
+    "The row names the ask by its raw handle, not its question, as Needs you has always drawn it.",
+    "The line under Home reads \"Session · queued\" with no session, and it stays there while the hub isn't answering."
+  ],
+  "screens": {
+    "hub-not-answering.png": "9adb2fc050c046012424b4ed75fb27ba47e28aa94b395899bebde9daa07b7ece",
+    "not-notified-row.png": "5a176df131a573e11bfc9db31382745de0036ca81d7a53e7e1dfa4b50d854667",
+    "notification.png": "778874335f85b51b2c4aa305a9b34e11af6307f40941a60ae9eaecdb6374a9eb"
+  }
+}
