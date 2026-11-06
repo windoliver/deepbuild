@@ -1,7 +1,7 @@
 // The default launcher (#112) against fake `claude` and `codex` executables on PATH, which print what the real ones'
 // headless streams do: each test failed on the program it names.
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -122,6 +122,20 @@ it('refuses a replay whose sandbox would read your home, where the CLI is instal
   const report = await runEval({ plan: w.plan(600_000), tasks: w.tasks, root: join(w.box, 'work'), env: { ...w.env, PATH: `${w.box}:${w.env.PATH}` } });
   expect(report.runs).toEqual([]);
   expect(report.after.reason).toContain(`reads ${w.box}`);
+  expect(report.after.reason).toMatch(/holds your home/);
+}, 60_000);
+
+it('refuses a replay whose sandbox would read your home through a link to it', async () => {
+  // Failed on a launcher that resolved your home but not the folder on PATH it reached claude by, so with /home a link
+  // (as on Fedora Silverblue) and claude a link in your home's top folder, it granted your home under the link's name.
+  const w = world(0);
+  const link = join(w.box, '..', `${w.box.split('/').pop()}-link`);
+  symlinkSync(w.box, link);
+  roots.push(link);
+  symlinkSync(join(w.box, 'bin', 'claude'), join(w.box, 'claude'));
+  const report = await runEval({ plan: w.plan(600_000), tasks: w.tasks, root: join(w.box, 'work'), env: { ...w.env, PATH: `${link}:${w.env.PATH}` } });
+  expect(report.runs).toEqual([]);
+  expect(report.after.reason).toContain(`reads ${link}`);
   expect(report.after.reason).toMatch(/holds your home/);
 }, 60_000);
 

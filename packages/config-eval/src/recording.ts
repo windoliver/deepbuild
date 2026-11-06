@@ -52,9 +52,12 @@ function fromProgram(piece: string): string[] {
 export function reachesNetwork(command: string): boolean {
   return command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''").split(/&&|\|\||[;|&\n()`]|\$\(/).some((piece) => {
     const words = fromProgram(piece);
-    // A program asked for its help or version prints it and reaches no host.
-    if (words.includes('--help') || words.includes('--version')) return false;
     const program = (words[0] ?? '').replace(/^.*\//, '');
+    // A program asked for its help or version prints it and reaches no host: the flag comes right after the program, or
+    // after git's, gh's or a publisher's subcommands, never after an argument (`ssh host node --version` runs remotely).
+    const asked = words.findIndex((w) => w === '--help' || w === '--version');
+    const subcommands = program === 'git' || program === 'gh' || PUBLISH.test(program);
+    if (asked === 1 || (asked > 1 && subcommands && words.slice(1, asked).every((w) => /^[a-z][a-z-]*$/.test(w)))) return false;
     if (NETWORK.test(program)) return true;
     if (program === 'git') return GIT_NETWORK.test(words.find((w, i) => i > 0 && !w.startsWith('-') && words[i - 1] !== '-C' && words[i - 1] !== '-c') ?? '');
     return PUBLISH.test(program) && words.includes('publish');

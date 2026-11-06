@@ -201,8 +201,9 @@ export function defaultLauncher(plan: ReplayPlan, env: Record<string, string>, d
   // A replay reads its installs, and none may hold your home or Claude config home, with your credentials in them.
   const cli = onPath('claude', env.PATH ?? '/usr/bin:/bin');
   const yours = ([['home', env.HOME], ['Claude config home', env.CLAUDE_CONFIG_DIR]] as const).flatMap(([name, d]) => (d && existsSync(d) ? [{ name, at: realpathSync(d) }] : []));
+  // Each folder resolved, as your home is: a sandbox's grant of a link reads what it links to.
   for (const folder of cli ? installReads(cli) : []) {
-    const held = yours.find((d) => within(d.at, folder));
+    const held = yours.find((d) => within(d.at, realpathSync(folder)));
     if (held) throw Error(`a replay's sandbox reads ${folder}, where Claude Code or the node it runs on is installed, and that holds your ${held.name} ${held.at} with its credentials; install them in a folder of their own, then rerun`);
   }
   // The judge only reads.
