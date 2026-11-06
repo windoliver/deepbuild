@@ -1,9 +1,9 @@
 // Runs before every vitest file (vitest.config.ts), so a test file leaves nothing running or gigabytes on disk.
 //
 // A process a file started ends with the file. A child still running at the file's end, such as #29's planted heavy
-// command that waits for a `go` file its test never writes, ran on under launchd for days. So at the file's end, and
-// when the worker exits early, every process descending from this worker is stopped: by PID, never by name, port or
-// process group, since the group is the shell's that started vitest.
+// command that waits for a `go` file its test never writes, ran on under launchd for days. So every process descending
+// from this worker is held at the file's end and killed when the worker ends: by PID, never by name, port or process
+// group, since the group is the shell's that started vitest.
 //
 // A fake HOME gets no Rust toolchain of its own. rustup installs the pinned toolchain into $HOME/.rustup, 1 to 3 GB
 // a run in #139's suites, so RUSTUP_HOME and CARGO_HOME are the user's own, as scripts/preflight.mjs gives its lanes,
@@ -17,13 +17,13 @@ import { afterAll } from 'vitest';
 process.env.RUSTUP_HOME ??= join(homedir(), '.rustup');
 process.env.CARGO_HOME ??= join(homedir(), '.cargo');
 
-interface Proc { pid: number; ppid: number; start: string; command: string }
+interface Proc { pid: number; ppid: number; command: string }
 /** Every process as `ps` shows it now, `ps` itself left out. */
 function table(): Proc[] {
-  const ps = spawnSync('ps', ['-axww', '-o', 'pid=,ppid=,lstart=,command='], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } });
+  const ps = spawnSync('ps', ['-axww', '-o', 'pid=,ppid=,command='], { encoding: 'utf8' });
   return (ps.stdout ?? '').split('\n').flatMap((line) => {
-    const m = /^\s*(\d+)\s+(\d+)\s+(\w{3} \w{3} [ \d]\d \d\d:\d\d:\d\d \d{4})\s+(.*)$/.exec(line);
-    return m && Number(m[1]) !== ps.pid ? [{ pid: Number(m[1]), ppid: Number(m[2]), start: m[3]!, command: m[4]! }] : [];
+    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
+    return m && Number(m[1]) !== ps.pid ? [{ pid: Number(m[1]), ppid: Number(m[2]), command: m[3]! }] : [];
   });
 }
 const signal = (procs: Proc[], sig: NodeJS.Signals): void => {
@@ -48,17 +48,20 @@ function stopTree(): Proc[] {
 
 // In a threads pool this process is vitest's own, and its descendants are every file's: nothing is stopped there.
 if (isMainThread) {
-  afterAll(async () => {
-    const left = stopTree();
-    if (!left.length) return;
-    console.warn(`vitest-setup: stopping ${left.length} process(es) this file left running:\n${left.map((p) => `  ${p.pid} ${p.command.slice(0, 200)}`).join('\n')}`);
-    signal(left, 'SIGTERM');
-    signal(left, 'SIGCONT');
-    // One that outlives SIGTERM by 2 s gets SIGKILL, while its PID is still the process first seen (same start time),
-    // wherever it was reparented when its parent ended.
-    const running = (): Proc[] => { const now = new Map(table().map((p) => [p.pid, p.start])); return left.filter((p) => now.get(p.pid) === p.start); };
-    for (const end = Date.now() + 2000; running().length && Date.now() < end;) await new Promise((resolve) => setTimeout(resolve, 50));
-    signal(running(), 'SIGKILL');
+  // At the file's end they are only held: one that ended while the file's code still ran would wake what waits on it,
+  // such as #29's twins' pending command, on a lease table the file had closed, an unhandled error that fails the file.
+  let held: Proc[] = [];
+  afterAll(() => {
+    held = stopTree();
+    const left = held.filter((p) => !p.command.endsWith('<defunct>'));
+    if (left.length) console.warn(`vitest-setup: stopping ${left.length} process(es) this file left running:\n${left.map((p) => `  ${p.pid} ${p.command.slice(0, 200)}`).join('\n')}`);
   });
-  process.once('exit', () => signal(stopTree(), 'SIGKILL'));
+  // They end with the worker, once no code of the file can run: when it exits, and when vitest stops it with SIGTERM,
+  // as it does a worker whose children keep it from exiting. Vitest sends SIGKILL 500 ms later, too soon for `ps` under
+  // load, so SIGTERM ends those held, which can't have started others; an exit, early or not, looks again.
+  process.once('exit', () => signal([...held, ...stopTree()], 'SIGKILL'));
+  process.once('SIGTERM', () => {
+    signal(held, 'SIGKILL');
+    process.kill(process.pid, 'SIGTERM');
+  });
 }
