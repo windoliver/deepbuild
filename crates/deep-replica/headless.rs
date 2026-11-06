@@ -178,16 +178,25 @@ mod suite {
 
     fn needs_you_view_snapshot() {
         let snapshot = view_snapshot("needs-you");
-        let labels: Vec<&str> = snapshot
+        // Issue #1172: a row reads as its question; its handle is its value.
+        let handles: Vec<&str> = snapshot
             .flatten()
             .into_iter()
-            .filter_map(|node| node.name.as_deref())
-            .filter(|name| name.starts_with("ask:"))
+            .filter_map(|node| node.value.as_ref()?.as_str())
+            .filter(|value| value.starts_with("ask:"))
             .collect();
         assert_eq!(
-            labels,
+            handles,
             expected_rows(),
             "the Needs you view lists the projection's rows"
+        );
+        assert!(
+            snapshot.flatten().iter().all(|node| !node
+                .name
+                .as_deref()
+                .unwrap_or("")
+                .starts_with("ask:")),
+            "a Needs you row reads as its question, never its handle"
         );
     }
 

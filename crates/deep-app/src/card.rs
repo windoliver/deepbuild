@@ -76,6 +76,61 @@ pub fn present_question(controller: Controller, window: &mut Window, cx: &mut Ap
         .expect("the prompt builder made the card")
 }
 
+thread_local! {
+    /// The card the app's window shows, with its ask.
+    static SHOWN: RefCell<Option<(String, Entity<Card>)>> = const { RefCell::new(None) };
+}
+
+/// Issue #1172: a Needs you row's click: presents `ask`'s card in the middle of the window, its content read from the
+/// record once. One already up leaves first, unanswered. An ask the record no longer holds open presents nothing.
+pub fn present_ask(ask: &str, window: &mut Window, cx: &mut App) {
+    leave(cx);
+    let viewport = window.viewport_size();
+    let (width, height) = (f32::from(viewport.width), f32::from(viewport.height));
+    let [w, h] = SIZE;
+    let rect = [
+        ((width as i64 - w) / 2).max(0),
+        ((height as i64 - h) / 2).max(0),
+        w,
+        h,
+    ];
+    let slot = crate::arming::Slot {
+        rect,
+        visible: [0, 0, width as i64, height as i64],
+    };
+    let events = crate::record::history();
+    let now = crate::views::now();
+    let Some(controller) = Controller::present(&events, ask, now, slot, Default::default()) else {
+        return;
+    };
+    let shown = present_question(controller, window, cx);
+    SHOWN.with(|cell| *cell.borrow_mut() = Some((ask.to_owned(), shown)));
+}
+
+fn leave(cx: &mut App) {
+    if let Some((_, shown)) = SHOWN.with(|cell| cell.borrow_mut().take()) {
+        shown.update(cx, |card, cx| card.dismiss(cx));
+    }
+}
+
+/// Time passed: the shown card arms once its interval ran, and leaves when its ask closed anywhere.
+pub fn tick(now: u64, cx: &mut App) {
+    let Some((ask, shown)) = SHOWN.with(|cell| cell.borrow().clone()) else {
+        return;
+    };
+    let open = crate::record::with_view(|view| view.table().is_open(&ask)).unwrap_or(true);
+    if !open {
+        leave(cx);
+        return;
+    }
+    shown.update(cx, |card, cx| {
+        if let Some(controller) = card.controller_mut() {
+            controller.tick(now);
+            cx.notify();
+        }
+    });
+}
+
 pub struct Card {
     question: SharedString,
     options: Vec<SharedString>,

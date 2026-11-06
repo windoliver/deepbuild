@@ -11,7 +11,7 @@ use deep_canvas_cells::emulator::{Cell, Terminal};
 use deep_canvas_cells::palette::resolve;
 use deep_text_gpui::{Label, Role};
 use gpui_kit::*;
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::canvas::record;
 
@@ -19,6 +19,7 @@ use crate::canvas::record;
 pub const CELL: [f32; 2] = [8., 16.];
 
 /// One row of the screen: its text, and its runs of one foreground color by grapheme.
+#[derive(Clone)]
 pub struct Row {
     pub text: String,
     pub runs: Vec<(Range<usize>, [u8; 3])>,
@@ -26,6 +27,7 @@ pub struct Row {
 }
 
 /// What the grid draws this frame: the terminal's screen as rows, at a revision.
+#[derive(Clone)]
 pub struct Screen {
     pub revision: u64,
     pub cols: u16,
@@ -44,6 +46,45 @@ impl Screen {
             bg,
         }
     }
+
+    /// Issue #1172: the screen the hub's canvas core holds, from its `cells` reply: each row's text and its runs of
+    /// `[from, to, fg, bg]`, as `#rrggbb`. `None` for any other reply.
+    pub fn from_reply(reply: &Value) -> Option<Screen> {
+        let bg = hex(reply["bg"].as_str()?)?;
+        let rows = reply["text"]
+            .as_array()?
+            .iter()
+            .zip(reply["runs"].as_array()?)
+            .map(|(text, runs)| {
+                let mut row = Row {
+                    text: text.as_str()?.to_owned(),
+                    runs: Vec::new(),
+                    fills: Vec::new(),
+                };
+                for run in runs.as_array()? {
+                    let (from, to) = (run[0].as_u64()? as usize, run[1].as_u64()? as usize);
+                    row.runs.push((from..to, hex(run[2].as_str()?)?));
+                    let fill = hex(run[3].as_str()?)?;
+                    if fill != bg {
+                        row.fills.push((from, to, fill));
+                    }
+                }
+                Some(row)
+            })
+            .collect::<Option<_>>()?;
+        Some(Screen {
+            revision: reply["revision"].as_u64()?,
+            cols: u16::try_from(reply["cols"].as_u64()?).ok()?,
+            rows,
+            bg,
+        })
+    }
+}
+
+/// `#rrggbb` as bytes.
+fn hex(text: &str) -> Option<[u8; 3]> {
+    let byte = |at: usize| u8::from_str_radix(text.get(at..at + 2)?, 16).ok();
+    Some([byte(1)?, byte(3)?, byte(5)?])
 }
 
 fn row(cells: &[Cell], fg: [u8; 3], bg: [u8; 3]) -> Row {
@@ -142,6 +183,18 @@ pub fn cells(id: &str, screen: Screen) -> Canvas<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[::core::prelude::v1::test]
+    fn a_screen_from_the_hubs_reply_keeps_each_rows_runs_and_its_fills_off_the_ground() {
+        let reply = json!({"revision": 2, "cols": 4, "bg": "#101010", "text": ["ab"], // color-literal-exception: the program's own colors on the wire, which a terminal draws as they come; review 2027-05-05
+            "runs": [[[0, 2, "#e8e8e8", "#101010"], [2, 3, "#e8e8e8", "#d81b9a"], [3, 4, "#e8e8e8", "#101010"]]]}); // color-literal-exception: the program's own colors on the wire, which a terminal draws as they come; review 2027-05-05
+        let screen = Screen::from_reply(&reply).expect("a cells reply");
+        assert_eq!((screen.revision, screen.cols), (2, 4));
+        assert_eq!(screen.rows[0].text, "ab");
+        assert_eq!(screen.rows[0].runs[0], (0..2, [0xe8; 3]));
+        assert_eq!(screen.rows[0].fills, [(2, 3, [0xd8, 0x1b, 0x9a])]);
+        assert!(Screen::from_reply(&json!({"code": "page_closed"})).is_none());
+    }
 
     #[::core::prelude::v1::test]
     fn a_row_keeps_its_text_its_color_runs_and_its_cells_off_the_grids_background() {
