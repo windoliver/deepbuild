@@ -3,7 +3,9 @@
 //! one group for the item, a group for each part (its opacity) and a path for each drawn
 //! element, painted by the roles `colors` maps its colors to, placed by the item's size and
 //! `at.pos`, every one in the item's layer and at its order, so a part never draws outside its
-//! item's draw order. `write_on` draws each term outline first, then fill.
+//! item's draw order. A path in a clip region draws inside a shape mask for each region it sits
+//! in (a hidden path its outline), with a group at the region's opacity (#1175). `write_on`
+//! draws each term outline first, then fill.
 
 use std::collections::BTreeMap;
 
@@ -77,23 +79,70 @@ pub fn placement(svg: &Svg, item: &Value) -> Affine {
 }
 
 /// Each part's id, its source (none from an SVG: the typeset job's probe gives it), its box and
-/// its outline, in document u: the read-only per-part fields.
+/// its outline, in document u: the read-only per-part fields. A clipped path's box is cut to its
+/// clip regions' boxes.
 pub fn parts(svg: &Svg, item: &Value) -> Vec<(String, [f64; 4], Vec<Verb>)> {
     let place = placement(svg, item);
+    let placed = |verbs: &[Verb]| -> Vec<Verb> { verbs.iter().map(|v| place.verb(*v)).collect() };
     svg.parts
         .iter()
         .enumerate()
         .map(|(i, part)| {
-            let verbs: Vec<Verb> = svg
+            let inside: Vec<&svg::Painted> = svg
                 .paths
                 .iter()
                 .filter(|p| within(svg, p.part, i))
-                .flat_map(|p| p.verbs.iter().map(|v| place.verb(*v)))
                 .collect();
-            let bounds = svg::bounds(&verbs).unwrap_or([0.0; 4]);
+            let bounds =
+                joined(inside.iter().filter_map(|p| drawn_box(svg, p, place))).unwrap_or([0.0; 4]);
+            let verbs = inside.iter().flat_map(|p| placed(&p.verbs)).collect();
             (part.id.clone(), bounds, verbs)
         })
         .collect()
+}
+
+/// Where every path `item` draws lies, its clips applied, in document u.
+pub fn bounds(svg: &Svg, item: &Value) -> Option<[f64; 4]> {
+    let place = placement(svg, item);
+    joined(svg.paths.iter().filter_map(|p| drawn_box(svg, p, place)))
+}
+
+/// A path's box under `place`, cut to its clip regions' boxes; `None` when they leave nothing.
+fn drawn_box(svg: &Svg, path: &svg::Painted, place: Affine) -> Option<[f64; 4]> {
+    let placed = |verbs: &[Verb]| -> Vec<Verb> { verbs.iter().map(|v| place.verb(*v)).collect() };
+    let mut b = svg::bounds(&placed(&path.verbs))?;
+    let mut clip = path.clip;
+    while let Some(c) = clip {
+        b = cut(b, svg::bounds(&placed(&svg.clips[c].verbs))?)?;
+        clip = svg.clips[c].parent;
+    }
+    Some(b)
+}
+
+/// The box holding every box, if there is one.
+fn joined(mut boxes: impl Iterator<Item = [f64; 4]>) -> Option<[f64; 4]> {
+    let first = boxes.next()?;
+    Some(boxes.fold(first, join))
+}
+
+/// Where two boxes `[x, y, w, h]` overlap, if they do.
+fn cut(a: [f64; 4], b: [f64; 4]) -> Option<[f64; 4]> {
+    let (x, y) = (a[0].max(b[0]), a[1].max(b[1]));
+    let (r, d) = (
+        (a[0] + a[2]).min(b[0] + b[2]),
+        (a[1] + a[3]).min(b[1] + b[3]),
+    );
+    (r >= x && d >= y).then_some([x, y, r - x, d - y])
+}
+
+/// The box holding two boxes.
+fn join(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
+    let (x, y) = (a[0].min(b[0]), a[1].min(b[1]));
+    let (r, d) = (
+        (a[0] + a[2]).max(b[0] + b[2]),
+        (a[1] + a[3]).max(b[1] + b[3]),
+    );
+    [x, y, r - x, d - y]
 }
 
 /// Whether a path in `part` sits in part `of`, directly or inside one of its parts.
@@ -171,6 +220,9 @@ pub fn lower(
             .unwrap_or(0.0)
             .clamp(0.0, 1.0)
     });
+    // The part and clip region the previous drawn path sat in, and the item it drew under, so a
+    // run of paths in one region shares its masks.
+    let mut run: Option<(Option<usize>, usize, String)> = None;
     for (j, painted) in svg.paths.iter().enumerate() {
         // The nearest part whose role a channel sets, else the SVG's own color's role; and the
         // offsets of every part it sits in, from where the import placed it.
@@ -221,10 +273,52 @@ pub fn lower(
             );
         }
         let params = json!({"d": d_of(&drawn.verbs), "paint": paint});
+        let under = match painted.clip {
+            None => {
+                run = None;
+                group(painted.part)
+            }
+            Some(c) => match &run {
+                Some((p, k, at)) if *p == painted.part && *k == c => at.clone(),
+                _ => {
+                    // The regions from the outermost in: a hidden path holds each one's outline,
+                    // a shape mask clips to it, and a group draws it at its opacity.
+                    let mut chain = vec![c];
+                    while let Some(up) = svg.clips[chain[chain.len() - 1]].parent {
+                        chain.push(up);
+                    }
+                    let mut at = group(painted.part);
+                    for (d, k) in chain.into_iter().rev().enumerate() {
+                        let region = &svg.clips[k];
+                        let key = format!("{id}.p{j:05}.c{d}");
+                        let verbs: Vec<Verb> =
+                            region.verbs.iter().map(|v| place.verb(*v)).collect();
+                        let (outline, mut hidden) = make(
+                            &format!("{key}k"),
+                            "path@1",
+                            Some(id),
+                            json!({"d": d_of(&verbs)}),
+                        );
+                        hidden["visible"] = json!(false);
+                        out.push((outline.clone(), hidden));
+                        let mask = json!({"shape": outline, "applies_to": "children"});
+                        out.push(make(&key, "mask@1", Some(&at), mask));
+                        at = key;
+                        if region.alpha < 1.0 {
+                            let alpha = json!({"opacity": region.alpha.clamp(0.0, 1.0)});
+                            out.push(make(&format!("{at}a"), "group@1", Some(&at), alpha));
+                            at = format!("{at}a");
+                        }
+                    }
+                    run = Some((painted.part, c, at.clone()));
+                    at
+                }
+            },
+        };
         out.push(make(
             &format!("{id}.p{j:05}"),
             "path@1",
-            Some(&group(painted.part)),
+            Some(&under),
             params,
         ));
     }
@@ -424,10 +518,23 @@ mod tests {
     }
 
     #[test]
+    fn a_patterned_shape_is_where_its_tiles_draw_inside_its_outline() {
+        let bytes = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+            <pattern id="p" patternUnits="userSpaceOnUse" width="20" height="20">
+            <rect width="10" height="10"/></pattern>
+            <rect id="r" x="25" y="25" width="30" height="30" fill="url(#p)"/></svg>"#;
+        let svg = svg::import(bytes, &[], svg::Twin::Honest).unwrap();
+        let item = json!({"params": {"size": [100, 100]}});
+        // The cells at 20..30 and 40..50 draw, cut to the outline 25..55; the tiles span 20..60.
+        assert_eq!(bounds(&svg, &item), Some([25.0, 25.0, 25.0, 25.0]));
+        assert_eq!(parts(&svg, &item)[0].1, [25.0, 25.0, 25.0, 25.0]);
+    }
+
+    #[test]
     fn a_parts_at_moves_its_paths_from_where_the_import_placed_them() {
         let bytes = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
             <g id="a"><path d="M 1 1 L 2 1 L 2 2 Z"/></g></svg>"#;
-        let svg = svg::import(bytes, &[], false).unwrap();
+        let svg = svg::import(bytes, &[], svg::Twin::Honest).unwrap();
         let still = json!({"params": {"size": [10, 10]}});
         let moved = json!({"params": {"size": [10, 10]}, "parts": {"a": {"at": {"0": 5}}}});
         assert_eq!(drawn(&still, &svg)[0], Verb::Move([1.0, 1.0]));

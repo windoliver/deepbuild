@@ -4,7 +4,8 @@
 // what the file imports, cargo test for crates. The files lanes.mjs runs alone run one at a time after everything
 // else, which runs in parallel, and those it leaves to a person don't run. Its timed files run last, one at a time
 // under a timed grant, and only with --timed: unrun, they leave the run INCONCLUSIVE. Failures main already has
-// (known-failures.json) read apart from new ones, and a timing budget missed under load reads INCONCLUSIVE.
+// (known-failures.json) read apart from new ones, and a timing budget missed under load reads INCONCLUSIVE. So does a
+// skip, or BLOCKED by its note, unless the same file's `skips` list covers it, which is printed.
 //
 //   node scripts/affected.mjs [--list] [--wide] [--record] [--timed] [path ...]
 //
@@ -17,9 +18,11 @@ import { loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { alone, byHand, changedPaths, checks, ownLane, timed } from './lanes.mjs';
+import { alone, byHand, cargoResults, changedPaths, checks, listed, ownLane, readSkips, reportResults, timed, worst } from './lanes.mjs';
 import { isTestFile, listFiles, named, underTestPaths } from './proof-change.mjs';
 import { childEnv } from './proof-runs.mjs';
+
+export { cargoResults, reportResults };
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const BASELINE = 'scripts/known-failures.json';
@@ -33,7 +36,6 @@ const PATHS = /(?<![\w.@-])(?:\.{1,2}\/[\w@.\/-]*|\/?(?:packages|crates|scripts|
 const PACKAGE = /@deepbuild\/[\w-]+(?:\/[\w.-]+)*/g;
 const within = (folder, path) => path === folder || path.startsWith(`${folder}/`);
 const folders = (path) => path.split('/').slice(0, -1).map((_, index, parts) => parts.slice(0, index + 1).join('/'));
-const listed = (list, file) => list.some((entry) => (entry.endsWith('/') ? file.startsWith(entry) : file === entry));
 
 /** The workspace's crates from cargo metadata: folders, path dependencies, the names they run by, and test targets. */
 export function crates(cwd) {
@@ -267,61 +269,6 @@ export function plan(cwd, tests) {
   return { blocks, skipped, timed: timedFiles };
 }
 
-// A failure that names its own state keeps it, as runLanes reads one: a check that couldn't run reads BLOCKED.
-const stateOf = (message = '') => message.match(/^(?:\w*Error: )?(BLOCKED|INCONCLUSIVE|INVALID)\b/)?.[1] ?? 'FAIL';
-
-/** The results in the report of a vitest or node --test job by its label: failures with their state, and the tests that passed, by ID. */
-export function reportResults(cwd, text, label) {
-  const failures = [], passed = [], stack = [];
-  const path = (file) => relative(cwd, file.startsWith('file:') ? fileURLToPath(file) : file).split(sep).join('/');
-  for (const [index, line] of text.split('\n').entries()) {
-    if (!line) continue;
-    let row;
-    try { row = JSON.parse(line); } catch {
-      // A line that doesn't parse, such as a record cut short with the next run on, hides whatever its records said:
-      // each file it names is unknown, and the line itself answers for a record cut before its file ends.
-      const records = [...line.matchAll(/\{"type":"\w+","file":("(?:[^"\\]|\\.)*")(?=,)/g)];
-      const ids = [...records[0]?.index === 0 ? [] : [`report line ${index + 1}`], ...new Set(records.map(([, file]) => named(path(JSON.parse(file)), '(file)')))];
-      for (const id of ids) failures.push({ id, state: 'INCONCLUSIVE', message: `line ${index + 1} of the report doesn't parse` });
-      continue;
-    }
-    if (row.type === 'unhandled') failures.push({ id: 'vitest › unhandled error', state: 'FAIL', message: row.message });
-    if (!row.file) continue;
-    const file = path(row.file);
-    // node --test names a test alone; its suites are the tests started around it.
-    if (row.type === 'start') stack[row.nesting] = row.name;
-    const name = row.nesting === undefined ? row.name : [...stack.slice(0, row.nesting), row.name].join(' › ');
-    if (row.suite || row.skip || row.todo) continue;
-    if (row.type === 'pass') passed.push(named(file, name));
-    if (row.type === 'fail') failures.push({ id: named(file, name), state: stateOf(row.error?.message), message: row.error?.message?.split('\n')[0] ?? '' });
-  }
-  // The vitest reporter ends its report once all of it landed; a record lost whole leaves nothing else to see.
-  if (label.startsWith('vitest') && !text.endsWith('{"type":"end"}\n')) failures.push({ id: `${label} report`, state: 'INCONCLUSIVE', message: "the report ends before the run did, so a test's result may be missing" });
-  return { failures, passed };
-}
-
-/** The results in cargo test's output, each test by the target that reruns it, and a target that failed in no test. */
-export function cargoResults(output, status, workspace) {
-  const targets = new Map(workspace.flatMap((crate) => crate.targets.flatMap((target) => [[target.key, target.rerun], ...(target.doc ? [[`doc ${target.doc}`, `-p ${crate.name} --doc`]] : [])])));
-  const failures = [], passed = [], failed = new Set();
-  let target = null;
-  for (const line of output.split('\n')) {
-    const running = line.match(/^\s*Running (?:unittests )?(.+?) \(.*?deps\/(\w+)-[0-9a-f]+\)\s*$/);
-    const doc = line.match(/^\s*Doc-tests (\w+)\s*$/);
-    if (running || doc) target = targets.get(running ? `${running[2]} ${running[1]}` : `doc ${doc[1]}`) ?? line.trim();
-    const test = line.match(/^test (.+?) \.\.\. (ok|FAILED)$/);
-    if (test && test[2] === 'ok') passed.push(`cargo ${target} › ${test[1]}`);
-    if (test && test[2] === 'FAILED') failures.push({ id: `cargo ${target} › ${test[1]}`, state: 'FAIL', message: '' }), failed.add(target);
-    // A harness that ran nothing says so, and nothing unrun passes.
-    if (/^test result: INCONCLUSIVE/.test(line)) failures.push({ id: `cargo ${target}`, state: 'INCONCLUSIVE', message: line.slice(13) }), failed.add(target);
-    // cargo names each failed target by the arguments that rerun it.
-    const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
-    if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, state: 'FAIL', message: 'the target failed outside any test it reported' }), failed.add(rerun);
-  }
-  if (status !== 0 && !failed.size) failures.push({ id: 'cargo test', state: 'FAIL', message: output.split('\n').find((line) => /^error/.test(line)) ?? `exited ${status}` });
-  return { failures, passed };
-}
-
 /** A lint's findings as keys without line numbers, so a finding main has still matches after lines move. */
 export function lintFindings(cwd, name, output, status) {
   const lines = output.split('\n'), found = [], at = (path) => relative(cwd, join(cwd, path)).split(sep).join('/');
@@ -413,31 +360,34 @@ async function main(args) {
   if (runTimed && timedFiles.vitest.length) jobs.push(await vitest(timedFiles.vitest, ['--no-file-parallelism'], 'vitest-timed'));
   if (runTimed && timedFiles.node.length) jobs.push(await node(timedFiles.node, ['--test-concurrency=1'], 'node-timed'));
 
-  const failures = [], passed = [], findings = [];
+  const failures = [], passed = [], findings = [], skips = [];
   for (const job of jobs) {
+    const tests = /^(?:vitest|node)/.test(job.label);
+    let report = '';
+    try { if (tests) report = readFileSync(join(logs, `${job.label}.jsonl`), 'utf8'); } catch {}
+    const results = reportResults(root, report, job.label);
     // A job the throttle didn't run, for want of a grant or of its table, ran nothing, so none of its results is read:
-    // it is unrun, never a failure on main.
-    const [, state, message] = job.output.match(/^(INCONCLUSIVE|BLOCKED) (no grant|throttle): (.*)/) ?? [];
+    // it is unrun, never a failure on main. A vitest job's marker names each of its files; any other's output says so.
+    const [, state, message] = results.noGrant ? [] : job.output.match(/^(INCONCLUSIVE|BLOCKED) (no grant|throttle): (.*)/) ?? [];
     if (state) {
       failures.push({ id: `${job.label} job`, state, message });
       continue;
     }
     if (job.label === 'build' && job.status !== 0) failures.push({ id: 'npm run build --workspaces', state: 'FAIL', message: job.output.split('\n').find((line) => /error/.test(line)) ?? '' });
     if (job.label.startsWith('lint')) findings.push(...lintFindings(root, job.label.slice(5), job.output, job.status));
-    if (job.label === 'cargo') { const results = cargoResults(job.output, job.status, workspace); failures.push(...results.failures); passed.push(...results.passed); }
-    if (/^(?:vitest|node)/.test(job.label)) {
+    if (job.label === 'cargo') { const cargo = cargoResults(job.output, job.status, workspace); failures.push(...cargo.failures); passed.push(...cargo.passed); skips.push(...cargo.skips ?? []); }
+    if (tests) {
       const files = ({ ...blocks, timed: timedFiles })[job.label.split('-')[1] ?? 'parallel'][job.label.split('-')[0]];
-      let report = '';
-      try { report = readFileSync(join(logs, `${job.label}.jsonl`), 'utf8'); } catch {}
-      const results = reportResults(root, report, job.label);
       failures.push(...results.failures);
       passed.push(...results.passed);
+      skips.push(...results.skips ?? []);
       // A file that reported no test didn't run, and nothing unrun passes.
-      for (const file of files.filter((file) => !report.includes(file))) failures.push({ id: named(file, '(file)'), state: 'FAIL', message: 'reported no test' });
+      for (const file of files.filter((file) => !report.includes(file))) failures.push({ id: named(file, '(file)'), state: results.noGrant ? 'INCONCLUSIVE' : 'FAIL', message: results.noGrant ?? 'reported no test' });
     }
   }
   const baseline = JSON.parse(readFileSync(join(root, BASELINE), 'utf8'));
-  const { known, fresh, unsure } = classify(failures, findings, baseline);
+  const { covered, open } = readSkips(skips, baseline.skips, timed);
+  const { known, fresh, unsure } = classify([...failures, ...open], findings, baseline);
   if (args.includes('--record')) {
     for (const id of passed) delete baseline.failures[id];
     for (const { id, message } of fresh.filter(({ message }) => message !== 'lint')) baseline.failures[id] = message || 'fails on main';
@@ -448,15 +398,16 @@ async function main(args) {
   }
   for (const { id, message } of known) console.log(`KNOWN ${id}${message === 'lint' ? '' : `: ${message}`}`);
   for (const { id, state, message } of unsure) console.log(`${state} ${id}${message ? `: ${message}` : ''}`);
+  for (const { id, note, reason } of covered) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);
   for (const id of passed.filter((id) => baseline.failures[id])) console.log(`NOTE ${id} passes; remove it from ${BASELINE}`);
   for (const { id, message } of fresh) console.log(`NEW FAIL ${id}${message && message !== 'lint' ? `: ${message}` : ''}`);
   for (const path of selection.every) console.log(`INCONCLUSIVE ${path} feeds every suite; run npm run preflight`);
   if (selection.wide.length) console.log(`INCONCLUSIVE ${selection.wide.length} suites that see the change through another package's process were not run; the release preflight or --wide runs them`);
   if (unrunTimed.length) console.log(`INCONCLUSIVE ${unrunTimed.length} timed ${unrunTimed.length === 1 ? 'file was' : 'files were'} not run; --timed runs them under a timed grant: ${unrunTimed.join(' ')}`);
   console.log(`TIMED the timed list, from scripts/lanes.mjs (${timed.length}): ${timed.join(' ')}`);
-  const state = fresh.length ? 'FAIL' : unsure.length || selection.every.length || selection.wide.length || unrunTimed.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS';
-  console.log(`${state} affected: ${fresh.length} new, ${known.length} already failing on main, ${unsure.length} inconclusive or blocked, ${passed.length} passed, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}; logs in ${logs}`);
-  return { FAIL: 1, INCONCLUSIVE: 2 }[state] ?? 0;
+  const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || unrunTimed.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');
+  console.log(`${state} affected: ${fresh.length} new, ${known.length} already failing on main, ${unsure.length} inconclusive or blocked, ${covered.length} listed skips, ${passed.length} passed, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}; logs in ${logs}`);
+  return { FAIL: 1, INCONCLUSIVE: 2, BLOCKED: 3, INVALID: 3 }[state] ?? 0;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) process.exitCode = await main(process.argv.slice(2));

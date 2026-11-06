@@ -429,7 +429,22 @@ pub struct StorageOut {
     pub count: u32,
     /// The multi-dispatch step whose result it takes (`from: step[.port]`, #483).
     pub from: Option<Arg>,
+    /// The word every row holds when the frame starts (#484); 0 unless it says.
+    pub clear: u32,
 }
+
+/// A compute operator's `instances` output (#484; Operator output): the instancer it draws, and
+/// the compact step whose kept rows are what draws.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InstancesOut {
+    pub instancer: String,
+    pub columns: Vec<String>,
+    pub count: Option<String>,
+}
+
+/// The input an indirect dispatch's count arrives through (#484): it binds as any storage input,
+/// and it orders the operator after the one that wrote the count.
+pub const DISPATCH_COUNT: &str = "dispatch_count";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Operator {
@@ -444,14 +459,20 @@ pub struct Operator {
     pub storage: BTreeMap<String, StorageOut>,
     /// A compute operator's texture outputs (#483).
     pub textures: BTreeMap<String, TexOut>,
+    /// A compute operator's instances outputs (#484).
+    pub instances: BTreeMap<String, InstancesOut>,
     pub blend: Blend,
     pub declared: Option<Class>,
     pub fallback: Fallback,
     /// ns per pixel (material, pass) or per element (compute).
     pub cost: Option<f64>,
     pub size: Size,
-    /// A compute operator's elements per dispatch.
+    /// A compute operator's elements per dispatch: an indirect dispatch's `max`, which the check
+    /// costs it at.
     pub elements: u32,
+    /// Whether a count written earlier in the frame runs it (`elements: {from, max}`, #484), read
+    /// through the input [`DISPATCH_COUNT`].
+    pub counted: bool,
     pub workgroup: u32,
     /// A WGSL-subset source's asset ID, in place of steps.
     pub source: Option<String>,
@@ -504,6 +525,8 @@ const LITERAL_FIELDS: &[&str] = &[
     "gain",
     // scan's operator (#483).
     "op",
+    // blend's mode (#430).
+    "mode",
 ];
 /// The look's status roles: no operator reads or writes one (Status guard).
 pub const STATUS_ROLES: &[&str] = &[
@@ -982,6 +1005,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
     }
     let mut outputs = BTreeMap::new();
     let mut storage = BTreeMap::new();
+    let mut instances = BTreeMap::new();
     let mut textures = BTreeMap::new();
     let mut blend = Blend::Replace;
     if let Some(out) = o.get("outputs").and_then(Value::as_object) {
@@ -1037,6 +1061,21 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 );
                 continue;
             }
+            if let Some(i) = v.get("instances") {
+                instances.insert(
+                    name.clone(),
+                    InstancesOut {
+                        instancer: i.get("instancer").and_then(Value::as_str).unwrap_or("").into(),
+                        columns: i
+                            .get("columns")
+                            .and_then(Value::as_array)
+                            .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+                            .unwrap_or_default(),
+                        count: i.get("count").and_then(Value::as_str).map(String::from),
+                    },
+                );
+                continue;
+            }
             // A readback (exact only, ≤ 64 KiB) is storage the CPU reads back a frame late.
             if let Some(s) = v.get("storage").or_else(|| v.get("readback")) {
                 if v.get("readback").is_some()
@@ -1057,6 +1096,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                                 sc,
                                 count: count as u32,
                                 from: v.get("from").map(arg),
+                                clear: s.get("clear").and_then(Value::as_u64).unwrap_or(0) as u32,
                             },
                         );
                     }
@@ -1135,6 +1175,33 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
             Size::Half
         }
     };
+    // An indirect dispatch (#484): `elements: {from: <op>.<output>, max}`, its count an input.
+    let counted_by = o.get("elements").filter(|e| e.is_object());
+    let elements = counted_by.map_or(o.get("elements"), |e| e.get("max"));
+    let counted = counted_by.is_some();
+    if let Some(e) = counted_by {
+        match e.get("from").and_then(Value::as_str).and_then(|f| f.split_once('.')) {
+            Some((op, output)) => {
+                inputs.insert(
+                    DISPATCH_COUNT.to_string(),
+                    Input {
+                        ty: Ty::Storage(Sc::U32, 1),
+                        from: From::Storage {
+                            op: op.into(),
+                            output: output.into(),
+                        },
+                        range: None,
+                        default: None,
+                    },
+                );
+            }
+            None => issues.push(Issue::at_path(
+                "operator_type",
+                "elements",
+                "an indirect dispatch's from is <op>.<output>",
+            )),
+        }
+    }
     let origin = match o.get("origin").and_then(Value::as_str) {
         Some("shipped") => Origin::Shipped,
         Some("pack") => Origin::Pack,
@@ -1162,12 +1229,14 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
         outputs,
         storage,
         textures,
+        instances,
         blend,
         declared,
         fallback,
         cost,
         size,
-        elements: o.get("elements").and_then(Value::as_u64).unwrap_or(0) as u32,
+        elements: elements.and_then(Value::as_u64).unwrap_or(0) as u32,
+        counted,
         workgroup: o.get("workgroup").and_then(Value::as_u64).unwrap_or(64) as u32,
         source,
         uses,

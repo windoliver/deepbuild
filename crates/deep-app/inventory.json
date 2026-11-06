@@ -29,6 +29,7 @@
       "panel": "deepbuild/needs-you",
       "entry": "crates/deep-app/src/views.rs Shipped, Kind::NeedsYou",
       "roles": [
+        "hover",
         "ink_primary",
         "ink_secondary",
         "ink_tertiary"
@@ -40,6 +41,7 @@
       "entry": "crates/deep-app/src/views.rs Shipped, Kind::Session",
       "roles": [
         "divider",
+        "hover",
         "ink_primary",
         "ink_secondary",
         "session_line",
@@ -53,7 +55,17 @@
       "roles": [
         "hover",
         "ink_primary",
+        "ink_secondary",
         "raised"
+      ],
+      "literals": []
+    },
+    {
+      "panel": "deepbuild/welcome",
+      "entry": "crates/deep-app/src/views.rs Shipped, Kind::Welcome",
+      "roles": [
+        "ground",
+        "ink_primary"
       ],
       "literals": []
     }

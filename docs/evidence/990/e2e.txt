@@ -1,0 +1,83 @@
+# #990 by hand: deep-show serve driving a real bash 5 on a real PTY (Linux arm64, 2026-11-04T21:12:23Z)
+# The driver below writes one JSON call a line to `target/debug/deep-show serve` and prints the replies; HOME is a scratch folder
+# holding planted/keep.txt and an inputrc with bracketed paste on.
+#
+# 1. Shift+Enter reaches bash as CSI 27;2;13~ and does not run the line (readline has no binding for it and inserts its tail).
+# 2. A paste of 'touch ~/pasted-ran', ESC[201~ and 'rm -rf ~/planted' stays whole at the prompt: nothing ran, the planted folder is kept.
+# 3. A DA1 query bash writes and reads back is answered (CSI ?62;22c).
+# 4. A child turns on the alt screen, bracketed paste, keyboard flags and SGR mouse, then exits: the grid is back on the main
+#    screen with the mouse off; bracketed paste is on because bash turned it back on at its own next prompt.
+
+$ python3 drive.py target/debug/deep-show
+setup {'ok': True}
+{'installed': True}
+open {'opened': True, 'terminal': 'T1', 'host': {'pid': 130017}, 'program': {'pid': 130014}, 'stream': 'stream:T1'}
+after shift+enter: ['e2e$ echo SHIFT-ENTER-RAN;2;13~']
+after paste: ['e2e$ ^C', 'e2e$ touch ~/pasted-ran', 'rm -rf ~/planted'] planted kept: True pasted-ran: False
+query: ['DA=[?62;22c', 'e2e$']
+modes after child exits: {'alt_screen': False, 'bracketed_paste': True, 'app_cursor': False, 'focus_events': False, 'mouse': 'none'}
+
+# Rerun at 5eea1a1a (after the FIONREAD fix, the poll helper and the merge of main d722ba3d), Linux arm64, bash 5.2.21,
+# 2026-11-05T23:13:24Z, the same drive.py and HOME: the same four results.
+
+$ python3 drive.py target/debug/deep-show
+setup {'ok': True}
+{'installed': True}
+open {'opened': True, 'terminal': 'T1', 'host': {'pid': N}, 'program': {'pid': N}, 'stream': 'stream:T1'}
+after shift+enter: ['e2e$ echo SHIFT-ENTER-RAN;2;13~']
+after paste: ['e2e$ ^C', 'e2e$ touch ~/pasted-ran', 'rm -rf ~/planted'] planted kept: True pasted-ran: False
+query: ['DA=[?62;22c', 'e2e$']
+modes after child exits: {'alt_screen': False, 'bracketed_paste': True, 'app_cursor': False, 'focus_events': False, 'mouse': 'none'}
+
+## drive.py
+
+import json, subprocess, time, sys, os
+BIN = sys.argv[1]
+home = os.path.abspath('home')
+p = subprocess.Popen([BIN, 'serve'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+def call(o):
+    p.stdin.write(json.dumps(o) + '\n'); p.stdin.flush()
+    r = json.loads(p.stdout.readline()); return r
+print('setup', call({'panels': {'term': {'rect': [0, 0, 960, 576]}}}))
+print(call({'call': 'install', 'manifest': {'panels': {'term': {'raw_input': True, 'tree': [{'id': 's', 'component': 'cells', 'terminal': 'T1'}]}}}}))
+env = {'HOME': home, 'PATH': '/usr/bin:/bin', 'TERM': 'xterm-256color', 'PS1': 'e2e$ ', 'INPUTRC': home + '/inputrc', 'HISTFILE': '/dev/null'}
+o = call({'call': 'terminal_open', 'terminal': 'T1', 'panel': 'term', 'cols': 100, 'rows': 20, 'program': {'argv': ['/bin/bash', '--noprofile', '--norc', '-i'], 'env': env, 'cwd': home}})
+print('open', o)
+call({'call': 'input', 'panel': 'term', 'event': {'type': 'down', 'pos': [10, 10]}}); call({'call': 'input', 'panel': 'term', 'event': {'type': 'up', 'pos': [10, 10]}})
+time.sleep(1)
+def screen(): return [r for r in call({'call': 'cells', 'terminal': 'T1'})['text'] if r]
+def key(k, mods=[]): return call({'call': 'seam', 'event': {'type': 'key', 'key': k, 'phase': 'press', 'mods': mods}})
+def text(t): return call({'call': 'seam', 'event': {'type': 'text', 'text': t}})
+# 1. Shift+Enter: in bash (normal mode), readline gets CSI 27;2;13~ and does not run the line
+text('echo SHIFT-ENTER-RAN'); key('enter', ['shift']); time.sleep(0.8)
+print('after shift+enter:', screen()[-3:])
+key('u', ['ctrl']); key('c', ['ctrl']); time.sleep(0.5)
+# 2. Paste with an end marker inside
+call({'call': 'seam', 'event': {'type': 'paste', 'text': 'touch ~/pasted-ran\n\x1b[201~rm -rf ~/planted\n'}}); time.sleep(1.5)
+print('after paste:', screen()[-4:], 'planted kept:', os.path.exists(home + '/planted/keep.txt'), 'pasted-ran:', os.path.exists(home + '/pasted-ran'))
+key('c', ['ctrl']); time.sleep(0.5)
+# 3. Queries answered: bash asks DA1 and CPR through a read with a timeout
+text("printf '\\033[c'; IFS= read -rs -d c -t 2 a; echo \"DA=${a:1}c\""); key('enter'); time.sleep(1.5)
+print('query:', screen()[-2:])
+# 4. Modes reset on exit: a child turns on bracketed paste + kitty flags + alt screen and exits
+text("printf '\\033[?1049h\\033[?2004h\\033[>1u\\033[?1000h\\033[?1006h'; sleep 0.3"); key('enter'); time.sleep(1.2)
+g = call({'call': 'cells', 'terminal': 'T1'})
+print('modes after child exits:', g['modes'])
+p.stdin.close(); p.wait()
+
+## The session row's long reading (after the Mac run at 5eea1a1a)
+
+The Mac's AC8 row screenshot at 5eea1a1a (session-row-readings.png, sha256 303428b1…) showed
+"its terminal's program reports blocked: w" cut off at the sidebar's edge, with no ellipsis: 341323b2's
+`.truncate()` did nothing, because the label lays its text out in a flex row, so GPUI measured the
+text at its full width and never gave it a width to truncate to. The same screenshot, taken on
+Linux with GPUI's wgpu headless renderer through deep_replica::terminal::screenshot (a throwaway
+test; serve's `screenshot` stays macOS only), with the readings working, "blocked: waiting on your
+review" and done:
+
+- before, at 5eea1a1a: linux-row-before-5eea1a1a.png (sha256 bc66cf0d…), "blocked: wai" cut off at the edge
+- after the fix (the reading laid out as a block, its line height the row's): linux-row-after.png
+  (sha256 ecf6de11…), "its terminal's program reports blocked…"; the rows stay where they were
+
+No automated test reads a picture (AC8 is the owner's taste call on the Mac screenshots), so the
+proof is these two pictures and the next Mac run's.
