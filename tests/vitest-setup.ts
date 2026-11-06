@@ -18,22 +18,25 @@ process.env.RUSTUP_HOME ??= join(homedir(), '.rustup');
 process.env.CARGO_HOME ??= join(homedir(), '.cargo');
 
 interface Proc { pid: number; ppid: number; command: string }
-/** Every process as `ps` shows it now, `ps` itself left out. */
+/**
+ * Every process as `ps` shows it now, `ps` itself and zombies left out: a zombie has no children, and once reaped its
+ * PID may be another process's.
+ */
 function table(): Proc[] {
-  const ps = spawnSync('ps', ['-axww', '-o', 'pid=,ppid=,command='], { encoding: 'utf8' });
+  const ps = spawnSync('ps', ['-axww', '-o', 'pid=,ppid=,stat=,command='], { encoding: 'utf8' });
   return (ps.stdout ?? '').split('\n').flatMap((line) => {
-    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
-    return m && Number(m[1]) !== ps.pid ? [{ pid: Number(m[1]), ppid: Number(m[2]), command: m[3]! }] : [];
+    const m = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
+    return m && Number(m[1]) !== ps.pid && !m[3]!.startsWith('Z') ? [{ pid: Number(m[1]), ppid: Number(m[2]), command: m[4]! }] : [];
   });
 }
 const signal = (procs: Proc[], sig: NodeJS.Signals): void => {
   for (const p of procs) try { process.kill(p.pid, sig); } catch { /* gone */ }
 };
 /**
- * Every process descending from this one, each stopped (SIGSTOP) as it is found, so none starts another or ends and
- * leaves its children to launchd while the rest are taken.
+ * Every process descending from this one, each sent `sig` as it is found: SIGSTOP, so none starts another or ends and
+ * leaves its children to launchd while the rest are taken, or SIGKILL.
  */
-function stopTree(): Proc[] {
+function tree(sig: NodeJS.Signals): Proc[] {
   const found = new Map<number, Proc>();
   for (;;) {
     const procs = table();
@@ -41,7 +44,7 @@ function stopTree(): Proc[] {
     const walk = (pid: number): void => { for (const p of procs) if (p.ppid === pid) { if (!found.has(p.pid)) fresh.push(p); walk(p.pid); } };
     walk(process.pid);
     if (!fresh.length) return [...found.values()];
-    signal(fresh, 'SIGSTOP');
+    signal(fresh, sig);
     for (const p of fresh) found.set(p.pid, p);
   }
 }
@@ -52,16 +55,17 @@ if (isMainThread) {
   // such as #29's twins' pending command, on a lease table the file had closed, an unhandled error that fails the file.
   let held: Proc[] = [];
   afterAll(() => {
-    held = stopTree();
-    const left = held.filter((p) => !p.command.endsWith('<defunct>'));
-    if (left.length) console.warn(`vitest-setup: stopping ${left.length} process(es) this file left running:\n${left.map((p) => `  ${p.pid} ${p.command.slice(0, 200)}`).join('\n')}`);
+    held = tree('SIGSTOP');
+    if (held.length) console.warn(`vitest-setup: stopping ${held.length} process(es) this file left running:\n${held.map((p) => `  ${p.pid} ${p.command.slice(0, 200)}`).join('\n')}`);
   });
   // They end with the worker, once no code of the file can run: when it exits, and when vitest stops it with SIGTERM,
   // as it does a worker whose children keep it from exiting. Vitest sends SIGKILL 500 ms later, too soon for `ps` under
-  // load, so SIGTERM ends those held, which can't have started others; an exit, early or not, looks again.
-  process.once('exit', () => signal([...held, ...stopTree()], 'SIGKILL'));
+  // load, so SIGTERM ends those held, which can't have started others; with none held, as when the file's tests all
+  // skipped, it looks, killing as it finds, so a look SIGKILL cuts short leaves nothing held. An exit always looks.
+  process.once('exit', () => { signal(held, 'SIGKILL'); tree('SIGKILL'); });
   process.once('SIGTERM', () => {
-    signal(held, 'SIGKILL');
+    if (held.length) signal(held, 'SIGKILL');
+    else tree('SIGKILL');
     process.kill(process.pid, 'SIGTERM');
   });
 }
