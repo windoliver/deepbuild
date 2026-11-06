@@ -228,6 +228,8 @@ export function render(rows: readonly StatusRow[], from: string): string {
   const rank = (r: StatusRow) => ORDER.indexOf(r.state);
   const counts = ORDER.map((s) => [s, rows.filter((r) => r.state === s).length] as const).filter(([, n]) => n).map(([s, n]) => `${n} ${s === 'needs you' ? 'need you' : s === 'quiet' ? 'gone quiet' : s}`);
   const out = [from, `${rows.length} session${rows.length === 1 ? '' : 's'}${counts.length ? `: ${counts.join(', ')}` : ''}`];
+  // A first run lists nothing: say what makes a session show here.
+  if (!rows.length) out.push('Start a Claude Code or Codex session in a repo and it shows here; deep doctor checks the setup.');
   const grouped = (shown: StatusRow[]) => {
     const repos = [...new Set(shown.map((r) => r.repo))].sort((a, b) =>
       Math.min(...shown.filter((r) => r.repo === a).map(rank)) - Math.min(...shown.filter((r) => r.repo === b).map(rank)) || a.localeCompare(b));

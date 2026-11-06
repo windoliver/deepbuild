@@ -1063,6 +1063,10 @@
         "deep-sandbox-wasmtime": {
           "spec": "* path=../deep-sandbox-wasmtime",
           "why": "Issue #238: runs providers, layouts' validators and program entries at check, and sandbox@1's kit part."
+        },
+        "deep-canvas-loop": {
+          "spec": "* path=../deep-canvas-loop",
+          "why": "Issue #453: the loop canvas module (geometry.shading) joins the full build set."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1321,6 +1325,22 @@
         "vello_cpu": {
           "spec": "^0.3",
           "why": "Issue #378: a label's coverage mask and an anchored overlay's picture, rasterized on the CPU."
+        }
+      }
+    },
+    "crates/deep-canvas-loop/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #453: the registry it registers geometry.shading's report through, and the ops module its math goes through."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #453: the glTF reader that hands it each primitive raw, or names why it can't."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #453: documents, the requirement it reads and the report it writes."
         }
       }
     },

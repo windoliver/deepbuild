@@ -44,11 +44,20 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000) {
   const timing = join(directory, 'time');
   try {
     const started = performance.now();
+    // A captured run leads its own process group: spawnSync stops only /usr/bin/time at the timeout or
+    // maxBuffer, so the group is stopped with it, or the measured command and its children run on (#1322).
     const result = spawnSync('/usr/bin/time', [...flags, '-o', timing, ...command], stream
       ? { cwd, stdio: ['ignore', 'inherit', 'inherit'] }
-      : { cwd, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 });
+      : { cwd, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024, detached: true });
     const elapsedMs = performance.now() - started;
-    if (result.error) throw result.error;
+    if (result.error) {
+      try {
+        if (!stream && result.pid > 0) process.kill(-result.pid, 'SIGKILL');
+      } catch (error) {
+        if (error.code !== 'ESRCH') throw error;
+      }
+      throw result.error;
+    }
     const report = readFileSync(timing, 'utf8');
     const peakBytes = parsePeakRss(report, process.platform);
     return { elapsedMs, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions: parseInstructions(report, process.platform), status: result.status, output: stream ? '' : result.stdout + result.stderr };
