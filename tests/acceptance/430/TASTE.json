@@ -1,0 +1,24 @@
+{
+  "issue": 430,
+  "criterion": "#430.9e7e049e",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), judging at the owner's request in the session (\"check the scrrnshot for me\"); not the owner's own call",
+  "when": "2026-11-06T01:45:46-08:00",
+  "screenshots": {
+    "blurred-group.png": "d2dafd905265068660ab63ddfdff45a7729f4414294bd160546ca94e658b837e",
+    "backdrop-group.png": "843c60a45a2896740b07c588f8bcb7e984b57b26881274bd37069e488136dc0f",
+    "blend-subtract.png": "e3d1845dde2140e77768fc9d33ec4f6a190f622f5311041be3e32226a2cdac37",
+    "blend-divide.png": "ba3a1afb4e58d3964f8775e72050f79b93a26fb5569f5272929090c4ffb7ba94",
+    "blend-linear_burn.png": "4c2c836bb0a1a0522c9a51bf48055a298607c2fe01b51d12500692ad50a7e574",
+    "blend-linear_dodge.png": "797cbcf4e6d2d5bac765af808046908580bb5765a5e561f96dfe8a8c540751cc",
+    "blend-linear_light.png": "9389a67a7bcc73d8e1122b30ffd4f52e9d68678bd92a1c0c1c2650ee7a1c419b",
+    "blend-vivid_light.png": "a0caed765ce445a1aafd1b2f79ef83d3fc0d9afc06f53998f3c850e333cb5bcf",
+    "blend-pin_light.png": "b8614d0dcf572c55d6357e954ad80b53bee4e86c72977a36d5ca51e3b792cdad",
+    "blend-hard_mix.png": "c6311f286b046a530bae379a43b7ca01c0168bb3018de91988afd855d1d21f2f",
+    "blend-darker_color.png": "fb16bdb766289357e17fb35058b4643133ff48bbeaeedfa1e1ba28a143b8d2a5",
+    "blend-lighter_color.png": "6ca5b302f00fc474d11a6f42677dcad535a80bbb179fb0e4e4d71e1fbdc1160d",
+    "blend-dissolve.png": "494499ed048c13a2f53c9be9adc48c917c1a7396ff5ab463720c276ea5759fb2",
+    "dancing-dissolve.apng": "d207ca3f76417d14718d627052ef29a2d978668688b3a62ee4efc91d814b1483"
+  },
+  "note": "Read at 3x and frame by frame. The blur sits between the items drawn before and after it, the after bar stays sharp, its steps are the fixture's 25-tap grid. The backdrop stops at its coverage, its later bar sharp. The eleven modes read as distinct and as their names say. The dissolve re-rolls each frame and holds its share."
+}

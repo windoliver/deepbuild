@@ -275,6 +275,9 @@ fn about(event: &Value) -> Option<&str> {
     about.as_str().filter(|handle| handle.starts_with("ask:"))
 }
 
+/// The readings a session's row shows beside it, newest last.
+pub const READINGS: usize = 3;
+
 /// Issue #1141: the record folded as its events arrive, in log order, each once: what the app shows of it, each
 /// session's title, the inputs of its state and its open asks, and each ask's reading, not the events themselves.
 /// A read costs what it shows, whatever the record's length, and gives what reading every event would.
@@ -289,6 +292,8 @@ pub struct Table {
     readings: HashMap<String, Reading>,
     /// The ask.created events, in log order, of every ask some event could still leave open.
     asks: Vec<Value>,
+    /// Each reading's newest value and the time it is as of, in ms (#1172).
+    values: HashMap<String, (f64, u64)>,
 }
 
 /// What a session's state is read from: of its own events, only the newest of each kind it reads, and each claim's
@@ -322,6 +327,8 @@ struct Session {
     starts: HashMap<String, Vec<(String, Option<u64>)>>,
     /// The times each run finished clean.
     passed: HashMap<String, Vec<Option<u64>>>,
+    /// Its newest readings (#990), oldest first: what the hub saw beside it, such as its terminal's program status.
+    readings: Vec<String>,
     /// How long each check's clean runs took, shortest first.
     took: HashMap<String, Vec<u64>>,
 }
@@ -344,6 +351,14 @@ impl Table {
         if kind == "ask.created" && !self.readings.get(&handle(event)).is_some_and(Reading::done) {
             self.asks.push(event.clone());
         }
+        if kind == "reading.recorded" {
+            let data = &event["data"];
+            if let (Some(reading), Some(value)) = (data["reading"].as_str(), data["value"].as_f64())
+            {
+                let as_of = data["as_of"].as_u64().unwrap_or(0);
+                self.values.insert(reading.to_owned(), (value, as_of));
+            }
+        }
         if kind == "task.created" {
             if let Some(thread) = event["data"]["thread"].as_str() {
                 self.titles
@@ -361,6 +376,11 @@ impl Table {
             .entry(session.to_owned())
             .or_default()
             .apply(event, kind);
+    }
+
+    /// A reading's newest value and the time it is as of, in ms.
+    pub fn value(&self, reading: &str) -> Option<(f64, u64)> {
+        self.values.get(reading).copied()
     }
 
     /// The sessions in the record, in the order they first appear.
@@ -433,6 +453,11 @@ impl Table {
         }
     }
 
+    /// A session's newest readings, oldest first, at most [`READINGS`].
+    pub fn readings(&self, session: &str) -> &[String] {
+        self.sessions.get(session).map_or(&[], |s| &s.readings)
+    }
+
     /// Every session in the record, in the order each first appears, with its task's title and its state.
     pub fn every_session(&self) -> Vec<(String, String, State)> {
         self.order
@@ -470,6 +495,15 @@ impl Session {
         let data = &event["data"];
         let text = |value: &Value| value.as_str().map(str::to_owned);
         let pos = event["log_pos"].as_u64().unwrap_or(0);
+        // A reading is shown beside the session and moves nothing about it (#990): no state, no sign of life.
+        if kind == "session.reading" {
+            if let Some(reading) = text(&data["reading"]) {
+                self.readings.push(reading);
+                let over = self.readings.len().saturating_sub(READINGS);
+                self.readings.drain(..over);
+            }
+            return;
+        }
         // The core's reading of its state and its finding the process gone (#992) are no sign of the session.
         if kind == "session.state" || kind == "session.gone" {
             if kind == "session.state" && event["writer"] == "core" {
@@ -664,6 +698,27 @@ mod tests {
 
     fn ask(id: &str) -> Value {
         json!({"v": 4, "id": id, "kind": "ask.created", "session": "s1", "data": {"question": "Push?"}})
+    }
+
+    #[test]
+    fn a_sessions_readings_show_beside_it_and_move_nothing() {
+        // #990: a terminal program's status readings are signal only: the row keeps the newest three, and the
+        // session's state and row words are what they were without them.
+        let before = vec![
+            json!({"kind": "permission.request", "writer": "hook", "session": "s1", "log_pos": 1, "ts": 1, "data": {}}),
+        ];
+        let mut events = before.clone();
+        for (i, word) in ["started", "working", "blocked", "done"].iter().enumerate() {
+            events.push(json!({"kind": "session.reading", "writer": "core", "session": "s1", "log_pos": 2 + i,
+                               "ts": 1_000_000 + i, "data": {"reading": format!("its terminal's program reports {word}")}}));
+        }
+        let (with, without) = (table(&events), table(&before));
+        assert_eq!(
+            with.readings("s1"),
+            ["working", "blocked", "done"].map(|w| format!("its terminal's program reports {w}"))
+        );
+        assert_eq!(with.state("s1"), without.state("s1"));
+        assert_eq!(with.row("s1", 2_000_000), without.row("s1", 2_000_000));
     }
 
     #[test]

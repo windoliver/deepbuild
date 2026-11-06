@@ -9,13 +9,12 @@ pub const MENU_BAR_TEMPLATE: &[u8] = include_bytes!("../../../brand/png/trayTemp
 pub const MENU_BAR_TEMPLATE_2X: &[u8] = include_bytes!("../../../brand/png/trayTemplate@2x.png");
 /// The title-bar mark: the small cut, for uses at 24 px and below.
 pub const TITLE_BAR_MARK: &[u8] = include_bytes!("../../../brand/symbol-small-ink.svg");
-/// The welcome screen's artwork: the stacked lockup in Ink, for a light ground.
+/// The welcome screen's artwork: the stacked lockup, tinted with the look's ink in the window's appearance (#1172).
 pub const WELCOME_LOCKUP: &[u8] = include_bytes!("../../../brand/lockup-stacked-ink.svg");
 
-/// `brand/palette.json`: Ink and Paper, the lockup's approved light ground. The kit's artwork is drawn in
-/// them, not the look's roles (#882), so the welcome screen and the title-bar mark show the kit as issued.
+/// `brand/palette.json`: Ink. The title-bar mark on the light bar is drawn in it, not the look's roles (#882), so it
+/// shows the kit as issued.
 pub const INK: u32 = 0x151619; // color-literal-exception: brand/palette.json's Ink, for the kit's artwork (#79); review 2027-04-30
-pub const PAPER: u32 = 0xF6F6F4; // color-literal-exception: brand/palette.json's Paper, for the kit's artwork (#79); review 2027-04-30
 
 /// The point size each use shows the D at; `brand/surfaces.json` records the same numbers.
 /// `MENU_BAR_PT` is an `f64` because it sizes an `NSSize`; the others size GPUI pixels.

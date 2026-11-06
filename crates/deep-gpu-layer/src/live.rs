@@ -16,12 +16,12 @@ use std::time::Instant;
 use deep_canvas::budget::{self, Class, Limits};
 use deep_canvas::camera::Offsets;
 use deep_canvas::document::check_in;
-use deep_effects_render::docops::{self, item_of_mark, DocOps, Drew};
 use deep_canvas::registry::{BuildSet, Registry, Sealed};
 use deep_canvas::show::{stamp, Writer, WriterKind};
 use deep_canvas_scene3d::frames::Frames;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::Labels;
+use deep_effects_render::docops::{self, item_of_mark, DocOps, Drew};
 use deep_gpu::cache::{self, Cache, Reader, Retired};
 
 /// A shared result: `test.gpu`'s texture or mesh in the test build, nothing otherwise.
@@ -70,7 +70,10 @@ pub struct Plants {
     canonical_climbs: bool,
     /// #429's: the emitter's and the check's planted programs; a render-back that draws
     /// live-only operators; a core that calls a frame drawn with a fallback settled.
-    ops: (deep_canvas_effects::emit::Options, deep_canvas_effects::check::CheckOptions),
+    ops: (
+        deep_canvas_effects::emit::Options,
+        deep_canvas_effects::check::CheckOptions,
+    ),
     render_back_live_only: bool,
     settles_with_fallback: bool,
 }
@@ -1258,7 +1261,13 @@ impl Live {
         // checked on the device; one the device rejects raises operator_compile to its writer.
         if let Some(v) = ses.view.as_mut() {
             let (options, planted) = self.plants.ops;
-            v.ops = DocOps::new(&self.device, &rev.doc, options, planted, &self.args.fail_pipelines);
+            v.ops = DocOps::new(
+                &self.device,
+                &rev.doc,
+                options,
+                planted,
+                &self.args.fail_pipelines,
+            );
             v.canonical_draws_live_only = self.plants.render_back_live_only;
             for i in v.ops.issues() {
                 if !ses.issues.contains(&i) {
@@ -1696,7 +1705,9 @@ impl Live {
                     })
                     .unwrap_or_default();
                 let settled = self.plants.settles_with_fallback
-                    || !ops.iter().any(|o| o.2 == Drew::Fallback.name() && self.failed(s, &o.0));
+                    || !ops
+                        .iter()
+                        .any(|o| o.2 == Drew::Fallback.name() && self.failed(s, &o.0));
                 self.views.push(ViewRow {
                     session: s,
                     binds,

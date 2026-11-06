@@ -1452,9 +1452,17 @@
     },
     "packages/config-eval/package.json": {
       "dependencies": {
+        "@deepbuild/gate": {
+          "spec": "0.0.0",
+          "why": "Issue #1108: a replayed call matches a recorded one by its input normalized as open items normalize error text (errorShape)."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #112: the eval compares its replays by the record's one comparison rule (compareReplay, planHash), which the learned layer's widening also uses."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #1108: a replayed agent runs in the platform sandbox (bubblewrap, Seatbelt), which refuses every host but its model endpoint and this machine."
         }
       },
       "devDependencies": {
