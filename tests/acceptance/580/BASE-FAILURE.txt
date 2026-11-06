@@ -1,0 +1,99 @@
+#580 acceptance tests, each file run once at the base commit d722ba3d929b368edb653682fd76926ae578aa74 (no implementation), 2026-11-05T23:43:30Z.
+Load: load averages: 66.08 68.68 56.33. Node v24.22.0. Docker 29.4.0.
+Every test fails for the missing surface: no stack.served event (the journey ran with no stack), or a hub that refuses the plant's name.
+
+=== start-steps.test.ts
+ FAIL  start-steps.test.ts > AC1 #580 a claim whose keys hold runs no start step but the app; one whose lockfile changed runs install, migrate and seed again > AC1 the first claim runs every start step, the second only the app with each step reused by its key, the third install, migrate and seed, and both installs stay kept
+Error: timed out after 120000 ms waiting for the journey's run in main; the hub (pid 89860) runs, its stderr ends ""
+ FAIL  start-steps.test.ts > AC1 #580 a claim whose keys hold runs no start step but the app; one whose lockfile changed runs install, migrate and seed again > AC1 (wrong program) an environment that reuses the install after the lockfile changed (DEEP_HUB_PLANT=env-reuses-stale-install) fails environment@1, naming the step and both keys
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=env-reuses-stale-install did not start: 580-2c68c8/agent-aad6b3270bd4b4e64/packages/hub/dist/plant.js:76
+Error: DEEP_HUB_PLANT=env-reuses-stale-install names no planted program
+      Tests  2 failed (2)
+   Duration  153.43s (tests 100%)
+
+=== isolation.test.ts
+ FAIL  isolation.test.ts > AC2 #580 three runs in a row on one warm stack each start from the seed's state > AC2 three runs each start with no orders and the visit counter at 0, show exactly 1 order, and share one warm stack with a database of their own
+Error: run:<id> (main) ended failed with no stack.served event: the stack's record is missing (findings: [".deepbuild/checks/orders.test.mjs (.deepbuild/checks/orders.test.mjs:1): unplaced: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'dh-wire' imported from /tmp/dh580-XXXXXX/h/.deepbuild/checkouts/c-G03kTj/.deepbuild/checks/orders.test.mjs"])
+ FAIL  isolation.test.ts > AC2 #580 three runs in a row on one warm stack each start from the seed's state > AC2 (wrong program) an environment that keeps one database across runs (DEEP_HUB_PLANT=env-keeps-database) shows 2 orders on the second run and fails environment@1, naming the database
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=env-keeps-database did not start: issue-580-2c68c8/agent-aad6b3270bd4b4e64/packages/hub/dist/plant.js:76
+Error: DEEP_HUB_PLANT=env-keeps-database names no planted program
+ FAIL  isolation.test.ts > AC2 #580 three runs in a row on one warm stack each start from the seed's state > AC2 (wrong program) an environment that keeps Redis running between runs (DEEP_HUB_PLANT=env-keeps-redis) fails environment@1, naming the service
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=env-keeps-redis did not start: ub-issue-580-2c68c8/agent-aad6b3270bd4b4e64/packages/hub/dist/plant.js:76
+Error: DEEP_HUB_PLANT=env-keeps-redis names no planted program
+      Tests  3 failed (3)
+   Duration  36.80s (tests 99%, transform 1%)
+
+=== images.test.ts
+ FAIL  images.test.ts > AC3 #580 an image built from app code is built again for each snapshot, and a bind-mounting service follows the run's checkout > AC3 a claim changing src/cart.ts builds web again with the checkout's digest in its record, and restarts db with its mount in the run's checkout and its volume and templates kept
+Error: run:<id> (main) ended failed with no stack.served event: the stack's record is missing (findings: ["web serves the claim's src/cart.ts (.deepbuild/checks/cart.test.mjs:1): unplaced: Failed to parse URL from http://127.0.0.1:undefined/release"])
+ FAIL  images.test.ts > AC3 #580 an image built from app code is built again for each snapshot, and a bind-mounting service follows the run's checkout > AC3 (wrong program) reusing the web image built from the previous snapshot (DEEP_HUB_PLANT=env-reuses-web-image) makes the run uncounted, naming the image
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=env-reuses-web-image did not start: sue-580-2c68c8/agent-aad6b3270bd4b4e64/packages/hub/dist/plant.js:76
+Error: DEEP_HUB_PLANT=env-reuses-web-image names no planted program
+ FAIL  images.test.ts > AC3 #580 an image built from app code is built again for each snapshot, and a bind-mounting service follows the run's checkout > AC3 (wrong program) leaving db mounted from the previous run's checkout (DEEP_HUB_PLANT=env-keeps-db-mount) makes the run uncounted, naming the mount
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=env-keeps-db-mount did not start: issue-580-2c68c8/agent-aad6b3270bd4b4e64/packages/hub/dist/plant.js:76
+Error: DEEP_HUB_PLANT=env-keeps-db-mount names no planted program
+      Tests  3 failed (3)
+   Duration  161.04s (tests 100%)
+
+=== store.test.ts
+ FAIL  store.test.ts > AC4 #580 a check's install and a worktree's come from the same kept copy > AC4 with node_modules for the lockfile in the product store, a claim's stack runs no install and its record names the entry and its key
+Error: run:<id> (main) ended failed with no stack.served event: the stack's record is missing (findings: [".deepbuild/checks/orders.test.mjs (.deepbuild/checks/orders.test.mjs:1): unplaced: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'dh-wire' imported from /tmp/dh580-XXXXXX/h/.deepbuild/checkouts/c-9Aoqea/.deepbuild/checks/orders.test.mjs"])
+ FAIL  store.test.ts > AC4 #580 a check's install and a worktree's come from the same kept copy > AC4 (wrong program) an environment that keeps installs in a second store of its own (DEEP_HUB_PLANT=env-second-install-store) fails this test, naming the duplicate folder
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=env-second-install-store did not start: 580-2c68c8/agent-aad6b3270bd4b4e64/packages/hub/dist/plant.js:76
+Error: DEEP_HUB_PLANT=env-second-install-store names no planted program
+      Tests  2 failed (2)
+   Duration  46.11s (tests 100%)
+
+=== caches.test.ts
+ FAIL  caches.test.ts > AC5 #580 a declared cache folder carries between runs, its digest in the record; build output never does > AC5 the second run finds .next/cache as the first left it, names its digest, and finds no .next build output
+Error: timed out after 120000 ms waiting for the journey's run in main; the hub (pid 77081) runs, its stderr ends ""
+ FAIL  caches.test.ts > AC5 #580 a declared cache folder carries between runs, its digest in the record; build output never does > AC5 (wrong program) an environment that clones .next whole (DEEP_HUB_PLANT=env-clones-next-whole) fails this test, naming the folder
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=env-clones-next-whole did not start: ue-580-2c68c8/agent-aad6b3270bd4b4e64/packages/hub/dist/plant.js:76
+Error: DEEP_HUB_PLANT=env-clones-next-whole names no planted program
+      Tests  2 failed (2)
+   Duration  220.15s (tests 100%)
+
+=== teardown.test.ts
+teardown.test.ts run again after a fix: on the first run its env-kills-by-port test passed, since that plant exists at the base and the port it looked for was still 0.
+ FAIL  teardown.test.ts > AC6 #580 a run removes only its own; the stack goes down by its token, and a stack whose cleanup didn't finish is never reused > AC6 a run's end removes its app, clone and copied volumes and leaves db answering; a change to docker-compose.yml and the session's end each tear
+Error: run:<id> (main) ended failed with no stack.served event: the stack's record is missing (findings: [".deepbuild/checks/orders.test.mjs (.deepbuild/checks/orders.test.mjs:1): unplaced: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'dh-wire' imported from /tmp/dh580-XXXXXX/h/.deepbuild/check
+ FAIL  teardown.test.ts > AC6 #580 a run removes only its own; the stack goes down by its token, and a stack whose cleanup didn't finish is never reused > AC6 when the supervisor can't prove a process of the run stopped, the stack is never reused and the next run starts on other leased ports, the pr
+Error: run:<id> (main) ended failed with no stack.served event: the stack's record is missing (findings: [".deepbuild/checks/orders.test.mjs (.deepbuild/checks/orders.test.mjs:1): unplaced: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'dh-wire' imported from /tmp/dh580-XXXXXX/h/.deepbuild/check
+ FAIL  teardown.test.ts > AC6 #580 a run removes only its own; the stack goes down by its token, and a stack whose cleanup didn't finish is never reused > AC6 (wrong program) an environment that stops a run's app by its port (DEEP_HUB_PLANT=env-kills-by-port) fails this test, naming the port
+AssertionError: the scenario formed: a run held its web port with the helper beside it (it ended: run:<id> (main) ended failed with no stack.served event: the stack's record is missing (findings: [".deepbuild/checks/orders.test.mjs (.deepbuild/checks/orders.test.mjs:1): unplaced: Error [ERR_MODULE_N
+      Tests  3 failed (3)
+   Duration  19.67s (tests 99%, transform 1%)
+
+=== pool.test.ts
+ FAIL  pool.test.ts > AC7 #580 a full pool reclaims a warm stack with no pending claim, an idle session's first, and otherwise a check waits > AC7 with stack.slot at 2, C reclaims idle A's stack and starts, D waits with the wait in its expected time until B's verdict lands and B's stack is reclaimed, and nobody is asked
+Error: timed out after 180000 ms waiting for the ask "make the cart total round each line to cents, change 1 in wt-a" to open a task with a locked definition; the hub (pid 22120) runs, its stderr ends ""
+ FAIL  pool.test.ts > AC7 #580 a full pool reclaims a warm stack with no pending claim, an idle session's first, and otherwise a check waits > AC7 (wrong program) a pool that reclaims B's stack while its journey runs (DEEP_HUB_PLANT=pool-reclaims-running) fails this test, naming B
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=pool-reclaims-running did not start: ue-580-2c68c8/agent-aad6b3270bd4b4e64/packages/hub/dist/plant.js:76
+Error: DEEP_HUB_PLANT=pool-reclaims-running names no planted program
+      Tests  2 failed (2)
+   Duration  319.41s (tests 100%)
+
+=== lanes.test.ts
+ FAIL  lanes.test.ts > AC8 #580 a stack starts only for a run that may start > AC8 a green stop answered "proceed" runs no start step and starts no app, and with the lockfile changed no install runs until a later stop's reply ends the turn
+Error: run:<id> (main) ended failed with no stack.served event: the stack's record is missing (findings: [".deepbuild/checks/orders.test.mjs (.deepbuild/checks/orders.test.mjs:1): unplaced: Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'dh-wire' imported from /tmp/dh580-XXXXXX/h/.deepbuild/checkouts/c-0g48Z4/.deepbuild/checks/orders.test.mjs"])
+ FAIL  lanes.test.ts > AC8 #580 a stack starts only for a run that may start > AC8 (wrong program) an environment that starts the stack, or installs, at every claim (DEEP_HUB_PLANT=env-starts-at-every-claim) fails this test, naming the stop
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=env-starts-at-every-claim did not start: 80-2c68c8/agent-aad6b3270bd4b4e64/packages/hub/dist/plant.js:76
+Error: DEEP_HUB_PLANT=env-starts-at-every-claim names no planted program
+      Tests  2 failed (2)
+   Duration  93.10s (tests 99%, transform 1%)
+
+=== budgets.test.ts
+ FAIL  budgets.test.ts > AC9 #580 a warm run stays near the repo's own start > AC9 a run on unchanged keys is ready within 5 s plus the app's own start; cloning the 50 MB template takes under 1 s; kept products add under 2 GB
+Error: timed out after 120000 ms waiting for the journey's run in main; the hub (pid 7669) runs, its stderr ends ""
+      Tests  1 failed (1)
+   Duration  147.26s (tests 100%)
+
+=== sandbox.test.ts
+ FAIL  sandbox.test.ts > AC10 #580 a run's sandboxed processes reach only their own stack's leased ports on loopback > AC10 a test in C that connects to A's database port is refused, the refusal recorded on its run naming A's lease, and A's orders table is unchanged
+Error: timed out after 120000 ms waiting for the journey's run in wt-a; the hub (pid 30479) runs, its stderr ends ""
+ FAIL  sandbox.test.ts > AC10 #580 a run's sandboxed processes reach only their own stack's leased ports on loopback > AC10 (wrong program) a sandbox that admits any loopback port (DEEP_HUB_PLANT=sandbox-any-loopback) lets C's test insert a row into A's database and fails, naming the port
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=sandbox-any-loopback did not start: sue-580-2c68c8/agent-aad6b3270bd4b4e64/packages/hub/dist/plant.js:76
+Error: DEEP_HUB_PLANT=sandbox-any-loopback names no planted program
+      Tests  2 failed (2)
+   Duration  139.20s (tests 100%)
+

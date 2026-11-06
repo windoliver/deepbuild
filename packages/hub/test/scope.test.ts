@@ -40,7 +40,7 @@ it('#324 a held stop, or one past its reply, sends nothing back and spends nothi
   const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
   open.push(record);
   const scope = new SizeScope({
-    raw: (query, params) => record.raw(query, params), append: (connection, input) => record.append(connection, input),
+    raw: (query, params) => record.raw(query, params), append: async (connection, input) => { await record.append(connection, input); },
     connection: (session) => ({ writer: 'core', actor: 'you', scope: 'you', session }), now: Date.now,
     asks: () => { throw Error('no ask is raised in this test'); }, pin: async () => ({ kind: 'evidence', ref: '0'.repeat(64) }), keep: async () => '0'.repeat(64),
     scopeOf: async () => ({ kind: 'feature', plan: null }), evidence: dir, accepted: join(dir, 'accepted.json'),
