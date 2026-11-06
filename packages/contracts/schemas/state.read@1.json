@@ -1,0 +1,176 @@
+{
+  "title": "state.read@1",
+  "description": "What a workspace's state sources read (#67), at a definition's lock, at a claim or at a drift, by digest: each reading's items are in the evidence store under that digest, and what a check pinned on it is the verdict's state_digests. Only the core appends it.",
+  "x-since": "R2",
+  "x-stability": "preview",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "state.read"
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "workspace": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z]+$",
+          "description": "The workspace's project id.",
+          "maxLength": 8192
+        },
+        "task_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The task it was read for.",
+          "maxLength": 8192
+        },
+        "claim": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The claim it was read for; null at the lock.",
+          "maxLength": 8192
+        },
+        "readings": {
+          "type": "array",
+          "description": "One reading per touch read.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "touch": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The touch, as the workspace names it.",
+                "maxLength": 8192
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The state source that read it.",
+                "maxLength": 8192
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "description": "The SHA-256 of its items.",
+                "maxLength": 8192
+              }
+            },
+            "required": [
+              "touch",
+              "source",
+              "digest"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "reads": {
+          "type": "array",
+          "description": "Which touches each requirement's check reads, from the definition.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "req": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The requirement's ID in its definition.",
+                "maxLength": 8192
+              },
+              "check": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Its check.",
+                "maxLength": 8192
+              },
+              "touches": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "description": "The touches it reads."
+              }
+            },
+            "required": [
+              "req",
+              "check",
+              "touches"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "workspace",
+        "task_ref",
+        "claim",
+        "readings",
+        "reads"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
