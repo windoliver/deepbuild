@@ -195,6 +195,32 @@ pub fn align(
     Ok((pins, moved))
 }
 
+/// Once the markers re-place with the pins in, each pinned marker must still sit on its anchor:
+/// one that doesn't was pinned to a marker placed from it, which moved on, so it is BLOCKED.
+pub(crate) fn landed(
+    doc: &Map<String, Value>,
+    markers: &[Marker],
+    tempo: Option<&Tempo>,
+    pins: &BTreeMap<String, i64>,
+) -> Result<(), Refused> {
+    let (again, _) = align(doc, markers, tempo)?;
+    let Some((marker, to)) = pins.iter().find(|(m, to)| again.get(*m) != Some(to)) else {
+        return Ok(());
+    };
+    let id = doc
+        .get("cue_align")
+        .and_then(Value::as_object)
+        .and_then(|cues| {
+            cues.iter()
+                .find(|(_, c)| c.get("cue").and_then(Value::as_str) == Some(marker))
+        })
+        .map_or(marker.as_str(), |(id, _)| id.as_str());
+    Err(blocked(
+        id,
+        format!("`{marker}` pinned at {to} flicks is off its anchor once the markers placed from it move with it"),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::doc::read;
@@ -271,6 +297,12 @@ mod tests {
                 "{cues}"
             );
         }
+        // `echo` is written after `hit`, so pinning `hit` to it moves it on: refused, not landed.
+        let r = refused(json!({"c": {"cue": "hit", "anchor": "marker"}}));
+        assert_eq!(
+            (r.code, r.detail.as_ref().map(|d| d["cue"].clone())),
+            ("cue_blocked", Some(json!("c")))
+        );
         // Without a snap, a cue within its tolerance is checked and left where it is.
         let d =
             doc(json!({"c": {"cue": "hit", "anchor": "beat", "snap": false, "tolerance": "0.2s"}}));
