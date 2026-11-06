@@ -215,10 +215,12 @@ export class GateRunner {
   }
   /** The stem of a check's key on a claim: on the merge base when `base` names it (#1018). */
   private async stemOf(c: Claim, e: Entry, base: string | null): Promise<string> {
-    // A base run's tree is the merge base's with the check's own files, so the snapshot's names say nothing of it.
+    // A base run's tree is the merge base's with the check's own files, so the snapshot's names say nothing of it. A
+    // workspace's check reads its state (#67): a base run the reading pinned at the lock, a head run the one now.
+    const state = base === null ? c.state?.files : c.state?.pinned;
     return stemOf({
       repo: await c.repo, check: e.check.check, approved: e.check.approved, command: e.check.command, deadline_ms: e.check.deadline_ms ?? null, held_out: e.check.held_out ?? null, references: e.check.references ?? null,
-      installs: await c.installs, names: base === null ? await c.names : null, base,
+      installs: await c.installs, names: base === null ? await c.names : null, base, ...(state ? { state } : {}),
       ...(this.o.plant === 'keys-runs-by-session' ? { session: c.session } : {}),
     });
   }

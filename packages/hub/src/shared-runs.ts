@@ -80,9 +80,9 @@ export async function namesOf(dir: string): Promise<string> {
   await walk('');
   return sha(out.sort().join('\0'));
 }
-/** The stem of a key: everything but the files' contents. */
-export const stemOf = (facts: { repo: string; check: string; approved: string | null; command: string; deadline_ms: number | null; held_out: unknown; references?: unknown; installs: string; names: string | null; base: string | null; session?: string }): string =>
-  sha(JSON.stringify([facts.repo, hostname(), facts.check, facts.approved, facts.command, facts.deadline_ms, facts.held_out ?? null, facts.references ?? null, facts.installs, facts.names, facts.base, facts.session ?? null]));
+/** The stem of a key: everything but the files' contents, and a workspace's state reading (#67) where a claim has one. */
+export const stemOf = (facts: { repo: string; check: string; approved: string | null; command: string; deadline_ms: number | null; held_out: unknown; references?: unknown; installs: string; names: string | null; base: string | null; session?: string; state?: Record<string, string> }): string =>
+  sha(JSON.stringify([facts.repo, hostname(), facts.check, facts.approved, facts.command, facts.deadline_ms, facts.held_out ?? null, facts.references ?? null, facts.installs, facts.names, facts.base, facts.session ?? null, ...facts.state ? [facts.state] : []]));
 /** How run.finished names a failure among its findings, at most FINDINGS of them, and how a restarted hub reads one back. */
 export const FINDINGS = 20;
 const FINDING = /^(.*) \(([^()]*):(\d+)\): ([\s\S]*)$/;
