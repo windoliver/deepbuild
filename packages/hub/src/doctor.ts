@@ -100,7 +100,8 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   if (socket) {
     answering = await hubAnswers(socket);
     if (answering) add('hub.socket', 'deepbuild', 'healthy', 'ok', `the hub answers at unix:${socket}`, 'Nothing to do.');
-    else add('hub.socket', 'deepbuild', 'hub_unreachable', 'fail', `no hub answers at unix:${socket}`, 'Run `deep hub start`; deep setup installs it as a login service.');
+    // Before setup, `deep hub start` would start a hub that no hook reaches: setup adds the hooks and starts it.
+    else add('hub.socket', 'deepbuild', 'hub_unreachable', 'fail', `no hub answers at unix:${socket}`, installed(root) ? 'Run `deep hub start`; deep setup installs it as a login service.' : 'Run `deep setup`, which adds the hooks and starts the hub at login.');
   }
   // The hub's background jobs (#909): one failing at its third run in a row or later, each with when the row began.
   if (answering) {

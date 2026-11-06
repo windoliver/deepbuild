@@ -19,7 +19,7 @@ const files = (args) => run('git', [...args, '-z']).split('\0').filter(Boolean);
 const blocked = (message, fix) => Object.assign(Error(message), { fix });
 const regressed = 'Restore the regressed budget; budgets are frozen once they reach main.';
 // Where every result's instructions retired came from; GNU time has no counter.
-const counter = process.platform === 'darwin' ? '/usr/bin/time -l: instructions retired' : null;
+const counter = process.platform === 'darwin' ? '/usr/bin/time -l and scripts/count-children.c: instructions retired, children included' : null;
 // Each side's copy lives at the same path every run, in this user's cache directory under a name
 // for this machine and clone, not for a checkout, with its Cargo builds kept beside it, so a preflight
 // from any worktree, a new one too, doesn't rebuild what the last run on the machine built (#594, #1119).
@@ -232,7 +232,7 @@ function checkCopy(directory, timeoutMs) {
   symlinkSync(process.env.CARGO_TARGET_DIR, join(directory, 'target'), 'dir');
   run('npm', ['ci', '--no-audit', '--no-fund'], directory);
   warm(directory);
-  return measureOnce([process.execPath, 'scripts/checks.mjs'], directory, false, timeoutMs);
+  return measureOnce([process.execPath, 'scripts/checks.mjs'], directory, false, timeoutMs, false);
 }
 // perf is a measured run: it holds timed from before its timer to its end, so its
 // kept copies and lock are taken only under timed. Under a preflight's grant it passes through on it.
@@ -332,7 +332,7 @@ try {
       samples = measure(budget.command, root, established && { command: established.command, cwd: archive });
       // Each limit is judged on five timed runs after one untimed warm-up run.
       const once = () => {
-        const result = measureOnce(budget.command, root);
+        const result = measureOnce(budget.command, root, false, undefined, false);
         if (result.status !== 0) throw Error(`${budget.command[0]} exited ${result.status}: ${result.output}`);
         return result;
       };
@@ -346,7 +346,7 @@ try {
     const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine })]));
     // Instructions retired don't move with load, so this comparison holds on any machine; it never
     // changes a limit's verdict.
-    const instructions = then && judgeInstructions(now.instructions.map((current, round) => ({ current, base: then.instructions[round] })));
+    const instructions = then && judgeInstructions(now.instructions.map((current, round) => ({ current, base: then.instructions[round] })), [...new Set([...now.uncounted, ...then.uncounted])]);
     let outcome;
     try {
       // compare holds only the merge-base regression here; the limits are judged above.
@@ -363,7 +363,7 @@ try {
       if (verdict.status !== 'PASS') verdicts.push([verdict.status, `${budget.id}: targets: ${verdict.reason}`, `Bring ${budget.id} back within its targets in ${manifest}, on a release build.`]);
     }
     if (instructions?.status === 'FAIL') verdicts.push(['FAIL', `${budget.id}: instructions: ${instructions.reason}`, `Bring ${budget.id}'s instructions retired back within the margin of the merge base's.`]);
-    if (instructions?.status === 'INCONCLUSIVE') verdicts.push(['INCONCLUSIVE', `${budget.id}: instructions: ${instructions.reason}`, "Run perf on macOS, whose /usr/bin/time -l reports instructions retired."]);
+    if (instructions?.status === 'INCONCLUSIVE') verdicts.push(['INCONCLUSIVE', `${budget.id}: instructions: ${instructions.reason}`, instructions.uncounted.length ? "Have the budget's command wait for each child it starts, from a process that isn't a platform binary such as /bin/sh." : "Run perf on macOS, whose /usr/bin/time -l reports instructions retired."]);
     for (const [metric, { status, reason }] of Object.entries(limits)) {
       if (status === 'PASS') continue;
       const fix = status === 'BLOCKED' ? 'Repair the measured command so each run reports this metric.'

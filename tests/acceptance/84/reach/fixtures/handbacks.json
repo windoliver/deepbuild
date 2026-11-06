@@ -1,0 +1,27 @@
+{
+  "note": "The month's recorded hand-backs (README, The replay), one per session: each a step an agent left to a person at the end of its turn, shaped on adapters/corpus's Stop payloads (`stop`) and the facts' request_user_input card (`card`). `tools` lists what the check can find for it in `reach`. Each hand-back words its step in prose: the tool's name is never in the agent's words, so a reply that names it is no echo, and no backticked command follows the word run, since the hub runs such a command (#323). A sample of 10, 2 of each class the criterion names.",
+  "reach": {
+    "tools": [
+      { "name": "computer-use", "kind": "computer" },
+      { "name": "gh", "kind": "cli", "provider": "github", "signed_in": true },
+      { "name": "vercel", "kind": "cli", "provider": "vercel", "signed_in": true },
+      { "name": "mcp__postgres__query", "kind": "mcp", "connector": "postgres", "read_only": true, "reads": ["orders", "refunds"] }
+    ],
+    "profiles": [],
+    "credentials": [{ "secret": "STRIPE_API_KEY", "provider": "stripe" }, { "secret": "SENTRY_AUTH_TOKEN", "provider": "sentry" }],
+    "grants": [],
+    "access": []
+  },
+  "handbacks": [
+    { "id": "keys-1", "class": "keys by reference", "agent": "claude-code", "stop": "unblock: please paste the Stripe key so the payment check can run.", "tools": ["STRIPE_API_KEY"] },
+    { "id": "keys-2", "class": "keys by reference", "agent": "claude-code", "stop": "unblock: I need you to export the Sentry token before the release check runs.", "tools": ["SENTRY_AUTH_TOKEN"] },
+    { "id": "computer-1", "class": "computer use", "agent": "claude-code", "stop": "unblock: click Allow in the Simulator's location dialog, then the journey can go on.", "tools": ["computer-use"] },
+    { "id": "computer-2", "class": "computer use", "agent": "claude-code", "stop": "unblock: open the app and press the Export button so the check sees the file.", "tools": ["computer-use"] },
+    { "id": "cli-1", "class": "signed-in CLIs", "agent": "claude-code", "stop": "unblock: please pull the Vercel env on your side; the preview check needs its output.", "tools": ["vercel"] },
+    { "id": "cli-2", "class": "signed-in CLIs", "agent": "claude-code", "stop": "unblock: please list the GitHub secrets for me and tell me what shows.", "tools": ["gh"] },
+    { "id": "data-1", "class": "data the agent can query", "agent": "claude-code", "stop": "unblock: please send me the failing row from the orders table.", "tools": ["mcp__postgres__query"] },
+    { "id": "data-2", "class": "data the agent can query", "agent": "claude-code", "stop": "unblock: can you look up how many refunds came in last week in the refunds table?", "tools": ["mcp__postgres__query"] },
+    { "id": "codex-1", "class": "Codex sign-in cards", "agent": "codex", "card": { "id": "signin", "header": "Sign in", "question": "Sign in to GitHub so I can read the failing run?", "options": ["I signed in", "Skip it"] }, "tools": ["gh"] },
+    { "id": "codex-2", "class": "Codex sign-in cards", "agent": "codex", "card": { "id": "signin", "header": "Sign in", "question": "Sign in to Vercel so I can pull the preview's env?", "options": ["I signed in", "Skip it"] }, "tools": ["vercel"] }
+  ]
+}

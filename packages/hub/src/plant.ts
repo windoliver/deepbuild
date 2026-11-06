@@ -23,7 +23,18 @@ export type Plant =
   | 'matches-text' | 'fail-closed-only-rules' | 'installs-unchecked' | 'trusts-hints' | 'warn-as-block'
   // #1097's: a warn entry a call meets only through what couldn't be read of it decides as block.
   | 'unknown-as-block'
+  // #84's defaults: an ask naming any effect covers all, every prompt counts whatever its `from`, the hub reads the
+  // command line as text, and `--auto` needs no commit and holds no branch.
+  | 'ask-covers-every-effect' | 'reads-every-from' | 'defaults-match-text' | 'auto-merge-unpinned'
+  // #84's sorter: a proceed with no record, an ask keyed from a question's words, a send-back a question should hold,
+  // a hold on every ask, a proceed that drops what fails, a task sent back naming no tool, a switch only recorded, a link to an agent's URL.
+  | 'proceed-unrecorded' | 'keys-ask-from-words' | 'sends-back-held-stop' | 'holds-every-ask' | 'proceed-alone' | 'sends-back-no-tool' | 'records-switch-only' | 'link-from-agent-url'
   // #19's, which only its twins select: the proof lanes' wrong programs for tests no plant above reaches.
+  // #580's: an environment that reuses a stale install, keeps a database, Redis, a web image or a mount across runs,
+  // keeps installs in a store of its own, clones build output, or starts its stack at every claim; a pool that
+  // reclaims a stack whose journey runs; and a sandbox that admits any loopback port.
+  | 'env-reuses-stale-install' | 'env-keeps-database' | 'env-keeps-redis' | 'env-reuses-web-image' | 'env-keeps-db-mount' | 'env-second-install-store'
+  | 'env-clones-next-whole' | 'env-starts-at-every-claim' | 'pool-reclaims-running' | 'sandbox-any-loopback'
   | 'bundle-raw-logs' | 'doctor-hides-token' | 'doctor-not-checked-first' | 'doctor-takes-any-flag' | 'stop-hold-wide-margin'
   | 'answer-skips-held-stop' | 'stop-hold-releases-without-answer' | 'both-routes' | 'stop-hold-polls' | 'no-stop-count' | 'stop-count-never-resets'
   | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-under-stop-only' | 'waiter-polls' | 'waiter-checks-every-5s'
@@ -60,6 +71,8 @@ export type Plant =
   | 'counts-every-enqueue' | 'slow-brief' | 'app-note-answers-authority'
   // #347's: a stager with no ceiling on files or seconds, and one that stages every shell call whose writes it can't predict.
   | 'stages-without-ceiling' | 'stages-unpredicted-writes'
+  // #1156's: a stager that records its staging and runs the script with no copy behind it.
+  | 'stages-without-copy'
   // #1294's: a stager whose class covers only untracked and ignored files, and one that copies on a clean tree too.
   | 'stages-untracked-only' | 'stages-clean-tree'
   // #356's: pages rewritten each run, a deleted line relearned, values copied, merging by name or never, everything read again, a
@@ -133,11 +146,16 @@ export type Plant =
   // ignores the builds running beside it.
   | 'jobserver-per-build' | 'refills-while-running' | 'share-ignores-running-build'
   // #65's: channels that take a channel's word, or cross one channel's trouble over to another.
-  | 'trusts-channel-proof' | 'last-writer-wins' | 'live-buttons-after-answer' | 'closes-on-failed-send' | 'takes-turns-at-token' | 'reconnects-every-channel' | 'buttons-for-authority' | 'keeps-unpaired-key';
+  | 'trusts-channel-proof' | 'last-writer-wins' | 'live-buttons-after-answer' | 'closes-on-failed-send' | 'takes-turns-at-token' | 'reconnects-every-channel' | 'buttons-for-authority' | 'keeps-unpaired-key'
+  // #1018's: runs keyed by session too, a key without the files runs read, a shared run counted once per claim that
+  // reads it, a store of the newest result per key, and a carry that copies the source run's evidence whole.
+  | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
   'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project', 'env-clone-without-record',
+  'env-reuses-stale-install', 'env-keeps-database', 'env-keeps-redis', 'env-reuses-web-image', 'env-keeps-db-mount', 'env-second-install-store',
+  'env-clones-next-whole', 'env-starts-at-every-claim', 'pool-reclaims-running', 'sandbox-any-loopback',
   'stops-at-first-bad-line', 'remove-spool-after-normal', 'drops-post-tool-use', 'replay-appends-twice',
   'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline',
   'evidence-checks-path-first', 'binds-first-stamp', 'unbound-reads-all', 'errors-without-actual', 'errors-unscrubbed', 'trusts-index',
@@ -165,7 +183,7 @@ const PLANTS: readonly string[] = [
   'app-note-unrecorded', 'app-note-as-person',
   'brief-full-text', 'brief-at-startup-only', 'queue-shows-newest', 'continuation-as-person', 'continuation-by-likeness',
   'counts-every-enqueue', 'slow-brief', 'app-note-answers-authority',
-  'stages-without-ceiling', 'stages-unpredicted-writes',
+  'stages-without-ceiling', 'stages-unpredicted-writes', 'stages-without-copy',
   'stages-untracked-only', 'stages-clean-tree',
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
   'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',
@@ -196,7 +214,10 @@ const PLANTS: readonly string[] = [
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
   'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
+  'ask-covers-every-effect', 'reads-every-from', 'defaults-match-text', 'auto-merge-unpinned',
+  'proceed-unrecorded', 'keys-ask-from-words', 'sends-back-held-stop', 'holds-every-ask', 'proceed-alone', 'sends-back-no-tool', 'records-switch-only', 'link-from-agent-url',
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
+  'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

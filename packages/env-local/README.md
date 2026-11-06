@@ -6,9 +6,9 @@ The first-party environment (#331), an environment@1 fill. It starts the repo's 
 
 ## Where new code goes
 
-- `src/index.ts`: the whole environment (`upStack`, compose handling, port and resource kinds).
+- `src/index.ts`: the public entry. `src/stack.ts`: a worktree's stack (`upStack`, compose handling, port and resource kinds). `src/warm.ts`: a check's warm stack (#580): start steps kept by their inputs' digests, a template each run clones, and only the app started from each run's checkout.
 - Every process start, signal and wait goes through host@1; never spawn, signal or wait for one here. `docker compose up` and `down` go through the host too.
-- Tests: `src/index.test.ts`, beside the source; the acceptance suites are `tests/acceptance/331/` and the environment@1 kit in `@deepbuild/conformance`.
+- Tests: `src/index.test.ts`, beside the source; the acceptance suites are `tests/acceptance/331/`, `tests/acceptance/580/` and the environment@1 kit in `@deepbuild/conformance`.
 
 ## What it may import
 

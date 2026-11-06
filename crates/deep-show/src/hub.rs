@@ -1304,7 +1304,7 @@ impl<'a> Hub<'a> {
         let (issues, imported) = deep_canvas_vector::check(
             map,
             |sha| (sha.len() == 64).then(|| std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()).flatten(),
-            false,
+            deep_canvas_vector::svg::Twin::Honest,
         );
         let Some(Value::Object(items)) = map.get_mut("items") else { return issues };
         for (id, found) in &imported {

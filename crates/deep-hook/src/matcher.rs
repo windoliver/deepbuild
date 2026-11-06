@@ -31,12 +31,14 @@
 //!   uncommitted edits to tracked files: a hard reset, a path checkout or restore, a forced switch, `rm` or
 //!   `worktree remove`, `read-tree -u --reset`, `checkout-index -f`, or `--abort` or `--skip` of a merge, rebase,
 //!   cherry-pick, revert or am), `drop-stash`
-//!   (`git stash drop` or `clear`), or one that needs your authority (#321): `push` (`git push`), `merge` (`gh pr merge`), `dispatch` (what `dispatch:workflow` reads),
+//!   (`git stash drop` or `clear`), or one that needs your authority (#321): `push` (`git push`), `pr` (`gh pr create`, #84), `merge` (`gh pr merge` or `gh api` on a pull request's merge endpoint), `dispatch` (what `dispatch:workflow` reads),
 //!   `send` (`gh pr comment`, `gh issue comment`, `gh pr review`, or a `gh api` POST of a comment, a review
 //!   comment's reply or a review) or `delete` (`gh repo delete`,
 //!   `gh release delete`, `gh issue delete`).
 //! - `counts:<class>`: the tool counts as `read`, `change`, `send` or `destructive`, by the classes rules.json
 //!   holds; a tool they don't list counts as change, and one whose name starts with `delete_` as destructive.
+//! - `unread:<effect>`: the reader couldn't read the call whole and it may have that effect class. A call it reads
+//!   whole never matches, so a plain push goes on to the authority gate while one nobody can read is denied (#1156).
 //!
 //! A call the reader couldn't read whole meets every entry it may be one of (#1097): a run whose program the line
 //! computes meets a `run:` entry whose argument globs its arguments fit and an `effect:` class whose words they fit,
@@ -49,7 +51,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::shell::{self, glob, lexical, real, Arg, Run, Unread};
+use crate::shell::{self, glob, lexical, real, same_name, Arg, Run, Unread};
 
 /// What deep-hook reads from one call: the runs of its shell command and the paths it writes.
 pub struct Call {
@@ -88,6 +90,7 @@ const EFFECTS: &[&str] = &[
     "discard-edits",
     "drop-stash",
     "push",
+    "pr",
     "merge",
     "dispatch",
     "send",
@@ -122,7 +125,7 @@ pub fn known(pattern: &str) -> bool {
         "git" => rest == "stash-unnamed" || rest == "other-checkout",
         "read" => !rest.is_empty(),
         "hub" => rest == "stop" || rest == "service",
-        "effect" => EFFECTS.contains(&rest),
+        "effect" | "unread" => EFFECTS.contains(&rest),
         "counts" => CLASSES.contains(&rest),
         _ => false,
     }
@@ -214,7 +217,7 @@ impl Call {
                 let wanted: Vec<&str> = rest.split_whitespace().skip(1).collect();
                 args_match(run, &wanted)
             }
-            Some(Unread::Program) if kind == "effect" => programs(rest).iter().any(|p| {
+            Some(Unread::Program) if kind == "effect" || kind == "unread" => programs(rest).iter().any(|p| {
                 let known = Run {
                     program: p.to_string(),
                     glob: false,
@@ -267,7 +270,7 @@ impl Call {
                 .and_then(|_| hit(None)),
             "run" => {
                 let mut words = rest.split_whitespace();
-                let program = words.next()?.to_lowercase();
+                let program = same_name(words.next()?).to_lowercase();
                 let wanted: Vec<&str> = words.collect();
                 self.runs
                     .iter()
@@ -519,6 +522,8 @@ impl Call {
                 )
             } else if class == "discard-edits" || class == "drop-stash" {
                 format!("To run it yourself: {}", command_of(run))
+            } else if class == "merge" {
+                merge_read(run)
             } else {
                 format!("It runs: {}", command_of(run))
             };
@@ -557,8 +562,9 @@ impl Call {
         } else {
             vec![lexical(written), real(written)]
         };
+        let patterns: Vec<String> = patterns.iter().map(|p| same_name(p)).collect();
         forms.iter().any(|form| {
-            let text = form.to_string_lossy();
+            let text = same_name(&form.to_string_lossy());
             patterns.iter().any(|p| {
                 if anchored {
                     glob_path(p.as_bytes(), text.as_bytes())
@@ -636,7 +642,7 @@ fn plain<'a>(words: &[&'a str]) -> Vec<&'a str> {
 fn stops_service(run: &Run) -> bool {
     let words = run.words();
     let sub = plain(&words).first().copied().unwrap_or("");
-    let names = |name: &str| words.iter().any(|w| w.contains(name));
+    let names = |name: &str| words.iter().any(|w| same_name(w).contains(name));
     (run.is("launchctl")
         && matches!(
             sub,
@@ -718,7 +724,8 @@ fn has_effect(run: &Run, class: &str) -> bool {
         "discard-edits" => discards(run),
         "drop-stash" => drops_stash(run),
         "push" => run.is("git") && git_rest(run).first().map(String::as_str) == Some("push"),
-        "merge" => gh(run, &[&["pr", "merge"]]),
+        "pr" => gh(run, &[&["pr", "create"]]),
+        "merge" => gh(run, &[&["pr", "merge"]]) || merge_endpoint(run).is_some(),
         "dispatch" => dispatch(run).is_some(),
         "send" => {
             gh(
@@ -755,7 +762,7 @@ fn programs(class: &str) -> &'static [&'static str] {
         "unknown-reach-delete" => &["rm", "unlink", "shred", "srm", "find", "git", "rsync"],
         "push" | "discard-edits" | "drop-stash" => &["git"],
         "dispatch" => &["gh", "curl", "wget"],
-        "merge" | "send" | "delete" => &["gh"],
+        "pr" | "merge" | "send" | "delete" => &["gh"],
         _ => &[],
     }
 }
@@ -981,6 +988,57 @@ fn gh(run: &Run, subs: &[&[&str]]) -> bool {
     run.is("gh") && subs.iter().any(|s| plain.len() >= 2 && plain[..2] == **s)
 }
 
+/// The word of `gh api` naming a pull request's merge endpoint, `repos/<owner>/<repo>/pulls/<n>/merge`.
+fn merge_endpoint<'a>(run: &'a Run) -> Option<&'a str> {
+    if !run.is("gh") {
+        return None;
+    }
+    let words = run.words();
+    let at = words.iter().position(|w| !w.starts_with('-'))?;
+    if words[at] != "api" {
+        return None;
+    }
+    words[at + 1..].iter().copied().find(|w| {
+        let parts: Vec<&str> = w.trim_matches('/').split('/').collect();
+        parts.len() >= 3
+            && parts[parts.len() - 1] == "merge"
+            && parts[parts.len() - 3] == "pulls"
+            && parts[parts.len() - 2].parse::<u64>().is_ok()
+    })
+}
+
+/// What a merge names, as the hub reads it from the entry's note (#84): `merge pr=12 head=<sha> auto disable`, each
+/// part only when the call has it. One commit, for `--match-head-commit` or the API's `sha` field.
+fn merge_read(run: &Run) -> String {
+    let words = run.words();
+    let value = |flag: &str| {
+        words.iter().enumerate().find_map(|(k, w)| {
+            w.strip_prefix(&format!("{flag}=")).or_else(|| (*w == flag).then(|| words.get(k + 1).copied()).flatten())
+        })
+    };
+    let field = words.iter().find_map(|w| w.strip_prefix("sha="));
+    let api = merge_endpoint(run);
+    let pr = match api {
+        Some(path) => path.trim_matches('/').rsplit('/').nth(1),
+        None => plain(&words).get(2).copied(),
+    };
+    let head = if api.is_some() { field } else { value("--match-head-commit") };
+    let mut read = String::from("merge");
+    if let Some(pr) = pr {
+        read.push_str(&format!(" pr={pr}"));
+    }
+    if let Some(head) = head {
+        read.push_str(&format!(" head={head}"));
+    }
+    if words.contains(&"--auto") {
+        read.push_str(" auto");
+    }
+    if words.contains(&"--disable-auto") {
+        read.push_str(" disable");
+    }
+    read
+}
+
 /// A command that adds a package: one it names, not a reinstall of the lockfile's.
 fn adds_dependency(run: &Run) -> bool {
     let words = run.words();
@@ -1036,9 +1094,10 @@ fn args_match(run: &Run, wanted: &[&str]) -> bool {
         if want.starts_with('-') {
             words.iter().any(|w| glob(want.as_bytes(), w.as_bytes()))
         } else {
+            // A word may be a path, read as the Mac reads it; an option's case is its meaning.
             plain
                 .next()
-                .is_some_and(|w| glob(want.as_bytes(), w.as_bytes()))
+                .is_some_and(|w| glob(same_name(want).as_bytes(), same_name(w).as_bytes()))
         }
     })
 }
@@ -1465,6 +1524,15 @@ mod tests {
     }
 
     #[test]
+    fn unread_matches_only_a_call_the_reader_couldnt_read_whole() {
+        assert!(known("unread:push") && !known("unread:nothing"));
+        let hit = bash("\"$(printf git)\" push origin main").matches("unread:push").unwrap();
+        assert!(hit.detail.unwrap().contains("couldn't be read"));
+        assert!(bash("git push origin main").matches("unread:push").is_none());
+        assert!(bash("\"$CC\" -o app main.c").matches("unread:push").is_none());
+    }
+
+    #[test]
     fn a_call_read_in_part_meets_the_entries_it_may_be() {
         for line in [
             "\"$(printf git)\" push origin main",
@@ -1541,6 +1609,110 @@ mod tests {
         assert!(bash("echo x > /h/.deepbuild/workspaces/a")
             .matches(m)
             .is_none());
+    }
+
+    /// Paths under a folder that isn't there, so nothing resolves them on disk.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_name_the_mac_takes_for_a_guarded_one_is_guarded() {
+        let m = "write:.deepbuild/* ~/.deepbuild/* !~/.deepbuild/workspaces/*";
+        for line in [
+            "echo x > /nowhere/.DEEPBUILD/done.yaml",
+            "echo x > /nowhere/.DeepBuild/done.yaml",
+            "echo x > /nowhere/.deepbuild/ſpec.md",
+            "echo x > /nowhere/.deepbuild/\u{212A}ey",
+            "echo x > /nowhere/.deepbuild/ﬁle",
+            "echo x > /H/.DEEPBUILD/config.json",
+        ] {
+            assert!(bash(line).matches(m).is_some(), "{line}");
+        }
+        assert!(bash("echo x > /H/.deepbuild/WORKSPACES/a")
+            .matches(m)
+            .is_none());
+        let ss = "write:.pi/settings.json";
+        assert!(bash("echo x > /nowhere/.PI/SETTINGS.json")
+            .matches(ss)
+            .is_some());
+        assert!(bash("echo x > /nowhere/.pi/settingſ.json")
+            .matches(ss)
+            .is_some());
+        assert!(bash("echo x > /nowhere/.deepbuild/a")
+            .matches("write:.DeepBuild/a")
+            .is_some());
+        assert!(
+            bash("launchctl unload ~/Library/LaunchAgents/COM.DEEPBUILD.HUB.plist")
+                .matches("hub:service")
+                .is_some()
+        );
+        assert!(bash("ſed -i '' s/a/b/ .deepbuild/a")
+            .matches("write:.deepbuild/a")
+            .is_some());
+        assert!(bash("baſh -c 'pkill x'").matches("run:pkill").is_some());
+        let sharp = "write:.deepbuild/pass";
+        assert!(bash("echo x > /nowhere/.deepbuild/paß")
+            .matches(sharp)
+            .is_some());
+        assert!(bash("echo x > /nowhere/.deepbuild/other")
+            .matches(sharp)
+            .is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn each_letter_that_folds_to_ascii_reads_as_its_fold() {
+        for (guarded, spelled) in [
+            ("sa", "ſa"),
+            ("ka", "\u{212A}a"),
+            ("ssa", "ßa"),
+            ("ssb", "ẞb"),
+            ("ffa", "ﬀa"),
+            ("fia", "ﬁa"),
+            ("fla", "ﬂa"),
+            ("ffia", "ﬃa"),
+            ("ffla", "ﬄa"),
+            ("sta", "ﬅa"),
+            ("stb", "ﬆb"),
+        ] {
+            let m = format!("write:/nowhere/{guarded}");
+            assert!(
+                bash(&format!("echo x > /nowhere/{spelled}"))
+                    .matches(&m)
+                    .is_some(),
+                "{spelled}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_script_whose_interpreter_the_mac_finds_is_read() {
+        let folder = std::env::temp_dir().join(format!("dh863-script-{}", std::process::id()));
+        fs::create_dir_all(&folder).unwrap();
+        for (name, first) in [("upper", "#!/BIN/BASH"), ("fold", "#!/bin/baſh")] {
+            let script = folder.join(name);
+            fs::write(&script, format!("{first}\npkill x\n")).unwrap();
+            assert!(
+                bash(&script.to_string_lossy())
+                    .matches("run:pkill")
+                    .is_some(),
+                "{first}"
+            );
+        }
+        fs::remove_dir_all(&folder).unwrap();
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_link_a_program_and_its_arguments_read_as_the_mac_reads_them() {
+        assert!(bash("ln -s ~/.deepbuild/config.json l; echo x > L")
+            .matches("write:.deepbuild/config.json")
+            .is_some());
+        assert!(bash("cat .DEEPBUILD/secret")
+            .matches("run:cat .deepbuild/secret")
+            .is_some());
+        assert!(bash("rm -R a").matches("run:rm -r").is_none());
+        assert!(bash("ſed x").matches("run:ſed").is_some());
+        assert!(bash("weiß x").matches("run:weiß").is_some());
     }
 
     #[test]

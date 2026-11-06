@@ -37,7 +37,9 @@ describe('a definition held at your reserve', () => {
     const tasks = new AskTasks({
       raw: (q, params) => record.raw(q, params), asks: () => { throw Error('no asks here'); }, now, plant: undefined, drafts, work: undefined,
       append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({}),
-      keep: async (bytes) => createHash('sha256').update(bytes).digest('hex'), run: async () => undefined, invalid: async () => undefined,
+      keep: async (bytes) => createHash('sha256').update(bytes).digest('hex'), run: async () => undefined, invalid: async () => undefined, unresolved: () => undefined,
+      // A repo, never a workspace (#67): it lands nowhere, so the workspace calls answer as they do outside one.
+      spaces: { land: async () => undefined, fill: async () => undefined, pin: async () => undefined, keep: async () => false, claimState: async () => undefined, folderOf: () => undefined },
       reading: async (_s, _a, text) => { readings.push(text); }, atReserve: () => why,
     });
     const task_ref = `session:${session}#0`;

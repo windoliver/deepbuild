@@ -15,7 +15,7 @@ const USAGE_CODES = new Set(['handle_syntax', 'not_found', 'enum']);
 /** How far back `deep inbox` lists what was decided for you. */
 const DAY_MS = 86_400_000;
 
-interface Row { ask: string; kind: string; session: string; status: string; outcome: string; age: number; question: string; options: string[]; plan?: { hash: string; steps: Step[] } | null; decision: string | null; answer?: string | null }
+interface Row { opens?: { kind: string; name?: string; command?: string }; ask: string; kind: string; session: string; status: string; outcome: string; age: number; question: string; options: string[]; plan?: { hash: string; steps: Step[] } | null; decision: string | null; answer?: string | null }
 /** A plan's step, as an authority ask shows it (#69). */
 interface Step { does: string; changes: string[]; undo: string; cost: number }
 /** A permission you said yes to in the terminal, offered back as a decision to save (#23). */
@@ -68,6 +68,8 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
   if (!rows.length) process.stdout.write('No open asks.\n');
   for (const r of rows) {
     process.stdout.write(`${r.ask}  ${r.kind}  ${r.session}  ${elapsed(r.age)}  ${r.status}  ${r.question}  [${r.options.join(' | ')}]\n`);
+    // Where a task sends you, from the trusted path alone (#84).
+    if (r.opens) process.stdout.write(`    opens ${r.opens.kind === 'secret' ? `the entry field of ${r.opens.name ?? ''}` : r.opens.command ?? ''}\n`);
     // Before a yes with authority, what will happen: each step, what it changes, its undo and its cost (#69).
     if (!r.plan) continue;
     process.stdout.write(`    plan ${r.plan.hash.slice(0, 12)}: ${r.plan.steps.length} step${r.plan.steps.length === 1 ? '' : 's'}, ${r.plan.steps.filter((s) => s.undo === "can't undo").length} can't be undone\n`);

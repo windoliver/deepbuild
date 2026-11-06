@@ -1,0 +1,10 @@
+{
+  "id": "checkout-web/vendor-guard",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["record"] },
+  "templates": [
+    { "name": "why", "hook": "tool.before", "text": "vendor/ holds a third party's code as it shipped, so it isn't edited here; see {handle}", "fields": { "handle": { "type": "handle" } } }
+  ],
+  "requires": { "preview": ["deep.on"] }
+}

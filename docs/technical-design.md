@@ -2258,7 +2258,7 @@ checks:
     file: .deepbuild/journeys/checkout.yaml
     runs: 3                                    # or accept: 10% to compute the runs needed
 environment:
-  up: "npm run dev"                            # or compose: docker-compose.yml
+  up: "npm run dev"                            # the app; compose: docker-compose.yml names the services, alone or beside it
   ports: [web, api]                            # leased per worktree
   ready: { http: "http://localhost:${web}/health" }
   install: "npm ci"                            # start steps, each kept by its inputs' digest

@@ -1,0 +1,12 @@
+{
+  "issue": 484,
+  "criterion": "#484.b58c79f0",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation in the session (\"can you check for me\")",
+  "when": "2026-11-06T08:49:48Z",
+  "screenshots": {
+    "forest.png": "4e32475a903fb041d1f12d6f946b348caabd9e28ce4ce097ba970c3d181d2e72",
+    "crowd.png": "2a66bca6ed29fdc8dd08c94b095fbbe406c2b62de69e52709001b14bb72d83bd"
+  },
+  "note": "Forest: two tree shapes, cast shadows, the crown tree entering at the right edge, no black or broken pixels; its 27 isolated pixels are pine tips through oak crowns. Edges are aliased because the test's plain look has no anti-aliasing. Crowd: exactly 2,000 identical 16-pixel agents in 20 columns and 100 rows on an even pitch, every fifth column of the grid."
+}

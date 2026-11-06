@@ -428,6 +428,7 @@ impl<'a> Hub<'a> {
         // Honest numbers (canvas primitives: Honest numbers, the check): every number each
         // deliverable shows, with what it traces to.
         let mut numbers: Vec<Value> = Vec::new();
+        let mut results: Vec<Value> = Vec::new();
         for (doc, cur) in docs {
             // Checked with the pack store, so a deliverable that names an installed pack resolves
             // it, as its show did (#200).
@@ -481,14 +482,38 @@ impl<'a> Hub<'a> {
                         }
                     }
                 }
-                raised.extend(run_check(
-                    self,
-                    check,
-                    &kind,
-                    &m.name,
-                    &checked.lowered,
-                    &input,
-                ));
+                if let Some(report) = check.report {
+                    // #453: a check that measures reads the assets its items name, and only the
+                    // proof surface plants its wrong program.
+                    if let Some(map) = input.as_object_mut() {
+                        map.insert("assets".into(), self.assets_of(&checked.lowered));
+                        map.remove("planted");
+                        if let Some(p) = &self.scenario.module_planted {
+                            map.insert("planted".into(), json!(p));
+                        }
+                    }
+                    let out = report(&checked.lowered, &input);
+                    for (id, r, actual) in out.raised {
+                        let mut issue = raised_json(self, &kind, &m.name, &id, r);
+                        issue["actual"] = actual;
+                        raised.push(issue);
+                    }
+                    let in_doc = |mut v: Value| {
+                        v["doc"] = json!(doc);
+                        v
+                    };
+                    results.extend(out.results.into_iter().map(in_doc));
+                    blocked.extend(out.blocked.into_iter().map(in_doc));
+                } else {
+                    raised.extend(run_check(
+                        self,
+                        check,
+                        &kind,
+                        &m.name,
+                        &checked.lowered,
+                        &input,
+                    ));
+                }
             }
             if honest {
                 match self.honest_numbers(cur.doc) {
@@ -529,6 +554,9 @@ impl<'a> Hub<'a> {
         if honest {
             row.insert("numbers".into(), Value::Array(numbers));
         }
+        if registered.is_some_and(|(_, c)| c.report.is_some()) {
+            row.insert("results".into(), Value::Array(results));
+        }
         done(row, result, blocked)
     }
 
@@ -543,6 +571,26 @@ impl<'a> Hub<'a> {
         }
         let empty = serde_json::Map::new();
         Ok(deep_canvas_marks::check::numbers(doc.as_object().unwrap_or(&empty)))
+    }
+
+    /// The bytes of every asset a lowered document's items name by hash that the evidence store
+    /// holds, in base64 by hash (#453).
+    fn assets_of(&self, lowered: &Value) -> Value {
+        let mut out = Map::new();
+        for item in lowered
+            .get("items")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .map(|(_, v)| v)
+        {
+            if let Some(sha) = item.pointer("/params/sha256").and_then(Value::as_str) {
+                if let Some(b) = crate::evidence::read(&self.scenario.evidence, sha) {
+                    out.insert(sha.to_string(), json!(deep_canvas::base64::encode(&b)));
+                }
+            }
+        }
+        Value::Object(out)
     }
 }
 

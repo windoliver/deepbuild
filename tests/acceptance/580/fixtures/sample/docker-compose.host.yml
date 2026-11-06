@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports: ["${db}:5432"]
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 1s
+      retries: 60
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["${redis}:6379"]
+    volumes:
+      - redis-data:/data
+volumes:
+  db-data: {}
+  redis-data: {}

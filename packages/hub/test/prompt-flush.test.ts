@@ -43,7 +43,7 @@ describe('a typed prompt whose transcript entry Claude Code writes after its hoo
       expect((await prompted()).exit).toBe(0);
       entry();
       expect(await hook('PreToolUse', { tool_name: 'Read', tool_use_id: 'toolu_1', tool_input: { file_path: '/tmp/src/auth.js' }, prompt_id: 'p1' })).toContain('"ack"');
-      const order = await until(() => rows<{ kind: string; f: string | null }>(root, "SELECT kind, json_extract(data, '$.from') AS f FROM events WHERE session_id = ? AND kind IN ('user.ask', 'tool.before') ORDER BY log_pos", SESSION).filter((_, i, all) => all.length >= 2), 10_000);
+      const order = await until(() => rows<{ kind: string; f: string | null }>(root, "SELECT kind, json_extract(data, '$.from') AS f FROM events WHERE session_id = ? AND kind IN ('user.ask', 'tool.before') ORDER BY log_pos", SESSION).filter((_, _i, all) => all.length >= 2), 10_000);
       expect(order.map((r) => r.kind), 'the prompt is recorded before the tool call its turn made').toEqual(['user.ask', 'tool.before']);
       expect(order[0]?.f, 'the prompt you typed is yours, not of an unknown origin').toBe('person');
     });
