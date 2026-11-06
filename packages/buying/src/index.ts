@@ -60,7 +60,10 @@ const PAGE = 1000;
 /**
  * Every card number in text: 13 to 19 digits, in groups a single space or dash joins, that pass the Luhn check, as
  * people and receipts write them. A number is found whatever digits stand beside it, such as an expiry after it or
- * an order number before it, so each window of whole groups in a run of digits is tried, the shortest first.
+ * an order number before it, so every window of whole groups in a run of digits is tried, and windows that overlap
+ * are masked as one: the card's own window is among them, so none of its digits is left showing beside the mask. The
+ * four shown are the span's last four, which end at or after the card's own end, so they are never digits of the card
+ * other than its last four.
  */
 const DIGIT_RUN = /\d+(?:[ -]\d+)*/g;
 function luhn(digits: string): boolean {
@@ -72,21 +75,26 @@ function luhn(digits: string): boolean {
   }
   return sum % 10 === 0;
 }
-/** Where each card number in text starts and ends, with its digits. */
-function cardSpans(text: string): { at: number; end: number; digits: string }[] {
-  const spans: { at: number; end: number; digits: string }[] = [];
+/** Where each card number in text starts and ends, with the four digits its mask shows. */
+function cardSpans(text: string): { at: number; end: number; last4: string }[] {
+  const spans: { at: number; end: number; last4: string }[] = [];
   for (const run of text.matchAll(DIGIT_RUN)) {
     const groups = [...run[0].matchAll(/\d+/g)].map((g) => ({ at: run.index + g.index, end: run.index + g.index + g[0].length, digits: g[0] }));
+    // Every window that passes, by its first and last group, in order of its first.
+    const windows: { i: number; j: number }[] = [];
     for (let i = 0; i < groups.length; i++) {
       let digits = '';
       for (let j = i; j < groups.length && digits.length + groups[j]!.digits.length <= 19; j++) {
         digits += groups[j]!.digits;
-        if (digits.length >= 13 && luhn(digits)) {
-          spans.push({ at: groups[i]!.at, end: groups[j]!.end, digits });
-          i = j;
-          break;
-        }
+        if (digits.length >= 13 && luhn(digits)) windows.push({ i, j });
       }
+    }
+    // Overlapping windows as one span.
+    for (let k = 0; k < windows.length;) {
+      const first = windows[k]!.i;
+      let last = windows[k]!.j;
+      for (k++; k < windows.length && windows[k]!.i <= last; k++) last = Math.max(last, windows[k]!.j);
+      spans.push({ at: groups[first]!.at, end: groups[last]!.end, last4: groups.slice(first, last + 1).map((g) => g.digits).join('').slice(-4) });
     }
   }
   return spans;
@@ -96,7 +104,7 @@ const cardNumbers = (text: string): string[] => cardSpans(text).map((s) => text.
 const masked = (text: string): string => {
   let out = '';
   let at = 0;
-  for (const s of cardSpans(text)) { out += `${text.slice(at, s.at)}•••• ${s.digits.slice(-4)}`; at = s.end; }
+  for (const s of cardSpans(text)) { out += `${text.slice(at, s.at)}•••• ${s.last4}`; at = s.end; }
   return out + text.slice(at);
 };
 
