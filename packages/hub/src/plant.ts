@@ -23,6 +23,12 @@ export type Plant =
   | 'matches-text' | 'fail-closed-only-rules' | 'installs-unchecked' | 'trusts-hints' | 'warn-as-block'
   // #1097's: a warn entry a call meets only through what couldn't be read of it decides as block.
   | 'unknown-as-block'
+  // #84's defaults: an ask naming any effect covers all, every prompt counts whatever its `from`, the hub reads the
+  // command line as text, and `--auto` needs no commit and holds no branch.
+  | 'ask-covers-every-effect' | 'reads-every-from' | 'defaults-match-text' | 'auto-merge-unpinned'
+  // #84's sorter: a proceed with no record, an ask keyed from a question's words, a send-back a question should hold,
+  // a hold on every ask, a proceed that drops what fails, a task sent back naming no tool, a switch only recorded, a link to an agent's URL.
+  | 'proceed-unrecorded' | 'keys-ask-from-words' | 'sends-back-held-stop' | 'holds-every-ask' | 'proceed-alone' | 'sends-back-no-tool' | 'records-switch-only' | 'link-from-agent-url'
   // #19's, which only its twins select: the proof lanes' wrong programs for tests no plant above reaches.
   // #580's: an environment that reuses a stale install, keeps a database, Redis, a web image or a mount across runs,
   // keeps installs in a store of its own, clones build output, or starts its stack at every claim; a pool that
@@ -205,6 +211,8 @@ const PLANTS: readonly string[] = [
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
   'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
+  'ask-covers-every-effect', 'reads-every-from', 'defaults-match-text', 'auto-merge-unpinned',
+  'proceed-unrecorded', 'keys-ask-from-words', 'sends-back-held-stop', 'holds-every-ask', 'proceed-alone', 'sends-back-no-tool', 'records-switch-only', 'link-from-agent-url',
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
