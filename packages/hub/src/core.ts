@@ -1016,7 +1016,7 @@ export class Core {
       return archiving;
     };
     archivePass();
-    this.archiveSession = async (session) => { await archiving; await archive.session(session); };
+    this.archiveSession = (session) => archive.session(session);
     // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
     this.wikiBuild = openWikiBuild({
       record: this.record, root: this.root, store: this.store, runner: this.runner, asks, now: this.now, archive: async () => { await archiving; await archivePass(); },
