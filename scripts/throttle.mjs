@@ -261,6 +261,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(2);
   }
   if (!grant) {
+    // The marker a job's report reads by: its output is the test run's too, so a line there proves nothing.
+    if (process.env.DEEP_PROOF_VITEST_REPORT) appendFileSync(process.env.DEEP_PROOF_VITEST_REPORT, `${JSON.stringify({ type: 'no-grant', message: `no ${cls} grant came within ${wait} min` })}\n`);
     console.log(`INCONCLUSIVE no grant: no ${cls} grant came within ${wait} min\n  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.`);
     process.exit(3);
   }

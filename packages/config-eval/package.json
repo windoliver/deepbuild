@@ -12,7 +12,9 @@
   },
   "scripts": { "build": "tsc -p tsconfig.json" },
   "dependencies": {
-    "@deepbuild/record": "0.0.0"
+    "@deepbuild/gate": "0.0.0",
+    "@deepbuild/record": "0.0.0",
+    "@deepbuild/supervisor": "0.0.0"
   },
   "devDependencies": {
     "@deepbuild/evidence": "0.0.0"

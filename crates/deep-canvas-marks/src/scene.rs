@@ -175,11 +175,13 @@ pub enum Scope {
         fill: Fill,
         feather: f64,
     },
-    /// `blend` is the group's when it names one (a group that does renders isolated).
+    /// `blend` is the group's when it names one (a group that does renders isolated). `effect`
+    /// is what only the GPU layer draws of it: its passes, its backdrop, its dancing dissolve.
     Opacity {
         item: String,
         alpha: f64,
         blend: Option<Blend>,
+        effect: Option<Arc<Effect>>,
     },
     /// `verbs` is the union of the fills inside, which draw inside it with no antialiasing of
     /// their own, so a shared edge shows neither of them partly and nothing under it.
@@ -189,7 +191,30 @@ pub enum Scope {
     Shape { item: String, verbs: Arc<Vec<Verb>> },
 }
 
-/// A group's blend (Frame and group: blend modes): the 16 W3C modes and add, which R2 draws.
+/// One pass of a group (Frame and group: passes): the operator it names, with its item when the
+/// document holds it, that operator's params at t, and how many u past the group's bounds it may
+/// reach (`None`: what the operator declares).
+#[derive(Clone, Debug, PartialEq)]
+pub struct GroupPass {
+    pub op: String,
+    pub item: Option<Value>,
+    pub params: Map<String, Value>,
+    pub grow: Option<f64>,
+}
+
+/// What a group asks of the GPU layer beyond a Vello layer (Frame and group: passes; backdrop).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Effect {
+    pub passes: Vec<GroupPass>,
+    /// `backdrop: below`: the passes run on what the writer layer drew before it, inside the
+    /// children's coverage, and the children aren't drawn.
+    pub backdrop: bool,
+    /// With dissolve: the hash takes the video frame index too.
+    pub dancing: bool,
+}
+
+/// A group's blend (Frame and group: blend modes): the 16 W3C modes and add, which Vello draws,
+/// and the eleven the GPU layer draws.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Blend {
     #[default]
@@ -210,10 +235,21 @@ pub enum Blend {
     Color,
     Luminosity,
     Add,
+    Subtract,
+    Divide,
+    LinearBurn,
+    LinearDodge,
+    LinearLight,
+    VividLight,
+    PinLight,
+    HardMix,
+    DarkerColor,
+    LighterColor,
+    Dissolve,
 }
 
 impl Blend {
-    pub const ALL: [(&'static str, Blend); 17] = [
+    pub const ALL: [(&'static str, Blend); 28] = [
         ("normal", Blend::Normal),
         ("multiply", Blend::Multiply),
         ("screen", Blend::Screen),
@@ -231,6 +267,17 @@ impl Blend {
         ("color", Blend::Color),
         ("luminosity", Blend::Luminosity),
         ("add", Blend::Add),
+        ("subtract", Blend::Subtract),
+        ("divide", Blend::Divide),
+        ("linear_burn", Blend::LinearBurn),
+        ("linear_dodge", Blend::LinearDodge),
+        ("linear_light", Blend::LinearLight),
+        ("vivid_light", Blend::VividLight),
+        ("pin_light", Blend::PinLight),
+        ("hard_mix", Blend::HardMix),
+        ("darker_color", Blend::DarkerColor),
+        ("lighter_color", Blend::LighterColor),
+        ("dissolve", Blend::Dissolve),
     ];
 
     pub fn name(self) -> &'static str {
@@ -240,33 +287,87 @@ impl Blend {
             .map_or("normal", |(n, _)| n)
     }
 
-    /// A group's `blend`, if it names one; the eleven modes R6 draws on the GPU layer wait for it.
+    /// Whether it's one of the eleven only the GPU layer draws.
+    pub fn gpu_only(self) -> bool {
+        self as usize >= Blend::Subtract as usize
+    }
+
+    /// A group's `blend`, if it names one.
     fn read(id: &str, v: Option<&Value>) -> Result<Option<Blend>, Refused> {
-        const LATER: [&str; 11] = [
-            "subtract",
-            "divide",
-            "linear_burn",
-            "linear_dodge",
-            "linear_light",
-            "vivid_light",
-            "pin_light",
-            "hard_mix",
-            "darker_color",
-            "lighter_color",
-            "dissolve",
-        ];
         let path = format!("items/{id}/params/blend");
         match v {
             None => Ok(None),
             Some(Value::String(name)) => match Blend::ALL.iter().find(|(n, _)| n == name) {
                 Some((_, b)) => Ok(Some(*b)),
-                None if LATER.contains(&name.as_str()) => refuse("module_missing", path),
                 None => refuse("bad_doc", path),
             },
             Some(_) => refuse("bad_doc", path),
         }
     }
 }
+
+impl Effect {
+    /// A group's passes, backdrop and dancing, if it asks for any; a list past 8 passes, a pass
+    /// without an op, a backdrop without passes and a dancing blend other than dissolve are
+    /// refused, naming the field.
+    fn read(
+        id: &str,
+        params: Option<&Value>,
+        blend: Option<Blend>,
+        items: &Map<String, Value>,
+    ) -> Result<Option<Effect>, Refused> {
+        let get = |k: &str| params.and_then(|p| p.get(k));
+        let path = |f: &str| format!("items/{id}/params/{f}");
+        let passes = match get("passes") {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::Array(list)) if list.len() > MAX_PASSES => {
+                return refuse("operator_limit", path("passes"))
+            }
+            Some(Value::Array(list)) => list
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    let at = format!("{}/{i}", path("passes"));
+                    let Some(op) = p.get("op").and_then(Value::as_str) else {
+                        return refuse("bad_doc", format!("{at}/op"));
+                    };
+                    let params = match p.get("params") {
+                        None | Some(Value::Null) => Map::new(),
+                        Some(Value::Object(m)) => m.clone(),
+                        Some(_) => return refuse("bad_doc", format!("{at}/params")),
+                    };
+                    let grow = match p.get("grow") {
+                        None | Some(Value::Null) => None,
+                        v => match num(v) {
+                            Some(g) if g >= 0.0 => Some(g),
+                            _ => return refuse("bad_doc", format!("{at}/grow")),
+                        },
+                    };
+                    let item = items.get(op).cloned();
+                    Ok(GroupPass { op: op.to_string(), item, params, grow })
+                })
+                .collect::<Result<_, _>>()?,
+            Some(_) => return refuse("bad_doc", path("passes")),
+        };
+        let backdrop = match get("backdrop") {
+            None | Some(Value::Null) => false,
+            Some(Value::String(b)) if b == "none" => false,
+            Some(Value::String(b)) if b == "below" => true,
+            Some(_) => return refuse("bad_doc", path("backdrop")),
+        };
+        if backdrop && passes.is_empty() {
+            return refuse("operator_kind_rule", path("backdrop"));
+        }
+        let dancing = get("dancing") == Some(&Value::Bool(true));
+        if dancing && blend != Some(Blend::Dissolve) {
+            return refuse("bad_doc", path("dancing"));
+        }
+        Ok((!passes.is_empty() || dancing).then_some(Effect { passes, backdrop, dancing }))
+    }
+}
+
+/// A group holds at most 8 passes (Frame and group: passes).
+pub const MAX_PASSES: usize = 8;
 
 impl Scope {
     pub fn item(&self) -> &str {
@@ -301,10 +402,24 @@ impl Scope {
                 });
                 fill.feed(k);
             }
-            Scope::Opacity { alpha, blend, .. } => {
+            Scope::Opacity {
+                alpha,
+                blend,
+                effect,
+                ..
+            } => {
                 k.text("opacity").number(*alpha);
                 if let Some(b) = blend {
                     k.text(b.name());
+                }
+                if let Some(e) = effect {
+                    k.text(if e.backdrop { "backdrop" } else { "passes" });
+                    k.text(if e.dancing { "dancing" } else { "still" });
+                    for p in &e.passes {
+                        k.text(&p.op).number(p.grow.unwrap_or(-1.0));
+                        k.text(&Value::Object(p.params.clone()).to_string());
+                        k.text(&p.item.as_ref().map_or(String::new(), Value::to_string));
+                    }
                 }
             }
             Scope::Cover { verbs, .. } | Scope::Shape { verbs, .. } => {
@@ -731,6 +846,51 @@ pub struct Drawn {
 }
 
 impl Drawn {
+    /// A box in u holding every pixel the mark draws: its outline, its stroke's width, a text's
+    /// lines at its widest; inside its rect masks.
+    pub fn extent(&self) -> [f64; 4] {
+        let grown = |b: [f64; 4], m: f64| [b[0] - m, b[1] - m, b[2] + 2.0 * m, b[3] + 2.0 * m];
+        let b = match &self.mark {
+            Mark::Rect { bounds, .. } | Mark::Image { bounds, .. } => *bounds,
+            Mark::Circle { center, r, .. } => [center[0] - r, center[1] - r, 2.0 * r, 2.0 * r],
+            Mark::Path {
+                geometry, offset, ..
+            } => {
+                let [x, y, w, h] = bounds_of(&geometry.verbs);
+                grown(
+                    [x + offset[0], y + offset[1], w, h],
+                    geometry.stroke.unwrap_or(0.0),
+                )
+            }
+            Mark::Shape { verbs, stroke, .. } => {
+                let reach = stroke.as_ref().map_or(0.0, |l| match &l.profile {
+                    // A stroke of any width draws to the outline's widest, at most this far.
+                    Some(_) => bounds_of(verbs)[2].max(bounds_of(verbs)[3]),
+                    None => l.width,
+                });
+                grown(bounds_of(verbs), reach)
+            }
+            Mark::Text { spec, origin, .. } => {
+                let lines = spec.max_lines.map_or(4.0, f64::from);
+                let width = spec
+                    .width
+                    .unwrap_or(spec.text.chars().count() as f64 * spec.size);
+                grown(
+                    [origin[0], origin[1] - spec.size, width, lines * spec.size * 2.0],
+                    spec.size,
+                )
+            }
+        };
+        match self.clip {
+            Some(c) => {
+                let (x0, y0) = (b[0].max(c[0]), b[1].max(c[1]));
+                let (x1, y1) = ((b[0] + b[2]).min(c[0] + c[2]), (b[1] + b[3]).min(c[1] + c[3]));
+                [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
+            }
+            None => b,
+        }
+    }
+
     /// The mark as its item draws after moving by `d` u and nothing else (#397: a frame where an
     /// item only moved reuses its marks); `None` for a mark a frame must rebuild: an outline, a
     /// gradient, or one inside a scope.
@@ -2185,6 +2345,7 @@ pub fn path_report(
     };
     let ctx = ItemCtx {
         items,
+        size: pair(doc.get("size")).unwrap_or_default(),
         palette,
         ty,
         paints: &paints,
@@ -3125,11 +3286,14 @@ fn ancestor_scope(
         Some("group@1") => {
             let alpha = num(get("opacity")).unwrap_or(1.0).clamp(0.0, 1.0);
             let blend = Blend::read(id, get("blend"))?;
-            let isolated = get("isolate") == Some(&Value::Bool(true)) || blend.is_some();
+            let effect = Effect::read(id, p, blend, items)?;
+            let isolated =
+                get("isolate") == Some(&Value::Bool(true)) || blend.is_some() || effect.is_some();
             (alpha < 1.0 || isolated).then(|| Scope::Opacity {
                 item: id.to_string(),
                 alpha,
                 blend,
+                effect: effect.map(Arc::new),
             })
         }
         _ => None,
@@ -3746,6 +3910,16 @@ fn isolated(item: &Value) -> bool {
             .is_some_and(|l| !l.is_empty())
 }
 
+/// Whether `id` is a `backdrop: below` group no item names as its parent.
+fn childless_backdrop(id: &str, item: &Value, items: &Map<String, Value>) -> bool {
+    item.get("kind").and_then(Value::as_str) == Some("group@1")
+        && item.get("params").and_then(|p| p.get("backdrop")).and_then(Value::as_str)
+            == Some("below")
+        && !items
+            .values()
+            .any(|i| i.get("parent").and_then(Value::as_str) == Some(id))
+}
+
 /// The ancestors of `id`, outermost first, bounded so a cycle the check refuses can't spin.
 fn ancestors(items: &Map<String, Value>, id: &str) -> Vec<String> {
     let mut chain = Vec::new();
@@ -3946,6 +4120,8 @@ impl deep_canvas::schedule::Canonical for Placed {
 /// planted program.
 struct ItemCtx<'a> {
     items: &'a Map<String, Value>,
+    /// The document's size in u.
+    size: [f64; 2],
     palette: &'a Palette,
     ty: &'a Type,
     paints: &'a Paints<'a>,
@@ -4034,6 +4210,30 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             let (under, slits) = union_outline(ctx, id, params, &path)?;
             after = slits;
             under
+        }
+        // A backdrop group with no children covers the frame it sits in.
+        "group@1" if childless_backdrop(id, item, ctx.items) => {
+            let inside = (0..ctx.items.len()).try_fold(item, |at, _| {
+                let frame = at
+                    .get("parent")
+                    .and_then(Value::as_str)
+                    .and_then(|p| ctx.items.get(p));
+                match frame {
+                    Some(f) if f.get("kind").and_then(Value::as_str) == Some("frame@1") => Err(f),
+                    Some(f) => Ok(f),
+                    None => Ok(at),
+                }
+            });
+            let bounds = match inside {
+                Err(f) => Place::of(f).rect(frame_box(id, f)?),
+                Ok(_) => [0.0, 0.0, ctx.size[0], ctx.size[1]],
+            };
+            vec![Mark::Rect {
+                item: id.clone(),
+                bounds,
+                radius: 0.0,
+                fill: Fill::Solid([255, 255, 255]),
+            }]
         }
         "mask@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" => {
             return Ok(None)
@@ -4296,11 +4496,16 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                     runs: text_runs(ctx.palette, params, &path)?,
                 }
             }
+            // A 2D layer's pass runs on the target of a group that names it, and draws nothing.
+            "gpu.pass@1" => return Ok(None),
             _ => return refuse("module_missing", format!("{path}/kind: {kind}")),
         }],
     };
     let order = item.get("order").and_then(Value::as_str).unwrap_or("");
     let mut scopes = ctx.scopes.get(id).cloned().unwrap_or_default();
+    if childless_backdrop(id, item, ctx.items) {
+        scopes.extend(ancestor_scope(id, item, ctx.items, ctx.palette)?);
+    }
     // Masked text draws whole, clipped to its box: its width, and its height or its line limit's.
     if let [Mark::Text { spec, origin, .. }] = marks.as_slice() {
         let side = |k: &str| params.get("box").and_then(|b| num(b.get(k)));
@@ -4321,6 +4526,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             item: format!("{id}#adjust"),
             alpha: adjust.opacity,
             blend: None,
+            effect: None,
         });
     }
     let clip = clip_of(&scopes);
@@ -4409,6 +4615,7 @@ fn shaded(
             item: format!("{id}#shade.multiply"),
             alpha: 1.0,
             blend: Some(Blend::Multiply),
+            effect: None,
         });
     }
     let clipped = |mark: Mark| {
@@ -4522,6 +4729,7 @@ pub fn item_placed(
         .collect();
     let ctx = ItemCtx {
         items: &empty,
+        size: [0.0; 2],
         palette,
         ty: &Type::default(),
         paints: &paints,
@@ -4665,6 +4873,7 @@ fn build(
     }
     let ctx = ItemCtx {
         items,
+        size,
         palette,
         ty,
         paints: &paints,

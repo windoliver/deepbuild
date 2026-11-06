@@ -553,6 +553,9 @@ fn fields(op: &str, t: &Ty) -> Map<String, Value> {
         "normal" => {
             f.insert("space".into(), json!("world"));
         }
+        "blend" => {
+            f.insert("mode".into(), json!("multiply"));
+        }
         _ => {}
     }
     f
@@ -615,7 +618,7 @@ fn build(def: &Def, plan: &Plan, end: &End) -> Option<(Value, Data)> {
                 "ixy" => g.seeded(port, &Ty::V(Sc::I32, 2), imax),
                 "lod" => g.seeded(port, &Ty::F32, imax),
                 "cond" => g.seeded(port, &Ty::BOOL, imax),
-                "rgb" => g.seeded(port, &Ty::V(Sc::F32, 3), imax),
+                "rgb" | "base" | "over" => g.seeded(port, &Ty::V(Sc::F32, 3), imax),
                 _ => match t {
                     Ty::Mat(_) | Ty::Arr(..) => g.uniform(port, t),
                     _ => g.seeded(port, t, imax),

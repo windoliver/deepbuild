@@ -2598,6 +2598,16 @@ fn main() {
     match command.as_str() {
         "serve" => std::process::exit(serve::run()),
         "host" => std::process::exit(host::run(&args)),
+        // #990: a hosted terminal's tab in the real app window, read by accessibility.
+        #[cfg(target_os = "macos")]
+        "term-ax" => {
+            let spec = args
+                .get(1)
+                .and_then(|p| std::fs::read_to_string(p).ok())
+                .and_then(|t| serde_json::from_str(&t).ok())
+                .unwrap_or(serde_json::Value::Null);
+            std::process::exit(deep_replica::terminal::ax(spec))
+        }
         // #498: this binary's copies as the decode worker and the encode tool.
         "decode-worker" => {
             std::process::exit(deep_codecs::serve(deep_codecs::DECODE_WORKER, &args[1..]))

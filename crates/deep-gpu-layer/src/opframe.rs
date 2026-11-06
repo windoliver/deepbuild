@@ -86,7 +86,7 @@ fn to_f16(x: f32) -> u16 {
 }
 
 /// Level `level` of `tex` read back as f32 RGBA, rows top-down, slices in z order.
-fn read_texture(device: &Device, tex: &wgpu::Texture, level: u32) -> ([u32; 3], Vec<f32>) {
+pub(crate) fn read_texture(device: &Device, tex: &wgpu::Texture, level: u32) -> ([u32; 3], Vec<f32>) {
     let d = &device.device;
     let w = (tex.width() >> level).max(1);
     let h = (tex.height() >> level).max(1);
@@ -97,6 +97,7 @@ fn read_texture(device: &Device, tex: &wgpu::Texture, level: u32) -> ([u32; 3], 
     };
     let texel = match tex.format() {
         wgpu::TextureFormat::Rgba16Float => 8,
+        wgpu::TextureFormat::Rgba32Float => 16,
         _ => 4,
     };
     let row = (w * texel).div_ceil(256) * 256;
@@ -152,6 +153,9 @@ fn read_texture(device: &Device, tex: &wgpu::Texture, level: u32) -> ([u32; 3], 
                     wgpu::TextureFormat::Rgba8Unorm => {
                         [0, 1, 2, 3].map(|k| f32::from(t[k]) / 255.0)
                     }
+                    wgpu::TextureFormat::Rgba32Float => [0, 1, 2, 3].map(|k| {
+                        f32::from_le_bytes([t[4 * k], t[4 * k + 1], t[4 * k + 2], t[4 * k + 3]])
+                    }),
                     wgpu::TextureFormat::R32Float => {
                         [f32::from_le_bytes([t[0], t[1], t[2], t[3]]), 0.0, 0.0, 1.0]
                     }
@@ -193,7 +197,7 @@ fn read_buffer(device: &Device, b: &wgpu::Buffer, words: u64) -> Vec<u8> {
     v
 }
 
-fn f32_bytes(px: &[f32]) -> Vec<u8> {
+pub(crate) fn f32_bytes(px: &[f32]) -> Vec<u8> {
     px.iter().flat_map(|x| x.to_le_bytes()).collect()
 }
 

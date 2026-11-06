@@ -115,8 +115,9 @@ mod screens {
         assert!(before != after, "selecting a session changed no pixels");
     }
 
-    /// Issue #79: with no panel, the right pane is the welcome screen, Paper with the lockup in
-    /// Ink, and the title bar holds the mark in Ink. Read from the pixels, within 8 per channel.
+    /// Issue #79: with no panel, the right pane is the welcome screen with the lockup, and the
+    /// title bar holds the mark in Ink. Issue #1172 moved the pane from Paper and Ink to the look's
+    /// ground and ink. Read from the pixels, within 8 per channel.
     fn welcome_screen() {
         let mut cx = context();
         let handle = open(&mut cx, None);
@@ -129,27 +130,33 @@ mod screens {
                 && pixel[1].abs_diff(g as u8) <= 8
                 && pixel[2].abs_diff(b as u8) <= 8
         };
+        let rgb = |color: gpui_kit::Hsla| {
+            let c = gpui_kit::Rgba::from(color);
+            let byte = |v: f32| (v * 255.).round() as u32;
+            byte(c.r) << 16 | byte(c.g) << 8 | byte(c.b)
+        };
+        let look = deep_app::chrome::chrome(false);
         let pixel = |x: u32, y: u32| &raw[((y * width + x) * 4) as usize..][..4];
         let right_pane =
             (0..height).flat_map(|y| (((260. * scale) as u32)..width).map(move |x| (x, y)));
-        let (mut paper, mut ink) = (0usize, 0usize);
+        let (mut ground, mut ink) = (0usize, 0usize);
         for (x, y) in right_pane {
             if y < (34. * scale) as u32 {
                 continue;
             }
             let pixel = pixel(x, y);
-            paper += usize::from(near(pixel, deep_app::brand::PAPER));
-            ink += usize::from(near(pixel, deep_app::brand::INK));
+            ground += usize::from(near(pixel, rgb(look.ground)));
+            ink += usize::from(near(pixel, rgb(look.ink_primary)));
         }
         assert!(
-            paper > 1_000,
-            "the welcome screen is not on Paper: {paper} Paper pixels"
+            ground > 1_000,
+            "the welcome screen is not on the look's ground: {ground} pixels"
         );
         // The lockup alone is about 351 by 199 px at 1x and mostly Ink; the tagline is under 2,000.
         let lockup_ink = (6_000. * scale * scale) as usize;
         assert!(
             ink > lockup_ink,
-            "the welcome screen shows no Ink lockup: {ink} Ink pixels, under {lockup_ink}"
+            "the welcome screen shows no lockup in the look's ink: {ink} pixels, under {lockup_ink}"
         );
         let bar_ink = (0..(34. * scale) as u32)
             .flat_map(|y| (0..((260. * scale) as u32)).map(move |x| (x, y)))
