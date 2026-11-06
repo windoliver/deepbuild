@@ -64,6 +64,13 @@ fn planted3(p: Option<Planted>) -> Planted3 {
             noise_from_frame: p == Some(Planted::SoftNoiseFromFrame),
             filter_in_texels: p == Some(Planted::CascadeFilterInTexels),
         },
+        cull: deep_scene3d_render::cull::Plants {
+            centers: p == Some(Planted::GpuCullByCenter),
+            reversed: p == Some(Planted::CompactInReverse),
+            row_as_element: p == Some(Planted::RowAsElement),
+        },
+        ids_by_compacted_place: p == Some(Planted::IdsByCompactedRow),
+        count_read_back: p == Some(Planted::CountReadBack),
         // #428's shading plants, a bit each in scene3d.wgsl's order.
         lobes: [
             Planted::AbsorptionIgnoresThickness,
@@ -260,6 +267,32 @@ pub fn masks(app: &mut App, key: u32, level: u32) -> Vec<(&'static str, [u32; 2]
             Some((name, size, bytes))
         })
         .collect()
+    })
+}
+
+/// Draws the session from the CPU's f64 cull (#484).
+pub fn cull_on_cpu(app: &mut App) {
+    app.worker.call(|state| {
+        if let Some(s) = state.scene3d.as_ref() {
+            if let Some(r) = lock(&s.shared).renderer.as_mut() {
+                r.cull_on_cpu();
+            }
+        }
+    })
+}
+
+/// What each culled list of the frame just drawn kept (#484).
+pub fn kept(app: &mut App) -> Vec<deep_scene3d_render::KeptRow> {
+    app.worker.call(|state| {
+        let Some(s) = state.scene3d.as_ref() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        shared
+            .renderer
+            .as_ref()
+            .map_or(Vec::new(), |r| r.read_kept(&device))
     })
 }
 

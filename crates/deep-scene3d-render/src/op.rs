@@ -69,7 +69,9 @@ pub(crate) fn coverage_moves(op: &SolidOp, any_t: bool) -> bool {
         return false;
     };
     let time = |name: &str| {
-        o.inputs.get(name).is_some_and(|i| matches!(i.from, From::Time))
+        o.inputs
+            .get(name)
+            .is_some_and(|i| matches!(i.from, From::Time))
             || o.steps.get(name).is_some_and(|s| s.op == "t@1")
     };
     if !any_t {
@@ -223,6 +225,7 @@ pub(crate) fn compile(
             "scene3d material operator shadow",
             &layout,
             &module,
+            ("mesh_vs", &crate::mesh_buffers()),
             "op_shadow_fs",
         )
     });
