@@ -1,0 +1,47 @@
+The run on the base, d722ba3d, trimmed to each result's reason. Node 24.22.0, with the workspaces and deep-hook built.
+
+$ npx vitest run --root tests/acceptance/67 --testTimeout=600000 --no-file-parallelism --reporter=verbose
+
+ FAIL drift.test.ts: drift.test.ts [ drift.test.ts ]
+      Error: `deep workspace new Web fleet` must exit 0: exit 2 after 47 ms, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ FAIL loop.test.ts: loop.test.ts [ loop.test.ts ]
+      Error: `deep workspace new Weekly report` must exit 0: exit 2 after 51 ms, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ FAIL budgets.test.ts: AC10 #67.458f2e6a deep workspace new answers within 1 s on each of five runs
+      Error: `deep workspace new` must make a workspace: exit 2 after 44 ms, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ FAIL diff.test.ts: AC3 #67.798381ee a setting and a file changed after the lock are named, and those changed between the workspace's making and the lock are not
+      Error: `deep workspace new Web host` must exit 0: exit 2 after 48 ms, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ FAIL landing.test.ts: a workspace is made under ~/.deepbuild/workspaces/ with no question and no git identity; another in a folder you pick; each is a project of its own, r
+      Error: `deep workspace new Household budget` must exit 0: exit 2 after 81 ms, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ FAIL landing.test.ts: a work item named outside any repo opens its task in a new workspace; moved to a folder you pick it keeps its id, files and history, and a session the
+      AssertionError: one workspace for the work item's task: session.start at log_pos 1 {"agent":"claude-code","worktree":"/tmp/dh67-…/outside","branch":null,"thread":"919cee82-ef0a-4828-8b69-82c4e2502bc8","loads":[],"billing":{"ANTHRO
+ FAIL outside.test.ts: AC8 #67.5080f53e "free 200 GB" opens a task in a new workspace with no question, a stop at 150 GB is sent back naming its check, and a stop at 240 GB 
+      AssertionError: one workspace for the task: session.start at log_pos 1 {"agent":"claude-code","worktree":"/tmp/dh67-…/outside","branch":null,"thread":"bc017c0f-6a13-41d7-bd7e-7d1da26efb47","loads":[],"billing":{"ANTHROPIC_API_KEY"
+ FAIL packs.test.ts: AC9 #67.7e6414d6 an untrusted project's pack runs no code in it and shows nothing; once you trust the project it loads, and shows while you're in it a
+      TypeError: w.host.enterProject is not a function
+ FAIL packs.test.ts: AC9 #67.7e6414d6 a pack of a project you never trusted stays out whatever else you trust
+      TypeError: w.host.enterProject is not a function
+ FAIL revert.test.ts: AC2 #67.a680fef7 a commit that rewrote a definition, took a script's mode, deleted a note and added a script is undone byte for byte; a later commit s
+      Error: `deep workspace new Server upkeep` must exit 0: exit 2 after 39 ms, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ FAIL sources.test.ts: AC5 #67.550dd2c3 the sound source installs with the kit passed, after the kit undid the change it calls undoable on the fixture
+      AssertionError: the install ran state-source@1's kit on what the package registers: expected [] to deep equally contain { slot: 'state-source@1', …(2) }
+ FAIL sources.test.ts: AC5 #67.550dd2c3 the planted source that calls purging the archive undoable is refused at install, naming the change, and isn't installed
+      AssertionError: promise resolved "{ id: 'deepbuild/settings-lying', …(6) }" instead of rejecting
+ FAIL sources.test.ts: AC5 #67.550dd2c3 runKit reads PASS on the sound fill and FAIL on the planted one, the failing case naming the change
+      Error: slotKits() ships no state-source@1 kit
+ FAIL sources.test.ts: AC5 #67.550dd2c3 the four state sources DeepBuild ships first, git, a host's change log, an API snapshot and document versions, pass the kit
+      Error: Cannot find module 'file://packages/workspaces/src/index.ts' imported from tests/acceptance/67/sources.test.ts
+ FAIL sources.test.ts: AC11 #67.b3d12369 runKit reads FAIL on the source that keeps its first answer, the failing case naming the item
+      Error: slotKits() ships no state-source@1 kit
+ FAIL sources.test.ts: AC11 #67.b3d12369 registered through deep.registerStateSource, it is refused at install, naming the item
+      AssertionError: promise resolved "{ id: 'deepbuild/settings-stale', …(6) }" instead of rejecting
+ FAIL sources.test.ts: AC4 #67.b151d718 the plan of a change the source can't undo says so on the card you answer and in the record; one it can undo gives its undo
+      Error: Cannot find module 'file://packages/workspaces/src/index.ts' imported from tests/acceptance/67/sources.test.ts
+ FAIL targets.test.ts: a script two requirements target is renamed: the claim follows it, and one proposal names both paths, leaving the definition as it was
+      Error: `deep workspace new Report script` must exit 0: exit 2 after 43 ms, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+
+ PASS sources.test.ts: AC7 #67.bb36d821 a verdict.made whose key has no state_digests fails its schema, naming the field
+      (verdict.made@1 already requires the field at the base; README, Readings)
+ SKIP drift.test.ts and loop.test.ts: 13 tests read one scenario, whose set-up failed above at `deep workspace new`
+
+Test Files  10 failed (10)
+      Tests  16 failed | 1 passed | 13 skipped (30)
