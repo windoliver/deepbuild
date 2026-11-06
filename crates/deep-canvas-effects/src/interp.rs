@@ -1336,7 +1336,17 @@ pub fn compute(
     let mut prog = Prog::new(c, env, [0, 0], storage)?;
     let steps = std::mem::take(&mut prog.steps);
     let mut regs = prog.base.clone();
-    for e in 0..c.op.elements {
+    // An indirect dispatch's invocations past its count write nothing (#484).
+    let elements = match c.op.counted {
+        true => prog
+            .storage
+            .iter()
+            .find(|(name, _)| name == crate::graph::DISPATCH_COUNT)
+            .and_then(|(_, n)| n.first())
+            .map_or(0, |n| (*n as u32).min(c.op.elements)),
+        false => c.op.elements,
+    };
+    for e in 0..elements {
         regs.copy_from_slice(&prog.base);
         prog.run(&steps, &mut regs, [0.0, 0.0], e)?;
     }

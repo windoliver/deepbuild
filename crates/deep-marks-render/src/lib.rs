@@ -11,7 +11,9 @@
 //! wakeups and CPU read from this process; and #398's: `check`, `raster` and `geometry` import
 //! each `vector@1` item's SVG from the line's `store` and draw it as marks2d's items, `geometry`
 //! answers a vector's `parts`, and the planted `write_fades_fills_from_start` and
-//! `import_skips_clip_path`; and #221's: every frame places items by relation, `check` refuses a
+//! `import_skips_clip_path`; and #1175's: `check` answers a `verdict` that stays INCONCLUSIVE
+//! while an import dropped an element the request's `accepted` doesn't hold, and the planted
+//! `import_drops_marker`; and #221's: every frame places items by relation, `check` refuses a
 //! `relation_cycle`, and `geometry` takes `t` and answers the item's `box` and its nine `points`;
 //! and #417's: `look` lists the shipped looks (`{"list": "shipped"}`) and answers font roles and
 //! each theme's roles in OKLab, `check` and `raster` hold the status distance only where the
@@ -35,6 +37,7 @@ use std::path::{Path, PathBuf};
 
 use deep_canvas_marks::look::{self, Look};
 use deep_canvas_marks::scene::{Palette, Planted, Record};
+use deep_canvas_vector::svg::Twin;
 use serde_json::{json, Map, Value};
 
 fn bad_input() -> Value {
@@ -288,6 +291,13 @@ fn doc(value: Option<&Value>) -> Option<Map<String, Value>> {
     value?.as_object().cloned()
 }
 
+/// Whether `kind` is one this binary draws though a module owns it: `vector@1` (the vector
+/// module's) and R1's mark sets, axes and scales (the data module's).
+fn drawn_here(kind: &Value) -> bool {
+    let name = kind.as_str().and_then(|k| k.split('@').next());
+    matches!(name, Some("vector" | "marks" | "axis" | "scale"))
+}
+
 /// Each imported `vector@1` item by ID (#398).
 type Vectors = BTreeMap<String, deep_canvas_vector::Imported>;
 
@@ -298,12 +308,17 @@ fn check(
     doc: &Map<String, Value>,
     look: Option<&Look>,
     store: Option<&Path>,
-    (skips_clip_path, distance_0_03): (bool, bool),
+    (twin, distance_0_03): (Twin, bool),
 ) -> (Value, Vectors) {
     let result = deep_canvas::document::check(&Value::Object(doc.clone()));
-    let mut issues = result.issues;
-    let (found, vectors) =
-        deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), skips_clip_path);
+    // This binary draws vector@1 and R1's mark sets, axes and scales itself, so their modules
+    // aren't missing from it (#1162 made those kinds the vector and data modules').
+    let mut issues: Vec<_> = result
+        .issues
+        .into_iter()
+        .filter(|i| !(i.code == "module_missing" && drawn_here(&i.actual)))
+        .collect();
+    let (found, vectors) = deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), twin);
     issues.extend(found);
     // #406: a quote's raw bytes against its source's, and a formula's numbers.
     issues.extend(deep_canvas_marks::check::quotes(doc, |sha| {
@@ -394,10 +409,57 @@ fn check(
     (answer, vectors)
 }
 
-/// #398 AC6's wrong program, which `check`, `raster` and `geometry` take: an importer that skips
-/// `<clipPath>` without an issue. `None` for another planted value, which another command reads.
-fn skips_clip_path(input: &Map<String, Value>) -> bool {
-    input.get("planted").and_then(Value::as_str) == Some("import_skips_clip_path")
+/// The importer `check`, `raster` and `geometry` take: #398 AC6's wrong program, which skips
+/// `<clipPath>` without an issue, or #1175 AC2's, which drops `<marker>` with only a warning; the
+/// honest one for another planted value, which another command reads.
+fn import_twin(input: &Map<String, Value>) -> Twin {
+    match input.get("planted").and_then(Value::as_str) {
+        Some("import_skips_clip_path") => Twin::SkipsClipPath,
+        Some("import_drops_marker") => Twin::DropsMarker,
+        _ => Twin::Honest,
+    }
+}
+
+/// #1175: the issues a person accepted, `[{item, element}]`; `None` when malformed.
+fn accepted(value: Option<&Value>) -> Option<Vec<(String, String)>> {
+    let Some(value) = value else {
+        return Some(Vec::new());
+    };
+    value
+        .as_array()?
+        .iter()
+        .map(|a| {
+            let field = |k: &str| a.get(k).and_then(Value::as_str).map(str::to_string);
+            Some((field("item")?, field("element")?))
+        })
+        .collect()
+}
+
+/// #1175: the check's verdict. Each element or attribute an import didn't draw as the SVG writes
+/// it is open until the person accepts it; with no error, open items make it INCONCLUSIVE, never
+/// PASS.
+fn verdict(checked: &mut Value, accepted: &[(String, String)]) {
+    let mut open: Vec<Value> = Vec::new();
+    for issue in checked["issues"].as_array().into_iter().flatten() {
+        let (Some("svg_unsupported"), Some(item), Some(element)) = (
+            issue["code"].as_str(),
+            issue["ids"][0].as_str(),
+            issue["actual"].as_str(),
+        ) else {
+            continue;
+        };
+        let entry = json!({"item": item, "element": element});
+        let taken = accepted.iter().any(|(i, e)| i == item && e == element);
+        if !taken && !open.contains(&entry) {
+            open.push(entry);
+        }
+    }
+    let outcome = match (checked["ok"] == json!(true), open.is_empty()) {
+        (false, _) => "FAIL",
+        (true, false) => "INCONCLUSIVE",
+        (true, true) => "PASS",
+    };
+    checked["verdict"] = json!({"outcome": outcome, "open": open});
 }
 
 /// #417 AC9's wrong program, which `check` and `raster` take: a status distance of 0.03.
@@ -479,7 +541,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         let (look, def) = look?;
         return Some(Answer::Now(look_answer(&look, def)));
     }
-    let skips = skips_clip_path(input);
+    let skips = import_twin(input);
     let near = distance_0_03(input);
     let store_dir = store(input.get("store"))?;
     if command == "path" {
@@ -533,7 +595,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     // #399 AC7's wrong router, which `geometry` takes.
     let straight = input.get("planted").and_then(Value::as_str) == Some("straight_router");
     if command == "check" || command == "geometry" {
-        if input.get("planted").is_some() && !skips && !near && !(straight && command == "geometry")
+        if input.get("planted").is_some()
+            && skips == Twin::Honest
+            && !near
+            && !(straight && command == "geometry")
         {
             return None;
         }
@@ -545,6 +610,8 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             (skips, near),
         );
         if command == "check" {
+            let mut checked = checked;
+            verdict(&mut checked, &accepted(input.get("accepted"))?);
             return Some(Answer::Now(checked));
         }
         let item = input.get("item")?.as_str()?;
@@ -581,7 +648,12 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             })
             .collect::<Option<Vec<_>>>()?;
         let doc = doc(input.get("doc"))?;
-        let (checked, vectors) = check(&doc, Some(&look), store_dir.as_deref(), (false, false));
+        let (checked, vectors) = check(
+            &doc,
+            Some(&look),
+            store_dir.as_deref(),
+            (Twin::Honest, false),
+        );
         if let Some(refusal) = refused_by_check(&checked) {
             return Some(Answer::Now(refusal));
         }
@@ -637,6 +709,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             Some(Value::String(p))
                 if p == "write_fades_fills_from_start"
                     || p == "import_skips_clip_path"
+                    || p == "import_drops_marker"
                     || p == "status_distance_0_03" =>
             {
                 (Planted::None, false, false)
