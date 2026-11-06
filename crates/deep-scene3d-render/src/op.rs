@@ -24,6 +24,8 @@ const ENTRY: &str = include_str!("op.wgsl");
 /// bind with each solid's maps.
 pub(crate) struct MatOp {
     pub pipeline: wgpu::RenderPipeline,
+    /// Its depth pipeline for a shadow map, when it writes its coverage (#446).
+    pub shadow: Option<wgpu::RenderPipeline>,
     pub layout: wgpu::BindGroupLayout,
     buffer: wgpu::Buffer,
     sampler: wgpu::Sampler,
@@ -52,6 +54,50 @@ pub(crate) fn key(op: &SolidOp) -> u64 {
     op.id.hash(&mut h);
     op.item.to_string().hash(&mut h);
     h.finish() | 1
+}
+
+/// Whether an operator's coverage reads t, so a shadow map it casts into is keyed by t (Light
+/// policy: local shadows); with `any_t`, the planted wrong program's question, whether it reads t
+/// at all. `false` for an operator that doesn't read as one.
+pub(crate) fn coverage_moves(op: &SolidOp, any_t: bool) -> bool {
+    fn refs(a: &graph::Arg, out: &mut Vec<String>) {
+        if let graph::Arg::Ref(name, _) = a {
+            out.push(name.clone());
+        }
+    }
+    let Some(o) = module::operator_of(&op.id, &op.item).and_then(|i| graph::read(&i).ok()) else {
+        return false;
+    };
+    let time = |name: &str| {
+        o.inputs
+            .get(name)
+            .is_some_and(|i| matches!(i.from, From::Time))
+            || o.steps.get(name).is_some_and(|s| s.op == "t@1")
+    };
+    if !any_t {
+        // What decides its coverage: its alpha and its discards' conditions.
+        let mut todo = Vec::new();
+        if let Some(a) = o.outputs.get("alpha") {
+            refs(a, &mut todo);
+        }
+        let discards = o.steps.iter().filter(|(_, s)| s.op == "discard_if@1");
+        todo.extend(discards.map(|(name, _)| name.clone()));
+        let mut seen = std::collections::BTreeSet::new();
+        while let Some(name) = todo.pop() {
+            if !seen.insert(name.clone()) {
+                continue;
+            }
+            if time(&name) {
+                return true;
+            }
+            if let Some(step) = o.steps.get(&name) {
+                step.args.values().for_each(|a| refs(a, &mut todo));
+                todo.extend(step.when.clone());
+            }
+        }
+        return false;
+    }
+    o.inputs.keys().chain(o.steps.keys()).any(|name| time(name))
 }
 
 /// The solid's seed for `seed@1`: a hash of the document's seed and its ID, as the GPU layer keys
@@ -165,6 +211,26 @@ pub(crate) fn compile(
         "op_mesh_fs",
         &mesh_buffers(),
     );
+    // Its coverage holes let the light through (#446): the shadow passes' depth state, drawn
+    // under the frame group and its own alone.
+    let cuts = |o: &graph::Operator| {
+        o.outputs.contains_key("alpha") || o.steps.values().any(|s| s.op == "discard_if@1")
+    };
+    let shadow = cuts(&checked.op).then(|| {
+        let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("scene3d material operator shadow"),
+            bind_group_layouts: &[Some(groups[0]), None, None, Some(&inputs_layout)],
+            immediate_size: 0,
+        });
+        crate::shadow_pipeline(
+            d,
+            "scene3d material operator shadow",
+            &layout,
+            &module,
+            ("mesh_vs", &crate::mesh_buffers()),
+            "op_shadow_fs",
+        )
+    });
     if let Some(e) = block_on(scope.pop()) {
         return Err(format!("the device rejects its pipeline: {e}"));
     }
@@ -185,6 +251,7 @@ pub(crate) fn compile(
     });
     Ok(MatOp {
         pipeline,
+        shadow,
         layout: inputs_layout,
         buffer,
         sampler,

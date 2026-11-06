@@ -257,6 +257,10 @@ pub struct DocOps {
     /// The document's motion program, for operator inputs read from a channel.
     program: Option<Program>,
     pub hooks: Hooks,
+    /// A group's passes (Frame and group: passes): each one's params at t, by item.
+    pub params: BTreeMap<String, BTreeMap<String, Value>>,
+    /// And the px each may write, `[x, y, w, h]` of the frame, by item.
+    pub within: BTreeMap<String, [u32; 4]>,
 }
 
 /// The issue a rejected pipeline raises, naming its canvas module, operator and item, with the
@@ -311,6 +315,8 @@ impl DocOps {
             doc_seed: 0,
             program: None,
             hooks: Hooks::default(),
+            params: BTreeMap::new(),
+            within: BTreeMap::new(),
         }
     }
 
@@ -352,10 +358,19 @@ impl DocOps {
         items.sort_by(|a, b| a.0.cmp(b.0));
         let mut follows: BTreeMap<String, Vec<String>> = BTreeMap::new();
         let mut channels = false;
+        // A pass a group names runs on the group's target, never in the view's chain.
+        let in_groups: Vec<&str> = items
+            .iter()
+            .flat_map(|(_, i)| i["params"]["passes"].as_array().into_iter().flatten())
+            .filter_map(|p| p["op"].as_str())
+            .collect();
         for (id, item) in items {
             let Some(json) = operator_of(id, item) else {
                 continue;
             };
+            if in_groups.contains(&id.as_str()) {
+                continue;
+            }
             let Ok(compiled) = compile_planted(&json, &BTreeMap::new(), options, planted) else {
                 continue;
             };
@@ -816,7 +831,9 @@ impl DocOps {
                 let c = runner.compiled.checked.clone();
                 let mut f = *frame;
                 f.seed = item_seed(self.doc_seed, &item);
-                let values = interp::inputs(&c, &params, roles);
+                let mut own_params = params.clone();
+                own_params.extend(self.params.get(&item).into_iter().flatten().map(|(k, v)| (k.clone(), v.clone())));
+                let values = interp::inputs(&c, &own_params, roles);
                 let storage: Option<Vec<wgpu::Buffer>> = c
                     .storage_inputs
                     .iter()
@@ -970,7 +987,7 @@ impl DocOps {
                                 } else {
                                     (last, 1 - last)
                                 };
-                                let mut bv = interp::inputs(bc, &params, roles);
+                                let mut bv = interp::inputs(bc, &own_params, roles);
                                 bv.insert(index.clone(), Val::N(Sc::U32, vec![f64::from(run)]));
                                 let views: Vec<wgpu::TextureView> = bc
                                     .textures
@@ -985,7 +1002,7 @@ impl DocOps {
                                     .collect();
                                 let refs: Vec<&wgpu::TextureView> = views.iter().collect();
                                 let (g0, g1, keep) = body.bind(&device.device, &f, isize, &bv, &refs, &[]);
-                                parts.push(Part::Draw(body.clone(), (g0, g1), keep, t[into].clone()));
+                                parts.push(Part::Draw(body.clone(), (g0, g1), keep, t[into].clone(), None));
                                 last = into;
                             }
                             iterated.insert(format!("{}.{step}", c.op.id), t[last].clone());
@@ -1002,7 +1019,15 @@ impl DocOps {
                         self.drawn.insert(item.clone(), key);
                         let (g0, g1, keep) =
                             runner.bind(&device.device, &f, own, &values, &refs, &srefs);
-                        parts.push(Part::Draw(runner.clone(), (g0, g1), keep, into.clone()));
+                        let within = self.within.get(&item).map(|&r| {
+                            let at = |v: u32, of: u32, to: u32| {
+                                (f64::from(v) * f64::from(to) / f64::from(of)).ceil() as u32
+                            };
+                            let (x, y) = (r[0] * own[0] / size[0], r[1] * own[1] / size[1]);
+                            let w = at(r[0] + r[2], size[0], own[0]).min(own[0]) - x;
+                            [x, y, w, at(r[1] + r[3], size[1], own[1]).min(own[1]) - y]
+                        });
+                        parts.push(Part::Draw(runner.clone(), (g0, g1), keep, into.clone(), within));
                         let blit = (own != size).then(|| {
                             let full = self.target(device, format!("{item}:{k}:full"), size);
                             self.blit_rec(device, &into, full, size)
@@ -1056,7 +1081,7 @@ enum Part {
     CopyBuffer(wgpu::Buffer, wgpu::Buffer),
     Dispatch(Arc<Runner>, Groups, [wgpu::Buffer; 2], u32),
     DispatchIndirect(Arc<Runner>, Groups, [wgpu::Buffer; 2], wgpu::Buffer),
-    Draw(Arc<Runner>, Groups, [wgpu::Buffer; 2], wgpu::TextureView),
+    Draw(Arc<Runner>, Groups, [wgpu::Buffer; 2], wgpu::TextureView, Option<[u32; 4]>),
     Blit(Blit),
     Pre(Arc<Pre>),
     Plan(Arc<Plan>),
@@ -1145,7 +1170,7 @@ impl Rec {
                     r.dispatch_indirect(encoder, args, g, writes);
                     times.end(i, encoder);
                 }
-                Part::Draw(r, g, _, into) => {
+                Part::Draw(r, g, _, into, within) => {
                     let i = times.start(self.mark, encoder);
                     let writes = match pair(used) {
                         Some((s, at)) => {
@@ -1154,7 +1179,7 @@ impl Rec {
                         }
                         None => times.render(i),
                     };
-                    r.encode(encoder, into, g, writes);
+                    r.encode_within(encoder, into, g, writes, *within);
                     times.end(i, encoder);
                 }
                 Part::Blit(b) => b.record(encoder),

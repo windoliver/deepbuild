@@ -31,7 +31,11 @@ impl Equirect {
         let v = (f64::from(y) + 0.5) / f64::from(self.size[1]);
         let phi = (u - 0.5) * std::f64::consts::TAU;
         let theta = v * std::f64::consts::PI;
-        [theta.sin() * phi.sin(), theta.cos(), -theta.sin() * phi.cos()]
+        [
+            theta.sin() * phi.sin(),
+            theta.cos(),
+            -theta.sin() * phi.cos(),
+        ]
     }
 
     /// The image made by `f` of each pixel's direction.
@@ -202,7 +206,11 @@ impl Prefilter {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
-                buffer_entry(2, wgpu::ShaderStages::FRAGMENT, wgpu::BufferBindingType::Uniform),
+                buffer_entry(
+                    2,
+                    wgpu::ShaderStages::FRAGMENT,
+                    wgpu::BufferBindingType::Uniform,
+                ),
             ],
         });
         let pl = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -249,7 +257,10 @@ impl Prefilter {
         let d = &device.device;
         // The source with its mips, as half floats.
         let mut levels = vec![source.clone()];
-        while levels.last().is_some_and(|l| l.size[0] > 1 || l.size[1] > 1) {
+        while levels
+            .last()
+            .is_some_and(|l| l.size[0] > 1 || l.size[1] > 1)
+        {
             let next = levels.last().expect("one level").half();
             levels.push(next);
         }
@@ -329,7 +340,12 @@ impl Prefilter {
                 }
                 let params = Params {
                     at: [face, m, mips, SAMPLES],
-                    k: [rough, px as f32, source.size[0] as f32, source.size[1] as f32],
+                    k: [
+                        rough,
+                        px as f32,
+                        source.size[0] as f32,
+                        source.size[1] as f32,
+                    ],
                 };
                 let buffer = d.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("scene3d env params"),
@@ -498,8 +514,10 @@ fn star(d: [f64; 3], density: f64) -> f64 {
 pub fn studio(d: [f64; 3]) -> [f64; 3] {
     let wall = 0.35 + 0.15 * d[1].max(0.0);
     let mut c = if d[1] < 0.0 { 0.25 } else { wall };
-    let boxes: [([f64; 3], f64, f64); 2] =
-        [([0.0, 1.0, 0.0], 0.92, 6.0), ([-0.6, 0.5, -0.62], 0.95, 4.0)];
+    let boxes: [([f64; 3], f64, f64); 2] = [
+        ([0.0, 1.0, 0.0], 0.92, 6.0),
+        ([-0.6, 0.5, -0.62], 0.95, 4.0),
+    ];
     for (dir, cos, k) in boxes {
         let l = (dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]).sqrt();
         let dot = (d[0] * dir[0] + d[1] * dir[1] + d[2] * dir[2]) / l;
@@ -515,13 +533,15 @@ pub fn source(sky: &Sky, from: &Source) -> Equirect {
     match from {
         Source::Sky => Equirect::from_fn([512, 256], |d| sky_radiance(sky, d)),
         Source::Studio => Equirect::from_fn([512, 256], studio),
-        Source::Asset(_, bytes) => bytes
-            .as_deref()
-            .and_then(|b| hdr(b))
-            .unwrap_or_else(|| Equirect {
-                size: [2, 1],
-                rgb: vec![[0.0; 3]; 2],
-            }),
+        Source::Asset(_, bytes) => {
+            bytes
+                .as_deref()
+                .and_then(|b| hdr(b))
+                .unwrap_or_else(|| Equirect {
+                    size: [2, 1],
+                    rgb: vec![[0.0; 3]; 2],
+                })
+        }
     }
 }
 
@@ -569,7 +589,7 @@ pub fn hdr(bytes: &[u8]) -> Option<Equirect> {
     for _ in 0..h {
         let rle = w >= 8
             && w < 32768
-            && bytes.get(at..at + 4)? [0] == 2
+            && bytes.get(at..at + 4)?[0] == 2
             && bytes[at + 1] == 2
             && (u32::from(bytes[at + 2]) << 8 | u32::from(bytes[at + 3])) == w;
         if rle {
@@ -607,7 +627,11 @@ pub fn hdr(bytes: &[u8]) -> Option<Equirect> {
             } else {
                 2f32.powi(i32::from(px[3]) - 136)
             };
-            rgb.push([f32::from(px[0]) * f, f32::from(px[1]) * f, f32::from(px[2]) * f]);
+            rgb.push([
+                f32::from(px[0]) * f,
+                f32::from(px[1]) * f,
+                f32::from(px[2]) * f,
+            ]);
         }
     }
     Some(Equirect { size: [w, h], rgb })
@@ -621,7 +645,12 @@ mod tests {
     fn a_uniform_environment_gives_irradiance_pi_everywhere() {
         let e = Equirect::from_fn([64, 32], |_| [1.0, 1.0, 1.0]);
         let c = sh9(&e);
-        for n in [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.6, 0.0, 0.8]] {
+        for n in [
+            [0.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.6, 0.0, 0.8],
+        ] {
             let e = irradiance(&c, n);
             assert!((e[0] - 1.0).abs() < 1e-3, "{n:?}: {e:?}");
         }
