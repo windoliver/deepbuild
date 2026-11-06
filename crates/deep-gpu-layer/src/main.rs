@@ -25,6 +25,7 @@ mod fixtures;
 mod flat;
 mod frames;
 mod golden;
+mod groups;
 mod guard;
 mod host;
 mod interp_suite;
@@ -71,6 +72,18 @@ use crate::worker::Worker;
 /// The wrong programs, each reachable only through `--planted` (README: Planted programs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #430's wrong programs (tests/acceptance/430/README.md: Planted programs).
+    GroupPassAtLayerEnd,
+    GroupPassReadsEarlier,
+    GroupPassPastGrow,
+    BackdropReadsOtherWriter,
+    BackdropReadsLaterItems,
+    BackdropPastCoverage,
+    BackdropReadsStatus,
+    VividLightAsLinearLight,
+    DissolveReadsPlayback,
+    PassLinearIn2d,
+    PassEncodedIn3d,
     DividesAlpha,
     DrawsSurfacesAfterScene,
     SubmitsOnCompletion,
@@ -265,6 +278,17 @@ pub enum Planted {
 impl Planted {
     fn parse(name: &str) -> Option<Planted> {
         Some(match name {
+            "group_pass_at_layer_end" => Planted::GroupPassAtLayerEnd,
+            "group_pass_reads_earlier" => Planted::GroupPassReadsEarlier,
+            "group_pass_past_grow" => Planted::GroupPassPastGrow,
+            "backdrop_reads_other_writer" => Planted::BackdropReadsOtherWriter,
+            "backdrop_reads_later_items" => Planted::BackdropReadsLaterItems,
+            "backdrop_past_coverage" => Planted::BackdropPastCoverage,
+            "backdrop_reads_status" => Planted::BackdropReadsStatus,
+            "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
+            "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
+            "pass_linear_in_2d" => Planted::PassLinearIn2d,
+            "pass_encoded_in_3d" => Planted::PassEncodedIn3d,
             "divides_alpha" => Planted::DividesAlpha,
             "draws_surfaces_after_scene" => Planted::DrawsSurfacesAfterScene,
             "submits_on_completion" => Planted::SubmitsOnCompletion,

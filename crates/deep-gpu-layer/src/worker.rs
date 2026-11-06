@@ -44,6 +44,7 @@ pub struct State {
     pub allocations: HashMap<String, Vec<wgpu::Texture>>,
     /// Vello GPU drawing 2D writer layers read back, and a 2D layer's surface (#385).
     pub vello2d: Option<deep_marks_render::gpu::Vello2d>,
+    pub groups: Option<crate::groups::Groups>,
     pub view2d: Option<View>,
 }
 
@@ -136,6 +137,7 @@ impl Worker {
                     releases_early,
                     allocations: HashMap::new(),
                     vello2d: None,
+                    groups: None,
                     view2d: None,
                 };
                 for work in rx {
