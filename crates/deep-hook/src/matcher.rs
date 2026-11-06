@@ -37,6 +37,8 @@
 //!   `gh release delete`, `gh issue delete`).
 //! - `counts:<class>`: the tool counts as `read`, `change`, `send` or `destructive`, by the classes rules.json
 //!   holds; a tool they don't list counts as change, and one whose name starts with `delete_` as destructive.
+//! - `unread:<effect>`: the reader couldn't read the call whole and it may have that effect class. A call it reads
+//!   whole never matches, so a plain push goes on to the authority gate while one nobody can read is denied (#1156).
 //!
 //! A call the reader couldn't read whole meets every entry it may be one of (#1097): a run whose program the line
 //! computes meets a `run:` entry whose argument globs its arguments fit and an `effect:` class whose words they fit,
@@ -122,7 +124,7 @@ pub fn known(pattern: &str) -> bool {
         "git" => rest == "stash-unnamed" || rest == "other-checkout",
         "read" => !rest.is_empty(),
         "hub" => rest == "stop" || rest == "service",
-        "effect" => EFFECTS.contains(&rest),
+        "effect" | "unread" => EFFECTS.contains(&rest),
         "counts" => CLASSES.contains(&rest),
         _ => false,
     }
@@ -214,7 +216,7 @@ impl Call {
                 let wanted: Vec<&str> = rest.split_whitespace().skip(1).collect();
                 args_match(run, &wanted)
             }
-            Some(Unread::Program) if kind == "effect" => programs(rest).iter().any(|p| {
+            Some(Unread::Program) if kind == "effect" || kind == "unread" => programs(rest).iter().any(|p| {
                 let known = Run {
                     program: p.to_string(),
                     glob: false,
@@ -1462,6 +1464,15 @@ mod tests {
             Path::new("/h"),
             Path::new("/h/.deepbuild/hub.sock"),
         )
+    }
+
+    #[test]
+    fn unread_matches_only_a_call_the_reader_couldnt_read_whole() {
+        assert!(known("unread:push") && !known("unread:nothing"));
+        let hit = bash("\"$(printf git)\" push origin main").matches("unread:push").unwrap();
+        assert!(hit.detail.unwrap().contains("couldn't be read"));
+        assert!(bash("git push origin main").matches("unread:push").is_none());
+        assert!(bash("\"$CC\" -o app main.c").matches("unread:push").is_none());
     }
 
     #[test]
