@@ -14,6 +14,7 @@ import { numbersLines } from './numbers.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime, elapsed } from './promises.js';
+import { visible } from './visible.js';
 import { startOf } from './wire.js';
 import { claimState, newestClaim } from './verdict-chat.js';
 import { verdictLine } from '@deepbuild/verdicts';
@@ -256,7 +257,8 @@ export function render(rows: readonly StatusRow[], from: string): string {
   const quiet = rows.filter((r) => r.state === 'quiet');
   const byRepo = [...new Set(quiet.map((r) => r.repo))].sort().map((repo) => `${repo} ${quiet.filter((r) => r.repo === repo).length}`);
   if (quiet.length) out.push(`${quiet.length} quiet, by repo: ${byRepo.join(', ')}`);
-  return `${out.join('\n')}\n`;
+  // Each line names sessions, notes and calls from the record, so each prints through `visible` (#1510).
+  return `${out.map(visible).join('\n')}\n`;
 }
 
 /** `deep numbers`: your readings through the hub, or what changes them; a hub that can't be read shows no numbers at all. */
