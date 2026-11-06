@@ -717,7 +717,8 @@ export class GateRunner {
     const entries = checks.flatMap((check) => { const e = c?.entries.get(check); return e ? [e] : []; });
     if (!c || entries.length !== checks.length) return false;
     c.state = state;
-    for (const e of entries) { e.runs = []; e.outcome = null; e.running = true; }
+    // A run on the new reading is no run of the old one's key (#1018): its runs no longer count for the check.
+    for (const e of entries) { e.runs = []; e.outcome = null; e.running = true; delete e.group; }
     void (async () => {
       await Promise.all(entries.map(async (e) => {
         try {
