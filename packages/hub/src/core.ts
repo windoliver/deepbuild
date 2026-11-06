@@ -380,6 +380,8 @@ export class Core {
   private notifications: string | null = null;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
   private readonly holds: Holds;
+  /** One session's transcript copied into the record now; unset until the archive opens. */
+  private archiveSession?: (session: string) => Promise<void>;
   /** The ask each plug-in change or send waits on, by its session and request ID (#363). */
   private readonly actionAsks = new Map<string, string>();
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
@@ -642,6 +644,7 @@ export class Core {
       raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
       pin: (cwd, question) => this.pinOf(cwd, question), heard: (ask) => this.heardBy(ask),
+      archived: async (session) => { await this.archiveSession?.(session); },
     });
     // Shared build products (#1017): made first, so a session that starts while the hub opens finds them; their builds
     // take the host and the lease queue only once a session's start asks.
@@ -1013,6 +1016,7 @@ export class Core {
       return archiving;
     };
     archivePass();
+    this.archiveSession = (session) => archive.session(session);
     // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
     this.wikiBuild = openWikiBuild({
       record: this.record, root: this.root, store: this.store, runner: this.runner, asks, now: this.now, archive: async () => { await archiving; await archivePass(); },
