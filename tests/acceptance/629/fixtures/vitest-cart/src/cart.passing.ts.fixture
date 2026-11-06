@@ -1,0 +1,2 @@
+// The cart under test: its total adds the prices in cents.
+export const totalOf = (prices: number[]): number => prices.reduce((sum, p) => sum + Math.round(p * 100), 0) / 100;

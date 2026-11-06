@@ -1,0 +1,7 @@
+import { expect, test } from 'vitest';
+import { totalOf } from './cart';
+
+test('cart total', () => {
+  const total = totalOf([6, 6.01, 6]);
+  expect(total).toBe(18.01);
+});
