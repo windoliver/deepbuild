@@ -11,6 +11,7 @@ pub mod meter;
 pub mod render;
 pub mod ring;
 pub mod seam;
+pub mod structural;
 pub mod surface;
 pub mod upload;
 pub mod view;
