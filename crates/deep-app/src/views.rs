@@ -946,14 +946,22 @@ fn terminal_view(tab: &TerminalTab, chrome: &chrome::Chrome) -> AnyElement {
 }
 
 /// The title bar with the mark, the small cut, drawn 24 px with the D at 18 px: the kit's Ink on the light bar, the
-/// look's ink on the dark one.
+/// look's ink on the dark one. In dark the bar takes the look's colors, so it can't stay light under a pale mark.
 pub fn title_bar(window: &Window) -> TitleBar {
-    let ink = if chrome::is_dark(window) {
-        chrome::of(window).ink_primary
+    let dark = chrome::is_dark(window);
+    let chrome = chrome::of(window);
+    let ink = if dark {
+        chrome.ink_primary
     } else {
         rgb(brand::INK).into()
     };
-    TitleBar::new().child(
+    let bar = TitleBar::new();
+    let bar = if dark {
+        bar.bg(chrome.raised).border_color(chrome.divider)
+    } else {
+        bar
+    };
+    bar.child(
         div()
             .id("title-bar-mark")
             .test_support()
