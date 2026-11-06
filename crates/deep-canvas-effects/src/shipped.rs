@@ -1095,6 +1095,53 @@ fn set_when(g: &mut G, step: &str, cond: &str) {
     }
 }
 
+/// The px a pass of the shipped blur reaches at most.
+pub const MAX_BLUR: f64 = 64.0;
+
+/// One axis of the shipped blur (Frame and group: passes): a Gaussian of `radius` px, 31 taps
+/// across twice the radius, of the premultiplied color. A group runs `x`, then `y`.
+pub fn blur(axis: &str) -> Value {
+    let mut g = G::new();
+    let uv = g.s("screen_uv@1", json!({}));
+    let texel = texel(&mut g, "src");
+    let along = g.ty(if axis == "x" { json!([1, 0]) } else { json!([0, 1]) }, "vec2<f32>");
+    let px = g.mul(&texel, &along);
+    let reach = g.mul(&px, "radius");
+    let mut b = G::named("b");
+    let i = b.convert("i", "f32");
+    let half = b.c(json!(15.0));
+    let centred = b.sub(&i, &half);
+    let u = b.div(&centred, &half);
+    let off = b.mul(&reach, &u);
+    let at = b.add(&uv, &off);
+    let tap = b.sample("src", &at);
+    let uu = b.mul(&u, &u);
+    let fall = b.mulk(&uu, -2.0);
+    let weight = b.s("exp@1", json!({"x": fall}));
+    let weighted = b.mul(&tap, &weight);
+    b.named_step("sum", "add@1", json!({"a": "sum", "b": weighted}));
+    b.named_step("total", "add@1", json!({"a": "total", "b": weight}));
+    let taps = g.s(
+        "repeat@1",
+        json!({"count": 31, "index": "i", "accumulate": {
+            "sum": {"type": "vec4<f32>", "init": [0, 0, 0, 0]},
+            "total": {"type": "f32", "init": 0},
+        }, "body": b.done()}),
+    );
+    let out = g.div(&format!("{taps}.sum"), &format!("{taps}.total"));
+    let mut radius = param("radius", "f32", json!(8), [0.0, MAX_BLUR]);
+    radius["unit"] = json!("px");
+    pass(
+        &format!("blur.{axis}@1"),
+        "One axis of a Gaussian blur.",
+        json!({"src": texture("core", "color", "texture"), "radius": radius}),
+        g,
+        &out,
+        json!("full"),
+        8.0,
+    )
+}
+
 /// The pixels the exactness fixture hashes: a fixed pattern of 64 × 64 RGBA8 words.
 pub const HASH_FIXTURE: u32 = 64 * 64;
 

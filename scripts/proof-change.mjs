@@ -6,7 +6,7 @@ import { existsSync, lstatSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { homedir, tmpdir } from 'node:os';
 import { join, posix, resolve } from 'node:path';
 import ts from 'typescript';
-import { testPaths } from './lanes.mjs';
+import { named, testPaths } from './lanes.mjs';
 
 const TAG = /#(\d+)\.([0-9a-f]{8})\b/g;
 export const tagsIn = (text) => [...new Set([...text.matchAll(TAG)].map(([tag]) => tag))];
@@ -22,7 +22,7 @@ export const underTestPaths = (path) => (testPattern.test(path) || TEST_DATA.tes
 export const RUNNER_CONFIG = /(?:^|\/)(?:vitest|vite)(?:\.[\w-]+)*\.(?:config|workspace)(?:\.[\w-]+)*\.[cm]?[jt]s$/i;
 export const isTestFile = (path) => underTestPaths(path) && /\.test\.(?:mjs|js|ts)$/.test(path);
 // A test's name in every line and approval: its file's repo path, then its full name.
-export const named = (path, name) => `${path} › ${name}`;
+export { named };
 
 export class Blocked extends Error {}
 

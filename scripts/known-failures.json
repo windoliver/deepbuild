@@ -44,5 +44,193 @@
     "cargo -p deep-replica --test headless › replica_launch_under_two_seconds",
     "tests/acceptance/326/setup/first-command.test.ts › #326 setup: the first deep command sets up as the click does, without a click › #326.523de34e the first deep status in a fresh home sets DeepBuild up and says so in one line, the second says nothing and writes nothing, and then a failed claim stops unheld and unblocked while pkill -f vite is denied with the hub up and down",
     "tests/acceptance/16/address.test.ts › AC2 #16.818c41e7 every client takes the hub's address from one setting and passes through a forwarded socket › AC2 the app (#34): its socket client's tests pass against the hub through the forwarded socket the setting names"
+  ],
+  "skips": [
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › a hub restarted mid-turn leaves the turn's stop judged",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › a hub restarted while pi is idle still reaches it with the answer",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › a judged stop's verdict line reaches the person, and not the model",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › a line from the hub that isn't JSON leaves pi running, and later hooks still flow",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › a replaced session's answer is refused by a hub restarted since",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › a run that failed settles, however the hub answers its stop",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › a running deep_ask answered in time returns the answer, with one outcome and no second message",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › a session quit during deep_ask takes its answer when resumed",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › a session replaced and then resumed takes its answer",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › a session resumed from a new process takes its answer, and a second process on one file adds no records",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › a stop sent back again and again ends at the cap, and the stop says what the model said",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › a stop the hub holds past 15 s still gets its send-back",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › an answer another extension rewrites goes once, and is reported once",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › an answer delivered as a turn is recorded as a continuation, not the person's words",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › an answer goes to the fork that asked, never to the session it forked from",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › an answer refused for a replaced session stays refused when that session resumes",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › an answer steered in and cleared from pi's queue goes again as a turn, reported only once it landed",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › runs with no hub, and adds no wait",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › the answer goes only to the session that asked, of two in one folder",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "packages/pi/test/lifecycle.test.ts › the pi package › two answers that come during a compaction wait it out, and go as one turn",
+      "note": "",
+      "reason": "gated on the opt-in variable DEEP_PI_CLI: the suite needs a real pi",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "tests/acceptance/327/answers.test.ts › AC2 #327.da06e3b1 the option the card sends is recorded and reaches the agent's next input with its ID and label, delivered › #327.da06e3b1 the app's answer C to a taste call (options A, C, B in the record; B recommended) records option C in ask.answered, the held Stop continues with C's ID and label, and delivery.outcome says delivered",
+      "note": "",
+      "reason": "retired with the owner's approval on #906's PR: answers-redraft/ac2.test.ts is AC2's hub-side test",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "tests/acceptance/380/cts-exact.test.ts › #380.639458be every exact operator gives identical bits on two GPUs of different families (an M1 and an M3); with one GPU that comparison is BLOCKED with one unblock ask, never PASS › #380.639458be on an M1 and an M3: every exact operator's bits from a record an M1 made equal this M3's (DEEPBUILD_M1_RECORD); without that record this is BLOCKED, never PASS",
+      "note": "BLOCKED: no record from an M1 (unblock: run `deep-gpu run` with {\"call\": \"exact\"} on an M1 Mac and set DEEPBUILD_M1_RECORD to the record file it writes); this is not a pass",
+      "reason": "BLOCKED by design: needs a record an M1 Mac made, which DEEPBUILD_M1_RECORD names",
+      "approval": "#1115, section 10a answer 1(a)"
+    },
+    {
+      "id": "tests/acceptance/39/app.live.test.ts › live runs › AC12 #39.071692b0 (live) Codex's engine for the eleven events other than Stop, whose replies replies.test.ts validates only against the schemas",
+      "note": "BLOCKED: needs a live run by hand: an interactive Codex session that fires each",
+      "reason": "BLOCKED by design: a person runs it live by hand",
+      "approval": "#1115, section 10a answer 1(a)"
+    },
+    {
+      "id": "tests/acceptance/39/app.live.test.ts › live runs › AC13 #39.3c135e58 (live) Codex shows you no prompt for a saved deny",
+      "note": "BLOCKED: needs a live run by hand: the terminal UI under -a on-request",
+      "reason": "BLOCKED by design: a person runs it live by hand",
+      "approval": "#1115, section 10a answer 1(a)"
+    },
+    {
+      "id": "tests/acceptance/39/app.live.test.ts › live runs › AC26 #39.8807ac2c (live) real Codex's read-only sandbox refuses the write",
+      "note": "BLOCKED: needs a live run by hand: a signed-in codex exec job; runner.test.ts replays its shape",
+      "reason": "BLOCKED by design: a person runs it live by hand",
+      "approval": "#1115, section 10a answer 1(a)"
+    },
+    {
+      "id": "tests/acceptance/39/app.live.test.ts › live runs › AC4 #39.3506d285 (live) a stop held in the Codex app, or the gap recorded with its version",
+      "note": "BLOCKED: needs a live run by hand: a throwaway session in Codex.app with DeepBuild's entries trusted, its Stop held",
+      "reason": "BLOCKED by design: a person runs it live by hand",
+      "approval": "#1115, section 10a answer 1(a)"
+    },
+    {
+      "id": "tests/acceptance/42/live.test.ts › AC1 live: a Claude Code session exporting to the receiver › AC1 live: claude -p with telemetry on runs Bash once; the record holds its tool.span and a request.cost for that session",
+      "note": "INCONCLUSIVE: the live session spends plan usage; set DEEP_OTLP_LIVE=1 to run it",
+      "reason": "gated on the opt-in variable DEEP_OTLP_LIVE: the live session spends plan usage",
+      "approval": "#1115, the scan on main"
+    },
+    {
+      "id": "tests/acceptance/45/baseline.test.ts › AC1 the pilot baseline is recomputed › #45.3f3734f8 AC1 the real pilot baseline, named by DEEP_PILOT_BASELINE (private, never committed), recomputes or reads missing",
+      "note": "BLOCKED: the private pilot baseline is yours; DEEP_PILOT_BASELINE names its manifest (README, Outside inputs)",
+      "reason": "BLOCKED by design: the private pilot baseline is the owner's, and DEEP_PILOT_BASELINE names it",
+      "approval": "#1115, section 10a answer 1(a)"
+    },
+    {
+      "id": "tests/acceptance/45/classify.test.ts › AC4 classifying readings are checked against your labels › #45.7492072d AC4 the real classifier against your real labelled sample, named by DEEP_LABELLED_SAMPLE, passes the threshold fixed with the measures",
+      "note": "BLOCKED: only you can label the sample; DEEP_LABELLED_SAMPLE names it (README, Outside inputs)",
+      "reason": "BLOCKED by design: only the owner can label the sample, and DEEP_LABELLED_SAMPLE names it",
+      "approval": "#1115, section 10a answer 1(a)"
+    },
+    {
+      "id": "tests/acceptance/880/redraft/touch-id.test.ts › #880.e0afc5f5 on the reference Mac, Touch ID accepted counts the answer within 2 s of the touch; cancelled leaves the ask open with \"the prompt was cancelled\"",
+      "note": "INCONCLUSIVE: a manual run on the reference Mac; a person sets DEEP_880_TOUCH_ID=1",
+      "reason": "gated on the opt-in variable DEEP_880_TOUCH_ID: a person records the screen and touches or cancels",
+      "approval": "#1115, Skips: known today"
+    },
+    {
+      "id": "tests/acceptance/880/touch-id.test.ts › #880.e0afc5f5 on the reference Mac, Touch ID accepted counts the answer within 2 s of the touch; cancelled leaves the ask open with \"the prompt was cancelled\"",
+      "note": "INCONCLUSIVE: a manual run on the reference Mac; a person sets DEEP_880_TOUCH_ID=1",
+      "reason": "gated on the opt-in variable DEEP_880_TOUCH_ID: a person records the screen and touches or cancels",
+      "approval": "#1115, Skips: known today"
+    }
   ]
 }

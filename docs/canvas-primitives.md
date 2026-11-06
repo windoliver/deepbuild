@@ -302,6 +302,7 @@ The kernel holds only this contract: document shapes, kinds with versions, stabl
 - `aspect: letterbox | extend` (by default letterbox for films and 2D documents, extend for 3D scenes and figures)
 - `look: {asset: look@major, theme: auto | light | dark = auto}`
 - `camera: item ID` (what the document is viewed through when no shot is active); `locale: BCP 47 = en` (the copy table's default; a view setting can change it)
+- `light_policy: {soft, contact, shadowed, local_map, cache}` (Light policy: soft shadows, Light policy: local shadows; a document that names none keeps the sun's fixed filter and draws no local shadow map)
 - `budget: {class, frame_gpu_ms, frame_cpu_ms: ms, gpu_mb: MB, items, instances, vertices, insets, lights, puffs, voices: u32, effects_gpu_ms: ms, ambient_fps: Hz, build_ms, rebuild_ms: ms}` (caps that only tighten the class)
 - `requires: {core: semver, kinds: [family.name@major.minor], modules: {canvas module → semver range}, preview: [name@major]} (each kind's minor is the lowest its used fields need; preview names each preview entry the document uses)`; `packs: [name@version]`
 - `data: {name → number | number[] | string[] | {value, source}}`
@@ -1996,11 +1997,11 @@ For: a blur, glow, grade or distortion on one item, at its place in the draw ord
 
 - `passes: [{op: name@major | gpu.pass@1 ID, params: {name → value | channel}, grow: u = 0}] ≤ 8 = []` (on `group@1`; op names a shipped pass operator, a pack's such as `fx.levels@1`, or a composed pass in the document)
 
-**Semantics:** The group's children draw into its isolated target; the passes run in order on that target, each on the result of the one before, within the group's bounds grown by grow; the result composites at the group's draw order with its blend and opacity. An item drawn after the group stays untouched, and nothing drawn before it reaches a pass. Each pass goes through the operator check like any other. Passes, a backdrop's among them, see the group's target in the space its writer layer composites in, as blend modes do: sRGB-encoded in a 2D writer layer and linear light in a 3D one, and they write back in that space. A 2D writer layer with passes moves to the GPU layer, as the draw-path rule says, and its 2D goldens stay Vello CPU, so the passes are display only there.
+**Semantics:** The group's children draw into its isolated target; the passes run in order on that target, each on the result of the one before, within the group's bounds grown by grow; the result composites at the group's draw order with its blend and opacity. An item drawn after the group stays untouched, and nothing drawn before it reaches a pass. Each pass goes through the operator check like any other, and a pass a group names runs there and nowhere else, not also in the view's chain. The shipped blur is `blur@1 {radius: px ≤ 64}`, which reaches its radius when `grow` is unset. Passes, a backdrop's among them, see the group's target in the space its writer layer composites in, as blend modes do: sRGB-encoded in a 2D writer layer and linear light in a 3D one, and they write back in that space. A 2D writer layer with passes moves to the GPU layer, as the draw-path rule says, and its 2D goldens stay Vello CPU, so the passes are display only there.
 
 **Cost:** Each pass's declared cost × the group's pixels at its resolution; the offscreen is shared with blend. Budget class: figure, work product, showpiece, export.
 
-**It can never:** Read another writer's layer, the card or an earlier frame; run outside its bounds plus grow; hold more than 8 passes; recolor or cover a status color.
+**It can never:** Read another writer's layer, the card or an earlier frame; run outside its bounds plus grow; hold more than 8 passes; recolor or cover a status color; hold a 3D item, which draws in depth and never into a group's target.
 
 **Lands:** R6, with composed graphs
 

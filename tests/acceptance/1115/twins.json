@@ -1,0 +1,17 @@
+{
+  "#1115.07ca71fc": [
+    "unanchored-state",
+    "quiet-reporter",
+    "moved-a-failure"
+  ],
+  "#1115.3a2181d7": [
+    "first-state-wins"
+  ],
+  "#1115.82b1c824": [
+    "whole-file-rule",
+    "line-rule"
+  ],
+  "#1115.1f2f1fa0": [
+    "empty-report-fails"
+  ]
+}

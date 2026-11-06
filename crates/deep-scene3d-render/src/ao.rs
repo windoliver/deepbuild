@@ -5,6 +5,7 @@
 //! three passes again from that frame's depth alone.
 
 use bytemuck::{Pod, Zeroable};
+use deep_canvas_scene3d::light::Contact;
 use deep_canvas_scene3d::look::Ao;
 use deep_gpu::device::Device;
 
@@ -16,7 +17,8 @@ pub const BLUR: &str = "scene3d.ao_blur";
 
 const SHADER: &str = include_str!("ao.wgsl");
 const NORMAL: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
-const VISIBILITY: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
+/// Occlusion in r; the key light's contact shadow in g (#446).
+const VISIBILITY: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -26,6 +28,9 @@ struct AoUniform {
     size: [f32; 4],
     opts: [u32; 4],
     scale: [f32; 4],
+    /// Toward the key light and the contact shadow's length in m, and its samples in `steps`.
+    contact: [f32; 4],
+    steps: [u32; 4],
 }
 
 struct Pipes {
@@ -156,8 +161,9 @@ impl Passes {
             VISIBILITY,
             wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         );
-        // 1.0 as an f16.
-        crate::write_texture(&device.queue, &white, 0, &0x3c00u16.to_le_bytes(), 2, [1, 1]);
+        // 1.0 as an f16, twice.
+        let one = [0x00, 0x3c, 0x00, 0x3c];
+        crate::write_texture(&device.queue, &white, 0, &one, 4, [1, 1]);
         let white = white.create_view(&Default::default());
         let off = bind_group(
             d,
@@ -206,18 +212,32 @@ impl Passes {
         ao: Option<Ao>,
         size: [u32; 2],
         clip: &[f64; 16],
+        contact: Option<(Contact, [f64; 3])>,
     ) -> u32 {
         let was = self.on.map(|(_, s)| s);
         let mut compiled = 0;
+        // A contact shadow marches the prepass's depth at full size; without ao it reads the
+        // prepass alone, an occlusion of strength 0.
+        let ao = match (ao, contact) {
+            (Some(a), Some(_)) => Some(Ao { half: false, ..a }),
+            (None, Some(_)) => Some(Ao {
+                strength: 0.0,
+                half: false,
+                ..Ao::default()
+            }),
+            (a, None) => a,
+        };
         let Some(ao) = ao else {
             if was.is_some() {
                 self.generation += 1;
             }
             self.on = None;
             deep_gpu::alloc::outside(|| {
-                device
-                    .queue
-                    .write_buffer(&self.uniform, 0, bytemuck::bytes_of(&AoUniform::zeroed()))
+                device.queue.write_buffer(
+                    &self.uniform,
+                    0,
+                    bytemuck::bytes_of(&AoUniform::zeroed()),
+                )
             });
             return 0;
         };
@@ -299,6 +319,10 @@ impl Passes {
                 0.0,
                 0.0,
             ],
+            contact: contact.map_or([0.0; 4], |(c, l)| {
+                [l[0] as f32, l[1] as f32, l[2] as f32, c.length as f32]
+            }),
+            steps: [contact.map_or(0, |(c, _)| c.samples); 4],
         };
         deep_gpu::alloc::outside(|| {
             device
@@ -394,62 +418,70 @@ pub struct Frame {
 }
 
 impl Frame {
-    /// Records the prepass (the opaque solids' depth and normals), the occlusion and the blur.
-    pub fn record(&self, encoder: &mut wgpu::CommandEncoder) {
-        deep_gpu::alloc::outside(|| {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some(PREPASS),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.normal,
-                    resolve_target: None,
-                    depth_slice: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 1.0,
-                            b: 0.0,
-                            a: 0.0,
+    /// Records the prepass (the opaque solids' depth and normals), the occlusion and the blur,
+    /// each timed under the occlusion's name, which sums them.
+    pub fn record(&self, profiler: &Option<crate::Profiler>, encoder: &mut wgpu::CommandEncoder) {
+        crate::timed(profiler, OCCLUSION, encoder, |encoder, timestamp_writes| {
+            deep_gpu::alloc::outside(|| {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some(PREPASS),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &self.normal,
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.0,
+                                g: 1.0,
+                                b: 0.0,
+                                a: 0.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.depth,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0.0),
+                            store: wgpu::StoreOp::Store,
                         }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0.0),
-                        store: wgpu::StoreOp::Store,
+                        stencil_ops: None,
                     }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
-            });
-            pass.set_pipeline(&self.prepass);
-            pass.set_bind_group(0, &self.frame, &[]);
-            for (vertices, indices, count, instances, n) in &self.solids {
-                pass.set_vertex_buffer(0, vertices.slice(..));
-                pass.set_vertex_buffer(1, instances.slice(..));
-                pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..*count, 0, 0..*n);
-            }
+                    timestamp_writes,
+                    ..Default::default()
+                });
+                pass.set_pipeline(&self.prepass);
+                pass.set_bind_group(0, &self.frame, &[]);
+                for (vertices, indices, count, instances, n) in &self.solids {
+                    pass.set_vertex_buffer(0, vertices.slice(..));
+                    pass.set_vertex_buffer(1, instances.slice(..));
+                    pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..*count, 0, 0..*n);
+                }
+            })
         });
         let white = wgpu::LoadOp::Clear(wgpu::Color::WHITE);
-        crate::full_pass(
-            encoder,
-            OCCLUSION,
-            &self.raw,
-            white,
-            &self.occlusion,
-            &self.occlusion_bind,
-            None,
-        );
-        crate::full_pass(
-            encoder,
-            BLUR,
-            &self.blurred,
-            white,
-            &self.blur,
-            &self.blur_bind,
-            None,
-        );
+        crate::timed(profiler, OCCLUSION, encoder, |encoder, timestamp_writes| {
+            crate::full_pass(
+                encoder,
+                OCCLUSION,
+                &self.raw,
+                white,
+                &self.occlusion,
+                &self.occlusion_bind,
+                timestamp_writes,
+            );
+        });
+        crate::timed(profiler, OCCLUSION, encoder, |encoder, timestamp_writes| {
+            crate::full_pass(
+                encoder,
+                BLUR,
+                &self.blurred,
+                white,
+                &self.blur,
+                &self.blur_bind,
+                timestamp_writes,
+            );
+        });
     }
 }

@@ -268,6 +268,13 @@ impl<C: Glyphs> Painter<'_, C> {
         marks: impl IntoIterator<Item = &'d Drawn>,
     ) -> Result<(), Value> {
         for drawn in marks {
+            // A backdrop group's children only shape its coverage, on the GPU layer.
+            let shapes_coverage = drawn.scopes.iter().any(|s| {
+                matches!(s, Scope::Opacity { effect: Some(e), .. } if e.backdrop)
+            });
+            if shapes_coverage {
+                continue;
+            }
             self.scopes
                 .enter(&mut self.ctx, &mut self.resources, &drawn.scopes);
             self.mark(&drawn.mark)?;
@@ -727,6 +734,7 @@ fn composite<'s>(
                     item,
                     alpha,
                     blend: Some(b),
+                    ..
                 } => Some((i + k, at, item.clone(), *alpha, *b)),
                 _ => None,
             })
