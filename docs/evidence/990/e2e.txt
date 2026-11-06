@@ -64,3 +64,20 @@ text("printf '\\033[?1049h\\033[?2004h\\033[>1u\\033[?1000h\\033[?1006h'; sleep 
 g = call({'call': 'cells', 'terminal': 'T1'})
 print('modes after child exits:', g['modes'])
 p.stdin.close(); p.wait()
+
+## The session row's long reading (after the Mac run at 5eea1a1a)
+
+The Mac's AC8 row screenshot at 5eea1a1a (session-row-readings.png, sha256 303428b1…) showed
+"its terminal's program reports blocked: w" cut off at the sidebar's edge, with no ellipsis: 341323b2's
+`.truncate()` did nothing, because the label lays its text out in a flex row, so GPUI measured the
+text at its full width and never gave it a width to truncate to. The same screenshot, taken on
+Linux with GPUI's wgpu headless renderer through deep_replica::terminal::screenshot (a throwaway
+test; serve's `screenshot` stays macOS only), with the readings working, "blocked: waiting on your
+review" and done:
+
+- before, at 5eea1a1a: linux-row-before-5eea1a1a.png (sha256 bc66cf0d…), "blocked: wai" cut off at the edge
+- after the fix (the reading laid out as a block, its line height the row's): linux-row-after.png
+  (sha256 ecf6de11…), "its terminal's program reports blocked…"; the rows stay where they were
+
+No automated test reads a picture (AC8 is the owner's taste call on the Mac screenshots), so the
+proof is these two pictures and the next Mac run's.

@@ -493,9 +493,13 @@ impl Render for Shipped {
                             )
                             .children(readings.into_iter().enumerate().map(|(n, reading)| {
                                 // A reading wider than the sidebar ends in an ellipsis; its
-                                // accessibility label keeps the whole of it.
+                                // accessibility label keeps the whole of it. A block, not the
+                                // label's flex row, so the text is laid out to the row's width
+                                // and can truncate; its line height centers it in the row.
                                 label(("sidebar-reading", index * READINGS + n), reading)
+                                    .block()
                                     .h(px(18.))
+                                    .line_height(px(18.))
                                     .pl_4()
                                     .text_color(chrome.ink_secondary)
                                     .truncate()
