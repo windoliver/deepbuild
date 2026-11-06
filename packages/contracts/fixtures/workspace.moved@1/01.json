@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8H3",
+  "kind": "workspace.moved",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017111123,
+  "data": {
+    "workspace": "Weeklyreport3fa9c1d2",
+    "folder": "/Users/you/clients/acme",
+    "from": "/Users/you/.deepbuild/workspaces/weekly-report-3fa9c1d2"
+  }
+}
