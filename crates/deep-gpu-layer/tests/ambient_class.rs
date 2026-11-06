@@ -43,7 +43,10 @@ fn live(dir: &std::path::Path, mut call: Value) -> Value {
     let answer: Value = serde_json::from_slice(&out.stdout).expect("one JSON answer");
     assert_eq!(answer["ok"], true, "the scenario ran: {answer}");
     let reply = answer["replies"][0].clone();
-    assert!(reply.get("code").is_none(), "the live call answered: {reply}");
+    assert!(
+        reply.get("code").is_none(),
+        "the live call answered: {reply}"
+    );
     reply
 }
 
@@ -75,20 +78,39 @@ fn gaps(reply: &Value) -> Vec<f64> {
 fn a_showpiece_presents_at_most_thirty_frames_a_second_while_a_core_view_follows_the_clock() {
     let dir = tempdir();
     let frames = 12;
-    let show = live(&dir, json!({"frames": frames, "fps": 120, "sessions": [session(&dir, "show", "showpiece")]}));
+    let show = live(
+        &dir,
+        json!({"frames": frames, "fps": 120, "sessions": [session(&dir, "show", "showpiece")]}),
+    );
     for f in show["frames"].as_array().expect("frames") {
-        assert_eq!(view(f, "show")["drawn"], true, "the showpiece draws frame {}", f["frame"]);
+        assert_eq!(
+            view(f, "show")["drawn"],
+            true,
+            "the showpiece draws frame {}",
+            f["frame"]
+        );
     }
     let g = gaps(&show);
     assert_eq!(g.len(), frames - 1);
     for (i, gap) in g.iter().enumerate() {
-        assert!(*gap >= 1e3 / 30.0 - 0.05, "presents {} and {} are {gap:.2} ms apart, under 1 ÷ 30 s", i + 1, i + 2);
+        assert!(
+            *gap >= 1e3 / 30.0 - 0.05,
+            "presents {} and {} are {gap:.2} ms apart, under 1 ÷ 30 s",
+            i + 1,
+            i + 2
+        );
     }
     // The control: a class with no ambient cap presents at the call's 120 fps.
-    let core = live(&dir, json!({"frames": frames, "fps": 120, "sessions": [session(&dir, "core", "core_view")]}));
+    let core = live(
+        &dir,
+        json!({"frames": frames, "fps": 120, "sessions": [session(&dir, "core", "core_view")]}),
+    );
     let mut g = gaps(&core);
     g.sort_by(f64::total_cmp);
-    assert!(g[g.len() / 2] < 20.0, "a core view's median gap at 120 fps is under 20 ms: {g:?}");
+    assert!(
+        g[g.len() / 2] < 20.0,
+        "a core view's median gap at 120 fps is under 20 ms: {g:?}"
+    );
 }
 
 #[test]
@@ -126,8 +148,14 @@ fn a_showpiece_pauses_while_hidden_or_unfocused_and_a_work_product_only_while_hi
         }
         let k = e["frame"].as_u64().expect("a submit names its frame");
         match e["session"].as_str() {
-            Some("show") => assert!(!unfocused.contains(&k) && !hidden.contains(&k), "the showpiece submitted frame {k} while paused"),
-            Some("work") => assert!(!hidden.contains(&k), "the work product submitted frame {k} while hidden"),
+            Some("show") => assert!(
+                !unfocused.contains(&k) && !hidden.contains(&k),
+                "the showpiece submitted frame {k} while paused"
+            ),
+            Some("work") => assert!(
+                !hidden.contains(&k),
+                "the work product submitted frame {k} while hidden"
+            ),
             _ => {}
         }
     }
