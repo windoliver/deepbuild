@@ -233,9 +233,11 @@ impl Passes {
             }
             self.on = None;
             deep_gpu::alloc::outside(|| {
-                device
-                    .queue
-                    .write_buffer(&self.uniform, 0, bytemuck::bytes_of(&AoUniform::zeroed()))
+                device.queue.write_buffer(
+                    &self.uniform,
+                    0,
+                    bytemuck::bytes_of(&AoUniform::zeroed()),
+                )
             });
             return 0;
         };
@@ -416,62 +418,70 @@ pub struct Frame {
 }
 
 impl Frame {
-    /// Records the prepass (the opaque solids' depth and normals), the occlusion and the blur.
-    pub fn record(&self, encoder: &mut wgpu::CommandEncoder) {
-        deep_gpu::alloc::outside(|| {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some(PREPASS),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.normal,
-                    resolve_target: None,
-                    depth_slice: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 1.0,
-                            b: 0.0,
-                            a: 0.0,
+    /// Records the prepass (the opaque solids' depth and normals), the occlusion and the blur,
+    /// each timed under the occlusion's name, which sums them.
+    pub fn record(&self, profiler: &Option<crate::Profiler>, encoder: &mut wgpu::CommandEncoder) {
+        crate::timed(profiler, OCCLUSION, encoder, |encoder, timestamp_writes| {
+            deep_gpu::alloc::outside(|| {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some(PREPASS),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &self.normal,
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.0,
+                                g: 1.0,
+                                b: 0.0,
+                                a: 0.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.depth,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0.0),
+                            store: wgpu::StoreOp::Store,
                         }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0.0),
-                        store: wgpu::StoreOp::Store,
+                        stencil_ops: None,
                     }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
-            });
-            pass.set_pipeline(&self.prepass);
-            pass.set_bind_group(0, &self.frame, &[]);
-            for (vertices, indices, count, instances, n) in &self.solids {
-                pass.set_vertex_buffer(0, vertices.slice(..));
-                pass.set_vertex_buffer(1, instances.slice(..));
-                pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..*count, 0, 0..*n);
-            }
+                    timestamp_writes,
+                    ..Default::default()
+                });
+                pass.set_pipeline(&self.prepass);
+                pass.set_bind_group(0, &self.frame, &[]);
+                for (vertices, indices, count, instances, n) in &self.solids {
+                    pass.set_vertex_buffer(0, vertices.slice(..));
+                    pass.set_vertex_buffer(1, instances.slice(..));
+                    pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..*count, 0, 0..*n);
+                }
+            })
         });
         let white = wgpu::LoadOp::Clear(wgpu::Color::WHITE);
-        crate::full_pass(
-            encoder,
-            OCCLUSION,
-            &self.raw,
-            white,
-            &self.occlusion,
-            &self.occlusion_bind,
-            None,
-        );
-        crate::full_pass(
-            encoder,
-            BLUR,
-            &self.blurred,
-            white,
-            &self.blur,
-            &self.blur_bind,
-            None,
-        );
+        crate::timed(profiler, OCCLUSION, encoder, |encoder, timestamp_writes| {
+            crate::full_pass(
+                encoder,
+                OCCLUSION,
+                &self.raw,
+                white,
+                &self.occlusion,
+                &self.occlusion_bind,
+                timestamp_writes,
+            );
+        });
+        crate::timed(profiler, OCCLUSION, encoder, |encoder, timestamp_writes| {
+            crate::full_pass(
+                encoder,
+                BLUR,
+                &self.blurred,
+                white,
+                &self.blur,
+                &self.blur_bind,
+                timestamp_writes,
+            );
+        });
     }
 }

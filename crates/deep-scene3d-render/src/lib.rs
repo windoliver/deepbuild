@@ -4882,9 +4882,7 @@ impl Renderer {
             let profiler = self.profiler.clone();
             jobs.push((
                 ao::OCCLUSION.into(),
-                Box::new(move |encoder| {
-                    timed(&profiler, ao::OCCLUSION, encoder, |e, _| ao.record(e))
-                }),
+                Box::new(move |encoder| ao.record(&profiler, encoder)),
             ));
         }
         jobs.push((GEOMETRY_PASS.into(), geometry));
@@ -5332,7 +5330,7 @@ impl Renderer {
             job(encoder);
         }
         if let Some(ao) = self.ao_frame() {
-            ao.record(encoder);
+            ao.record(&None, encoder);
         }
         let bundles = self
             .order
