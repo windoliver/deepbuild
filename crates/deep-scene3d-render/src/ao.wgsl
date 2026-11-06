@@ -75,7 +75,9 @@ fn basis(n: vec3<f32>) -> mat3x3<f32> {
 }
 
 // The key light's contact shadow (#446; Light policy: soft shadows): a fixed march over the
-// prepass's depth toward the light for its short length, 0 where a surface stands in the way.
+// prepass's depth toward the light for its short length. A surface blocks the ray only within two
+// steps of it: further in front, the ray passes behind that surface as the camera sees it. A hit
+// reads darker the nearer it is, so a contact shadow fades out along the march.
 fn contact(p: vec3<f32>, n: vec3<f32>) -> f32 {
     let count = ao.steps.x;
     let span = ao.contact.w;
@@ -95,10 +97,8 @@ fn contact(p: vec3<f32>, n: vec3<f32>) -> f32 {
         let q_px = vec2<i32>(at);
         let dq = textureLoad(depth_t, q_px, 0);
         if dq > c.z / c.w {
-            // A surface in front of the ray's point, no further than the ray's own length, so a
-            // far part's silhouette doesn't cut the march.
-            if distance(world_at(q_px, dq), s) < span {
-                return 0.0;
+            if distance(world_at(q_px, dq), s) < 2.0 * stride {
+                return (f32(i) + 0.5) / f32(count);
             }
         }
     }
