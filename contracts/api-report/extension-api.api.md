@@ -165,6 +165,9 @@ export interface Deep {
         source: {
         };
     }): Promise<unknown>;
+    registerStateSource(params: {
+        name: string;
+    }): Promise<unknown>;
     registerView(params: {
         name: string;
         panel: string;
