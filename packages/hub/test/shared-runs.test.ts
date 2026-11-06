@@ -17,6 +17,9 @@ const record = (run: string, read = ['src/a.ts']): RecordedRun => ({
   output: { stdout: '', stderr: '', sha256: { stdout: SHA, stderr: SHA } }, attempts: [], seeded: [], contract: null,
 });
 
+/** A workspace's state reading (#67): what a claim's checkout holds now, and what was pinned at the lock. */
+const pin = (reading: string) => (): StatePin => ({ digests: [reading], files: { 'state/now.json': reading }, pinned: { 'state/lock.json': reading } });
+
 /**
  * A gate whose runs end as the hub's do: recorded and keyed before `ended` resolves; `release` ends the runs held.
  * `records` changes a run's record (the nth run started, and whether it's a held-out variant's).
@@ -128,8 +131,6 @@ describe('#1018 a result is pruned with its evidence', () => {
 });
 
 describe('#1018 a workspace\'s state reading (#67) is part of the key', () => {
-  const pin = (reading: string) => (): StatePin => ({ digests: [reading], files: { 'state/now.json': reading }, pinned: { 'state/lock.json': reading } });
-
   it('a base run on another reading pinned at the lock never carries: each claim runs its own base', async () => {
     const readings: Record<string, string> = { s1: '{"open":1}', s2: '{"open":2}' };
     const w = world({ onBase: 'fails', read: ['c.sh', 'src/a.ts'], state: (session) => pin(readings[session]!)() });
@@ -159,15 +160,38 @@ describe('#1018 a workspace\'s state reading (#67) is part of the key', () => {
     for (let i = 0; i < 200 && w.started.length < 4; i++) await tick();
     for (let i = 0; i < 20; i++) await tick();
     expect(w.started.length, 'the rerun runs the check and its variant').toBe(4);
-    expect(w.gate.verdictOf('claim:1')?.outcome).not.toBe('PASS');
+    // A failed variant beside a passing run reads INCONCLUSIVE, never the PASS of a rerun without it.
+    const check = w.gate.verdictOf('claim:1')?.checks.find((c) => c.check === 'c.sh');
+    expect(check?.counted, 'only the new reading\'s run and variant count').toEqual(['run:3', 'run:4']);
+    expect(check?.outcome).toBe('INCONCLUSIVE');
   });
 });
 
-describe('#1018 a journey on a warm stack (#580) is never shared', () => {
+describe('#1018 a journey on a warm stack (#580)', () => {
+  it('a journey\'s drift rerun whose stack served another tree runs once more on a fresh stack, which counts', async () => {
+    const w = world({ depth: 'journey', state: pin('{"open":1}'), records: (n) => (n === 2 ? { outcome: 'uncounted', mask: 'its stack served another tree' } : {}) });
+    await w.claim('s1', 1);
+    expect(w.gate.rerun('claim:1', ['c.sh'], pin('{"open":2}')())).toBe(true);
+    for (let i = 0; i < 200 && w.started.length < 3; i++) await tick();
+    for (let i = 0; i < 20; i++) await tick();
+    expect(w.started.length, 'the run, the rerun, and the rerun once more').toBe(3);
+    expect(w.gate.verdictOf('claim:1')?.checks.find((c) => c.check === 'c.sh')?.outcome).toBe('PASS');
+  });
+
   it('a held-out variant whose stack served another tree is a missing run, never one left out', async () => {
     const w = world({ variants: 'none', records: (_n, variant) => (variant ? { outcome: 'uncounted', mask: 'its stack served another tree' } : {}) });
     await w.claim('s1', 1);
-    expect(w.gate.verdictOf('claim:1')?.outcome).not.toBe('PASS');
+    const v = w.gate.verdictOf('claim:1')!;
+    expect(v.outcome).toBe('BLOCKED');
+    // Its reason is the withheld one: a variant's own cause never shows.
+    expect(v.reasons.join(' ')).toContain('a held-out variant of its fixtures never ran');
+  });
+
+  it('a journey\'s held-out variant whose stack served another tree runs once more on a fresh stack, which counts', async () => {
+    const w = world({ variants: 'none', depth: 'journey', records: (n, variant) => (variant && n === 2 ? { outcome: 'uncounted', mask: 'its stack served another tree' } : {}) });
+    await w.claim('s1', 1);
+    expect(w.started.length, 'the run, its variant, and the variant once more').toBe(3);
+    expect(w.gate.verdictOf('claim:1')?.outcome).toBe('PASS');
   });
 
   it('another session\'s claim neither carries nor waits on a journey run on its stack', async () => {
