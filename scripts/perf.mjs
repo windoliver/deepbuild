@@ -24,8 +24,9 @@ const counter = process.platform === 'darwin' ? '/usr/bin/time -l: instructions 
 // for this machine and clone, not for a checkout, with its Cargo builds kept beside it, so a preflight
 // from any worktree, a new one too, doesn't rebuild what the last run on the machine built (#594, #1119).
 // Another repository, such as a test's fixture, has a git directory of its own, so it gets copies and
-// a lock of its own and never replaces the clone's. macOS adds .local to its name on some networks,
-// which would start the copies cold in a second folder. The
+// a lock of its own and never replaces the clone's. The machine is its name's first label: macOS adds
+// .local to it on some networks and a router's DHCP its own domain, which would start the copies cold
+// in another folder. The
 // path has to stay put: Cargo doesn't rebuild a crate whose workspace moved, so absolute paths baked
 // into earlier builds (CARGO_MANIFEST_DIR, CARGO_BIN_EXE_*) would point at a deleted copy. Each run
 // replaces a copy's tree by the bays' rule (scripts/bays.mjs), writing only the files whose bytes
@@ -37,7 +38,7 @@ function keptRoot() {
   if (kept) return kept;
   const cache = process.env.XDG_CACHE_HOME || join(homedir(), process.platform === 'darwin' ? 'Library/Caches' : '.cache');
   const clone = createHash('sha256').update(realpathSync(run('git', ['rev-parse', '--path-format=absolute', '--git-common-dir']).trim())).digest('hex').slice(0, 12);
-  const directory = join(cache, 'deepbuild-perf', `${hostname().replace(/\.local$/, '').replace(/[^\w.-]/g, '_')}-${clone}`);
+  const directory = join(cache, 'deepbuild-perf', `${hostname().split('.')[0].replace(/[^\w-]/g, '_')}-${clone}`);
   // Perf runs what it builds there, so the directory is this user's alone: anyone else who could
   // write to it could plant artifacts Cargo reads as fresh.
   mkdirSync(dirname(directory), { recursive: true });

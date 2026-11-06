@@ -182,7 +182,7 @@ test('the merge base builds at one path every run, outside the checkout, from fi
 });
 
 // The directory perf keeps this clone's copies in on this machine, under the fixture's cache directory.
-const keptRoot = (cache, cwd) => join(cache, 'deepbuild-perf', `${hostname().replace(/\.local$/, '').replace(/[^\w.-]/g, '_')}-${createHash('sha256').update(realpathSync(join(cwd, '.git'))).digest('hex').slice(0, 12)}`);
+const keptRoot = (cache, cwd) => join(cache, 'deepbuild-perf', `${hostname().split('.')[0].replace(/[^\w-]/g, '_')}-${createHash('sha256').update(realpathSync(join(cwd, '.git'))).digest('hex').slice(0, 12)}`);
 
 test('kept copies another user could write to are refused, since perf runs what it builds there', (t) => {
   const { cwd, perf, cache } = repository(t, () => '');
@@ -223,7 +223,7 @@ test('another repository on the machine keeps copies and a lock of its own: a fi
   assert.notEqual(theirs, mine, 'the other repository\'s perf ran its checks in this clone\'s kept copy');
 });
 
-test('a Mac that adds .local to its name on some networks keeps one folder: a run under either name uses the same copies', (t) => {
+test('a Mac whose name gains a network\'s domain keeps one folder: a run under any of its names uses the same copies', (t) => {
   const { cwd, cache, env } = repository(t, (root) => `
     import { appendFileSync } from 'node:fs';
     for (const start = process.cpuUsage(); process.cpuUsage(start).user < 50_000;);
@@ -232,13 +232,14 @@ test('a Mac that adds .local to its name on some networks keeps one folder: a ru
   // The machine's name is the OS's to give; the preload gives the one each run names.
   const named = join(cache, '..', 'hostname.cjs');
   writeFileSync(named, "const os = require('node:os'); os.hostname = () => process.env.FIXTURE_HOSTNAME; require('node:module').syncBuiltinESMExports();");
-  for (const name of ['fixture-mac.local', 'fixture-mac']) {
+  // macOS adds .local on some networks, and a router's DHCP its own domain, such as .attlocal.net.
+  for (const name of ['fixture-mac.local', 'fixture-mac.attlocal.net', 'fixture-mac']) {
     const result = spawnSync(process.execPath, ['-r', named, 'scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })], { cwd, encoding: 'utf8', env: { ...env, FIXTURE_HOSTNAME: name } });
     assert.equal(result.status, 0, result.stdout + result.stderr);
   }
   const copies = readFileSync(join(cwd, 'base-cwd'), 'utf8').trim().split('\n');
-  assert.equal(copies.length, 2, copies.join('\n'));
-  assert.equal(copies[1], copies[0], 'the copies moved when the machine\'s name lost .local');
+  assert.equal(copies.length, 3, copies.join('\n'));
+  assert.equal(new Set(copies).size, 1, `the copies moved when the machine's name gained or lost a domain: ${copies.join(', ')}`);
 });
 
 test('one perf run per machine at a time: a live run\'s lock blocks, a killed run\'s is taken over and released', (t) => {
