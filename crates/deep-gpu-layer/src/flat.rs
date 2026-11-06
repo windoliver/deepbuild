@@ -7,6 +7,7 @@
 //! same either way.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use deep_canvas_marks::scene::{self, Drawn, Fill, Mark, Palette, Record};
 use deep_canvas_motion::eval;
@@ -16,6 +17,7 @@ use deep_gpu::surface::FORMAT;
 use deep_marks_render::gpu::{Options, Vello2d};
 use serde_json::{Map, Value};
 
+use crate::groups::{self, Clock, Groups, Layer};
 use crate::liveview::Timer;
 
 /// The pass a 2D view's frame is timed as.
@@ -27,9 +29,11 @@ pub struct Flat {
     program: Program,
     state: State,
     palette: Palette,
+    roles: BTreeMap<String, [f64; 3]>,
     vello: Option<Vello2d>,
-    /// The last frame's evaluated items and marks.
-    last: Option<(Map<String, Value>, Vec<Drawn>)>,
+    groups: Option<Groups>,
+    /// The last frame's evaluated items and marks, and where each writer layer's marks end.
+    last: Option<(Map<String, Value>, Vec<Drawn>, Vec<usize>)>,
 }
 
 /// Whether a document draws as 2D in the live window: it names no camera.
@@ -107,7 +111,12 @@ impl Flat {
             program,
             state,
             palette: palette.clone(),
+            roles: palette
+                .iter()
+                .map(|(k, c)| (k.clone(), c.map(|v| f64::from(v) / 255.0)))
+                .collect(),
             vello: None,
+            groups: None,
             last: None,
         };
         flat.frame(0)?;
@@ -119,9 +128,9 @@ impl Flat {
         self.program
             .evaluate(t, eval::Validity::Full, &mut self.state);
         let items = eval::items(&self.doc, &self.program, &self.state);
-        let reused = self.last.as_ref().and_then(|(before, marks)| {
+        let reused = self.last.as_ref().and_then(|(before, marks, ends)| {
             let moves = moved(before, &items)?;
-            marks
+            let marks = marks
                 .iter()
                 .map(|d| {
                     let id = d.mark.item().split('#').next().unwrap_or_default();
@@ -130,13 +139,14 @@ impl Flat {
                         None => Some(d.clone()),
                     }
                 })
-                .collect::<Option<Vec<Drawn>>>()
+                .collect::<Option<Vec<Drawn>>>()?;
+            Some((marks, ends.clone()))
         });
-        let marks = match reused {
-            Some(marks) => marks,
+        let (marks, ends) = match reused {
+            Some(made) => made,
             None => self.build(&items, t)?,
         };
-        let (_, marks) = self.last.insert((items, marks));
+        let (_, marks, _) = self.last.insert((items, marks, ends));
         Ok(marks)
     }
 
@@ -144,7 +154,7 @@ impl Flat {
         &self,
         items: &Map<String, Value>,
         t: i64,
-    ) -> Result<Vec<Drawn>, (&'static str, String)> {
+    ) -> Result<(Vec<Drawn>, Vec<usize>), (&'static str, String)> {
         let record = Record {
             pinned: t,
             ..Record::default()
@@ -162,13 +172,12 @@ impl Flat {
             scopes: Vec::new(),
         };
         let mut out = vec![ground];
-        out.extend(
-            frame
-                .layers
-                .iter()
-                .flat_map(|l| l.marks.iter().map(|m| Drawn::clone(m))),
-        );
-        Ok(out)
+        let mut ends = vec![1];
+        for l in &frame.layers {
+            out.extend(l.marks.iter().map(|m| Drawn::clone(m)));
+            ends.push(out.len());
+        }
+        Ok((out, ends))
     }
 
     /// Records the frame at `t` into `target`, `size` px, timed by `timer` as `session`'s.
@@ -190,20 +199,72 @@ impl Flat {
         let marks = self.frame(t)?;
         let i = timer.start(FLAT_PASS, session);
         let (begin, end) = timer.bracket(i);
-        mark_pass(encoder, target, begin);
-        let drawn = vello.draw(
-            &device.device,
-            &device.queue,
-            encoder,
-            marks.iter(),
-            size,
-            target,
-            Options::default(),
-        );
+        let drawn = if groups::composited(marks.iter()) {
+            // The compositor submits as it goes, so the frame's first stamp goes ahead of it.
+            let mut first = device.device.create_command_encoder(&Default::default());
+            mark_pass(&mut first, target, begin);
+            device.queue.submit([first.finish()]);
+            self.composed(device, &mut vello, t, size, target, encoder)
+        } else {
+            mark_pass(encoder, target, begin);
+            vello.draw(
+                &device.device,
+                &device.queue,
+                encoder,
+                marks.iter(),
+                size,
+                target,
+                Options::default(),
+            )
+        };
         mark_pass(encoder, target, end);
         timer.end(i);
         self.vello = Some(vello);
         drawn.map_err(|e| ("not_drawn", e.to_string()))
+    }
+}
+
+impl Flat {
+    /// The last frame through the group compositor, each writer layer alone.
+    fn composed(
+        &mut self,
+        device: &Device,
+        vello: &mut Vello2d,
+        t: i64,
+        size: [u32; 2],
+        target: &wgpu::TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> Result<(), serde_json::Value> {
+        let Some((_, marks, ends)) = &self.last else {
+            return Ok(());
+        };
+        let mut layers: Vec<Vec<Arc<Drawn>>> = Vec::with_capacity(ends.len());
+        let mut from = 0;
+        for &end in ends {
+            layers.push(marks[from..end].iter().cloned().map(Arc::new).collect());
+            from = end;
+        }
+        let slices: Vec<&[Arc<Drawn>]> = layers.iter().map(Vec::as_slice).collect();
+        let layer = Layer {
+            layers: &slices,
+            size,
+            options: Options::default(),
+            clock: Clock::of(&self.doc, t),
+            roles: &self.roles,
+            packs: &[],
+            canonical: false,
+            base: None,
+            keep: false,
+            planted: None,
+            guard: None,
+            other: None,
+        };
+        let groups = self
+            .groups
+            .get_or_insert_with(|| Groups::new(&device.device));
+        let (done, _) = groups.compose(device, vello, &layer)?;
+        groups.finish(&device.device, encoder, &done, target, FORMAT, false);
+        Ok(())
     }
 }
 
