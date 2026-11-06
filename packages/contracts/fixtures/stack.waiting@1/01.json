@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8H1",
+  "kind": "stack.waiting",
+  "subject": "claim:01K74FMXR4T6V8X0Z2B4D6F8H4",
+  "data": {
+    "claim": "claim:01K74FMXR4T6V8X0Z2B4D6F8H4",
+    "check": ".deepbuild/checks/orders.sh",
+    "wait_ms": 240000,
+    "expected_ms": 540000
+  },
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017051123
+}

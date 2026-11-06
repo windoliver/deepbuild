@@ -1,0 +1,102 @@
+#1312 on the base: main 1d3ae632 (Merge pull request #1310), 2026-11-05, Linux arm64, NVIDIA GB10 on Vulkan.
+Results: AC1 fails (slot 1 at 1.7 s, slot 0 at 2.2 s), its span-0.4 guard passes; AC2 fails (w -1 from 1 s on, a new
+generation's velocity); AC3 fails (0 px at frames 60 and 300, linear target; 1,792 px at 30 and 59, 0 at 630).
+deep-gpu run died by SIGSEGV at exit after its whole answer (logged on stderr below; README: How each criterion is read).
+
+$ cargo test --locked -p deep-canvas-effects --test acceptance_1312
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+     Running ../../tests/acceptance/1312/operator.rs (target/debug/deps/acceptance_1312-6d182eb27da17d66)
+
+running 3 tests
+test ac1_a_particle_born_inside_the_span_lives_out_its_life ... FAILED
+test ac1_a_slot_first_born_after_the_span_never_draws ... ok
+test ac2_it_keeps_its_own_path_across_the_spans_end ... FAILED
+
+failures:
+
+---- ac1_a_particle_born_inside_the_span_lives_out_its_life stdout ----
+
+thread 'ac1_a_particle_born_inside_the_span_lives_out_its_life' (2611675) panicked at crates/deep-canvas-effects/../../tests/acceptance/1312/operator.rs:81:5:
+AC1 #1312.326099bf count 2, rate 2, span 1.2, life 1.5: each slot keeps its last generation born inside the span until its life ends: 2 value(s) off by more than 0.0001:
+  slot 1, t = 1.7 s, w: expected 0.800000, got -1.000000
+  slot 0, t = 2.2 s, w: expected 0.800000, got -1.000000
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- ac2_it_keeps_its_own_path_across_the_spans_end stdout ----
+
+thread 'ac2_it_keeps_its_own_path_across_the_spans_end' (2611677) panicked at crates/deep-canvas-effects/../../tests/acceptance/1312/operator.rs:81:5:
+AC2 #1312.73432a75 count 1, rate 1, span 0.5, life 10, v0 1, no gravity or drag: the particle born at 0 carries on along its own path until 10 s: 21 value(s) off by more than 0.0001:
+  slot 0, t = 1 s, w: expected 0.100000, got -1.000000
+  slot 0, t = 1 s, velocity x (velocity at 0.4 s): expected -0.146067, got -0.479168
+  slot 0, t = 1 s, position x (position(0.4) + velocity(0.4) · (t − 0.4)): expected -0.146067, got 0.000000
+  slot 0, t = 1 s, velocity y (velocity at 0.4 s): expected 0.535230, got 0.645114
+  slot 0, t = 1 s, position y (position(0.4) + velocity(0.4) · (t − 0.4)): expected 0.535230, got 0.000000
+  slot 0, t = 1 s, velocity z (velocity at 0.4 s): expected 0.831982, got -0.595169
+  slot 0, t = 1 s, position z (position(0.4) + velocity(0.4) · (t − 0.4)): expected 0.831982, got 0.000000
+  slot 0, t = 5 s, w: expected 0.500000, got -1.000000
+  slot 0, t = 5 s, velocity x (velocity at 0.4 s): expected -0.146067, got 0.481384
+  slot 0, t = 5 s, position x (position(0.4) + velocity(0.4) · (t − 0.4)): expected -0.730334, got 0.000000
+  slot 0, t = 5 s, velocity y (velocity at 0.4 s): expected 0.535230, got 0.501535
+  slot 0, t = 5 s, position y (position(0.4) + velocity(0.4) · (t − 0.4)): expected 2.676148, got 0.000000
+  slot 0, t = 5 s, velocity z (velocity at 0.4 s): expected 0.831982, got -0.718841
+  slot 0, t = 5 s, position z (position(0.4) + velocity(0.4) · (t − 0.4)): expected 4.159909, got 0.000000
+  slot 0, t = 9.5 s, w: expected 0.950000, got -1.000000
+  slot 0, t = 9.5 s, velocity x (velocity at 0.4 s): expected -0.146067, got 0.292054
+  slot 0, t = 9.5 s, position x (position(0.4) + velocity(0.4) · (t − 0.4)): expected -1.387635, got 0.146027
+  slot 0, t = 9.5 s, velocity y (velocity at 0.4 s): expected 0.535230, got 0.895495
+  slot 0, t = 9.5 s, position y (position(0.4) + velocity(0.4) · (t − 0.4)): expected 5.084682, got 0.447747
+  slot 0, t = 9.5 s, velocity z (velocity at 0.4 s): expected 0.831982, got -0.335847
+  slot 0, t = 9.5 s, position z (position(0.4) + velocity(0.4) · (t − 0.4)): expected 7.903827, got -0.167924
+
+
+failures:
+    ac1_a_particle_born_inside_the_span_lives_out_its_life
+    ac2_it_keeps_its_own_path_across_the_spans_end
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+error: test failed, to rerun pass `-p deep-canvas-effects --test acceptance_1312`
+
+$ CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1312 --testTimeout=1800000 --no-file-parallelism
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/blind-1312/tests/acceptance/1312
+
+stderr | repro.test.ts > AC3 #1312.1cc5895b the repro's still puff draws until its life ends > AC3 #1312.1cc5895b the still puff covers at least 1,000 px at frames 30, 59, 60 and 300 at 60 fps, and 0 px at frame 630, against the frame with no emitter (linear target on linux)
+deep-gpu run died by SIGSEGV after writing its whole answer; the answer is judged. stderr: TU: error: ../src/freedreno/vulkan/tu_knl.cc:387: failed to open device /dev/dri/renderD128 (VK_ERROR_INCOMPATIBLE_DRIVER)
+
+
+stdout | repro.test.ts > AC3 #1312.1cc5895b the repro's still puff draws until its life ends > AC3 #1312.1cc5895b the still puff covers at least 1,000 px at frames 30, 59, 60 and 300 at 60 fps, and 0 px at frame 630, against the frame with no emitter (linear target on linux)
+AC3 #1312.1cc5895b footprints, linear target, 160 × 120: frame 30 (t = 0.5 s): 1792 px; frame 59 (t = 0.983 s): 1792 px; frame 60 (t = 1 s): 0 px; frame 300 (t = 5 s): 0 px; frame 630 (t = 10.5 s): 0 px
+
+ ❯ repro.test.ts (1 test | 1 failed) 5991ms
+   ❯ AC3 #1312.1cc5895b the repro's still puff draws until its life ends (1)
+     × AC3 #1312.1cc5895b the still puff covers at least 1,000 px at frames 30, 59, 60 and 300 at 60 fps, and 0 px at frame 630, against the frame with no emitter (linear target on linux) 4904ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  repro.test.ts > AC3 #1312.1cc5895b the repro's still puff draws until its life ends > AC3 #1312.1cc5895b the still puff covers at least 1,000 px at frames 30, 59, 60 and 300 at 60 fps, and 0 px at frame 630, against the frame with no emitter (linear target on linux)
+AssertionError: AC3 #1312.1cc5895b the repro's puff (count 1, rate 1, span 0.5, life 10, still) against the frame with no emitter, linear target:
+  frame 60 (t = 1 s): the puff covers 0 px, expected at least 1000 (its particle, born at 0 s with a 10 s life, is alive)
+  frame 300 (t = 5 s): the puff covers 0 px, expected at least 1000 (its particle, born at 0 s with a 10 s life, is alive)
+(all: frame 30 (t = 0.5 s): 1792 px; frame 59 (t = 0.983 s): 1792 px; frame 60 (t = 1 s): 0 px; frame 300 (t = 5 s): 0 px; frame 630 (t = 10.5 s): 0 px): expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "frame 60 (t = 1 s): the puff covers 0 px, expected at least 1000 (its particle, born at 0 s with a 10 s life, is alive)",
++   "frame 300 (t = 5 s): the puff covers 0 px, expected at least 1000 (its particle, born at 0 s with a 10 s life, is alive)",
++ ]
+
+ ❯ repro.test.ts:73:197
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  00:53:14
+   Duration  6.19s (tests 99%, transform 1%)
+

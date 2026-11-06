@@ -1,0 +1,10 @@
+// checkout-web's own extension, which comes with the project: an edit under vendor/ is denied.
+export default function (deep: any): void {
+  deep.on('tool.before', async (request: { data?: { kind?: string; paths?: string[] } }) => {
+    const edits = request.data?.kind === 'edit' || request.data?.kind === 'write';
+    if (edits && (request.data?.paths ?? []).some((p) => /(^|\/)vendor\//.test(p))) {
+      return { deny: { template: 'why', values: { handle: 'claim:01K74G1Z3X5V7T9R1P3N5M7K9H' } } };
+    }
+    return {};
+  });
+}
