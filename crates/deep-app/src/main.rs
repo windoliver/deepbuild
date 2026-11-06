@@ -142,12 +142,11 @@ fn main() {
         return;
     }
     // Issue #1172: macOS has no outside switch for one process's appearance, so a check forces it here.
-    let forced = match std::env::var("DEEP_APP_APPEARANCE").as_deref() {
-        Ok("dark") => Some(true),
-        Ok("light") => Some(false),
-        _ => None,
-    };
-    deep_app::chrome::force_dark(forced);
+    match std::env::var("DEEP_APP_APPEARANCE").as_deref() {
+        Ok("dark") => deep_app::chrome::force_dark(Some(true)),
+        Ok("light") => deep_app::chrome::force_dark(Some(false)),
+        _ => {}
+    }
     // One app per user (#994). A window for a panel or a view is a tool beside it, and runs no notifier.
     let mut held = None;
     if mode == Mode::Window && panel_dir.is_none() && view.is_none() {
@@ -163,9 +162,6 @@ fn main() {
         gpui_kit::init(cx);
         init(cx);
         menu_bar::set_dock_icon();
-        if let Some(dark) = forced {
-            menu_bar::set_appearance(dark);
-        }
         // Every window reads the record; only the one app of a user notifies (#994). The planted build shows the spike's
         // made-up count and no record.
         #[cfg(not(feature = "plant-spike-window"))]
@@ -1725,9 +1721,8 @@ mod menu_bar {
     use deep_app::brand;
     use objc2::{rc::Retained, AllocAnyThread as _, MainThreadMarker};
     use objc2_app_kit::{
-        NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication,
-        NSBitmapImageRep, NSCellImagePosition, NSImage, NSSound, NSStatusBar, NSStatusItem,
-        NSVariableStatusItemLength,
+        NSApplication, NSBitmapImageRep, NSCellImagePosition, NSImage, NSSound, NSStatusBar,
+        NSStatusItem, NSVariableStatusItemLength,
     };
     use objc2_foundation::{NSData, NSSize, NSString};
 
@@ -1764,20 +1759,6 @@ mod menu_bar {
         unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(image.as_deref()) };
     }
 
-    /// Issue #1172: a forced appearance reaches the title bar too, as a person's own dark mode does.
-    pub fn set_appearance(dark: bool) {
-        let mtm = MainThreadMarker::new().expect("the appearance is set from the main thread");
-        // SAFETY: AppKit's own constant names, read on the main thread.
-        let name = unsafe {
-            match dark {
-                true => NSAppearanceNameDarkAqua,
-                false => NSAppearanceNameAqua,
-            }
-        };
-        let appearance = NSAppearance::appearanceNamed(name);
-        NSApplication::sharedApplication(mtm).setAppearance(appearance.as_deref());
-    }
-
     /// gpui-kit has no menu-bar item, so the count is one `NSStatusItem`, with the template mark before the count.
     pub fn show_title(title: &str) {
         let mtm = MainThreadMarker::new().expect("the menu bar is set from the main thread");
@@ -1811,7 +1792,6 @@ mod menu_bar {
 #[cfg(not(target_os = "macos"))]
 mod menu_bar {
     pub fn set_dock_icon() {}
-    pub fn set_appearance(_: bool) {}
     pub fn show_title(_: &str) {}
     pub fn app_active() -> bool {
         false
