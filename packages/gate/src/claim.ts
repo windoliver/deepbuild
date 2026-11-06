@@ -48,7 +48,7 @@ export interface ClaimedCheck {
 }
 /** The definition's requirement, and whether it is about what real users get. */
 export interface ClaimRequirement extends Requirement { real_users?: boolean }
-export interface ClaimedRuns { claim: string; agent: string; repo: string; task: string; commit: string; requirements: ClaimRequirement[]; checks: ClaimedCheck[]; now: number }
+export interface ClaimedRuns { claim: string; agent: string; repo: string; task: string; commit: string; requirements: ClaimRequirement[]; checks: ClaimedCheck[]; now: number; /** A workspace claim's digests of what its state sources read (#67), part of the verdict's key. */ state?: string[] }
 /** The planted twin: a gate that judges only the exit code, with no masked-exit rule; tests only. */
 export type VerdictPlant = 'exit-code-only';
 
@@ -122,7 +122,7 @@ export function claimVerdict(claim: ClaimedRuns, options: { plant?: VerdictPlant
   }
   const input: ClaimInput = {
     claim: claim.claim, agent: claim.agent, repo: claim.repo, task: claim.task, commit: claim.commit,
-    requirements: claim.requirements, checks, runs, changes: [], waivers: [], now: claim.now,
+    requirements: claim.requirements, checks, runs, changes: [], waivers: [], now: claim.now, ...(claim.state ? { state: claim.state } : {}),
   };
   return verdict(input);
 }
