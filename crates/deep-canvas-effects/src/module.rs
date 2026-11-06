@@ -4,9 +4,10 @@
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{Dependency, Manifest, Module, Raised, Range, Registrar, Semver};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use crate::check;
+use crate::fx::Named;
 use crate::graph::{self, Class, Kind, Origin};
 
 pub const GRID: &str = "effects.grid";
@@ -236,6 +237,153 @@ fn operator_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     out
 }
 
+/// What a group's pass may read: its target, never another writer's layer or an earlier frame.
+fn reads_only_its_target(graph: &Value) -> bool {
+    graph["inputs"].as_object().into_iter().flatten().all(|(_, i)| {
+        let Some(t) = i["from"].get("texture") else {
+            return true;
+        };
+        t.get("target").is_some_and(|t| t["op"] == "core" && t["output"] == "color")
+    })
+}
+
+/// What a group's pass runs: its graphs in order, and the px it reaches when the pass sets no grow.
+pub struct PassGraph {
+    pub stages: Vec<Value>,
+    pub grow: f64,
+}
+
+/// The graph a group's pass names (Frame and group: passes): an operator item of the document, a
+/// named operator of `packs` or of fx@1, or the shipped blur; or the code that refuses it. No other
+/// shipped pass qualifies, since each reads targets beside its group's.
+pub fn pass_graph(
+    op: &str,
+    item: Option<&Value>,
+    params: &Map<String, Value>,
+    packs: &[Named],
+) -> Result<PassGraph, &'static str> {
+    if op == "blur@1" {
+        let radius = params.get("radius").and_then(Value::as_f64).unwrap_or(8.0);
+        let stages = vec![crate::shipped::blur("x"), crate::shipped::blur("y")];
+        return Ok(PassGraph { stages, grow: radius.clamp(0.0, crate::shipped::MAX_BLUR) });
+    }
+    let (graph, grow) = if let Some(item) = item {
+        match operator_of(op, item) {
+            Some(g) if g["kind"] == "pass" => (g, 0.0),
+            _ => return Err("operator_kind_rule"),
+        }
+    } else if let Some(n) = packs.iter().find(|n| n.name == op) {
+        (n.graph.clone(), n.grow as f64)
+    } else if let Some(n) = crate::fx::library().into_iter().find(|n| n.name == op) {
+        (n.graph, n.grow as f64)
+    } else if crate::shipped::all().iter().any(|g| g["id"] == op) {
+        return Err("operator_kind_rule");
+    } else {
+        return Err("operator_unknown_op");
+    };
+    if reads_only_its_target(&graph) {
+        Ok(PassGraph { stages: vec![graph], grow })
+    } else {
+        Err("operator_kind_rule")
+    }
+}
+
+/// Whether `item` is a kind only a 3D writer layer's scene draws.
+fn in_depth(item: &Value) -> bool {
+    let kind = item["kind"].as_str().unwrap_or("");
+    kind.starts_with("mark.") || kind.starts_with("light.") || kind.starts_with("camera@")
+}
+
+/// A 3D item under the group `id`, if the group composites: its children draw into an isolated 2D
+/// target, which scene3d's items can't, so it's refused rather than left out of the group.
+pub fn depth_child<'a>(
+    items: &'a Map<String, Value>,
+    id: &str,
+    group: &Value,
+) -> Option<&'a String> {
+    let p = &group["params"];
+    let eleven = p["blend"].as_str().is_some_and(|b| {
+        deep_canvas::blend::index(b).is_some_and(|i| i >= deep_canvas::blend::FIRST_GPU_ONLY)
+    });
+    let passes = p["passes"].as_array().is_some_and(|l| !l.is_empty());
+    if group["kind"] != "group@1" || !(eleven || passes) {
+        return None;
+    }
+    items.iter().find_map(|(child, item)| {
+        let mut at = item["parent"].as_str();
+        for _ in 0..items.len() {
+            match at {
+                Some(p) if p == id => return in_depth(item).then_some(child),
+                Some(p) => at = items.get(p).and_then(|i| i["parent"].as_str()),
+                None => break,
+            }
+        }
+        None
+    })
+}
+
+/// The document's check over a group's passes and backdrop (Frame and group: passes; backdrop): at
+/// most 8 passes, each naming a pass the document can reach that reads only its group's target and
+/// passes the operator check, in a class that runs them; no backdrop without passes, and no 3D item
+/// under a group that composites. A pack the document names installs with the document, so its
+/// passes meet the operator check when a call draws them.
+fn group_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
+    let params = &item["params"];
+    let passes = params["passes"].as_array().map_or(&[][..], Vec::as_slice);
+    let field = |f: &str| format!("items/{id}/params/{f}");
+    let mut out = Vec::new();
+    if passes.len() > 8 {
+        out.push(raised("operator_limit", field("passes"), format!("{id} holds {} passes, past 8", passes.len())));
+    }
+    if params["backdrop"] == "below" && passes.is_empty() {
+        out.push(raised("operator_kind_rule", field("backdrop"), format!("{id}: a backdrop runs its passes, and it has none")));
+    }
+    if let Some(child) = doc["items"].as_object().and_then(|items| depth_child(items, id, item)) {
+        out.push(raised("operator_kind_rule", format!("items/{child}/parent"), format!("{child} draws in depth, so {id} can't composite it")));
+    }
+    let class = doc["budget"]["class"].as_str().unwrap_or("figure");
+    if !passes.is_empty() && matches!(class, "core_view" | "data_view") {
+        out.push(raised(
+            "operator_budget_class",
+            field("passes"),
+            format!("{id}: a group's passes can't run in a {class}"),
+        ));
+    }
+    let named = |pack: &str| {
+        doc["packs"].as_array().into_iter().flatten().any(|n| {
+            let name = n.as_str().and_then(|n| n.split('@').next());
+            name.and_then(|n| n.rsplit('/').next()) == Some(pack)
+        })
+    };
+    for (i, p) in passes.iter().enumerate() {
+        let at = field(&format!("passes/{i}/op"));
+        let Some(op) = p["op"].as_str() else {
+            out.push(raised("operator_type", at, format!("{id}: pass {i} names no op")));
+            continue;
+        };
+        let pack = op.split_once('.').map(|(pack, _)| pack);
+        if pack == Some("fx") && !named("fx") {
+            out.push(raised("operator_unknown_op", at, format!("{op}: the document names no fx@1 pack")));
+            continue;
+        }
+        if pack.is_some_and(|p| p != "fx" && named(p)) {
+            continue;
+        }
+        let own = p["params"].as_object().cloned().unwrap_or_default();
+        match pass_graph(op, doc["items"].get(op), &own, &[]) {
+            Ok(graph) => {
+                for stage in &graph.stages {
+                    if let Err(issues) = graph::read(stage).and_then(|o| check::check(&o)) {
+                        out.extend(issues.into_iter().map(|e| raised(e.code, at.clone(), e.message)));
+                    }
+                }
+            }
+            Err(code) => out.push(raised(code, at, format!("{op} is no pass this group can run"))),
+        }
+    }
+    out
+}
+
 fn register(r: &mut Registrar) {
     for (name, place) in PASSES {
         r.pass(name, place);
@@ -250,6 +398,7 @@ fn register(r: &mut Registrar) {
             .described("A GPU operator as data: typed inputs, steps from the closed list, typed outputs, checked, costed and classed before it runs.");
         r.rule(&kind[..kind.len() - 2], operator_rule);
     }
+    r.rule("group", group_rule);
     for (code, meaning) in [
         ("not_exact", "An operator declared exact computes as less, or a check that holds on any machine reads an operator that isn't exact."),
         ("operator_budget_class", "The document's budget class doesn't run this operator's kind."),
@@ -455,4 +604,77 @@ fn shadowed_box() -> Value {
                     "params": {"illuminance": deep_canvas::ops::PI, "shadow": true}, "at": {"rot": [-55, -40, 0]}}
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn codes(doc: &Value, params: Value) -> Vec<&'static str> {
+        group_rule(doc, "g", &json!({"params": params}))
+            .iter()
+            .map(|r| r.code)
+            .collect()
+    }
+
+    #[test]
+    fn a_groups_passes_are_held_to_their_fields() {
+        let fx = json!({"packs": ["deepbuild/fx@1.0.0"], "budget": {"class": "figure"}});
+        let invert = json!({"op": "fx.invert@1"});
+        assert!(codes(&fx, json!({"passes": [invert]})).is_empty());
+        assert_eq!(codes(&fx, json!({"passes": vec![&invert; 9]})), ["operator_limit"]);
+        assert_eq!(codes(&fx, json!({"backdrop": "below"})), ["operator_kind_rule"]);
+        assert_eq!(
+            codes(&fx, json!({"passes": [{"op": "fx.no_such@1"}]})),
+            ["operator_unknown_op"]
+        );
+        // A pack's pass needs the document to name the pack.
+        assert_eq!(codes(&json!({}), json!({"passes": [invert]})), ["operator_unknown_op"]);
+        let core_view = json!({"packs": fx["packs"], "budget": {"class": "core_view"}});
+        assert_eq!(codes(&core_view, json!({"passes": [invert]})), ["operator_budget_class"]);
+    }
+
+    #[test]
+    fn a_groups_pass_reads_only_its_target_and_is_a_pass() {
+        let reads = |output: &str| {
+            let src = json!({"from": {"texture": {"target": {"op": "core", "output": output}}}});
+            json!({"kind": "gpu.pass@1", "params": {"inputs": {"src": src}}})
+        };
+        let graph = |item: &Value| pass_graph("p", Some(item), &Map::new(), &[]).map(|g| g.grow);
+        assert!(graph(&reads("color")).is_ok());
+        assert_eq!(graph(&reads("depth")).err(), Some("operator_kind_rule"));
+        let compute = json!({"kind": "gpu.compute@1", "params": {}});
+        assert_eq!(graph(&compute).err(), Some("operator_kind_rule"));
+        // A shipped pass that reads other targets can't run on a group's.
+        let shipped = pass_graph("outline.select@1", None, &Map::new(), &[]);
+        assert_eq!(shipped.err(), Some("operator_kind_rule"));
+    }
+
+    #[test]
+    fn the_shipped_blur_is_two_axes_that_pass_the_operator_check_and_reach_its_radius() {
+        let params = json!({"radius": 12}).as_object().cloned().unwrap_or_default();
+        let blur = pass_graph("blur@1", None, &params, &[]).expect("a shipped pass");
+        assert_eq!((blur.stages.len(), blur.grow), (2, 12.0));
+        for stage in &blur.stages {
+            crate::check::read_and_check(stage).unwrap_or_else(|e| panic!("{e:?}"));
+        }
+    }
+
+    #[test]
+    fn a_composited_group_refuses_a_child_in_depth_and_a_plain_group_keeps_it() {
+        let doc = |params: Value| {
+            json!({"items": {
+                "g": {"kind": "group@1", "params": params},
+                "inner": {"kind": "group@1", "parent": "g", "params": {}},
+                "cube": {"kind": "mark.box@1", "parent": "inner", "params": {}},
+            }})
+        };
+        let codes_of = |params: Value| {
+            let d = doc(params.clone());
+            group_rule(&d, "g", &d["items"]["g"]).iter().map(|r| r.code).collect::<Vec<_>>()
+        };
+        assert!(codes_of(json!({"opacity": 0.5})).is_empty());
+        assert_eq!(codes_of(json!({"blend": "subtract"})), ["operator_kind_rule"]);
+        assert_eq!(codes_of(json!({"blend": "multiply"})), Vec::<&str>::new());
+    }
 }

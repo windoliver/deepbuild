@@ -1,0 +1,9 @@
+#430 acceptance suite at the base, 80ba48fe (Merge pull request #1403), before any implementation.
+
+Not run at the base: the surfaces plainly don't exist there, and no cargo binary was built. crates/deep-canvas-marks's Blend
+holds #385's 17 modes, so the check refuses each of the eleven's names; nothing runs a group's `passes` (scene.rs's z rule only
+looks at the field) and nothing reads `backdrop` or `dancing` on a group (searched); `layers` has no `float` or `packs`, `film2d` has no `from` or `hash`, and Planted::parse has none of
+this suite's names, so deep-gpu refuses them at startup. Every test that draws would fail on the refusal, and taste.test.ts
+is INCONCLUSIVE with no TASTE.json. Checked instead: `tsc --noEmit -p tests/acceptance/430` exits 0, and reference.ts run on
+its own under node on a synthetic copy of AC3's figure: all twelve modes differ pairwise past one 10-bit code on at least
+30% of pixels; sRGB 200 is 0.5776 linear, half is 0.2888, which encodes as 146.3.
