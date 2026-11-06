@@ -87,7 +87,7 @@ describe('a fix check on a base with nothing to start', () => {
     });
     const surface = { kind: 'command', name: 'deep-greet' };
     await gate.stop({ session: 's', claim: 'claim:1', task: 'task:1', cwd: '/w', base: 'b', requirements: [], stopAt: 0,
-      checks: [{ check: '.deepbuild/checks/greet.sh', approved: 'a', command: 'sh .deepbuild/checks/greet.sh', covers: ['R1'], depth: 'unit', on_base: 'fails', req: 'R1', surface }] });
+      checks: [{ check: '.deepbuild/checks/greet.sh', approved: 'a', command: 'sh .deepbuild/checks/greet.sh', covers: ['R1'], depth: 'unit', on_base: 'fails', asserts: [], req: 'R1', surface }] });
     for (let i = 0; i < 20 && stood.length === 0; i++) await tick();
     expect(starts).toEqual([{ commit: 'c1' }, { commit: 'b0', standIns: ['deep-greet'] }]);
     expect(stood).toEqual([{ task: 'task:1', req: 'R1', surface, hash: 'h-greet' }]);
