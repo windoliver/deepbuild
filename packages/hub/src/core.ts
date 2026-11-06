@@ -1479,8 +1479,8 @@ export class Core {
         }
       }
       if (failed.length) throw Error(`hook ${meta.id} was not recorded`);
-      // Your words close a question that needs no authority as they land, and a stop drops what its turn no longer asks (#84).
-      if (drafts.some((d) => (d.kind === 'user.ask' && d.data.from === 'person') || d.kind === 'agent.stop')) void this.asks.tick().catch(() => undefined);
+      // A stop drops what its turn no longer asks as it lands (#84).
+      if (drafts.some((d) => d.kind === 'agent.stop')) void this.asks.tick().catch(() => undefined);
     });
     settled.catch(() => undefined);
     // A stop that leaves the agent's question open is recorded as waiting on you once the stop is in the record (#27).
@@ -3922,15 +3922,18 @@ export class Core {
       // A stop answered "proceed" goes on at once: the proceed rides in its one reply with what else waits, the failing
       // requirements with their smallest failing case. What else the sort sends back rides the same way.
       // pi's package places its own answers: a reply here would hand them over a second time.
-      const back = sorted?.back ?? [];
+      // A question that holds the send-back holds what the sort would send back too (#84): a proceed is only recorded.
+      const back = questionHeld ? [] : sorted?.back ?? [];
+      if (questionHeld && proceeds.length) await this.holds.record(meta, proceeds, until);
       // A provisional choice raised in the turn goes on: its recommended option goes back in the same reply as a send-back.
       const carried = lane?.sendBack ? await this.provisionalCarried(meta.session) : undefined;
-      if (proceeds.length || back.length) {
+      const going = questionHeld ? [] : proceeds;
+      if (going.length || back.length) {
         proceeded = true;
-        if (proceeds.length) await this.holds.record(meta, proceeds, until);
+        if (going.length) await this.holds.record(meta, going, until);
         const delivered = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
-        const failing = proceeds.length && lane?.sendBack && judged?.claim ? await this.smallestOf(judged.claim) : undefined;
-        const said = proceeds.length ? `DeepBuild: proceed (${proceeds.map((p) => `"${p.question}", by rule ${p.rule}`).join('; ')}). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask.` : undefined;
+        const failing = going.length && lane?.sendBack && judged?.claim ? await this.smallestOf(judged.claim) : undefined;
+        const said = going.length ? `DeepBuild: proceed (${going.map((p) => `"${p.question}", by rule ${p.rule}`).join('; ')}). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask.` : undefined;
         block = (this.options.plant === 'proceed-alone' ? [said] : [r.sendBacks.shift(), delivered, lane?.sendBack, failing, sized, nudge, ...back, said]).filter(Boolean).join('\n\n');
       } else if (lane?.sendBack || sized) {
         // Your answer rides with the send-back: only a question that holds it waits for the first stop after it.
