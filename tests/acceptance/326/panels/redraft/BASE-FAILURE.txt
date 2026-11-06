@@ -1,0 +1,6 @@
+# The redraft on the base, commit 4c0b5899: cargo test --locked -p deep-replica --test acceptance_326_panels_redraft
+# Run by the implementing session, because the blind job never got a build grant. The file is the job's, unchanged.
+thread 'main' (112795668) panicked at crates/deep-replica/../../tests/acceptance/326/panels/redraft/panels_redraft.rs:149:21:
+after the frame at log_pos 1, the question "Which header colour, take 1?" is missing from Needs you: a person reads Some("ask:01K70000000000000000000001"), the ask's handle ask:01K70000000000000000000001
+test needs_you_and_session_page_share_each_log_pos ... FAILED
+test result: FAILED. 0 passed; 1 failed
