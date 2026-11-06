@@ -90,6 +90,27 @@ impl View {
         table.deadline(created)
     }
 
+    /// Folds the record up to the view's `log_pos` into its table, read from the hub a page at a time. The reads
+    /// already reflect those events, so nothing else of the view takes them, and the notifier never sees them as new.
+    fn fold_before(&mut self, client: &mut HubClient) -> Result<(), HubError> {
+        let mut after = 0;
+        while after < self.log_pos {
+            let page = client.call("events.read", json!({ "after": after, "limit": PAGE }))?;
+            let events = page["events"].as_array().cloned().unwrap_or_default();
+            for event in &events {
+                after = event["log_pos"].as_u64().unwrap_or(after);
+                if after > self.log_pos {
+                    return Ok(());
+                }
+                self.table.apply(event);
+            }
+            if events.len() < PAGE {
+                break;
+            }
+        }
+        Ok(())
+    }
+
     /// Applies one event the view doesn't have yet.
     pub fn apply(&mut self, event: Value) {
         self.log_pos = event["log_pos"].as_u64().unwrap_or(self.log_pos);
@@ -100,6 +121,7 @@ impl View {
                 self.inbox.push(json!({
                     "ask": ask, "kind": event["data"]["kind"], "session": event["session"],
                     "status": "shown", "outcome": "unanswered", "owner": event["data"]["owner"],
+                    "question": event["data"]["question"],
                 }));
             }
         } else if let Some((_, outcome)) = CLOSING.iter().find(|(k, _)| *k == kind) {
@@ -142,16 +164,29 @@ pub struct RecordReader {
     token_file: PathBuf,
     client: Option<HubClient>,
     view: View,
+    /// Whether each new read also folds the record before it, for the window's views.
+    folds: bool,
 }
 
 impl RecordReader {
     /// Connects as the app, does its reads and subscribes after the `log_pos` they reflect.
     pub fn open(socket: &Path, token_file: &Path) -> Result<RecordReader, HubError> {
+        Self::opened(socket, token_file, false)
+    }
+
+    /// Issue #1172: as [`RecordReader::open`], for the window: its sidebar and session pages read the folded record,
+    /// so each new read also folds what the record held before the app or the hub started.
+    pub fn open_folded(socket: &Path, token_file: &Path) -> Result<RecordReader, HubError> {
+        Self::opened(socket, token_file, true)
+    }
+
+    fn opened(socket: &Path, token_file: &Path, folds: bool) -> Result<RecordReader, HubError> {
         let mut reader = RecordReader {
             socket: socket.to_path_buf(),
             token_file: token_file.to_path_buf(),
             client: None,
             view: View::default(),
+            folds,
         };
         reader.connect()?;
         Ok(reader)
@@ -215,6 +250,9 @@ impl RecordReader {
                 inbox: inbox["asks"].as_array().cloned().unwrap_or_default(),
                 ..View::default()
             };
+            if self.folds {
+                self.view.fold_before(&mut client)?;
+            }
         }
         client.call("stream.subscribe", json!({ "after": self.view.log_pos }))?;
         self.client = Some(client);
@@ -360,6 +398,14 @@ pub fn take_unseen() -> Vec<Value> {
         Some(Source::Hub(reader)) => std::mem::take(&mut reader.view.unseen),
         Some(Source::Local(view, _)) => std::mem::take(&mut view.unseen),
         None => Vec::new(),
+    })
+}
+
+/// One call to the hub on the one reader's connection; `None` when no hub is connected or it refused.
+pub fn call(method: &str, params: Value) -> Option<Value> {
+    READER.with(|cell| match cell.borrow_mut().as_mut() {
+        Some(Source::Hub(reader)) => reader.client.as_mut()?.call(method, params).ok(),
+        _ => None,
     })
 }
 
