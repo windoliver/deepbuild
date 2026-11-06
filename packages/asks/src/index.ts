@@ -530,6 +530,8 @@ interface Ask {
   later?: number;
   /** Raised by a turn that hadn't read a message you typed: it waits until the agent has it, unless due first. */
   unread: boolean;
+  /** An exception the hub raised, not the agent's question: what you type to the agent isn't its answer, and shows beside it. */
+  hubs: boolean;
   /** Read since it was held: it stands only if the agent raises it again before its next stop (#84). */
   recheck?: boolean;
   /** Since when it waits for a batch: raised, or read by the agent when raised held for your message. */
@@ -1867,7 +1869,7 @@ class AsksCore implements Asks {
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
           fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], receiptAlso: [], decided: new Set(), pending: {}, conflict: [],
-          created: e.ts, wait: (d.deadline as number) - e.ts, due: d.deadline as number, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session),
+          created: e.ts, wait: (d.deadline as number) - e.ts, due: d.deadline as number, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session), hubs: e.writer === 'core' && d.kind === 'exception',
           ...(signature === undefined ? {} : { block: { signature, stops: this.coveringStops(d) } }),
         };
         if (request) this.requested.set(request.block, ask.handle);
@@ -2015,9 +2017,9 @@ class AsksCore implements Asks {
         const thread = this.threadOf(e.session);
         const open = this.openIn(thread);
         // Typed text never answers an authority ask: it shows beside it, for one tap on the card.
-        for (const a of open) if (a.data.kind === 'authority') a.words.push(d.text);
+        for (const a of open) if (a.data.kind === 'authority' || a.hubs) a.words.push(d.text);
         // It answers only a question in sight: not one queued for a batch, put off with Later, or in a hidden exception.
-        const question = open.filter((a) => TYPED_KINDS.has(a.data.kind as string) && !a.fold && this.inSight(a)).at(-1);
+        const question = open.filter((a) => TYPED_KINDS.has(a.data.kind as string) && !a.fold && !a.hubs && this.inSight(a)).at(-1);
         if (question && d.text && question.pending.typed === undefined) question.pending.typed = d.text;
         return;
       }
