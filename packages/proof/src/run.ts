@@ -123,7 +123,7 @@ export interface Parts {
   smallest: string | null;
 }
 /** The checker refused something: failed; else a theorem proves nothing: ran_nothing; else one it stopped short of deciding: stopped; else passed, once it checked one. */
-export function outcomeOf(failures: readonly Failure[], causes: readonly Cause[], testsRun = 1): ProofResult['outcome'] {
+export function outcomeOf(failures: readonly Failure[], causes: readonly Cause[], testsRun: number): ProofResult['outcome'] {
   if (failures.length) return 'failed';
   if (causes.some((c) => c.why !== 'bound')) return 'ran_nothing';
   if (causes.length) return 'stopped';

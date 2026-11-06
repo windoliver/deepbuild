@@ -18,6 +18,8 @@ const agent: Connection = { writer: 'mcp:S1', actor: 'you', scope: 'you', sessio
 /** A test number that passes the Luhn check. */
 const PAN = '4000056655665556';
 const holdsPan = (text: string): boolean => text.replace(/[\s-]/g, '').includes(PAN);
+/** No digit run longer than the four a mask shows: every run of the card's digits is behind one. */
+const showsMoreThanFour = (text: string): boolean => [...Array(PAN.length - 4).keys()].some((s) => text.replace(/[\s-]/g, '').includes(PAN.slice(s, s + 5)));
 
 let dir: string;
 let record: RecordStore;
@@ -49,14 +51,21 @@ afterEach(async () => {
 const purchase = (what: string) => ({ purchase: `run:${ulid(T0)}`, what, seller: 'shop.example', usd: 12, budget, refund: null });
 
 describe('a card number beside other digits', () => {
-  for (const line of [`Visa ${PAN.match(/.{4}/g)!.join(' ')} 05 29`, `Order 7 ${PAN}`, `Card ${PAN.match(/.{4}/g)!.join('-')} 0529`]) {
+  // `00008 4000 0566` alone passes the Luhn check, so a scan that stops at the first window that passes masks it and
+  // leaves `5566 5556` showing.
+  const grouped = PAN.match(/.{4}/g)!;
+  for (const line of [`Visa ${grouped.join(' ')} 05 29`, `Order 7 ${PAN}`, `Card ${grouped.join('-')} 0529`, `Order 00008 ${grouped.join(' ')}`]) {
     it(`is masked in the receipt kept as evidence: "${line}"`, async () => {
       printed = `shop.example\n${line}\nTotal: $12.00\n`;
       const bought = await buying.buy(agent, purchase('USB-C cable'));
       if (bought.status !== 'paid') throw Error(`the purchase is paid under the card rule, not ${bought.status}`);
       const kept = new TextDecoder().decode(await evidence.read(bought.receipt.replace(/^ev:/, '')));
       expect(holdsPan(kept), `the receipt kept as evidence holds the card number: ${JSON.stringify(kept)}`).toBe(false);
-      expect(kept, 'its last four digits stay').toContain('5556');
+      expect(showsMoreThanFour(kept), `the receipt kept as evidence shows more of the card number than four digits: ${JSON.stringify(kept)}`).toBe(false);
+      expect(kept, 'a mask stands where the number was').toContain('••••');
+      // Where digits follow the card in one run, as an expiry, the four shown end the run: never the card's other digits.
+      const shown = /•••• (\d{4})/.exec(kept)?.[1] ?? '';
+      expect(shown === PAN.slice(-4) || !PAN.slice(0, -4).includes(shown), `the mask shows ${shown}, digits of the card other than its last four`).toBe(true);
     });
 
     it(`is refused in a purchase's words: "${line}"`, async () => {

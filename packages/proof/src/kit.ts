@@ -181,7 +181,8 @@ function without(c: Checked, drop: Cause['why'][]): ProofResult {
   const r = c.result;
   const ran = r.outcome === 'passed' || r.outcome === 'failed' || r.outcome === 'ran_nothing' || r.outcome === 'stopped';
   const dropped = new Set(c.causes.filter((x) => drop.includes(x.why)).map((x) => x.line));
-  return { ...r, outcome: ran ? outcomeOf(r.failures, causes) : r.outcome, reasons: r.reasons.filter((l) => !dropped.has(l)), testsRun: ran ? r.testsRun || 1 : r.testsRun };
+  const testsRun = ran ? r.testsRun || 1 : r.testsRun;
+  return { ...r, outcome: ran ? outcomeOf(r.failures, causes, testsRun) : r.outcome, reasons: r.reasons.filter((l) => !dropped.has(l)), testsRun };
 }
 const plant = (name: string, breaks: Rule, fill: ProofFill): PlantedFill<ProofFill> =>
   ({ name, message: RULES[breaks].message, codes: [RULES[breaks].code], breaks: RULES[breaks].id, fill });
