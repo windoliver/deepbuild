@@ -43,7 +43,7 @@ fn svg_of(id: &str, item: &Value, bytes: &dyn Fn(&str) -> Option<Vec<u8>>) -> Re
                 .collect()
         })
         .unwrap_or_default();
-    svg::import(&found, &classes, false)
+    svg::import(&found, &classes, svg::Twin::Honest)
         .map_err(|r| refusal("asset_missing", format!("items/{id}/params/src"), r.what()))
 }
 
@@ -161,7 +161,7 @@ pub const RING_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="
 /// vector's kit fixture: the ring's outline at 1 m and flatten 0.001 against its own curves
 /// flattened finely, as the 2D fill draws them, both evenodd.
 pub fn fixture() -> Value {
-    let svg = svg::import(RING_SVG.as_bytes(), &[], false).expect("the ring imports");
+    let svg = svg::import(RING_SVG.as_bytes(), &[], svg::Twin::Honest).expect("the ring imports");
     let (fine, _) = contours(&svg, None, 1e-4).expect("the ring fills");
     let (_, k, _) = boxed(&fine, 1.0);
     let (rings, _) = contours(&svg, None, 0.001 / k).expect("the ring fills");

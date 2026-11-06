@@ -11,6 +11,8 @@ use crate::scene::{local_of, num, Affine3, Refused};
 
 /// The most planes a cutaway takes.
 pub const MAX_PLANES: usize = 4;
+/// Instancers above this many elements are culled on the GPU (Instance `instance@1`).
+pub const GPU_CULLED_ABOVE: usize = 256;
 /// The most elements an instancer takes.
 pub const MAX_ELEMENTS: usize = 100_000;
 
@@ -156,6 +158,8 @@ pub fn cutaway(
 #[derive(Clone, Debug, PartialEq)]
 pub struct Element {
     pub id: u64,
+    /// Its row in the instancer's columns.
+    pub row: u32,
     pub proto: usize,
     pub at: Affine3,
 }
@@ -253,7 +257,7 @@ pub fn elements(params: &Value, path: &str) -> Result<(Vec<String>, Vec<Element>
             let y = num(Some(y)).ok_or_else(|| bad("yaw"))?;
             at = local_of(pos, [0.0, y, 0.0], scale, [1.0; 3]);
         }
-        out.push(Element { id, proto, at });
+        out.push(Element { id, row: i as u32, proto, at });
     }
     Ok((of, out))
 }
