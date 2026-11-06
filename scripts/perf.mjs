@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, hostname, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,8 +21,11 @@ const regressed = 'Restore the regressed budget; budgets are frozen once they re
 // Where every result's instructions retired came from; GNU time has no counter.
 const counter = process.platform === 'darwin' ? '/usr/bin/time -l: instructions retired' : null;
 // Each side's copy lives at the same path every run, in this user's cache directory under a name
-// for this machine, not for a checkout, with its Cargo builds kept beside it, so a preflight from any
-// worktree, a new one too, doesn't rebuild what the last run on the machine built (#594, #1119). The
+// for this machine and clone, not for a checkout, with its Cargo builds kept beside it, so a preflight
+// from any worktree, a new one too, doesn't rebuild what the last run on the machine built (#594, #1119).
+// Another repository, such as a test's fixture, has a git directory of its own, so it gets copies and
+// a lock of its own and never replaces the clone's. macOS adds .local to its name on some networks,
+// which would start the copies cold in a second folder. The
 // path has to stay put: Cargo doesn't rebuild a crate whose workspace moved, so absolute paths baked
 // into earlier builds (CARGO_MANIFEST_DIR, CARGO_BIN_EXE_*) would point at a deleted copy. Each run
 // replaces a copy's tree by the bays' rule (scripts/bays.mjs), writing only the files whose bytes
@@ -32,7 +36,8 @@ let kept, lock, owner = process.pid;
 function keptRoot() {
   if (kept) return kept;
   const cache = process.env.XDG_CACHE_HOME || join(homedir(), process.platform === 'darwin' ? 'Library/Caches' : '.cache');
-  const directory = join(cache, 'deepbuild-perf', hostname().replace(/[^\w.-]/g, '_'));
+  const clone = createHash('sha256').update(realpathSync(run('git', ['rev-parse', '--path-format=absolute', '--git-common-dir']).trim())).digest('hex').slice(0, 12);
+  const directory = join(cache, 'deepbuild-perf', `${hostname().replace(/\.local$/, '').replace(/[^\w.-]/g, '_')}-${clone}`);
   // Perf runs what it builds there, so the directory is this user's alone: anyone else who could
   // write to it could plant artifacts Cargo reads as fresh.
   mkdirSync(dirname(directory), { recursive: true });
@@ -49,7 +54,7 @@ function keptRoot() {
   process.env.DEEP_PERF_LOCK = String(owner);
   return (kept = directory);
 }
-// One perf run per machine at a time: a second would replace the first's copies under it. The lock
+// One perf run per clone on the machine at a time: a second would replace the first's copies under it. The lock
 // appears whole, number and all, by linking a file already written. A lock whose process is gone,
 // or that names none, was left by a run that was killed, and is replaced in one step, under a
 // takeover mark that the lock's release also takes: between reading the lock and replacing it, no
