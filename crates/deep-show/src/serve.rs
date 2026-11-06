@@ -14,8 +14,17 @@
 //! - Raw input comes only from you: keys, text and paste from the input seam go to the panel
 //!   that holds keyboard focus, whatever the pointer is over, and on to its program; a write from
 //!   an agent's session is refused, naming the writer.
-//! - The host never answers the program, so a clipboard read through the terminal's escape gets
-//!   no reply and no byte of the clipboard.
+//! - The host never answers a clipboard read through the terminal's escape: it gets no reply and
+//!   no byte of the clipboard.
+//! - Issue #990: a key's bytes follow the program's modes as the host holds them after every byte
+//!   the program wrote before the key ([`deep_canvas_cells::keys`]); the host's answers to the
+//!   program's queries go to the program ahead of any later input, since input first waits for
+//!   the PTY to be read empty and the host to apply all of it. A paste loses every end marker in
+//!   its text. Each program-status report becomes a reading on the terminal's session, signal
+//!   only. Every mode a program set is reset when it exits, when the shell takes its terminal
+//!   back from it, and when the host restarts the program. Composing text is shown at the
+//!   program's cursor and never sent; text another app inserts waits in the session's box,
+//!   naming the app, until your Enter. Mouse reports map to the cells as drawn.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::fs::File;
@@ -27,14 +36,18 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use deep_canvas_cells::keys::{encode, release, Mods};
 use serde_json::{json, Map, Value};
 
 use crate::optional;
+use crate::shared::ulid_of;
 
 /// The most a terminal's stream holds that its host hasn't taken: 16 MiB.
 pub const WINDOW: usize = 16 * 1024 * 1024;
 /// One read of the PTY, and one frame to the host, at most.
 const CHUNK: usize = 64 * 1024;
+/// The host's answers to a program's queries waiting for it to read its input, at most.
+const ANSWERS: usize = 64;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Plant {
@@ -51,12 +64,30 @@ enum Plant {
     AgentAccepted,
     /// Each line of a stream is written to the record as an event.
     ToRecord,
+    /// The encoder sends a bare carriage return for Shift+Enter.
+    ShiftEnterBareCr,
+    /// A paste keeps the end markers inside its text.
+    PasteKeepsMarker,
+    /// The host answers none of the program's queries.
+    QueriesDropped,
+    /// Each program-status reading also sets the session's state.
+    StatusSetsState,
+    /// Nothing is reset when a program exits or restarts.
+    ModesLeftOn,
+    /// Composing text is sent to the program as it changes.
+    ImeSendsComposing,
+    /// Text another app inserts is dropped.
+    InsertDropped,
+    /// Text another app inserts goes straight to the program.
+    InsertTypedStraight,
 }
 
 /// One frame for the host: the program's bytes, or a query, which reads every byte before it.
 enum Item {
     Data(Vec<u8>),
     Query(Vec<u8>),
+    /// The program's modes are reset, after every byte before it.
+    Reset,
 }
 
 /// What the stream holds and has done, shared by its threads.
@@ -75,14 +106,19 @@ struct Flow {
 struct Stream {
     flow: Mutex<Flow>,
     wake: Condvar,
+    /// Held while the PTY is read and the bytes queued, so input can wait for it to be empty.
+    reading: Mutex<()>,
 }
+
+/// The PTY's master, which a restart replaces.
+type Master = Arc<Mutex<Arc<File>>>;
 
 /// A query's answer from the host, routed back to the call waiting on it.
 type Replies = Arc<(Mutex<VecDeque<Value>>, Condvar)>;
 
 struct Term {
     panel: String,
-    master: Arc<File>,
+    master: Master,
     /// The program, reaped by its own thread once it ends, and the host.
     program: Arc<Mutex<Option<Child>>>,
     host: Child,
@@ -90,6 +126,54 @@ struct Term {
     replies: Replies,
     /// The bracketed-paste, mouse and focus modes, as the host last reported them.
     modes: Value,
+    /// The terminal's size in cells, which a restarted program starts at.
+    size: (u16, u16),
+    /// The grid's top left and one cell's size as drawn, in window px.
+    drawn: [f64; 4],
+    /// The text you are composing in an input method, shown and never sent.
+    preedit: String,
+    /// Text another app inserted, and that app, waiting for your Enter.
+    inserted: Option<(String, String)>,
+}
+
+impl Term {
+    fn master(&self) -> Arc<File> {
+        Arc::clone(&self.master.lock().expect("master"))
+    }
+}
+
+/// One cell's size as drawn at a font size, in px: 8 × 16 at the cell grid's default 13 points.
+fn cell_size(points: f64) -> [f64; 2] {
+    [points * 8.0 / 13.0, points * 16.0 / 13.0]
+}
+
+/// What poll says of the PTY's output within `ms`: its events, none when nothing came.
+fn poll_in(master: &File, ms: libc::c_int) -> libc::c_short {
+    let mut fds = libc::pollfd {
+        fd: master.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    // SAFETY: poll reads and writes the one pollfd we pass.
+    match unsafe { libc::poll(&mut fds, 1, ms) } {
+        n if n > 0 => fds.revents,
+        _ => 0,
+    }
+}
+
+/// Whether the PTY holds output nobody has read, asked of poll without waiting. FIONREAD can't
+/// say: on macOS a PTY master's FIONREAD counts the program's unread input, not its output.
+fn unread(master: &File) -> bool {
+    poll_in(master, 0) & libc::POLLIN != 0
+}
+
+/// A paste's text with every bracketed-paste marker taken out, so it can't end early.
+fn unmarked(text: &str) -> String {
+    let mut t = text.to_string();
+    while t.contains("\x1b[200~") || t.contains("\x1b[201~") {
+        t = t.replace("\x1b[200~", "").replace("\x1b[201~", "");
+    }
+    t
 }
 
 struct Serve {
@@ -103,6 +187,8 @@ struct Serve {
     clipboard: String,
     record: Option<String>,
     plant: Plant,
+    /// The app windows `ax` left up, ended with the rest by their PIDs.
+    windows: Vec<Child>,
 }
 
 fn bad() -> Value {
@@ -161,6 +247,80 @@ fn set_size(master: &File, cols: u16, rows: u16) -> bool {
     unsafe { libc::ioctl(master.as_raw_fd(), TIOCSWINSZ as _, &size) == 0 }
 }
 
+/// Starts `program` (`{argv, env, cwd}`) on a new PTY of `cols` × `rows`, in a session of its
+/// own with the PTY as its controlling terminal: the PTY's master and the program.
+fn spawn_program(program: &Value, cols: u16, rows: u16) -> Result<(File, Child), Value> {
+    let argv: Vec<String> = program
+        .get("argv")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|a| a.as_str().map(str::to_string))
+        .collect();
+    let Some((exe, args)) = argv.split_first() else {
+        return Err(bad());
+    };
+    let Some((master, slave)) = openpty(cols, rows) else {
+        return Err(json!({"code": "pty_failed"}));
+    };
+    let mut cmd = Command::new(exe);
+    cmd.args(args).env_clear();
+    for (k, v) in program
+        .get("env")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(v) = v.as_str() {
+            cmd.env(k, v);
+        }
+    }
+    if let Some(cwd) = program.get("cwd").and_then(Value::as_str) {
+        cmd.current_dir(cwd);
+    }
+    let fd = slave.as_raw_fd();
+    // SAFETY: between fork and exec the child only calls login_tty, which is async-signal
+    // safe: a new session with the slave as its controlling terminal and stdio.
+    unsafe {
+        cmd.pre_exec(move || match libc::login_tty(fd) {
+            0 => Ok(()),
+            _ => Err(std::io::Error::last_os_error()),
+        });
+    }
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let child = cmd
+        .spawn()
+        .map_err(|e| json!({"code": "spawn_failed", "what": e.to_string()}))?;
+    drop(slave);
+    Ok((File::from(master), child))
+}
+
+/// The program, reaped by its own thread as soon as it ends, so its PID is gone, not a zombie.
+fn reaped(child: Child) -> Arc<Mutex<Option<Child>>> {
+    let program = Arc::new(Mutex::new(Some(child)));
+    let watched = Arc::clone(&program);
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_millis(50));
+        let mut p = watched.lock().expect("program");
+        match p.as_mut().map(Child::try_wait) {
+            Some(Ok(None)) => {}
+            _ => {
+                p.take();
+                return;
+            }
+        }
+    });
+    program
+}
+
+fn unhex(h: &str) -> Vec<u8> {
+    (0..h.len() / 2)
+        .filter_map(|i| u8::from_str_radix(&h[2 * i..2 * i + 2], 16).ok())
+        .collect()
+}
+
 impl Serve {
     fn setup(input: &Map<String, Value>) -> Option<Serve> {
         let panels = match input.get("panels") {
@@ -187,6 +347,14 @@ impl Serve {
             Some(Some("router_follows_pointer")) => Plant::FollowsPointer,
             Some(Some("agent_raw_input_accepted")) => Plant::AgentAccepted,
             Some(Some("stream_to_record")) => Plant::ToRecord,
+            Some(Some("shift_enter_bare_cr")) => Plant::ShiftEnterBareCr,
+            Some(Some("paste_keeps_end_marker")) => Plant::PasteKeepsMarker,
+            Some(Some("queries_dropped")) => Plant::QueriesDropped,
+            Some(Some("status_sets_state")) => Plant::StatusSetsState,
+            Some(Some("modes_left_on")) => Plant::ModesLeftOn,
+            Some(Some("ime_sends_composing")) => Plant::ImeSendsComposing,
+            Some(Some("insert_dropped")) => Plant::InsertDropped,
+            Some(Some("insert_typed_straight")) => Plant::InsertTypedStraight,
             _ => return None,
         };
         Some(Serve {
@@ -202,6 +370,7 @@ impl Serve {
             },
             record: optional(input.get("record"), |r| Some(r.as_str()?.to_string()))?,
             plant,
+            windows: Vec::new(),
         })
     }
 
@@ -220,6 +389,9 @@ impl Serve {
         match name.as_str() {
             "install" => self.install(c),
             "terminal_open" => self.open(c),
+            "terminal_restart" => self.restart(c),
+            "screenshot" => self.screenshot(c),
+            "ax" => self.ax(c),
             "terminal_resize" => self.resize(c),
             "input" => self.input(c),
             "focus" => json!({"kb_focus": self.focus}),
@@ -237,7 +409,33 @@ impl Serve {
                 let Some(t) = s("terminal") else { return bad() };
                 let mut q = c.clone();
                 q.insert("q".into(), json!(name));
-                self.ask(&t, &Value::Object(q))
+                let mut reply = self.ask(&t, &Value::Object(q));
+                if let (Some(term), "cells", Some(r)) =
+                    (self.terms.get(&t), name.as_str(), reply.as_object_mut())
+                {
+                    // What the app draws beside the grid: your composition at the program's
+                    // cursor, the box of inserted text, and where the cells are drawn.
+                    let cursor = r.get("cursor").cloned().unwrap_or(Value::Null);
+                    r.insert(
+                        "preedit".into(),
+                        match term.preedit.is_empty() {
+                            true => Value::Null,
+                            false => {
+                                json!({"text": term.preedit, "x": cursor["x"], "y": cursor["y"]})
+                            }
+                        },
+                    );
+                    r.insert(
+                        "box".into(),
+                        match &term.inserted {
+                            None => Value::Null,
+                            Some((text, app)) => json!({"text": text, "source": app}),
+                        },
+                    );
+                    let [x, y, w, h] = term.drawn;
+                    r.insert("drawn".into(), json!({"x": x, "y": y, "w": w, "h": h}));
+                }
+                reply
             }
             _ => bad(),
         }
@@ -270,75 +468,48 @@ impl Serve {
     fn open(&mut self, c: &Map<String, Value>) -> Value {
         let s = |k: &str| c.get(k).and_then(Value::as_str).map(str::to_string);
         let n = |k: &str, d: u64| c.get(k).map_or(Some(d), Value::as_u64);
-        let (Some(id), Some(panel), Some(cols), Some(rows), Some(history)) = (
+        let (Some(id), Some(cols), Some(rows), Some(history)) = (
             s("terminal"),
-            s("panel"),
             n("cols", 120),
             n("rows", 36),
             n("history", 10_000),
         ) else {
             return bad();
         };
-        if self.terminals_of.get(&panel).map(|(t, _)| t.as_str()) != Some(id.as_str()) {
-            return json!({"code": "unknown_panel"});
-        }
-        let Some(program) = c.get("program") else {
-            return bad();
+        // A plug-in's panel shows the terminal, or the hub hosts it for a session.
+        let session = s("session");
+        let panel = match (s("panel"), &session) {
+            (Some(p), None) => {
+                if self.terminals_of.get(&p).map(|(t, _)| t.as_str()) != Some(id.as_str()) {
+                    return json!({"code": "unknown_panel"});
+                }
+                p
+            }
+            (None, Some(sid)) => format!("session:{sid}"),
+            _ => return bad(),
         };
-        let argv: Vec<String> = program
-            .get("argv")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|a| a.as_str().map(str::to_string))
-            .collect();
-        let Some((exe, args)) = argv.split_first() else {
+        let points = c
+            .get("font")
+            .map_or(Some(13.0), |f| f.get("size").and_then(Value::as_f64))
+            .filter(|p| *p > 0.0);
+        let (Some(points), Some(program)) = (points, c.get("program")) else {
             return bad();
         };
         let (cols, rows) = (cols as u16, rows as u16);
-        let Some((master, slave)) = openpty(cols, rows) else {
-            return json!({"code": "pty_failed"});
-        };
-        let mut cmd = Command::new(exe);
-        cmd.args(args).env_clear();
-        for (k, v) in program
-            .get("env")
-            .and_then(Value::as_object)
-            .into_iter()
-            .flatten()
-        {
-            if let Some(v) = v.as_str() {
-                cmd.env(k, v);
-            }
-        }
-        if let Some(cwd) = program.get("cwd").and_then(Value::as_str) {
-            cmd.current_dir(cwd);
-        }
-        let fd = slave.as_raw_fd();
-        // SAFETY: between fork and exec the child only calls login_tty, which is async-signal
-        // safe: a new session with the slave as its controlling terminal and stdio.
-        unsafe {
-            cmd.pre_exec(move || match libc::login_tty(fd) {
-                0 => Ok(()),
-                _ => Err(std::io::Error::last_os_error()),
-            });
-        }
-        cmd.stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        let program = match cmd.spawn() {
+        let (master, program) = match spawn_program(program, cols, rows) {
             Ok(p) => p,
-            Err(e) => return json!({"code": "spawn_failed", "what": e.to_string()}),
+            Err(e) => return e,
         };
-        drop(slave);
         let mut host_args = vec![
             "host".to_string(),
             cols.to_string(),
             rows.to_string(),
             history.to_string(),
         ];
-        if matches!(self.plant, Plant::RepliesSecret | Plant::RepliesInSt) {
-            host_args.push("answers".into());
+        match self.plant {
+            Plant::RepliesSecret | Plant::RepliesInSt => host_args.push("answers".into()),
+            Plant::QueriesDropped => host_args.push("queries_dropped".into()),
+            _ => {}
         }
         let host = Command::new(std::env::current_exe().unwrap_or_default())
             .args(&host_args)
@@ -350,36 +521,28 @@ impl Serve {
             Ok(h) => h,
             Err(e) => return json!({"code": "spawn_failed", "what": e.to_string()}),
         };
-        let master = Arc::new(File::from(master));
+        let master: Master = Arc::new(Mutex::new(Arc::new(master)));
         let stream = Arc::new(Stream {
             flow: Mutex::new(Flow::default()),
             wake: Condvar::new(),
+            reading: Mutex::new(()),
         });
         let to_host = File::from(OwnedFd::from(host.stdin.take().expect("piped")));
         let replies: Replies = Arc::new((Mutex::new(VecDeque::new()), Condvar::new()));
-        self.spawn_reader(Arc::clone(&master), Arc::clone(&stream));
+        let program_pid = program.id();
+        self.spawn_reader(Arc::clone(&master), program_pid, Arc::clone(&stream));
         self.spawn_writer(Arc::clone(&stream), to_host);
         self.spawn_host_reader(
             host.stdout.take().expect("piped"),
             Arc::clone(&stream),
             Arc::clone(&replies),
             Arc::clone(&master),
+            session.filter(|_| self.record.is_some()),
         );
-        let (host_pid, program_pid) = (host.id(), program.id());
-        // The program is reaped as soon as it ends, so its PID is gone, not a zombie.
-        let program = Arc::new(Mutex::new(Some(program)));
-        let reaped = Arc::clone(&program);
-        thread::spawn(move || loop {
-            thread::sleep(Duration::from_millis(50));
-            let mut p = reaped.lock().expect("program");
-            match p.as_mut().map(Child::try_wait) {
-                Some(Ok(None)) => {}
-                _ => {
-                    p.take();
-                    return;
-                }
-            }
-        });
+        let host_pid = host.id();
+        let program = reaped(program);
+        let origin = self.panels.get(&panel).map_or([0.0, 0.0], |r| [r[0], r[1]]);
+        let [w, h] = cell_size(points);
         self.terms.insert(
             id.clone(),
             Term {
@@ -390,50 +553,94 @@ impl Serve {
                 stream,
                 replies,
                 modes: Value::Null,
+                size: (cols, rows),
+                drawn: [origin[0], origin[1], w, h],
+                preedit: String::new(),
+                inserted: None,
             },
         );
         json!({"opened": true, "terminal": id, "host": {"pid": host_pid}, "program": {"pid": program_pid}, "stream": format!("stream:{id}")})
     }
 
+    /// The host starts a new program on the same terminal and grid: the old one, if it still
+    /// runs, is ended by its PID, and every mode it set is reset before the new one reads input.
+    fn restart(&mut self, c: &Map<String, Value>) -> Value {
+        let id = c
+            .get("terminal")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let Some(program) = c.get("program") else {
+            return bad();
+        };
+        let Some(t) = self.terms.get(&id) else {
+            return json!({"code": "unknown_terminal"});
+        };
+        if let Some(mut old) = t.program.lock().expect("program").take() {
+            // SAFETY: kill on a PID this process started and has not reaped.
+            unsafe { libc::kill(old.id() as libc::pid_t, libc::SIGKILL) };
+            let _ = old.wait();
+        }
+        let (master, child) = match spawn_program(program, t.size.0, t.size.1) {
+            Ok(p) => p,
+            Err(e) => return e,
+        };
+        let pid = child.id();
+        {
+            // Under the reading lock, so no byte the old program left is read after the reset.
+            let _held = t.stream.reading.lock().expect("reading");
+            {
+                let mut f = t.stream.flow.lock().expect("flow");
+                if self.plant != Plant::ModesLeftOn {
+                    f.queue.push_back(Item::Reset);
+                }
+                f.closed = false;
+                t.stream.wake.notify_all();
+            }
+            *t.master.lock().expect("master") = Arc::new(master);
+        }
+        self.spawn_reader(Arc::clone(&t.master), pid, Arc::clone(&t.stream));
+        if let Some(t) = self.terms.get_mut(&id) {
+            t.program = reaped(child);
+        }
+        json!({"restarted": true, "program": {"pid": pid}})
+    }
+
     /// The PTY's reader: the program's output into the stream, never past its window. A full
     /// window stops the reads, so the program's writes block; the planted stream drops its
-    /// oldest chunks instead and reads on.
-    fn spawn_reader(&self, master: Arc<File>, stream: Arc<Stream>) {
+    /// oldest chunks instead and reads on. It reads only what the PTY holds, under the stream's
+    /// reading lock, so input can wait for every byte written before it. When the shell (the
+    /// program, `leader`) takes its terminal back from a program it ran, or the program ends,
+    /// the modes are reset after every byte read so far and before any the shell writes. Once a
+    /// restart replaces its PTY, it stops, and says nothing of the old program's end.
+    fn spawn_reader(&self, slot: Master, leader: u32, stream: Arc<Stream>) {
         let plant = self.plant;
         let record = self.record.clone();
         thread::spawn(move || {
+            let master = Arc::clone(&slot.lock().expect("master"));
+            let current = || Arc::ptr_eq(&slot.lock().expect("master"), &master);
+            let fd = master.as_raw_fd();
+            let leader = leader as libc::pid_t;
             let mut buf = vec![0u8; CHUNK];
             let mut line = Vec::new();
-            loop {
-                {
-                    // The window counts what the hub holds, one chunk on its way to the host and
-                    // the host's pipe, so all of it stays under 16 MiB.
-                    let mut f = stream.flow.lock().expect("flow");
-                    while f.queued + 4 * CHUNK > WINDOW && plant != Plant::DropsOldest && !f.closed
-                    {
-                        f = stream.wake.wait(f).expect("flow");
-                    }
-                }
-                let n = match (&*master).read(&mut buf) {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => n,
-                };
+            let mut foreground = leader;
+            let push = |chunk: Vec<u8>, line: &mut Vec<u8>| {
                 if plant == Plant::ToRecord {
                     if let Some(path) = &record {
-                        line.extend_from_slice(&buf[..n]);
-                        record_lines(path, &mut line);
+                        line.extend_from_slice(&chunk);
+                        record_lines(path, line);
                     }
                 }
                 // The planted stream keeps its chunks to whole lines, so what it drops is lines.
                 let chunk = match plant {
                     Plant::DropsOldest => {
-                        line.extend_from_slice(&buf[..n]);
+                        line.extend_from_slice(&chunk);
                         let Some(end) = line.iter().rposition(|b| *b == b'\n') else {
-                            continue;
+                            return;
                         };
                         line.drain(..=end).collect()
                     }
-                    _ => buf[..n].to_vec(),
+                    _ => chunk,
                 };
                 let n = chunk.len();
                 let mut f = stream.flow.lock().expect("flow");
@@ -452,7 +659,67 @@ impl Serve {
                     f.dropped_bytes += old.len() as u64;
                 }
                 stream.wake.notify_all();
+            };
+            let reset = || {
+                if plant != Plant::ModesLeftOn {
+                    let mut f = stream.flow.lock().expect("flow");
+                    f.queue.push_back(Item::Reset);
+                    stream.wake.notify_all();
+                }
+            };
+            loop {
+                {
+                    // The window counts what the hub holds, one chunk on its way to the host and
+                    // the host's pipe, so all of it stays under 16 MiB.
+                    let mut f = stream.flow.lock().expect("flow");
+                    while f.queued + 4 * CHUNK > WINDOW && plant != Plant::DropsOldest && !f.closed
+                    {
+                        f = stream.wake.wait(f).expect("flow");
+                    }
+                }
+                let revents = poll_in(&master, 20);
+                let _held = stream.reading.lock().expect("reading");
+                if !current() {
+                    return;
+                }
+                // SAFETY: tcgetpgrp only reads the descriptor's terminal.
+                let now = unsafe { libc::tcgetpgrp(fd) };
+                // The shell already holds its terminal again when it writes, so what the PTY
+                // holds now is the shell's and comes after the reset.
+                if now == leader && foreground != leader && foreground > 0 {
+                    reset();
+                }
+                if now > 0 {
+                    foreground = now;
+                }
+                // Read only what the PTY holds, so the read never blocks while the lock is held;
+                // a hang-up with nothing left reads its end, and so does a descriptor poll can't
+                // watch, rather than polling it forever.
+                let hung = revents & (libc::POLLHUP | libc::POLLERR | libc::POLLNVAL) != 0;
+                if revents == 0 || (!unread(&master) && !hung) {
+                    continue;
+                }
+                // One chunk of everything the PTY holds, up to CHUNK, read in as few passes as it
+                // takes; a read the PTY has output for returns what it holds without waiting.
+                let mut n = 0;
+                loop {
+                    match (&*master).read(&mut buf[n..]) {
+                        Ok(0) | Err(_) => break,
+                        Ok(k) => n += k,
+                    }
+                    if n == CHUNK || !unread(&master) {
+                        break;
+                    }
+                }
+                if n == 0 {
+                    break;
+                }
+                push(buf[..n].to_vec(), &mut line);
             }
+            if !current() {
+                return;
+            }
+            reset();
             let mut f = stream.flow.lock().expect("flow");
             f.closed = true;
             stream.wake.notify_all();
@@ -480,6 +747,7 @@ impl Serve {
                         frame(b'D', &c)
                     }
                     Item::Query(q) => frame(b'Q', &q),
+                    Item::Reset => frame(b'X', &[]),
                 }
             };
             if to_host.write_all(&bytes).is_err() {
@@ -488,23 +756,59 @@ impl Serve {
         });
     }
 
-    /// The host's answers: `A n` for bytes applied, `C <end>` for a clipboard read only the
+    /// The host's answers: `A n` for bytes applied, `R <hex>` for its answers to the program's
+    /// queries, written to the program as they come, `S <hex>` for a program-status report,
+    /// kept as a reading on the terminal's session, `C <end>` for a clipboard read only the
     /// planted host reports, and one JSON line per query.
     fn spawn_host_reader(
         &self,
         out: std::process::ChildStdout,
         stream: Arc<Stream>,
         replies: Replies,
-        master: Arc<File>,
+        master: Master,
+        session: Option<String>,
     ) {
-        let (plant, secret) = (self.plant, self.clipboard.clone());
+        let (plant, secret, record) = (self.plant, self.clipboard.clone(), self.record.clone());
+        // Readings are written on a thread of their own, so the program's answers never wait on
+        // the record.
+        let (to_record, reports) = std::sync::mpsc::channel::<String>();
+        if let (Some(path), Some(sid)) = (record, session) {
+            thread::spawn(move || {
+                for (n, report) in reports.iter().enumerate() {
+                    record_reading(
+                        &path,
+                        &sid,
+                        &report,
+                        n as u64,
+                        plant == Plant::StatusSetsState,
+                    );
+                }
+            });
+        }
+        // The answers to the program's queries are written on a thread of their own, so a
+        // program that reads none of its input stalls only them, never the host's other lines;
+        // past ANSWERS waiting, more are dropped.
+        let (answers, to_write) = std::sync::mpsc::sync_channel::<Vec<u8>>(ANSWERS);
+        thread::spawn(move || {
+            for bytes in to_write {
+                let m = Arc::clone(&master.lock().expect("master"));
+                let _ = (&*m).write_all(&bytes);
+            }
+        });
         thread::spawn(move || {
             for line in BufReader::new(out).lines() {
                 let Ok(line) = line else { break };
+                let to_program = |bytes: &[u8]| {
+                    let _ = answers.try_send(bytes.to_vec());
+                };
                 if let Some(n) = line.strip_prefix("A ") {
                     let mut f = stream.flow.lock().expect("flow");
                     f.delivered = n.parse().unwrap_or(f.delivered);
                     stream.wake.notify_all();
+                } else if let Some(h) = line.strip_prefix("R ") {
+                    to_program(&unhex(h));
+                } else if let Some(h) = line.strip_prefix("S ") {
+                    let _ = to_record.send(String::from_utf8_lossy(&unhex(h)).into_owned());
                 } else if let Some(end) = line.strip_prefix("C ") {
                     let answer = match (plant, end) {
                         (Plant::RepliesSecret, _) => {
@@ -514,7 +818,7 @@ impl Serve {
                         _ => None,
                     };
                     if let Some(a) = answer {
-                        let _ = (&*master).write_all(a.as_bytes());
+                        to_program(a.as_bytes());
                     }
                 } else {
                     let v = serde_json::from_str(&line).unwrap_or(Value::Null);
@@ -587,8 +891,11 @@ impl Serve {
         let Some(t) = self.terms.get(&s) else {
             return json!({"code": "unknown_terminal"});
         };
-        if !set_size(&t.master, cols as u16, rows as u16) {
+        if !set_size(&t.master(), cols as u16, rows as u16) {
             return json!({"code": "resize_failed"});
+        }
+        if let Some(t) = self.terms.get_mut(&s) {
+            t.size = (cols as u16, rows as u16);
         }
         let _ = self.ask(&s, &json!({"q": "resize", "cols": cols, "rows": rows}));
         json!({"resized": true})
@@ -640,8 +947,29 @@ impl Serve {
 
     fn write(&self, terminal: &str, bytes: &[u8]) {
         if let Some(t) = self.terms.get(terminal) {
-            let _ = (&*t.master).write_all(bytes);
+            let _ = (&*t.master()).write_all(bytes);
         }
+    }
+
+    /// Waits until the program's output is read empty and applied, so the host's answers to
+    /// every query before your input reach the program first, and returns the modes after it.
+    fn settled_modes(&mut self, terminal: &str) -> Value {
+        if let Some(t) = self.terms.get(terminal) {
+            let master = t.master();
+            for _ in 0..2000 {
+                // A full window holds the PTY unread on purpose; your input doesn't wait on it.
+                let full = t.stream.flow.lock().expect("flow").queued + 4 * CHUNK > WINDOW;
+                let empty = full || {
+                    let _held = t.stream.reading.lock().expect("reading");
+                    !unread(&master)
+                };
+                if empty {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(1));
+            }
+        }
+        self.modes(terminal)
     }
 
     /// One event of the input seam's test backend, naming no panel: keys, text and paste go to
@@ -669,32 +997,113 @@ impl Serve {
         let Some(id) = self.term_of_panel(&panel).map(str::to_string) else {
             return json!({"serial": serial, "reached": ["shell"]});
         };
+        let m = self.settled_modes(&id);
+        let plant = self.plant;
+        let text = e
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let paste = |text: &str| -> Vec<u8> {
+            let text = match plant {
+                Plant::PasteKeepsMarker => text.to_string(),
+                _ => unmarked(text),
+            };
+            match m["bracketed_paste"] == true {
+                true => format!("\x1b[200~{text}\x1b[201~").into_bytes(),
+                false => text.into_bytes(),
+            }
+        };
         let bytes: Vec<u8> = match ty {
-            "key" => match e.get("phase").and_then(Value::as_str) {
-                // A legacy terminal has no escape for a release.
-                Some("release") => Vec::new(),
-                _ => key_bytes(e.get("key").and_then(Value::as_str).unwrap_or("")),
-            },
-            "text" => e
-                .get("text")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .as_bytes()
-                .to_vec(),
-            "paste" => {
-                let text = e.get("text").and_then(Value::as_str).unwrap_or("");
-                match self.modes(&id)["bracketed_paste"] == true {
-                    true => format!("\x1b[200~{text}\x1b[201~").into_bytes(),
-                    false => text.as_bytes().to_vec(),
+            "key" => {
+                let key = e.get("key").and_then(Value::as_str).unwrap_or("");
+                let held = |n: &str| {
+                    e.get("mods")
+                        .and_then(Value::as_array)
+                        .is_some_and(|a| a.iter().any(|v| v.as_str() == Some(n)))
+                };
+                let mods = Mods {
+                    shift: held("shift"),
+                    alt: held("alt"),
+                    ctrl: held("ctrl"),
+                };
+                let code = e.get("code").and_then(Value::as_str);
+                let flags = m["keyboard_flags"].as_u64().unwrap_or(0) as u8;
+                match e.get("phase").and_then(Value::as_str) {
+                    // A release has an escape only once the program asked for event types.
+                    Some("release") => release(key, code, mods, flags),
+                    _ => {
+                        let mut out = match (plant, key, mods) {
+                            (
+                                Plant::ShiftEnterBareCr,
+                                "enter",
+                                Mods {
+                                    shift: true,
+                                    alt: false,
+                                    ctrl: false,
+                                },
+                            ) => b"\r".to_vec(),
+                            _ => encode(key, code, mods, m["app_cursor"] == true, flags),
+                        };
+                        // Your Enter sends the text another app inserted, whole, then the Enter.
+                        let inserted = self.terms.get_mut(&id).and_then(|t| match key {
+                            "enter" | "return" => t.inserted.take(),
+                            _ => None,
+                        });
+                        if let Some((text, _)) = inserted {
+                            let mut first = paste(&text);
+                            first.append(&mut out);
+                            out = first;
+                        }
+                        out
+                    }
                 }
             }
+            "text" => {
+                if let Some(t) = self.terms.get_mut(&id) {
+                    t.preedit.clear();
+                }
+                text.into_bytes()
+            }
+            // An input method's marked text is shown at the program's cursor, never sent.
+            "preedit" => {
+                if let Some(t) = self.terms.get_mut(&id) {
+                    t.preedit = text.clone();
+                }
+                match plant {
+                    Plant::ImeSendsComposing => text.into_bytes(),
+                    _ => Vec::new(),
+                }
+            }
+            // Text another app inserts (dictation, text expansion) waits in the session's box,
+            // naming the app, until your Enter.
+            "insert" => {
+                let app = e
+                    .get("app")
+                    .and_then(Value::as_str)
+                    .unwrap_or("another app")
+                    .to_string();
+                match plant {
+                    Plant::InsertDropped => Vec::new(),
+                    Plant::InsertTypedStraight => text.into_bytes(),
+                    _ => {
+                        if let Some(t) = self.terms.get_mut(&id) {
+                            let mut held = t.inserted.take().map(|(t, _)| t).unwrap_or_default();
+                            held.push_str(&text);
+                            t.inserted = Some((held, app));
+                        }
+                        Vec::new()
+                    }
+                }
+            }
+            "paste" => paste(&text),
             "mouse" => {
-                let m = self.modes(&id);
-                let (Some(p), Some(r)) = (pos(e.get("pos")), self.panels.get(&panel)) else {
+                let (Some(p), Some(t)) = (pos(e.get("pos")), self.terms.get(&id)) else {
                     return bad();
                 };
-                let x = ((p[0] - r[0]) / 8.0).floor() as i64 + 1;
-                let y = ((p[1] - r[1]) / 16.0).floor() as i64 + 1;
+                let [ox, oy, w, h] = t.drawn;
+                let x = ((p[0] - ox) / w).floor() as i64 + 1;
+                let y = ((p[1] - oy) / h).floor() as i64 + 1;
                 let down = e.get("phase").and_then(Value::as_str) == Some("down");
                 match (m["mouse"].as_str(), down) {
                     (Some("sgr"), true) => format!("\x1b[<0;{x};{y}M").into_bytes(),
@@ -740,8 +1149,117 @@ impl Serve {
                "what": format!("raw input comes only from your focused panel; {writer} is an agent's session")})
     }
 
+    /// What the app draws for a call naming a `terminal` or a `session`: that terminal's screen and
+    /// your composition (a session's, its hosted terminal), and the record's events, which the
+    /// sidebar's session rows read with their readings.
+    fn app_spec(&mut self, c: &Map<String, Value>) -> Result<Value, Value> {
+        let s = |k: &str| c.get(k).and_then(Value::as_str).map(str::to_string);
+        let terminal = s("terminal").or_else(|| {
+            let panel = format!("session:{}", s("session")?);
+            self.term_of_panel(&panel).map(str::to_string)
+        });
+        let terminal = match terminal {
+            None => None,
+            Some(id) => {
+                let screen = self.ask(&id, &json!({"q": "screen"}));
+                if screen.get("code").is_some() {
+                    return Err(screen);
+                }
+                let preedit = self
+                    .terms
+                    .get(&id)
+                    .map(|t| t.preedit.clone())
+                    .filter(|p| !p.is_empty());
+                Some(
+                    json!({"cols": screen["cols"], "rows": screen["rows"], "screen": screen["screen"], "preedit": preedit}),
+                )
+            }
+        };
+        let events = self
+            .record
+            .as_deref()
+            .map(record_events)
+            .unwrap_or_default();
+        Ok(
+            json!({"terminal": terminal, "events": events, "session": s("session"), "part": s("part")}),
+        )
+    }
+
+    /// A PNG of the app at the reference window, drawing what the call names (macOS).
+    fn screenshot(&mut self, c: &Map<String, Value>) -> Value {
+        let Some(path) = c.get("path").and_then(Value::as_str).map(str::to_string) else {
+            return bad();
+        };
+        if !cfg!(target_os = "macos") {
+            return json!({"code": "unsupported_platform"});
+        }
+        match self.app_spec(c) {
+            Ok(mut spec) => {
+                spec["path"] = json!(path);
+                shoot(&spec)
+            }
+            Err(e) => e,
+        }
+    }
+
+    /// The terminal tab as accessibility reads it in the real app window (macOS), which stays up,
+    /// its tab focused, until serve ends.
+    fn ax(&mut self, c: &Map<String, Value>) -> Value {
+        if !cfg!(target_os = "macos") {
+            return json!({"code": "unsupported_platform"});
+        }
+        let spec = match self.app_spec(c) {
+            Ok(spec) => spec,
+            Err(e) => return e,
+        };
+        let path = std::env::temp_dir().join(format!(
+            "deep-990-ax-{}-{}.json",
+            std::process::id(),
+            self.windows.len()
+        ));
+        if std::fs::write(&path, spec.to_string()).is_err() {
+            return json!({"code": "spec_unwritten"});
+        }
+        let child = Command::new(std::env::current_exe().unwrap_or_default())
+            .arg("term-ax")
+            .arg(&path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn();
+        let mut child = match child {
+            Ok(c) => c,
+            Err(e) => return json!({"code": "spawn_failed", "what": e.to_string()}),
+        };
+        // Its one line once the window has drawn, or nothing: a window that never draws (no
+        // display session, a prompt over it) is ended after a minute and a half.
+        let (tx, rx) = std::sync::mpsc::channel();
+        if let Some(out) = child.stdout.take() {
+            thread::spawn(move || {
+                let mut line = String::new();
+                let _ = BufReader::new(out).read_line(&mut line);
+                let _ = tx.send(line);
+            });
+        }
+        let line = rx.recv_timeout(Duration::from_secs(90));
+        let _ = std::fs::remove_file(&path);
+        let Ok(line) = line else {
+            // SAFETY: kill on a PID this process started and has not reaped.
+            unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGKILL) };
+            let _ = child.wait();
+            return json!({"code": "ax_timeout", "what": "the app window drew nothing to read in 90 s"});
+        };
+        self.windows.push(child);
+        serde_json::from_str(&line).unwrap_or_else(|_| json!({"code": "ax_failed", "what": line}))
+    }
+
     /// Ends every host and program it started, by the PIDs it holds.
     fn close(&mut self) {
+        for mut window in std::mem::take(&mut self.windows) {
+            // SAFETY: kill on a PID this process started and has not reaped.
+            unsafe { libc::kill(window.id() as libc::pid_t, libc::SIGKILL) };
+            let _ = window.wait();
+        }
         for (_, mut t) in std::mem::take(&mut self.terms) {
             let mut program = t.program.lock().expect("program").take();
             for child in std::iter::once(&mut t.host).chain(program.as_mut()) {
@@ -761,21 +1279,6 @@ impl Serve {
 fn pos(v: Option<&Value>) -> Option<[f64; 2]> {
     let a = v?.as_array()?;
     Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?])
-}
-
-/// The bytes a key sends: its character, or the escape of a named key.
-fn key_bytes(key: &str) -> Vec<u8> {
-    match key {
-        "enter" | "return" => b"\r".to_vec(),
-        "tab" => b"\t".to_vec(),
-        "backspace" => vec![0x7f],
-        "escape" => vec![0x1b],
-        "up" => b"\x1b[A".to_vec(),
-        "down" => b"\x1b[B".to_vec(),
-        "right" => b"\x1b[C".to_vec(),
-        "left" => b"\x1b[D".to_vec(),
-        k => k.as_bytes().to_vec(),
-    }
 }
 
 fn base64(bytes: &[u8]) -> String {
@@ -807,6 +1310,92 @@ fn record_lines(path: &str, pending: &mut Vec<u8>) {
         let text = l.replace('\'', "''");
         sql.push_str(&format!(
             "INSERT INTO events (id, log_pos, v, ts, writer, actor, scope, kind, data, hash) VALUES (lower(hex(randomblob(13))), (SELECT coalesce(max(log_pos),0)+1 FROM events), 1, 0, 'app', 'you', 'you', 'stream.line', json_object('text', '{text}'), '');"
+        ));
+    }
+    sql.push_str("COMMIT;");
+    let _ = Command::new("sqlite3").arg(path).arg(sql).output();
+}
+
+#[cfg(target_os = "macos")]
+fn shoot(spec: &Value) -> Value {
+    deep_replica::terminal::screenshot(spec)
+        .unwrap_or_else(|what| json!({"code": "screenshot_failed", "what": what}))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn shoot(_: &Value) -> Value {
+    json!({"code": "unsupported_platform"})
+}
+
+/// The record's events, in log order, as the app reads them: kind, writer, session, time, data.
+fn record_events(path: &str) -> Vec<Value> {
+    let out = Command::new("sqlite3")
+        .arg("-json")
+        .arg(path)
+        .arg("SELECT log_pos, ts, kind, writer, session_id AS session, data FROM events ORDER BY log_pos")
+        .output();
+    let rows: Vec<Value> = out
+        .ok()
+        .and_then(|o| serde_json::from_slice(&o.stdout).ok())
+        .unwrap_or_default();
+    rows.into_iter()
+        .map(|mut row| {
+            if let Some(data) = row["data"]
+                .as_str()
+                .and_then(|d| serde_json::from_str(d).ok())
+            {
+                row["data"] = data;
+            }
+            row
+        })
+        .collect()
+}
+
+/// A program-status report (`state[;text]`) as a reading on its session in the record: a signal
+/// only, never a state. The planted twin also sets the session's state from it.
+fn record_reading(path: &str, session: &str, report: &str, n: u64, sets_state: bool) {
+    // A reading is a line on the session's row: its first 200 characters.
+    let report: String = report.chars().take(200).collect();
+    let (state, text) = report.split_once(';').unwrap_or((&report, ""));
+    let reading = match text {
+        "" => format!("its terminal's program reports {state}"),
+        t => format!("its terminal's program reports {state}: {t}"),
+    };
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as i64);
+    let q = |t: &str| t.replace('\'', "''");
+    let subject = format!(
+        "session:{}",
+        session
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect::<String>()
+    );
+    let insert = |kind: &str, data: String, seed: &str| {
+        format!(
+            "INSERT INTO events (id, log_pos, v, ts, session_id, writer, actor, scope, kind, subject, data, hash) VALUES ('{}', (SELECT coalesce(max(log_pos),0)+1 FROM events), 1, {ts}, '{}', 'core', 'you', 'you', '{kind}', '{}', {data}, '');",
+            ulid_of(&format!("{session}:{seed}:{n}:{ts}")),
+            q(session),
+            q(&subject),
+        )
+    };
+    let mut sql = String::from("BEGIN;");
+    sql.push_str(&insert(
+        "session.reading",
+        format!("json_object('reading', '{}')", q(&reading)),
+        "reading",
+    ));
+    if sets_state {
+        let to = match state {
+            "blocked" => "waiting_you",
+            "done" => "finished",
+            s => s,
+        };
+        sql.push_str(&insert(
+            "session.attention",
+            format!("json_object('state', '{}')", q(to)),
+            "state",
         ));
     }
     sql.push_str("COMMIT;");

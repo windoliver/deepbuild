@@ -1,5 +1,6 @@
 // #355's scope beyond its acceptance tests: the default index's tables in the ledger, your edits kept as decisions,
 // and standing questions rewritten as the wiki learns. Real record, evidence store and pages in a temp folder.
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -195,4 +196,24 @@ test('no learned claim supersedes a claim you corrected', async () => {
   expect(other.written).toEqual([]);
   expect(other.dropped[0]?.reason).toMatch(/is yours/);
   expect(await w.record.raw("SELECT handle FROM wiki_claims WHERE state = 'in force' ORDER BY handle")).toEqual([{ handle: 'wiki:repos/api#queue' }]);
+});
+
+// A repo source's commit is an object name, never an option: `git show --output=<file>:<path>` would write that file.
+test('a repo source whose commit is no object name is refused, and git writes nothing', async () => {
+  const w = await world(['The api queue runs on redis']);
+  const dir = join(w.folder, '..');
+  execFileSync('git', ['init', '-q', dir]);
+  writeFileSync(join(dir, 'NOTES.md'), 'The api queue runs on redis\n');
+  execFileSync('git', ['-C', dir, '-c', 'user.email=t@t', '-c', 'user.name=t', 'add', 'NOTES.md']);
+  execFileSync('git', ['-C', dir, '-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'notes']);
+  const head = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const planted = join(dir, 'planted');
+  const source = (commit: string) => ({ page: 'repos/api', id: 'queue', text: 'The api queue runs on redis', scope: 'repo:api', sources: [{ repo: dir, path: 'NOTES.md', commit, quote: 'The api queue runs on redis' }] });
+  for (const commit of [`--output=${planted}`, '-p', 'HEAD~0 --stat', 'main']) {
+    const learned = await w.wiki.learn([source(commit)]);
+    expect(learned.written, `commit ${commit}`).toEqual([]);
+    expect(learned.dropped.map((d) => d.reason).join('; '), `commit ${commit}`).toMatch(/isn't a commit's object name/);
+  }
+  expect(existsSync(`${planted}:NOTES.md`) || existsSync(planted), 'git wrote a file the commit named').toBe(false);
+  expect((await w.wiki.learn([source(head)])).written).toEqual(['wiki:repos/api#queue']);
 });

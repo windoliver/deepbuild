@@ -656,8 +656,15 @@ pub fn reference(app: &mut App, out: &str, call: &Value) -> Value {
                 .stages
                 .iter()
                 .map(|g| {
-                    compile_with(g, &BTreeMap::new(), Options { off_by_two: off, ..Options::default() })
-                        .expect("shipped stages check")
+                    compile_with(
+                        g,
+                        &BTreeMap::new(),
+                        Options {
+                            off_by_two: off,
+                            ..Options::default()
+                        },
+                    )
+                    .expect("shipped stages check")
                 })
                 .collect();
             let held = reference::upload(&device, Tex::Float, &inputs.images["color"]).1;
@@ -919,10 +926,7 @@ pub fn check_operator(app: &mut App, call: &Value) -> Value {
         .unwrap_or_default();
     let skips = app.planted == Some(Planted::SkipsOperatorCheck);
     let (emit_options, check_options) = operator_plants(app.planted);
-    let ui_thread = std::thread::current()
-        .name()
-        .unwrap_or("main")
-        .to_string();
+    let ui_thread = std::thread::current().name().unwrap_or("main").to_string();
     app.worker.call(move |state| {
         let device = state.gpu.device();
         let mut reached = Reached::default();
@@ -977,6 +981,7 @@ pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
         Options {
             drops_swizzle_last: p == Some(Planted::DropsSwizzleLast),
             index_wraps: p == Some(Planted::IndexWraps),
+            no_count_guard: p == Some(Planted::DispatchWithoutGuard),
             ..Options::default()
         },
         check::CheckOptions {
@@ -1000,6 +1005,7 @@ pub fn operator_hooks(p: Option<Planted>) -> deep_effects_render::docops::Hooks 
         old_key: p == Some(Planted::MipsKeptUnderOldKey),
         ties_decreasing: p == Some(Planted::SortTiesDecreasing),
         compact_by_atomic: p == Some(Planted::CompactByAtomic),
+        dispatch_without_guard: p == Some(Planted::DispatchWithoutGuard),
     }
 }
 

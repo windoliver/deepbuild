@@ -1,0 +1,16 @@
+[package]
+name = "deep-canvas-loop"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #453: the loop canvas module's first check kind, geometry.shading: a mesh asset's
+# defects counted per face or edge on welded positions, and its quad ratio, which a mesh that
+# deforms must keep. It reads each `mesh.asset@1`'s glTF through scene3d's reader and never
+# repairs or remeshes anything.
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

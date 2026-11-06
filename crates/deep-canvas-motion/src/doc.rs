@@ -3,6 +3,8 @@
 //! Issue #417 adds the toggle and stages controls, the shots stages name, `camera@1` items, the
 //! transition follow (#489) and the look's time feel they take.
 
+use std::collections::BTreeMap;
+
 use deep_canvas::grammar::{Seeded, Time, TimeContext, FLICKS_PER_SECOND};
 use serde_json::{Map, Value};
 
@@ -12,6 +14,7 @@ use deep_canvas::ease::{self, Named};
 use crate::follow;
 use crate::modifier::{Kind as ModKind, Modifier, Rate, Shape};
 use crate::spring::Spring;
+use crate::tempo::Tempo;
 
 /// Why a document can't be evaluated, as a refusal code and the path it names.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -62,6 +65,9 @@ pub struct Channel {
     pub follow: Option<follow::Spec>,
     /// The hard range, checked at compile against keys, Bézier extremes and spring peaks.
     pub range: Option<(f64, f64)>,
+    /// On a frame's `layout` (#491): the keys' interpolations over their index, 0, 1, 2…, so a
+    /// key mixes each flow child from the layout before to the layout after.
+    pub glide: Option<Curve>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -116,6 +122,8 @@ pub struct Marker {
     pub kind: String,
     pub start: i64,
     pub end: i64,
+    pub tags: Vec<String>,
+    pub payload: Value,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -145,6 +153,8 @@ pub struct Driver {
     pub inputs: Vec<(String, DriverInput)>,
     /// The hard range (Driver: `range`), checked against the driver's bound.
     pub range: Option<(f64, f64)>,
+    /// What it writes where a read finds nothing or the value isn't finite (#491).
+    pub fallback: Option<f64>,
 }
 
 /// A driver var that reads no document path.
@@ -154,6 +164,8 @@ pub enum DriverInput {
     Time,
     /// `controls/<id>/value`: a control's value, swept over its declared range.
     Control(String),
+    /// An occurrence list with its filter (#491), read through the occurrence functions.
+    List(crate::occurrence::Filter),
 }
 
 /// Each axis's `[min, max]`, `None` for an axis a limit leaves free.
@@ -290,6 +302,8 @@ pub struct Motion {
     pub clips: Vec<Clip>,
     pub placements: Vec<Placement>,
     pub markers: Vec<Marker>,
+    /// The `first` markers, solved by the program once its channels are compiled (#491).
+    pub firsts: Vec<First>,
     /// Each parented item with its parent, parents before their children (child-of parenting).
     pub parents: Vec<(String, String)>,
     pub cuts: Vec<Cut>,
@@ -299,6 +313,9 @@ pub struct Motion {
     /// Each reversing time remap (Time remap; #429): the recipe instance it targets and the
     /// span it reverses over, outer targets first.
     pub remaps: Vec<(String, i64)>,
+    /// The notices the check raised on an accepted document (#491's
+    /// `literal_time_with_tempo_map`).
+    pub notices: Vec<Value>,
 }
 
 impl Motion {
@@ -354,14 +371,72 @@ fn section<'a>(doc: &'a Map<String, Value>, name: &str) -> Result<Entries<'a>, R
     Ok(entries)
 }
 
-/// A time field's flicks.
-pub fn time_of(value: Option<&Value>, ctx: &TimeContext, path: &str) -> Result<i64, Refused> {
+/// What motion's time fields resolve against: the core's context and the document's tempo map
+/// (#491), with the notices reading them raises.
+#[derive(Default)]
+pub struct Ctx {
+    pub time: TimeContext,
+    pub tempo: Option<Tempo>,
+    notices: std::cell::RefCell<Vec<Value>>,
+}
+
+impl std::ops::Deref for Ctx {
+    type Target = TimeContext;
+    fn deref(&self) -> &TimeContext {
+        &self.time
+    }
+}
+
+impl std::ops::DerefMut for Ctx {
+    fn deref_mut(&mut self) -> &mut TimeContext {
+        &mut self.time
+    }
+}
+
+impl Ctx {
+    fn of(frame_rate: (u32, u32)) -> Ctx {
+        Ctx {
+            time: TimeContext {
+                frame_rate,
+                ..TimeContext::default()
+            },
+            ..Ctx::default()
+        }
+    }
+}
+
+/// A time field's flicks: a bar:beat through the tempo map, anything else through the core.
+pub fn time_of(value: Option<&Value>, ctx: &Ctx, path: &str) -> Result<i64, Refused> {
     let Some(Value::String(text)) = value else {
         return refuse("bad_time", path);
     };
-    Time::parse(text)
-        .and_then(|t| t.resolve(ctx))
-        .or_else(|_| refuse("bad_time", path))
+    match (Time::parse(text), &ctx.tempo) {
+        (Ok(Time::Beats { bar, beat }), Some(tempo)) => tempo.beat(bar, beat).map_err(|why| Refused {
+            code: "time_unresolved",
+            path: path.to_string(),
+            detail: Some(Box::new(serde_json::json!({"time": text, "why": why}))),
+        }),
+        (parsed, _) => parsed
+            .and_then(|t| t.resolve(ctx))
+            .or_else(|_| refuse("bad_time", path)),
+    }
+}
+
+/// A time that places something on the timeline (a marker, a key): with a tempo map, a literal
+/// in seconds or frames raises `literal_time_with_tempo_map`, offering the bar:beat it lands on,
+/// or the beat before it and the marker forms.
+fn placed_time_of(value: Option<&Value>, ctx: &Ctx, path: &str, id: &str) -> Result<i64, Refused> {
+    let t = time_of(value, ctx, path)?;
+    if let (Some(tempo), Some(Ok(Time::Span(_)))) = (&ctx.tempo, value.and_then(Value::as_str).map(Time::parse)) {
+        let text = value.and_then(Value::as_str).unwrap_or_default();
+        let mut notice = serde_json::json!({"code": "literal_time_with_tempo_map", "id": id, "path": path, "time": text});
+        match tempo.beat_on(t) {
+            Some(fix) => notice["fix"] = serde_json::json!([fix]),
+            None => notice["nearest"] = serde_json::json!(tempo.beat_before(t)),
+        }
+        ctx.notices.borrow_mut().push(notice);
+    }
+    Ok(t)
 }
 
 fn number(value: Option<&Value>, path: &str) -> Result<f64, Refused> {
@@ -521,10 +596,7 @@ pub fn feel_of(look: &Map<String, Value>, frame_rate: (u32, u32)) -> Result<Feel
         },
         Some(_) => return refuse("bad_look", "look/time"),
     };
-    let ctx = TimeContext {
-        frame_rate,
-        ..TimeContext::default()
-    };
+    let ctx = Ctx::of(frame_rate);
     if let Some(span) = state.and_then(|s| s.get("span")) {
         feel.span = time_of(Some(span), &ctx, "look/time/state/span")?;
     }
@@ -539,7 +611,7 @@ pub fn feel_of(look: &Map<String, Value>, frame_rate: (u32, u32)) -> Result<Feel
 fn controls_of(
     doc: &Map<String, Value>,
     cameras: &[(String, [f64; 3])],
-    ctx: &TimeContext,
+    ctx: &Ctx,
 ) -> Result<(Vec<Control>, Vec<Shot>), Refused> {
     let mut controls = Vec::new();
     let mut read: Vec<Shot> = Vec::new();
@@ -646,7 +718,7 @@ fn shot_of(
     id: &str,
     s: &Map<String, Value>,
     cameras: &[(String, [f64; 3])],
-    ctx: &TimeContext,
+    ctx: &Ctx,
 ) -> Result<Shot, Refused> {
     let path = format!("shots/{id}");
     let camera = s.get("camera").and_then(Value::as_str);
@@ -693,7 +765,7 @@ fn follow_of(
     c: &Map<String, Value>,
     doc: &Map<String, Value>,
     controls: &[Control],
-    ctx: &TimeContext,
+    ctx: &Ctx,
 ) -> Result<Follow, Refused> {
     let path = format!("channels/{id}");
     let Some(Value::String(target)) = c.get("target") else {
@@ -808,6 +880,10 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
         .flatten()
     {
         let vpath = format!("{path}/vars/{name}");
+        if let Value::Object(f) = v {
+            inputs.push((name.clone(), DriverInput::List(filter_of(f, &vpath)?)));
+            continue;
+        }
         let Value::String(text) = v else {
             return refuse("bad_path", vpath);
         };
@@ -842,6 +918,10 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
         }
         Some(_) => return refuse("bad_doc", format!("{path}/range")),
     };
+    let fallback = match d.get("fallback") {
+        None => None,
+        v => Some(number(v, &format!("{path}/fallback"))?),
+    };
     Ok(Driver {
         id: id.to_string(),
         target,
@@ -850,6 +930,37 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
         vars,
         inputs,
         range,
+        fallback,
+    })
+}
+
+/// An occurrence list var: `{list, kinds, a, b, tags, where}` (Driver).
+fn filter_of(f: &Map<String, Value>, path: &str) -> Result<crate::occurrence::Filter, Refused> {
+    let text = |k: &str| match f.get(k) {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => refuse("bad_doc", format!("{path}/{k}")),
+    };
+    let strings = |k: &str| match f.get(k) {
+        None => Ok(None),
+        Some(Value::Array(l)) if l.iter().all(Value::is_string) => {
+            Ok(Some(l.iter().filter_map(Value::as_str).map(str::to_string).collect::<Vec<_>>()))
+        }
+        Some(_) => refuse("bad_doc", format!("{path}/{k}")),
+    };
+    if let Some(k) = f.keys().find(|k| !["list", "kinds", "a", "b", "tags", "where"].contains(&k.as_str())) {
+        return refuse("bad_doc", format!("{path}/{k}"));
+    }
+    let Some(list) = text("list")? else {
+        return refuse("bad_doc", format!("{path}/list"));
+    };
+    Ok(crate::occurrence::Filter {
+        list,
+        kinds: strings("kinds")?,
+        a: text("a")?,
+        b: text("b")?,
+        tags: strings("tags")?.unwrap_or_default(),
+        where_: text("where")?,
     })
 }
 
@@ -1022,7 +1133,7 @@ fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused
 }
 
 /// Seconds as a number, or a time literal, in flicks.
-fn seconds_of(v: Option<&Value>, ctx: &TimeContext, path: &str) -> Result<i64, Refused> {
+fn seconds_of(v: Option<&Value>, ctx: &Ctx, path: &str) -> Result<i64, Refused> {
     match v {
         Some(Value::Number(n)) => match n.as_f64() {
             Some(s) if s.is_finite() && s >= 0.0 => {
@@ -1036,7 +1147,7 @@ fn seconds_of(v: Option<&Value>, ctx: &TimeContext, path: &str) -> Result<i64, R
 
 /// A follow channel's `follow` on held keys or a control's value (#489): its source, its model
 /// and its outputs. A `follow` naming `source.control` and its option `values` is #417's.
-fn follow_spec_of(f: &Map<String, Value>, ctx: &TimeContext, path: &str) -> Result<follow::Spec, Refused> {
+fn follow_spec_of(f: &Map<String, Value>, ctx: &Ctx, path: &str) -> Result<follow::Spec, Refused> {
     let source = match f.get("source") {
         Some(Value::String(s)) => match s.strip_prefix("controls/").and_then(|r| r.strip_suffix("/value")) {
             Some(id) if !id.is_empty() => follow::Source::Control(id.to_string()),
@@ -1122,10 +1233,12 @@ pub const PER_LOOP_NO_LOOP: &str = "per_loop_no_loop";
 /// the same with its kind in `kind`; each takes an `influence` (1).
 fn modifier_of(
     m: &Value,
-    ctx: &TimeContext,
+    ctx: &Ctx,
     transport: &Transport,
     path: &str,
     channel: &str,
+    // The channel's id when its times are on the timeline (not in a clip), for the literal notice.
+    placed: Option<&str>,
 ) -> Result<Modifier, Refused> {
     let Value::Object(m) = m else {
         return refuse("bad_doc", path);
@@ -1204,7 +1317,10 @@ fn modifier_of(
                 Some(e) => named_of(e, &format!("{at}/ease"))?,
             };
             ModKind::Pulse {
-                at: time_of(body.get("at"), ctx, &format!("{at}/at"))?,
+                at: match placed {
+                    Some(id) => placed_time_of(body.get("at"), ctx, &format!("{at}/at"), id)?,
+                    None => time_of(body.get("at"), ctx, &format!("{at}/at"))?,
+                },
                 span: time_of(body.get("span"), ctx, &format!("{at}/span"))?,
                 amount: num("amount", 1.0)?,
                 shape,
@@ -1224,7 +1340,7 @@ fn channel_of(
     id: &str,
     c: &Map<String, Value>,
     in_clip: bool,
-    ctx: &TimeContext,
+    ctx: &Ctx,
     transport: &Transport,
     path: &str,
     labels: &mut Vec<String>,
@@ -1269,9 +1385,13 @@ fn channel_of(
             modifiers: Vec::new(),
             follow: Some(follow_spec_of(f, ctx, &format!("{path}/follow"))?),
             range,
+            glide: None,
         });
     }
     let mut keys = Vec::new();
+    // A frame's layout is a channel target: its keys may glide, the value itself held.
+    let glides = !in_clip && ty == ValueType::Enum && target.field == ["params", "layout"];
+    let mut glide: Vec<Key> = Vec::new();
     let Some(Value::Object(map)) = c.get("keys") else {
         return refuse("bad_doc", format!("{path}/keys"));
     };
@@ -1280,7 +1400,11 @@ fn channel_of(
         let Value::Object(key) = key else {
             return refuse("bad_doc", kpath);
         };
-        let t = time_of(key.get("t"), ctx, &format!("{kpath}/t"))?;
+        let t = if in_clip {
+            time_of(key.get("t"), ctx, &format!("{kpath}/t"))?
+        } else {
+            placed_time_of(key.get("t"), ctx, &format!("{kpath}/t"), &format!("{id}/{kid}"))?
+        };
         let value = match (ty, key.get("value")) {
             (ValueType::F32, v) => vec![number(v, &format!("{kpath}/value"))?],
             (ValueType::Bool, Some(Value::Bool(b))) => vec![if *b { 1.0 } else { 0.0 }],
@@ -1298,10 +1422,17 @@ fn channel_of(
                 .collect::<Result<_, _>>()?,
             _ => return refuse("out_of_range", format!("{kpath}/value")),
         };
-        let interp = match (ty, key.get("interp")) {
+        let mut interp = match (ty, key.get("interp")) {
             (ValueType::Bool | ValueType::Enum, None) => Interp::Hold,
             (_, v) => interp_of(v, &format!("{kpath}/interp"))?,
         };
+        if glides {
+            if matches!(interp, Interp::Spring(_) | Interp::Auto { .. } | Interp::CatmullRom | Interp::Table) {
+                return refuse("bad_interp", format!("{kpath}/interp"));
+            }
+            glide.push(Key::new(kid, t, Vec::new(), interp));
+            interp = Interp::Hold;
+        }
         if matches!(ty, ValueType::Bool | ValueType::Enum) && interp != Interp::Hold {
             return refuse("bad_interp", format!("{kpath}/interp"));
         }
@@ -1335,7 +1466,10 @@ fn channel_of(
         Some(Value::Array(list)) => list
             .iter()
             .enumerate()
-            .map(|(i, m)| modifier_of(m, ctx, transport, &format!("{path}/modifiers/{i}"), path))
+            .map(|(i, m)| {
+                let at = format!("{path}/modifiers/{i}");
+                modifier_of(m, ctx, transport, &at, path, (!in_clip).then_some(id))
+            })
             .collect::<Result<_, _>>()?,
         Some(_) => return refuse("bad_doc", format!("{path}/modifiers")),
     };
@@ -1350,6 +1484,11 @@ fn channel_of(
         modifiers,
         follow: None,
         range,
+        glide: glides.then(|| {
+            glide.sort_by_key(|k| k.t);
+            let keys = glide.into_iter().enumerate().map(|(i, k)| Key::new(&k.id, k.t, vec![i as f64], k.interp)).collect();
+            Curve::extrapolated(keys, Extrapolate::Hold, Extrapolate::Hold)
+        }),
     })
 }
 
@@ -1404,20 +1543,21 @@ fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), R
 
 /// Reads a document's motion.
 pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
+    read_with(doc, false)
+}
+
+/// Reads a document's motion, its constant tempo sections' beats in f32 seconds when
+/// `f32_beats` (the planted twin of #491 AC1).
+pub fn read_with(doc: &Map<String, Value>, f32_beats: bool) -> Result<Motion, Refused> {
     let transport_map = match doc.get("transport") {
         None | Some(Value::Null) => None,
         Some(Value::Object(t)) => Some(t),
         Some(_) => return refuse("bad_doc", "transport"),
     };
     let frame_rate = frame_rate_of(transport_map)?;
-    let markers = markers_of(doc, frame_rate)?;
-    let ctx = TimeContext {
-        frame_rate,
-        markers: markers
-            .iter()
-            .map(|m| (m.id.clone(), (m.start, m.end)))
-            .collect(),
-    };
+    let mut ctx = Ctx::of(frame_rate);
+    ctx.tempo = Tempo::read(doc, &ctx.time, f32_beats)?;
+    let (markers, firsts) = markers_of(doc, &mut ctx)?;
     let reduce_holds = transport_map
         .and_then(|t| t.get("reduced_motion"))
         .and_then(Value::as_str)
@@ -1566,11 +1706,13 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
         clips,
         placements,
         markers,
+        firsts,
         parents,
         cuts,
         frame_rate,
         labels,
         remaps,
+        notices: ctx.notices.take(),
     })
 }
 
@@ -1650,60 +1792,184 @@ fn cuts_of(
     Ok(cuts)
 }
 
-/// The marker kinds R1 lands: cue, shot, section and record; and a reading hold (#419), which
-/// motion blur never spans.
-const MARKER_KINDS: [&str; 5] = ["cue", "shot", "section", "record", "hold"];
+/// The marker kinds (canvas primitives: Marker), with a reading hold (#419), which motion blur
+/// never spans. Stage markers wait on present mode (Marker: present mode), which motion doesn't
+/// land yet, so they are refused rather than played through.
+pub(crate) const MARKER_KINDS: [&str; 8] = ["cue", "shot", "section", "beat", "word", "moment", "record", "hold"];
 
 /// Resolves every marker at check, in dependency order: a marker whose time names another marker
 /// waits for it, so a relative time keeps its offset when its marker moves. One that never
-/// resolves, through a cycle or a missing marker, is refused, naming it.
-fn markers_of(doc: &Map<String, Value>, frame_rate: (u32, u32)) -> Result<Vec<Marker>, Refused> {
+/// resolves, through a cycle or a missing marker, is refused, naming it. A `first` marker (#491)
+/// is solved later, from the channels, and comes back unsolved.
+fn markers_of(doc: &Map<String, Value>, ctx: &mut Ctx) -> Result<(Vec<Marker>, Vec<First>), Refused> {
     let mut pending = Vec::new();
+    let mut firsts = Vec::new();
     for (id, m) in section(doc, "markers")? {
         let path = format!("markers/{id}");
         let kind = m.get("kind").and_then(Value::as_str).unwrap_or("cue");
         if !MARKER_KINDS.contains(&kind) {
             return refuse("bad_marker_kind", format!("{path}/kind"));
         }
-        pending.push((id.clone(), kind.to_string(), m, path));
+        // Word markers come only from a bake; beat markers from the tempo map or a beats bake.
+        let on_beat = matches!(m.get("t").and_then(Value::as_str).map(Time::parse), Some(Ok(Time::Beats { .. })));
+        if kind == "word" || (kind == "beat" && !(on_beat && ctx.tempo.is_some())) {
+            return Err(Refused {
+                code: "marker_needs_bake",
+                path: format!("{path}/t"),
+                detail: Some(Box::new(serde_json::json!({"marker": id, "kind": kind}))),
+            });
+        }
+        let tags = match m.get("tags") {
+            None => Vec::new(),
+            Some(Value::Array(t)) if t.iter().all(Value::is_string) => {
+                t.iter().filter_map(Value::as_str).map(str::to_string).collect()
+            }
+            Some(_) => return refuse("bad_doc", format!("{path}/tags")),
+        };
+        let marker = Marker {
+            id: id.clone(),
+            kind: kind.to_string(),
+            start: 0,
+            end: 0,
+            tags,
+            payload: m.get("payload").cloned().unwrap_or(Value::Null),
+        };
+        if let Some(Value::Object(f)) = m.get("t").and_then(|t| t.get("first")) {
+            firsts.push((first_of(marker, f, &path)?, f, m.get("span")));
+            continue;
+        }
+        pending.push((marker, m, path));
     }
-    let mut ctx = TimeContext {
-        frame_rate,
-        ..TimeContext::default()
-    };
+    // Cue alignment (#491) moves markers onto their anchors, so the markers are resolved again
+    // with the moved ones pinned, and a time relative to one keeps its offset.
+    // The first pass raises each literal's notice, as written; the second only re-times.
+    let mut done = resolve_markers(pending.clone(), ctx, &BTreeMap::new())?;
+    let (pins, moved) = crate::cue::align(doc, &done, ctx.tempo.as_ref())?;
+    if !pins.is_empty() {
+        let notices = ctx.notices.borrow().len();
+        ctx.markers.clear();
+        done = resolve_markers(pending, ctx, &pins)?;
+        crate::cue::landed(doc, &done, ctx.tempo.as_ref(), &pins)?;
+        ctx.notices.borrow_mut().truncate(notices);
+    }
+    ctx.notices.borrow_mut().extend(moved);
+    done.sort_by(|a, b| a.id.cmp(&b.id));
+    // A first marker's window and span resolve once the markers they may name have.
+    let firsts = firsts
+        .into_iter()
+        .map(|(mut first, f, span): (First, &Map<String, Value>, Option<&Value>)| {
+            first.after = time_of(f.get("after"), ctx, &format!("{}/after", first.path))?;
+            first.before = time_of(f.get("before"), ctx, &format!("{}/before", first.path))?;
+            first.span = match span {
+                None => 0,
+                v => time_of(v, ctx, &format!("markers/{}/span", first.marker.id))?,
+            };
+            if first.before < first.after || first.span < 0 {
+                return refuse("bad_time", first.path.clone());
+            }
+            Ok(first)
+        })
+        .collect::<Result<_, _>>()?;
+    Ok((done, firsts))
+}
+
+/// One pass of marker resolution in dependency order, each pinned marker at its pin.
+fn resolve_markers(
+    pending: Vec<(Marker, &Map<String, Value>, String)>,
+    ctx: &mut Ctx,
+    pins: &BTreeMap<String, i64>,
+) -> Result<Vec<Marker>, Refused> {
     let mut done: Vec<Marker> = Vec::new();
+    let mut pending = pending;
     while !pending.is_empty() {
         let before = pending.len();
         let mut waiting = Vec::new();
-        for (id, kind, m, path) in pending {
-            match time_of(m.get("t"), &ctx, &format!("{path}/t")) {
+        for (mut marker, m, path) in pending {
+            let start = match pins.get(&marker.id) {
+                Some(&pin) => Ok(pin),
+                None => placed_time_of(m.get("t"), ctx, &format!("{path}/t"), &marker.id),
+            };
+            match start {
                 Ok(start) => {
                     let span = match m.get("span") {
                         None => 0,
-                        v => time_of(v, &ctx, &format!("{path}/span"))?,
+                        v => time_of(v, ctx, &format!("{path}/span"))?,
                     };
                     if span < 0 {
                         return refuse("bad_time", format!("{path}/span"));
                     }
-                    ctx.markers.insert(id.clone(), (start, start + span));
-                    done.push(Marker {
-                        id,
-                        kind,
-                        start,
-                        end: start + span,
-                    });
+                    ctx.markers.insert(marker.id.clone(), (start, start + span));
+                    (marker.start, marker.end) = (start, start + span);
+                    done.push(marker);
                 }
-                Err(_) => waiting.push((id, kind, m, path)),
+                Err(_) => waiting.push((marker, m, path)),
             }
         }
         if waiting.len() == before {
-            let (_, _, _, path) = &waiting[0];
-            return refuse("time_unresolved", format!("{path}/t"));
+            let (marker, m, path) = &waiting[0];
+            // The refusal that kept it: a time off the tempo map says why.
+            let mut r = placed_time_of(m.get("t"), ctx, &format!("{path}/t"), &marker.id)
+                .err()
+                .unwrap_or(Refused { code: "time_unresolved", path: format!("{path}/t"), detail: None });
+            if r.code == "bad_time" {
+                r.code = "time_unresolved";
+            }
+            return Err(r);
         }
         pending = waiting;
     }
-    done.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(done)
+}
+
+/// A marker at the first flick in [after, before] where `expr ≥ 0` (#491), read at check and
+/// solved once the channels it reads are compiled.
+#[derive(Clone, Debug, PartialEq)]
+pub struct First {
+    pub marker: Marker,
+    pub span: i64,
+    pub expr: String,
+    /// Each var's name and the item path it reads (`None` for `time`), in name order.
+    pub vars: Vec<(String, Option<Target>)>,
+    pub after: i64,
+    pub before: i64,
+    pub path: String,
+}
+
+fn first_of(marker: Marker, f: &Map<String, Value>, path: &str) -> Result<First, Refused> {
+    let path = format!("{path}/t/first");
+    let Some(Value::String(expr)) = f.get("expr") else {
+        return refuse("bad_doc", format!("{path}/expr"));
+    };
+    let mut vars = Vec::new();
+    for (name, v) in f.get("vars").and_then(Value::as_object).into_iter().flatten() {
+        let vpath = format!("{path}/vars/{name}");
+        let Value::String(text) = v else {
+            return refuse("bad_path", vpath);
+        };
+        if text == "time" {
+            vars.push((name.clone(), None));
+            continue;
+        }
+        // The input track has no values after t yet, so a first time can't read it.
+        if text.starts_with("controls/") || text.starts_with("input") {
+            return Err(Refused {
+                code: "first_reads_input",
+                path: vpath,
+                detail: Some(Box::new(serde_json::json!({"marker": marker.id}))),
+            });
+        }
+        vars.push((name.clone(), Some(target_of(text, false, &vpath)?)));
+    }
+    vars.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(First {
+        marker,
+        span: 0,
+        expr: expr.clone(),
+        vars,
+        after: 0,
+        before: 0,
+        path,
+    })
 }
 
 /// A placement's start before series are resolved: its own time, or after another placement.
@@ -1740,7 +2006,7 @@ fn placement_of(
     id: &str,
     p: &Map<String, Value>,
     clips: &[Clip],
-    ctx: &TimeContext,
+    ctx: &Ctx,
 ) -> Result<Raw, Refused> {
     let path = format!("placements/{id}");
     let Some(Value::String(clip)) = p.get("clip") else {
@@ -1769,7 +2035,7 @@ fn placement_of(
         }
     }
     let start = match (p.get("start"), p.get("after")) {
-        (Some(t), None) => Start::At(time_of(Some(t), ctx, &format!("{path}/start"))?),
+        (Some(t), None) => Start::At(placed_time_of(Some(t), ctx, &format!("{path}/start"), id)?),
         (None, Some(Value::String(after))) => Start::After {
             placement: after.clone(),
             offset: match p.get("offset") {

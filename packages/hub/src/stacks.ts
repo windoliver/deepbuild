@@ -7,7 +7,8 @@ import { existsSync, realpathSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { scrubText } from '@deepbuild/evidence';
 import type { LeaseTable } from '@deepbuild/leases';
-import type { upStack, Stack, Take, Up } from '@deepbuild/env-local';
+import type { Keys, Serving, upStack, Stack, Take, Up, WarmStack } from '@deepbuild/env-local';
+import { attributeStack, environmentFindings, type RunFacts, type StackRecords } from '@deepbuild/gate';
 import { alive, type Supervisor } from '@deepbuild/supervisor';
 import { downLeaving } from './leftover.js';
 import { refusal, Refused, type Plant } from './wire.js';
@@ -23,6 +24,11 @@ export interface StackEnvironment {
   up(options: Parameters<typeof upStack>[1]): Promise<Up>;
   down(run: string): Promise<void>;
   healthy(stack: Stack): Promise<boolean>;
+  /** A warm stack for a check, whose per-session keys its `take` leases (#580). */
+  warm(o: { take: Take; scrub: (values: string[]) => void }): WarmStack;
+  /** Whether the folder's done.yaml has an environment block, so a journey there needs a stack. */
+  wanted(folder: string): boolean;
+  keys(folder: string): Promise<Keys>;
 }
 
 export interface StacksOptions {
@@ -41,7 +47,17 @@ export interface StacksOptions {
   session(id: string): { ended?: boolean; pid: number; start: string } | undefined;
   /** A process's start time now, undefined when it can't be read. */
   startOf(pid: number): Promise<string | undefined>;
+  /** Whether a claim in the worktree still has a journey to run or running (#580). */
+  pending(worktree: string): boolean;
+  /** Whether the session is idle: no turn of it is running. */
+  idle(session: string): boolean;
 }
+
+/** What a check needs of its stack (#580): whose worktree it is, and what the run is on. */
+export interface StackWant { session: string; worktree: string; on_base: 'fails' | 'passes'; /** A base run, on the head run's install. */ base?: boolean; /** A run after an uncounted one: nothing kept is reused. */ fresh?: boolean }
+interface Warm { stack: WarmStack; worktree: string; session: string; used: number; slot: string; /** The run on it now and when it is expected to end. */ running?: { run: string; ends: number }; earlier: RunFacts[]; folders: string[]; dirty: boolean; ending: boolean }
+interface Going { warm: Warm; serving: Serving; findings: string[]; trees: { checkout: string; worktree: string } }
+const median = (list: number[]): number => [...list].sort((a, b) => a - b)[Math.floor(list.length / 2)] ?? 0;
 
 /** A per-session key's holder, as a person reads it. */
 const owned = (holder: string): string => (holder === 'core' ? 'your own terminal\'s deep env up' : `session ${holder.slice('mcp:'.length)}`);
@@ -68,7 +84,167 @@ export class Stacks {
   /** Each worktree's stack run while it waits for its health route, so a down can end it rather than wait. */
   private readonly rising = new Map<string, string>();
 
+  /** Each worktree's warm stack (#580), keeping its images, its database service, its templates and its leases between runs. */
+  private readonly warm = new Map<string, Warm>();
+  /** Each worktree's stack serves one run at a time: the rest wait here, the checks of on_base: fails requirements first. */
+  private readonly lines = new Map<string, { on_base: string; go: () => void }[]>();
+  private readonly busy = new Set<string>();
+  private readonly going = new Map<string, Going>();
+  /** What waits for a stack.slot, woken when a stack ends or a run does. */
+  private woken: (() => void)[] = [];
+
   constructor(private readonly o: StacksOptions) {}
+
+  // ---- Warm stacks (#580).
+
+  /** Whether a journey in the folder needs a stack. */
+  wanted(folder: string): boolean { return this.o.environment.wanted(folder); }
+
+  private wake(): void { for (const go of this.woken.splice(0)) go(); }
+  private async turnOf(worktree: string, on_base: string): Promise<void> {
+    if (!this.busy.has(worktree)) { this.busy.add(worktree); return; }
+    await new Promise<void>((go) => {
+      const line = this.lines.get(worktree) ?? [];
+      line.splice(on_base === 'fails' ? line.findIndex((w) => w.on_base !== 'fails') >>> 0 : line.length, 0, { on_base, go });
+      this.lines.set(worktree, line);
+    });
+  }
+  private nextTurn(worktree: string): void {
+    const next = this.lines.get(worktree)?.shift();
+    if (next) next.go();
+    else this.busy.delete(worktree);
+    this.wake();
+  }
+  /** A warm stack the pool may reclaim, an idle session's first and then the one used least recently; never one with a run or a pending claim. */
+  private reclaimable(): Warm | undefined {
+    const all = [...this.warm.values()];
+    // The planted wrong program takes a stack whose journey runs.
+    const running = this.o.plant === 'pool-reclaims-running' ? all.find((w) => w.running) : undefined;
+    return running ?? all.filter((w) => !w.running && !this.busy.has(w.worktree) && !this.o.pending(w.worktree))
+      .sort((a, b) => Number(this.o.idle(b.session)) - Number(this.o.idle(a.session)) || a.used - b.used)[0];
+  }
+  /** How long until a running stack is expected to come free. */
+  private waitMs(): number {
+    const ends = [...this.warm.values()].flatMap((w) => (w.running ? [w.running.ends - this.o.now()] : []));
+    return Math.max(1, Math.min(...ends, 60_000));
+  }
+  /** A `stack.slot`: a free one, a reclaimed stack's, or the next to free; no agent is asked which stack to stop. */
+  private async slot(r: { claim: string; check: string; expected_ms: number | null }): Promise<string | { cause: string }> {
+    let told = false;
+    for (;;) {
+      if (this.o.stopping()) return { cause: 'the hub is stopping' };
+      const got = await this.o.leases().lease({ holder: 'core' }, { host: 'local', kind: 'stack.slot', key: 'stack' }, 'exclusive');
+      if (got.status === 'granted') return got.lease.id;
+      if (got.status === 'BLOCKED') return { cause: got.message };
+      const victim = this.reclaimable();
+      if (victim) { await this.tear(victim); continue; }
+      if (!told) {
+        told = true;
+        const wait_ms = this.waitMs();
+        await this.o.appendCore('stack.waiting', { claim: r.claim, check: r.check, wait_ms, expected_ms: (r.expected_ms ?? 0) + wait_ms }, { subject: r.claim });
+      }
+      await new Promise<void>((go) => { this.woken.push(go); setTimeout(go, 500); });
+    }
+  }
+  /** The whole stack down by its token through the supervisor; its leases end once its processes and containers are proven gone. */
+  private async tear(w: Warm): Promise<void> {
+    this.warm.delete(w.worktree);
+    await this.takeDown(w.stack.id).catch(() => undefined);
+    await this.o.leases().release(w.slot, []).catch(() => undefined);
+    this.wake();
+  }
+  /**
+   * The stack a claim's check runs on, started from the run's checkout: the worktree's warm stack while its services'
+   * key holds, else a new one on a `stack.slot`. Resolves once it is ready, with what the run is handed, or why it can't be.
+   */
+  async serve(r: StackWant & { run: string; claim: string; check: string; folder: string; expected_ms: number | null }): Promise<Serving | { cause: string }> {
+    const began = this.o.now();
+    await this.turnOf(r.worktree, r.on_base);
+    let w: Warm | undefined;
+    try {
+      const keys = await this.o.environment.keys(r.folder);
+      w = this.warm.get(r.worktree);
+      // One whose run cleanup didn't finish is never reused, and a changed services key is a new stack.
+      if (w && (w.dirty || w.stack.servicesKey !== keys.services || r.fresh)) { await this.tear(w); w = undefined; }
+      if (!w) {
+        const slot = await this.slot(r);
+        if (typeof slot !== 'string') { this.nextTurn(r.worktree); return slot; }
+        let take: Take | undefined;
+        const stack: WarmStack = this.o.environment.warm({ take: (kind, list) => (take ??= this.take('core', stack.id))(kind, list), scrub: (v) => this.scrubValues(v) });
+        w = { stack, worktree: r.worktree, session: r.session, used: this.o.now(), slot, earlier: [], folders: [], dirty: false, ending: false };
+        this.runs.add(stack.id);
+        this.warm.set(r.worktree, w);
+        const why = await stack.open(r.folder);
+        if (why) { await this.tear(w); this.nextTurn(r.worktree); return { cause: why }; }
+      }
+      w.session = r.session;
+      w.used = this.o.now();
+      w.running = { run: r.run, ends: this.o.now() + (r.expected_ms ?? 0) };
+      const serving = await w.stack.serve({ run: r.run, folder: r.folder, worktree: r.worktree, began, ...(r.fresh ? { fresh: true } : {}), ...(r.base ? { base: true } : {}) });
+      if ('cause' in serving) { await this.tear(w); this.nextTurn(r.worktree); return serving; }
+      const findings = r.base ? [] : environmentFindings(serving.facts, w.earlier);
+      w.earlier.push(serving.facts);
+      await this.o.appendCore('stack.served', { run: r.run, ...serving.served }, { subject: r.run });
+      if (serving.seed) await this.cloned(r.run, { run: w.stack.id, seed: serving.seed } as Stack);
+      this.going.set(r.run, { warm: w, serving, findings, trees: { checkout: serving.served.checkout, worktree: r.worktree } });
+      return serving;
+    } catch (error) {
+      if (w) await this.tear(w);
+      this.nextTurn(r.worktree);
+      return { cause: (error as Error).message };
+    }
+  }
+  /**
+   * A run's end on its warm stack: the core reads the tree the stack served, from the supervisor's and Docker's records,
+   * then only what is the run's own goes. A run on another tree, or an environment that broke its slot's rules, comes
+   * back as what leaves the run uncounted; a stack whose cleanup didn't finish is never reused.
+   */
+  async finish(run: string): Promise<{ uncounted?: string }> {
+    const on = this.going.get(run);
+    if (!on) return {};
+    const { warm: w, serving, findings, trees } = on;
+    this.going.delete(run);
+    const named = [...findings];
+    try {
+      const { containers } = await w.stack.containers();
+      const processes: StackRecords['processes'] = [];
+      if (serving.app) {
+        const rows = await this.o.raw(`SELECT kind, json_extract(data, '$.pid') AS pid, json_extract(data, '$.cwd') AS cwd FROM events WHERE kind IN ('process.starting', 'process.tracked') AND json_extract(data, '$.run') = ?`, [serving.app]) as { kind: string; pid: number | null; cwd: string | null }[];
+        processes.push({ name: 'app', pid: rows.find((x) => x.pid)?.pid ?? 0, cwd: rows.find((x) => x.cwd)?.cwd ?? trees.checkout, reads: [] });
+      }
+      const served = attributeStack({ processes, containers }, { ...trees, others: w.folders, digests: serving.digests });
+      if (served.served !== 'checkout') named.push(served.named);
+      if (this.o.plant === 'env-kills-by-port') for (const port of serving.appPorts) for (const pid of await listening(port)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+      const { left } = serving.app
+        ? await downLeaving(serving.appPorts, { listen: listening, leases: async () => (await this.o.leases().leases()).map((v) => v.lease) }, async () => { await this.o.environment.down(serving.app!); return this.o.supervisor().cleanup(serving.app!); })
+        : { left: [] };
+      const why = await w.stack.end(run);
+      if (left.length || why) w.dirty = true;
+    } catch {
+      w.dirty = true;
+    } finally {
+      w.folders.push(trees.checkout);
+      delete w.running;
+      w.used = this.o.now();
+      if (w.ending || this.o.stopping()) await this.tear(w).catch(() => undefined);
+      this.nextTurn(w.worktree);
+    }
+    return named.length ? { uncounted: named.join('; ') } : {};
+  }
+  /** The start a check's stack needs now, for the lanes: the median of each start step that will run, the per-run part, and the wait for a free stack. */
+  async expectedStart(folder: string, worktree: string): Promise<number> {
+    if (!this.wanted(folder)) return 0;
+    const rows = await this.o.raw(`SELECT json_extract(data, '$.steps') AS steps FROM events WHERE kind = 'stack.served' ORDER BY log_pos DESC LIMIT 20`) as { steps: string }[];
+    const ran = rows.flatMap((r) => JSON.parse(r.steps) as { step: string; status: string; ms: number }[]).filter((s) => s.status === 'ran');
+    const of = (step: string): number => median(ran.filter((s) => s.step === step).map((s) => s.ms));
+    const w = this.warm.get(worktree);
+    const keys = await this.o.environment.keys(folder).catch(() => undefined);
+    const last = w?.stack.last;
+    const steps = (['services', 'install', 'migrate', 'seed'] as const).filter((s) => !keys || !last || keys[s] !== last[s]);
+    const pool = (await this.o.leases().kinds()).find((k) => k.name === 'stack.slot')?.match ?? '';
+    const free = w !== undefined || this.warm.size < Number(/\d+/.exec(pool)?.[0] ?? 0) || this.reclaimable() !== undefined;
+    return steps.reduce((n, s) => n + of(s), 0) + of('clone') + of('app') + (free ? 0 : this.waitMs());
+  }
 
   /** Sessions retained by the core until their stack's keys have been released. */
   holders(): ReadonlySet<string> { return new Set(this.owners.values()); }
@@ -103,6 +279,11 @@ export class Stacks {
 
   /** A session that ended takes the stacks its keys back down with it, so no key outlives its session (#332). */
   endFor(session: string): void {
+    for (const w of [...this.warm.values()]) {
+      if (w.session !== session) continue;
+      if (w.running) w.ending = true;
+      else void this.tear(w);
+    }
     for (const [worktree, stack] of this.stacks) {
       if (this.owners.get(stack.run) === `mcp:${session}`) void this.down(worktree, { path: '/params/worktree', remedy: 'deep env up' }).catch(() => undefined);
     }

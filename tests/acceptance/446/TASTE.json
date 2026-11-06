@@ -1,0 +1,15 @@
+{
+  "issue": 446,
+  "criterion": "#446.cf21f50f",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation in the session (\"check the screenshot for me\")",
+  "when": "2026-11-06T09:27:35Z",
+  "screenshots": {
+    "house-day.png": "bbf9978ad1db7c5c6cc25ac6e5deec31a1e1a97f6beb97d90916e98c673aa44c",
+    "house-night.png": "d9b676602f05b1c08030fd50613f5b661fdf03e642022d9caf4b000bf1dae9d0",
+    "soft-contact.png": "2420da569733e22c138a3fd8f0e61e1f8d2f859773ff5cb3194a6beb9155c125",
+    "soft-widened.png": "29c27c92cd4b99ca32436aa14e1830c625805993a80a1c51066998dd36ff503b",
+    "engine-cut.png": "3c5e64b0636b3f4b8122697090a8f8aa56b449e333ca661cb9479633ae6cd672"
+  },
+  "note": "Each picture zoomed 4x. Odd details traced to the fixtures' geometry: the step in the eave shadow is the corner wall standing 0.1 m proud; the engine's black L and strip are faces edge-on to the sun under a black sky. Two things to know: the night ground glows past the walls because the fixture's lamps name only furniture as casters, and the widest penumbra (9 deg sun) shows per-pixel grain from the design's rotated 16-tap disk; at the real 0.53 deg sun it isn't visible. A contact-shadow fault this check found (a false wedge on the post's shadow) was fixed before these pictures were taken."
+}

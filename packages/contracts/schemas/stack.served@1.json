@@ -1,0 +1,320 @@
+{
+  "title": "stack.served@1",
+  "description": "A check's run has its stack ready, started from its checkout (#580): each start step run or reused with its key, the caches it reused, the images built from the repo and the repo's bind mounts, as Docker shows them. The gate runner's lanes read its steps' times. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "stack.served"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The check's run: a run: handle."
+        },
+        "stack": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The warm stack, the same across its runs: a run: handle."
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Its compose project."
+        },
+        "checkout": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The folder the run's stack serves, as its real path."
+        },
+        "ports": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "description": "Its leased ports, by the variable each is passed in.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          }
+        },
+        "ready_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "From the run leaving the queue to the health route answering 200."
+        },
+        "steps": {
+          "type": "array",
+          "maxItems": 16,
+          "description": "Each start step in order.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "services",
+                  "install",
+                  "migrate",
+                  "seed",
+                  "clone",
+                  "app"
+                ],
+                "description": "The step.",
+                "x-closure": {
+                  "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                  "reopens": "a new major of this schema",
+                  "mark": "exhaustive"
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ran",
+                  "reused"
+                ],
+                "description": "Whether it ran, or its kept product was reused.",
+                "x-closure": {
+                  "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                  "reopens": "a new major of this schema",
+                  "mark": "exhaustive"
+                }
+              },
+              "key": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The digest of its inputs; null for the clone and the app, which are the run's own.",
+                "maxLength": 8192
+              },
+              "ms": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "How long it took."
+              },
+              "product": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "description": "The product store's entry."
+                  },
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "description": "Its key."
+                  }
+                },
+                "required": [
+                  "name",
+                  "key"
+                ],
+                "additionalProperties": false,
+                "description": "The store entry an install came from or went to."
+              }
+            },
+            "required": [
+              "step",
+              "status",
+              "key",
+              "ms"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "caches": {
+          "type": "array",
+          "maxItems": 64,
+          "description": "Each cache folder the run reused.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The folder, relative to the checkout."
+              },
+              "digest": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The digest of its files."
+              }
+            },
+            "required": [
+              "path",
+              "digest"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "images": {
+          "type": "array",
+          "maxItems": 64,
+          "description": "Each image built from the repo.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "service": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "Its compose service."
+              },
+              "image": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The image."
+              },
+              "context_digest": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The digest of its build context's files."
+              },
+              "built": {
+                "type": "boolean",
+                "description": "Whether it was built for this run, not kept by its digest."
+              }
+            },
+            "required": [
+              "service",
+              "image",
+              "context_digest",
+              "built"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "mounts": {
+          "type": "array",
+          "maxItems": 64,
+          "description": "Each bind mount of the stack, as Docker shows it.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "service": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "Its compose service."
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The folder mounted."
+              },
+              "target": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "Where in the container."
+              }
+            },
+            "required": [
+              "service",
+              "source",
+              "target"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "run",
+        "stack",
+        "checkout",
+        "ports",
+        "ready_ms",
+        "steps",
+        "caches",
+        "images",
+        "mounts"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

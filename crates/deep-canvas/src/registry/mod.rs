@@ -454,6 +454,8 @@ pub struct Fixture {
     pub category: String,
     /// Data only: existing check kinds, named oracles, coverage, codes and the twin.
     pub sidecar: Value,
+    /// The assets its items name by hash (#453), which a kit hands a check that reports.
+    pub assets: Vec<Vec<u8>>,
 }
 
 /// A kind's drawing as `rect@1` params, from the item's params.
@@ -625,11 +627,27 @@ pub struct Check {
     /// The evaluated arrays it reads beside the lowered document (#411), which its input gets
     /// under `read`; its result's determinism class is the least exact of their writers'.
     pub reads: Vec<String>,
+    /// Its run with what it measured and what it couldn't read (#453), in place of `run` where a
+    /// verdict judges it; its input then gets the assets the document's items name by hash under
+    /// `assets`, each hash's bytes in base64.
+    pub report: Option<ReportRun>,
 }
 
 /// A registered check kind's run over a document, given the check input that named it: each
 /// raised issue with the item it names.
 pub type CheckRun = fn(&Value, &Value) -> Vec<(String, Raised)>;
+
+/// What a check kind that measures returns (#453): each raised issue with the item it names and
+/// its `actual`; one result per item it read, as its requirement's row carries it; and one row
+/// per thing it couldn't read, each of which makes the requirement BLOCKED, never PASS.
+#[derive(Debug, Default)]
+pub struct Report {
+    pub raised: Vec<(String, Raised, Value)>,
+    pub results: Vec<Value>,
+    pub blocked: Vec<Value>,
+}
+
+pub type ReportRun = fn(&Value, &Value) -> Report;
 
 /// The core's own document check kinds (canvas primitives: Check input). Each reads only the
 /// core's arrays, which canvas modules fill through `contributes_to`, and names no module's kind.
@@ -895,6 +913,7 @@ impl Registrar {
             record,
             category: String::new(),
             sidecar: Value::Null,
+            assets: Vec::new(),
         });
         self
     }
@@ -919,6 +938,14 @@ impl Registrar {
     pub fn sidecar(&mut self, sidecar: Value) -> &mut Self {
         if let Some(last) = self.fixtures.last_mut() {
             last.sidecar = sidecar;
+        }
+        self
+    }
+
+    /// The last fixture's assets, by their bytes (#453).
+    pub fn fixture_assets(&mut self, assets: Vec<Vec<u8>>) -> &mut Self {
+        if let Some(last) = self.fixtures.last_mut() {
+            last.assets = assets;
         }
         self
     }
@@ -1014,7 +1041,16 @@ impl Registrar {
             codes: codes.to_vec(),
             run,
             reads: Vec::new(),
+            report: None,
         });
+        self
+    }
+
+    /// The last check registered reports, reading the assets its items name by hash (#453).
+    pub fn check_report(&mut self, report: ReportRun) -> &mut Self {
+        if let Some(last) = self.checks.last_mut() {
+            last.report = Some(report);
+        }
         self
     }
 

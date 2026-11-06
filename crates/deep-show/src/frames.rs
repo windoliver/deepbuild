@@ -869,7 +869,7 @@ fn written_vectors(
             .map(str::to_string)
             .collect();
         let (Ok(svg), Ok(colors)) = (
-            svg::import(src.as_bytes(), &classes, false),
+            svg::import(src.as_bytes(), &classes, svg::Twin::Honest),
             lower::colors(id, map),
         ) else {
             continue;

@@ -142,9 +142,11 @@ Each step is one issue and one PR, following AGENTS.md:
 - **Failures on main stay as they are.** A step that changes how a lane reads results lists the FAIL IDs on main before and after, and they match.
 - **No option, flag or fallback** beyond what a step names; rollback is reverting its PR.
 
-### 10a. Open owner decision (gates T9)
+### 10a. Owner decision (gates T9)
 
 Two questions for the owner, asked once, gate T9b. Before T9b lands, a run of the unit lane on main lists every pass the new skip rule turns INCONCLUSIVE, with its skip site, and that list goes to the owner with these questions.
+
+**Answered on 2026-11-06: (a) on both.** The `skips` list holds seven BLOCKED-by-design tests, in `380/cts-exact`, `39/app.live`, `45/baseline` and `45/classify`. It holds no reading-only skip. Each site is in a timed file or carries a criterion tag, except the three in `160/budgets.test.ts`, whose notes hold a measurement that changes every run, so a full note can't key them.
 
 1. **An approved BLOCKED-by-design test.** `380/cts-exact.test.ts` skips with `BLOCKED: no record from an M1 …` unless `DEEPBUILD_M1_RECORD` is set.
    - **(a, recommended)** A `skips` entry may list an approved BLOCKED-by-design test. The lane keeps the state its other tests give, and every summary prints the listed BLOCKED test.
@@ -154,6 +156,8 @@ Two questions for the owner, asked once, gate T9b. Before T9b lands, a run of th
    - **(b)** Each makes its lane INCONCLUSIVE when it fires.
 
 Whatever the answers, a skip is unrun and never PASS (invariant 2): an unlisted skip makes its lane INCONCLUSIVE, one whose note starts with BLOCKED makes it BLOCKED, and platform and GPU skips are never listed and leave the lane INCONCLUSIVE (platform). A change to the `skips` key of `scripts/known-failures.json` needs a signed approval tag; the approver, not a parser, confirms that a gate is an opt-in variable or a retirement.
+
+Each lane writes its evidence record to `~/.deepbuild/lanes/<tree>-<lane>.json`: the lane, its state, the host, the platform, the tree hash and each test's ID, state and note, with `skipped` on a test that never ran. The tree hash is of what is on disk, uncommitted and untracked files too, so a clean checkout's is `HEAD^{tree}`.
 
 ## 11. Invariants
 

@@ -16,12 +16,12 @@ use deep_canvas_scene3d::frames::Frames;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{Depth, Labels, Refused};
+use deep_effects_render::docops::{item_of_mark, DocOps, Rec, Row, Times};
+use deep_effects_render::runner::Frame;
 use deep_gpu::alloc::outside;
 use deep_gpu::device::Device;
 use deep_gpu::memory;
 use deep_gpu::meter::{Rung, MAX_PASSES};
-use deep_effects_render::docops::{DocOps, Row, Times};
-use deep_effects_render::runner::Frame;
 use deep_gpu::surface::{allocate, Handoff, Path};
 use deep_scene3d_render::surface::{Filter, Surface, LABEL_PASS, OUTLINE_PASS};
 pub use deep_scene3d_render::surface::{Upscale, SHARPEN_PASS as SHARPEN, UPSCALE_PASS as UPSCALE};
@@ -557,11 +557,13 @@ impl Times for LiveTimes<'_> {
         self.timer.writes(i)
     }
     fn compute(&self, i: Option<usize>) -> Option<wgpu::ComputePassTimestampWrites<'_>> {
-        self.timer.writes(i).map(|w| wgpu::ComputePassTimestampWrites {
-            query_set: w.query_set,
-            beginning_of_pass_write_index: w.beginning_of_pass_write_index,
-            end_of_pass_write_index: w.end_of_pass_write_index,
-        })
+        self.timer
+            .writes(i)
+            .map(|w| wgpu::ComputePassTimestampWrites {
+                query_set: w.query_set,
+                beginning_of_pass_write_index: w.beginning_of_pass_write_index,
+                end_of_pass_write_index: w.end_of_pass_write_index,
+            })
     }
     fn end(&mut self, i: Option<usize>, _: &mut wgpu::CommandEncoder) {
         self.timer.end(i);
@@ -706,9 +708,7 @@ impl View {
             Content::Scene(frames) if !drawing.canonical && drawing.rung != Rung::Placeholder => {
                 frames.at(t, self.size, &drawing.offsets, labels)?;
                 let still = match self.still {
-                    Some((rung, s, n))
-                        if drawing.settles && self.prepared && !frames.changed() =>
-                    {
+                    Some((rung, s, n)) if drawing.settles && self.prepared && !frames.changed() => {
                         (rung == drawing.rung && s == scale).then_some(n)
                     }
                     _ => None,
@@ -796,18 +796,58 @@ impl View {
         }
         let scene = frames.scene();
         let clip = scene.camera.clip(Depth::Reversed);
+        // The instances outputs the frame's instancers draw from (#484).
+        self.renderer.feed(self.ops.sources());
         match frames.moved().filter(|_| self.prepared) {
             Some(moved) => self.renderer.prepare_moved(device, scene, look, moved),
             None => self.renderer.prepare(device, scene, look),
         }
         self.prepared = true;
-        let i = timer.start(GEOMETRY_PASS, session);
-        self.renderer.record_geometry(encoder, timer.writes(i));
-        timer.end(i);
         let Some((linear_texture, linear)) = self.renderer.linear() else {
             return Ok(true);
         };
         let (linear_texture, linear) = (linear_texture.clone(), linear.clone());
+        // Operators are bound before the frame draws, so what feeds an instances output can
+        // record first; the rest record where the effects chain runs.
+        let planned = (!self.ops.ops.is_empty()).then(|| {
+            // Column-major, as the operators' frame holds it.
+            let flat: [f64; 16] = std::array::from_fn(|i| clip[i % 4][i / 4]);
+            let frame = Frame {
+                clip: flat.map(|x| x as f32),
+                inverse_clip: deep_effects_render::reference::inverse(&flat).map(|x| x as f32),
+                eye: [0.0; 4],
+                t: (t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64) as f32,
+                seed: 0,
+            };
+            let roles: BTreeMap<String, [f64; 3]> = look
+                .roles
+                .iter()
+                .map(|(k, c)| (k.clone(), crate::effects::linear_of(*c)))
+                .collect();
+            let res = &self.op_resolution;
+            let canonical = drawing.canonical && !self.canonical_draws_live_only;
+            self.ops.plan(
+                device,
+                &linear,
+                None,
+                None,
+                internal,
+                &frame,
+                &roles,
+                &|i| res.get(i).copied().unwrap_or(1.0),
+                canonical,
+            )
+        });
+        let early = |r: &Rec| item_of_mark(r.mark).is_some_and(|i| self.ops.early.contains(i));
+        if let Some((_, recs, _)) = &planned {
+            let mut times = LiveTimes { timer, session };
+            for r in recs.iter().filter(|r| early(r)) {
+                outside(|| r.record(encoder, &mut times));
+            }
+        }
+        let i = timer.start(GEOMETRY_PASS, session);
+        self.renderer.record_geometry(encoder, timer.writes(i));
+        timer.end(i);
         #[cfg(feature = "test-meter")]
         self.test.record(
             device,
@@ -830,36 +870,9 @@ impl View {
         );
         #[cfg(not(feature = "test-meter"))]
         let _ = drawing.effects_resolution;
-        if !self.ops.ops.is_empty() {
-            // Column-major, as the operators' frame holds it.
-            let flat: [f64; 16] = std::array::from_fn(|i| clip[i % 4][i / 4]);
-            let frame = Frame {
-                clip: flat.map(|x| x as f32),
-                inverse_clip: deep_effects_render::reference::inverse(&flat).map(|x| x as f32),
-                eye: [0.0; 4],
-                t: (t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64) as f32,
-                seed: 0,
-            };
-            let roles: BTreeMap<String, [f64; 3]> = look
-                .roles
-                .iter()
-                .map(|(k, c)| (k.clone(), crate::effects::linear_of(*c)))
-                .collect();
-            let res = &self.op_resolution;
-            let canonical = drawing.canonical && !self.canonical_draws_live_only;
-            let (rows, recs, out) = self.ops.plan(
-                device,
-                &linear,
-                None,
-                None,
-                internal,
-                &frame,
-                &roles,
-                &|i| res.get(i).copied().unwrap_or(1.0),
-                canonical,
-            );
+        if let Some((rows, recs, out)) = planned {
             let mut times = LiveTimes { timer, session };
-            for r in &recs {
+            for r in recs.iter().filter(|r| !early(r)) {
                 outside(|| r.record(encoder, &mut times));
             }
             if let Some(o) = out {

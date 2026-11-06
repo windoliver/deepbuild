@@ -181,7 +181,7 @@ export class Staging {
     const copy = join(this.dir, id);
     await mkdir(copy, { recursive: true, mode: 0o700 });
     const slow = Number(process.env.DEEP_HUB_TEST_SLOW_CLONE_MS) || 0;
-    for (const [i, f] of existing.entries()) {
+    for (const [i, f] of this.o.plant === 'stages-without-copy' ? [] : existing.entries()) {
       // The test file system: each clone waits this long first.
       if (slow) await sleep(Math.min(slow, Math.max(0, deadline - Date.now())));
       const why = late() ? `staging ${existing.join(', ')} would take past the ${seconds} s ceiling` : await clone(f, join(copy, String(i)), deadline);

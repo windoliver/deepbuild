@@ -1062,11 +1062,14 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         }),
     };
     let mut placement_planted = placement::Planted::default();
-    // #420's wrong programs live in scene3d's and the building module's operators.
+    // #420's wrong programs live in scene3d's and the building module's operators, #453's in the
+    // loop module's geometry.shading.
     let module_planted = input
         .get("planted")
         .and_then(Value::as_str)
-        .filter(|p| deep_canvas_scene3d::PLANTED.contains(p))
+        .filter(|p| {
+            deep_canvas_scene3d::PLANTED.contains(p) || deep_canvas_loop::PLANTED.contains(p)
+        })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
     let pack_planted = input
@@ -1742,6 +1745,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     if set >= BuildSet::Full {
         // Issue #420: walls, openings, slabs, roofs and stairs as trusted builders.
         out.push(deep_canvas_scene3d::building::module());
+        // Issue #453: the loop's check kinds, geometry.shading first.
+        out.push(deep_canvas_loop::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -2593,6 +2598,16 @@ fn main() {
     match command.as_str() {
         "serve" => std::process::exit(serve::run()),
         "host" => std::process::exit(host::run(&args)),
+        // #990: a hosted terminal's tab in the real app window, read by accessibility.
+        #[cfg(target_os = "macos")]
+        "term-ax" => {
+            let spec = args
+                .get(1)
+                .and_then(|p| std::fs::read_to_string(p).ok())
+                .and_then(|t| serde_json::from_str(&t).ok())
+                .unwrap_or(serde_json::Value::Null);
+            std::process::exit(deep_replica::terminal::ax(spec))
+        }
         // #498: this binary's copies as the decode worker and the encode tool.
         "decode-worker" => {
             std::process::exit(deep_codecs::serve(deep_codecs::DECODE_WORKER, &args[1..]))

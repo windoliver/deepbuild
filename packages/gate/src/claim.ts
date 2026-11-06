@@ -39,6 +39,8 @@ export interface ClaimedCheck {
   inputs?: string[];
   deadline?: string;
   contract?: NumericContract;
+  /** The clean runs it needs, one when absent. */
+  needed?: number;
   runs: RecordedRun[];
   /** How the check ran on the merge base (#31), for a fix check; absent while it hasn't, or couldn't. */
   base?: BaseResult;
@@ -111,7 +113,7 @@ export function claimVerdict(claim: ClaimedRuns, options: { plant?: VerdictPlant
     const mask = exitOnly ? null : maskIn(c.command) ?? c.runs.map((r) => r.mask).find((m): m is string => m !== null && maskIn(m) !== null) ?? null;
     checks.push({
       check: c.check, digest, source: c.source, depth: c.depth ?? 'unit', proof: c.proof ?? 'test_run', covers: [...c.covers],
-      ...(c.inputs ? { inputs: [...c.inputs] } : {}), ...(c.deadline !== undefined ? { deadline: c.deadline } : {}),
+      ...(c.inputs ? { inputs: [...c.inputs] } : {}), ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(c.needed !== undefined ? { runs: c.needed } : {}),
       ...(mask !== null ? { cant_fail: `exit status masked by \`${mask}\`` } : {}),
       ...(c.contract ? { contract: c.contract } : {}),
       ...(c.base ? { base: c.base } : {}),

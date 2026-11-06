@@ -447,4 +447,3 @@ fn chain(p: &[V3], points: &[usize], i: usize, j: usize) -> Vec<usize> {
     lower.extend(upper);
     lower
 }
-

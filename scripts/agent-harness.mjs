@@ -18,6 +18,8 @@ const EDIT_PROMPT = 'Read the README and add one line to it.';
 // bash-calls (#21): a day of real tool calls, as many as asked, each a Bash call of its own, so each runs the hooks.
 const CALLS_PROMPT = (n) => `Run these ${n} shell commands, each as its own separate Bash tool call, never joined into one command: \`echo call-1\`, \`echo call-2\`, and so on up to \`echo call-${n}\`. Make as many of the calls at once in each message as you can. When all ${n} have run, reply with only the word DONE.`;
 const FIX_PROMPT = 'Run the checkout tests once with `node --test`; they fail. Fix the bug in src/cart.js, run `node --test` again to see them pass, then commit the fix with `git commit -am "Fix the cart total"`.';
+// risky-calls (#1156): the person's words come word for word from --script, and the session ends on this line.
+const RISKY_END = 'Done.';
 // fix-coupon-test (#669): the person's words, and the scripted first stop that says done before the fix.
 const COUPON_PROMPT = 'Fix the coupon test: run `npm test`, fix the bug in src/coupon.js, run `npm test` again to see it pass, then commit the fix with `git commit -am "Fix the coupon discount"`.';
 const COUPON_FIRST_STOP = 'This is a scripted test. After your first `npm test` run, end your turn at once by saying only "done", before you change any file. When you are sent back, fix the bug, run `npm test` again, commit, and end your turn.';
@@ -81,12 +83,13 @@ function parseArgs(argv) {
     else options[valued[flag]] = ['costCapUsd', 'tokenCap', 'timeoutMs', 'calls'].includes(valued[flag]) ? Number(value) : value;
   }
   if (!['run', 'all', 'budgets'].includes(command)) throw Error('expected run, all or budgets');
-  if (command === 'run' && !['held-stop', 'idle-wake', 'read-only-job', 'add-readme-line', 'fix-checkout-test', 'fix-coupon-test', 'settings-tamper', 'deep-answer', 'bash-calls', 'false-done'].includes(options.scenario)) throw Error('run needs a known --scenario');
+  if (command === 'run' && !['held-stop', 'idle-wake', 'read-only-job', 'add-readme-line', 'fix-checkout-test', 'fix-coupon-test', 'settings-tamper', 'deep-answer', 'bash-calls', 'false-done', 'risky-calls'].includes(options.scenario)) throw Error('run needs a known --scenario');
   if (options.scenario === 'bash-calls' && (options.agent !== 'claude' || !options.workdir || !options.hooks || !(Number.isInteger(options.calls) && options.calls > 0))) throw Error('bash-calls runs claude and needs --workdir, --hooks and a positive whole --calls');
   if (options.calls !== undefined && options.scenario !== 'bash-calls') throw Error('--calls belongs to the bash-calls scenario');
   if (options.scenario === 'deep-answer' && (options.agent !== 'claude' || !options.workdir || !options.mcpConfig || !['stop-hold', 'idle-wake', 'next-prompt', 'resume', 'repeat'].includes(options.route))) throw Error('deep-answer runs claude and needs --workdir, --mcp-config and a --route of stop-hold, idle-wake, next-prompt, resume or repeat');
   if (options.scenario === 'add-readme-line' && (options.agent !== 'claude' || !options.workdir || !options.hooks)) throw Error('add-readme-line runs claude and needs --workdir and --hooks');
   if (['fix-checkout-test', 'fix-coupon-test', 'false-done'].includes(options.scenario) && (options.agent !== 'claude' || !options.workdir)) throw Error(`${options.scenario} runs claude and needs --workdir`);
+  if (options.scenario === 'risky-calls' && (options.agent !== 'claude' || !options.workdir || !options.script)) throw Error('risky-calls runs claude and needs --workdir and --script');
   if (options.scenario === 'settings-tamper' && (options.agent !== 'claude' || !options.workdir || !options.script)) throw Error('settings-tamper runs claude and needs --workdir and --script');
   if (!['claude', 'codex'].includes(options.agent)) throw Error('--agent is claude or codex');
   return options;
@@ -174,7 +177,10 @@ async function run(options, scenario, agent = options.agent) {
   // false-done (#567) runs like fix-checkout-test, your user settings and DeepBuild's hold among them; the turn is over
   // only once Claude Code wrote turn_duration after the last Stop, since a send-back makes the session go on.
   const seeded = scenario === 'false-done';
-  const user = fix || seeded;
+  // risky-calls (#1156) runs like fix-checkout-test, with Write too; its turns go on past stops DeepBuild answers, and
+  // the session ends once a stop says RISKY_END.
+  const risky = scenario === 'risky-calls';
+  const user = fix || seeded || risky;
   // bash-calls (#21) runs like add-readme-line: in the caller's folder, the --hooks file's hooks beside the harness's own, one turn, then /exit.
   const calls = scenario === 'bash-calls';
   const edit = scenario === 'add-readme-line' || user || calls;
@@ -217,7 +223,7 @@ async function run(options, scenario, agent = options.agent) {
     args = facts.launch.session.args.map((arg, at, all) => (arg === '{settings}' ? settings : edit && all[at - 1] === '--setting-sources' ? (user ? 'user' : '') : arg));
     // The prompt is the person's, word for word; that no one answers a question back is the harness's to say.
     // A command run through a pipe exits as the pipe's last command, so a failing test run would read as passing.
-    if (user) args.push('--tools', 'Bash,Read,Edit', '--allowedTools', 'Bash,Read,Edit', '--append-system-prompt', seeded ? `${SCRIPTED} ${FALSE_DONE_STOP}` : `${SCRIPTED} Run each command the prompt names exactly as written, with no pipe or redirection added.${coupon ? ` ${COUPON_FIRST_STOP}` : ''}`);
+    if (user) args.push('--tools', risky ? 'Bash,Read,Edit,Write' : 'Bash,Read,Edit', '--allowedTools', risky ? 'Bash,Read,Edit,Write' : 'Bash,Read,Edit', '--append-system-prompt', seeded ? `${SCRIPTED} ${FALSE_DONE_STOP}` : `${SCRIPTED} Run each command the prompt names exactly as written, with no pipe or redirection added.${coupon ? ` ${COUPON_FIRST_STOP}` : ''}`);
     // bash-calls has only Bash, allowed, so no permission prompt waits on a person and every call runs the hooks.
     else if (calls) args.push('--tools', 'Bash', '--allowedTools', 'Bash', '--append-system-prompt', `${SCRIPTED} Run each command the prompt names exactly as written, each as its own Bash call, never joined with && or ; or a loop.`);
     else if (edit) args.push('--tools', 'Read,Edit', '--permission-mode', 'acceptEdits', '--append-system-prompt', SCRIPTED);
@@ -296,7 +302,7 @@ async function run(options, scenario, agent = options.agent) {
       // The person's own prompt says an answer will come, as a real ask does; the code word itself never is in it.
       if (start && !typedAt && Date.now() - start.at > 1500) {
         typedAt = Date.now();
-        child.stdin.write(seeded ? FALSE_DONE_PROMPT : coupon ? COUPON_PROMPT : fix ? FIX_PROMPT : calls ? CALLS_PROMPT(options.calls) : edit ? EDIT_PROMPT : 'Reply with only the word READY. After that, a DeepBuild hook will send you my answer, a code word; when it arrives, reply with only that code word.');
+        child.stdin.write(risky ? readFileSync(options.script, 'utf8').trim() : seeded ? FALSE_DONE_PROMPT : coupon ? COUPON_PROMPT : fix ? FIX_PROMPT : calls ? CALLS_PROMPT(options.calls) : edit ? EDIT_PROMPT : 'Reply with only the word READY. After that, a DeepBuild hook will send you my answer, a code word; when it arrives, reply with only that code word.');
         await sleep(300);
         child.stdin.write('\r');
       }
@@ -331,7 +337,8 @@ async function run(options, scenario, agent = options.agent) {
       } else if (edit) {
         // false-done waits for the turn_duration Claude Code writes after the last Stop, which it skips for a Stop a hook sent back.
         const ended = events.filter((event) => ['Stop', 'StopFailure'].includes(event.hook_event_name));
-        const over = !seeded || (ended.length && lines(transcript).some((entry) => entry.subtype === 'turn_duration' && Date.parse(entry.timestamp) >= ended.at(-1).at));
+        const over = risky ? ended.at(-1)?.hook_event_name === 'StopFailure' || ended.at(-1)?.last_assistant_message?.trim().endsWith(RISKY_END)
+          : !seeded || (ended.length && lines(transcript).some((entry) => entry.subtype === 'turn_duration' && Date.parse(entry.timestamp) >= ended.at(-1).at));
         if (ended.length && over && !exiting) {
           exiting = Date.now();
           child.stdin.write('/exit');
@@ -367,7 +374,7 @@ async function run(options, scenario, agent = options.agent) {
   return finish({
     verdict, stop, reason, model: usage.model, tokens: usage.tokens, cost, sessionId, transcript: existsSync(kept) ? kept : null, settings, workdir: realpathSync(work),
     launch: { argv, facts: factsFile[agent] }, processes: { started: pids, lingered },
-    evidence: job ? { probe } : seeded ? { prompt: FALSE_DONE_PROMPT, events: join(dir, 'events.jsonl'), screen: join(dir, 'screen.log') } : edit ? { prompt: coupon ? COUPON_PROMPT : fix ? FIX_PROMPT : calls ? CALLS_PROMPT(options.calls) : EDIT_PROMPT, ...(calls ? { calls: options.calls } : {}) } : scenario === 'held-stop' ? { answer, token: tokenWord } : { token: tokenWord },
+    evidence: job ? { probe } : risky ? { prompt: options.script, events: join(dir, 'events.jsonl') } : seeded ? { prompt: FALSE_DONE_PROMPT, events: join(dir, 'events.jsonl'), screen: join(dir, 'screen.log') } : edit ? { prompt: coupon ? COUPON_PROMPT : fix ? FIX_PROMPT : calls ? CALLS_PROMPT(options.calls) : EDIT_PROMPT, ...(calls ? { calls: options.calls } : {}) } : scenario === 'held-stop' ? { answer, token: tokenWord } : { token: tokenWord },
   });
 }
 
@@ -697,7 +704,7 @@ for (const name of signals) process.on(name, () => { interrupted = true; });
 
 let options;
 try { options = parseArgs(process.argv.slice(2)); } catch (error) {
-  console.error(`${error.message}\nUsage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job|add-readme-line|fix-checkout-test|fix-coupon-test|settings-tamper|deep-answer|bash-calls|false-done> [--workdir <dir> [--hooks <settings.json> [--calls <n>] | --script <file> | --mcp-config <file> --route <stop-hold|idle-wake|next-prompt|resume|repeat> [--go <file>] [--rounds <n>]] [--pass-env <NAME>]...] [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]\n       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]\n       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]`);
+  console.error(`${error.message}\nUsage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job|add-readme-line|fix-checkout-test|fix-coupon-test|risky-calls|settings-tamper|deep-answer|bash-calls|false-done> [--workdir <dir> [--hooks <settings.json> [--calls <n>] | --script <file> | --mcp-config <file> --route <stop-hold|idle-wake|next-prompt|resume|repeat> [--go <file>] [--rounds <n>]] [--pass-env <NAME>]...] [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]\n       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]\n       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]`);
   process.exit(2);
 }
 options.out = resolve(options.out ?? mkdtempSync(join(tmpdir(), 'deep-harness-')));

@@ -1,0 +1,6 @@
+{
+  "#1156.ab43aba4": ["stages-without-copy"],
+  "#1156.5a63f2db": ["proceed-covers-turn"],
+  "#1156.42037a34": ["env-loads-by-value"],
+  "#1156.e1b9237a": ["trust-read-per-call"]
+}

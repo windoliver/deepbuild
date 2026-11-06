@@ -183,7 +183,7 @@ pub fn accepted(sealed: &deep_canvas::registry::Sealed, f: &Entry) -> bool {
 /// past f64's range, and, when the check found no error, what its operators can't evaluate and
 /// what the renderer can't draw.
 pub fn raised(hub: &mut Hub<'_>, doc: &Value) -> Vec<Value> {
-    raised_with(hub, doc, None, &[])
+    raised_with(hub, doc, None, &[], &[])
 }
 
 /// What a document raises read against `readings`, a fixture's own record, when it has one,
@@ -193,6 +193,7 @@ fn raised_with(
     doc: &Value,
     readings: Option<&std::collections::BTreeMap<String, Value>>,
     checks: &[&serde_json::Map<String, Value>],
+    assets: &[Vec<u8>],
 ) -> Vec<Value> {
     let result = check_in(doc, &hub.startup.sealed);
     let mut issues: Vec<Value> = result.issues.iter().map(|i| i.to_json()).collect();
@@ -214,7 +215,18 @@ fn raised_with(
             .and_then(Value::as_str)
             .unwrap_or_default();
         if let Some((m, check)) = hub.startup.sealed.check_kind(kind) {
-            let input = Value::Object((*input).clone());
+            let mut input = Value::Object((*input).clone());
+            // #453: a check that reports reads the fixture's own assets, by hash.
+            if check.report.is_some() {
+                let by_hash: serde_json::Map<String, Value> = assets
+                    .iter()
+                    .map(|b| {
+                        let sha = deep_canvas::canon::sha256_hex(b);
+                        (sha, json!(deep_canvas::base64::encode(b)))
+                    })
+                    .collect();
+                input["assets"] = Value::Object(by_hash);
+            }
             issues.extend(crate::verdict::run_check(
                 hub,
                 check,
@@ -267,7 +279,18 @@ pub fn fixture_issues(hub: &mut Hub<'_>, f: &Entry) -> Vec<Value> {
         .record
         .as_ref()
         .map(|r| super::instance::readings(Some(r)));
-    raised_with(hub, &doc, readings.as_ref(), &f.checks())
+    // The assets the module registered with this fixture (#453).
+    let assets = hub
+        .startup
+        .sealed
+        .modules
+        .iter()
+        .filter(|m| m.name == f.module)
+        .flat_map(|m| &m.shapes.fixtures)
+        .find(|x| x.document == f.document)
+        .map(|x| x.assets.clone())
+        .unwrap_or_default();
+    raised_with(hub, &doc, readings.as_ref(), &f.checks(), &assets)
 }
 
 /// Compares the codes raised with those named: the case passes only on exactly them; under the
