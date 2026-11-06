@@ -1,6 +1,6 @@
 // #1018's scope beyond its criteria: the readings sharing makes per repo (runs saved and their slot time, runs that
 // waited on another session's run and how long), and a result pruned with its evidence never carrying.
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -24,13 +24,18 @@ const record = (run: string, read = ['src/a.ts']): RecordedRun => ({
 function world(o: {
   kept?: boolean | ((evidence: string[]) => boolean); hold?: boolean; dir?: string; read?: string[]; variants?: 'none' | 'unstartable' | 'second-unstartable';
   records?: (n: number, variant: boolean) => Partial<RecordedRun>; runs?: number; definition?: DefinitionState; onBase?: 'fails'; state?: (session: string) => StatePin;
+  /** The check's depth, and whether the checkout's done.yaml has an environment, so a journey runs on its stack (#580). */
+  depth?: string; stacked?: boolean; variantDirs?: boolean;
 } = {}) {
   const started: { check: string; claim: string }[] = [];
   const finished: { run: string; check: string; key: KeyFacts }[] = [];
   const readings: { source: string; value: number; unit: string }[] = [];
   const keys = new Map<string, RunKey>();
+  const unkeyed = new Set<string>();
   const bases: string[] = [];
   const held: (() => void)[] = [];
+  /** Each variant run's checkout, and whether it held the claim's state reading when it started. */
+  const variantStates: (string | null)[] = [];
   const checkout = o.dir ?? mkdtempSync(join(tmpdir(), 'dh1018-unit-'));
   if (!o.dir) {
     dirs.push(checkout);
@@ -43,6 +48,7 @@ function world(o: {
     checkout: async (r: { runs: string[] }) => {
       if (o.variants === 'unstartable' && r.runs.some((t) => t.includes('variant'))) throw Error('the snapshot is gone');
       if (o.variants === 'second-unstartable' && r.runs.some((t) => t.endsWith('variant 2'))) throw Error('the snapshot is gone');
+      if (o.variantDirs && r.runs.some((t) => t.includes('variant'))) { const dir = mkdtempSync(join(tmpdir(), 'dh1018-unit-')); dirs.push(dir); return { dir, commit: 'c1' }; }
       return { dir: checkout, commit: 'c1' };
     },
     baseCheckout: async () => ({ dir: checkout, commit: 'b', standIns: [] }),
@@ -52,28 +58,37 @@ function world(o: {
   const gate: GateRunner = new GateRunner({
     raw: async (q) => (q.includes('FROM runs WHERE id') ? [{ ms: 4000 }] : []), now: () => now, core: {} as GateOptions['core'],
     append: async (_c, e) => { if (e.kind === 'reading.recorded') { const d = e.data as { source: string; value: number; unit: string }; readings.push({ source: d.source, value: d.value, unit: d.unit }); } },
-    start: async (r) => { started.push({ check: r.check, claim: r.claim }); const run = `run:${started.length}`; keys.set(run, r.key!); if (r.key?.base) bases.push(r.claim); return run; },
+    start: async (r) => {
+      started.push({ check: r.check, claim: r.claim });
+      const run = `run:${started.length}`;
+      keys.set(run, r.key ?? { check: r.check, stem: '', dir: r.cwd, claim: r.claim, session: '', base: false, withheld: r.overlay !== undefined });
+      if (r.key?.base) bases.push(r.claim);
+      if (r.overlay) variantStates.push(existsSync(join(r.cwd, 'state/now.json')) ? readFileSync(join(r.cwd, 'state/now.json'), 'utf8') : null);
+      if (!r.key) unkeyed.add(run);
+      return run;
+    },
     ended: async (run) => {
       if (o.hold) await new Promise<void>((done) => held.push(done));
       now += 1500;
       const r = { ...record(run, o.read), ...o.records?.(Number(run.slice(4)), keys.get(run)!.withheld) };
       gate.recorded(run, r);
-      finished.push({ run, check: keys.get(run)!.check, key: await gate.keyed(keys.get(run)!, run, r) });
+      if (!unkeyed.has(run)) finished.push({ run, check: keys.get(run)!.check, key: await gate.keyed(keys.get(run)!, run, r) });
       return r.outcome;
     },
     slots: () => ({ free: 4 }), budget_ms: 60_000, hold_ms: 60_000,
     checkouts: () => checkouts as unknown as ReturnType<GateOptions['checkouts']>,
+    ...(o.stacked ? { stacked: () => true } : {}),
     invalid: async () => undefined, stopping: () => false, stoodIn: async () => undefined, kept: async (evidence) => (typeof o.kept === 'function' ? o.kept(evidence) : o.kept ?? true),
   });
   const claim = (session: string, n: number) => gate.stop({
     session, claim: `claim:${n}`, task: 'task:1', cwd: checkout, base: 'b', requirements: [], stopAt: now, ...(o.definition ? { definition: o.definition } : {}),
     ...(o.state ? { state: o.state(session) } : {}),
     checks: [{
-      check: 'c.sh', approved: 'a', command: "sh 'c.sh'", covers: ['R1'], depth: 'unit', on_base: o.onBase ?? 'passes', asserts: [], expected_ms: 1, ...(o.runs ? { runs: o.runs } : {}),
+      check: 'c.sh', approved: 'a', command: "sh 'c.sh'", covers: ['R1'], depth: o.depth ?? 'unit', on_base: o.onBase ?? 'passes', asserts: [], expected_ms: 1, ...(o.runs ? { runs: o.runs } : {}),
       ...(o.variants ? { held_out: o.variants === 'second-unstartable' ? [{ files: { 'test/fixture.json': SHA } }, { files: { 'test/fixture.json': 'b'.repeat(64) } }] : [{ files: { 'test/fixture.json': SHA } }] } : {}),
     }],
   });
-  return { gate, started, finished, readings, held, claim, checkout, bases };
+  return { gate, started, finished, readings, held, claim, checkout, bases, variantStates };
 }
 
 describe('#1018 readings, per repo', () => {
@@ -128,6 +143,44 @@ describe('#1018 a workspace\'s state reading (#67) is part of the key', () => {
     await w.claim('s1', 1);
     await w.claim('s2', 2);
     expect(w.bases).toEqual(['claim:1']);
+  });
+
+  it('a held-out variant runs on the claim\'s state reading, written into its own checkout', async () => {
+    const w = world({ variants: 'none', variantDirs: true, state: pin('{"open":1}') });
+    await w.claim('s1', 1);
+    expect(w.variantStates).toEqual(['{"open":1}']);
+  });
+
+  it('a drift rerun runs the held-out variants again on the new reading, and the old reading\'s never count', async () => {
+    // Reading 1: the run passes and its variant fails. Reading 2: the run passes and its variant fails again.
+    const w = world({ variants: 'none', state: pin('{"open":1}'), records: (_n, variant) => (variant ? { outcome: 'failed', failures: [{ test: 'case', file: 'test/a.ts', line: 1, stack: null, assertion: true, message: 'no' }] } : {}) });
+    await w.claim('s1', 1);
+    expect(w.gate.rerun('claim:1', ['c.sh'], pin('{"open":2}')())).toBe(true);
+    for (let i = 0; i < 200 && w.started.length < 4; i++) await tick();
+    for (let i = 0; i < 20; i++) await tick();
+    expect(w.started.length, 'the rerun runs the check and its variant').toBe(4);
+    expect(w.gate.verdictOf('claim:1')?.outcome).not.toBe('PASS');
+  });
+});
+
+describe('#1018 a journey on a warm stack (#580) is never shared', () => {
+  it('a held-out variant whose stack served another tree is a missing run, never one left out', async () => {
+    const w = world({ variants: 'none', records: (_n, variant) => (variant ? { outcome: 'uncounted', mask: 'its stack served another tree' } : {}) });
+    await w.claim('s1', 1);
+    expect(w.gate.verdictOf('claim:1')?.outcome).not.toBe('PASS');
+  });
+
+  it('another session\'s claim neither carries nor waits on a journey run on its stack', async () => {
+    const w = world({ depth: 'journey', stacked: true, hold: true });
+    const first = w.claim('s1', 1);
+    for (let i = 0; i < 50 && !w.held.length; i++) await tick();
+    const second = w.claim('s2', 2);
+    for (let i = 0; i < 50 && w.held.length < 2; i++) await tick();
+    expect(w.started, 'the second claim starts its own run while the first is going').toEqual([{ check: 'c.sh', claim: 'claim:1' }, { check: 'c.sh', claim: 'claim:2' }]);
+    for (const done of w.held.splice(0)) done();
+    await Promise.all([first, second]);
+    expect(w.finished, 'neither run is keyed').toEqual([]);
+    expect(w.readings).toEqual([]);
   });
 });
 

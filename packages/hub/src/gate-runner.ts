@@ -72,6 +72,8 @@ export interface GateOptions {
   stackStart?(folder: string, worktree: string): Promise<number>;
   /** The planted wrong program's start of a stack at a claim, whatever its lane. */
   startsAtClaim?(folder: string, session: string, worktree: string): Promise<void>;
+  /** Whether a checkout's done.yaml has an environment, so a journey there runs on its warm stack (#580). */
+  stacked?(folder: string): boolean;
   /** Resolves with the run's outcome once it has finished. */
   ended(run: string): Promise<string>;
   /** CPU slots free now. */
@@ -255,6 +257,7 @@ export class GateRunner {
    * key, by stem and snapshot, is what the check waits for; null when there is none and the check runs on its own.
    */
   private async carry(c: Claim, e: Entry, dir: string): Promise<'carried' | { wait: Promise<void> } | null> {
+    if (this.onStack(e, dir)) return null;
     const stem = await this.stemOf(c, e, null);
     for (const g of await this.shared.find(e.check.check, stem, dir)) {
       if (this.unread.has(g.id)) continue;
@@ -311,6 +314,13 @@ export class GateRunner {
       await this.reading(c, "time waited on another session's run", Math.max(0, this.o.now() - from), 'ms');
     });
   }
+  /**
+   * Whether the check's runs in `dir` are a journey's on its warm stack (#580): what the app it serves reads is no file
+   * of the run's, so they have no key (#1018), never carry and are never waited for.
+   */
+  private onStack(e: Entry, dir: string): boolean {
+    return e.check.depth === 'journey' && (this.o.stacked?.(dir) ?? false);
+  }
   /** Marks a run going on `key` until `done` settles: runs on an equal key wait for it. */
   private goingOn(key: string, session: string, done: Promise<unknown>): void {
     const going = { done: done.then(() => undefined, () => undefined), session };
@@ -325,8 +335,9 @@ export class GateRunner {
   private async runOwn(c: Claim, e: Entry, dir: string, lane: 'fast' | 'slow', expected: number | null, ran?: (run: string) => void): Promise<void> {
     const stem = await this.stemOf(c, e, null);
     const key: RunKey = { check: e.check.check, stem, dir, claim: c.claim, session: sessionOf(c.session), base: false, withheld: false };
+    const shared = !this.onStack(e, dir);
     const own = (async () => {
-      const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane, expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check), key });
+      const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane, expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check), ...(shared ? { key } : {}) });
       e.runs.push(run);
       ran?.(run);
       e.outcome = await this.retried(c, e, dir, await this.o.ended(run));
@@ -334,7 +345,7 @@ export class GateRunner {
       if (id) e.group = id;
       if (KEPT.has(e.outcome)) await this.variants(c, e, id, lane);
     })();
-    this.goingOn(`${stem}\0${c.snapshot}`, key.session, own);
+    if (shared) this.goingOn(`${stem}\0${c.snapshot}`, key.session, own);
     await own;
     if (e.group) await this.rejudge(e.group, c.claim);
   }
@@ -347,12 +358,14 @@ export class GateRunner {
       const t = await this.o.checkouts().checkout({ worktree: c.cwd, commit: c.snapshot, dependencies: DEPENDENCIES, runs: [token] }).catch((error: unknown) => this.unrun(e, error));
       if (!t) continue;
       try {
+        if (c.state) await hold(t.dir, c.state.files);
         const run = await this.o.start({
           claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: t.dir, lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null,
           ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check), overlay: v.files, ...(g ? { key: { check: e.check.check, stem: g.stem, dir: t.dir, claim: c.claim, session: sessionOf(c.session), base: false, withheld: true, id: g.key, paths: g.paths } } : {}),
         });
         (e.variants ??= []).push(run);
-        await this.o.ended(run);
+        // A variant whose run didn't count (its stack served another tree) is missing, so its check never passes without it.
+        if (await this.o.ended(run) === 'uncounted') this.unrun(e, Error(`its run didn't count: ${this.records.get(run)?.mask ?? 'uncounted'}`));
       } catch (error) {
         this.unrun(e, error);
       } finally {
@@ -694,15 +707,17 @@ export class GateRunner {
     // run on an equal key that ended as a run is read as carried; one going is waited for, and if it ends as no run
     // this check's base runs on its own.
     let key: RunKey;
+    let shared: boolean;
     try {
       const { dir } = await this.checkoutOf(c);
+      shared = !this.onStack(e, dir);
       const stem = await this.stemOf(c, e, c.base);
       const paths = [...new Set(this.ownOf(e))].sort();
       key = { check, stem, dir, claim: c.claim, session: sessionOf(c.session), base: true, withheld: false, id: keyId(stem, paths, await contents(dir, paths)), paths };
     } catch {
       return;
     }
-    for (;;) {
+    while (shared) {
       const from = this.runsOn(`${check}\0${key.id!}`).find((x) => x.session !== key.session && ON_BASE.has(this.records.get(x.run)?.outcome ?? ''));
       if (from && await this.keptAll([from])) {
         e.base = from.run;
@@ -714,8 +729,8 @@ export class GateRunner {
       if (!going || going.session === key.session) break;
       await this.waited(c, going);
     }
-    let ran!: () => void;
-    this.goingOn(key.id!, key.session, new Promise<void>((done) => { ran = done; }));
+    let ran = (): void => undefined;
+    if (shared) this.goingOn(key.id!, key.session, new Promise<void>((done) => { ran = done; }));
     try {
       const surfaces = surface ? [{ ...surface, check } as DeclaredSurface] : [];
       const base = await this.o.checkouts().baseCheckout({ worktree: c.cwd, onto: c.base, claim: c.snapshot, own: this.ownOf(e), dependencies: DEPENDENCIES, surfaces, runs: [token] });
@@ -724,7 +739,7 @@ export class GateRunner {
         const standIn = base.standIns.find((s) => s.check === check);
         const reach = standIn?.port ? { env: { DEEP_SURFACE_URL: `http://127.0.0.1:${standIn.port}` }, hosts: [`127.0.0.1:${standIn.port}`] }
           : standIn?.bin ? { standIns: [basename(standIn.bin)] } : {};
-        const run = await this.o.start({ claim: e.claim, check, approved: e.check.approved, command: e.check.command, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...reach, ...stackOf(c, e.check, { base: true }), key });
+        const run = await this.o.start({ claim: e.claim, check, approved: e.check.approved, command: e.check.command, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...reach, ...stackOf(c, e.check, { base: true }), ...(shared && !this.onStack(e, base.dir) ? { key } : {}) });
         e.base = run;
         e.baseFrom = { run, claim: c.claim, session: key.session, withheld: false };
         if (standIn) e.standIn = standIn;
@@ -753,7 +768,7 @@ export class GateRunner {
     if (!c || entries.length !== checks.length) return false;
     c.state = state;
     // A run on the new reading is no run of the old one's key (#1018): its runs no longer count for the check.
-    for (const e of entries) { e.runs = []; e.outcome = null; e.running = true; delete e.group; }
+    for (const e of entries) { e.runs = []; e.outcome = null; e.running = true; delete e.group; delete e.variants; }
     void (async () => {
       await Promise.all(entries.map(async (e) => {
         try {
@@ -762,6 +777,8 @@ export class GateRunner {
           const run = await this.o.start({ claim: c.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane: 'slow', expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}) });
           e.runs.push(run);
           e.outcome = await this.o.ended(run);
+          // Its held-out variants run again on the new reading too.
+          if (KEPT.has(e.outcome)) await this.variants(c, e, undefined, 'slow');
         } catch {
           e.outcome = 'missing';
         } finally {
