@@ -359,13 +359,20 @@ export class GateRunner {
       if (!t) continue;
       try {
         if (c.state) await hold(t.dir, c.state.files);
-        const run = await this.o.start({
-          claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: t.dir, lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null,
-          ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check), overlay: v.files, ...(g ? { key: { check: e.check.check, stem: g.stem, dir: t.dir, claim: c.claim, session: sessionOf(c.session), base: false, withheld: true, id: g.key, paths: g.paths } } : {}),
-        });
-        (e.variants ??= []).push(run);
-        // A variant whose run didn't count (its stack served another tree) is missing, so its check never passes without it.
-        if (await this.o.ended(run) === 'uncounted') this.unrun(e, Error(`its run didn't count: ${this.records.get(run)?.mask ?? 'uncounted'}`));
+        const go = async (fresh: boolean): Promise<string> => {
+          const run = await this.o.start({
+            claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: t.dir, lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null,
+            ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check, fresh ? { fresh } : {}), overlay: v.files, ...(g ? { key: { check: e.check.check, stem: g.stem, dir: t.dir, claim: c.claim, session: sessionOf(c.session), base: false, withheld: true, id: g.key, paths: g.paths } } : {}),
+          });
+          (e.variants ??= []).push(run);
+          const outcome = await this.o.ended(run);
+          return outcome === 'uncounted' ? this.records.get(run)?.mask ?? outcome : '';
+        };
+        // A journey's variant whose stack served another tree runs once more on a fresh stack, as its check's run does
+        // (#580); one that still didn't count is missing, so its check never passes without it.
+        let uncounted = await go(false);
+        if (uncounted && e.check.depth === 'journey' && !e.stale) uncounted = await go(true);
+        if (uncounted) this.unrun(e, Error(`its run didn't count: ${uncounted}`));
       } catch (error) {
         this.unrun(e, error);
       } finally {
@@ -774,9 +781,9 @@ export class GateRunner {
         try {
           const { dir } = await this.checkoutOf(c);
           await hold(dir, state.files);
-          const run = await this.o.start({ claim: c.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane: 'slow', expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}) });
+          const run = await this.o.start({ claim: c.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane: 'slow', expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check) });
           e.runs.push(run);
-          e.outcome = await this.o.ended(run);
+          e.outcome = await this.retried(c, e, dir, await this.o.ended(run));
           // Its held-out variants run again on the new reading too.
           if (KEPT.has(e.outcome)) await this.variants(c, e, undefined, 'slow');
         } catch {
