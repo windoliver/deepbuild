@@ -28,6 +28,8 @@ const key = (v: unknown) => sha256Hex(canonicalize(v as JsonValue));
 
 
 export interface HoldOptions {
+  /** The session ran a held call again on your yes to this ask: it has your answer. */
+  heard?(ask: string): Promise<void>;
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   asks: () => Asks;
   now: () => number;
@@ -274,7 +276,7 @@ export class Holds {
    * raised from its subject so a saved decision that covers it answers it at once, as decided for you. Its handle,
    * and the decision that answered it with its option, if one did.
    */
-  async asked(meta: Pick<HookMeta, 'session' | 'agent' | 'cwd'>, about: About): Promise<{ ask: string; decision?: string; option?: string }> {
+  async asked(meta: Pick<HookMeta, 'session' | 'agent' | 'cwd'>, about: About): Promise<{ ask: string; decision?: string; option?: string; answered?: string }> {
     const pinned_to = await this.o.pin(meta.cwd, about.question);
     const options = [{ id: 'approve', label: about.options[0], decision: 'allow' }, { id: 'decline', label: about.options[1], decision: 'deny' }];
     const ask = await this.o.asks().raise(this.o.connection(meta.session, meta.agent), about.source, {
@@ -283,18 +285,21 @@ export class Holds {
     return { ask, ...(await this.applied(ask)) };
   }
   /** The decision that answered an ask for you, with the option it chose; nothing when none did. */
-  async applied(ask: string): Promise<{ decision?: string; option?: string }> {
+  async applied(ask: string): Promise<{ decision?: string; option?: string; answered?: string }> {
     const [applied] = (await this.o.raw(`SELECT json_extract(data, '$.decision') AS decision FROM events WHERE kind = 'decision.applied' AND json_extract(data, '$.ask') = ? ORDER BY log_pos LIMIT 1`, [ask])) as { decision: string }[];
     if (!applied) return {};
-    const [saved] = (await this.o.raw(`SELECT json_extract(data, '$.answer') AS answer FROM events WHERE kind = 'decision.created' AND id = ?`, [applied.decision.slice('decision:'.length)])) as { answer: string }[];
-    return saved ? { decision: applied.decision, option: saved.answer } : {};
+    const [saved] = (await this.o.raw(`SELECT json_extract(data, '$.answer') AS answer, json_extract(data, '$.ask') AS ask FROM events WHERE kind = 'decision.created' AND id = ?`, [applied.decision.slice('decision:'.length)])) as { answer: string; ask: string }[];
+    return saved ? { decision: applied.decision, option: saved.answer, answered: saved.ask } : {};
   }
 
   /** A call a standing rule decides: allowed or denied by your rule, naming it; held by an ask when none covers it. */
   async decide(meta: HookMeta, about: About): Promise<{ held?: string; allow?: string; deny?: string }> {
-    const { ask, decision, option } = await this.asked(meta, about);
+    const { ask, decision, option, answered } = await this.asked(meta, about);
     const why = this.o.plant === 'rule-without-reason' ? '' : ` by your standing rule ${decision}`;
-    if (decision && option === 'approve') return { allow: `DeepBuild allowed this${why}: ${about.question.replace(/\? No plan names it\.$/, '.')}` };
+    if (decision && option === 'approve') {
+      if (answered) await this.o.heard?.(answered);
+      return { allow: `DeepBuild allowed this${why}: ${about.question.replace(/\? No plan names it\.$/, '.')}` };
+    }
     if (decision) return { deny: `DeepBuild denied this${why}: you said no to it. ${about.question}` };
     return { held: `DeepBuild is holding this: ${about.question} It waits for your answer to ${ask}; once you say yes, run the same call again.` };
   }

@@ -167,5 +167,19 @@
       "signed-without-signature"
     ],
     "since": "R2"
+  },
+  {
+    "method": "deep.registerStateSource",
+    "variant": null,
+    "interface": "state-source@1",
+    "digest": "d1:a7d264bb9fad235638dea3c2fc302524644ad92c3fa5ddec5d3419f4ba0d8aaf",
+    "fills": "many",
+    "kit": "state-source@1",
+    "planted": [
+      "undo-fails",
+      "first-read-kept",
+      "compare-sees-nothing"
+    ],
+    "since": "R2"
   }
 ]
