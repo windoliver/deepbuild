@@ -1,0 +1,17 @@
+commit f21d897032a6debfcc85053946b5666bb092ef2e (PR #1276)
+hw.model Mac15,12; macOS 14.7.7
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/990 --no-file-parallelism (automated only, DEEP_990_LIVE unset)
+
+Result: 18 passed, 4 failed (22); 5 of 8 files pass. Same as 5eea1a1a and 3f472b68.
+The 4 failures are all INCONCLUSIVE, none a FAIL:
+  INCONCLUSIVE: the VoiceOver test needs a person at the reference Mac with VoiceOver on; run with DEEP_990_LIVE=1 (README: The live runs); this is not a pass
+  INCONCLUSIVE: no bash 5.1 or newer (readline with bracketed paste) at /bin, /usr/bin, /opt/homebrew/bin or /usr/local/bin; this is not a pass
+  INCONCLUSIVE: no bash 5.1 or newer (readline with bracketed paste) at /bin, /usr/bin, /opt/homebrew/bin or /usr/local/bin; this is not a pass
+  INCONCLUSIVE: no taste call is recorded: attach the screenshots to the PR, show them to the owner
+  (AC7 live VoiceOver; AC2 x2 needing bash >= 5.1, which this Mac lacks and the owner declined to install; AC8 taste)
+
+PNG sha256 (AC8 screenshots):
+  143993728f66982c9fa0339be09ba5f6c2a19512b7aebb65a593c0adf96510b1  composition-at-cursor.png
+  fd2309456f4e67a641c229c9f1b70bafbdbfec1884d055794e9425280e64ad5a  session-row-readings.png
+  composition-at-cursor is unchanged from 5eea1a1a (143993728f66...).
+  session-row-readings changed (5eea1a1a: 303428b16ed9...). It now shows the long reading cut with an ellipsis: "its terminal's program reports blocked…".
