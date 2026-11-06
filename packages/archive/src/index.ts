@@ -40,6 +40,8 @@ export interface ArchiveOptions {
 export interface Archive {
   /** Copies every source new or changed since its last copy, and every completed CI run not yet copied. */
   pass(): Promise<void>;
+  /** Copies one session's transcript now, so what it read so far is in the record for a question asked about it (#1156). */
+  session(id: string): Promise<void>;
 }
 
 const DAY = 86_400_000;
@@ -312,6 +314,9 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
       if (options.forge) await forgeRuns(options.forge).catch((error: unknown) => failed.push(error));
       await quiet();
       if (failed.length) throw new AggregateError(failed, `the archive pass left ${failed.length} cop${failed.length === 1 ? 'y' : 'ies'} undone`);
+    },
+    async session(id) {
+      for (const source of await sources(options)) if (letters(source.session) === letters(id)) await copy(source);
     },
   };
 }

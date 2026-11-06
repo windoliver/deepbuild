@@ -1,0 +1,5 @@
+// A test pack (#67 AC9): a project names it, and it brings a view with a command.
+export default async function (deep: any): Promise<void> {
+  await deep.registerAction('ext.runbook.restart', { declares: 'read', input: { type: 'object', additionalProperties: false } }, () => ({ restarted: false }));
+  await deep.registerView('ext.runbook.board', 'panel', 'sidebar', { commands: [{ name: 'Restart', action: 'ext.runbook.restart' }] });
+}
