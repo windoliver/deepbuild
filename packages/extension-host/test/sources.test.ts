@@ -206,7 +206,7 @@ describe('#364 secrets on the trusted path', () => {
   });
 
   it('sign-in through an OAuth loopback: the browser goes to the source\'s host with PKCE and a state, the code comes back to 127.0.0.1, and the token is saved as the secret', async () => {
-    const seen: { challenge?: string } = {};
+    const seen: { challenge?: string | undefined } = {};
     const p = provider((r) => {
       if (r.url === `https://${MARKET}/oauth/token` && r.method === 'POST') {
         const form = new URLSearchParams(r.body ?? '');

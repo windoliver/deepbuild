@@ -470,7 +470,29 @@ impl Effects {
     }
 }
 
+impl Effects {
+    /// Builds the document's operators on the device, the first frame that needs them.
+    fn build_docops(&mut self, device: &Device) {
+        if let Some((doc, options, planted)) = self.op_doc.take() {
+            self.docops = Some(crate::docops::DocOps::with(
+                device,
+                &doc,
+                options,
+                planted,
+                &[],
+                self.op_hooks,
+                BTreeMap::new(),
+            ));
+        }
+    }
+}
+
 impl Post for Effects {
+    fn sources(&mut self, device: &Device) -> Vec<deep_scene3d_render::cull::Source> {
+        self.build_docops(device);
+        self.docops.as_ref().map_or(Vec::new(), |ops| ops.sources())
+    }
+
     fn shadows(&self) -> bool {
         self.settings.shadow.is_some()
     }
@@ -578,17 +600,7 @@ impl Post for Effects {
             ));
             cur = out;
         }
-        if let Some((doc, options, planted)) = self.op_doc.take() {
-            self.docops = Some(crate::docops::DocOps::with(
-                device,
-                &doc,
-                options,
-                planted,
-                &[],
-                self.op_hooks,
-                BTreeMap::new(),
-            ));
-        }
+        self.build_docops(device);
         if let Some(ops) = self.docops.as_mut() {
             let res = self.op_resolution.clone();
             let (rows, recs, out) = ops.plan(
@@ -724,6 +736,13 @@ pub fn timings(results: &[wgpu_profiler::GpuTimerQueryResult]) -> (f64, BTreeMap
 pub struct Shared(pub Arc<std::sync::Mutex<Effects>>);
 
 impl Post for Shared {
+    fn sources(&mut self, device: &Device) -> Vec<deep_scene3d_render::cull::Source> {
+        self.0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .sources(device)
+    }
+
     fn passes(&self) -> Vec<deep_gpu::render::Pass> {
         use deep_gpu::render::{Determinism, Pass, Resolution};
         let pass = |name: &str, place, order, reads: Vec<&'static str>, ns_per_px| Pass {
@@ -738,13 +757,23 @@ impl Post for Shared {
         };
         // The document's composed operators, after the shipped effects in the effects chain.
         let fx = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        let marks: Vec<(String, f64)> = match (&fx.docops, &fx.op_doc) {
+        let marks: Vec<(String, f64, bool)> = match (&fx.docops, &fx.op_doc) {
             (Some(ops), _) => ops
                 .ops
                 .iter()
-                .map(|o| (o.mark.to_string(), o.declared_ns))
+                .map(|o| (o.mark.to_string(), o.declared_ns, ops.early.contains(&o.item)))
                 .collect(),
-            (None, Some((doc, ..))) => crate::docops::marks(doc),
+            (None, Some((doc, ..))) => {
+                let early = crate::docops::feeders(doc);
+                crate::docops::marks(doc)
+                    .into_iter()
+                    .map(|(mark, ns)| {
+                        let item = crate::docops::item_of_mark(&mark).unwrap_or_default();
+                        let early = early.contains(item);
+                        (mark, ns, early)
+                    })
+                    .collect()
+            }
             (None, None) => Vec::new(),
         };
         drop(fx);
@@ -761,13 +790,19 @@ impl Post for Shared {
             pass(OUTLINE, "effects", 3, vec!["linear", "ids"], 0.06),
             pass(GLOW, "bloom", 0, vec!["linear"], 0.25),
         ];
-        for (k, (name, ns)) in marks.into_iter().enumerate() {
+        for (k, (name, ns, early)) in marks.into_iter().enumerate() {
+            // What feeds an instances output runs before the frame's draws (#484).
+            let (place, reads) = if early {
+                ("compute", Vec::new())
+            } else {
+                ("effects", vec!["linear"])
+            };
             out.push(Pass {
                 name,
-                place: "effects",
+                place,
                 order: 4 + k as u32,
-                reads: vec!["linear"],
-                writes: vec!["linear"],
+                reads,
+                writes: if early { Vec::new() } else { vec!["linear"] },
                 resolution: Resolution::Full,
                 ns_per_px: ns as f32,
                 determinism: Determinism::SameMachine,

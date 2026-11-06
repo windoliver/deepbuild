@@ -8,7 +8,7 @@ Buying within a budget you approved (#69, with the money extensions). A purchase
 
 - `src/index.ts`: the whole package (`openBuying`). DeepBuild never stores or sees a card number: a rule names the processor's reference, text carrying a number is refused, and a receipt's numbers are masked to their last four digits. New code keeps all three.
 - Reservations and charges go through the `Ledger` from `@deepbuild/budget`, never a ledger of its own.
-- Tests: none in this package; the acceptance suite is `tests/acceptance/69/`.
+- Tests: `test/` for regressions; the acceptance suite is `tests/acceptance/69/`.
 
 ## What it may import
 

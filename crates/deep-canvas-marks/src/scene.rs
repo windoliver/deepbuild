@@ -3007,12 +3007,39 @@ const MASK_DEPTH: usize = 4;
 
 /// A mask's scope over the items it applies to: a scissor for a shape mask, coverage from its own
 /// paint for an alpha or luminance one, and for a feathered one its rect's coverage ramped over the
-/// feather (#385). Other shapes, inverted and combined masks wait.
-fn mask_scope(id: &str, item: &Value, palette: &Palette) -> Result<Scope, Refused> {
+/// feather (#385); a path ID's shape clips by that path's outline where it draws (#1175: an SVG's
+/// `<clipPath>`). A rounded rect, a soft path, a shape naming no path, inverted and combined
+/// masks wait.
+fn mask_scope(
+    id: &str,
+    item: &Value,
+    items: &Map<String, Value>,
+    palette: &Palette,
+) -> Result<Scope, Refused> {
     let path = format!("items/{id}/params");
     let p = object_or_empty(item.get("params"));
-    if p.get("shape").and_then(Value::as_str).unwrap_or("rect") != "rect" {
-        return refuse("mask_r2", format!("{path}/shape"));
+    match p.get("shape").and_then(Value::as_str).unwrap_or("rect") {
+        "rect" => {}
+        "rounded rect" => return refuse("mask_r2", format!("{path}/shape")),
+        shape => {
+            let plain = p.get("mode").is_none_or(|m| m == "shape")
+                && ["feather", "expand"]
+                    .iter()
+                    .all(|k| num(p.get(*k)).unwrap_or(0.0) == 0.0)
+                && p.get("invert").is_none_or(|v| v == &Value::Bool(false))
+                && p.get("combine").is_none_or(|c| c == "add");
+            if !plain {
+                return refuse("mask_r2", path);
+            }
+            let is_path = items.get(shape).and_then(|i| i.get("kind")) == Some(&json!("path@1"));
+            let Some(verbs) = item_outline(items, shape).filter(|_| is_path) else {
+                return refuse("mask_r2", format!("{path}/shape"));
+            };
+            return Ok(Scope::Shape {
+                item: id.to_string(),
+                verbs: Arc::new(verbs),
+            });
+        }
     }
     let feather = num(p.get("feather")).unwrap_or(0.0);
     if feather < 0.0 {
@@ -3075,12 +3102,17 @@ fn mask_scope(id: &str, item: &Value, palette: &Palette) -> Result<Scope, Refuse
 
 /// The scope an ancestor puts its children in: a mask's, a frame's overflow scissor, or a group's
 /// opacity (one offscreen pass, which GPUI's per-primitive opacity can't do).
-fn ancestor_scope(id: &str, item: &Value, palette: &Palette) -> Result<Option<Scope>, Refused> {
+fn ancestor_scope(
+    id: &str,
+    item: &Value,
+    items: &Map<String, Value>,
+    palette: &Palette,
+) -> Result<Option<Scope>, Refused> {
     let p = item.get("params");
     let get = |k: &str| p.and_then(|p| p.get(k));
     Ok(match item.get("kind").and_then(Value::as_str) {
         Some("mask@1") => match get("applies_to").and_then(Value::as_str) {
-            None | Some("children") => Some(mask_scope(id, item, palette)?),
+            None | Some("children") => Some(mask_scope(id, item, items, palette)?),
             Some(_) => None,
         },
         Some("frame@1") if get("overflow").and_then(Value::as_str) != Some("show") => {
@@ -3142,7 +3174,7 @@ fn scopes_of(
             continue;
         }
         // Every mask is held to what this build draws, whether or not anything is under it.
-        mask_scope(id, item, palette)?;
+        mask_scope(id, item, items, palette)?;
         let applies = item.get("params").and_then(|p| p.get("applies_to"));
         let collection = match applies {
             None => continue,
@@ -3191,9 +3223,9 @@ fn scopes_of(
                 continue;
             }
             let scope = if by_parent {
-                ancestor_scope(a, ancestor, palette)?
+                ancestor_scope(a, ancestor, items, palette)?
             } else {
-                Some(mask_scope(a, ancestor, palette)?)
+                Some(mask_scope(a, ancestor, items, palette)?)
             };
             let Some(scope) = scope else { continue };
             if ancestor.get("kind").and_then(Value::as_str) == Some("mask@1") {
