@@ -144,4 +144,24 @@ describe('a held push (#1156)', () => {
     expect(held, 'the push waits on an ask').toContain('ask:');
     expect(seen).toEqual(['s1 with 0 asks']);
   });
+
+  it('still raises its ask when the copy never ends, inside the gate\'s hold', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'holds-'));
+    writeFileSync(join(dir, 'config.json'), JSON.stringify({ asks: { deadline: { authority: '1d' }, default: { authority: 'no' } } }));
+    let t = 1_760_000_000_000;
+    const now = () => (t += 1000);
+    const record = await openRecord({ path: join(dir, 'record.db'), now });
+    const asks = await openAsks({ record, now, deliver: () => undefined, home: dir });
+    const as = (writer: string, session: string): Connection => ({ writer, actor: 'you', scope: 'you', session, agent: 'claude-code' });
+    const holds = new Holds({
+      raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
+      append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
+      archived: () => new Promise(() => undefined),
+    });
+    await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Push?', rule: 'r' } });
+    const started = Date.now();
+    const held = await holds.gate({ session: 's1', agent: 'claude-code', cwd: dir } as HookMeta, { label: 'git push origin main', classes: ['push'] });
+    expect(held, 'the push waits on an ask').toContain('ask:');
+    expect(Date.now() - started).toBeLessThan(5000);
+  }, 20_000);
 });

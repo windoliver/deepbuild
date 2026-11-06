@@ -13,6 +13,7 @@
 // A hold denies the call, naming its ask; once you say yes the same call runs. The sorter #84 builds takes the
 // planted one's place (DEEP_HUB_TEST_SORTER, only tests set it).
 import { readFileSync } from 'node:fs';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { AskRefused, type Asks, type PlanInput, type Target } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
@@ -51,6 +52,8 @@ function planFor(source: string, does: string, changes: string[], targets: Targe
 /** A `git push`'s words up to the end of its command, git's own flags before `push` skipped. */
 const GIT_PUSH = /\bgit(?:\s+(?:-[cC]\s+\S+|-\S+))*\s+push\b([^;&|)\n]*)/g;
 const VALUED = new Set(['-o', '--push-option', '--receive-pack', '--exec']);
+/** How long a held push waits for its session's transcript, well inside the gate's hold. */
+const ARCHIVE_WAIT_MS = 2000;
 /**
  * Where a line's pushes go (#1098): each names its remote or URL, the first word after `push` that isn't a flag or
  * `--repo`'s, and a push that names none goes to git's default, origin. A value the line computes is kept as written,
@@ -184,8 +187,8 @@ export class Holds {
       ? `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`
       : `Run \`${call.label}\`? It replies in your name to a reviewer's thread on the pull request, a send that needs your authority.`;
     const targets = classes.includes('push') ? pushTargets(call.label) : [];
-    // A failed copy leaves a target the session read as unknown, which asks you all the same.
-    if (targets.length) await this.o.archived(meta.session).catch(() => undefined);
+    // A failed or late copy leaves a target the session read as unknown, which asks you all the same.
+    if (targets.length) await Promise.race([this.o.archived(meta.session).catch(() => undefined), sleep(ARCHIVE_WAIT_MS)]);
     return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label], targets));
   }
 
