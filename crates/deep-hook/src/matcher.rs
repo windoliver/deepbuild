@@ -42,8 +42,9 @@
 //!
 //! A call the reader couldn't read whole meets every entry it may be one of (#1097): a run whose program the line
 //! computes meets a `run:` entry whose argument globs its arguments fit and an `effect:` class whose words they fit,
-//! and a run nested past what the reader reads meets every entry. Its hit says what couldn't be read, so a block
-//! entry denies it and a watch or warn entry records it with that reason. An unread run never lowers a match.
+//! and a run nested past what the reader reads meets every entry, as does a shell or an interpreter whose program
+//! comes from a pipe the line doesn't say or is a value it computes (`curl … | sh`, `eval "$X"`, #1503). Its hit says
+//! what couldn't be read, so a block entry denies it and a watch or warn entry records it with that reason. An unread run never lowers a match.
 //!
 //! deep-hook reads rules.json as unreadable when an entry's `match` isn't one of these, so an entry newer than
 //! deep-hook never fails open.
@@ -187,6 +188,9 @@ impl Call {
                 Some(c) => Some(c.join(p)),
                 None => None,
             }));
+            // What an interpreter's inline program holds, it may read or write (#1503).
+            writes.extend(run.held.iter().cloned());
+            reads.extend(run.held.iter().cloned());
             by.0.resize(writes.len(), Some((k, false)));
             by.1.resize(reads.len(), Some((k, false)));
         }
@@ -212,7 +216,7 @@ impl Call {
     fn may_be(&self, pattern: &str) -> Option<Hit> {
         let (kind, rest) = pattern.split_once(':')?;
         let fits = |run: &&Run| match run.unread {
-            Some(Unread::Depth) => true,
+            Some(Unread::Depth | Unread::Piped | Unread::Computed) => true,
             Some(Unread::Program) if kind == "run" => {
                 let wanted: Vec<&str> = rest.split_whitespace().skip(1).collect();
                 args_match(run, &wanted)
@@ -236,14 +240,21 @@ impl Call {
                 "it nests past what the reader reads, a depth of {} shells, substitutions or evals",
                 shell::DEPTH
             ),
-            _ => {
+            unread => {
                 let line = self.command.as_deref().unwrap_or_default();
                 let cut = line.char_indices().nth(LINE).map_or(line.len(), |(k, _)| k);
                 let more = if cut < line.len() { "…" } else { "" };
-                format!(
-                    "the line computes the program it runs, in {}{more}",
-                    &line[..cut]
-                )
+                let what = match unread {
+                    Some(Unread::Piped) => format!(
+                        "{} reads its program from a pipe or a file whose text the line doesn't say",
+                        run.program
+                    ),
+                    Some(Unread::Computed) => {
+                        format!("the program {} runs is a value the line computes", run.program)
+                    }
+                    _ => "the line computes the program it runs".to_string(),
+                };
+                format!("{what}, in {}{more}", &line[..cut])
             }
         };
         Some(Hit {
