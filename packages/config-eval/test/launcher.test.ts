@@ -1,11 +1,12 @@
 // The default launcher (#112) against fake `claude` and `codex` executables on PATH, which print what the real ones'
 // headless streams do: each test failed on the program it names.
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { runEval } from '../src/index.js';
+import { runCli } from '../src/launcher.js';
 
 const roots: string[] = [];
 afterEach(() => { for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true }); });
@@ -89,4 +90,80 @@ it('stops a run at the eval\'s deadline, so an eval ends within its stated time'
   const report = await runEval({ plan: w.plan(2_000), tasks: w.tasks, root: join(w.box, 'work'), env: w.env });
   expect(performance.now() - t0).toBeLessThan(15_000);
   expect(report.runs.map((r) => r.ok)).toEqual([false, false]);
+}, 60_000);
+
+it("refuses a replay whose copied sign-in expires before the agents' deadline, naming when", async () => {
+  // Failed on a launcher that copied the access token without reading when it expires, so later runs failed sign-in
+  // and counted as failed pairs.
+  const w = world(0);
+  mkdirSync(join(w.box, '.claude'));
+  writeFileSync(join(w.box, '.claude', '.credentials.json'), JSON.stringify({ claudeAiOauth: { accessToken: 'fake-access', refreshToken: 'fake-refresh', expiresAt: Date.now() + 60_000 } }));
+  const report = await runEval({ plan: w.plan(600_000), tasks: w.tasks, root: join(w.box, 'work'), env: w.env });
+  expect(report.runs).toEqual([]);
+  expect(report.after.outcome).toBe('refused');
+  expect(report.after.reason).toMatch(/sign-in expires at .*before the replay's runs end/);
+}, 60_000);
+
+it('refuses a model endpoint off this machine over plain http, which the tunnel cannot carry', async () => {
+  // Failed on a launcher that set only HTTPS_PROXY, so each run's plain-http request to the endpoint was refused in
+  // the sandbox and counted as a failed pair.
+  const w = world(0);
+  const report = await runEval({ plan: w.plan(600_000), tasks: w.tasks, root: join(w.box, 'work'), env: { ...w.env, ANTHROPIC_BASE_URL: 'http://model.example:8080' } });
+  expect(report.runs).toEqual([]);
+  expect(report.after.reason).toMatch(/http:\/\/model\.example:8080.*https/);
+}, 60_000);
+
+it('refuses a replay whose sandbox would read your home, where the CLI is installed in its top folder', async () => {
+  // Failed on a launcher that granted the CLI's folder whatever it held, so with claude in your home's top folder the
+  // agent could read your Claude, gh and ssh credentials.
+  const w = world(0);
+  writeFileSync(join(w.box, 'claude'), readFileSync(join(w.box, 'bin', 'claude')));
+  chmodSync(join(w.box, 'claude'), 0o755);
+  const report = await runEval({ plan: w.plan(600_000), tasks: w.tasks, root: join(w.box, 'work'), env: { ...w.env, PATH: `${w.box}:${w.env.PATH}` } });
+  expect(report.runs).toEqual([]);
+  expect(report.after.reason).toContain(`reads ${w.box}`);
+  expect(report.after.reason).toMatch(/holds your home/);
+}, 60_000);
+
+it('refuses a replay whose sandbox would read your home through a link to it', async () => {
+  // Failed on a launcher that resolved your home but not the folder on PATH it reached claude by, so with /home a link
+  // (as on Fedora Silverblue) and claude a link in your home's top folder, it granted your home under the link's name.
+  const w = world(0);
+  const link = join(w.box, '..', `${w.box.split('/').pop()}-link`);
+  symlinkSync(w.box, link);
+  roots.push(link);
+  symlinkSync(join(w.box, 'bin', 'claude'), join(w.box, 'claude'));
+  const report = await runEval({ plan: w.plan(600_000), tasks: w.tasks, root: join(w.box, 'work'), env: { ...w.env, PATH: `${link}:${w.env.PATH}` } });
+  expect(report.runs).toEqual([]);
+  expect(report.after.reason).toContain(`reads ${link}`);
+  expect(report.after.reason).toMatch(/holds your home/);
+}, 60_000);
+
+it("ends a run on the sandbox helper's exit line though it arrives in two pieces", async () => {
+  // Failed on a reader that looked for "exit" inside each chunk of fd 3, so a line split across two chunks never ended
+  // the run while the sandbox stayed up.
+  const box = realpathSync(mkdtempSync(join(tmpdir(), 'dce-fd3-')));
+  roots.push(box);
+  const pidFile = join(box, 'cli.pid');
+  const cli = join(box, 'cli');
+  writeFileSync(cli, `#!/bin/sh
+echo $$ > "${pidFile}"
+cat > /dev/null
+echo '{"type":"result","subtype":"success","is_error":false,"result":"Fixed it."}'
+printf '{"ex' >&3
+sleep 0.5
+printf 'it":0}\\n' >&3
+sleep 30
+`);
+  chmodSync(cli, 0o755);
+  const t0 = performance.now();
+  try {
+    const lines = await runCli([cli], 'go', box, { PATH: '/usr/bin:/bin' }, Date.now() + 60_000);
+    expect(performance.now() - t0).toBeLessThan(15_000);
+    expect(lines).toContainEqual(expect.objectContaining({ type: 'result', result: 'Fixed it.' }));
+  } finally {
+    // Only the group the fake wrote down: an empty file would read 0, and kill(0) is this runner's own group.
+    const pgid = existsSync(pidFile) ? Number(readFileSync(pidFile, 'utf8')) : 0;
+    if (pgid > 1) try { process.kill(-pgid, 'SIGKILL'); } catch { /* gone */ }
+  }
 }, 60_000);
