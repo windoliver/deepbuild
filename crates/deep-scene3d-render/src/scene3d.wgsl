@@ -15,9 +15,34 @@ struct Frame {
     // A sky's ambient light from above and below (#418), w 1 with a sky.
     sky_top: vec4<f32>,
     sky_low: vec4<f32>,
+    // Clip to world, and the eye with the near plane in w: what a material operator's camera
+    // step reads (#429).
+    inverse_clip: mat4x4<f32>,
+    eye: vec4<f32>,
+    // The cutaway (#424): each plane's normal and offset; how many, 1 to intersect, its cap's
+    // bits (1: drawn, 2: lit); the cap's role, linear RGB.
+    cut: array<vec4<f32>, 4>,
+    cut_info: vec4<u32>,
+    cap: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
+
+// Whether the cutaway hides `p`: past any of its planes, or past all of them when it intersects.
+fn cut_hides(p: vec3<f32>) -> bool {
+    let count = frame.cut_info.x;
+    if count == 0u {
+        return false;
+    }
+    var any = false;
+    var all = true;
+    for (var k = 0u; k < count; k++) {
+        let past = dot(frame.cut[k].xyz, p) > frame.cut[k].w;
+        any = any || past;
+        all = all && past;
+    }
+    return select(any, all, frame.cut_info.y == 1u);
+}
 
 struct Targets {
     @location(0) color: vec4<f32>,
@@ -102,7 +127,8 @@ struct Lights {
 @group(1) @binding(0) var<uniform> lights: Lights;
 // 32 × 32 entries, cos(view) across and roughness down, two to a vec4: (A, B) with the
 // directional albedo F0·A + F90·B of the specular lobe.
-@group(1) @binding(1) var<uniform> dfg: array<vec4<f32>, 512>;
+// The DFG table, then the sheen lobe's albedo table four to an entry (#428).
+@group(1) @binding(1) var<uniform> dfg: array<vec4<f32>, 1024>;
 // The key sun's cascades (#422), one layer each (a texel's stand-in before one is drawn).
 @group(1) @binding(2) var shadow_map: texture_depth_2d_array;
 
@@ -166,6 +192,145 @@ const ADD: u32 = 3u;
 const ALPHA_CUTOFF: f32 = 0.5;
 // Its material samples texture maps (#423): group 3 holds them.
 const MAPS: u32 = 8192u;
+// A cast-only level drawn inside its surface by its inset, in its surface's w (#425).
+const INSET: u32 = 32768u;
+
+// Issue #425: a band's mask inside its item's margin, carried in the record's `tie` above its
+// rank: bit 8 masked, bit 7 the less detailed band's draw, bits 0 to 6 the blend level of OF.
+const RANK: u32 = 0xfffffu;
+const MASK_SHIFT: u32 = 20u;
+const OF: u32 = 64u;
+// The planted masks (#425's `band_masks_independent`): each band keyed by its own hash.
+const MASKS_INDEPENDENT: bool = false;
+
+fn band_hash(px: vec2<u32>, key: u32) -> u32 {
+    var h = px.x * 0x8da6b343u ^ px.y * 0xd8163841u ^ key * 0xcb1ab31fu;
+    h = (h ^ (h >> 16u)) * 0x7feb352du;
+    h = (h ^ (h >> 15u)) * 0x846ca68bu;
+    return h ^ (h >> 16u);
+}
+
+// Whether a band's draw keeps pixel `px` of its target: the two bands of one item key the same
+// hash of the pixel and the item's pick ID, the less detailed keeping the buckets below the blend
+// level and the more detailed the rest, so between them every pixel is kept exactly once, in
+// every pass that draws them.
+fn band_keeps(px: vec2<u32>, key: u32, code: u32) -> bool {
+    if (code & 256u) == 0u {
+        return true;
+    }
+    let lower = (code & 128u) != 0u;
+    var h = band_hash(px, key);
+    if MASKS_INDEPENDENT {
+        h = band_hash(px, key ^ select(0x9e3779b9u, 0x7f4a7c15u, lower));
+    }
+    let below = (h % OF) < (code & 127u);
+    return below == lower;
+}
+// End of #425's band masks.
+// The cutaway reaches it (#424).
+const CUT: u32 = 16384u;
+// #424's planted program: a mask part's ID written through its holes.
+const IDS_THROUGH_MASK: u32 = 8u;
+
+// The frame's adjust table (#424; Object: adjust): entry k at 3(k − 1).
+@group(1) @binding(8) var<uniform> adjusts: array<vec4<f32>, 768>;
+
+// A material's extra lobes (#428), as lib.rs's `lobe_entry` packs them: sheen color and
+// roughness; anisotropy, its rotation, diffuse roughness and retroreflection; translucency's
+// color and wrap (< 0 for thin); transmission, ior, dispersion and thickness; attenuation per m
+// and iridescence's weight; the film's ior and nm, the flakes' weight and size; the flakes'
+// color and cos tilt; the flake seed.
+struct LobeEntry {
+    v: array<vec4<f32>, 8>,
+};
+@group(1) @binding(12) var<uniform> lobe_table: array<LobeEntry, 512>;
+// The opaque scene's copy with mips, which transmission samples (#428).
+@group(1) @binding(13) var opaque: texture_2d<f32>;
+
+// The part's lobes' entry, 0 for none.
+fn lobe_index(in: MeshOut) -> u32 {
+    return in.op.w >> 16u;
+}
+
+fn oklab(c: vec3<f32>) -> vec3<f32> {
+    let l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
+    let m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
+    let s = 0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b;
+    let r = pow(max(vec3<f32>(l, m, s), vec3<f32>(0.0)), vec3<f32>(1.0 / 3.0));
+    return vec3<f32>(
+        0.2104542553 * r.x + 0.7936177850 * r.y - 0.0040720468 * r.z,
+        1.9779984951 * r.x - 2.4285922050 * r.y + 0.4505937099 * r.z,
+        0.0259040371 * r.x + 0.7827717662 * r.y - 0.8086757660 * r.z,
+    );
+}
+
+fn from_oklab(c: vec3<f32>) -> vec3<f32> {
+    let l = c.x + 0.3963377774 * c.y + 0.2158037573 * c.z;
+    let m = c.x - 0.1055613458 * c.y - 0.0638541728 * c.z;
+    let s = c.x - 0.0894841775 * c.y - 1.2914855480 * c.z;
+    let q = vec3<f32>(l * l * l, m * m * m, s * s * s);
+    return vec3<f32>(
+        4.0767416621 * q.x - 3.3077115913 * q.y + 0.2309699292 * q.z,
+        -1.2684380046 * q.x + 2.6097574011 * q.y - 0.3413193965 * q.z,
+        -0.0041960863 * q.x - 0.7034186147 * q.y + 1.7076147010 * q.z,
+    );
+}
+
+// A lit color under adjust entry `k` (0: none), in the design's fixed order: exposure, contrast
+// about mid gray, gamma, hue and saturation in OKLCh, brightness, tint, then invert.
+fn adjusted(c0: vec3<f32>, k0: u32) -> vec3<f32> {
+    // The lobe table's index rides above the adjust's (#428).
+    let k = k0 & 0xffffu;
+    if k == 0u {
+        return c0;
+    }
+    let a = adjusts[3u * (k - 1u)];
+    let b = adjusts[3u * (k - 1u) + 1u];
+    let tint = adjusts[3u * (k - 1u) + 2u];
+    var c = max(c0, vec3<f32>(0.0)) * exp2(a.x);
+    c = 0.18 * pow(c / 0.18, vec3<f32>(a.y));
+    c = pow(c, vec3<f32>(1.0 / a.z));
+    if a.w != 0.0 || b.x != 1.0 {
+        let lab = oklab(c);
+        let h = radians(a.w);
+        let ab = vec2<f32>(lab.y * cos(h) - lab.z * sin(h), lab.y * sin(h) + lab.z * cos(h)) * b.x;
+        c = max(from_oklab(vec3<f32>(lab.x, ab)), vec3<f32>(0.0));
+    }
+    c = c * b.y;
+    if b.w > 0.5 {
+        c = c * tint.rgb;
+    }
+    if b.z > 0.5 {
+        c = vec3<f32>(1.0) - clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
+    }
+    return c;
+}
+
+// Where the view ray through a back face at `w` enters what the cutaway keeps (#424): the cap's
+// point, and the plane it lies on (w), or w < 0 where none.
+fn cap_at(w: vec3<f32>) -> vec4<f32> {
+    let d = select(normalize(lights.forward.xyz), normalize(w - lights.view.xyz), lights.view.w > 0.5);
+    let intersect = frame.cut_info.y == 1u;
+    var best = select(1e30, -1.0, intersect);
+    var plane = -1.0;
+    for (var k = 0u; k < frame.cut_info.x; k++) {
+        let p = frame.cut[k];
+        let nd = dot(p.xyz, d);
+        if nd >= 0.0 {
+            continue;
+        }
+        // Toward the eye from `w`, the distance to this plane.
+        let s = (p.w - dot(p.xyz, w)) / -nd;
+        if s < 0.0 {
+            continue;
+        }
+        if (intersect && s > best) || (!intersect && s < best) {
+            best = s;
+            plane = f32(k);
+        }
+    }
+    return vec4<f32>(w - d * best, plane);
+}
 
 // Issue #423: a material's texture maps (canvas primitives: Material: texture maps), in the order
 // base color, metallic-roughness, normal, occlusion, emission. Each map's uv transform is two
@@ -234,7 +399,8 @@ struct Mapped {
 };
 
 struct MeshOut {
-    @builtin(position) pos: vec4<f32>,
+    // Invariant, so a fade's color pass meets its own depth pass exactly (#424).
+    @builtin(position) @invariant pos: vec4<f32>,
     @location(0) normal: vec3<f32>,
     @location(1) @interpolate(flat) color: u32,
     @location(2) @interpolate(flat) pick: u32,
@@ -250,7 +416,39 @@ struct MeshOut {
     // uv0 and uv1 (#423), and the tangent in the world with its handedness in w.
     @location(10) uv: vec4<f32>,
     @location(11) tangent: vec4<f32>,
+    // Its band's mask inside a margin (#425); and the part's rotation as a unit quaternion's
+    // vector (its w ≥ 0, two 16-bit snorm pairs), which flakes read (#428).
+    @location(14) @interpolate(flat) mask: vec4<u32>,
+    // Its normal in its mesh's own space; its material operator's time (f32 bits), seed and the
+    // item's opacity (f32 bits), which a material operator reads (#429).
+    @location(12) object_n: vec3<f32>,
+    @location(13) @interpolate(flat) op: vec4<u32>,
 };
+
+// A model's rotation and scale from its columns (#428): the rotation of its axes made
+// orthonormal, as a unit quaternion's vector with w ≥ 0, and cbrt |det|.
+fn part_of(c0: vec3<f32>, c1: vec3<f32>, c2: vec3<f32>) -> vec4<f32> {
+    let x = normalize(c0);
+    let y = normalize(c1 - x * dot(x, c1));
+    let z = cross(x, y) * select(-1.0, 1.0, dot(cross(c0, c1), c2) >= 0.0);
+    let tr = x.x + y.y + z.z;
+    var q: vec4<f32>;
+    if tr > 0.0 {
+        let k = 0.5 / sqrt(tr + 1.0);
+        q = vec4<f32>((y.z - z.y) * k, (z.x - x.z) * k, (x.y - y.x) * k, 0.25 / k);
+    } else if x.x > y.y && x.x > z.z {
+        let k = 2.0 * sqrt(1.0 + x.x - y.y - z.z);
+        q = vec4<f32>(0.25 * k, (y.x + x.y) / k, (z.x + x.z) / k, (y.z - z.y) / k);
+    } else if y.y > z.z {
+        let k = 2.0 * sqrt(1.0 + y.y - x.x - z.z);
+        q = vec4<f32>((y.x + x.y) / k, 0.25 * k, (z.y + y.z) / k, (z.x - x.z) / k);
+    } else {
+        let k = 2.0 * sqrt(1.0 + z.z - x.x - y.y);
+        q = vec4<f32>((z.x + x.z) / k, (z.y + y.z) / k, 0.25 * k, (x.y - y.x) / k);
+    }
+    q = normalize(q) * select(-1.0, 1.0, q.w >= 0.0);
+    return vec4<f32>(q.xyz, pow(abs(dot(c0, cross(c1, c2))), 1.0 / 3.0));
+}
 
 @vertex
 fn mesh_vs(
@@ -267,13 +465,22 @@ fn mesh_vs(
     @location(10) base: vec4<f32>,
     @location(11) surface: vec4<f32>,
     @location(12) specular: vec4<f32>,
-    @location(13) uv0: vec2<f32>,
-    @location(14) uv1: vec2<f32>,
-    @location(15) tangent: vec4<f32>,
+    // uv0 in xy and uv1 in zw (#423), one attribute so that the 16 a device holds take the
+    // material operator's (#429).
+    @location(13) uv: vec4<f32>,
+    @location(14) tangent: vec4<f32>,
+    @location(15) op: vec4<u32>,
 ) -> MeshOut {
     var out: MeshOut;
+    out.object_n = n;
+    out.op = op;
     out.emission = emission;
-    let world = vec3<f32>(dot(r0.xyz, p) + r0.w, dot(r1.xyz, p) + r1.w, dot(r2.xyz, p) + r2.w);
+    // A cast-only level (#425) is drawn inside its surface by its inset, along its normals.
+    var q = p;
+    if (flags & INSET) != 0u {
+        q = p - normalize(n) * surface.w;
+    }
+    let world = vec3<f32>(dot(r0.xyz, q) + r0.w, dot(r1.xyz, q) + r1.w, dot(r2.xyz, q) + r2.w);
     out.pos = frame.clip * vec4<f32>(world, 1.0);
     // The shadow pass (light.w < 0) leaves out a solid with `cast_shadow: false` (#420).
     if frame.light.w < 0.0 && (flags & 1u) != 0u {
@@ -288,10 +495,14 @@ fn mesh_vs(
     // Coplanar opaque faces of two solids: the one whose ID ranks later is pushed back by 1/64
     // px of its face's depth slope per rank, past the rasterizer's sub-pixel snapping, so ties
     // draw the same way every frame, whatever the submission order (#421).
-    if frame.light.w >= 0.0 && tie > 0u {
+    out.mask.x = tie >> MASK_SHIFT;
+    let rank = tie & RANK;
+    if frame.light.w >= 0.0 && rank > 0u {
         let cos_t = max(abs(dot(cof, normalize(cross(frame.up.xyz, frame.right.xyz)))), 1.0 / 64.0);
         let slope = sqrt(1.0 - cos_t * cos_t) / cos_t / max(frame.viewport.z, 1.0);
-        let k = f32(tie) * (1.0e-6 + slope / 64.0);
+        // 2⁻²² a rank is two f32 steps of depth: enough to part an exact tie, and small enough
+        // that a thin part 0.05 mm in front of another on a 200 m range stays in front (#428).
+        let k = f32(rank) * (2.384e-7 + slope / 64.0);
         out.pos.z = out.pos.z * select(1.0 - k, 1.0 + k, frame.px.w > 0.5);
     }
     if (flags & MATERIAL) != 0u {
@@ -313,7 +524,9 @@ fn mesh_vs(
         dot(o, c1) / max(length(c1), 1e-9),
         dot(o, c2) / max(length(c2), 1e-9),
     );
-    out.uv = vec4<f32>(uv0, uv1);
+    out.uv = uv;
+    let part = part_of(c0, c1, c2);
+    out.mask = vec4<u32>(out.mask.x, pack2x16snorm(part.xy), pack2x16snorm(vec2<f32>(part.z, 0.0)), 0u);
     // The tangent moves with the surface (the model matrix, not its inverse transpose); a mirror
     // turns the bitangent over with the winding.
     let tw = vec3<f32>(dot(r0.xyz, tangent.xyz), dot(r1.xyz, tangent.xyz), dot(r2.xyz, tangent.xyz));
@@ -347,7 +560,12 @@ fn mapped(in: MeshOut, n: vec3<f32>, s0: Surface, g: array<vec4<f32>, 2>) -> Map
         if maps.has.z != 0u {
             m.z = sqrt(max(1.0 - dot(c.xy, c.xy), 0.0));
         } else {
-            spread = clamp(length(c), 1e-3, 1.0);
+            // Toksvig's spread is the normals under the pixel's footprint: where the map is
+            // magnified, a texel or less a pixel, a shorter normal is only the bilinear blend of
+            // neighbouring texels, so the lobe keeps its width (#428).
+            let size = vec2<f32>(textureDimensions(map_normal));
+            let foot = max(length(map_d(2u, g[0]) * size), length(map_d(2u, g[1]) * size));
+            spread = mix(1.0, clamp(length(c), 1e-3, 1.0), clamp(foot - 1.0, 0.0, 1.0));
         }
         let t = normalize(in.tangent.xyz - n * dot(n, in.tangent.xyz));
         let b = cross(n, t) * select(1.0, -1.0, in.tangent.w < 0.0);
@@ -392,6 +610,15 @@ struct Surface {
     specular: vec3<f32>,
     coat: f32,
     coat_rough: f32,
+    // Its lobes' entry (#428), 0 for none; the anisotropy's direction and the flake's normal in
+    // the world, each set only where its lobe is on.
+    k: u32,
+    t: vec3<f32>,
+    flake: vec3<f32>,
+    // The sheen lobe's albedo at the view, read once a pixel (#428).
+    sheen_ev: f32,
+    // The flake lobe's α², widened where a cell is smaller than the pixel's footprint.
+    flake_a2: f32,
 };
 
 // Our physically based BRDF: GGX with a height-correlated Smith visibility, Schlick's Fresnel
@@ -427,7 +654,8 @@ fn compensation(f0: vec3<f32>, dfg_v: vec2<f32>, off: bool) -> vec3<f32> {
 // The two ends a material mixes by metallic (#422: the glTF BRDF's mix, taken after each is
 // shaded, never through one F0 premixed from metallic): a dielectric's F0 and F90, and a metal's.
 fn dielectric_f0(s: Surface) -> vec3<f32> {
-    return min(0.08 * s.level, 1.0) * s.specular;
+    // #428's planted wrong program drops the specular color.
+    return min(0.08 * s.level, 1.0) * select(s.specular, vec3<f32>(1.0), planted(P_SPECULAR_COLOR));
 }
 
 fn dielectric_f90(s: Surface) -> f32 {
@@ -471,11 +699,485 @@ fn lobes(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, s: Surface, a2: f32, dfg_v: v
     return Lobes(diffuse, spec);
 }
 
+// ---- the extra lobes (#428; Material): each read only where its part's lobe entry turns it on.
+
+fn lobe(k: u32, i: u32) -> vec4<f32> {
+    return lobe_table[k - 1u].v[i];
+}
+
+// A part's whole lobe entry, read once where a function needs most of it.
+fn entry_of(k: u32) -> array<vec4<f32>, 8> {
+    return lobe_table[k - 1u].v;
+}
+
+fn max3(c: vec3<f32>) -> f32 {
+    return max(c.r, max(c.g, c.b));
+}
+
+// Charlie's sheen distribution and Estevez and Kulla's visibility, as KHR_materials_sheen
+// gives them, at α = sheen roughness².
+fn sheen_d(nh: f32, a: f32) -> f32 {
+    let inv = 1.0 / a;
+    let sin2 = max(1.0 - nh * nh, 1e-7);
+    return (2.0 + inv) * pow(sin2, 0.5 * inv) / (2.0 * PI);
+}
+
+fn sheen_l(x: f32, a: f32) -> f32 {
+    let t = (1.0 - a) * (1.0 - a);
+    let p = mix(21.5473, 25.3245, t);
+    let q = mix(3.82987, 3.32435, t);
+    let r = mix(0.19823, 0.16801, t);
+    let u = mix(-1.97760, -1.27393, t);
+    let w = mix(-4.32054, -4.85967, t);
+    return p / (1.0 + q * pow(x, r)) + u * x + w;
+}
+
+// Λ(c), with L(0.5) given: it is the same for both directions.
+fn sheen_lambda(c: f32, a: f32, l5: f32) -> f32 {
+    return exp(select(2.0 * l5 - sheen_l(1.0 - c, a), sheen_l(c, a), c < 0.5));
+}
+
+fn sheen_v(nv: f32, nl: f32, a: f32) -> f32 {
+    let l5 = sheen_l(0.5, a);
+    return clamp(1.0 / ((1.0 + sheen_lambda(nv, a, l5) + sheen_lambda(nl, a, l5)) * 4.0 * nv * nl), 0.0, 1.0);
+}
+
+// The sheen lobe's directional albedo at (cos view, sheen roughness), bilinear, from the table
+// after the DFG's.
+fn sheen_e(nv: f32, rough: f32) -> f32 {
+    let x = clamp(nv * 63.0, 0.0, 63.0);
+    let y = clamp(rough * 31.0, 0.0, 31.0);
+    let x0 = u32(floor(x));
+    let y0 = u32(floor(y));
+    let x1 = min(x0 + 1u, 63u);
+    let y1 = min(y0 + 1u, 31u);
+    let fx = x - f32(x0);
+    let fy = y - f32(y0);
+    let a = mix(sheen_at(y0 * 64u + x0), sheen_at(y0 * 64u + x1), fx);
+    let b = mix(sheen_at(y1 * 64u + x0), sheen_at(y1 * 64u + x1), fx);
+    return mix(a, b, fy);
+}
+
+fn sheen_at(i: u32) -> f32 {
+    // A dot with a one-hot lane, not a dynamic component index, which spills to memory.
+    let lane = vec4<f32>(vec4<u32>(0u, 1u, 2u, 3u) == vec4<u32>(i & 3u));
+    return dot(dfg[512u + (i >> 2u)], lane);
+}
+
+// The anisotropic GGX distribution and height-correlated visibility (KHR_materials_anisotropy),
+// at α along the tangent `at` and along the bitangent `ab`.
+fn ggx_aniso(n: vec3<f32>, t: vec3<f32>, b: vec3<f32>, h: vec3<f32>, at: f32, ab: f32) -> f32 {
+    let a2 = at * ab;
+    let f = vec3<f32>(ab * dot(t, h), at * dot(b, h), a2 * dot(n, h));
+    let w2 = a2 / max(dot(f, f), 1e-12);
+    return a2 * w2 * w2 / PI;
+}
+
+fn vis_aniso(n: vec3<f32>, t: vec3<f32>, b: vec3<f32>, v: vec3<f32>, l: vec3<f32>, at: f32, ab: f32) -> f32 {
+    let nv = max(dot(n, v), 1e-4);
+    let nl = max(dot(n, l), 1e-4);
+    let gv = nl * length(vec3<f32>(at * dot(t, v), ab * dot(b, v), nv));
+    let gl = nv * length(vec3<f32>(at * dot(t, l), ab * dot(b, l), nl));
+    return clamp(0.5 / max(gv + gl, 1e-6), 0.0, 1e6);
+}
+
+// The thin film's Fresnel (KHR_materials_iridescence; Belcour and Barla): a film of `film_ior`
+// and `nm` nanometres over a base of reflectance `f0`, at the cosine `c1` outside it.
+fn ior_to_f0(t: f32, i: f32) -> f32 {
+    let r = (t - i) / (t + i);
+    return r * r;
+}
+
+fn sensitivity(opd: f32, shift: vec3<f32>) -> vec3<f32> {
+    let phase = 2.0 * PI * opd * 1.0e-9;
+    let val = vec3<f32>(5.4856e-13, 4.4201e-13, 5.2481e-13);
+    let pos = vec3<f32>(1.6810e+06, 1.7953e+06, 2.2084e+06);
+    let vr = vec3<f32>(4.3278e+09, 9.3046e+09, 6.6121e+09);
+    var xyz = val * sqrt(2.0 * PI * vr) * cos(pos * phase + shift) * exp(-phase * phase * vr);
+    xyz.x += 9.7470e-14 * sqrt(2.0 * PI * 4.5282e+09) * cos(2.2399e+06 * phase + shift.x)
+        * exp(-4.5282e+09 * phase * phase);
+    xyz = xyz / 1.0685e-7;
+    return vec3<f32>(
+        3.2404542 * xyz.x - 1.5371385 * xyz.y - 0.4985314 * xyz.z,
+        -0.9692660 * xyz.x + 1.8760108 * xyz.y + 0.0415560 * xyz.z,
+        0.0556434 * xyz.x - 0.2040259 * xyz.y + 1.0572252 * xyz.z,
+    );
+}
+
+fn iridescence(film_ior0: f32, c1: f32, nm: f32, f0: vec3<f32>) -> vec3<f32> {
+    let film_ior = mix(1.0, film_ior0, smoothstep(0.0, 0.03, nm));
+    let sin2 = (1.0 / film_ior) * (1.0 / film_ior) * (1.0 - c1 * c1);
+    let cos2sq = 1.0 - sin2;
+    if cos2sq < 0.0 {
+        return vec3<f32>(1.0);
+    }
+    let c2 = sqrt(cos2sq);
+    let r0 = ior_to_f0(film_ior, 1.0);
+    let r12 = r0 + (1.0 - r0) * pow(1.0 - c1, 5.0);
+    let t121 = 1.0 - r12;
+    let phi12 = select(0.0, PI, film_ior < 1.0);
+    let phi21 = PI - phi12;
+    let sf0 = sqrt(clamp(f0, vec3<f32>(0.0), vec3<f32>(0.9999)));
+    let base_ior = (1.0 + sf0) / (1.0 - sf0);
+    let rb = (base_ior - film_ior) / (base_ior + film_ior);
+    let r1 = rb * rb;
+    let r23 = r1 + (1.0 - r1) * pow(1.0 - c2, 5.0);
+    let phi23 = select(vec3<f32>(0.0), vec3<f32>(PI), base_ior < vec3<f32>(film_ior));
+    let opd = 2.0 * film_ior * nm * c2;
+    let phi = vec3<f32>(phi21) + phi23;
+    let r123 = clamp(r12 * r23, vec3<f32>(1e-5), vec3<f32>(0.9999));
+    let rr = sqrt(r123);
+    let rs = t121 * t121 * r23 / (1.0 - r123);
+    var out = r12 + rs;
+    var cm = rs - t121;
+    for (var m = 1; m <= 2; m++) {
+        cm = cm * rr;
+        out += cm * 2.0 * sensitivity(f32(m) * opd, f32(m) * phi);
+    }
+    return max(out, vec3<f32>(0.0));
+}
+
+// Energy-preserving Oren-Nayar (KHR_materials_diffuse_roughness; Portsmouth et al.'s EON), per
+// unit illuminance: its single-scattering FON lobe with the multiple scattering it loses.
+const FON_1: f32 = 0.5 - 2.0 / (3.0 * PI);
+const FON_2: f32 = 2.0 / 3.0 - 28.0 / (15.0 * PI);
+
+// FON's directional albedo, exact (Portsmouth et al.).
+fn fon_e(mu0: f32, r: f32) -> f32 {
+    let mu = clamp(mu0, 1e-7, 1.0);
+    let af = 1.0 / (1.0 + FON_1 * r);
+    let si = sqrt(max(1.0 - mu * mu, 0.0));
+    let g = si * (acos(mu) - si * mu) + (2.0 / 3.0) * ((si / mu) * (1.0 - si * si * si) - si);
+    return af + r * af / PI * g;
+}
+
+// f_EON(ρ, r; l, v) about n, without the cosine; `ms` false leaves FON's single scattering.
+fn eon(rho: vec3<f32>, r: f32, n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, ms: bool) -> vec3<f32> {
+    let mi = dot(n, l);
+    let mo = dot(n, v);
+    let sv = dot(l, v) - mi * mo;
+    let st = select(sv, sv / max(mi, mo), sv > 0.0);
+    let af = 1.0 / (1.0 + FON_1 * r);
+    let ss = rho / PI * af * (1.0 + r * st);
+    if !ms {
+        return ss;
+    }
+    let avg = af * (1.0 + FON_2 * r);
+    let rho_ms = rho * rho * avg / (1.0 - rho * (1.0 - avg));
+    return ss + rho_ms / PI * max(1e-7, 1.0 - fon_e(mo, r)) * max(1e-7, 1.0 - fon_e(mi, r)) / max(1e-7, 1.0 - avg);
+}
+
+// EON's directional albedo at the view: what the environment's diffuse light is scaled by.
+fn eon_albedo(rho: vec3<f32>, r: f32, mu: f32) -> vec3<f32> {
+    let af = 1.0 / (1.0 + FON_1 * r);
+    let ef = fon_e(mu, r);
+    let avg = af * (1.0 + FON_2 * r);
+    let rho_ms = rho * rho * avg / (1.0 - rho * (1.0 - avg));
+    return rho * ef + rho_ms * (1.0 - ef);
+}
+
+// #428's planted wrong programs, bits of the lights' planted word.
+const P_ABSORPTION_FIXED: u32 = 16u;
+const P_ROUGHNESS_IGNORED: u32 = 32u;
+const P_DISPERSION_ONCE: u32 = 64u;
+const P_SPECULAR_COLOR: u32 = 128u;
+const P_FILM_400: u32 = 256u;
+const P_LAMBERT: u32 = 512u;
+const P_FON: u32 = 1024u;
+const P_RETRO: u32 = 2048u;
+const P_FLAKES_BY_PIXEL: u32 = 4096u;
+
+fn planted(bit: u32) -> bool {
+    return (lights.count.z & bit) != 0u;
+}
+
+// The dielectric's F0 per channel before its weight (KHR_materials_ior and _specular:
+// min(F0(ior) × specular color, 1)), and its weight, glTF's specular strength (2 × level).
+fn lobe_f0(s: Surface) -> vec3<f32> {
+    let ior = lobe(s.k, 3u).y;
+    let r = (ior - 1.0) / (ior + 1.0);
+    let color = select(s.specular, vec3<f32>(1.0), planted(P_SPECULAR_COLOR));
+    return min(r * r * color, vec3<f32>(1.0));
+}
+
+fn lobe_weight(s: Surface) -> f32 {
+    return 2.0 * s.level;
+}
+
+// The specular lobe's D × V at view `vv`, isotropic or stretched along s.t (KHR_materials_
+// anisotropy: αt = mix(α, 1, strength²), αb = α).
+fn spec_d_vis(n: vec3<f32>, vv: vec3<f32>, l: vec3<f32>, s: Surface, a2: f32) -> f32 {
+    let h = normalize(l + vv);
+    let nl = max(dot(n, l), 1e-4);
+    let nv = max(dot(n, vv), 1e-4);
+    let x = lobe(s.k, 1u).x;
+    if x != 0.0 {
+        let a = sqrt(a2);
+        let at = a + (1.0 - a) * x * x;
+        let b = cross(n, s.t);
+        return ggx_aniso(n, s.t, b, h, at, max(a, 1e-4)) * vis_aniso(n, s.t, b, vv, l, at, max(a, 1e-4));
+    }
+    let vis = 0.5 / max(nl * sqrt(nv * nv * (1.0 - a2) + a2) + nv * sqrt(nl * nl * (1.0 - a2) + a2), 1e-6);
+    return ggx(max(dot(n, h), 0.0), a2) * vis;
+}
+
+fn schlick3(f0: vec3<f32>, c: f32) -> vec3<f32> {
+    let m = 1.0 - clamp(c, 0.0, 1.0);
+    let m2 = m * m;
+    return f0 + (1.0 - f0) * (m2 * m2 * m);
+}
+
+// glTF's BRDF with every extra lobe the part's entry turns on, per unit illuminance and times
+// |n·l| (thin translucency reads light from behind through its mirror direction, wrap reaches
+// past the shadow line): the metal and the dielectric (KHR_materials_specular's fresnel_mix,
+// its iridescent twin by weight) mixed by metallic; the diffuse Lambert or EON, less what
+// transmission and translucency take; retroreflection's mirrored-view lobe mixed in by its
+// amount; sheen over all of it with its albedo scaling; the flakes mixed in by weight; the coat.
+fn extra_lobes(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, s: Surface, a2: f32, dfg_v: vec2<f32>) -> vec3<f32> {
+    let k = s.k;
+    let nl_raw = dot(n, l);
+    let nv = max(dot(n, v), 1e-4);
+    let L = entry_of(k);
+    let sheen = L[0];
+    let x1 = L[1];
+    let tr = L[2];
+    let t3 = L[3];
+    let film = L[5];
+    let irid = L[4].w;
+    let amount = L[7].y;
+    let thin = tr.w < 0.0;
+    let wrap = max(tr.w, 0.0);
+    let back = nl_raw < 0.0;
+    let lit_wrap = !thin && amount > 0.0 && nl_raw > -wrap;
+    if back && !((thin && amount > 0.0) || lit_wrap) {
+        return vec3<f32>(0.0);
+    }
+    // A light behind a thin part shades through its mirror direction.
+    let ls = select(l, l - n * (2.0 * nl_raw), back && thin);
+    let nl = max(abs(nl_raw), 1e-4);
+    let h = normalize(ls + v);
+    let vh = max(dot(v, h), 0.0);
+    let retro = select(x1.w, 0.0, planted(P_RETRO));
+    var dv = 0.0;
+    var dvm = 0.0;
+    var vhr = 0.0;
+    if !back {
+        dv = spec_d_vis(n, v, ls, s, a2);
+        if retro > 0.0 {
+            let vm = normalize(2.0 * dot(n, v) * n - v);
+            vhr = max(dot(vm, normalize(ls + vm)), 0.0);
+            dvm = spec_d_vis(n, vm, ls, s, a2);
+        }
+    }
+    let w = lobe_weight(s);
+    let f0 = lobe_f0(s);
+    let fs = schlick3(f0, vh);
+    var fd = w * fs;
+    if retro > 0.0 {
+        fd = w * mix(fs, schlick3(f0, vhr), retro);
+    }
+    // The diffuse, times its cosine: Lambert or EON, less transmission's and translucency's
+    // shares; the light thin translucency lets through; wrap's share past the shadow line,
+    // normalized so it reflects no more than Lambert.
+    let keep = 1.0 - t3.x;
+    var diffuse = vec3<f32>(0.0);
+    if back && thin {
+        diffuse = tr.rgb * amount / PI * nl * keep;
+    } else {
+        var lam = s.base / PI;
+        if x1.z > 0.0 && !planted(P_LAMBERT) {
+            lam = eon(s.base, x1.z, n, v, ls, !planted(P_FON));
+        }
+        let front = lam * max(nl_raw, 0.0);
+        if thin {
+            diffuse = front * (1.0 - amount) * keep;
+        } else {
+            let wrapped = max((nl_raw + wrap) / ((1.0 + wrap) * (1.0 + wrap)), 0.0);
+            diffuse = (front * (1.0 - amount) + s.base / PI * tr.rgb * amount * wrapped) * keep;
+        }
+    }
+    let off = (lights.count.z & (NO_COMP | ENV_COMP_ONLY)) != 0u;
+    let comp_d = compensation(w * f0, dfg_v, off);
+    var lobe_d = dv * fs;
+    var lobe_m = dv * schlick3(s.base, vh);
+    if retro > 0.0 {
+        lobe_d = mix(lobe_d, dvm * schlick3(f0, vhr), retro);
+        lobe_m = mix(lobe_m, dvm * schlick3(s.base, vhr), retro);
+    }
+    var dielectric = (1.0 - max3(fd)) * diffuse + w * lobe_d * comp_d * nl;
+    if irid > 0.0 {
+        let nm = select(film.y, 400.0, planted(P_FILM_400));
+        let fi = iridescence(film.x, vh, nm, f0);
+        let layer = (1.0 - max3(fi)) * diffuse + fi * dv * compensation(fi, dfg_v, off) * nl;
+        dielectric = mix(dielectric, layer, irid);
+    }
+    let metal = lobe_m * compensation(s.base, dfg_v, off) * nl;
+    var out = mix(dielectric, metal, s.metallic);
+    if max3(sheen.rgb) > 0.0 {
+        let e = max3(sheen.rgb);
+        let scale = min(1.0 - e * s.sheen_ev, 1.0 - e * sheen_e(nl, sheen.w));
+        var f_sheen = vec3<f32>(0.0);
+        if !back {
+            let a = max(sheen.w, 1e-3) * max(sheen.w, 1e-3);
+            f_sheen = sheen.rgb * sheen_d(max(dot(n, h), 0.0), a) * sheen_v(nv, nl, a) * nl;
+        }
+        out = f_sheen + out * scale;
+    }
+    // Flakes under the coat: a metal of their color through GGX at the coat's roughness, mixed in
+    // by weight.
+    if film.z > 0.0 && !back {
+        let fl = s.flake;
+        let fa2 = s.flake_a2;
+        let fnh = max(dot(fl, h), 0.0);
+        let fnl = max(dot(fl, ls), 0.0);
+        let fnv = max(dot(fl, v), 1e-4);
+        let col = lobe(k, 6u).rgb;
+        let fvis = 0.5 / max(fnl * sqrt(fnv * fnv * (1.0 - fa2) + fa2) + fnv * sqrt(fnl * fnl * (1.0 - fa2) + fa2), 1e-6);
+        let flake = schlick3(col, vh) * ggx(fnh, fa2) * fvis * fnl;
+        out = mix(out, flake, film.z);
+    }
+    if s.coat > 0.0 && !back {
+        let ca = max(s.coat_rough * s.coat_rough, 0.002);
+        let fc = (0.04 + 0.96 * pow(1.0 - vh, 5.0)) * s.coat;
+        let coat = ggx(max(dot(n, h), 0.0), ca * ca) * 0.25 / max(vh * vh, 1e-4) * fc;
+        out = out * (1.0 - fc) + vec3<f32>(coat) * nl;
+    }
+    return out;
+}
+
+// The light a transmissive part lets through at a pixel (#428; KHR_materials_transmission,
+// _volume and _dispersion, as the glTF Sample Viewer draws them): the view ray refracted at
+// `ior` through the part's thickness (times its scale), the opaque scene's copy read where it
+// leaves, trilinearly at level log2(its larger side) × roughness × clamp(2·ior − 2, 0, 1),
+// attenuated by Beer-Lambert along that path, times what the surface's Fresnel at n·v lets in
+// and its base color. With dispersion each channel refracts at its own IOR.
+fn transmitted(in: MeshOut, n: vec3<f32>, v: vec3<f32>, s: Surface) -> vec3<f32> {
+    let t3 = lobe(s.k, 3u);
+    let sigma = lobe(s.k, 4u).rgb;
+    let size = vec2<f32>(textureDimensions(opaque));
+    let rough = select(clamp(s.rough, 0.0, 1.0), 0.0, planted(P_ROUGHNESS_IGNORED));
+    let lod = log2(max(size.x, size.y)) * rough * clamp(t3.y * 2.0 - 2.0, 0.0, 1.0);
+    let spread = select((t3.y - 1.0) * 0.025 * t3.z, 0.0, planted(P_DISPERSION_ONCE));
+    let thickness = t3.w;
+    let path = select(thickness, 0.02, planted(P_ABSORPTION_FIXED));
+    let px = in.pos.xy / vec2<f32>(frame.viewport.xy);
+    var out = vec3<f32>(0.0);
+    let channels = select(1u, 3u, spread > 0.0);
+    for (var c = 0u; c < channels; c++) {
+        let ior = t3.y + spread * (f32(c) - 1.0);
+        var uv = px;
+        if thickness > 0.0 {
+            let r = refract(-v, n, 1.0 / ior);
+            if dot(r, r) > 0.0 {
+                let exit = frame.clip * vec4<f32>(in.world + normalize(r) * thickness, 1.0);
+                uv = (exit.xy / exit.w) * vec2<f32>(0.5, -0.5) + 0.5;
+            }
+        }
+        let seen = textureSampleLevel(opaque, env_sampler, uv, lod).rgb;
+        if channels == 1u {
+            out = seen;
+        } else {
+            out[c] = seen[c];
+        }
+    }
+    let f = lobe_weight(s) * schlick3(lobe_f0(s), max(dot(n, v), 0.0));
+    return t3.x * (1.0 - max3(f)) * s.base * exp(-sigma * path) * out;
+}
+
+// Duff et al.'s orthonormal basis about unit n.
+fn onb(n: vec3<f32>) -> array<vec3<f32>, 2> {
+    let sg = select(-1.0, 1.0, n.z >= 0.0);
+    let a = -1.0 / (sg + n.z);
+    let b = n.x * n.y * a;
+    return array<vec3<f32>, 2>(
+        vec3<f32>(1.0 + sg * n.x * n.x * a, sg * b, -sg * n.x),
+        vec3<f32>(b, sg + n.y * n.y * a, -n.y),
+    );
+}
+
+// A unit quaternion's rotation of `v`.
+fn rotate_q(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
+    let t = 2.0 * cross(q.xyz, v);
+    return v + q.w * t + cross(q.xyz, t);
+}
+
+// A part's anisotropy direction and flake normal at a pixel (#428): the tangent along uv0's u,
+// turned by the rotation; and the flake of the cell of its own space that holds the pixel,
+// tilted from the shading normal in the part's own space by hash(its seed, the cell).
+fn with_lobes(in: MeshOut, n: vec3<f32>, s0: Surface) -> Surface {
+    var s = s0;
+    if s.k == 0u {
+        return s;
+    }
+    let x1 = lobe(s.k, 1u);
+    if x1.x != 0.0 {
+        var t = in.tangent.xyz - n * dot(n, in.tangent.xyz);
+        if dot(t, t) < 1e-12 {
+            // No tangent: uv0's u direction from its derivatives.
+            let dp = dpdx(in.world);
+            let dq = dpdy(in.world);
+            let du = dpdx(in.uv.xy);
+            let dv = dpdy(in.uv.xy);
+            t = dp * dv.y - dq * du.y;
+            t = t - n * dot(n, t);
+        }
+        t = normalize(t + vec3<f32>(1e-9, 0.0, 0.0));
+        let b = cross(n, t) * select(1.0, -1.0, in.tangent.w < 0.0);
+        // A negative strength stretches across the tangent instead.
+        let r = x1.y + select(0.0, 0.5 * PI, x1.x < 0.0);
+        s.t = normalize(t * cos(r) + b * sin(r));
+    }
+    let sheen = lobe(s.k, 0u);
+    if max3(sheen.rgb) > 0.0 {
+        let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
+        s.sheen_ev = sheen_e(max(dot(n, v), 1e-4), sheen.w);
+    }
+    let film = lobe(s.k, 5u);
+    if film.z > 0.0 {
+        var cell = vec3<i32>(floor(in.local / film.w));
+        if planted(P_FLAKES_BY_PIXEL) {
+            cell = vec3<i32>(vec2<i32>(in.pos.xy / 8.0), 0);
+        }
+        let seed = bitcast<u32>(lobe(s.k, 7u).x);
+        let u1 = hash3(cell, seed);
+        let u2 = hash3(cell, seed + 1u);
+        let ct = 1.0 - u1 * (1.0 - lobe(s.k, 6u).w);
+        let st = sqrt(max(1.0 - ct * ct, 0.0));
+        let phi = 2.0 * PI * u2;
+        let qv = vec3<f32>(unpack2x16snorm(in.mask.y), unpack2x16snorm(in.mask.z).x);
+        let q = vec4<f32>(qv, sqrt(max(1.0 - dot(qv, qv), 0.0)));
+        let qi = vec4<f32>(-q.xyz, q.w);
+        let np = normalize(rotate_q(qi, n));
+        let tb = onb(np);
+        let fp = tb[0] * (st * cos(phi)) + tb[1] * (st * sin(phi)) + np * ct;
+        // Where a cell is smaller than the pixel's footprint, the flake fades toward the shading
+        // normal and its lobe widens by the spread of the tilts (the mean of sin² θ with cos θ
+        // uniform from cos tilt to 1), so far paint reads as a smooth metallic sheen.
+        let foot = max(length(dpdx(in.local)), length(dpdy(in.local)));
+        let wide = clamp(foot / film.w - 1.0, 0.0, 1.0);
+        let c = lobe(s.k, 6u).w;
+        let spread = 1.0 - (1.0 + c + c * c) / 3.0;
+        let ca = max(s.coat_rough * s.coat_rough, 0.002);
+        s.flake = normalize(mix(rotate_q(q, fp), n, wide));
+        s.flake_a2 = min(ca * ca + wide * 2.0 * spread, 1.0);
+    }
+    return s;
+}
+
 // The key sun's visibility at `world` from cascade `i`: the share of a 3 × 3 texel
-// neighbourhood that doesn't block it, the point first pushed along its normal by a texel and a
-// half (1 outside the cascade).
-fn cascade_lit(i: u32, world: vec3<f32>, n: vec3<f32>) -> f32 {
-    let p = world + n * (1.5 * lights.texels[i]);
+// neighbourhood that doesn't block it, the point first biased by `curved` (1 outside the
+// cascade).
+fn cascade_lit(i: u32, world: vec3<f32>, n: vec3<f32>, curved: bool) -> f32 {
+    // A flat face is biased toward the sun, by a texel plus 1.5 texels of its slope to the light,
+    // so the point keeps its own place in the map: the shadow's edge lands where the casters put
+    // it, and a cut face beside a kept edge isn't shadowed by that edge (#424). A smooth-shaded
+    // curved face is pushed along its normal by a texel and a half instead: its facets lie off
+    // the surface its normal describes, steeper to the light than the normal says, and a bias by
+    // the normal's slope draws hatched stripes across the ones that graze the sun (#1297).
+    let c = clamp(dot(n, frame.light.xyz), 0.05, 1.0);
+    let slope = min(sqrt(1.0 - c * c) / c, 4.0);
+    let toward = frame.light.xyz * (1.0 + 1.5 * slope);
+    let p = world + select(toward, n * 1.5, curved) * lights.texels[i];
     let lp = lights.cascades[i] * vec4<f32>(p, 1.0);
     let uv = lp.xy * vec2<f32>(0.5, -0.5) + 0.5;
     if any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) || lp.z > 1.0 {
@@ -494,7 +1196,7 @@ fn cascade_lit(i: u32, world: vec3<f32>, n: vec3<f32>) -> f32 {
 
 // The key sun's visibility at `world` (#422): the cascade its view depth falls in, blended with
 // the next across the last tenth of its range when fade is on; 1 past the last cascade.
-fn lit_share(world: vec3<f32>, n: vec3<f32>) -> f32 {
+fn lit_share(world: vec3<f32>, n: vec3<f32>, curved: bool) -> f32 {
     let count = lights.count.w;
     if count == 0u {
         return 1.0;
@@ -503,13 +1205,13 @@ fn lit_share(world: vec3<f32>, n: vec3<f32>) -> f32 {
     for (var i = 0u; i < count; i++) {
         let far = lights.splits[i];
         if d <= far {
-            let lit = cascade_lit(i, world, n);
+            let lit = cascade_lit(i, world, n, curved);
             let near = select(0.0, lights.splits[max(i, 1u) - 1u], i > 0u);
             let edge = far - 0.1 * (far - near);
             if lights.forward.w > 0.5 && d > edge {
                 var next = 1.0;
                 if i + 1u < count {
-                    next = cascade_lit(i + 1u, world, n);
+                    next = cascade_lit(i + 1u, world, n, curved);
                 }
                 return mix(lit, next, (d - edge) / max(far - edge, 1e-6));
             }
@@ -740,7 +1442,8 @@ fn pattern(id: u32, q: vec3<f32>, n: vec3<f32>, seed: u32) -> vec2<f32> {
 }
 
 fn surface_of(in: MeshOut, local_n: vec3<f32>) -> Surface {
-    var s = Surface(in.base.rgb, in.surface.x, in.surface.y, in.surface.z, in.specular.rgb, in.surface.w, in.specular.w);
+    var s = Surface(in.base.rgb, in.surface.x, in.surface.y, in.surface.z, in.specular.rgb, in.surface.w, in.specular.w,
+        lobe_index(in), vec3<f32>(0.0), vec3<f32>(0.0), 0.0, 0.0);
     let id = (in.flags >> 9u) & 15u;
     if id != 0u {
         let t = pattern(id, in.local / max(in.base.w, 1e-6), local_n, in.flags >> 16u);
@@ -757,7 +1460,7 @@ struct Direct {
     removed: f32,
 };
 
-fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32) -> Direct {
+fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> Direct {
     let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
     let rough = clamp(s.rough, 0.045, 1.0);
     // Geometric specular antialiasing (Kaplanyan): the normal's change across the pixel widens
@@ -770,7 +1473,7 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32) -> Direct {
     // and the lobe widens by the vMF lobe that mean fits, α² += 2 ÷ κ, κ = (3l − l³) ÷ (1 − l²).
     let l = spread;
     let tok = select(0.0, 2.0 * (1.0 - l * l) / max(3.0 * l - l * l * l, 1e-4), l < 0.9999);
-    let a2 = clamp(max(rough * rough * rough * rough, min(dn, 0.18)) + min(tok, 1.0), 0.0, 1.0);
+    let a2 = clamp(max(rough * rough * rough * rough, min(2.0 * dn, 0.18)) + min(tok, 1.0), 0.0, 1.0);
     let dfg_v = dfg_at(max(dot(n, v), 1e-4), rough);
     let catches = (in.flags & CATCH) != 0u;
     var out = vec3<f32>(0.0);
@@ -796,7 +1499,9 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32) -> Direct {
                 }
             }
             let nl = dot(n, l);
-            if nl > 0.0 {
+            if s.k != 0u {
+                add = extra_lobes(n, v, l, s, a2, dfg_v) * e;
+            } else if nl > 0.0 {
                 let b = lobes(n, v, l, s, a2, dfg_v);
                 add = (b.diffuse + b.spec) * e * nl;
             }
@@ -805,7 +1510,7 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32) -> Direct {
         // reports the share its shadow removes.
         var lit = 1.0;
         if lights.count.y == i + 1u && (in.flags & NO_RECEIVE) == 0u {
-            lit = lit_share(in.world, n);
+            lit = lit_share(in.world, n, curved);
         }
         if catches {
             let y = dot(add, vec3<f32>(0.2126, 0.7152, 0.0722));
@@ -850,14 +1555,52 @@ fn occlusion(pos: vec2<f32>, albedo: vec3<f32>) -> vec3<f32> {
     return min(max(vec3<f32>(v), ((v * a + b) * v + c) * v), vec3<f32>(1.0));
 }
 
+// A band inside its item's margin keeps only its mask's pixels (#425), discarded after shading
+// so every derivative the shading takes still sees the whole quad.
 @fragment
 fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
-    let n = normalize(in.normal);
     // The texture coordinates' derivatives, while every pixel of the quad still runs (#423).
     let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
     // Derivatives first, while every pixel of the quad still runs: the face's normal in its
     // part's own space, which a pattern reads.
     let local_n = normalize(cross(dpdx(in.local), dpdy(in.local)) + vec3<f32>(0.0, 1e-9, 0.0));
+    let shaded = shade(in, front, local_n, g, false);
+    if !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x) {
+        discard;
+    }
+    return shaded;
+}
+
+// `keyed`: with no light, no sky and no environment, a material takes the view's own key light, as
+// a solid without a material does; only a material operator's solid asks for it (#429).
+fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, keyed: bool) -> Targets {
+    var in = in0;
+    // A cutaway hides what lies past its planes (#424); with a cap, a back face seen through the
+    // cut shades as the cut face: a matte surface of the cap's role on its plane, facing along
+    // its normal, or the role itself under cap_light: flat.
+    let cut = (in.flags & CUT) != 0u && frame.cut_info.x > 0u;
+    if cut && cut_hides(in.world) {
+        discard;
+    }
+    if cut && (frame.cut_info.z & 1u) != 0u && front == ((in.flags & MIRRORED) != 0u) {
+        let c = cap_at(in.world);
+        if c.w < 0.0 {
+            discard;
+        }
+        in.world = c.xyz;
+        in.normal = -frame.cut[u32(c.w)].xyz;
+        in.base = vec4<f32>(frame.cap.rgb, 1.0);
+        in.surface = vec4<f32>(0.0, 1.0, 0.0, 0.0);
+        in.specular = vec4<f32>(1.0, 1.0, 1.0, 0.03);
+        in.emission = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        in.flags = (in.flags & (NO_RECEIVE | CUT)) | MATERIAL | DOUBLE_SIDED
+            | select(UNLIT, 0u, (frame.cut_info.z & 2u) != 0u);
+    }
+    let n = normalize(in.normal);
+    // Whether its interpolated normal turns across the triangle: a smooth-shaded curved face,
+    // never a flat one or a cap (the cascades' bias, #1297).
+    let dn = dpdx(in.normal) * dpdx(in.normal) + dpdy(in.normal) * dpdy(in.normal);
+    let curved = dn.x + dn.y + dn.z > 1e-10;
     if (in.flags & MATERIAL) != 0u {
         // Its back faces are culled; a negative determinant turns its winding over.
         if (front == ((in.flags & MIRRORED) != 0u)) && (in.flags & DOUBLE_SIDED) == 0u {
@@ -876,20 +1619,29 @@ fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
         var alpha = m.alpha;
         if mode == MASK {
             if alpha < cutoff {
+                // The planted wrong program writes the part's ID through its hole.
+                if (lights.count.z & IDS_THROUGH_MASK) != 0u {
+                    return Targets(vec4<f32>(0.0), in.pick);
+                }
                 discard;
             }
             alpha = 1.0;
         }
-        let s = m.s;
         let facing = m.n;
+        let s = with_lobes(in, facing, m.s);
         if (in.flags & UNLIT) != 0u {
-            return Targets(see_through(s.base + m.emission, alpha, mode), in.pick);
+            return Targets(see_through(adjusted(s.base + m.emission, in.op.w), alpha, mode), in.pick);
         }
-        let d = direct(in, facing, s, m.spread);
+        let d = direct(in, facing, s, m.spread, curved);
         // A shadow catcher writes black, as opaque as the share of light its shadow removes, at
         // its strength.
         if (in.flags & CATCH) != 0u {
             return Targets(vec4<f32>(0.0, 0.0, 0.0, d.removed * alpha * in.base.w), in.pick);
+        }
+        if keyed && lights.count.x == 0u && frame.sky_top.w <= 0.0 && env.k.x <= 0.0 {
+            let key = 0.45 * occlusion(in.pos.xy, s.base) + 0.55 * max(dot(facing, frame.light.xyz), 0.0);
+            let unlit = fogged(adjusted(s.base * key + in.emission.rgb, in.op.w), in.world);
+            return Targets(see_through(unlit, alpha, mode), in.pick);
         }
         var ambient: vec3<f32>;
         if env.k.x > 0.0 {
@@ -898,7 +1650,12 @@ fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
             ambient = sky_light(in, facing, s);
         }
         // A map's occlusion scales the ambient term alone (#423).
-        let lit = fogged(d.color + ambient * m.occlusion + m.emission, in.world);
+        var through = vec3<f32>(0.0);
+        if s.k != 0u && lobe(s.k, 3u).x > 0.0 {
+            let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
+            through = transmitted(in, facing, v, s);
+        }
+        let lit = fogged(adjusted(d.color + ambient * m.occlusion + m.emission + through, in.op.w), in.world);
         return Targets(see_through(lit, alpha, mode), in.pick);
     }
     let facing = max(dot(n, frame.light.xyz), 0.0);
@@ -914,20 +1671,181 @@ fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
     }
     // Under the key sun's cascades (#422) a painted solid is shadowed as a material is.
     if lights.count.w > 0u && (in.flags & NO_RECEIVE) == 0u {
-        direct = direct * lit_share(in.world, n);
+        direct = direct * lit_share(in.world, n, curved);
     }
     let albedo = paint(in.color);
     let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
     let a = in.emission.w;
-    return Targets(vec4<f32>(fogged(albedo * lit + in.emission.rgb, in.world) * a, a), in.pick);
+    return Targets(vec4<f32>(fogged(adjusted(albedo * lit + in.emission.rgb, in.op.w), in.world) * a, a), in.pick);
+}
+
+// ---- the per-pixel resolve (#424; Object: see-through order): a per-pixel item's fragments
+// join per-pixel lists in its writer layer, then one pass composites each pixel's by depth.
+
+struct OitInfo {
+    // Fragments written this frame (past `capacity` none is kept); the room; the target's width.
+    count: atomic<u32>,
+    capacity: u32,
+    width: u32,
+    pad: u32,
+};
+
+// Each pixel's list head (a node's index + 1, 0 for none); the nodes: premultiplied RGBA as
+// halves, the depth's bits, the next node; the count.
+@group(1) @binding(9) var<storage, read_write> oit_heads: array<atomic<u32>>;
+@group(1) @binding(10) var<storage, read_write> oit_nodes: array<vec4<u32>>;
+@group(1) @binding(11) var<storage, read_write> oit_info: OitInfo;
+
+// The most fragments one pixel composites in depth order; any past them blend in behind them.
+const OIT_LAYERS: u32 = 8u;
+
+@fragment
+fn oit_fs(in0: MeshOut, @builtin(front_facing) front: bool) -> Targets {
+    let g = array<vec4<f32>, 2>(dpdx(in0.uv), dpdy(in0.uv));
+    let local_n = normalize(cross(dpdx(in0.local), dpdy(in0.local)) + vec3<f32>(0.0, 1e-9, 0.0));
+    var in = in0;
+    in.flags = in.flags | DOUBLE_SIDED;
+    let t = shade(in, front, local_n, g, false);
+    let i = atomicAdd(&oit_info.count, 1u);
+    if i < oit_info.capacity {
+        let px = vec2<u32>(in.pos.xy);
+        let prev = atomicExchange(&oit_heads[px.y * oit_info.width + px.x], i + 1u);
+        oit_nodes[i] = vec4<u32>(pack2x16float(t.color.rg), pack2x16float(t.color.ba), bitcast<u32>(in.pos.z), prev);
+    }
+    return Targets(vec4<f32>(0.0), 0u);
+}
+
+// Each pixel's fragments, farthest first, over what's behind them; nothing when the frame ran
+// out of room, where the per-pixel items draw sorted instead. The kept layers stay packed (two
+// halves a word) so the pass holds few registers.
+@fragment
+fn oit_resolve_fs(@builtin(position) pos: vec4<f32>) -> Targets {
+    if atomicLoad(&oit_info.count) > oit_info.capacity {
+        discard;
+    }
+    let px = vec2<u32>(pos.xy);
+    var at = atomicLoad(&oit_heads[px.y * oit_info.width + px.x]);
+    if at == 0u {
+        discard;
+    }
+    // Nearest first, as a depth key that grows toward the eye (reversed Z; the planted forward Z
+    // turned over).
+    let forward = frame.px.w > 0.5;
+    var key: array<f32, 8>;
+    var color: array<vec2<u32>, 8>;
+    var n = 0u;
+    var tail = vec4<f32>(0.0);
+    var guard = 0u;
+    while at != 0u && guard < 1048576u {
+        let node = oit_nodes[at - 1u];
+        var k = bitcast<f32>(node.z);
+        if forward {
+            k = -k;
+        }
+        var c = node.xy;
+        if n == OIT_LAYERS {
+            // Full: the farthest of the kept layers and this one, whichever is farther, blends in
+            // behind the rest.
+            if k > key[n - 1u] {
+                let far = color[n - 1u];
+                n -= 1u;
+                tail = tail + vec4<f32>(unpack2x16float(far.x), unpack2x16float(far.y)) * (1.0 - tail.a);
+            } else {
+                tail = tail + vec4<f32>(unpack2x16float(c.x), unpack2x16float(c.y)) * (1.0 - tail.a);
+                at = node.w;
+                guard += 1u;
+                continue;
+            }
+        }
+        // Insert by key, nearest first.
+        var j = n;
+        while j > 0u && key[j - 1u] < k {
+            key[j] = key[j - 1u];
+            color[j] = color[j - 1u];
+            j -= 1u;
+        }
+        key[j] = k;
+        color[j] = c;
+        n += 1u;
+        at = node.w;
+        guard += 1u;
+    }
+    var acc = tail;
+    for (var i = n; i > 0u; i--) {
+        let c = vec4<f32>(unpack2x16float(color[i - 1u].x), unpack2x16float(color[i - 1u].y));
+        acc = c + acc * (1.0 - c.a);
+    }
+    return Targets(acc, 0u);
+}
+
+// A per-pixel item drawn sorted, only in a frame whose fragments ran out of room.
+@fragment
+fn oit_fallback_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
+    let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
+    let local_n = normalize(cross(dpdx(in.local), dpdy(in.local)) + vec3<f32>(0.0, 1e-9, 0.0));
+    if atomicLoad(&oit_info.count) <= oit_info.capacity {
+        discard;
+    }
+    return shade(in, front, local_n, g, false);
+}
+
+// A frame with a capped cutaway draws its solids through this entry (#424): a cap shades the back
+// face seen through the cut, drawn an eighth of a pixel's depth slope nearer the eye (never past its plane),
+// so a coplanar front face of a neighbouring part never hides it, while a front face of its own
+// part in front of it still does.
+struct CutTargets {
+    @location(0) color: vec4<f32>,
+    @location(1) id: u32,
+    @builtin(frag_depth) depth: f32,
+};
+
+@fragment
+fn mesh_cut_fs(in: MeshOut, @builtin(front_facing) front: bool) -> CutTargets {
+    let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
+    let local_n = normalize(cross(dpdx(in.local), dpdy(in.local)) + vec3<f32>(0.0, 1e-9, 0.0));
+    let slope = fwidth(in.pos.z);
+    var depth = in.pos.z;
+    let back = front == ((in.flags & MIRRORED) != 0u);
+    if (in.flags & CUT) != 0u && frame.cut_info.x > 0u && (frame.cut_info.z & 1u) != 0u && back {
+        let c = cap_at(in.world);
+        if c.w >= 0.0 {
+            let clip = frame.clip * vec4<f32>(c.xyz, 1.0);
+            let plane = clip.z / clip.w;
+            // Nearer is larger under reversed Z, smaller under the planted forward Z.
+            if frame.px.w > 0.5 {
+                depth = max(in.pos.z - 0.125 * slope, plane);
+            } else {
+                depth = min(in.pos.z + 0.125 * slope, plane);
+            }
+            depth = clamp(depth, 0.0, 1.0);
+        }
+    }
+    let t = shade(in, front, local_n, g, false);
+    // A band inside its margin keeps only its mask's pixels (#425), after shading.
+    if !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x) {
+        discard;
+    }
+    return CutTargets(t.color, t.id, depth);
+}
+
+// The shadow passes' fragment stage: what a cutaway removes casts nothing (#424), and a band
+// inside its margin casts only its mask's texels (#425).
+@fragment
+fn shadow_fs(in: MeshOut) {
+    if ((in.flags & CUT) != 0u && cut_hides(in.world))
+        || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x) {
+        discard;
+    }
 }
 
 // The ao prepass (#418): an opaque solid's world normal; its depth goes to the prepass's own
 // depth target.
 @fragment
 fn ao_normal_fs(in: MeshOut) -> @location(0) vec4<f32> {
-    // A see-through solid writes no occlusion depth.
-    if in.emission.w < 1.0 {
+    // A see-through solid writes no occlusion depth, nor what a cutaway removes (#424); a band
+    // keeps only its mask's pixels (#425).
+    if in.emission.w < 1.0 || ((in.flags & CUT) != 0u && cut_hides(in.world))
+        || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x) {
         discard;
     }
     return vec4<f32>(normalize(in.normal), 1.0);
@@ -942,6 +1860,9 @@ fn sky_light(in: MeshOut, n: vec3<f32>, s: Surface) -> vec3<f32> {
         return vec3<f32>(0.0);
     }
     let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
+    if s.k != 0u {
+        return ambient_lobes(in, n, v, s, false);
+    }
     let rough = clamp(s.rough, 0.045, 1.0);
     let dfg_v = dfg_at(max(dot(n, v), 1e-4), rough);
     let albedo = max(dfg_v.x + dfg_v.y, 1e-4);
@@ -962,6 +1883,9 @@ fn sky_light(in: MeshOut, n: vec3<f32>, s: Surface) -> vec3<f32> {
 // scattering restored, the dielectric and metal lobes shaded apart and mixed by metallic.
 fn env_light(in: MeshOut, n: vec3<f32>, s: Surface) -> vec3<f32> {
     let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
+    if s.k != 0u {
+        return ambient_lobes(in, n, v, s, true) * env.k.z;
+    }
     let rough = clamp(s.rough, 0.045, 1.0);
     let dfg_v = dfg_at(max(dot(n, v), 1e-4), rough);
     let off = (lights.count.z & NO_COMP) != 0u;
@@ -980,6 +1904,104 @@ fn env_light(in: MeshOut, n: vec3<f32>, s: Surface) -> vec3<f32> {
     let r = reflect(-v, n);
     let lod = rough * env.k.y;
     return (diffuse * env_irradiance(n) * occlusion(in.pos.xy, diffuse) + spec * env_radiance(r, lod)) * env.k.z;
+}
+
+// The ambient light along `d` at roughness `rough`: the environment's prefiltered radiance, or
+// the sky's, its average over the hemisphere for a rough lobe.
+fn ambient_along(d: vec3<f32>, n: vec3<f32>, rough: f32, from_env: bool) -> vec3<f32> {
+    if from_env {
+        return env_radiance(d, rough * env.k.y);
+    }
+    return mix(sky_at(d), sky_at(n), rough * rough);
+}
+
+// The ambient irradiance ÷ π facing `n` and facing −n, in one pass over the coefficients: the
+// first band's terms change sign with the direction.
+fn ambient_irradiance2(n: vec3<f32>, from_env: bool) -> array<vec3<f32>, 2> {
+    if !from_env {
+        return array<vec3<f32>, 2>(sky_at(n), sky_at(-n));
+    }
+    let d = env_dir(n);
+    let w = env.m.x;
+    let c = array<vec3<f32>, 9>(
+        mix(env.sh[0].rgb, env.sh_to[0].rgb, w), mix(env.sh[1].rgb, env.sh_to[1].rgb, w),
+        mix(env.sh[2].rgb, env.sh_to[2].rgb, w), mix(env.sh[3].rgb, env.sh_to[3].rgb, w),
+        mix(env.sh[4].rgb, env.sh_to[4].rgb, w), mix(env.sh[5].rgb, env.sh_to[5].rgb, w),
+        mix(env.sh[6].rgb, env.sh_to[6].rgb, w), mix(env.sh[7].rgb, env.sh_to[7].rgb, w),
+        mix(env.sh[8].rgb, env.sh_to[8].rgb, w),
+    );
+    let odd = 0.488603 * (c[1] * d.y + c[2] * d.z + c[3] * d.x);
+    let even = 0.282095 * c[0]
+        + 1.092548 * (c[4] * (d.x * d.y) + c[5] * (d.y * d.z) + c[7] * (d.x * d.z))
+        + 0.315392 * (3.0 * d.z * d.z - 1.0) * c[6]
+        + 0.546274 * (d.x * d.x - d.y * d.y) * c[8];
+    return array<vec3<f32>, 2>(max(even + odd, vec3<f32>(0.0)), max(even - odd, vec3<f32>(0.0)));
+}
+
+// The environment's or the sky's light on a part with extra lobes (#428), as `env_light` and
+// `sky_light` shade the base lobes: the diffuse by its irradiance (EON's albedo for rough
+// diffuse, the back's irradiance through thin translucency), the specular through the DFG table
+// with its Fresnel replaced by the film's and its mirror ray bent toward the anisotropy, sheen
+// by its albedo over both, and the flakes' mirror rays mixed in by weight.
+fn ambient_lobes(in: MeshOut, n: vec3<f32>, v: vec3<f32>, s: Surface, from_env: bool) -> vec3<f32> {
+    let k = s.k;
+    let rough = clamp(s.rough, 0.045, 1.0);
+    let nv = max(dot(n, v), 1e-4);
+    let dfg_v = dfg_at(nv, rough);
+    let off = from_env && (lights.count.z & NO_COMP) != 0u;
+    let L = entry_of(k);
+    let x1 = L[1];
+    let tr = L[2];
+    let film = L[5];
+    let irid = L[4].w;
+    let amount = L[7].y;
+    let f0 = lobe_weight(s) * lobe_f0(s);
+    var e = f0 * dfg_v.x + lobe_weight(s) * dfg_v.y;
+    var metal = s.base * dfg_v.x + dfg_v.y;
+    if irid > 0.0 {
+        let albedo = dfg_v.x + dfg_v.y;
+        e = mix(e, iridescence(film.x, nv, film.y, f0) * albedo, irid);
+        metal = mix(metal, iridescence(film.x, nv, film.y, s.base) * albedo, irid);
+    }
+    let spec = mix(e * compensation(f0, dfg_v, off), metal * compensation(s.base, dfg_v, off), s.metallic);
+    var r = reflect(-v, n);
+    if x1.x != 0.0 {
+        // The mirror ray bent toward the stretched lobe (KHR_materials_anisotropy's bent normal).
+        let ab = cross(s.t, v);
+        let an = cross(ab, s.t);
+        let bend = 1.0 - abs(x1.x) * (1.0 - rough);
+        r = reflect(-v, normalize(mix(an, n, bend * bend * bend * bend)));
+    }
+    var rho = s.base * (1.0 - s.metallic) * (1.0 - L[3].x);
+    if x1.z > 0.0 && !planted(P_LAMBERT) {
+        // FON alone keeps only its single scattering's albedo (the planted wrong program).
+        rho = select(eon_albedo(rho, x1.z, nv), rho * fon_e(nv, x1.z), planted(P_FON));
+    }
+    // The diffuse keeps what the compensated specular doesn't take, so a part never reflects
+    // more than it receives, F0 1 included.
+    let taken = min(e * compensation(f0, dfg_v, off), vec3<f32>(1.0));
+    let irr = ambient_irradiance2(n, from_env);
+    var diffuse = rho * (1.0 - max3(taken)) * irr[0];
+    if tr.w < 0.0 {
+        diffuse = diffuse * (1.0 - amount)
+            + (1.0 - s.metallic) * tr.rgb * amount * (1.0 - max3(taken)) * irr[1];
+    }
+    diffuse = diffuse * occlusion(in.pos.xy, rho);
+    var out = diffuse + spec * ambient_along(r, n, rough, from_env);
+    let sheen = L[0];
+    if max3(sheen.rgb) > 0.0 {
+        let a = s.sheen_ev;
+        out = out * (1.0 - max3(sheen.rgb) * a) + sheen.rgb * a * irr[0];
+    }
+    if film.z > 0.0 {
+        let fv = max(dot(s.flake, v), 1e-4);
+        let col = lobe(k, 6u).rgb;
+        let cr = max(sqrt(sqrt(s.flake_a2)), 0.045);
+        let fd = dfg_at(fv, cr);
+        let flake = (col * fd.x + fd.y) * compensation(col, fd, off);
+        out = mix(out, flake * ambient_along(reflect(-v, s.flake), s.flake, cr, from_env), film.z);
+    }
+    return out;
 }
 
 // A direction turned into the environment's own frame: back by its rotation about +Y.
@@ -1441,3 +2463,4 @@ fn puff_fs(in: PuffOut) -> Targets {
     c = fogged(c * in.shape.z * 0.9, in.world);
     return Targets(vec4<f32>(c * alpha, alpha), 0u);
 }
+

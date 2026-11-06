@@ -72,7 +72,7 @@ const MACHINES: &[&str] = &["any", "same"];
 const TOOLS: &[&str] = &["deep_show", "deep_query", "deep_kinds", "deep_patch"];
 
 /// The core kinds the core draws a module's kind as, until modules draw their own.
-const DRAWS_AS: &[&str] = &["rect@1"];
+const DRAWS_AS: &[&str] = &["rect@1", "path@1"];
 
 /// An array's domain (Array and table).
 const DOMAINS: &[&str] = &["item", "row", "element", "document"];
@@ -154,7 +154,14 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("curve", "scene3d"),
     ("material", "scene3d"),
     ("sky", "scene3d"),
+    ("vector", "vector"),
+    // R1's mark sets, scales and axes are the data module's, which marks2d draws.
+    ("marks", "data"),
+    ("axis", "data"),
+    ("scale", "data"),
     ("puff", "scene3d"),
+    ("cutaway", "scene3d"),
+    ("instance", "scene3d"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
@@ -690,6 +697,8 @@ pub struct Registrar {
     pub registries: Vec<lists::RegistryDef>,
     /// The entries it fills at the seal, into its own registries or the core's (#200).
     pub entries: Vec<lists::EntryDef>,
+    /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
+    pub outline_fills: Vec<(String, crate::outline::Fill)>,
 }
 
 impl Registrar {
@@ -961,6 +970,19 @@ impl Registrar {
         self
     }
 
+    /// Fills an entry of the core's `outline.source@1` (#443): its value, which the registry's kit
+    /// holds to its item's 2D fill, and its own Rust, which `extrude` reads outlines through.
+    pub fn outline_source(
+        &mut self,
+        name: &str,
+        value: Value,
+        fill: crate::outline::Fill,
+    ) -> &mut Self {
+        self.entry(crate::outline::REGISTRY, name, value, "R6");
+        self.outline_fills.push((name.into(), fill));
+        self
+    }
+
     /// A GPU pass that fills the items of `kind` with its WGSL fragment shader.
     pub fn gpu_pass(
         &mut self,
@@ -1043,7 +1065,16 @@ pub enum Fault {
     /// Hashes each implementation's pins into its interface's digest, so another patch of a
     /// pinned crate changes it (#238).
     DigestCoversPins,
+    /// Opens `ease@1` with its entries renumbered, so a key's content key changes (#490).
+    EaseRenumbered,
+    /// Declares `ease@1` in the motion module instead of the core (#490): the core declares
+    /// none, so a build without motion has no eases.
+    EaseInMotion,
 }
+
+/// The module that declares `ease@1` in the planted layout that moves it out of the core, which
+/// a build that lacks it names as missing (#490).
+pub const EASES_OUTSIDE_CORE: &str = "motion";
 
 /// The type an array declares when it holds JSON, which only a check phase writes (#855).
 pub const JSON: &str = "json";
@@ -1208,6 +1239,18 @@ pub struct Sealed {
     /// How the document check names close names: `NoCloseNames` and `CloseBySpelling` are the
     /// planted checks (#412); `None` is the right one.
     pub close_fault: Option<Fault>,
+    /// Each entry of `outline.source@1` the build's modules fill, with the module and its Rust
+    /// (#443), sorted by module then entry.
+    pub outlines: Vec<SealedOutline>,
+}
+
+/// One outline source the seal admitted: its entry, module, form and Rust (#443).
+#[derive(Clone, Debug)]
+pub struct SealedOutline {
+    pub entry: String,
+    pub module: String,
+    pub form: String,
+    pub fill: crate::outline::Fill,
 }
 
 impl Sealed {
@@ -2765,11 +2808,20 @@ impl Registry {
         // Registries (#200): every one the core and the modules declare, every entry a module
         // or the core fills, and every step a pass compiles from.
         let started = self.clock.map(|c| c());
-        let mut core_registries = core_lists::registries();
+        let eases = self.fault != Some(Fault::EaseInMotion);
+        let mut core_registries = core_lists::registries_with(eases);
         core_registries.extend(self.declared.iter().cloned());
+        let mut core_entries: Vec<lists::EntryDef> =
+            core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere))
+                .into_iter()
+                .filter(|e| e.registry != "ease@1")
+                .collect();
+        if eases {
+            core_entries.extend(core_lists::ease_entries(self.fault == Some(Fault::EaseRenumbered)));
+        }
         let (registries, parts) = lists::seal(
             core_registries,
-            core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere)),
+            core_entries,
             &shapes,
             self.admits_all.as_deref(),
             self.fault,
@@ -2779,6 +2831,28 @@ impl Registry {
             _ => 0,
         };
 
+        // Outline sources (#443): each module's Rust beside the entry it filled, which the
+        // registries' seal has held to the kit.
+        let mut outlines: Vec<SealedOutline> = shapes
+            .iter()
+            .skip(1)
+            .flat_map(|(name, r)| {
+                r.outline_fills.iter().filter_map(move |(entry, fill)| {
+                    let value = &r
+                        .entries
+                        .iter()
+                        .find(|e| e.registry == crate::outline::REGISTRY && e.name == *entry)?
+                        .value;
+                    Some(SealedOutline {
+                        entry: entry.clone(),
+                        module: name.clone(),
+                        form: value.get("form")?.as_str()?.to_string(),
+                        fill: *fill,
+                    })
+                })
+            })
+            .collect();
+        outlines.sort_by(|a, b| (&a.module, &a.entry).cmp(&(&b.module, &b.entry)));
         // Digests: each module's own; the core's shapes are no module's. Each module's shapes
         // hash to its interface's digest: its reference's, registered beside it when the module
         // isn't that reference (Canvas module: interface and implementation).
@@ -2839,6 +2913,7 @@ impl Registry {
             close_fault: self
                 .fault
                 .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
+            outlines,
             costs: self
                 .costs
                 .take()
@@ -3718,7 +3793,7 @@ mod tests {
 
     #[test]
     fn a_reader_runs_after_its_writer_whatever_their_names_and_readers_share() {
-        // Bevy's schedule `ambiguity` and `read_only` cases: a read and a write of one value
+        // The `ambiguity` and `read_only` cases: a read and a write of one value
         // are ordered by the read, never by name, and two reads of it seal clean.
         fn a(r: &mut Registrar) {
             r.operator("read", "items", &["z.x"], &[]);

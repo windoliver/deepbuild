@@ -8,7 +8,7 @@
 //! - A template's words follow the same rule, and each slot shows a value its path resolves to
 //!   (`ref_unresolved`). A story's own number (a constant whose source is `story`) passes only in a
 //!   document that binds no status and no reading and isn't shown inside one that does
-//!   ([`shown_inside`]); elsewhere it is unsourced (`number_unsourced`).
+//!   ([`shown_inside`]); elsewhere the honest-numbers check finds it unsourced.
 //! - A text marked `{name: true}` is a name, so its digits aren't counted, and a name an
 //!   `honest_numbers` check input lists (`names`) is skipped wherever it shows; that input's
 //!   `number_words: false` stops number words counting; a code item's digits count unless it
@@ -195,6 +195,21 @@ impl<'d> Texts<'d> {
 
 /// The number rules over one item.
 fn numbers_of(doc: &Value, texts: &Texts<'_>, id: &String, item: &Value, issues: &mut Vec<Issue>) {
+    // An outline in `outline.source@1`'s text form shows its string as text@1 shows its own, so a
+    // 3D title is displayed text (#443; Builder `extrude`: outlines from text, paths and SVG).
+    let outline = member(item, "params").and_then(|p| member(p, "outline"));
+    if let Some(Value::String(text)) = outline.and_then(|o| member(o, "text")) {
+        if texts.shows_number(text) {
+            issues.push(Issue::error(
+                "number_unsourced",
+                id,
+                format!("items/{id}/params/outline/text"),
+                json!(text),
+                "the title shows a number with no source; mark it a name in the honest_numbers check input, or bind or compute the number",
+            ));
+        }
+        return;
+    }
     if !kind_text(item).is_some_and(|k| k.starts_with("text@")) {
         return;
     }
@@ -249,8 +264,8 @@ fn numbers_of(doc: &Value, texts: &Texts<'_>, id: &String, item: &Value, issues:
     }
 }
 
-/// A template's words and slots: words that show a number are unsourced, a slot names a value its
-/// path resolves to, and a story's own number shows only where no status or reading is bound.
+/// A template's words and slots: words that show a number are unsourced, and a slot names a value
+/// its path resolves to.
 fn template_numbers(doc: &Value, texts: &Texts<'_>, id: &str, t: &str, issues: &mut Vec<Issue>) {
     let path = format!("items/{id}/params/template");
     let Ok(parts) = template::parts(t) else {
@@ -283,14 +298,14 @@ fn template_numbers(doc: &Value, texts: &Texts<'_>, id: &str, t: &str, issues: &
             Part::Slot(_) => {}
         }
     }
-    if texts.binds_status_or_reading {
-        story_issues(doc, id, t, issues);
-    }
+    // A story number shown where a status or a reading is bound is the honest-numbers check's
+    // finding, as a number from a table an agent wrote is (deep_canvas_marks::check::numbers),
+    // never a refusal of the revision (#1162).
 }
 
-/// Each story number a template shows where a status or a reading is bound, or where it is shown
-/// inside a document that binds one: unsourced there.
-fn story_issues(doc: &Value, id: &str, t: &str, issues: &mut Vec<Issue>) {
+/// Each story number a template shows where it is shown inside a document that binds a status
+/// or a reading: unsourced there.
+pub fn story_issues(doc: &Value, id: &str, t: &str, issues: &mut Vec<Issue>) {
     for (slot, _) in template::story_numbers(doc, t) {
         issues.push(Issue::error(
             "number_unsourced",

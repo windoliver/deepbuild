@@ -23,7 +23,7 @@ export type { PaidKind, Pricing } from './price.js';
 export { freshCount, judgeStop } from './stalls.js';
 export type { StallCount, StallRule } from './stalls.js';
 export type { ClaimedCheck, ClaimedRuns, ClaimRequirement, RecordedFailure, RecordedRun, VerdictPlant } from './claim.js';
-export { addedLines, errorShape, leftOpen, limitsIn, openTasks, placeholders, solveLine, toldToRun, unitless } from './open.js';
+export { addedLines, endsEmpty, errorShape, leftOpen, limitsIn, openTasks, placeholders, solveLine, toldToRun, unitless } from './open.js';
 export type { LeftOpen, TaskListFacts } from './open.js';
 export { attributeStack } from './stack.js';
 export type { Served, StackRecords, Trees } from './stack.js';
@@ -32,3 +32,6 @@ export type {
   Agent, CheckDef, CheckOnClaim, ClaimRecord, Config, Delivery, Held, HeldRecord, LoopFacts, Needs, Origin, QueueEvent, RunContext, RunRecord,
   Scenario, SchedulerPlant, ScriptEvent, SessionScript, SortedAs, StackDef, StackStep, StopReply, Trace,
 } from './scheduler.js';
+export { diffOf, itemChanges, LAST, measure, over, OVER, usualOf } from './size.js';
+export type { ItemChange, Usual } from './size.js';
+export { gitEnv } from './env.js';

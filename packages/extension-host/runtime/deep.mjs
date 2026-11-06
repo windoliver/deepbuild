@@ -19,6 +19,12 @@ export const API = Object.freeze([
   { method: 'deep.registerEnvironment', needs: null },
   { method: 'deep.registerView', needs: null },
   { method: 'deep.registerAdapter', needs: null },
+  // #65: a way to reach you, which only transports; its provider calls go through the hub (`deep.channel.fetch`, its
+  // context's fetch), which adds the channel's token and holds the call to its settings.
+  { method: 'deep.registerChannel', needs: null },
+  { method: 'deep.channel.fetch', needs: null },
+  // #67: what a workspace touches; read, compare, undo and its fixture stay with the package.
+  { method: 'deep.registerStateSource', needs: null },
   { method: 'deep.registerRoute', needs: null },
   // #355: the wiki's index, in place of the shipped one.
   { method: 'deep.registerIndex', needs: null },
@@ -87,6 +93,10 @@ export function extensionSide(call, load, imports = (file) => import(file)) {
   // The package's resolvers in order, and its adapters by name: their functions stay here (#349).
   let resolvers = [];
   const adapters = new Map();
+  // Its channels by name (#65): deliver and receive stay here, asked by the host with the context it gives.
+  const channels = new Map();
+  // Its state sources by name (#67): the host asks for each read, compare, undo and fixture step.
+  const stateSources = new Map();
   // Its index's methods stay here too (#355); the host asks for each call by name.
   const indexes = new Map();
   // Its sources by name (#364): a polled one's parse and a stream one's read stay here; the host sends the rest.
@@ -104,6 +114,8 @@ export function extensionSide(call, load, imports = (file) => import(file)) {
     'deep.registerIndex': keeper(indexes),
     'deep.registerAdapter': (name, adapter) => { adapters.set(name, adapter); return () => { if (adapters.get(name) === adapter) adapters.delete(name); }; },
     'deep.registerEnvironment': keeper(environments),
+    'deep.registerChannel': keeper(channels),
+    'deep.registerStateSource': keeper(stateSources),
     'deep.registerSource': keeper(sources),
     'deep.schedule': (name, _declared, job) => keeper(schedules)(name, job),
     'deep.on': (kind, handler) => {
@@ -121,7 +133,7 @@ export function extensionSide(call, load, imports = (file) => import(file)) {
       const drop = keep[method]?.(...args);
       const within = scope.getStore();
       // A source's functions stay here: the host gets its declaration only.
-      const sent = method === 'deep.registerSource' ? args.map((a) => (typeof a === 'object' && a !== null ? Object.fromEntries(Object.entries(a).filter(([, v]) => typeof v !== 'function')) : a)) : args;
+      const sent = method === 'deep.registerStateSource' ? args.slice(0, 1) : method === 'deep.registerSource' ? args.map((a) => (typeof a === 'object' && a !== null ? Object.fromEntries(Object.entries(a).filter(([, v]) => typeof v !== 'function')) : a)) : args;
       const made = Promise.resolve().then(() => call(method, sent.filter((a) => typeof a !== 'function'), within)).catch((error) => {
         drop?.();
         throw error;
@@ -150,6 +162,12 @@ export function extensionSide(call, load, imports = (file) => import(file)) {
         if (!env) throw Error(`no environment ${params?.name} is registered here`);
         return method === 'env.up' ? await env.up(params.spec, params.lease, params.checkout) : (await env.down(params.handle)) ?? null;
       }
+      if (method === 'state') {
+        const source = stateSources.get(params?.name);
+        if (!source) throw Error(`no state source ${params?.name} is registered here`);
+        const target = params.op.startsWith('fixture.') ? source.fixture : source;
+        return (await target[params.op.replace('fixture.', '')](...params.args)) ?? null;
+      }
       if (method === 'deliver') {
         for (const event of params.events) for (const handler of handlers.get(event.kind) ?? []) await handler(event);
         return null;
@@ -166,6 +184,13 @@ export function extensionSide(call, load, imports = (file) => import(file)) {
           if (answer !== undefined && answer !== null) return answer;
         }
         return undefined;
+      }
+      // A channel's send or read: its context's fetch is the hub's call for this one, named by `call`.
+      if (method === 'channel.deliver' || method === 'channel.receive') {
+        const channel = channels.get(params?.name);
+        if (!channel) throw Error(`no channel ${params?.name} is registered here`);
+        const ctx = { settings: params.settings ?? {}, fetch: (request) => call('deep.channel.fetch', [params.call, request]) };
+        return (method === 'channel.deliver' ? await channel.deliver(params.item, ctx) : await channel.receive(ctx)) ?? null;
       }
       if (method === 'adapter.mapHook' || method === 'adapter.deliver') {
         const adapter = adapters.get(params?.name);

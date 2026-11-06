@@ -26,7 +26,8 @@ pub struct Def {
     /// Its argument ports, in the order the emitter passes them.
     pub ports: &'static [&'static str],
     /// Cost units per evaluation: about 1 for an add or a compare, 4 for a divide or a square
-    /// root, 8 for a transcendental, 16 per noise octave (estimates until measured).
+    /// root, 8 for a transcendental (estimates until measured); 180 per noise octave, measured
+    /// by the calibration run (a noise octave is nine integer hashes and its gradients).
     pub weight: f64,
     pub fetches: u32,
     /// Exact when every value it reads and writes is an integer or a bool.
@@ -65,6 +66,10 @@ const fn tex(name: &'static str, ports: &'static [&'static str], exact: bool, ki
 const A: &[&str] = &["a", "b"];
 const X: &[&str] = &["x"];
 const NONE: &[&str] = &[];
+/// A storage statement's ports: the buffer, the index and the value.
+const W: &[&str] = &["buf", "i", "v"];
+/// A seeded step's ports: the point and the seed.
+const NOISE: &[&str] = &["p", "seed"];
 
 /// The base entries, sorted by name.
 pub const TABLE: &[Def] = &[
@@ -77,6 +82,12 @@ pub const TABLE: &[Def] = &[
     d("asin@1", X, 8.0, false, ALL),
     d("atan2@1", &["y", "x"], 8.0, false, ALL),
     d("atan@1", X, 8.0, false, ALL),
+    d("atomic_add@1", W, 2.0, true, COMPUTE),
+    d("atomic_and@1", W, 2.0, true, COMPUTE),
+    d("atomic_max@1", W, 2.0, true, COMPUTE),
+    d("atomic_min@1", W, 2.0, true, COMPUTE),
+    d("atomic_or@1", W, 2.0, true, COMPUTE),
+    d("atomic_xor@1", W, 2.0, true, COMPUTE),
     d("bitcast@1", X, 0.0, true, ALL),
     d("camera@1", NONE, 0.0, false, MATERIAL | PASS),
     d("ceil@1", X, 1.0, true, ALL),
@@ -97,6 +108,8 @@ pub const TABLE: &[Def] = &[
     d("eq@1", A, 1.0, true, ALL),
     d("exp2@1", X, 8.0, false, ALL),
     d("exp@1", X, 8.0, false, ALL),
+    // Fractal noise: `octaves` (1 to 8, a literal) of noise@1, so its weight is per octave.
+    d("fbm@1", NOISE, 180.0, false, ALL),
     d("first_leading_bit@1", X, 1.0, true, ALL),
     d("first_trailing_bit@1", X, 1.0, true, ALL),
     d("floor@1", X, 1.0, true, ALL),
@@ -121,6 +134,10 @@ pub const TABLE: &[Def] = &[
     d("mul@1", A, 1.0, true, ALL),
     d("ne@1", A, 1.0, true, ALL),
     d("neg@1", X, 1.0, true, ALL),
+    // Gradient noise on the integer lattice hash: one octave.
+    d("noise@1", NOISE, 180.0, false, ALL),
+    // A geometry step: the surface's normal in `space` (object, world or view).
+    d("normal@1", NONE, 0.0, false, MATERIAL),
     d("normalize@1", X, 6.0, false, ALL),
     d("not@1", X, 1.0, true, ALL),
     d("or@1", A, 1.0, true, ALL),
@@ -130,6 +147,9 @@ pub const TABLE: &[Def] = &[
     tex("read@1", &["buf", "i"], true, ALL),
     d("rem@1", A, 4.0, true, ALL),
     d("repeat@1", NONE, 0.0, true, ALL),
+    // A look role's color, theme-resolved: the check binds it as an input (`x`); status roles are
+    // never reachable.
+    d("role@1", X, 0.0, false, MATERIAL | PASS),
     d("round@1", X, 1.0, true, ALL),
     tex("sample@1", &["tex", "uv", "lod"], false, ALL),
     d("screen_size@1", NONE, 0.0, false, MATERIAL | PASS),
@@ -149,7 +169,7 @@ pub const TABLE: &[Def] = &[
     d("tan@1", X, 8.0, false, ALL),
     d("transpose@1", X, 4.0, false, ALL),
     d("trunc@1", X, 1.0, true, ALL),
-    d("write@1", &["buf", "i", "v"], 1.0, true, COMPUTE),
+    d("write@1", W, 1.0, true, COMPUTE),
     d("xor@1", A, 1.0, true, ALL),
 ];
 
@@ -465,13 +485,47 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
             U(k) => F(f64::from(hash1(k) >> 8) * 5.960_464_5e-8),
             x => return Err(format!("rand's key is a u32, not {x:?}")),
         },
+        // The fields a seeded step takes beside its ports are in the case's env.
+        "noise" | "fbm" => {
+            let p = arg(0)?.lanes()?;
+            let U(seed) = arg(1)? else {
+                return Err(format!("{step}'s seed is a u32"));
+            };
+            let field = |k: &str, or: f64| env.get(k).and_then(Value::as_f64).unwrap_or(or);
+            let period = field("period", 0.0) as u32;
+            let at = [
+                p.first().copied().unwrap_or(0.0),
+                p.get(1).copied().unwrap_or(0.0),
+            ];
+            F(if name == "noise" {
+                noise2(at, seed, period)
+            } else {
+                fbm2(
+                    at,
+                    seed,
+                    field("octaves", 4.0) as u32,
+                    field("lacunarity", 2.0),
+                    field("gain", 0.5),
+                    period,
+                )
+            })
+        }
         "compose" => Vf(a.iter().map(V::f).collect::<Result<_, _>>()?),
         "split" => arg(0)?,
+        // A small array's index clamps into [0, n - 1] (structural steps, #483).
         "index" => {
             let v = arg(0)?.lanes()?;
-            let i = arg(1)?.f()? as usize;
-            F(*v.get(i)
-                .ok_or_else(|| format!("index {i} past {}", v.len()))?)
+            let i = (arg(1)?.f()?.max(0.0) as usize).min(v.len().saturating_sub(1));
+            F(*v.get(i).ok_or("index into an empty array")?)
+        }
+        "with" => {
+            let mut v = arg(0)?.lanes()?;
+            let i = (arg(1)?.f()?.max(0.0) as usize).min(v.len().saturating_sub(1));
+            *v.get_mut(i).ok_or("with on an empty array")? = arg(2)?.f()?;
+            Vf(v)
+        }
+        "scan" | "compact" | "sort_by_key" | "iterate" | "load3d" | "sample3d" => {
+            structural(name, a, env, "")?
         }
         "dot" => {
             let (x, y) = (arg(0)?.lanes()?, arg(1)?.lanes()?);
@@ -527,6 +581,8 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
         }
         "const" => env_v("value")?,
         "camera" => Vf(env_nums("camera")?),
+        "normal" => Vf(env_nums("normal")?),
+        "role" => arg(0)?,
         "pixel" => UVec(env_nums("pixel")?.into_iter().map(|n| n as u32).collect()),
         "screen_size" => Vf(env_nums("size")?),
         "screen_uv" => {
@@ -567,7 +623,26 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
             let i = arg(1)?.f()? as usize;
             F(*b.get(i).ok_or("read past the buffer")?)
         }
-        "write" => {
+        // An atomic statement, whose result is never read: u32 words, wrapping.
+        "atomic_add" | "atomic_min" | "atomic_max" | "atomic_and" | "atomic_or" | "atomic_xor" => {
+            let Buf(mut b) = arg(0)? else {
+                return Err(format!("{name} adds into a storage buffer"));
+            };
+            let i = arg(1)?.f()? as usize;
+            let v = arg(2)?.f()? as u32;
+            let w = b.get_mut(i).ok_or("an atomic past the buffer")?;
+            let x = *w as u32;
+            *w = f64::from(match name {
+                "atomic_add" => x.wrapping_add(v),
+                "atomic_min" => x.min(v),
+                "atomic_max" => x.max(v),
+                "atomic_and" => x & v,
+                "atomic_or" => x | v,
+                _ => x ^ v,
+            });
+            Buf(b)
+        }
+        "write" | "store" => {
             let Buf(mut b) = arg(0)? else {
                 return Err("write writes a storage buffer".into());
             };
@@ -580,10 +655,182 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
 }
 
 /// The fixed hash, as the effects module's WGSL writer and CPU reference write it.
+/// The structural steps' meanings on fixture values (canvas primitives: Step and the closed step
+/// list: structural steps, #483), and their planted twins: `scan` an exclusive prefix sum of u32
+/// words wrapping at 2^32 (`inclusive` its twin); `compact` the flagged words in index order
+/// (`atomic_order` keeps them in the order a racing counter might hand out, last first);
+/// `sort_by_key` the values stably by key (`ties_by_decreasing_index` breaks ties the other way);
+/// `iterate` its body (`env.body`, over `prev`) run `count` times, each run reading the last
+/// (`first_run` feeds every run the first run's output); `load3d` and `sample3d` a texel of a
+/// 3D texture of `env.size` held as a flat buffer (sample3d takes the texel nearest `uvw`).
+fn structural(name: &str, a: &[V], env: &Value, twin: &str) -> Result<V, String> {
+    let buf = |i: usize| match a.get(i) {
+        Some(V::Buf(b)) => Ok(b.iter().map(|x| *x as u32).collect::<Vec<u32>>()),
+        other => Err(format!("{name} takes storage, not {other:?}")),
+    };
+    let words = |w: Vec<u32>| V::Buf(w.into_iter().map(f64::from).collect());
+    let count = |i: usize, len: usize| -> Result<usize, String> {
+        Ok(match a.get(i) {
+            Some(x) => (x.f()? as usize).min(len),
+            None => len,
+        })
+    };
+    Ok(match name {
+        "scan" => {
+            let x = buf(0)?;
+            let mut acc = 0u32;
+            words(
+                x.iter()
+                    .map(|v| {
+                        let before = acc;
+                        acc = acc.wrapping_add(*v);
+                        if twin == "inclusive" {
+                            acc
+                        } else {
+                            before
+                        }
+                    })
+                    .collect(),
+            )
+        }
+        "compact" => {
+            let (x, f) = (buf(0)?, buf(1)?);
+            let n = count(2, x.len().min(f.len()))?;
+            let mut kept: Vec<u32> = (0..n).filter(|i| f[*i] != 0).map(|i| x[i]).collect();
+            if twin == "atomic_order" {
+                kept.reverse();
+            }
+            words(kept)
+        }
+        "sort_by_key" => {
+            let (k, v) = (buf(0)?, buf(1)?);
+            let n = count(2, k.len().min(v.len()))?;
+            let mut at: Vec<usize> = (0..n).collect();
+            if twin == "ties_by_decreasing_index" {
+                at.sort_by(|p, q| k[*p].cmp(&k[*q]).then(q.cmp(p)));
+            } else {
+                at.sort_by_key(|i| k[*i]);
+            }
+            words(at.into_iter().map(|i| v[i]).collect())
+        }
+        "iterate" => {
+            let n = a.first().ok_or("iterate takes a count")?.f()? as u32;
+            let mut prev = a.get(1).cloned().ok_or("iterate takes a first input")?;
+            let body = env.get("body").ok_or("iterate's fixture names no body")?;
+            let first = run_body(body, &prev, env)?;
+            for k in 0..n {
+                prev = if twin == "first_run" && k > 0 {
+                    run_body(body, &first, env)?
+                } else {
+                    run_body(body, &prev, env)?
+                };
+            }
+            prev
+        }
+        "load3d" | "sample3d" => {
+            let Some(V::Buf(raw)) = a.first() else {
+                return Err(format!("{name} reads a 3D texture"));
+            };
+            let size: Vec<usize> = env
+                .get("size")
+                .and_then(Value::as_array)
+                .map(|s| s.iter().filter_map(Value::as_u64).map(|x| x as usize).collect())
+                .ok_or_else(|| format!("{name}'s fixture names no size"))?;
+            if size.len() != 3 || raw.len() != size[0] * size[1] * size[2] {
+                return Err(format!("{name}'s texture isn't its size"));
+            }
+            let p = a.get(1).ok_or("a 3D texel's place")?.lanes()?;
+            let at: Vec<usize> = (0..3)
+                .map(|c| {
+                    let x = if name == "load3d" {
+                        p[c]
+                    } else {
+                        (p[c] * size[c] as f64).floor()
+                    };
+                    (x.max(0.0) as usize).min(size[c] - 1)
+                })
+                .collect();
+            V::F(raw[(at[2] * size[1] + at[1]) * size[0] + at[0]])
+        }
+        other => return Err(format!("`{other}` is no structural step")),
+    })
+}
+
+/// A body node over `prev` (iterate's fixture), as an `impl.body` is over ports.
+fn run_body(e: &Value, prev: &V, env: &Value) -> Result<V, String> {
+    match e {
+        Value::String(p) if p == "prev" => Ok(prev.clone()),
+        Value::Number(n) => Ok(V::F(n.as_f64().unwrap_or(0.0))),
+        Value::Array(list) => {
+            let (op, rest) = list.split_first().ok_or("an empty body node")?;
+            let op = op.as_str().ok_or("a body node names a step")?;
+            let vals: Vec<V> = rest
+                .iter()
+                .map(|x| run_body(x, prev, env))
+                .collect::<Result<_, _>>()?;
+            base(&format!("{op}@1"), &vals, env, None)
+        }
+        other => Err(format!("{other} is no body node")),
+    }
+}
+
 pub fn hash1(x: u32) -> u32 {
     let s = x.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
     let w = ((s >> ((s >> 28) + 4)) ^ s).wrapping_mul(277_803_737);
     (w >> 22) ^ w
+}
+
+/// One lattice corner of noise@1: its gradient, two lanes in [-1, 1) from the hash of the
+/// corner (wrapped into `period` cells when it is above 0) and the seed's hash `hs`, dotted with
+/// the offset `(dx, dy)` from the corner.
+fn corner(hs: u32, cx: i32, cy: i32, period: u32, dx: f64, dy: f64) -> f64 {
+    let (x, y) = match i32::try_from(period) {
+        Ok(p) if p > 0 => (cx.rem_euclid(p), cy.rem_euclid(p)),
+        _ => (cx, cy),
+    };
+    let h = hash1(hash1(hs ^ x as u32) ^ y as u32);
+    let gx = f64::from(h & 0xffff) / 32768.0 - 1.0;
+    let gy = f64::from(h >> 16) / 32768.0 - 1.0;
+    gx * dx + gy * dy
+}
+
+/// `noise@1`: 2D gradient noise on the integer lattice hash, about [-1, 1], 0 at every lattice
+/// point; with `period` above 0 it repeats every `period` cells on each axis. The effects
+/// module's WGSL writer and its f64 interpreter both write this function.
+pub fn noise2(p: [f64; 2], seed: u32, period: u32) -> f64 {
+    let (ix, iy) = (p[0].floor(), p[1].floor());
+    let (fx, fy) = (p[0] - ix, p[1] - iy);
+    let (cx, cy) = (ix as i32, iy as i32);
+    let hs = hash1(seed);
+    let fade = |t: f64| t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+    let (ux, uy) = (fade(fx), fade(fy));
+    let mix = |a: f64, b: f64, t: f64| a * (1.0 - t) + b * t;
+    let (x1, y1) = (cx.wrapping_add(1), cy.wrapping_add(1));
+    let bottom = mix(
+        corner(hs, cx, cy, period, fx, fy),
+        corner(hs, x1, cy, period, fx - 1.0, fy),
+        ux,
+    );
+    let top = mix(
+        corner(hs, cx, y1, period, fx, fy - 1.0),
+        corner(hs, x1, y1, period, fx - 1.0, fy - 1.0),
+        ux,
+    );
+    mix(bottom, top, uy)
+}
+
+/// `fbm@1`: `octaves` of [`noise2`], octave k at `p × lacunarity^k` with seed `seed + k` and
+/// weight `gain^k`, over the sum of the weights; a period grows by the lacunarity each octave.
+pub fn fbm2(p: [f64; 2], seed: u32, octaves: u32, lacunarity: f64, gain: f64, period: u32) -> f64 {
+    let (mut sum, mut amp, mut norm, mut q, mut per) = (0.0, 1.0, 0.0, p, period);
+    for k in 0..octaves {
+        sum += amp * noise2(q, seed.wrapping_add(k), per);
+        norm += amp;
+        amp *= gain;
+        q = [q[0] * lacunarity, q[1] * lacunarity];
+        per = per.wrapping_mul(lacunarity as u32);
+    }
+    sum / norm
 }
 
 /// A value moved by one: an integer by one (wrapping), a float by 1.0, a bool flipped, a list's
@@ -639,6 +886,14 @@ fn twisted(step: &str, a: &[V], env: &Value, to: Option<&str>, perturb: &str) ->
             _ => V::U(0),
         }),
         ("off_by_one", _, _) => Ok(bump(base(step, a, env, to)?)),
+        ("wraps", "index", [arr, i]) => {
+            let v = arr.lanes()?;
+            let n = v.len().max(1);
+            Ok(V::F(v[(i.f()?.max(0.0) as usize) % n]))
+        }
+        ("ties_by_decreasing_index" | "inclusive" | "atomic_order" | "first_run", _, _) => {
+            structural(name, a, env, perturb)
+        }
         ("", _, _) | ("saturate" | "unmasked", _, _) => base(step, a, env, to),
         (other, _, _) => Err(format!("`{other}` is no twin")),
     }
@@ -761,6 +1016,7 @@ fn twin_of(name: &str) -> &'static str {
     match name {
         "add@1" | "sub@1" | "mul@1" => "saturate",
         "shl@1" | "shr@1" => "unmasked",
+        "index@1" => "wraps",
         _ => "off_by_one",
     }
 }

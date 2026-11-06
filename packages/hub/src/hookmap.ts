@@ -179,6 +179,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (request.late === true) meta.late = { matched: request.matched };
   if (request.notes) meta.notes = request.notes;
   if (request.stage) meta.stage = request.stage;
+  if (request.heavy) meta.heavy = request.heavy;
   const fields: NonNullable<HookMeta['fields']> = {};
   for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
   if (Object.keys(fields).length) meta.fields = fields;
@@ -310,9 +311,10 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       // Whether it is a claim is the core's stop rule's to read.
       data = { turn: 0, did_work: false, claim: false, outcome: mapped.outcome === 'failed' ? 'failed' : 'finished', cause: STOP_CAUSES.includes(str(mapped.cause)) ? mapped.cause : 'unknown', usage: null };
       // A child session's stop (a subagent's) names the child, from the payload field the facts' common template maps
-      // to `subagent`: it is no turn end of the session, so the core and the hub leave it out of the session's turns.
+      // to `subagent`: it is no turn end of the session, so it takes no number from the session's turns, and the core
+      // and the hub leave it out of them.
       if (str(mapped.subagent)) data.child = str(mapped.subagent);
-      fill = 'turn';
+      else fill = 'turn';
       v = 5;
       break;
     case 'permission.request':

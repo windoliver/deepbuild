@@ -33,12 +33,13 @@ import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
 import type { EvidenceStore } from '@deepbuild/evidence';
-import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
+import type { StateSource, StateSourceFill } from '@deepbuild/conformance';
+import type { ChannelCtx, ChannelDelivered, ChannelFill, ChannelItem, ChannelReceived, CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
@@ -192,6 +193,8 @@ export interface InstallFrom {
 }
 /** A kit the install ran on what the package registers: the slot, the fill (a check kind's name), its verdict. */
 export interface KitRun { slot: string; fill: string; verdict: 'PASS' | 'FAIL' | 'BLOCKED' | 'INVALID' | 'INCONCLUSIVE' }
+/** A view of a project's pack, as the app shows it while you're in the project (#67). */
+export interface ProjectView { name: string; extension: string; commands: { name: string; action: string }[] }
 export interface Installed { id: string; version: string; folder: string; digest: string; builtBy: string | null; project: string | null; kits: KitRun[] }
 export interface PackageTests { passed: boolean; testsRun: number; failures: { test: string; message: string }[] }
 /** How an answer reaches a session: into the running turn, in the stop hold, waking an idle session, or at its next prompt. */
@@ -207,8 +210,33 @@ export interface NoticeRow { id: string; kind: string; key: string; source: stri
 export interface Loaded { status: 'loaded'; id: string; version: string; place: 'hub' | 'sandbox'; run: string | null }
 export interface Refused { status: 'refused'; id: string; version: string; reason: string }
 export type Load = Loaded | Refused;
+/** One acquired environment handle belongs to the load that created it, never its replacement. */
+export interface RunningEnvironment {
+  readonly handle: Readonly<EnvironmentHandle>;
+  down(): Promise<void>;
+}
+/** A runtime environment selected from a live, kit-checked package. */
+export interface RuntimeEnvironment {
+  readonly extension: string;
+  readonly version: string;
+  up(spec: EnvironmentSpec, lease: EnvironmentLease, checkout: string, deadline: number): Promise<RunningEnvironment>;
+}
+
 export interface ExtensionHost {
   install(from: InstallFrom): Promise<Installed>;
+  /** The channels of the packages loaded and started (#65), each by name with what it reaches. */
+  channels(): { name: string; kind: 'device' | 'chat' | 'email' | 'text'; extension: string }[];
+  /** A live state source by its registered name (#67): what a workspace's touch reads through. */
+  stateSource(name: string): Promise<Omit<StateSource, 'fixture'>>;
+  /** You are in this project (#67): its packs, as `.deepbuild/packs.json` names them, install and load if you trust it; an untrusted project's stay out, none installed, none run. */
+  enterProject(folder: string): Promise<{ trusted: boolean; views: ProjectView[] }>;
+  /** You left it: once nobody is in it, its packs stop and their views go. */
+  leaveProject(folder: string): Promise<void>;
+  /** What the app shows now: the views and commands of the projects you're in. */
+  projectViews(): ProjectView[];
+  /** One send or read of a loaded channel (#65), its provider calls made by `ctx.fetch`, the caller's. */
+  channel(name: string, op: 'deliver', item: ChannelItem, ctx: ChannelCtx): Promise<ChannelDelivered>;
+  channel(name: string, op: 'receive', item: null, ctx: ChannelCtx): Promise<ChannelReceived>;
   /** Kept across a restart: a new host on the same home. */
   installed(): Promise<Installed[]>;
   /**
@@ -239,6 +267,8 @@ export interface ExtensionHost {
   load(pkg: Installed): Promise<Load>;
   loaded(): Promise<Loaded[]>;
   checks(): Promise<{ kind: string; extension: string }[]>;
+  /** Select a live environment by its registered name; absence and revoked trust refuse, never fall back. */
+  environment(name: string): Promise<RuntimeEnvironment>;
   /** `ctx.environment`: the first-party interface the run used, such as environment@1, whose provider it makes the check's piece a user of (#103). */
   runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number; environment?: string }): Promise<CheckResult>;
   /** Hands each event to the loaded packages subscribed to its kind, once they have all taken it; rejects naming each that didn't. */
@@ -357,6 +387,14 @@ const NODE_HOME = dirname(dirname(realpathSync(process.execPath)));
 const LOAD_MS = 10_000;
 /** How long a package gets to take a batch of events, or to answer a request on a route. */
 const CALL_MS = 10_000;
+/** How long a channel's send or read may take (#65): its provider calls are the hub's, each bounded by the hub. */
+const CHANNEL_MS = 30_000;
+const CHANNEL = 'channel@1';
+const STATE_SOURCE = 'state-source@1';
+/** How long one call into a state source may take (#67). */
+const STATE_MS = 30_000;
+const CHANNEL_KINDS = ['device', 'chat', 'email', 'text'] as const;
+type ChannelKind = typeof CHANNEL_KINDS[number];
 /**
  * How long past a hook's deadline the host waits for a package's replies to arrive: the package marks each handler
  * late at the deadline itself, so its other handlers' replies (a deny among them) still make the trip back.
@@ -440,6 +478,8 @@ interface Manifest {
   host?: { runs: 'terminals'; lives: 'past_app'; owns: 'terminals'[] };
   secrets?: { name: string; for: string }[];
   sources?: { name: string; variant: string; reading?: string }[];
+  /** The state sources it registers (#67), each held to state-source@1's kit at install. */
+  state_sources?: string[];
 }
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
 interface Entry extends Installed { grant: { record: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[]; docs?: string[] }; holds: string[] }
@@ -483,6 +523,10 @@ interface Ext {
   routes: Set<string>;
   /** The adapter names it registered. */
   adapters: Set<string>;
+  /** The channels it registered (#65), by name, with what each reaches; their deliver and receive stay with the package. */
+  channels: Map<string, ChannelKind>;
+  /** The state sources it registered (#67), by name; their read, compare, undo and fixture stay with the package. */
+  stateSources: string[];
   /** The index it registered, by name, with the kit revision it declares, and how the host reaches it once loaded. */
   index?: { name: string; revision: number; fill?: IndexFill };
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts. */
@@ -491,6 +535,8 @@ interface Ext {
   sources: Map<string, Declared>;
   /** Its views, each with the reading handles it binds (#262). */
   views: Map<string, string[]>;
+  /** Each view's ⌘K commands (#67), as the app shows them while you're in its project. */
+  commands: Map<string, { name: string; action: string }[]>;
   /** The sources each check kind it registered reads, as declared (#365). */
   checkReads: Map<string, string[]>;
   /** How many times its code started in this copy: a restart imports a hub package's code afresh. */
@@ -689,6 +735,15 @@ function actionRules(actions: Map<string, Action>): string[] {
 }
 const message = (e: unknown): string => String((e as Error)?.message ?? e);
 /** A package's manifest, as its folder holds it. */
+/** The packs a project names in `.deepbuild/packs.json` (#67): folders inside it. */
+function packsNamed(project: string): string[] {
+  const file = join(project, '.deepbuild', 'packs.json');
+  if (!existsSync(file)) return [];
+  const { packs } = JSON.parse(readFileSync(file, 'utf8')) as { packs?: unknown };
+  if (!texts(packs)) throw Error(`${file} names no list of packs`);
+  for (const pack of packs as string[]) if (isAbsolute(pack) || pack.split('/').includes('..')) throw Error(`${file} names ${pack}, which isn't a folder inside the project`);
+  return packs as string[];
+}
 const manifestOf = (folder: string): Manifest => JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
 /** A piece as composition reads it (#103): its id and its manifest's rows. */
 const pieceOf = (id: string, m: Manifest): Piece => ({ id, provides: m.provides ?? [], uses: m.uses ?? [] });
@@ -799,6 +854,9 @@ class Host implements ExtensionHost {
   private readonly wired = new Map<string, Map<string, string>>();
   /** The provider each use reads from, by user and interface, until a piece loads, stops or installs (#103). */
   private readonly routes = new Map<string, Ext | undefined>();
+  /** The channel sends and reads under way (#65), by the call ID their context's fetch names. */
+  private readonly channelCalls = new Map<string, { ext: Ext; ctx: ChannelCtx }>();
+  private channelCount = 0;
   /** Install folders' manifests, read once each. */
   private readonly manifests = new Map<string, Manifest>();
   /** The starts of the packages loaded before ready, once ready runs. */
@@ -1273,6 +1331,7 @@ class Host implements ExtensionHost {
     // An index that replaces the shipped one is held to index@1's kit wherever it will run (#355).
     const indexed = replaces.includes(INDEX);
     const streams = (manifest.sources ?? []).filter((s) => s.variant === 'stream').map((s) => s.name);
+    const states = manifest.state_sources ?? [];
     const blocked = (why: string): never => {
       rmSync(folder, { recursive: true, force: true });
       throw Error(`BLOCKED: ${entry.id} ${why}`);
@@ -1280,11 +1339,12 @@ class Host implements ExtensionHost {
     // No package code runs in the hub before it is ready (#348): a kit that needs to is BLOCKED, so the install is.
     const later = 'and the hub isn\'t ready; install it once it is';
     if (hub && streams.length && !this.isReady) blocked(`registers the stream source ${streams.join(', ')}, whose ${SOURCE} kit runs its code in the hub, ${later}`);
+    if (hub && states.length && !this.isReady) blocked(`registers the state source ${states.join(', ')}, whose ${STATE_SOURCE} kit runs its code in the hub, ${later}`);
     if (hub && indexed && !this.isReady) blocked(`replaces ${INDEX}, whose kit runs its code in the hub, ${later}`);
     if (hub && (kitted.length || environments.length) && !this.isReady) blocked(`${what}, whose ${kits} run${kitted.length && environments.length ? '' : 's'} its code in the hub, ${later}`);
     // The kits' suites and stacks run where the sandbox can't reach: unrun, the package doesn't install.
     if (!hub && (kitted.length || environments.length)) blocked(`${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
-    if (!kitted.length && !environments.length && !indexed && !streams.length) {
+    if (!kitted.length && !environments.length && !indexed && !streams.length && !states.length) {
       rmSync(folder, { recursive: true, force: true });
       return declared.map((kind) => ({ slot: CHECK_KIND, fill: kind, verdict: 'BLOCKED' as const }));
     }
@@ -1333,6 +1393,11 @@ class Host implements ExtensionHost {
         if (!ext.index) throw Error(`${entry.id} replaces ${INDEX}, but its code registered no index; it isn't installed`);
         await judge(INDEX, ext.index.name, `index ${ext.index.name}`, () => this.indexFill(ext));
       }
+      // Each state source its manifest lists (#67): the kit makes and undoes changes on the source's own fixture.
+      for (const name of states) {
+        if (!ext.stateSources.includes(name)) throw Error(`BLOCKED: ${entry.id} lists the state source ${name} and didn't register it at install, so ${STATE_SOURCE}'s kit couldn't run; it isn't installed`);
+        await judge(STATE_SOURCE, name, `state source ${name}`, (revision) => this.stateFill(ext, name, revision));
+      }
       for (const name of streams) {
         if (ext.sources.get(name)?.variant !== 'stream') throw Error(`BLOCKED: ${entry.id} lists the stream source ${name} and didn't register it at install, so ${SOURCE}'s kit couldn't run; it isn't installed`);
         // The kit's restart is the hub's: the package's code stops and starts again, keeping nothing it held.
@@ -1351,6 +1416,95 @@ class Host implements ExtensionHost {
       rmSync(folder, { recursive: true, force: true });
     }
     return runs;
+  }
+  /** One call into a package's state source, bounded (#67). */
+  private stateCall(ext: Ext, name: string, op: string, ...args: unknown[]): Promise<unknown> {
+    return within(STATE_MS, `${ext.entry.id}'s state source ${name}`, ext.ask!('state', { name, op, args }));
+  }
+  /** A registered state source as a state-source@1 fill, its calls going to the package. */
+  private stateFill(ext: Ext, name: string, revision: number): StateSourceFill {
+    const call = <T>(op: string) => (...args: unknown[]): Promise<T> => this.stateCall(ext, name, op, ...args) as Promise<T>;
+    return {
+      slot: STATE_SOURCE, revision, name, read: call('read'), compare: call('compare'), undo: call('undo'),
+      fixture: { start: call('fixture.start'), make: call('fixture.make'), run: call('fixture.run') },
+    };
+  }
+  async stateSource(name: string): Promise<Omit<StateSource, 'fixture'>> {
+    const ext = [...this.exts.values()].find((e) => e.live && e.ask && e.stateSources.includes(name));
+    if (!ext) throw Error(`no loaded package registers the state source ${name}`);
+    const { read, compare, undo } = this.stateFill(ext, name, 1);
+    return { read, compare, undo };
+  }
+
+  /** Who is in each project now, by real path. */
+  private readonly inside = new Map<string, number>();
+  async enterProject(folder: string): Promise<{ trusted: boolean; views: ProjectView[] }> {
+    const real = realpathSync(folder);
+    if (!(await this.options.trust.trusted(real))) {
+      for (const ext of this.packsOf(real)) await this.unload(ext);
+      this.inside.delete(real);
+      return { trusted: false, views: [] };
+    }
+    this.inside.set(real, (this.inside.get(real) ?? 0) + 1);
+    for (const pack of packsNamed(real)) {
+      const from = join(real, pack);
+      const { id } = manifestOf(from) as { id: string };
+      if (this.exts.get(id)?.live) continue;
+      // Installed once for its bytes; a pack changed in the project is a new install, held to its kits again.
+      const known = this.entries[id];
+      const installed = known?.project === real && known.digest === packageDigest(from) ? this.installedOf(known) : await this.install({ from, builtBy: null, project: real });
+      const conformance = await this.check(installed);
+      if (!conformance.passed) throw Error(`${id}, a pack of ${real}, failed conformance: ${conformance.reasons.join('; ')}`);
+      const load = await this.load(installed);
+      if (load.status !== 'loaded') throw Error(`${id}, a pack of ${real}, didn't load: ${load.reason}`);
+    }
+    return { trusted: true, views: this.viewsOf(real) };
+  }
+  async leaveProject(folder: string): Promise<void> {
+    const real = realpathSync(folder);
+    const left = (this.inside.get(real) ?? 0) - 1;
+    if (left > 0) { this.inside.set(real, left); return; }
+    this.inside.delete(real);
+    for (const ext of this.packsOf(real)) await this.unload(ext);
+  }
+  projectViews(): ProjectView[] {
+    return [...this.inside.keys()].flatMap((project) => this.viewsOf(project));
+  }
+  private packsOf(project: string): Ext[] {
+    return [...this.exts.values()].filter((e) => e.project === project);
+  }
+  private viewsOf(project: string): ProjectView[] {
+    return this.packsOf(project).filter((e) => e.live).flatMap((e) => [...e.views.keys()].map((name) => ({ name, extension: e.entry.id, commands: e.commands.get(name) ?? [] })));
+  }
+
+  /** The channels of the packages loaded and started (#65): each by name, with what it reaches. */
+  channels(): { name: string; kind: ChannelKind; extension: string }[] {
+    return [...this.exts.values()].filter((e) => e.live && e.ask).flatMap((e) => [...e.channels].map(([name, kind]) => ({ name, kind, extension: e.entry.id })));
+  }
+  /** One send or read of a loaded channel, its context's fetch the caller's; bounded, and never unloading it. */
+  async channel(name: string, op: 'deliver', item: ChannelItem, ctx: ChannelCtx): Promise<ChannelDelivered>;
+  async channel(name: string, op: 'receive', item: null, ctx: ChannelCtx): Promise<ChannelReceived>;
+  async channel(name: string, op: 'deliver' | 'receive', item: ChannelItem | null, ctx: ChannelCtx): Promise<unknown> {
+    const ext = [...this.exts.values()].find((e) => e.live && e.ask && e.channels.has(name));
+    if (!ext) throw Error(`no loaded package registers the channel ${name}`);
+    return this.channelAsk(ext, name, op, item, ctx);
+  }
+  private async channelAsk(ext: Ext, name: string, op: 'deliver' | 'receive', item: ChannelItem | null, ctx: ChannelCtx): Promise<unknown> {
+    const call = `channel:${++this.channelCount}`;
+    this.channelCalls.set(call, { ext, ctx });
+    try {
+      return await within(CHANNEL_MS, `${ext.entry.id}'s channel ${name}`, ext.ask!(`channel.${op}`, { name, call, settings: ctx.settings, ...(item ? { item } : {}) }));
+    } finally {
+      this.channelCalls.delete(call);
+    }
+  }
+  /** A registered channel as a channel@1 fill the kit judges, its calls going to the package. */
+  private channelFill(ext: Ext, name: string, kind: ChannelKind, revision: number): ChannelFill {
+    return {
+      slot: CHANNEL, revision, kind,
+      deliver: (item, ctx) => this.channelAsk(ext, name, 'deliver', item, ctx) as Promise<ChannelDelivered>,
+      receive: (ctx) => this.channelAsk(ext, name, 'receive', null, ctx) as Promise<ChannelReceived>,
+    };
   }
   async enterSecret(connection: Connection, extension: string, name: string, value: string): Promise<{ test: KeyTest; saved: boolean }> {
     this.trustedPath(connection, 'a secret is entered');
@@ -1730,7 +1884,20 @@ class Host implements ExtensionHost {
       // The calls it made and didn't wait for are answered too before its run is read.
       await Promise.all(this.calls);
     } catch (e) {
+      await ext.stop?.();
       return [`its code didn't register in the platform sandbox: ${message(e)}`];
+    }
+    // Each channel it registers is held to channel@1's kit (#65), its code running where conformance runs it.
+    const kitted: string[] = [];
+    try {
+      for (const [name, kind] of ext.channels) {
+        const { runKit, slotKits } = await import('@deepbuild/conformance');
+        const kit = slotKits().find((k) => k.slot === CHANNEL) as SlotKit<ChannelFill> | undefined;
+        if (!kit) { kitted.push(`the conformance package ships no ${CHANNEL} kit, so its channel ${name} is unkitted`); continue; }
+        const report = await runKit(kit, this.channelFill(ext, name, kind, kit.revision), { parts: ['fixed'] });
+        const failed = report.cases.find((c) => c.outcome !== 'PASS');
+        if (report.verdict !== 'PASS') kitted.push(`its channel ${name} reads ${report.verdict} on ${CHANNEL}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}`);
+      }
     } finally {
       await ext.stop?.();
     }
@@ -1738,6 +1905,7 @@ class Host implements ExtensionHost {
     const environments = manifest.environments ?? [];
     return [
       ...ext.refusals,
+      ...kitted,
       ...actionRules(ext.actions),
       ...ext.kinds.filter((k) => !declared.includes(k)).map((k) => `it registers the check kind ${k}, which its manifest doesn't declare`),
       ...ext.environments.filter((e) => !environments.includes(e)).map((e) => `it registers the environment ${e}, which its manifest doesn't declare`),
@@ -1748,7 +1916,7 @@ class Host implements ExtensionHost {
     return {
       entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
-      adapters: new Set(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
+      adapters: new Set(), channels: new Map(), stateSources: [], leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), commands: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -2244,6 +2412,32 @@ class Host implements ExtensionHost {
         ext.adapters.add(name);
         return null;
       }
+      case 'deep.registerChannel': {
+        const [name, channel] = args as [unknown, { slot?: unknown; revision?: unknown; kind?: unknown } | null | undefined];
+        if (typeof name !== 'string' || !ADAPTER_NAME.test(name)) throw Error(`deep.registerChannel takes the channel's name first, one lower-case word, not ${JSON.stringify(name)}`);
+        if (channel?.slot !== CHANNEL || !Number.isSafeInteger(channel.revision) || (channel.revision as number) < 1) throw Error(`deep.registerChannel: ${name} declares itself a ${CHANNEL} fill, with the kit revision it was built against`);
+        if (!CHANNEL_KINDS.includes(channel.kind as ChannelKind)) throw Error(`deep.registerChannel: ${name}'s kind is one of ${CHANNEL_KINDS.join(', ')}`);
+        const owner = conformance ? undefined : [...this.exts.values()].find((e) => e !== ext && e.channels.has(name));
+        if (owner) throw Error(`the channel ${name} is already registered by ${owner.entry.id}`);
+        ext.channels.set(name, channel.kind as ChannelKind);
+        return null;
+      }
+      case 'deep.registerStateSource': {
+        const [name] = args;
+        if (typeof name !== 'string' || !ADAPTER_NAME.test(name)) throw Error(`deep.registerStateSource takes the source's name first, one lower-case word, not ${JSON.stringify(name)}`);
+        if (!(ext.manifest.state_sources ?? []).includes(name)) throw Error(`deep.registerStateSource: ${name} isn't a state source ${id}'s manifest declares, so no kit held it`);
+        const owner = conformance ? undefined : [...this.exts.values()].find((e) => e !== ext && e.stateSources.includes(name));
+        if (owner) throw Error(`the state source ${name} is already registered by ${owner.entry.id}`);
+        if (!ext.stateSources.includes(name)) ext.stateSources.push(name);
+        return null;
+      }
+      case 'deep.channel.fetch': {
+        // Only a send or read of its own under way: the hub's call, with the channel's settings and token.
+        const [call, request] = args;
+        const live = typeof call === 'string' ? this.channelCalls.get(call) : undefined;
+        if (!live || live.ext !== ext) throw Error(`deep.channel.fetch: ${id} has no channel send or read under way as ${String(call)}`);
+        return live.ctx.fetch(request as Parameters<ChannelCtx['fetch']>[0]);
+      }
       case 'deep.registerIndex': {
         const [name, fill] = args as [unknown, { slot?: unknown; revision?: unknown } | null | undefined];
         if (typeof name !== 'string' || !INDEX_NAME.test(name)) throw Error(`deep.registerIndex takes the index's name first, not ${JSON.stringify(name)}`);
@@ -2504,6 +2698,7 @@ class Host implements ExtensionHost {
         const refusal = this.viewRefusal(ext, args);
         if (refusal === null) {
           ext.views.set(args[0] as string, ((args[3] as { binds?: string[] } | undefined)?.binds ?? []).slice());
+          ext.commands.set(args[0] as string, ((args[3] as { commands?: { name: string; action: string }[] } | undefined)?.commands ?? []).map((c) => ({ name: c.name, action: c.action })));
           return null;
         }
         if (conformance) ext.refusals.push(refusal);
@@ -3231,6 +3426,42 @@ class Host implements ExtensionHost {
   }
   async checks(): Promise<{ kind: string; extension: string }[]> {
     return [...this.exts.values()].flatMap((ext) => ext.kinds.map((kind) => ({ kind, extension: ext.entry.id })));
+  }
+  async environment(name: string): Promise<RuntimeEnvironment> {
+    const ext = this.environmentOwner(name);
+    const current = async (): Promise<void> => {
+      if (!ext?.live || !ext.ask || this.exts.get(ext.entry.id) !== ext || await this.revoked(ext)) {
+        throw Error(`no loaded extension registered the environment ${name}; it is absent, replaced or no longer trusted`);
+      }
+    };
+    await current();
+    // Only the release's hub-bound environment passed the install kit; never widen its execution boundary here.
+    if (!ext!.hubBound || !ext!.entry.kits?.some(k => k.slot === ENVIRONMENT && k.fill === name && k.verdict === 'PASS')) {
+      throw Error(`BLOCKED: environment ${name} has no passing install kit for this release package`);
+    }
+    return {
+      extension: ext!.entry.id, version: ext!.entry.version,
+      up: async (spec, lease, checkout, deadline) => {
+        const bad = badDeadline('deadline', deadline);
+        if (bad) throw Error(`an environment start's ${bad}`);
+        await current();
+        const value = await this.ask(ext!, deadline, `environment ${name}`, 'env.up', { name, spec, lease, checkout });
+        // An old load's late start is never presented as its replacement's handle.
+        await current();
+        if (!isPlain(value) || typeof value.id !== 'string' || !value.id || value.port !== lease.port || !Number.isSafeInteger(value.pid) || Number(value.pid) <= 0) {
+          throw Error(`environment ${name} returned an invalid handle or a port outside its lease`);
+        }
+        const handle = Object.freeze({ id: value.id, port: lease.port, pid: Number(value.pid) });
+        let down: Promise<void> | undefined;
+        return {
+          handle,
+          down: () => down ??= (async () => {
+            await current();
+            await this.ask(ext!, CALL_MS, `environment ${name} down`, 'env.down', { name, handle });
+          })(),
+        };
+      },
+    };
   }
   hooks(): string[] {
     return [...new Set([...this.exts.values()].flatMap((ext) => [...ext.subscribed]))].sort();

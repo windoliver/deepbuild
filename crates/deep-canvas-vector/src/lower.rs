@@ -97,7 +97,7 @@ pub fn parts(svg: &Svg, item: &Value) -> Vec<(String, [f64; 4], Vec<Verb>)> {
 }
 
 /// Whether a path in `part` sits in part `of`, directly or inside one of its parts.
-fn within(svg: &Svg, mut part: Option<usize>, of: usize) -> bool {
+pub fn within(svg: &Svg, mut part: Option<usize>, of: usize) -> bool {
     while let Some(p) = part {
         if p == of {
             return true;
@@ -229,6 +229,29 @@ pub fn lower(
         ));
     }
     out
+}
+
+/// A vector item's whole outline in its own units (its `at` left out), every path at full
+/// write, and the role its first painted path maps to: what a frame draws it as when the
+/// evidence store's holder inlines it (#1162).
+pub fn outline(svg: &Svg, item: &Value, colors: &BTreeMap<Color, String>) -> Value {
+    let mut local = item.clone();
+    if let Some(m) = local.as_object_mut() {
+        m.remove("at");
+    }
+    let place = placement(svg, &local);
+    let verbs: Vec<Verb> = svg
+        .paths
+        .iter()
+        .flat_map(|p| p.verbs.iter().map(|v| place.verb(*v)))
+        .collect();
+    let role = svg
+        .paths
+        .iter()
+        .find_map(|p| p.fill.map(|f| f.color).or(p.stroke.as_ref().map(|s| s.paint.color)))
+        .and_then(|c| colors.get(&c))
+        .map_or("ink", String::as_str);
+    json!({"d": d_of(&verbs), "role": role})
 }
 
 /// What one path draws: its outline, and its fill and stroke as `(role, opacity[, width])`.

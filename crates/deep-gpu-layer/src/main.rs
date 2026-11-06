@@ -13,6 +13,9 @@
 
 #[cfg(feature = "test-meter")]
 mod allocations;
+mod blur;
+mod calibrate;
+mod columns;
 mod compare;
 mod compile;
 mod conformance;
@@ -24,17 +27,22 @@ mod frames;
 mod golden;
 mod guard;
 mod host;
+mod interp_suite;
 mod levels;
 mod live;
 mod liveview;
+mod lod;
 mod marks2d;
+mod opframe;
 mod parity;
 mod plugin;
 mod reference;
 mod scene;
 mod seam;
 mod session3;
+mod simplify;
 mod status;
+mod steps_ref;
 #[cfg(feature = "test-meter")]
 mod testgpu;
 mod textures;
@@ -148,6 +156,12 @@ pub enum Planted {
     /// stepped from the last frame; mesh edges read unwelded, or drawn without the depth test;
     /// a shared result released when a revision drops its last reader.
     ParticlesIntegrate,
+    /// #419's wrong programs (tests/acceptance/419/README.md: Assumed surfaces 11).
+    VelocityFromTransform,
+    SamplerStepsWorld,
+    VelocityPairsByIndex,
+    SettleResetsEachFrame,
+    SamplerHoldsCamera,
     EdgesUnwelded,
     EdgesSkipDepth,
     ReleasesAtRevision,
@@ -162,6 +176,17 @@ pub enum Planted {
     StatusBeforeToneMap,
     /// #418's: the bloom's lens dirt laid over the frame instead of multiplying its light.
     DirtOverlay,
+    /// #429's wrong programs (tests/acceptance/429/README.md: Planted programs).
+    RenderBackDrawsLiveOnly,
+    TakesDeclaredClass,
+    AttributeStride16,
+    PartialUpdate2Bytes,
+    RecopiesWholeColumn,
+    F32CompareFloorExact,
+    TrustsWriteIndex,
+    DropsSwizzleLast,
+    NoiseWeightHalved,
+    SettlesWithFallback,
     /// #423's wrong programs (tests/acceptance/423/README.md: Planted programs): the
     /// metallic-roughness map decoded from sRGB; a PNG's gAMA applied as it decodes; every map
     /// sampled at anisotropy 1; a KTX2 normal map transcoded as sRGB color.
@@ -175,11 +200,51 @@ pub enum Planted {
     /// environment light alone; metallic premixed into one F0 before shading.
     DrawsBlack,
     DropsClouds,
+    /// #424's wrong programs.
+    AddWritesDepth,
+    AddWithoutDepthTest,
+    IdsByDrawPosition,
+    IdsIgnoreMask,
+    CutsColorOnly,
+    SinglePixelPick,
     CascadeCacheKeepsStale,
     PrefilterOverFrames,
     UncompensatedLobe,
     CompensatesEnvironmentOnly,
     PremixedMetallic,
+    /// #425's wrong programs (tests/acceptance/425/README.md: Planted programs): a band or the
+    /// light cut held by session hysteresis; a band change faded over wall-clock time; a mesh
+    /// level chosen from the previous frame's view; band masks keyed per band; the blend level
+    /// computed in f32 from the drawn frame; a climb that never steps down; canonical renders at
+    /// the live rung; a frame-health drop climbed again without a view change.
+    BandHysteresis,
+    LightCutHysteresis,
+    BandFadeByWallClock,
+    LevelByEarlierFrame,
+    BandMasksIndependent,
+    BlendLevelOnGpu,
+    ClimbNeverStepsDown,
+    CanonicalClimbs,
+    ReclimbsWithoutViewChange,
+    /// #428's wrong programs (tests/acceptance/428/README.md: Planted programs).
+    DropsDispersion,
+    AbsorptionIgnoresThickness,
+    TransmissionIgnoresRoughness,
+    DispersionSamplesOnce,
+    SpecularColorIgnored,
+    IridescenceIgnoresThickness,
+    DiffuseLambert,
+    OrenNayarUncompensated,
+    RetroreflectionIgnored,
+    FlakesByPixel,
+    // #483: the structural steps' wrong programs.
+    IterateFeedsFirst,
+    SortTiesDecreasing,
+    CompactByAtomic,
+    IndexWraps,
+    MipsLevel0Only,
+    MipsKeptUnderOldKey,
+    PoolWithoutClear,
 }
 
 impl Planted {
@@ -251,6 +316,11 @@ impl Planted {
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,
             "particles_integrate" => Planted::ParticlesIntegrate,
+            "velocity_from_transform" => Planted::VelocityFromTransform,
+            "sampler_steps_world" => Planted::SamplerStepsWorld,
+            "velocity_pairs_by_index" => Planted::VelocityPairsByIndex,
+            "settle_resets_each_frame" => Planted::SettleResetsEachFrame,
+            "sampler_holds_camera" => Planted::SamplerHoldsCamera,
             "edges_unwelded" => Planted::EdgesUnwelded,
             "edges_skip_depth" => Planted::EdgesSkipDepth,
             "releases_at_revision" => Planted::ReleasesAtRevision,
@@ -260,17 +330,59 @@ impl Planted {
             "spot_counts_cone" => Planted::SpotCountsCone,
             "status_before_tone_map" => Planted::StatusBeforeToneMap,
             "dirt_overlay" => Planted::DirtOverlay,
+            "render_back_draws_live_only" => Planted::RenderBackDrawsLiveOnly,
+            "takes_declared_class" => Planted::TakesDeclaredClass,
+            "attribute_stride_16" => Planted::AttributeStride16,
+            "partial_update_2_bytes" => Planted::PartialUpdate2Bytes,
+            "recopies_whole_column" => Planted::RecopiesWholeColumn,
+            "f32_compare_floor_exact" => Planted::F32CompareFloorExact,
+            "trusts_write_index" => Planted::TrustsWriteIndex,
+            "drops_swizzle_last" => Planted::DropsSwizzleLast,
+            "noise_weight_halved" => Planted::NoiseWeightHalved,
+            "settles_with_fallback" => Planted::SettlesWithFallback,
             "mr_from_srgb" => Planted::MrFromSrgb,
             "applies_image_gamma" => Planted::AppliesImageGamma,
             "anisotropy_one" => Planted::AnisotropyOne,
             "normal_map_as_srgb" => Planted::NormalMapAsSrgb,
             "draws_black" => Planted::DrawsBlack,
             "drops_clouds" => Planted::DropsClouds,
+            "add_writes_depth" => Planted::AddWritesDepth,
+            "add_skips_depth_test" => Planted::AddWithoutDepthTest,
+            "ids_by_draw_position" => Planted::IdsByDrawPosition,
+            "ids_ignore_mask" => Planted::IdsIgnoreMask,
+            "cut_color_only" => Planted::CutsColorOnly,
+            "single_pixel_pick" => Planted::SinglePixelPick,
             "cascade_cache_keeps_stale" => Planted::CascadeCacheKeepsStale,
             "prefilter_over_frames" => Planted::PrefilterOverFrames,
             "uncompensated_lobe" => Planted::UncompensatedLobe,
             "compensates_environment_only" => Planted::CompensatesEnvironmentOnly,
             "premixed_metallic" => Planted::PremixedMetallic,
+            "band_hysteresis" => Planted::BandHysteresis,
+            "light_cut_hysteresis" => Planted::LightCutHysteresis,
+            "band_fade_by_wall_clock" => Planted::BandFadeByWallClock,
+            "level_by_earlier_frame" => Planted::LevelByEarlierFrame,
+            "band_masks_independent" => Planted::BandMasksIndependent,
+            "blend_level_on_gpu" => Planted::BlendLevelOnGpu,
+            "climb_never_steps_down" => Planted::ClimbNeverStepsDown,
+            "canonical_climbs" => Planted::CanonicalClimbs,
+            "reclimbs_without_view_change" => Planted::ReclimbsWithoutViewChange,
+            "drops_dispersion" => Planted::DropsDispersion,
+            "absorption_ignores_thickness" => Planted::AbsorptionIgnoresThickness,
+            "transmission_ignores_roughness" => Planted::TransmissionIgnoresRoughness,
+            "dispersion_samples_once" => Planted::DispersionSamplesOnce,
+            "specular_color_ignored" => Planted::SpecularColorIgnored,
+            "iridescence_ignores_thickness" => Planted::IridescenceIgnoresThickness,
+            "diffuse_lambert" => Planted::DiffuseLambert,
+            "oren_nayar_uncompensated" => Planted::OrenNayarUncompensated,
+            "retroreflection_ignored" => Planted::RetroreflectionIgnored,
+            "flakes_by_pixel" => Planted::FlakesByPixel,
+            "iterate_feeds_first" => Planted::IterateFeedsFirst,
+            "sort_ties_decreasing" => Planted::SortTiesDecreasing,
+            "compact_by_atomic" => Planted::CompactByAtomic,
+            "index_wraps" => Planted::IndexWraps,
+            "mips_level0_only" => Planted::MipsLevel0Only,
+            "mips_kept_under_old_key" => Planted::MipsKeptUnderOldKey,
+            "pool_without_clear" => Planted::PoolWithoutClear,
             _ => return None,
         })
     }
@@ -470,16 +582,23 @@ impl App {
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("simplify") => simplify::call(out, call),
             Some("workers") => textures::workers(self),
             Some("tone") => tone::call(self, out, call),
             Some("host") => host::call(self, out, call),
             Some("guard") => guard::call(self, out, call),
             Some("operators") => effects::operators(self),
+            Some("calibrate") => calibrate::calibrate(self),
             Some("reference") => effects::reference(self, out, call),
+            Some("check_operator") if opframe::wants(call) => opframe::call(self, out, call),
             Some("check_operator") => effects::check_operator(self, call),
             Some("op") => effects::op(self, call),
+            Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),
             Some("cross_gpu") => effects::cross_gpu(self, call),
+            Some("op_table") => steps_ref::op_table(),
+            Some("steps_reference") => steps_ref::steps_reference(self, out),
+            Some("interp_suite") => interp_suite::call(self, call),
             Some("golden") => golden::golden(self, out, call),
             Some("decide") => golden::decide(self, call),
             Some("live") => live::call(self, out, call),
@@ -568,7 +687,13 @@ fn main() {
                 _ => bad_input(),
             },
             "--planted" => match args.next().as_deref().and_then(Planted::parse) {
-                Some(p) => planted = Some(p),
+                Some(p) => {
+                    if p == Planted::DropsDispersion {
+                        deep_canvas_scene3d::gltf::DROPS_DISPERSION
+                            .store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    planted = Some(p)
+                }
                 None => bad_input(),
             },
             "--withhold" => match args.next().as_deref().and_then(deep_gpu::seam::row) {

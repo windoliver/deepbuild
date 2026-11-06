@@ -72,6 +72,18 @@
     "tracking": "#65"
   },
   {
+    "method": "device.unpair",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#65"
+  },
+  {
+    "method": "channel.link",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#65"
+  },
+  {
     "method": "confirm.enroll",
     "since": "R1",
     "stability": "preview",
@@ -142,6 +154,24 @@
     "since": "R1",
     "stability": "stable",
     "called_by": "deep env down"
+  },
+  {
+    "method": "lease.wait",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep lease"
+  },
+  {
+    "method": "lease.started",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep lease"
+  },
+  {
+    "method": "lease.exited",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep lease"
   },
   {
     "method": "extension.install",
@@ -216,6 +246,12 @@
     "called_by": "deep-hook statusline"
   },
   {
+    "method": "notifications.report",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#994"
+  },
+  {
     "method": "views.shown",
     "since": "R2",
     "stability": "preview",
@@ -250,5 +286,46 @@
     "since": "R1",
     "stability": "preview",
     "tracking": "#965"
+  },
+  {
+    "method": "workspace.new",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67",
+    "called_by": "deep workspace new"
+  },
+  {
+    "method": "workspace.move",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67",
+    "called_by": "deep workspace move"
+  },
+  {
+    "method": "workspace.revert",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67",
+    "called_by": "deep workspace revert"
+  },
+  {
+    "method": "workspace.diff",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67",
+    "called_by": "deep workspace diff"
+  },
+  {
+    "method": "workspace.drift",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67",
+    "called_by": "deep workspace drift"
+  },
+  {
+    "method": "project.views",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67"
   }
 ]

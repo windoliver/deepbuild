@@ -178,6 +178,9 @@ pub enum Planted {
     AcceptsEverySampleRate8To192k,
     /// #411: `items/<id>/modifiers/<k>#out` reads the stack's final result for every k.
     PrefixReadsFinal,
+    /// #1162 AC3's wrong program: deep_query evaluates each `at.place` relation against its
+    /// target's box as the previous evaluation in this call left it (at time 0 before any).
+    RelationFromPreviousBox,
     /// #411: a why names its canvas module and operator and no document field or default.
     WhyNamesOperatorOnly,
     /// #411: a why lists only the first write to its value.
@@ -204,6 +207,10 @@ pub enum Planted {
     SerialCarriesManySends,
     /// #401: a frame shows the readings of the latch a frame before its own.
     BoundValueAFrameLate,
+    /// #629: a run's assertion value is read from the agent's summary of the run.
+    ResolverReadsSummary,
+    /// #629: an assertion value that doesn't parse as a number reads 0.
+    UnparsableReadsZero,
     /// #401: install takes any keymap as it is.
     KeymapUnchecked,
     /// #401: two bindings of one chord in one context install with no conflict reported.
@@ -518,6 +525,10 @@ pub enum Call {
     },
     /// #200: `deep://registries/<core version>`.
     Registries,
+    /// #490: `fn`, one expression of the closed function list.
+    Fn(Box<Map<String, Value>>),
+    /// #490: `path`, an item's drawn path.
+    Path { doc: String, item: String },
     /// #412: deep_kinds, its fields as the call gave them.
     Kinds(Value),
     /// #238: the sandbox module's counts of checks, links, rewrites and check-time runs.
@@ -756,6 +767,9 @@ pub struct Scenario {
     pub panels: BTreeMap<String, Panel>,
     pub docs: BTreeMap<String, String>,
     pub record: BTreeMap<String, RecordObject>,
+    /// #629: a replay's run record entries, each as a `run` call's reply gave it (`record` as a
+    /// list).
+    pub runs: Vec<Value>,
     pub claims: BTreeMap<String, Claim>,
     pub window: Option<[f64; 2]>,
     /// The display the window is on, px: full screen fills it (#383).
@@ -1020,9 +1034,13 @@ impl<'a> Hub<'a> {
             pending3d: None,
             scopes: BTreeMap::new(),
             serial: 0,
-            ring: crate::ring::Ring::new(
-                scenario.panels.iter().map(|(id, p)| (id.clone(), p.rect)),
-            ),
+            ring: {
+                let mut ring = crate::ring::Ring::new(
+                    scenario.panels.iter().map(|(id, p)| (id.clone(), p.rect)),
+                );
+                ring.replay(&scenario.runs);
+                ring
+            },
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
@@ -1250,6 +1268,65 @@ impl<'a> Hub<'a> {
 
     /// A new session for a document: its epochs from the scenario's start, the look's tokens
     /// and the record's readings.
+    /// The look a document names by asset, resolved over the bundled faces (#1162).
+    fn look_of(&self, doc: &Value) -> Option<Look> {
+        let name = doc.pointer("/look/asset")?.as_str()?;
+        let id = name.split('@').next()?;
+        let sha = doc.pointer(&format!("/assets/{id}/sha256"))?.as_str()?;
+        let bytes = (sha.len() == 64)
+            .then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())
+            .flatten()?;
+        let def: Value = serde_json::from_slice(&bytes).ok()?;
+        let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
+        look::resolve(&def, &bundled).ok()
+    }
+
+    /// Mark set columns that read the agent's table, inlined from the evidence store as
+    /// `deep-canvas-render` reads them (#397, #1162): what every frame of a revision draws.
+    pub(crate) fn inline_tables(
+        &self,
+        form: &mut Value,
+    ) -> Result<(), deep_marks_vello::tables::Refused> {
+        match form {
+            Value::Object(map) => {
+                deep_marks_vello::tables::tables(map, Some(&self.scenario.evidence))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Each `vector@1` item's imported outline, inlined from the evidence store as
+    /// `params.outline` (#398, #1162): what the vector kind draws as in a frame.
+    /// The import's issues come back: an SVG the store doesn't hold is `asset_missing`.
+    pub(crate) fn inline_vectors(&self, form: &mut Value) -> Vec<Issue> {
+        let Value::Object(map) = form else { return Vec::new() };
+        let root = &self.scenario.evidence;
+        let (issues, imported) = deep_canvas_vector::check(
+            map,
+            |sha| (sha.len() == 64).then(|| std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()).flatten(),
+            false,
+        );
+        let Some(Value::Object(items)) = map.get_mut("items") else { return issues };
+        for (id, found) in &imported {
+            if let Some(item) = items.get_mut(id) {
+                let mut outline =
+                    deep_canvas_vector::lower::outline(&found.svg, item, &found.colors);
+                // Its source too, which a frame mid-write lowers again at its progress (#1162).
+                let src = item.pointer("/params/src").and_then(Value::as_str).unwrap_or("");
+                if let Some(bytes) = (src.len() == 64)
+                    .then(|| std::fs::read(root.join(&src[..2]).join(&src[2..])).ok())
+                    .flatten()
+                {
+                    outline["svg"] = Value::String(String::from_utf8_lossy(&bytes).into_owned());
+                }
+                if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
+                    params.insert("outline".into(), outline);
+                }
+            }
+        }
+        issues
+    }
+
     pub(crate) fn new_session(&self) -> DocSession {
         let mut s = DocSession::new(
             self.scenario.epoch_start,
@@ -1412,6 +1489,11 @@ impl<'a> Hub<'a> {
                 self.install_pack(id, dir, session.as_deref())
             }
             Call::Registries => self.registries_reply(),
+            Call::Fn(c) => crate::function::reply(c),
+            Call::Path { doc, item } => match self.current(doc) {
+                Some(row) => crate::function::path_reply(&row.doc, item),
+                None => json!({"outcome": "refused", "code": "no_revision"}),
+            },
             Call::Kinds(c) => self.kinds_reply(c),
             Call::Sandbox => json!({
                 "module": "sandbox",
@@ -1764,6 +1846,13 @@ impl<'a> Hub<'a> {
             &writer,
             &title,
         );
+        // The document's look (Document envelope: `look: {asset: look@major}`), read from the
+        // evidence store by its asset's hash; one the store doesn't hold leaves the shipped look.
+        if let Ok(doc) = &stamped {
+            if let Some(look) = self.look_of(doc) {
+                self.look = look;
+            }
+        }
         let mut notices = Vec::new();
         // #403: in a claim that names the document, an item of a kind this build doesn't know
         // blocks its checks, naming the kind, while the rest still draws.
@@ -1795,6 +1884,7 @@ impl<'a> Hub<'a> {
                 skipped = crate::verdict::unknown_items(&result.notices);
                 blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = result.issues;
+                blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
                 // the rest.
                 if self.scenario.planted == Some(Planted::AcceptsEverySampleRate8To192k) {
@@ -1865,6 +1955,12 @@ impl<'a> Hub<'a> {
                 &skipped,
             )
         });
+        if let Some(form) = drawn_form.as_mut() {
+            if let Err(r) = self.inline_tables(form) {
+                issues.push(unfit_issue(r.code, r.path));
+            }
+            issues.extend(self.inline_vectors(form));
+        }
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
         if let Some(form) = drawn_form.as_mut() {
@@ -1961,7 +2057,9 @@ impl<'a> Hub<'a> {
         let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
         // A revision with 3D writer layers renders back on the GPU (#378).
         let three = visible && wants_pixels && deep_canvas_scene3d::scene::has_3d(&doc);
-        let drawn = if visible && wants_pixels && !three {
+        // A 3D writer layer draws its 2D items as overlays (Writer layer): the 2D frame of the
+        // same revision at `t`, drawn over the 3D frame (#1162).
+        let drawn = if visible && wants_pixels {
             self.live_drawn(&show.doc, show.t)
         } else {
             None
@@ -1981,6 +2079,9 @@ impl<'a> Hub<'a> {
                 !(n.code == "deprecated"
                     && self.scenario.planted == Some(Planted::LoadsDeprecatedSilently))
             })
+            // A kind this build draws without a kind registry entry (rect@1, path@1) is drawn,
+            // not skipped, as `unknown_items` reads it, so no notice says it is (#490).
+            .filter(|n| !(n.code == "unknown_kind" && n.actual.as_str().is_some_and(shared::knows)))
             .map(Notice::to_json)
             .collect()
     }
@@ -2039,17 +2140,31 @@ impl<'a> Hub<'a> {
                 }
                 Ok(()) => {
                     let mut batches = Vec::new();
+                    let instanced = crate::packs::instanced(
+                        self.expansions
+                            .get(&show.doc)
+                            .map_or(&[][..], Vec::as_slice),
+                    );
                     let pixels = match drawn3d {
-                        Some(drawn3d) => drawn3d.ok(),
+                        Some(drawn3d) => drawn3d.ok().map(|(mut rgba, size, boxes)| {
+                            // The 2D items over the 3D frame, with no ground of their own.
+                            let mut boxes = boxes;
+                            if let Some(d) = drawn {
+                                let (over, drew) =
+                                    self.renderer.raster_batched(d, size, None, &instanced);
+                                batches = drew;
+                                snapshot::over(&mut rgba, &over);
+                                let scale = d.scale(size);
+                                boxes.extend(
+                                    d.boxes().into_iter().map(|(id, b)| (id, b.map(|v| v * scale))),
+                                );
+                            }
+                            (rgba, size, boxes)
+                        }),
                         None => {
                             let drawn = drawn.expect("a revision with no error was drawn");
                             let size = show.size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
                             let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-                            let instanced = crate::packs::instanced(
-                                self.expansions
-                                    .get(&show.doc)
-                                    .map_or(&[][..], Vec::as_slice),
-                            );
                             let (rgba, drew) =
                                 self.renderer
                                     .raster_batched(drawn, size, Some(ground), &instanced);

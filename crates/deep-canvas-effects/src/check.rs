@@ -11,7 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::Value;
 
 use crate::graph::{
-    self, Arg, Body, Class, Count, From, Issue, Kind, Operator, Origin, Sc, Step, Tex, Ty,
+    self, Arg, Body, Class, Count, Fallback, From, Issue, Kind, Operator, Origin, Sc, Step, Tex,
+    Ty,
 };
 use crate::table::{self, Def};
 
@@ -25,6 +26,9 @@ pub const MAX_NEST: usize = 2;
 pub const MAX_TRIPS: u32 = 256;
 pub const MAX_TEXTURES: usize = 8;
 pub const MAX_ELEMENTS: u32 = 1_048_576;
+/// A texture3d output's side, at most (structural steps), and a 2D texture output's.
+pub const MAX_TEXTURE3D: u32 = 256;
+pub const MAX_TEXTURE2D: u32 = 8192;
 
 /// Fetches per invocation, by kind.
 pub fn max_fetches(kind: Kind) -> u32 {
@@ -58,7 +62,27 @@ pub struct Checked {
     pub textures: Vec<String>,
     /// The storage inputs, in binding order, after the textures.
     pub storage_inputs: Vec<String>,
+    /// Each `iterate@1` step's body, checked as a pass of its own (#483); the step itself is an
+    /// input of `op`, the texture its last run writes.
+    pub iterates: Vec<Iterated>,
 }
+
+/// An iterate step as the check passed it: its body a pass whose inputs are those of the
+/// operator it reads, `prev` and its index.
+#[derive(Clone, Debug)]
+pub struct Iterated {
+    pub step: String,
+    pub count: u32,
+    pub index: String,
+    pub format: String,
+    pub size: graph::Size,
+    pub body: Box<Checked>,
+}
+
+/// Iterate's limits (structural steps): at most 16 runs, never nested.
+pub const MAX_ITERATE: u64 = 16;
+/// The formats a ping-pong target may take.
+pub const PING_PONG: &[&str] = &["rgba16float", "rgba8unorm"];
 
 /// A value's name in the type map.
 pub fn key(step: &str, port: Option<&str>) -> String {
@@ -74,10 +98,41 @@ pub fn acc_key(name: &str) -> String {
     format!("acc:{name}")
 }
 
+/// What keeps an operator from being exact: a step, or an input by its path.
+#[derive(Clone, Debug)]
+pub enum Why {
+    Step(String, String),
+    Input(String, String),
+}
+
+/// The check's planted wrong programs (canvas primitives: Determinism class; the issue's
+/// criteria name each one), all off in every real build.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CheckOptions {
+    /// Takes the declared class instead of the computed one.
+    pub declared_class: bool,
+    /// An op table that marks f32 compares exact.
+    pub exact_f32_compares: bool,
+    /// An op table that marks f32 floor exact.
+    pub exact_f32_floor: bool,
+    /// Trusts a compute write's index.
+    pub trusts_index: bool,
+    /// An op table whose noise octave weight is halved.
+    pub noise_weight_halved: bool,
+}
+
 struct Ctx<'a> {
     op: &'a Operator,
     types: BTreeMap<String, Ty>,
-    exact: bool,
+    /// The first step or input that keeps the operator from being exact, if any.
+    inexact: Option<Why>,
+    /// Each integer value that is an affine function `scale × element + offset` of the
+    /// invocation's element index, by its name in the type map: what a compute write's index
+    /// must be for each invocation to write only its own slots.
+    affine: BTreeMap<String, (u64, u64)>,
+    /// Steps whose value is the same in every invocation.
+    uniform: BTreeSet<String>,
+    options: CheckOptions,
     weight: f64,
     fetches: u32,
     body_order: BTreeMap<String, Vec<String>>,
@@ -188,6 +243,62 @@ pub fn const_type(step: &Step) -> Result<Ty, String> {
         .ok_or_else(|| format!("{value} is not a literal of a step type"))
 }
 
+/// A seeded step's literal fields (`noise@1`, `fbm@1`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Seeded {
+    /// 0 for none: the noise repeats every `period` lattice cells on each axis.
+    pub period: u32,
+    pub octaves: u32,
+    pub lacunarity: f64,
+    pub gain: f64,
+}
+
+/// Periods above this many cells are refused.
+pub const MAX_PERIOD: u32 = 65_536;
+
+/// A seeded step's fields, defaulted: no period, 4 octaves, lacunarity 2, gain 0.5; fbm with a
+/// period takes a whole-number lacunarity, since each octave must repeat within it.
+pub fn seeded_fields(s: &Step) -> Result<Seeded, String> {
+    let num = |k: &str, or: f64| -> Result<f64, String> {
+        match s.fields.get(k) {
+            None => Ok(or),
+            Some(v) => v
+                .as_f64()
+                .filter(|x| x.is_finite())
+                .ok_or_else(|| format!("{k} is a number")),
+        }
+    };
+    let period = num("period", 0.0)?;
+    if period < 0.0 || period.fract() != 0.0 || period > f64::from(MAX_PERIOD) {
+        return Err(format!(
+            "period is a whole number of cells, 0 to {MAX_PERIOD}"
+        ));
+    }
+    let octaves = num("octaves", 4.0)?;
+    if !(1.0..=8.0).contains(&octaves) || octaves.fract() != 0.0 {
+        return Err("octaves is 1 to 8".into());
+    }
+    let lacunarity = num("lacunarity", 2.0)?;
+    if !(1.0..=8.0).contains(&lacunarity) {
+        return Err("lacunarity is 1 to 8".into());
+    }
+    if period > 0.0 && lacunarity.fract() != 0.0 {
+        return Err(format!(
+            "fbm with a period takes a whole-number lacunarity, not {lacunarity}: each octave must repeat within the period"
+        ));
+    }
+    let gain = num("gain", 0.5)?;
+    if !(0.0..=1.0).contains(&gain) {
+        return Err("gain is 0 to 1".into());
+    }
+    Ok(Seeded {
+        period: period as u32,
+        octaves: octaves as u32,
+        lacunarity,
+        gain,
+    })
+}
+
 fn pick_lane(c: char) -> Option<u8> {
     "xyzw".find(c).or_else(|| "rgba".find(c)).map(|i| i as u8)
 }
@@ -280,9 +391,14 @@ impl Ctx<'_> {
         if name == "repeat" {
             return self.repeat(id, s, scope, depth, trips);
         }
-        if name == "write" {
-            self.write(id, s, scope)?;
-            self.cost(def, &BTreeMap::new(), &Ty::U32, trips);
+        if name == "store" {
+            self.store(id, s, scope)?;
+            self.cost(id, def, &BTreeMap::new(), &Ty::U32, trips);
+            return Ok(Vec::new());
+        }
+        if name == "write" || name.starts_with("atomic_") {
+            self.write(id, s, scope, name != "write")?;
+            self.cost(id, def, &BTreeMap::new(), &Ty::U32, trips);
             return Ok(Vec::new());
         }
         let mut args: BTreeMap<&str, Ty> = BTreeMap::new();
@@ -316,8 +432,12 @@ impl Ctx<'_> {
                     .ok_or_else(|| bad(format!("{} takes to: a type", s.op)))?;
                 let x = concrete(need("x")?);
                 match (lanes(&x), lanes(&to)) {
+                    // A scalar's bits splat into every lane.
                     (Some((xs, a)), Some((ts, b)))
-                        if name == "bitcast" && a == b && xs != Sc::Bool && ts != Sc::Bool =>
+                        if name == "bitcast"
+                            && (a == b || a == 1)
+                            && xs != Sc::Bool
+                            && ts != Sc::Bool =>
                     {
                         to
                     }
@@ -478,6 +598,17 @@ impl Ctx<'_> {
                 }
                 Ty::U32
             }
+            "noise" | "fbm" => {
+                if float(&need("p")?).map_err(bad)? != Ty::V(Sc::F32, 2) {
+                    return Err(bad(format!("{}'s p is a vec2<f32>", s.op)));
+                }
+                match need("seed")? {
+                    Ty::Int | Ty::V(Sc::U32, 1) => {}
+                    t => return Err(bad(format!("{} takes a u32 seed, not {}", s.op, t.wgsl()))),
+                }
+                seeded_fields(s).map_err(bad)?;
+                Ty::F32
+            }
             "rand" => {
                 match need("key")? {
                     Ty::Int | Ty::V(Sc::U32, 1) => {}
@@ -499,6 +630,24 @@ impl Ctx<'_> {
                         "camera takes of: clip, inverse_clip, position or near".into()
                     ))
                 }
+            },
+            "role" => {
+                let name = s.fields.get("name").and_then(Value::as_str).unwrap_or("");
+                if graph::STATUS_ROLES.contains(&name) {
+                    return Err(Issue::at_step(
+                        "operator_status_color",
+                        id,
+                        format!("role {name} is a status color: no operator reads or writes one (status colors are reachable only through a binding)"),
+                    ));
+                }
+                if name.is_empty() {
+                    return Err(bad("role names a look role".into()));
+                }
+                Ty::V(Sc::F32, 3)
+            }
+            "normal" => match s.fields.get("space").and_then(Value::as_str) {
+                Some("object" | "world" | "view") => Ty::V(Sc::F32, 3),
+                _ => return Err(bad("normal takes space: object, world or view".into())),
             },
             "luminance" => {
                 match float(&need("rgb")?).map_err(bad)? {
@@ -562,6 +711,107 @@ impl Ctx<'_> {
                 int_of("i")?;
                 Ty::V(sc, l)
             }
+            "load3d" => {
+                match lanes(&need("ixyz")?) {
+                    Some((sc, 3)) if sc.is_int() => {}
+                    _ => return Err(bad("load3d's ixyz is a vec3 of integers".into())),
+                }
+                match need("tex")? {
+                    Ty::Tex3(Tex::Uint) => Ty::U32,
+                    Ty::Tex3(_) => Ty::V(Sc::F32, 4),
+                    t => return Err(bad(format!("load3d reads a texture3d, not {}", t.wgsl()))),
+                }
+            }
+            "sample3d" => {
+                if float(&need("uvw")?).map_err(bad)? != Ty::V(Sc::F32, 3) {
+                    return Err(bad("sample3d's uvw is a vec3".into()));
+                }
+                match need("tex")? {
+                    Ty::Tex3(Tex::Float) => Ty::V(Sc::F32, 4),
+                    t => return Err(bad(format!("sample3d reads a float texture3d, not {}", t.wgsl()))),
+                }
+            }
+            "with" => {
+                let (sc, l, n) = match need("a")? {
+                    Ty::Arr(sc, l, n) => (sc, l, n),
+                    t => return Err(bad(format!("with copies an array, not {}", t.wgsl()))),
+                };
+                int_of("i")?;
+                let v = need("v")?;
+                if concrete(unify(&Ty::V(sc, l), &v).map_err(bad)?) != Ty::V(sc, l) {
+                    return Err(bad(format!(
+                        "with puts a {} into an array of them, not a {}",
+                        Ty::V(sc, l).wgsl(),
+                        v.wgsl()
+                    )));
+                }
+                Ty::Arr(sc, l, n)
+            }
+            "sort_by_key" | "scan" | "compact" => {
+                let storage = |p: &str| -> Result<(Sc, u32), Issue> {
+                    match need(p)? {
+                        Ty::Storage(sc, n) => Ok((sc, n)),
+                        t => Err(bad(format!("{} reads storage at {p}, not {}", s.op, t.wgsl()))),
+                    }
+                };
+                let count = |len: u32| -> Result<u32, Issue> {
+                    let c = match s.args.get("count") {
+                        Some(Arg::Lit(v)) => v
+                            .as_u64()
+                            .ok_or_else(|| bad("count is a whole number".into()))?,
+                        None if name == "scan" => u64::from(len),
+                        _ => return Err(bad(format!("{}'s count is a literal", s.op))),
+                    };
+                    if c == 0 || c > u64::from(MAX_ELEMENTS) || (len > 0 && c > u64::from(len)) {
+                        return Err(Issue::at_step(
+                            "operator_limit",
+                            id,
+                            format!("{} runs over 1 to {MAX_ELEMENTS} elements, at most its storage's {len}; not {c}", s.op),
+                        ));
+                    }
+                    Ok(c as u32)
+                };
+                let ports = match name {
+                    "sort_by_key" => {
+                        let (k, nk) = storage("keys")?;
+                        let (v, nv) = storage("values")?;
+                        if k != Sc::U32 || v != Sc::U32 {
+                            return Err(bad("sort_by_key sorts u32 values by u32 keys".into()));
+                        }
+                        vec![(None, Ty::Storage(Sc::U32, count(nk.min(nv))?))]
+                    }
+                    "scan" => {
+                        let (sc, n) = storage("in")?;
+                        if !sc.is_int() {
+                            return Err(bad("scan adds u32 or i32 values".into()));
+                        }
+                        if s.fields.get("op").and_then(Value::as_str) != Some("add") {
+                            return Err(bad("scan's op is add".into()));
+                        }
+                        vec![(None, Ty::Storage(sc, count(n)?))]
+                    }
+                    _ => {
+                        let (sc, n) = storage("in")?;
+                        let (f, nf) = storage("flag")?;
+                        if !matches!(f, Sc::Bool | Sc::U32) {
+                            return Err(bad("compact's flag is storage of bools".into()));
+                        }
+                        let c = count(n.min(nf))?;
+                        vec![
+                            (Some("out".to_string()), Ty::Storage(sc, c)),
+                            (Some("count".to_string()), Ty::Storage(Sc::U32, 1)),
+                        ]
+                    }
+                };
+                let elements = match &ports[0].1 {
+                    Ty::Storage(_, n) => *n,
+                    _ => 1,
+                };
+                // Its weight is per element; the operator's estimate is per element too.
+                let _ = elements;
+                self.cost(id, def, &args, &Ty::U32, trips);
+                return Ok(ports);
+            }
             "read" => {
                 let (sc, n) = match need("buf")? {
                     Ty::Storage(sc, n) => (sc, n),
@@ -577,7 +827,15 @@ impl Ctx<'_> {
                     }
                 }
                 int_of("i")?;
-                Ty::V(sc, 1)
+                // An attribute reads whole elements at its packed stride.
+                let lanes = match s.args.get("buf") {
+                    Some(Arg::Ref(b, None)) => match self.op.inputs.get(b).map(|i| &i.from) {
+                        Some(From::Attribute { lanes, .. }) => *lanes,
+                        _ => 1,
+                    },
+                    _ => 1,
+                };
+                Ty::V(sc, lanes)
             }
             "discard_if" => {
                 match need("cond")? {
@@ -595,13 +853,88 @@ impl Ctx<'_> {
             }
         };
         let out = concrete(out);
-        self.cost(def, &args, &out, trips);
+        // fbm's weight is per octave.
+        let octaves = if name == "fbm" {
+            seeded_fields(s).map_or(1, |f| f.octaves)
+        } else {
+            1
+        };
+        self.cost(id, def, &args, &out, trips * octaves);
+        self.track_affine(id, name, s);
         Ok(vec![(None, out)])
     }
 
-    /// `write(buf, i, v)`: `buf` names one of the operator's storage outputs, and a constant
-    /// index past its declared count is refused.
-    fn write(&mut self, id: &str, s: &Step, scope: &BTreeSet<String>) -> Result<(), Issue> {
+    /// Records an integer step that is an affine function of the element index, `k × element +
+    /// j` plus any value the same in every invocation (a param, say).
+    fn track_affine(&mut self, id: &str, name: &str, s: &Step) {
+        // The same in every invocation: a literal, a value input, or pure arithmetic on them.
+        let uniform = |a: &Arg| match a {
+            Arg::Lit(_) => true,
+            Arg::Ref(n, None) => {
+                self.uniform.contains(n)
+                    || self
+                        .op
+                        .inputs
+                        .get(n)
+                        .is_some_and(|i| !matches!(i.ty, Ty::Tex(_) | Ty::Tex3(_) | Ty::Storage(..)))
+            }
+            Arg::Ref(..) => false,
+        };
+        let pure = matches!(
+            name,
+            "const" | "convert" | "bitcast" | "add" | "sub" | "mul" | "div" | "rem" | "min"
+                | "max" | "and" | "or" | "xor" | "shl" | "shr" | "select" | "hash"
+        );
+        let is_uniform = pure && s.args.values().all(uniform);
+        let of = |a: Option<&Arg>| -> Option<(u64, u64)> {
+            match a? {
+                Arg::Lit(v) => Some((0, v.as_u64()?)),
+                Arg::Ref(n, None) => self.affine.get(n).copied(),
+                Arg::Ref(..) => None,
+            }
+        };
+        let either = |a: Option<&Arg>, b: Option<&Arg>| match (a, b) {
+            (Some(x), Some(y)) if uniform(y) => of(Some(x)),
+            (Some(x), Some(y)) if uniform(x) => of(Some(y)),
+            _ => None,
+        };
+        let got = match name {
+            "element" => Some((1, 0)),
+            "const" => s.fields.get("value").and_then(Value::as_u64).map(|c| (0, c)),
+            "convert" | "bitcast" => of(s.args.get("x")),
+            "add" => match (of(s.args.get("a")), of(s.args.get("b"))) {
+                (Some((a, b)), Some((c, d))) => a.checked_add(c).zip(b.checked_add(d)),
+                // A uniform shift moves every invocation's slots alike.
+                _ => either(s.args.get("a"), s.args.get("b")),
+            },
+            "mul" => match (of(s.args.get("a")), of(s.args.get("b"))) {
+                (Some((a, b)), Some((0, k))) | (Some((0, k)), Some((a, b))) => {
+                    a.checked_mul(k).zip(b.checked_mul(k))
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        if is_uniform {
+            self.uniform.insert(id.to_string());
+        }
+        if let Some(g) = got {
+            self.affine.insert(id.to_string(), g);
+        }
+    }
+
+    /// `write(buf, i, v)` and the atomics: `buf` names one of the operator's storage outputs, and
+    /// a constant index past its declared count is refused. A write lands only in the
+    /// invocation's own slots, an index `k × element + j` with `j < k` (or any index in a
+    /// dispatch of one element); an atomic statement, whose result is never read, may land
+    /// anywhere.
+    fn write(
+        &mut self,
+        id: &str,
+        s: &Step,
+        scope: &BTreeSet<String>,
+        atomic: bool,
+    ) -> Result<(), Issue> {
         let bad = |m: String| Issue::at_step("operator_type", id, m);
         let out = match s.args.get("buf") {
             Some(Arg::Ref(name, None)) => self
@@ -633,6 +966,29 @@ impl Ctx<'_> {
             },
             None => return Err(bad("write takes i".into())),
         }
+        if !atomic && !self.options.trusts_index && self.op.elements > 1 {
+            let own = match s.args.get("i") {
+                Some(Arg::Ref(n, None)) => self
+                    .affine
+                    .get(n)
+                    .is_some_and(|(k, j)| *k >= 1 && j < k),
+                _ => false,
+            };
+            if !own {
+                return Err(Issue::at_step(
+                    "operator_kind_rule",
+                    id,
+                    "a compute operator writes storage only at its own element's index (k × element + j, j < k); add into a shared slot with an atomic statement instead",
+                ));
+            }
+        }
+        if atomic && !out.sc.is_int() {
+            return Err(bad(format!(
+                "{} adds into integer storage, not {}",
+                s.op,
+                out.sc.wgsl()
+            )));
+        }
         let v = self.ty_of(
             scope,
             s.args.get("v").ok_or_else(|| bad("write takes v".into()))?,
@@ -656,13 +1012,47 @@ impl Ctx<'_> {
         Ok(())
     }
 
-    fn cost(&mut self, def: &Def, args: &BTreeMap<&str, Ty>, out: &Ty, trips: u32) {
+    /// `store {tex, ixy, v}` (#483): a texel of one of the operator's texture outputs, at an
+    /// integer index of its dimension, a value of its format.
+    fn store(&mut self, id: &str, s: &Step, scope: &BTreeSet<String>) -> Result<(), Issue> {
+        let bad = |m: String| Issue::at_step("operator_type", id, m);
+        let out = match s.args.get("tex") {
+            Some(Arg::Ref(t, None)) => self
+                .op
+                .textures
+                .get(t)
+                .ok_or_else(|| bad(format!("store writes a texture output; {t} is none")))?,
+            _ => return Err(bad("store names its texture output at tex".into())),
+        };
+        let dims = if out.dim3 { 3 } else { 2 };
+        let at = s.args.get("ixy").ok_or_else(|| bad("store needs ixy".into()))?;
+        match lanes(&concrete(self.ty_of(scope, at, id)?)) {
+            Some((sc, n)) if sc.is_int() && n == dims => {}
+            _ => return Err(bad(format!("store's ixy is a vec{dims} of integers"))),
+        }
+        let v = s.args.get("v").ok_or_else(|| bad("store needs v".into()))?;
+        let vt = self.ty_of(scope, v, id)?;
+        let want = out.value();
+        if concrete(unify(&want, &vt).map_err(bad)?) != want {
+            return Err(bad(format!("a {} texel holds a {}, not a {}", out.format, want.wgsl(), vt.wgsl())));
+        }
+        if let Some(w) = &s.when {
+            if self.ty_of(scope, &Arg::Ref(w.clone(), None), id)? != Ty::BOOL {
+                return Err(bad("when names a bool step".into()));
+            }
+        }
+        Ok(())
+    }
+
+    fn cost(&mut self, id: &str, def: &Def, args: &BTreeMap<&str, Ty>, out: &Ty, trips: u32) {
         let lanes_of = |t: &Ty| match t {
             Ty::V(_, n) => f64::from(*n),
             Ty::Mat(n) => f64::from(*n) * f64::from(*n),
             _ => 1.0,
         };
-        self.weight += def.weight * lanes_of(out) * f64::from(trips);
+        let halved = self.options.noise_weight_halved && matches!(def.name, "noise@1" | "fbm@1");
+        let weight = if halved { def.weight / 2.0 } else { def.weight };
+        self.weight += weight * lanes_of(out) * f64::from(trips);
         self.fetches += def.fetches * trips;
         let floats = |t: &Ty| {
             matches!(
@@ -673,8 +1063,20 @@ impl Ctx<'_> {
                     | Ty::Storage(Sc::F32, _)
             )
         };
-        if !def.exact || floats(out) || args.values().any(floats) {
-            self.exact = false;
+        let planted = (self.options.exact_f32_compares
+            && matches!(def.name, "eq@1" | "ne@1" | "lt@1" | "le@1" | "gt@1" | "ge@1"))
+            || (self.options.exact_f32_floor && def.name == "floor@1");
+        // Floats travel only as bits: a bitcast or a constant moves them without an f32 operation.
+        let carries_bits = matches!(def.name, "bitcast@1" | "const@1");
+        let inexact = !def.exact
+            || (!planted && !carries_bits && (floats(out) || args.values().any(floats)));
+        if inexact && self.inexact.is_none() {
+            let why = if def.exact {
+                format!("{} on f32 values", def.name)
+            } else {
+                format!("{} is never exact", def.name)
+            };
+            self.inexact = Some(Why::Step(id.to_string(), why));
         }
     }
 
@@ -906,14 +1308,174 @@ impl Ctx<'_> {
 
 fn input_class(from: &From) -> Class {
     match from {
-        From::Target { .. } | From::Time | From::Phase(_) | From::Channel(_) => Class::SameMachine,
+        // A target the GPU rasterized is same machine, and so is time.
+        From::Target { .. } | From::Time | From::Phase(_) => Class::SameMachine,
         // Storage carries its writer's bits; an operator's class over them is its own.
-        From::Param(_) | From::Seed | From::Role(_) | From::Storage { .. } => Class::Exact,
+        From::Param(_)
+        | From::Channel(_)
+        | From::Texture3d { .. }
+        | From::Seed
+        | From::Role(_)
+        | From::Storage { .. }
+        | From::Column { .. }
+        | From::Attribute { .. } => Class::Exact,
     }
 }
 
 /// Checks an operator: Ok with what the emitter and the interpreter need, or every refusal.
 pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
+    check_with(op, CheckOptions::default())
+}
+
+/// The first iterate among `steps`, with its body's own first iterate if it has one.
+fn first_iterate(steps: &BTreeMap<String, Step>) -> Option<(&String, &graph::Iterate)> {
+    steps
+        .iter()
+        .find_map(|(id, s)| s.iterate.as_deref().map(|it| (id, it)))
+}
+
+/// Every name the steps (and their repeats' and outputs') arguments read.
+fn reads_of(steps: &BTreeMap<String, Step>, outputs: &BTreeMap<String, Arg>, out: &mut BTreeSet<String>) {
+    let mut push = |a: &Arg| {
+        if let Arg::Ref(n, _) = a {
+            out.insert(n.clone());
+        }
+    };
+    outputs.values().for_each(&mut push);
+    let mut stack: Vec<&BTreeMap<String, Step>> = vec![steps];
+    while let Some(st) = stack.pop() {
+        for s in st.values() {
+            s.args.values().for_each(&mut push);
+            if let Some(b) = &s.body {
+                b.accumulate.iter().for_each(|(_, _, a)| push(a));
+                stack.push(&b.steps);
+            }
+        }
+    }
+}
+
+/// An operator with iterate steps (#483): each body checked as a pass of its own, which reads only
+/// the operator's own inputs, `prev` and its index, then the operator with each iterate step in
+/// its place as a texture input, costed as its count of passes over its body.
+fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<Issue>> {
+    let mut outer = op.clone();
+    let mut iterates = Vec::new();
+    let (mut extra, mut floor) = (0.0, Class::Exact);
+    for (id, s) in &op.steps {
+        let Some(it) = s.iterate.as_deref() else {
+            continue;
+        };
+        let refuse = |code: &'static str, m: String| Err(vec![Issue::at_step(code, id, m)]);
+        if op.kind != Kind::Pass {
+            return refuse("operator_kind_rule", format!("iterate is a pass step, not a {} one", op.kind.name()));
+        }
+        if it.count == 0 || it.count > MAX_ITERATE {
+            return refuse("operator_limit", format!("iterate runs 1 to {MAX_ITERATE} times, not {}", it.count));
+        }
+        if let Some((inner, _)) = first_iterate(&it.steps) {
+            return Err(vec![Issue {
+                path: Some(format!("steps/{id}/body/steps/{inner}")),
+                ..Issue::at_step(
+                    "operator_limit",
+                    inner,
+                    format!("iterate never nests: {inner} is an iterate inside the iterate {id}"),
+                )
+            }]);
+        }
+        if !PING_PONG.contains(&it.format.as_str()) {
+            return refuse("operator_type", format!("a ping-pong target is {}, not {}", PING_PONG.join(" or "), it.format));
+        }
+        let mut read = BTreeSet::new();
+        reads_of(&it.steps, &it.outputs, &mut read);
+        let mut inputs = BTreeMap::new();
+        for name in &read {
+            if let Some(input) = op.inputs.get(name) {
+                if let From::Target { op: from, .. } = &input.from {
+                    if from != "core" {
+                        return Err(vec![Issue {
+                            step: Some(id.clone()),
+                            ..Issue::at_path(
+                                "operator_kind_rule",
+                                &format!("inputs/{name}"),
+                                format!("the body of {id} reads {name}, {from}'s target: a body reads only its operator's own inputs and prev"),
+                            )
+                        }]);
+                    }
+                }
+                inputs.insert(name.clone(), input.clone());
+            } else if op.steps.contains_key(name) && !it.steps.contains_key(name) {
+                return refuse("operator_kind_rule", format!("the body of {id} reads the step {name}, outside it: a body reads only its operator's own inputs and prev"));
+            }
+        }
+        let key = format!("{}.{id}", op.id);
+        let tex = |output: &str| graph::Input {
+            ty: Ty::Tex(Tex::Float),
+            from: From::Target { op: key.clone(), output: output.into() },
+            range: None,
+            default: None,
+        };
+        inputs.insert("prev".into(), tex("prev"));
+        inputs.insert(
+            it.index.clone(),
+            graph::Input { ty: Ty::U32, from: From::Param(it.index.clone()), range: None, default: None },
+        );
+        let body = Operator {
+            id: key.clone(),
+            kind: Kind::Pass,
+            about: op.about.clone(),
+            inputs,
+            steps: it.steps.clone(),
+            outputs: it.outputs.clone(),
+            storage: BTreeMap::new(),
+            textures: BTreeMap::new(),
+            blend: graph::Blend::Replace,
+            declared: None,
+            fallback: op.fallback,
+            cost: None,
+            size: it.resolution.clone(),
+            elements: 0,
+            workgroup: 64,
+            source: None,
+            uses: Vec::new(),
+            origin: Origin::Shipped,
+            chain: op.chain.clone(),
+            order: op.order.clone(),
+        };
+        let checked = check_with(&body, options)?;
+        extra += it.count as f64 * checked.estimate;
+        floor = floor.max(checked.class);
+        outer.steps.remove(id);
+        outer.inputs.insert(id.clone(), tex("color"));
+        iterates.push(Iterated {
+            step: id.clone(),
+            count: it.count as u32,
+            index: it.index.clone(),
+            format: it.format.clone(),
+            size: it.resolution.clone(),
+            body: Box::new(checked),
+        });
+    }
+    let mut c = check_inner(&outer, options, extra, floor)?;
+    c.iterates = iterates;
+    Ok(c)
+}
+
+/// [`check`], under the planted wrong programs `options` turns on.
+pub fn check_with(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<Issue>> {
+    if op.steps.values().any(|s| s.iterate.is_some()) {
+        return check_iterating(op, options);
+    }
+    check_inner(op, options, 0.0, Class::Exact)
+}
+
+/// The check over an operator with no iterate step left: `extra` ns its iterates' runs cost and
+/// `floor` the least class their bodies allow.
+fn check_inner(
+    op: &Operator,
+    options: CheckOptions,
+    extra: f64,
+    floor: Class,
+) -> Result<Checked, Vec<Issue>> {
     if op.source.is_some() {
         return Err(vec![Issue::at_path(
             "operator_source",
@@ -924,7 +1486,10 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
     let mut ctx = Ctx {
         op,
         types: BTreeMap::new(),
-        exact: true,
+        inexact: None,
+        affine: BTreeMap::new(),
+        uniform: BTreeSet::new(),
+        options,
         weight: 0.0,
         fetches: 0,
         body_order: BTreeMap::new(),
@@ -942,22 +1507,42 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
                 "an input and a step share a name",
             ));
         }
-        if matches!(input.ty, Ty::Tex(_)) != matches!(input.from, From::Target { .. }) {
+        if matches!(input.ty, Ty::Tex(_)) != matches!(input.from, From::Target { .. })
+            || matches!(input.ty, Ty::Tex3(_)) != matches!(input.from, From::Texture3d { .. })
+        {
             issues.push(Issue::at_path(
                 "operator_type",
                 &path,
-                "a texture input reads a target, and only a texture input does",
+                "a texture input reads a target, and a texture3d input a 3D texture, and only they do",
+            ));
+        }
+        // A 3D texture is read only in the frame that wrote it (structural steps, #483).
+        if let From::Texture3d { op: from, output, previous: true } = &input.from {
+            issues.push(Issue::at_path(
+                "operator_kind_rule",
+                &path,
+                format!("{name} reads {from}.{output} from an earlier frame: a 3D texture is read only by later operators in the frame that wrote it, never kept to the next"),
             ));
         }
         match input.ty {
-            Ty::Tex(_) => textures.push(name.clone()),
+            Ty::Tex(_) | Ty::Tex3(_) => textures.push(name.clone()),
             Ty::Storage(..) => storage_inputs.push(name.clone()),
             _ => {}
         }
-        if input_class(&input.from) != Class::Exact
-            || matches!(input.ty, Ty::V(Sc::F32, _) | Ty::Mat(_))
-        {
-            ctx.exact = false;
+        let why = if input_class(&input.from) != Class::Exact {
+            Some(match &input.from {
+                From::Target { output, .. } => {
+                    format!("it reads the {output} target, which the GPU rasterized")
+                }
+                _ => "it reads time".to_string(),
+            })
+        } else if matches!(input.ty, Ty::V(Sc::F32, _) | Ty::Mat(_)) {
+            Some(format!("it is a {}", input.ty.wgsl()))
+        } else {
+            None
+        };
+        if let (Some(why), None) = (why, &ctx.inexact) {
+            ctx.inexact = Some(Why::Input(path.clone(), why));
         }
         ctx.types.insert(name.clone(), input.ty.clone());
     }
@@ -983,11 +1568,33 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
                 "workgroup is 64, 128 or 256",
             ));
         }
-        if op.storage.is_empty() {
+        if op.storage.is_empty() && op.textures.is_empty() {
             issues.push(Issue::at_path(
                 "operator_type",
                 "outputs",
-                "a compute operator writes storage",
+                "a compute operator writes storage or a texture",
+            ));
+        }
+    }
+    for (name, t) in &op.textures {
+        let path = format!("outputs/{name}");
+        if op.kind != Kind::Compute {
+            issues.push(Issue::at_path("operator_type", &path, "only a compute operator writes a texture output"));
+        }
+        // Integers don't average, and r32float isn't filterable on every adapter.
+        if t.mips && !matches!(t.format.as_str(), "rgba16float" | "rgba8unorm") {
+            issues.push(Issue::at_path(
+                "operator_type",
+                &path,
+                format!("mips: true takes rgba16float or rgba8unorm, not {}", t.format),
+            ));
+        }
+        let cap = if t.dim3 { MAX_TEXTURE3D } else { MAX_TEXTURE2D };
+        if t.size.iter().any(|&n| n == 0 || n > cap) {
+            issues.push(Issue::at_path(
+                "operator_limit",
+                &path,
+                format!("a {} output is 1 to {cap} texels a side", if t.dim3 { "texture3d" } else { "texture" }),
             ));
         }
     }
@@ -1017,6 +1624,42 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
                 op.kind.name()
             ),
         )]);
+    }
+    // #483: a multi-dispatch step runs over whole buffers, so it runs alone: its operator holds
+    // only such steps, reading storage, and each storage output takes one's result.
+    let multi = op.steps.values().any(|s| table::multi_dispatch(&s.op));
+    if multi {
+        if let Some((id, s)) = op.steps.iter().find(|(_, s)| !table::multi_dispatch(&s.op)) {
+            return Err(vec![Issue::at_step(
+                "operator_kind_rule",
+                id,
+                format!("{} can't share an operator with a sort, a scan or a compaction, which run over whole buffers: write it in an operator before or after", s.op),
+            )]);
+        }
+    }
+    for (name, so) in &op.storage {
+        let path = format!("outputs/{name}");
+        match &so.from {
+            Some(a) => match ctx.ty_of(&scope, a, name) {
+                Ok(Ty::Storage(sc, n)) if sc == so.sc && n >= so.count => {}
+                Ok(t) => issues.push(Issue::at_path(
+                    "operator_type",
+                    &path,
+                    format!("{name} is storage of {} {}, so it takes such storage, not {}", so.count, so.sc.wgsl(), t.wgsl()),
+                )),
+                Err(mut e) => {
+                    e.step = None;
+                    e.path = Some(path);
+                    issues.push(e);
+                }
+            },
+            None if multi => issues.push(Issue::at_path(
+                "operator_type",
+                &path,
+                format!("{name} takes from: a sort's, a scan's or a compaction's result"),
+            )),
+            None => {}
+        }
     }
     for (name, a) in &op.outputs {
         let path = format!("outputs/{name}");
@@ -1058,25 +1701,53 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
     if !issues.is_empty() {
         return Err(issues);
     }
-    let class = if ctx.exact {
+    let class = if ctx.inexact.is_none() {
         Class::Exact
     } else {
         Class::SameMachine
-    };
+    }
+    .max(floor);
     if let Some(d) = op.declared {
-        if d < class {
-            return Err(vec![Issue::at_path(
-                "not_exact",
-                "determinism",
-                format!(
-                    "declared {}, but its steps and inputs make it {}",
-                    d.name(),
-                    class.name()
-                ),
-            )]);
+        if d < class && !options.declared_class {
+            let (step, path, why) = match ctx.inexact.clone() {
+                Some(Why::Step(s, w)) => (Some(s), None, w),
+                Some(Why::Input(p, w)) => (None, Some(p), w),
+                None => (None, Some("determinism".to_string()), String::new()),
+            };
+            return Err(vec![Issue {
+                step,
+                path,
+                ..Issue::new(
+                    "not_exact",
+                    format!(
+                        "{} is declared {}, but its steps and inputs make it {}: {why}",
+                        op.id,
+                        d.name(),
+                        class.name()
+                    ),
+                )
+            }]);
         }
     }
-    let estimate = ctx.weight * NS_PER_UNIT + f64::from(ctx.fetches) * NS_PER_FETCH;
+    // A live-only operator draws its fallback in every canonical render; a material with no
+    // fallback would leave its parts undrawn there.
+    if op.declared == Some(Class::LiveOnly)
+        && op.kind == Kind::Material
+        && op.fallback == Fallback::None
+    {
+        return Err(vec![Issue {
+            item: Some(op.id.clone()),
+            ..Issue::at_path(
+                "live_only_canonical",
+                "fallback",
+                format!(
+                    "{} is declared live_only with fallback none: canonical renders, render-back, exports and goldens would draw nothing for it",
+                    op.id
+                ),
+            )
+        }]);
+    }
+    let estimate = ctx.weight * NS_PER_UNIT + f64::from(ctx.fetches) * NS_PER_FETCH + extra;
     match op.cost {
         None if op.origin != Origin::Shipped => {
             return Err(vec![Issue::at_path(
@@ -1106,15 +1777,25 @@ pub fn check(op: &Operator) -> Result<Checked, Vec<Issue>> {
         order,
         body_order: ctx.body_order,
         types: ctx.types,
-        class: op.declared.map_or(class, |d| d.max(class)),
+        class: if options.declared_class {
+            op.declared.unwrap_or(class)
+        } else {
+            op.declared.map_or(class, |d| d.max(class))
+        },
         estimate,
         fetches: ctx.fetches,
         textures,
         storage_inputs,
+        iterates: Vec::new(),
     })
 }
 
 /// Reads and checks an operator's JSON.
 pub fn read_and_check(v: &Value) -> Result<Checked, Vec<Issue>> {
     check(&graph::read(v)?)
+}
+
+/// [`read_and_check`] under planted wrong programs.
+pub fn read_and_check_with(v: &Value, options: CheckOptions) -> Result<Checked, Vec<Issue>> {
+    check_with(&graph::read(v)?, options)
 }

@@ -363,6 +363,65 @@ workloads.class = () => {
   }
 };
 
+// #429: a composed operator's GPU time in its class. The data_view fixture with a composed pass that tints the
+// frame (resolution half, the class's), five runs of 300 frames after 30 of warm-up, each run the p95 of the
+// operator's own pass; the perf lane compares it with the merge base, which draws no operator item.
+const OPERATOR_LIMITS = { data_view: 0.5 };
+workloads.operator = () => {
+  const cls = process.argv[3] ?? 'data_view';
+  if (!(cls in OPERATOR_LIMITS)) throw Error(`Unknown class ${cls}; one of: ${Object.keys(OPERATOR_LIMITS).join(', ')}`);
+  const doc = JSON.parse(readFileSync(join(root, 'benchmarks', 'canvas', `${cls}.json`), 'utf8'));
+  doc.requires.modules.effects = '^1';
+  doc.items.tint = { id: 'tint', kind: 'gpu.pass@1', name: 'Tint', order: 'z0', params: {
+    about: 'The #429 benchmark pass: adds 0.6 to the frame\'s red.', origin: 'composed',
+    inputs: { src: { type: 'texture', from: { texture: { target: { op: 'core', output: 'color' } } } } },
+    steps: { uv: { op: 'screen_uv@1', args: {} }, c: { op: 'sample@1', args: { tex: 'src', uv: 'uv', lod: 0 } },
+      red: { op: 'const@1', args: { value: [0.6, 0, 0, 0], type: 'vec4' } }, out: { op: 'add@1', args: { a: 'c', b: 'red' } } },
+    outputs: { color: 'out' }, chain: 'effects', order: 'a0', resolution: 'half', cost: { ns_per_px: 50 }, fallback: 'look' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const runs = liveCalls(dir, Array.from({ length: 5 }, () => ({ docs: [doc], frames: WARM_UP + WARM_FRAMES, report: ['passes'] })));
+    const report = { task: 'operator', class: cls, limit_ms: OPERATOR_LIMITS[cls], fingerprint: fingerprint(), runs: runs.map((r) => {
+      const ms = r.frames.slice(WARM_UP).map((f) => f.passes.filter((p) => p.operator === 'tint').reduce((s, p) => s + (p.end_ns - p.start_ns) / 1e6, 0));
+      return { frames: ms.length, operator_p95_ms: p95(ms) };
+    }) };
+    console.log(JSON.stringify(report));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #483: the structural steps' GPU time. sort_by_key of 1,048,576 keys, scan and compact of 1,048,576 elements,
+// each a check_operator frame dispatched 300 times on the same inputs, five runs after one of warm-up, each run the
+// p95 of the step's GPU time from its passes' own timestamps; the perf lane compares them with the merge base,
+// which has none of these steps.
+workloads.structural = () => {
+  const n = 1_048_576;
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    let x = 4837;
+    const word = () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; return (x >>>= 0); };
+    const file = (name, f) => { const p = join(dir, `${name}.u32`); writeFileSync(p, Buffer.from(Uint32Array.from({ length: n }, (_, i) => f(i)).buffer)); return p; };
+    const data = { keys: file('keys', word), vals: file('vals', (i) => i), xs: file('xs', word), flags: file('flags', () => (word() % 10 < 3 ? 1 : 0)) };
+    const core = (type, name) => ({ type, count: n, from: { storage: { op: 'core', output: name } } });
+    const op = (id, steps, outputs, inputs) => ({ id, kind: 'compute', origin: 'composed', about: `The #483 benchmark ${id}.`, inputs, steps, outputs, elements: n, workgroup: 256, cost: { ns_per_element: 100 } });
+    const operators = [
+      op('srt', { s: { op: 'sort_by_key@1', args: { keys: 'keys', values: 'vals', count: n } } }, { sorted: { storage: { type: 'u32', count: n }, from: 's' } }, { keys: core('u32', 'keys'), vals: core('u32', 'vals') }),
+      op('scn', { sc: { op: 'scan@1', args: { in: 'xs', op: 'add' } } }, { out: { storage: { type: 'u32', count: n }, from: 'sc' } }, { xs: core('u32', 'xs') }),
+      op('cmp', { c: { op: 'compact@1', args: { in: 'vals', flag: 'flags', count: n } } }, { kept: { storage: { type: 'u32', count: n }, from: 'c.out' }, n: { storage: { type: 'u32', count: 1 }, from: 'c.count' } }, { vals: core('u32', 'vals'), flags: core('bool', 'flags') }),
+    ];
+    const calls = Array.from({ length: 6 }, () => ({ call: 'check_operator', operators, data, repeat: 300 }));
+    const [answer] = run('deep-gpu', 'run', [JSON.stringify({ out: dir, calls })]);
+    if (answer.ok !== true || answer.replies.some((r) => r.outcome !== 'accepted')) throw Error(`deep-gpu check_operator answered ${JSON.stringify(answer).slice(0, 1500)}`);
+    const limits = { srt: 2, scn: 0.5, cmp: 0.5 };
+    const report = { task: 'structural', limits_ms: limits, fingerprint: fingerprint(), runs: answer.replies.slice(1).map((r) =>
+      Object.fromEntries(Object.keys(limits).map((k) => [`${k}_p95_ms`, p95(r.timing.gpu_ns[k].map((ns) => ns / 1e6))]))) };
+    console.log(JSON.stringify(report));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #386: the upscale's two passes on a 1080p frame of 12 px labels and thin diagonal lines, drawn at
 // internal scale 0.5 through the edge-adaptive upscale: each frame's time the two passes cover, by their
 // timestamps, five runs after a warm-up one.
