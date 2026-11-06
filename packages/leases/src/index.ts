@@ -137,9 +137,16 @@ interface Held { lease: Lease; run?: string; agent?: { pid: number; start: strin
 const keyOf = (r: Resource): string => JSON.stringify([r.host, r.kind, r.key]);
 const names = (leases: Lease[]): string => leases.map((l) => `${l.holder} (${l.id}, ${l.mode})`).join(', ');
 
-/** A process's start time as `ps -o lstart=` prints it under LC_ALL=C, or undefined when no process has the ID. */
-const startOf = (pid: number): Promise<string | undefined> => new Promise((resolve) => {
-  execFile('/bin/ps', ['-o', 'lstart=', '-p', String(pid)], { env: { ...process.env, LC_ALL: 'C' } }, (_, stdout) => resolve(stdout.trim() || undefined));
+/**
+ * A process's start time as `ps -o lstart=` prints it under LC_ALL=C; null when no process has the ID, which `ps`
+ * says by exiting 1 with nothing printed; undefined when the table gave no answer, which proves nothing.
+ */
+const startOf = (pid: number): Promise<string | null | undefined> => new Promise((resolve) => {
+  execFile('/bin/ps', ['-o', 'lstart=', '-p', String(pid)], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout) => {
+    const start = stdout.trim();
+    if (!error) resolve(start || undefined);
+    else resolve(error.code === 1 && !error.signal && !start ? null : undefined);
+  });
 });
 
 class Table implements LeaseTable {
@@ -357,7 +364,9 @@ class Table implements LeaseTable {
     if (!holder.startsWith('session:')) return undefined;
     if (this.ends.has(holder) || !h.agent) return this.ends.get(holder);
     const start = await startOf(h.agent.pid);
-    const gone = this.plant === 'pid-only-liveness' ? start === undefined : start !== h.agent.start;
+    // A table that can't be read ends no holder: the next tick reads it again.
+    if (start === undefined) return this.ends.get(holder);
+    const gone = this.plant === 'pid-only-liveness' ? start === null : start !== h.agent.start;
     if (!gone || this.ends.has(holder)) return this.ends.get(holder);
     const ts = this.options.now();
     const id = ulid(ts);

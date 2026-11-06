@@ -43,6 +43,10 @@ export async function checkSpeed(claim: SpeedClaim, sides: { baseline: Side; cha
     ({ outcome, testsRun: repeats.change.length ? 1 : 0, failures, evidence: [], read: [], mask: null, timing, repeats });
   const missing = unresolved(claim, ctx, plant);
   if (missing) return result('uncounted', { outcome: 'INVALID', reasons: [missing], warm });
+  // No repeat timed shows no speed: a claim judged on none would pass on nothing.
+  if (!(Number.isInteger(claim.timing.repeats) && claim.timing.repeats > 0)) {
+    return result('uncounted', { outcome: 'INVALID', reasons: [`the timing check times ${String(claim.timing.repeats)} repeats a side, so nothing is timed`], warm });
+  }
 
   const unflushed: string[] = [];
   const named = [['baseline', sides.baseline], ['change', sides.change]] as const;

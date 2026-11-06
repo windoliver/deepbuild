@@ -68,6 +68,8 @@ pub type Bounds = Vec<(String, Option<(f64, f64)>)>;
 pub(crate) struct Core {
     pub(crate) expr: Arc<Expr>,
     pub(crate) inputs: Vec<CoreInput>,
+    /// What the driver writes where a read finds nothing or its value isn't finite (#491).
+    pub(crate) fallback: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -83,6 +85,8 @@ pub(crate) enum CoreInput {
         default: f64,
         range: (f64, f64),
     },
+    /// An occurrence read over a list filtered at check (#491).
+    Occurrence(Arc<crate::occurrence::Read>),
 }
 
 /// A driver's ops at most (Driver: "≤ 64 ops"), and so its stack's depth.
@@ -166,6 +170,8 @@ pub enum Planted {
     BackIgnoresParams,
     /// #490: an opening of `ease@1` that renumbers its entries.
     EaseRenumbered,
+    /// #491: a beat grid kept in f32 seconds.
+    BeatGridF32,
 }
 
 /// What an evaluation takes besides the document: the input track's entries, the viewer's
@@ -179,6 +185,32 @@ pub struct Options {
     pub scope: Scope,
     /// Times are timeline positions as given: the loop isn't applied.
     pub unwrap: bool,
+    /// The auto layout solve a frame's layout glide reads (#491), given by the host: each laid-out
+    /// item's `[x, y, w, h]`, or the code and item it refuses with.
+    pub layout: Option<Layout>,
+}
+
+/// A document's auto layout: each laid-out item's box `[x, y, w, h]`.
+pub type Boxes = std::collections::BTreeMap<String, [f64; 4]>;
+
+/// Each layout glide's channel, with the boxes of the layout at each of its keys (#491).
+pub(crate) type Glides = Vec<(usize, Vec<Boxes>)>;
+
+/// The host's auto layout solve, the canvas core's layout module (canvas primitives: Auto layout).
+#[derive(Clone, Copy)]
+pub struct Layout(pub fn(&Value) -> Result<Boxes, (String, String)>);
+
+impl std::fmt::Debug for Layout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Layout")
+    }
+}
+
+/// One solve gives one answer, so any two are the same program.
+impl PartialEq for Layout {
+    fn eq(&self, _: &Layout) -> bool {
+        true
+    }
 }
 
 /// The input track's hash: SHA-256 over each entry's time, seq, control and value.
@@ -230,6 +262,9 @@ pub struct Program {
     pub order_names: Vec<String>,
     /// Each channel's #489 follow segments, built once per document and input track.
     pub channel_follows: Vec<Option<crate::follow::Follow>>,
+    /// With a layout solve: the document's boxes, and each layout glide's channel with the
+    /// boxes of the layout at each of its keys, all solved at check (#491).
+    pub(crate) layout: Option<(Boxes, Glides)>,
     pub options: Options,
 }
 
@@ -292,7 +327,7 @@ impl Program {
 
     /// [`Program::compile`] with the input track, the view and a planted program.
     pub fn compile_with(doc: &Map<String, Value>, options: Options) -> Result<Program, Refused> {
-        let mut motion = doc::read(doc)?;
+        let mut motion = doc::read_with(doc, options.planted == Planted::BeatGridF32)?;
         if options.planted == Planted::SpringDropsVelocity {
             for c in &mut motion.channels {
                 c.curve.keys.iter_mut().for_each(|k| k.velocity.clear());
@@ -347,9 +382,33 @@ impl Program {
             order: Vec::new(),
             order_names: Vec::new(),
             channel_follows: Vec::new(),
+            layout: None,
             options,
             motion: motion.clone(),
         };
+        // Only a document with frames is laid out; it is refused here only when a key glides
+        // its layout, since the layout is otherwise not motion's to check. A glide needs a frame
+        // to lay out and a host that lays it out, or the layout would hold and the glide be lost.
+        let frames = items_json.values().any(|i| i.get("kind").and_then(Value::as_str) == Some("frame@1"));
+        let glides = motion.channels.iter().filter(|c| c.glide.is_some());
+        for c in glides.clone() {
+            let frame = items_json.get(&c.target.owner).and_then(|i| i.get("kind")).and_then(Value::as_str) == Some("frame@1");
+            if !frame || program.options.layout.is_none() {
+                return Err(Refused {
+                    code: "layout_refused",
+                    path: format!("channels/{}/target", c.id),
+                    detail: Some(Box::new(json!({"why": if frame { "this host has no auto layout solve to glide it" } else { "only a frame@1 is laid out" }, "item": c.target.owner}))),
+                });
+            }
+        }
+        if let (Some(solve), true) = (program.options.layout, frames) {
+            let glides = glides.count() > 0;
+            match layouts(doc, &motion, solve) {
+                Ok(l) => program.layout = Some(l),
+                Err(r) if glides => return Err(r),
+                Err(_) => {}
+            }
+        }
         let mut values = 0;
         for channel in &motion.channels {
             let width = channel.curve.keys.first().map_or(1, |k| k.value.len());
@@ -389,6 +448,12 @@ impl Program {
             }
             program.placements.push(writes);
         }
+        // #491: first markers read the channels, and drivers' lists read the markers.
+        for first in &motion.firsts {
+            let marker = program.solve_first(items_json, first)?;
+            program.motion.markers.push(marker);
+        }
+        program.motion.markers.sort_by(|a, b| a.id.cmp(&b.id));
         for driver in &motion.drivers {
             let path = format!("drivers/{}", driver.id);
             let mut vars = Vec::new();
@@ -401,9 +466,9 @@ impl Program {
             }
             let slot = program.slot(items_json, &driver.target.owner, &driver.target, 1);
             program.mark_written(slot);
-            // A driver with inputs or a hard range compiles through the core, whose interval
-            // form the range check reads.
-            let r1 = driver.inputs.is_empty() && driver.range.is_none();
+            // A driver with inputs, a hard range or a fallback compiles through the core, whose
+            // interval form the range check reads and which takes the fallback.
+            let r1 = driver.inputs.is_empty() && driver.range.is_none() && driver.fallback.is_none();
             let ops = match compile_ops(&driver.expr, &vars).filter(|_| r1) {
                 Some(ops) => ops,
                 None => {
@@ -490,6 +555,147 @@ impl Program {
         program.schedule(program.options.planted == Planted::SchedulesWholeItems)?;
         program.channel_follows = program.build_follows();
         Ok(program)
+    }
+
+    /// Each laid-out item's box at `doc_t` (#491): the document's layout, where a key on a frame's
+    /// layout mixes each box between the layouts of the keys before and after by the key's
+    /// interpolation, so a row glides into a grid; `None` without a layout solve.
+    pub fn boxes(&self, doc_t: i64) -> Option<Boxes> {
+        let (still, glides) = self.layout.as_ref()?;
+        let mut out = still.clone();
+        for (c, at_keys) in glides {
+            let Some(glide) = &self.motion.channels[*c].glide else { continue };
+            let mut u = [0.0];
+            glide.sample_into(doc_t, &mut u);
+            let Some(last) = at_keys.len().checked_sub(1) else { continue };
+            let i = (u[0].floor().max(0.0) as usize).min(last);
+            let s = u[0] - i as f64;
+            let next = &at_keys[(i + 1).min(last)];
+            for (id, from) in &at_keys[i] {
+                let to = next.get(id).unwrap_or(from);
+                out.insert(id.clone(), std::array::from_fn(|k| from[k] + (to[k] - from[k]) * s));
+            }
+        }
+        Some(out)
+    }
+
+    /// Solves a `first` marker (#491): the first flick in [after, before] where its expression is
+    /// at least 0, by bisection on the expression's interval form down to single flicks. Each
+    /// var reads a slot one keyed channel writes, or nothing writes; one the forms can't settle
+    /// within the budget, or a condition that never holds in the window, is refused, naming it.
+    fn solve_first(&mut self, items: &Map<String, Value>, first: &doc::First) -> Result<doc::Marker, Refused> {
+        let id = &first.marker.id;
+        let refused = |code: &'static str, why: String| Refused {
+            code,
+            path: first.path.clone(),
+            detail: Some(Box::new(json!({"marker": id, "why": why}))),
+        };
+        let expr = Expr::compile(&first.expr, &self.options.scope, DRIVER_OPS)
+            .map_err(|r| refused("bad_doc", format!("{}: {}", r.call, r.why)))?;
+        // What each var reads: the time, a channel, or a slot nothing writes.
+        enum Src {
+            Time,
+            Channel(usize),
+            Base(f64),
+        }
+        let mut reads: Vec<Src> = Vec::new();
+        for name in &expr.vars {
+            let Some((_, target)) = first.vars.iter().find(|(n, _)| n == name) else {
+                return Err(refused("ref_unresolved", format!("`{name}` is not one of its vars")));
+            };
+            let Some(target) = target else {
+                reads.push(Src::Time);
+                continue;
+            };
+            let at = format!("{}/{}", target.owner, target.field.join("/"));
+            let local = matches!(target.field.as_slice(), [a, g, k] if a == "at" && ["pos", "rot", "scale"].contains(&g.as_str()) && k.parse::<usize>().is_ok_and(|k| k < 3));
+            if !local || !self.items.contains(&target.owner) {
+                return Err(refused("first_unsettled", format!("`{name}` reads {at}: a first time reads an item's at/pos, at/rot or at/scale component")));
+            }
+            let slot = self.slot(items, &target.owner, target, 1);
+            let by: Vec<usize> = (0..self.channels.len())
+                .filter(|&c| {
+                    let (at, width) = self.channels[c];
+                    (at..at + width).contains(&slot)
+                })
+                .collect();
+            let written_elsewhere = self.follows.contains(&slot)
+                || self.placements.iter().flatten().any(|w| (w.slot..w.slot + w.width).contains(&slot))
+                || self.motion.drivers.iter().any(|d| d.target == *target)
+                || self.motion.limits.iter().any(|l| l.owner == target.owner)
+                || self.motion.constraints.iter().any(|c| c.owner == target.owner);
+            match by.as_slice() {
+                [] if !written_elsewhere => reads.push(Src::Base(self.base[slot])),
+                [c] if !written_elsewhere && self.channels[*c].1 == 1 && channel_bound(&self.motion.channels[*c]).is_some() => reads.push(Src::Channel(*c)),
+                _ => return Err(refused("first_unsettled", format!("`{name}` reads {at}, which the forms can't bound over time"))),
+            }
+        }
+        let start = self.motion.transport.start;
+        let seconds = |t: i64| (t - start) as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+        let value = |c: usize, t: i64| {
+            let channel = &self.motion.channels[c];
+            let mut v = [0.0];
+            channel.curve.sample_into(t, &mut v);
+            channel.modifiers.iter().fold(v[0], |v, m| m.apply(v, t - start))
+        };
+        let point = |t: i64| {
+            let vals: Vec<f64> = reads
+                .iter()
+                .map(|r| match *r {
+                    Src::Time => seconds(t),
+                    Src::Channel(c) => value(c, t),
+                    Src::Base(b) => b,
+                })
+                .collect();
+            expr.eval_num(&vals)
+        };
+        let over = |a: i64, b: i64| {
+            let vals: Vec<Iv> = reads
+                .iter()
+                .map(|r| match *r {
+                    Src::Time => {
+                        let e = 4.0 * f64::EPSILON * seconds(a).abs().max(seconds(b).abs());
+                        Iv::new(seconds(a) - e, seconds(b) + e)
+                    }
+                    Src::Channel(c) => channel_window(&self.motion.channels[c], a, b, value(c, a), value(c, b)),
+                    Src::Base(base) => Iv::point(base),
+                })
+                .collect();
+            expr.bound_num(&vals)
+        };
+        let mut stack = vec![(first.after, first.before)];
+        let mut budget = 100_000u32;
+        let found = loop {
+            let Some((a, b)) = stack.pop() else { break None };
+            let bound = over(a, b);
+            if bound.hi < 0.0 {
+                continue;
+            }
+            if bound.lo >= 0.0 {
+                break Some(a);
+            }
+            if b - a <= 1 {
+                if let Some(t) = [a, b].into_iter().find(|&t| point(t) >= 0.0) {
+                    break Some(t);
+                }
+                continue;
+            }
+            budget = budget.checked_sub(1).ok_or_else(|| refused("first_unsettled", "the interval forms don't settle it within the check's budget".into()))?;
+            let mid = a + (b - a) / 2;
+            stack.push((mid + 1, b));
+            stack.push((a, mid));
+        };
+        let Some(start) = found else {
+            return Err(refused(
+                "first_never",
+                format!("markers/{id}: `{} >= 0` never holds in [{}, {}] flicks", first.expr, first.after, first.before),
+            ));
+        };
+        Ok(doc::Marker {
+            start,
+            end: start + first.span,
+            ..first.marker.clone()
+        })
     }
 
     /// `items/<id>/world/<group>/<k>`: the item and the component of its world pose.
@@ -915,6 +1121,74 @@ pub fn channel_bound(c: &doc::Channel) -> Option<(f64, f64)> {
     (lo.is_finite() && hi.is_finite()).then_some((lo, hi))
 }
 
+/// The document's auto layout, and for each channel keying a frame's layout, the layout at each
+/// key, solved with that key's value in place.
+fn layouts(doc: &Map<String, Value>, motion: &Motion, solve: Layout) -> Result<(Boxes, Glides), Refused> {
+    let run = |doc: Value| {
+        solve.0(&doc).map_err(|(code, item)| Refused {
+            code: "layout_refused",
+            path: format!("items/{item}"),
+            detail: Some(Box::new(json!({"why": code, "item": item}))),
+        })
+    };
+    let still = run(Value::Object(doc.clone()))?;
+    let mut glides = Vec::new();
+    for (c, channel) in motion.channels.iter().enumerate() {
+        let Some(glide) = &channel.glide else { continue };
+        let mut at_keys = Vec::new();
+        for key in &glide.keys {
+            let label = channel
+                .curve
+                .keys
+                .iter()
+                .find(|k| k.id == key.id)
+                .and_then(|k| motion.labels.get(k.value[0] as usize))
+                .cloned()
+                .unwrap_or_default();
+            let mut with = Value::Object(doc.clone());
+            match with.pointer_mut(&format!("/items/{}/params", channel.target.owner)) {
+                Some(Value::Object(params)) => {
+                    params.insert("layout".into(), Value::String(label));
+                }
+                _ => {
+                    return Err(Refused {
+                        code: "ref_unresolved",
+                        path: format!("channels/{}/target", channel.id),
+                        detail: None,
+                    })
+                }
+            }
+            at_keys.push(run(with)?);
+        }
+        glides.push((c, at_keys));
+    }
+    Ok((still, glides))
+}
+
+/// A keyed channel's bound over the flicks [a, b], given its values there: those and every key
+/// inside, every value a segment that overlaps the window reaches, widened by its modifiers.
+/// Only for a channel [`channel_bound`] settles.
+fn channel_window(c: &doc::Channel, a: i64, b: i64, at_a: f64, at_b: f64) -> Iv {
+    let keys = &c.curve.keys;
+    let (mut lo, mut hi) = (at_a.min(at_b), at_a.max(at_b));
+    for (i, k) in keys.iter().enumerate() {
+        if (a..=b).contains(&k.t) {
+            (lo, hi) = (lo.min(k.value[0]), hi.max(k.value[0]));
+        }
+        if let Some(next) = keys.get(i + 1).filter(|n| k.t < b && n.t > a) {
+            for (v, _) in segment_reach(k, next, 0) {
+                (lo, hi) = (lo.min(v), hi.max(v));
+            }
+        }
+    }
+    for m in &c.modifiers {
+        (lo, hi) = m.bound(lo, hi);
+    }
+    // Widened past the f64 rounding of the values it was taken from.
+    let e = lo.abs().max(hi.abs()) * 4.0 * f64::EPSILON;
+    Iv::new(lo - e, hi + e)
+}
+
 /// Opens each key's ease through `ease@1` (#490): a pack's ease table resolved from the
 /// document's packs, and the planted programs that read params or numbers wrongly.
 fn open_eases(motion: &mut Motion, options: &Options) -> Result<(), Refused> {
@@ -1140,8 +1414,54 @@ impl Program {
                 })
             })
             .collect();
+        let lists: Vec<&str> = driver
+            .inputs
+            .iter()
+            .filter(|(_, i)| matches!(i, doc::DriverInput::List(_)))
+            .map(|(n, _)| n.as_str())
+            .collect();
+        let refused = |code: &'static str, why: String| Refused {
+            code,
+            path: format!("{path}/expr"),
+            detail: Some(Box::new(json!({"driver": driver.id, "why": why}))),
+        };
+        let (text, found) = crate::occurrence::rewrite(&driver.text, &lists).map_err(|r| refused(r.code, r.why))?;
+        for f in &found {
+            let Some((_, doc::DriverInput::List(filter))) = driver.inputs.iter().find(|(n, _)| *n == f.list) else {
+                continue;
+            };
+            let entries = self.occurrences(filter, controls).ok_or_else(|| Refused {
+                code: "ref_unresolved",
+                path: format!("{path}/vars/{}/list", f.list),
+                detail: Some(Box::new(json!({"driver": driver.id, "list": filter.list}))),
+            })?;
+            // Occurrences read on the driver's clock, from the transport's start as `time` reads.
+            let start = self.motion.transport.start;
+            let entries = entries
+                .into_iter()
+                .map(|o| crate::occurrence::Occurrence {
+                    t: o.t.saturating_sub(start),
+                    end: o.end.saturating_sub(start),
+                    ..o
+                })
+                .collect();
+            // Inputs after t don't exist yet, so nothing looks ahead on a list they feed.
+            if f.function == "next" && filter.list.starts_with("input.") {
+                return Err(refused(
+                    "look_ahead_on_input",
+                    format!("drivers/{}: next({}) looks ahead on {}, which the input track feeds", driver.id, f.list, filter.list),
+                ));
+            }
+            let list = crate::occurrence::filtered(filter, entries).map_err(|r| refused(r.code, r.why))?;
+            let read = crate::occurrence::read_of(f, &list).map_err(|r| refused(r.code, r.why))?;
+            if read.needs_fallback() && driver.fallback.is_none() {
+                return Err(refused("fallback_missing", format!("drivers/{}: {}({}) has no match before its first, so the driver needs a fallback", driver.id, f.function, f.list)));
+            }
+            inputs_of.push((f.name.as_str(), CoreInput::Occurrence(Arc::new(read))));
+        }
         for (name, input) in &driver.inputs {
             let input = match input {
+                doc::DriverInput::List(_) => continue,
                 doc::DriverInput::Time => CoreInput::Time,
                 doc::DriverInput::Control(id) => {
                     let c = controls.and_then(|c| c.get(id));
@@ -1175,7 +1495,7 @@ impl Program {
         if self.options.planted == Planted::TableFormSamples8 {
             scope.planted = Some(deep_canvas::expr::Planted::TableFormSamples8);
         }
-        let expr = Expr::compile(&driver.text, &scope, DRIVER_OPS).map_err(|r| Refused {
+        let expr = Expr::compile(&text, &scope, DRIVER_OPS).map_err(|r| Refused {
             code: "bad_doc",
             path: format!("{path}/expr"),
             detail: Some(Box::new(json!({"call": r.call, "why": r.why}))),
@@ -1194,6 +1514,7 @@ impl Program {
         let core = Core {
             expr: Arc::new(expr),
             inputs,
+            fallback: driver.fallback,
         };
         if let Some((lo, hi)) = driver.range {
             let b = self.core_bound(&core);
@@ -1214,20 +1535,22 @@ impl Program {
     /// A core driver's value over the slots at `doc_t`.
     fn evaluate_core(&self, c: usize, slots: &[f64], doc_t: i64) -> f64 {
         let core = &self.cores[c];
+        // The document's time from the transport's start, held to its span, the range its
+        // bound reads.
+        let transport = &self.motion.transport;
+        let t = doc_t
+            .saturating_sub(transport.start)
+            .clamp(0, transport.span.unwrap_or(i64::MAX));
         let mut vals = [0.0f64; DRIVER_OPS];
         for (v, input) in vals.iter_mut().zip(&core.inputs) {
             *v = match input {
+                CoreInput::Occurrence(read) => match read.at(t) {
+                    Some(v) => v,
+                    None => return core.fallback.unwrap_or(f64::NAN),
+                },
                 CoreInput::Slot(s) => slots[*s],
                 CoreInput::World(i, k) => self.world(slots, *i)[*k],
-                // The document's time, held to its span, the range its bound reads.
-                CoreInput::Time => {
-                    let s = (doc_t - self.motion.transport.start) as f64
-                        / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
-                    let span = self.motion.transport.span.map_or(f64::INFINITY, |sp| {
-                        sp as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
-                    });
-                    s.clamp(0.0, span)
-                }
+                CoreInput::Time => t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64,
                 // A control's value, held to its declared range.
                 CoreInput::Control {
                     entries,
@@ -1240,7 +1563,59 @@ impl Program {
                 }
             };
         }
-        core.expr.eval_num(&vals[..core.inputs.len()])
+        let v = core.expr.eval_num(&vals[..core.inputs.len()]);
+        match core.fallback {
+            Some(fallback) if !v.is_finite() => fallback,
+            _ => v,
+        }
+    }
+
+    /// The occurrences a list names: `markers.<kind>`, or `input.<control>`, the input track's
+    /// entries for a control, each a match whose payload is `{value}`.
+    fn occurrences(&self, filter: &crate::occurrence::Filter, controls: Option<&Map<String, Value>>) -> Option<Vec<crate::occurrence::Occurrence>> {
+        use crate::occurrence::Occurrence;
+        // A list names a marker kind or a declared control; any other would read empty forever.
+        if let Some(kind) = filter.list.strip_prefix("markers.") {
+            if !doc::MARKER_KINDS.contains(&kind) {
+                return None;
+            }
+            return Some(
+                self.motion
+                    .markers
+                    .iter()
+                    .filter(|m| m.kind == kind)
+                    .map(|m| Occurrence {
+                        t: m.start,
+                        end: m.end,
+                        a: Some(m.id.clone()),
+                        b: None,
+                        kind: m.kind.clone(),
+                        tags: m.tags.clone(),
+                        payload: m.payload.clone(),
+                    })
+                    .collect(),
+            );
+        }
+        let control = filter.list.strip_prefix("input.")?;
+        if !controls.is_some_and(|c| c.contains_key(control)) {
+            return None;
+        }
+        Some(
+            self.options
+                .input
+                .iter()
+                .filter(|e| e.control == control)
+                .map(|e| Occurrence {
+                    t: e.t,
+                    end: e.t,
+                    a: None,
+                    b: None,
+                    kind: "input".into(),
+                    tags: Vec::new(),
+                    payload: json!({"value": e.value}),
+                })
+                .collect(),
+        )
     }
 
     /// A core driver's bound from its interval form: time over the span, each control over its
@@ -1257,9 +1632,14 @@ impl Program {
                 CoreInput::Control { range, .. } => Iv::new(range.0, range.1),
                 CoreInput::Slot(s) => self.slot_bound(*s),
                 CoreInput::World(..) => Iv::ENTIRE,
+                CoreInput::Occurrence(read) => read.bound(span),
             })
             .collect();
-        core.expr.bound_num(&vars)
+        let b = core.expr.bound_num(&vars);
+        match core.fallback {
+            Some(f) => Iv::new(b.lo.min(f), b.hi.max(f)),
+            None => b,
+        }
     }
 
     /// The bound of what slot `s` holds: its base value when nothing writes it, a channel's
