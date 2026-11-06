@@ -391,6 +391,8 @@ export class Core {
   private readonly questions: Questions;
   /** Your switches from a provisional ask's option, in flight: the commits made under the old one (#84). */
   private readonly switches = new Map<string, string[]>();
+  /** One session's transcript copied into the record now; unset until the archive opens. */
+  private archiveSession?: (session: string) => Promise<void>;
   /** The ask each plug-in change or send waits on, by its session and request ID (#363). */
   private readonly actionAsks = new Map<string, string>();
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
@@ -653,6 +655,7 @@ export class Core {
       raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
       pin: (cwd, question) => this.pinOf(cwd, question), heard: (ask) => this.heardBy(ask),
+      archived: async (session) => { await this.archiveSession?.(session); },
       reading: (session, agent, reading) => this.appendReading(session, agent, reading),
     });
     this.questions = new Questions({
@@ -1032,6 +1035,7 @@ export class Core {
       return archiving;
     };
     archivePass();
+    this.archiveSession = (session) => archive.session(session);
     // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
     this.wikiBuild = openWikiBuild({
       record: this.record, root: this.root, store: this.store, runner: this.runner, asks, now: this.now, archive: async () => { await archiving; await archivePass(); },
