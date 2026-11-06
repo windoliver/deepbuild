@@ -145,6 +145,11 @@ export interface StageReach {
 }
 export interface Gated {
   label: string; classes: string[]; mcp?: { server: string; tool: string }; decided?: string[]; command?: string;
+  /** The push, PR and merge defaults this call meets (#84), each with what it does; `merge` is what a merge names. */
+  named?: { rule: string; effect: 'push' | 'pr' | 'merge' }[];
+  merge?: { head?: string; pr?: string; auto?: boolean; disable?: boolean };
+  /** A question card's questions (#84), sorted as a stop's question is. */
+  card?: Record<string, unknown>[];
   /** A computer-use step: allowed only on what its session leases (#332). */
   screen?: boolean;
   /** What is staged before it runs (#347, #1294). */

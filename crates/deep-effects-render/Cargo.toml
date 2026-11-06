@@ -20,3 +20,10 @@ naga = { version = "30", default-features = false, features = ["wgsl-in"] }
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl"] }
 wgpu-profiler = "0.28"
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+# Issue #1312: criteria 1 and 2's acceptance tests, written blind in tests/acceptance/1312 (here, not in
+# deep-canvas-effects, whose canvas lint scans only files inside the crate): the shipped particles
+# operator on the CPU reference keeps a particle born inside emit.span alive until its life ends, on its own path.
+[[test]]
+name = "acceptance_1312"
+path = "../../tests/acceptance/1312/operator.rs"

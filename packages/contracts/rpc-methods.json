@@ -286,5 +286,46 @@
     "since": "R1",
     "stability": "preview",
     "tracking": "#965"
+  },
+  {
+    "method": "workspace.new",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67",
+    "called_by": "deep workspace new"
+  },
+  {
+    "method": "workspace.move",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67",
+    "called_by": "deep workspace move"
+  },
+  {
+    "method": "workspace.revert",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67",
+    "called_by": "deep workspace revert"
+  },
+  {
+    "method": "workspace.diff",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67",
+    "called_by": "deep workspace diff"
+  },
+  {
+    "method": "workspace.drift",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67",
+    "called_by": "deep workspace drift"
+  },
+  {
+    "method": "project.views",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#67"
   }
 ]

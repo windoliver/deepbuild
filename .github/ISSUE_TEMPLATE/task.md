@@ -24,7 +24,7 @@ labels: type:feature
 
 <!-- how we'll know it works: the failing-before test, the end-to-end run, the evidence -->
 
-**Oracle:** <!-- Blender, Unreal or Godot, if a lane checks this; delete if none -->
+**Oracle:** <!-- the outside renderer or importer, if a lane checks this; delete if none -->
 
 ### Depends on
 

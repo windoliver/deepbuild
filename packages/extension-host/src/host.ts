@@ -33,11 +33,12 @@ import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
 import type { EvidenceStore } from '@deepbuild/evidence';
+import type { StateSource, StateSourceFill } from '@deepbuild/conformance';
 import type { ChannelCtx, ChannelDelivered, ChannelFill, ChannelItem, ChannelReceived, CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
@@ -192,6 +193,8 @@ export interface InstallFrom {
 }
 /** A kit the install ran on what the package registers: the slot, the fill (a check kind's name), its verdict. */
 export interface KitRun { slot: string; fill: string; verdict: 'PASS' | 'FAIL' | 'BLOCKED' | 'INVALID' | 'INCONCLUSIVE' }
+/** A view of a project's pack, as the app shows it while you're in the project (#67). */
+export interface ProjectView { name: string; extension: string; commands: { name: string; action: string }[] }
 export interface Installed { id: string; version: string; folder: string; digest: string; builtBy: string | null; project: string | null; kits: KitRun[] }
 export interface PackageTests { passed: boolean; testsRun: number; failures: { test: string; message: string }[] }
 /** How an answer reaches a session: into the running turn, in the stop hold, waking an idle session, or at its next prompt. */
@@ -223,6 +226,14 @@ export interface ExtensionHost {
   install(from: InstallFrom): Promise<Installed>;
   /** The channels of the packages loaded and started (#65), each by name with what it reaches. */
   channels(): { name: string; kind: 'device' | 'chat' | 'email' | 'text'; extension: string }[];
+  /** A live state source by its registered name (#67): what a workspace's touch reads through. */
+  stateSource(name: string): Promise<Omit<StateSource, 'fixture'>>;
+  /** You are in this project (#67): its packs, as `.deepbuild/packs.json` names them, install and load if you trust it; an untrusted project's stay out, none installed, none run. */
+  enterProject(folder: string): Promise<{ trusted: boolean; views: ProjectView[] }>;
+  /** You left it: once nobody is in it, its packs stop and their views go. */
+  leaveProject(folder: string): Promise<void>;
+  /** What the app shows now: the views and commands of the projects you're in. */
+  projectViews(): ProjectView[];
   /** One send or read of a loaded channel (#65), its provider calls made by `ctx.fetch`, the caller's. */
   channel(name: string, op: 'deliver', item: ChannelItem, ctx: ChannelCtx): Promise<ChannelDelivered>;
   channel(name: string, op: 'receive', item: null, ctx: ChannelCtx): Promise<ChannelReceived>;
@@ -307,6 +318,8 @@ export interface ExtensionHost {
    * saves nothing, and a test that couldn't run (INCONCLUSIVE) saves it. With no key test it reads untested and saves.
    */
   enterSecret(connection: Connection, extension: string, name: string, value: string): Promise<{ test: KeyTest; saved: boolean }>;
+  /** The secrets held by reference for the loaded packages, by name with the package that names them; never a value. */
+  heldSecrets(): Promise<{ secret: string; provider: string }[]>;
   /** A reading of a loaded polled source, as what needs it would read it: from the cache while fresh, else one call. */
   readSource(name: string): Promise<SourceRead>;
   /** Every source call this host made, with its secrets stripped. */
@@ -379,6 +392,9 @@ const CALL_MS = 10_000;
 /** How long a channel's send or read may take (#65): its provider calls are the hub's, each bounded by the hub. */
 const CHANNEL_MS = 30_000;
 const CHANNEL = 'channel@1';
+const STATE_SOURCE = 'state-source@1';
+/** How long one call into a state source may take (#67). */
+const STATE_MS = 30_000;
 const CHANNEL_KINDS = ['device', 'chat', 'email', 'text'] as const;
 type ChannelKind = typeof CHANNEL_KINDS[number];
 /**
@@ -464,6 +480,8 @@ interface Manifest {
   host?: { runs: 'terminals'; lives: 'past_app'; owns: 'terminals'[] };
   secrets?: { name: string; for: string }[];
   sources?: { name: string; variant: string; reading?: string }[];
+  /** The state sources it registers (#67), each held to state-source@1's kit at install. */
+  state_sources?: string[];
 }
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
 interface Entry extends Installed { grant: { record: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[]; docs?: string[] }; holds: string[] }
@@ -509,6 +527,8 @@ interface Ext {
   adapters: Set<string>;
   /** The channels it registered (#65), by name, with what each reaches; their deliver and receive stay with the package. */
   channels: Map<string, ChannelKind>;
+  /** The state sources it registered (#67), by name; their read, compare, undo and fixture stay with the package. */
+  stateSources: string[];
   /** The index it registered, by name, with the kit revision it declares, and how the host reaches it once loaded. */
   index?: { name: string; revision: number; fill?: IndexFill };
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts. */
@@ -517,6 +537,8 @@ interface Ext {
   sources: Map<string, Declared>;
   /** Its views, each with the reading handles it binds (#262). */
   views: Map<string, string[]>;
+  /** Each view's ⌘K commands (#67), as the app shows them while you're in its project. */
+  commands: Map<string, { name: string; action: string }[]>;
   /** The sources each check kind it registered reads, as declared (#365). */
   checkReads: Map<string, string[]>;
   /** How many times its code started in this copy: a restart imports a hub package's code afresh. */
@@ -715,6 +737,15 @@ function actionRules(actions: Map<string, Action>): string[] {
 }
 const message = (e: unknown): string => String((e as Error)?.message ?? e);
 /** A package's manifest, as its folder holds it. */
+/** The packs a project names in `.deepbuild/packs.json` (#67): folders inside it. */
+function packsNamed(project: string): string[] {
+  const file = join(project, '.deepbuild', 'packs.json');
+  if (!existsSync(file)) return [];
+  const { packs } = JSON.parse(readFileSync(file, 'utf8')) as { packs?: unknown };
+  if (!texts(packs)) throw Error(`${file} names no list of packs`);
+  for (const pack of packs as string[]) if (isAbsolute(pack) || pack.split('/').includes('..')) throw Error(`${file} names ${pack}, which isn't a folder inside the project`);
+  return packs as string[];
+}
 const manifestOf = (folder: string): Manifest => JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
 /** A piece as composition reads it (#103): its id and its manifest's rows. */
 const pieceOf = (id: string, m: Manifest): Piece => ({ id, provides: m.provides ?? [], uses: m.uses ?? [] });
@@ -1302,6 +1333,7 @@ class Host implements ExtensionHost {
     // An index that replaces the shipped one is held to index@1's kit wherever it will run (#355).
     const indexed = replaces.includes(INDEX);
     const streams = (manifest.sources ?? []).filter((s) => s.variant === 'stream').map((s) => s.name);
+    const states = manifest.state_sources ?? [];
     const blocked = (why: string): never => {
       rmSync(folder, { recursive: true, force: true });
       throw Error(`BLOCKED: ${entry.id} ${why}`);
@@ -1309,11 +1341,12 @@ class Host implements ExtensionHost {
     // No package code runs in the hub before it is ready (#348): a kit that needs to is BLOCKED, so the install is.
     const later = 'and the hub isn\'t ready; install it once it is';
     if (hub && streams.length && !this.isReady) blocked(`registers the stream source ${streams.join(', ')}, whose ${SOURCE} kit runs its code in the hub, ${later}`);
+    if (hub && states.length && !this.isReady) blocked(`registers the state source ${states.join(', ')}, whose ${STATE_SOURCE} kit runs its code in the hub, ${later}`);
     if (hub && indexed && !this.isReady) blocked(`replaces ${INDEX}, whose kit runs its code in the hub, ${later}`);
     if (hub && (kitted.length || environments.length) && !this.isReady) blocked(`${what}, whose ${kits} run${kitted.length && environments.length ? '' : 's'} its code in the hub, ${later}`);
     // The kits' suites and stacks run where the sandbox can't reach: unrun, the package doesn't install.
     if (!hub && (kitted.length || environments.length)) blocked(`${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
-    if (!kitted.length && !environments.length && !indexed && !streams.length) {
+    if (!kitted.length && !environments.length && !indexed && !streams.length && !states.length) {
       rmSync(folder, { recursive: true, force: true });
       return declared.map((kind) => ({ slot: CHECK_KIND, fill: kind, verdict: 'BLOCKED' as const }));
     }
@@ -1362,6 +1395,11 @@ class Host implements ExtensionHost {
         if (!ext.index) throw Error(`${entry.id} replaces ${INDEX}, but its code registered no index; it isn't installed`);
         await judge(INDEX, ext.index.name, `index ${ext.index.name}`, () => this.indexFill(ext));
       }
+      // Each state source its manifest lists (#67): the kit makes and undoes changes on the source's own fixture.
+      for (const name of states) {
+        if (!ext.stateSources.includes(name)) throw Error(`BLOCKED: ${entry.id} lists the state source ${name} and didn't register it at install, so ${STATE_SOURCE}'s kit couldn't run; it isn't installed`);
+        await judge(STATE_SOURCE, name, `state source ${name}`, (revision) => this.stateFill(ext, name, revision));
+      }
       for (const name of streams) {
         if (ext.sources.get(name)?.variant !== 'stream') throw Error(`BLOCKED: ${entry.id} lists the stream source ${name} and didn't register it at install, so ${SOURCE}'s kit couldn't run; it isn't installed`);
         // The kit's restart is the hub's: the package's code stops and starts again, keeping nothing it held.
@@ -1381,6 +1419,66 @@ class Host implements ExtensionHost {
     }
     return runs;
   }
+  /** One call into a package's state source, bounded (#67). */
+  private stateCall(ext: Ext, name: string, op: string, ...args: unknown[]): Promise<unknown> {
+    return within(STATE_MS, `${ext.entry.id}'s state source ${name}`, ext.ask!('state', { name, op, args }));
+  }
+  /** A registered state source as a state-source@1 fill, its calls going to the package. */
+  private stateFill(ext: Ext, name: string, revision: number): StateSourceFill {
+    const call = <T>(op: string) => (...args: unknown[]): Promise<T> => this.stateCall(ext, name, op, ...args) as Promise<T>;
+    return {
+      slot: STATE_SOURCE, revision, name, read: call('read'), compare: call('compare'), undo: call('undo'),
+      fixture: { start: call('fixture.start'), make: call('fixture.make'), run: call('fixture.run') },
+    };
+  }
+  async stateSource(name: string): Promise<Omit<StateSource, 'fixture'>> {
+    const ext = [...this.exts.values()].find((e) => e.live && e.ask && e.stateSources.includes(name));
+    if (!ext) throw Error(`no loaded package registers the state source ${name}`);
+    const { read, compare, undo } = this.stateFill(ext, name, 1);
+    return { read, compare, undo };
+  }
+
+  /** Who is in each project now, by real path. */
+  private readonly inside = new Map<string, number>();
+  async enterProject(folder: string): Promise<{ trusted: boolean; views: ProjectView[] }> {
+    const real = realpathSync(folder);
+    if (!(await this.options.trust.trusted(real))) {
+      for (const ext of this.packsOf(real)) await this.unload(ext);
+      this.inside.delete(real);
+      return { trusted: false, views: [] };
+    }
+    this.inside.set(real, (this.inside.get(real) ?? 0) + 1);
+    for (const pack of packsNamed(real)) {
+      const from = join(real, pack);
+      const { id } = manifestOf(from) as { id: string };
+      if (this.exts.get(id)?.live) continue;
+      // Installed once for its bytes; a pack changed in the project is a new install, held to its kits again.
+      const known = this.entries[id];
+      const installed = known?.project === real && known.digest === packageDigest(from) ? this.installedOf(known) : await this.install({ from, builtBy: null, project: real });
+      const conformance = await this.check(installed);
+      if (!conformance.passed) throw Error(`${id}, a pack of ${real}, failed conformance: ${conformance.reasons.join('; ')}`);
+      const load = await this.load(installed);
+      if (load.status !== 'loaded') throw Error(`${id}, a pack of ${real}, didn't load: ${load.reason}`);
+    }
+    return { trusted: true, views: this.viewsOf(real) };
+  }
+  async leaveProject(folder: string): Promise<void> {
+    const real = realpathSync(folder);
+    const left = (this.inside.get(real) ?? 0) - 1;
+    if (left > 0) { this.inside.set(real, left); return; }
+    this.inside.delete(real);
+    for (const ext of this.packsOf(real)) await this.unload(ext);
+  }
+  projectViews(): ProjectView[] {
+    return [...this.inside.keys()].flatMap((project) => this.viewsOf(project));
+  }
+  private packsOf(project: string): Ext[] {
+    return [...this.exts.values()].filter((e) => e.project === project);
+  }
+  private viewsOf(project: string): ProjectView[] {
+    return this.packsOf(project).filter((e) => e.live).flatMap((e) => [...e.views.keys()].map((name) => ({ name, extension: e.entry.id, commands: e.commands.get(name) ?? [] })));
+  }
+
   /** The channels of the packages loaded and started (#65): each by name, with what it reaches. */
   channels(): { name: string; kind: ChannelKind; extension: string }[] {
     return [...this.exts.values()].filter((e) => e.live && e.ask).flatMap((e) => [...e.channels].map(([name, kind]) => ({ name, kind, extension: e.entry.id })));
@@ -1409,6 +1507,11 @@ class Host implements ExtensionHost {
       deliver: (item, ctx) => this.channelAsk(ext, name, 'deliver', item, ctx) as Promise<ChannelDelivered>,
       receive: (ctx) => this.channelAsk(ext, name, 'receive', null, ctx) as Promise<ChannelReceived>,
     };
+  }
+  async heldSecrets(): Promise<{ secret: string; provider: string }[]> {
+    const named = [...this.exts.entries()].flatMap(([id, ext]) => (ext.manifest.secrets ?? []).map((s) => ({ secret: s.name, provider: id })));
+    const held = await Promise.all(named.map((n) => this.sources.holds(n.provider, n.secret)));
+    return named.filter((_, i) => held[i]);
   }
   async enterSecret(connection: Connection, extension: string, name: string, value: string): Promise<{ test: KeyTest; saved: boolean }> {
     this.trustedPath(connection, 'a secret is entered');
@@ -1820,7 +1923,7 @@ class Host implements ExtensionHost {
     return {
       entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
-      adapters: new Set(), channels: new Map(), leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
+      adapters: new Set(), channels: new Map(), stateSources: [], leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), commands: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -2326,6 +2429,15 @@ class Host implements ExtensionHost {
         ext.channels.set(name, channel.kind as ChannelKind);
         return null;
       }
+      case 'deep.registerStateSource': {
+        const [name] = args;
+        if (typeof name !== 'string' || !ADAPTER_NAME.test(name)) throw Error(`deep.registerStateSource takes the source's name first, one lower-case word, not ${JSON.stringify(name)}`);
+        if (!(ext.manifest.state_sources ?? []).includes(name)) throw Error(`deep.registerStateSource: ${name} isn't a state source ${id}'s manifest declares, so no kit held it`);
+        const owner = conformance ? undefined : [...this.exts.values()].find((e) => e !== ext && e.stateSources.includes(name));
+        if (owner) throw Error(`the state source ${name} is already registered by ${owner.entry.id}`);
+        if (!ext.stateSources.includes(name)) ext.stateSources.push(name);
+        return null;
+      }
       case 'deep.channel.fetch': {
         // Only a send or read of its own under way: the hub's call, with the channel's settings and token.
         const [call, request] = args;
@@ -2593,6 +2705,7 @@ class Host implements ExtensionHost {
         const refusal = this.viewRefusal(ext, args);
         if (refusal === null) {
           ext.views.set(args[0] as string, ((args[3] as { binds?: string[] } | undefined)?.binds ?? []).slice());
+          ext.commands.set(args[0] as string, ((args[3] as { commands?: { name: string; action: string }[] } | undefined)?.commands ?? []).map((c) => ({ name: c.name, action: c.action })));
           return null;
         }
         if (conformance) ext.refusals.push(refusal);
