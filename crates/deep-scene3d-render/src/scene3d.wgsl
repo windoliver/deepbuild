@@ -106,11 +106,25 @@ struct Light {
     // rgb: color × intensity (lx for a sun, cd otherwise, an area's lm ÷ 4π) × the policy's
     // weight; w: radius in m.
     color: vec4<f32>,
-    // A spot's cos outer and cos inner.
+    // A spot's cos outer and cos inner; z: 1 + its local shadow, 0 for none; w: its receiver
+    // set's bit (f32 bits), 0 for every part (#446).
     cone: vec4<f32>,
-    // An area's half axes across its face; right.w: 1 for a disk.
+    // An area's half axes across its face, a point's or a spot's own unit axes; right.w: 1 for a
+    // disk; up.w: 1 + its IES table's layer, 0 for none (#446).
     right: vec4<f32>,
     up: vec4<f32>,
+};
+
+// A shadowed local light's map (#446; Light policy: local shadows).
+struct Local {
+    // A spot's world to clip; a cube's world to its frame's axes, in the rotation's rows.
+    clip: mat4x4<f32>,
+    // xyz: the light; w: its map's far plane.
+    pos: vec4<f32>,
+    // Its near plane, its first layer, tan of half a map's field, and 1 for a cube.
+    info: vec4<f32>,
+    // The light's radius in m, and the share of its shadow the policy keeps.
+    size: vec4<f32>,
 };
 
 struct Lights {
@@ -127,6 +141,19 @@ struct Lights {
     forward: vec4<f32>,
     // World to each cascade's clip space (depth 0 nearest the light).
     cascades: array<mat4x4<f32>, 4>,
+    // Each cascade's depth range in m (#446).
+    depths: vec4<f32>,
+    // Soft shadows (#446; Light policy: soft shadows): x: 0 the tent, 1 Castaño's 9-tap filter,
+    // 2 PCSS; y and z: the blocker and filter taps; w: the most a penumbra spreads, in texels.
+    soft: vec4<f32>,
+    // x: tan of half the key sun's angle; y: 1 with a contact shadow; z: 1 when a sample index
+    // turns the disk, w its angle in radians (under samples per frame).
+    key: vec4<f32>,
+    // Each local map's side in texels in x.
+    local_size: vec4<f32>,
+    // x: 1 with a light grid; y and z: its far and near planes.
+    grid: vec4<f32>,
+    locals: array<Local, 12>,
     items: array<Light, 32>,
 };
 
@@ -137,6 +164,13 @@ struct Lights {
 @group(1) @binding(1) var<uniform> dfg: array<vec4<f32>, 1024>;
 // The key sun's cascades (#422), one layer each (a texel's stand-in before one is drawn).
 @group(1) @binding(2) var shadow_map: texture_depth_2d_array;
+// Every local shadow map's layers (#446).
+@group(1) @binding(14) var local_maps: texture_depth_2d_array;
+// The IES tables, one layer each, and their sampler, wrapping in azimuth (#446).
+@group(1) @binding(15) var ies_tables: texture_2d_array<f32>;
+@group(1) @binding(16) var ies_sampler: sampler;
+// The light grid's cells (#446; clusters.rs): each a bit per shaded light that reaches it.
+@group(1) @binding(17) var<storage, read> light_grid: array<u32>;
 
 // The environment (#422; Sky `sky@1`: environment): its prefiltered cubes, each mip a roughness,
 // and their irradiance ÷ π as nine SH coefficients.
@@ -184,6 +218,7 @@ const NO_COMP: u32 = 2u;
 const ENV_COMP_ONLY: u32 = 4u;
 
 const PI: f32 = 3.14159265;
+const TAU: f32 = 6.2831853;
 // A solid record's flags: no shadow cast or received (#420); shaded by its material; its world
 // determinant negative, which turns its front faces over; unlit; seen from both sides.
 const MATERIAL: u32 = 4u;
@@ -544,6 +579,10 @@ fn mesh_out(p: vec3<f32>, n: vec3<f32>, e: Element, uv: vec4<f32>, tangent: vec4
     // The shadow pass (light.w < 0) leaves out a solid with `cast_shadow: false` (#420).
     if frame.light.w < 0.0 && (flags & 1u) != 0u {
         out.pos = OFF;
+    }
+    // Where the device has no unclipped depth, what lies before the near plane lands on it.
+    if frame.light.w < -1.5 {
+        out.pos.z = max(out.pos.z, 0.0);
     }
     let c0 = vec3<f32>(r0.x, r1.x, r2.x);
     let c1 = vec3<f32>(r0.y, r1.y, r2.y);
@@ -1223,10 +1262,132 @@ fn with_lobes(in: MeshOut, n: vec3<f32>, s0: Surface) -> Surface {
     return s;
 }
 
-// The key sun's visibility at `world` from cascade `i`: the share of a 3 × 3 texel
-// neighbourhood that doesn't block it, the point first biased by `curved` (1 outside the
-// cascade).
-fn cascade_lit(i: u32, world: vec3<f32>, n: vec3<f32>, curved: bool) -> f32 {
+// #446's planted wrong program: the filter disk sized in the cascade's own texels.
+const FILTER_IN_TEXELS: u32 = 0x40000000u;
+
+// The fixed Vogel disk's tap `i` of `n` (#446), turned by `turn`.
+fn vogel(i: u32, n: u32, turn: f32) -> vec2<f32> {
+    let r = sqrt((f32(i) + 0.5) / f32(n));
+    let a = f32(i) * 2.399963 + turn;
+    return r * vec2<f32>(cos(a), sin(a));
+}
+
+// How the disk turns at a pixel: an integer hash of the pixel, the same every frame, or under
+// samples per frame by the sample's index, so the point on the light moves with the sample.
+fn disk_turn(px: vec2<f32>) -> f32 {
+    if lights.key.z > 0.5 {
+        return lights.key.w;
+    }
+    return f32(band_hash(vec2<u32>(px), 0x5bd1e995u) & 0xffffu) * (TAU / 65536.0);
+}
+
+// Where a shadow map's tap lands: its uv, its depth and its layer.
+struct Tap {
+    uv: vec2<f32>,
+    z: f32,
+    layer: i32,
+};
+
+// A sample in a cube's frame: which face holds `d`, and its coordinates there (shadow.rs's FACES).
+fn cube_tap(l: Local, world: vec3<f32>) -> Tap {
+    let o = world - l.pos.xyz;
+    let d = vec3<f32>(dot(l.clip[0].xyz, o), dot(l.clip[1].xyz, o), dot(l.clip[2].xyz, o));
+    let a = abs(d);
+    var face = 0;
+    var m = a.x;
+    var st = vec2<f32>(select(d.z, -d.z, d.x > 0.0), d.y);
+    if a.x < a.y || a.x < a.z {
+        if a.y >= a.z {
+            face = 3;
+            m = a.y;
+            st = vec2<f32>(d.x, select(d.z, -d.z, d.y > 0.0));
+            if d.y > 0.0 {
+                face = 2;
+            }
+        } else {
+            face = 5;
+            m = a.z;
+            st = vec2<f32>(select(-d.x, d.x, d.z > 0.0), d.y);
+            if d.z > 0.0 {
+                face = 4;
+            }
+        }
+    } else if d.x <= 0.0 {
+        face = 1;
+    }
+    let near = l.info.x;
+    let far = l.pos.w;
+    let z = far / (far - near) * (1.0 - near / max(m, near));
+    return Tap(st / max(m, 1e-6) * vec2<f32>(0.5, -0.5) + 0.5, z, i32(l.info.y) + face);
+}
+
+// A local map's tap of `world`.
+fn local_tap(l: Local, world: vec3<f32>) -> Tap {
+    if l.info.w > 0.5 {
+        return cube_tap(l, world);
+    }
+    let c = l.clip * vec4<f32>(world, 1.0);
+    if c.w <= 0.0 {
+        return Tap(vec2<f32>(-1.0), 0.0, i32(l.info.y));
+    }
+    return Tap(c.xy / c.w * vec2<f32>(0.5, -0.5) + 0.5, c.z / c.w, i32(l.info.y));
+}
+
+// The distance along a local map's axis that its depth `z` stands for.
+fn local_distance(l: Local, z: f32) -> f32 {
+    let near = l.info.x;
+    let far = l.pos.w;
+    return near * far / max(far - z * (far - near), 1e-6);
+}
+
+fn cascade_tap(i: u32, world: vec3<f32>) -> Tap {
+    let c = lights.cascades[i] * vec4<f32>(world, 1.0);
+    return Tap(c.xy * vec2<f32>(0.5, -0.5) + 0.5, c.z, i32(i));
+}
+
+fn inside_map(t: Tap) -> bool {
+    return all(t.uv >= vec2<f32>(0.0)) && all(t.uv <= vec2<f32>(1.0)) && t.z <= 1.0;
+}
+
+// Where a disk tap lands on the receiver's plane, along the light's ray, so a wide disk on a
+// slanted face compares each tap with the face's own depth there.
+fn on_plane(p: vec3<f32>, o: vec3<f32>, n: vec3<f32>, ray: vec3<f32>) -> vec3<f32> {
+    let c = dot(n, ray);
+    if abs(c) < 0.1 {
+        return p + o;
+    }
+    return p + o - ray * (dot(n, o) / c);
+}
+
+// Castaño's 9-tap filter (2013): a 5 × 5 texel tent in nine bilinear comparisons.
+fn castano(map: texture_depth_2d_array, uv: vec2<f32>, z: f32, layer: i32, size: f32) -> f32 {
+    let at = uv * size;
+    let base = floor(at + 0.5);
+    let f = at + 0.5 - base;
+    let o = (base - 0.5) / size;
+    let w0 = 4.0 - 3.0 * f;
+    let w1 = vec2<f32>(7.0);
+    let w2 = 1.0 + 3.0 * f;
+    let u0 = (3.0 - 2.0 * f) / w0 - 2.0;
+    let u1 = (3.0 + f) / w1;
+    let u2 = f / w2 + 2.0;
+    var sum = 0.0;
+    for (var j = 0; j < 3; j++) {
+        let wv = select(select(w2.y, w1.y, j == 1), w0.y, j == 0);
+        let v = select(select(u2.y, u1.y, j == 1), u0.y, j == 0);
+        for (var i = 0; i < 3; i++) {
+            let wu = select(select(w2.x, w1.x, i == 1), w0.x, i == 0);
+            let u = select(select(u2.x, u1.x, i == 1), u0.x, i == 0);
+            sum += wu * wv * textureSampleCompareLevel(map, shadow_cmp, o + vec2<f32>(u, v) / size, layer, z);
+        }
+    }
+    return sum / 144.0;
+}
+
+// The key sun's visibility at `world` from cascade `i`: PCSS (a blocker search, then a disk the
+// penumbra sizes), Castaño's filter, or the share of a 3 × 3 texel neighbourhood that doesn't
+// block it, the point first biased by `curved` (1 outside the cascade).
+fn cascade_lit(i: u32, world: vec3<f32>, n: vec3<f32>, curved: bool, px: vec2<f32>) -> f32 {
     // A flat face is biased toward the sun, by a texel plus 1.5 texels of its slope to the light,
     // so the point keeps its own place in the map: the shadow's edge lands where the casters put
     // it, and a cut face beside a kept edge isn't shadowed by that edge (#424). A smooth-shaded
@@ -1237,25 +1398,144 @@ fn cascade_lit(i: u32, world: vec3<f32>, n: vec3<f32>, curved: bool) -> f32 {
     let slope = min(sqrt(1.0 - c * c) / c, 4.0);
     let toward = frame.light.xyz * (1.0 + 1.5 * slope);
     let p = world + select(toward, n * 1.5, curved) * lights.texels[i];
-    let lp = lights.cascades[i] * vec4<f32>(p, 1.0);
-    let uv = lp.xy * vec2<f32>(0.5, -0.5) + 0.5;
-    if any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) || lp.z > 1.0 {
+    let t = cascade_tap(i, p);
+    if !inside_map(t) {
         return 1.0;
     }
+    let size = f32(textureDimensions(shadow_map).x);
+    let z = t.z - 1e-4;
+    if lights.soft.x > 1.5 {
+        return cascade_pcss(i, p, n, t, size, px);
+    }
+    if lights.soft.x > 0.5 {
+        return castano(shadow_map, t.uv, z, i32(i), size);
+    }
     // Four bilinear comparisons half a texel apart: a 3 × 3 texel tent.
-    let texel = 0.5 / vec2<f32>(textureDimensions(shadow_map));
-    let z = lp.z - 1e-4;
+    let texel = 0.5 / size;
     var lit = 0.0;
-    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(-texel.x, -texel.y), i32(i), z);
-    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(texel.x, -texel.y), i32(i), z);
-    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(-texel.x, texel.y), i32(i), z);
-    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(texel.x, texel.y), i32(i), z);
+    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, t.uv + vec2<f32>(-texel, -texel), i32(i), z);
+    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, t.uv + vec2<f32>(texel, -texel), i32(i), z);
+    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, t.uv + vec2<f32>(-texel, texel), i32(i), z);
+    lit += textureSampleCompareLevel(shadow_map, shadow_cmp, t.uv + vec2<f32>(texel, texel), i32(i), z);
     return lit * 0.25;
+}
+
+// The sun's PCSS: the blockers within what the sun's disk can reach, their mean distance above
+// the point, and a disk that distance sizes, so a shadow hardens where it touches its caster.
+fn cascade_pcss(i: u32, p: vec3<f32>, n: vec3<f32>, t: Tap, size: f32, px: vec2<f32>) -> f32 {
+    let ray = -frame.light.xyz;
+    let b = onb(ray);
+    let texel = lights.texels[i];
+    let most = lights.soft.w * texel;
+    let k = lights.key.x;
+    let range = lights.depths[i];
+    let turn = disk_turn(px);
+    let search = clamp(t.z * range * k, texel, most);
+    let taps = u32(lights.soft.y);
+    var sum = 0.0;
+    var found = 0.0;
+    for (var j = 0u; j < taps; j++) {
+        let v = vogel(j, taps, turn) * search;
+        let q = cascade_tap(i, on_plane(p, b[0] * v.x + b[1] * v.y, n, ray));
+        let at = clamp(vec2<i32>(q.uv * size), vec2<i32>(0), vec2<i32>(i32(size) - 1));
+        let d = textureLoad(shadow_map, at, i, 0);
+        if d < q.z - 1e-4 {
+            sum += q.z - d;
+            found += 1.0;
+        }
+    }
+    if found < 0.5 {
+        return 1.0;
+    }
+    var radius = clamp(sum / found * range * k, texel, most);
+    if (lights.count.z & FILTER_IN_TEXELS) != 0u {
+        radius *= texel / lights.texels[0];
+    }
+    let count = u32(lights.soft.z);
+    var lit = 0.0;
+    for (var j = 0u; j < count; j++) {
+        let v = vogel(j, count, turn) * radius;
+        let q = cascade_tap(i, on_plane(p, b[0] * v.x + b[1] * v.y, n, ray));
+        if !inside_map(q) {
+            lit += 1.0;
+            continue;
+        }
+        lit += textureSampleCompareLevel(shadow_map, shadow_cmp, q.uv, q.layer, q.z - 1e-4);
+    }
+    return lit / f32(count);
+}
+
+// A local light's visibility at `world` (#446; Light policy: local shadows): PCSS over a disk
+// its radius sizes, its taps read wherever each lands, so a disk crosses a cube's faces; the
+// tent without soft shadows.
+fn local_lit(l: Local, world: vec3<f32>, n: vec3<f32>, px: vec2<f32>) -> f32 {
+    let to = world - l.pos.xyz;
+    let dist = max(length(to), 1e-4);
+    let ray = to / dist;
+    let size = lights.local_size.x;
+    let texel = 2.0 * l.info.z * dist / size;
+    let bias = 1e-5;
+    let p = world + n * 1.5 * texel - ray * texel;
+    let t = local_tap(l, p);
+    if !inside_map(t) {
+        return 1.0;
+    }
+    var lit = 1.0;
+    if lights.soft.x > 0.5 && lights.soft.x < 1.5 {
+        lit = castano(local_maps, t.uv, t.z - bias, t.layer, size);
+    } else if lights.soft.x < 0.5 {
+        let h = 0.5 / size;
+        lit = 0.0;
+        lit += textureSampleCompareLevel(local_maps, shadow_cmp, t.uv + vec2<f32>(-h, -h), t.layer, t.z - bias);
+        lit += textureSampleCompareLevel(local_maps, shadow_cmp, t.uv + vec2<f32>(h, -h), t.layer, t.z - bias);
+        lit += textureSampleCompareLevel(local_maps, shadow_cmp, t.uv + vec2<f32>(-h, h), t.layer, t.z - bias);
+        lit += textureSampleCompareLevel(local_maps, shadow_cmp, t.uv + vec2<f32>(h, h), t.layer, t.z - bias);
+        lit *= 0.25;
+    } else {
+        let b = onb(ray);
+        let most = lights.soft.w * texel;
+        let turn = disk_turn(px);
+        let r = l.size.x;
+        let search = clamp(r * (dist - l.info.x) / dist, texel, most);
+        let taps = u32(lights.soft.y);
+        var sum = 0.0;
+        var found = 0.0;
+        for (var j = 0u; j < taps; j++) {
+            let v = vogel(j, taps, turn) * search;
+            let q = local_tap(l, on_plane(p, b[0] * v.x + b[1] * v.y, n, ray));
+            let at = clamp(vec2<i32>(q.uv * size), vec2<i32>(0), vec2<i32>(i32(size) - 1));
+            let d = textureLoad(local_maps, at, q.layer, 0);
+            if d < q.z - bias {
+                sum += local_distance(l, d);
+                found += 1.0;
+            }
+        }
+        if found > 0.5 {
+            let blocker = sum / found;
+            let radius = clamp(r * max(dist - blocker, 0.0) / blocker, texel, most);
+            let count = u32(lights.soft.z);
+            lit = 0.0;
+            for (var j = 0u; j < count; j++) {
+                let v = vogel(j, count, turn) * radius;
+                let q = local_tap(l, on_plane(p, b[0] * v.x + b[1] * v.y, n, ray));
+                lit += textureSampleCompareLevel(local_maps, shadow_cmp, q.uv, q.layer, q.z - bias);
+            }
+            lit /= f32(count);
+        }
+    }
+    return mix(1.0, lit, l.size.y);
+}
+
+// An IES table's value toward `w` from a light, unit along its axis and across it (#446).
+fn ies_at(layer: u32, axis: vec3<f32>, right: vec3<f32>, up: vec3<f32>, w: vec3<f32>) -> f32 {
+    let v = acos(clamp(dot(w, axis), -1.0, 1.0)) / PI;
+    let u = fract(atan2(dot(w, up), dot(w, right)) / TAU + 1.0);
+    return textureSampleLevel(ies_tables, ies_sampler, vec2<f32>(u, v), i32(layer), 0.0).r;
 }
 
 // The key sun's visibility at `world` (#422): the cascade its view depth falls in, blended with
 // the next across the last tenth of its range when fade is on; 1 past the last cascade.
-fn lit_share(world: vec3<f32>, n: vec3<f32>, curved: bool) -> f32 {
+fn lit_share(world: vec3<f32>, n: vec3<f32>, curved: bool, px: vec2<f32>) -> f32 {
     let count = lights.count.w;
     if count == 0u {
         return 1.0;
@@ -1264,13 +1544,13 @@ fn lit_share(world: vec3<f32>, n: vec3<f32>, curved: bool) -> f32 {
     for (var i = 0u; i < count; i++) {
         let far = lights.splits[i];
         if d <= far {
-            let lit = cascade_lit(i, world, n, curved);
+            let lit = cascade_lit(i, world, n, curved, px);
             let near = select(0.0, lights.splits[max(i, 1u) - 1u], i > 0u);
             let edge = far - 0.1 * (far - near);
             if lights.forward.w > 0.5 && d > edge {
                 var next = 1.0;
                 if i + 1u < count {
-                    next = cascade_lit(i + 1u, world, n, curved);
+                    next = cascade_lit(i + 1u, world, n, curved, px);
                 }
                 return mix(lit, next, (d - edge) / max(far - edge, 1e-6));
             }
@@ -1278,6 +1558,18 @@ fn lit_share(world: vec3<f32>, n: vec3<f32>, curved: bool) -> f32 {
         }
     }
     return 1.0;
+}
+
+// Which of the shaded lights reach a fragment: a bit each, by the policy's order.
+fn cluster_at(px: vec2<f32>, world: vec3<f32>) -> u32 {
+    if lights.grid.x < 0.5 {
+        return 0xffffffffu;
+    }
+    let z = max(dot(world - lights.view.xyz, lights.forward.xyz), lights.grid.z);
+    let slice = min(u32(log(z / lights.grid.z) / log(lights.grid.y / lights.grid.z) * 24.0), 23u);
+    let x = min(u32(px.x / frame.viewport.x * 16.0), 15u);
+    let y = min(u32(px.y / frame.viewport.y * 9.0), 8u);
+    return light_grid[(slice * 9u + y) * 16u + x];
 }
 
 // The illuminance an area light (a one-sided Lambertian rect or disk) gives at `p` on a surface
@@ -1538,11 +1830,26 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
     var out = vec3<f32>(0.0);
     var total = 0.0;
     var removed = 0.0;
+    let reach = cluster_at(in.pos.xy, in.world);
     for (var i = 0u; i < lights.count.x; i++) {
+        if (reach >> i & 1u) == 0u {
+            continue;
+        }
         let li = lights.items[i];
+        // A light skips what its receivers don't hold (#446): a material's `color` word holds the
+        // receiver sets it belongs to.
+        let only = bitcast<u32>(li.cone.w);
+        if only != 0u && (in.color & only) == 0u {
+            continue;
+        }
         var add = vec3<f32>(0.0);
+        let table = u32(li.up.w);
         if li.pos.w > 2.5 {
             add = area_light(li, in.world, n, v, s, a2, dfg_v);
+            if table > 0u {
+                let w = normalize(in.world - li.pos.xyz);
+                add = add * ies_at(table - 1u, li.dir.xyz, normalize(li.right.xyz), normalize(li.up.xyz), w);
+            }
         } else {
             var l = -li.dir.xyz;
             var e = li.color.rgb;
@@ -1552,7 +1859,13 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
                 l = d * inverseSqrt(d2);
                 let fade = clamp(1.0 - pow(d2 / (li.dir.w * li.dir.w), 2.0), 0.0, 1.0);
                 e = e * fade * fade / max(d2, li.color.w * li.color.w);
-                if li.pos.w > 1.5 {
+                if table > 0u {
+                    // A spot clips its table at its cone, whose values keep its flux inside it.
+                    e = e * ies_at(table - 1u, li.dir.xyz, li.right.xyz, li.up.xyz, -l);
+                    if li.pos.w > 1.5 && dot(-l, li.dir.xyz) < li.cone.x {
+                        e = vec3<f32>(0.0);
+                    }
+                } else if li.pos.w > 1.5 {
                     let t = clamp((dot(-l, li.dir.xyz) - li.cone.x) / max(li.cone.y - li.cone.x, 1e-4), 0.0, 1.0);
                     e = e * t * t;
                 }
@@ -1569,7 +1882,11 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
         // reports the share its shadow removes.
         var lit = 1.0;
         if lights.count.y == i + 1u && (in.flags & NO_RECEIVE) == 0u {
-            lit = lit_share(in.world, n, curved);
+            lit = lit_share(in.world, n, curved, in.pos.xy) * contact_at(in.pos.xy);
+        }
+        let local = u32(li.cone.z);
+        if local > 0u && (in.flags & NO_RECEIVE) == 0u && any(add > vec3<f32>(0.0)) {
+            lit = local_lit(lights.locals[local - 1u], in.world, n, in.pos.xy);
         }
         if catches {
             let y = dot(add, vec3<f32>(0.2126, 0.7152, 0.0722));
@@ -1591,6 +1908,8 @@ struct Ao {
     // Samples, multi-bounce, specular, and 1 with ao on.
     opts: vec4<u32>,
     scale: vec4<f32>,
+    contact: vec4<f32>,
+    steps: vec4<u32>,
 };
 
 @group(2) @binding(0) var ao_t: texture_2d<f32>;
@@ -1598,6 +1917,15 @@ struct Ao {
 
 // The ambient term's visibility at this pixel, brightened by the surface's albedo with
 // multi-bounce on (Jimenez's fit); 1 with ao off.
+// The key light's contact shadow here (#446), 1 with none.
+fn contact_at(pos: vec2<f32>) -> f32 {
+    if ao.steps.x == 0u {
+        return 1.0;
+    }
+    let dims = textureDimensions(ao_t);
+    return textureLoad(ao_t, min(vec2<u32>(pos * ao.scale.xy), dims - vec2<u32>(1u)), 0).g;
+}
+
 fn occlusion(pos: vec2<f32>, albedo: vec3<f32>) -> vec3<f32> {
     if ao.opts.w == 0u {
         return vec3<f32>(1.0);
@@ -1747,7 +2075,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
     }
     // Under the key sun's cascades (#422) a painted solid is shadowed as a material is.
     if lights.count.w > 0u && (in.flags & NO_RECEIVE) == 0u {
-        direct = direct * lit_share(in.world, n, curved);
+        direct = direct * lit_share(in.world, n, curved, in.pos.xy) * contact_at(in.pos.xy);
     }
     let albedo = paint(in.color);
     let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);

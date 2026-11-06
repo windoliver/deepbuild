@@ -8,9 +8,10 @@
 //! target and writes the slot.
 
 pub mod ao;
-pub mod env;
 pub mod cull;
+pub mod env;
 mod glass;
+pub mod local;
 pub mod maps;
 mod mesh;
 mod motion;
@@ -20,18 +21,18 @@ pub mod shadow;
 pub mod status;
 pub mod surface;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 
 use bytemuck::{Pod, Zeroable};
-use deep_canvas_scene3d::cut;
 use deep_canvas_scene3d::label::{half_fraction, AtlasPage, PAGE, PAGES};
 use deep_canvas_scene3d::light::{self, AlphaMode, LightKind, SHADED};
 use deep_canvas_scene3d::look::{Look3, ToneMap};
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{Adjust3, Depth, Facing, Layer3, PointShape, Scene, Shape, Solid};
 use deep_canvas_scene3d::sky::{Curve, Fog};
+use deep_canvas_scene3d::{clusters, cut};
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
 use deep_gpu::render::{Determinism, Pass, RenderModule, Resolution, Target};
@@ -167,6 +168,8 @@ pub struct Planted {
     pub resolve_accumulates: bool,
     /// #428's shading plants as the shader's bits (scene3d.wgsl: `P_*`), 0 for none.
     pub lobes: u32,
+    /// #446: the local maps' wrong programs.
+    pub local: local::Planted,
     /// #484: the cull's wrong programs.
     pub cull: cull::Plants,
     /// #484: the object-ID pass writes a row's place in the compacted list.
@@ -213,7 +216,9 @@ pub struct Counts {
     pub fragments: u64,
     pub fragments_capped: bool,
     /// Each shadow map the key sun draws from this frame: its key and its texel in m (#424).
-    pub shadow_maps: Vec<(u64, f64)>,
+    pub shadow_maps: Vec<(u64, f64, [f64; 16])>,
+    /// Each shadowed local light's map this frame (#446).
+    pub local_maps: Vec<local::Report>,
 }
 
 /// The key light's direction, toward the light: what the solids are shaded by and what casts the
@@ -378,7 +383,7 @@ pub trait Post: Send {
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-struct FrameUniform {
+pub(crate) struct FrameUniform {
     /// Column-major.
     clip: [[f32; 4]; 4],
     right: [f32; 4],
@@ -490,7 +495,27 @@ struct LightsUniform {
     texels: [f32; 4],
     forward: [f32; 4],
     cascades: [[[f32; 4]; 4]; 4],
+    /// Each cascade's depth range in m (#446).
+    depths: [f32; 4],
+    /// Soft shadows' mode, blocker taps, filter taps and most texels of penumbra (#446).
+    soft: [f32; 4],
+    /// tan of half the key sun's angle; 1 with a contact shadow; the sample's turn and its flag.
+    key: [f32; 4],
+    local_size: [f32; 4],
+    /// x: 1 with a light grid; y: its far plane (#446).
+    grid: [f32; 4],
+    locals: [LocalUniform; local::SLOTS],
     items: [[[f32; 4]; 6]; SHADED],
+}
+
+/// scene3d.wgsl's `Local` (#446).
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct LocalUniform {
+    clip: [[f32; 4]; 4],
+    pos: [f32; 4],
+    info: [f32; 4],
+    size: [f32; 4],
 }
 
 /// scene3d.wgsl's `Env` (#422): the environment's irradiance coefficients, its mix's, and how to
@@ -660,6 +685,8 @@ struct SolidRecord {
     op: [u32; 4],
 }
 
+/// #446's planted wrong program's bit in the shader's planted word (scene3d.wgsl).
+const FILTER_IN_TEXELS: u32 = 1 << 30;
 /// A solid the shadow pass leaves out (`cast_shadow: false`).
 const NO_CAST: u32 = 1;
 /// A solid no shadow falls on (`receive_shadow: false`), for the passes that shade one.
@@ -784,7 +811,13 @@ fn solid_record(
     op[3] = adjust;
     SolidRecord {
         rows: m.map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]),
-        color: pack(s.color),
+        // A material's color word holds the receiver sets it belongs to (#446): its own color is
+        // its base, and the lights are what reads the word.
+        color: if s.material.is_some() {
+            s.receiver_sets
+        } else {
+            pack(s.color)
+        },
         pick,
         flags,
         tie: tie | mask_code(s.mask) << 20,
@@ -884,7 +917,7 @@ pub fn shadow_texels(scene: &Scene, size: u32) -> impl Fn([f64; 3]) -> Option<f6
         .sun
         .as_ref()
         .filter(|_| scene.cascaded() && scene.camera.perspective)
-        .map(|sun| shadow::cascades(scene, sun.toward, &sun.cascades, size))
+        .map(|sun| shadow::cascades(scene, sun.toward, &sun.cascades, size, None, true))
         .unwrap_or_default();
     let camera = scene.camera.clone();
     move |p| {
@@ -929,7 +962,13 @@ const PER_PIXEL: u8 = 4;
 /// A blend or add part drawn after the glass, with its pipeline (#428).
 /// A culled batch's draw into one view: its mesh's vertices and indices, its records' group, and
 /// the row list and indirect arguments its cull wrote (#484).
-type RowDraw = (wgpu::Buffer, wgpu::Buffer, wgpu::BindGroup, wgpu::Buffer, wgpu::Buffer);
+type RowDraw = (
+    wgpu::Buffer,
+    wgpu::Buffer,
+    wgpu::BindGroup,
+    wgpu::Buffer,
+    wgpu::Buffer,
+);
 
 type LateDraw = (
     wgpu::RenderPipeline,
@@ -1093,6 +1132,49 @@ pub(crate) fn target(
         format,
         blend,
         write_mask: wgpu::ColorWrites::ALL,
+    })
+}
+
+/// A shadow map's pipeline: the solids' vertex stage under a light's clip matrix, depth only,
+/// nearest the light kept, with what lies past its near and far planes clamped where the device
+/// can (`fs`, its fragment stage, only discards).
+pub(crate) fn shadow_pipeline(
+    d: &wgpu::Device,
+    label: &str,
+    layout: &wgpu::PipelineLayout,
+    module: &wgpu::ShaderModule,
+    (vs, buffers): (&str, &[Option<wgpu::VertexBufferLayout>]),
+    fs: &str,
+) -> wgpu::RenderPipeline {
+    d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module,
+            entry_point: Some(vs),
+            compilation_options: Default::default(),
+            buffers,
+        },
+        primitive: wgpu::PrimitiveState {
+            unclipped_depth: d.features().contains(wgpu::Features::DEPTH_CLIP_CONTROL),
+            ..Default::default()
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: shadow::FORMAT,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::Less),
+            stencil: Default::default(),
+            bias: Default::default(),
+        }),
+        multisample: Default::default(),
+        fragment: Some(wgpu::FragmentState {
+            module,
+            entry_point: Some(fs),
+            compilation_options: Default::default(),
+            targets: &[],
+        }),
+        multiview_mask: None,
+        cache: None,
     })
 }
 
@@ -1460,6 +1542,8 @@ struct Cascaded {
     list: Vec<shadow::Cascade>,
     stale: Vec<usize>,
     fade: bool,
+    /// The casters a sun that names its own draws (#446).
+    casters: Option<BTreeSet<String>>,
     /// Each layer's side in texels: shadow::SIZE times the renderer's shadow scale.
     size: u32,
 }
@@ -1506,6 +1590,15 @@ pub struct Renderer {
     lights_generation: u64,
     /// The key sun's cascades (#422).
     cascaded: Cascaded,
+    /// The local lights' shadow maps (#446).
+    locals: local::Locals,
+    /// What a shadow frame's `light.w` holds: −1, or −2 to pancake its near plane.
+    shadow_mark: f32,
+    /// The IES tables' atlas (#446).
+    ies: local::Tables,
+    /// The light grid this frame, and the buffer its cells are in (#446).
+    clusters: Option<clusters::Grid>,
+    cluster_buffer: wgpu::Buffer,
     /// The environment's prefilter and cubes (#422).
     env: EnvState,
     /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422).
@@ -1755,7 +1848,9 @@ fn contour(
         .collect();
     let covered = |q: [f64; 2]| {
         flat.iter().any(|[a, b, c]| {
-            let side = |p: [f64; 2], r: [f64; 2]| (r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0]);
+            let side = |p: [f64; 2], r: [f64; 2]| {
+                (r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0])
+            };
             let (x, y, z) = (side(*a, *b), side(*b, *c), side(*c, *a));
             (x >= 0.0 && y >= 0.0 && z >= 0.0) || (x <= 0.0 && y <= 0.0 && z <= 0.0)
         })
@@ -1797,7 +1892,7 @@ fn decode(c: u8) -> f64 {
     }
 }
 
-fn shape_code(s: Shape) -> u64 {
+pub(crate) fn shape_code(s: Shape) -> u64 {
     match s {
         Shape::Box => 1,
         Shape::Cylinder => 2,
@@ -1871,6 +1966,9 @@ fn lights_bind(
     cascades: &wgpu::TextureView,
     env: &EnvState,
     glass: &wgpu::TextureView,
+    locals: &wgpu::TextureView,
+    ies: &local::Tables,
+    grid: &wgpu::Buffer,
 ) -> wgpu::BindGroup {
     let cube = env.cube.as_ref().map_or(&env.stub, |c| &c.view);
     let to = env.to.as_ref().map_or(&env.stub, |c| &c.view);
@@ -1893,6 +1991,10 @@ fn lights_bind(
             oit.info.as_entire_binding(),
             lobes.as_entire_binding(),
             wgpu::BindingResource::TextureView(glass),
+            wgpu::BindingResource::TextureView(locals),
+            wgpu::BindingResource::TextureView(&ies.view),
+            wgpu::BindingResource::Sampler(&ies.sampler),
+            grid.as_entire_binding(),
         ],
     )
 }
@@ -2383,6 +2485,37 @@ impl Renderer {
                     wgpu::ShaderStages::FRAGMENT,
                     wgpu::BufferBindingType::Storage { read_only: false },
                 ),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 14,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 15,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 16,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                buffer_entry(
+                    17,
+                    wgpu::ShaderStages::FRAGMENT,
+                    wgpu::BufferBindingType::Storage { read_only: true },
+                ),
                 buffer_entry(
                     10,
                     wgpu::ShaderStages::FRAGMENT,
@@ -2455,6 +2588,13 @@ impl Renderer {
             cube: None,
             to: None,
         };
+        let ies = local::Tables::new(d);
+        let cluster_buffer = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("scene3d light grid"),
+            size: (clusters::CELLS * 4) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let lights_bind = lights_bind(
             d,
             &lights_layout,
@@ -2463,6 +2603,9 @@ impl Renderer {
             &cascade_stub(d),
             &env,
             &glass_stub,
+            &cascade_stub(d),
+            &ies,
+            &cluster_buffer,
         );
         let ao = ao::Passes::new(device);
         let maps = maps::Store::new(d, &device.queue);
@@ -2504,21 +2647,21 @@ impl Renderer {
         // nearest the light kept.
         // Its fragment stage only discards what a cutaway removes (#424), and a band's texels
         // outside its mask (#425).
-        let shadow_pipeline = pipeline(
+        let shadow_pipeline = shadow_pipeline(
             d,
             SHADOW_PASS,
-            Some(&draw_layout),
+            &draw_layout,
             &module,
             ("mesh_vs", &mesh_buffers),
-            Some(("shadow_fs", &[])),
-            Some(wgpu::DepthStencilState {
-                format: shadow::FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
+            "shadow_fs",
         );
+        // Depth clamps through wgpu's unclipped depth; without it the vertex stage pancakes what
+        // lies before the near plane onto it (Light policy: cascades).
+        let shadow_mark = if d.features().contains(wgpu::Features::DEPTH_CLIP_CONTROL) {
+            -1.0
+        } else {
+            -2.0
+        };
         let light_buffer = uniform_buffer("scene3d light", std::mem::size_of::<FrameUniform>());
         let light_bind = bind_group(
             d,
@@ -2734,10 +2877,8 @@ impl Renderer {
                 texture: None,
                 frames: (0..4)
                     .map(|_| {
-                        let b = uniform_buffer(
-                            "scene3d cascade",
-                            std::mem::size_of::<FrameUniform>(),
-                        );
+                        let b =
+                            uniform_buffer("scene3d cascade", std::mem::size_of::<FrameUniform>());
                         let g = bind_group(
                             d,
                             "scene3d cascade",
@@ -2751,8 +2892,14 @@ impl Renderer {
                 list: Vec::new(),
                 stale: Vec::new(),
                 fade: true,
+                casters: None,
                 size: shadow::SIZE,
             },
+            locals: local::Locals::default(),
+            shadow_mark,
+            ies,
+            clusters: None,
+            cluster_buffer,
             env,
             sky: false,
             sky_pipeline: None,
@@ -3089,13 +3236,30 @@ impl Renderer {
                     near: 0.0,
                     far: f64::MAX,
                     center: [0.0; 3],
-                    radius: 1.0 / (clip[0] * clip[0] + clip[4] * clip[4] + clip[8] * clip[8]).sqrt(),
+                    radius: 1.0
+                        / (clip[0] * clip[0] + clip[4] * clip[4] + clip[8] * clip[8]).sqrt(),
                     clip,
+                    depth: 1.0
+                        / (clip[2] * clip[2] + clip[6] * clip[6] + clip[10] * clip[10]).sqrt(),
                 })
                 .into_iter()
                 .collect();
         } else {
-            c.list = shadow::cascades(scene, sun.toward, &sun.cascades, size);
+            let angle = scene
+                .lights
+                .iter()
+                .find(|l| l.id == sun.id)
+                .map_or(0.53, |l| l.angle);
+            let reach = scene
+                .shadowing
+                .soft
+                .filter(|_| !self.planted.local.no_reach)
+                .map(|s| shadow::Reach {
+                    angle,
+                    max_penumbra: s.max_penumbra,
+                });
+            let snap = !self.planted.local.unsnapped;
+            c.list = shadow::cascades(scene, sun.toward, &sun.cascades, size, reach, snap);
         }
         c.fade = sun.cascades.fade;
         if let Some(first) = c.list.first() {
@@ -3114,6 +3278,11 @@ impl Renderer {
             .filter(|s| s.batch != 0 && s.cast_shadow)
             .collect();
         let casters = shadow::caster_corners(scene);
+        let sun_caster = scene
+            .lights
+            .iter()
+            .find(|l| l.id == sun.id)
+            .map_or(0, |l| l.caster_bit);
         let solids: BTreeMap<&str, &Solid> = scene
             .layers
             .iter()
@@ -3132,17 +3301,16 @@ impl Renderer {
                 for v in s.model.iter().flatten() {
                     v.to_bits().hash(&mut h);
                 }
+                local::hash_caster(s, &mut h);
+                local::hash_time(s, self.planted.local, &mut h);
             }
             for (id, corners) in &casters {
-                if !shadow::inside(&cascade.clip, corners) {
+                let drawn = sun_caster == 0 || solids[id.as_str()].caster_sets & sun_caster != 0;
+                if !drawn || !shadow::inside(&cascade.clip, corners) {
                     continue;
                 }
-                let s = solids[id.as_str()];
-                id.hash(&mut h);
-                shape_code(s.shape).hash(&mut h);
-                for v in s.model.iter().flatten() {
-                    v.to_bits().hash(&mut h);
-                }
+                local::hash_caster(solids[id.as_str()], &mut h);
+                local::hash_time(solids[id.as_str()], self.planted.local, &mut h);
             }
             // A level only the shadow passes draw is part of what the cascade reads (#425).
             for s in scene
@@ -3158,21 +3326,19 @@ impl Renderer {
                 }
                 s.mask.map(|m| (m.level, m.lower)).hash(&mut h);
             }
+            sun_caster.hash(&mut h);
             // The planes that cut its casters (#424): moving one draws the map again.
-            if !self.planted.cuts_color_only {
-                if let Some(cut) = scene.cutaway.as_ref().filter(|c| !c.shadows_whole) {
-                    for (n, o) in &cut.planes {
-                        for v in n.iter().chain([o]) {
-                            v.to_bits().hash(&mut h);
-                        }
-                    }
-                    cut.intersect.hash(&mut h);
-                }
+            if !self.planted.cuts_color_only && !self.planted.local.ignores_cut {
+                local::hash_cut(scene, &mut h);
             }
             // The planted wrong program keys a map by the scene's solid count alone.
-            let key = if stale_plant { solid_count as u64 } else { h.finish() };
+            let key = if stale_plant {
+                solid_count as u64
+            } else {
+                h.finish()
+            };
             let texel = 2.0 * cascade.radius / f64::from(size);
-            self.counts.shadow_maps.push((key, texel));
+            self.counts.shadow_maps.push((key, texel, cascade.clip));
             if c.keys[i] != Some(key) {
                 c.keys[i] = Some(key);
                 c.stale.push(i);
@@ -3225,7 +3391,7 @@ impl Renderer {
                 }
             }
             // The shadow pass's mark (scene3d.wgsl's `mesh_vs`): it leaves out what casts none.
-            f.light[3] = -1.0;
+            f.light[3] = self.shadow_mark;
             Self::cut_casts(&self.planted, scene, &mut f);
             deep_gpu::alloc::outside(|| {
                 device
@@ -3234,6 +3400,66 @@ impl Renderer {
             });
         }
         self.counts.cascades_drawn = c.stale.iter().map(|&i| i as u32).collect();
+        // A sun that names its casters draws only them (Light: casters).
+        self.cascaded.casters = (sun_caster != 0).then(|| {
+            scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .filter(|s| s.caster_sets & sun_caster != 0)
+                .map(|s| s.id.clone())
+                .collect()
+        });
+    }
+
+    /// The shadowed local lights' maps at this view (#446; Light policy: local shadows): each
+    /// keyed by everything it reads and marked to draw when that changed since it was drawn; a
+    /// dirty map is never deferred. `kept` is the policy's shadows.
+    fn prepare_locals(
+        &mut self,
+        device: &Device,
+        scene: &Scene,
+        frame: &FrameUniform,
+        kept: &[(usize, f64)],
+    ) {
+        let wanted: Vec<(usize, f64)> = kept
+            .iter()
+            .copied()
+            .filter(|&(i, _)| scene.lights[i].kind != LightKind::Sun)
+            .collect();
+        let casters = if wanted.is_empty() {
+            Vec::new()
+        } else {
+            shadow::local_caster_corners(scene)
+        };
+        let planted = self.planted.local;
+        let fresh = self.locals.prepare(scene, &wanted, &casters, planted);
+        if fresh {
+            let device_size = (self.locals.size, self.locals.layers);
+            self.locals.ensure(device, device_size, &self.frame_layout);
+            self.rebind_lights(device);
+        }
+        for slot in self.locals.stale.clone() {
+            let (first, faces) = {
+                let m = &self.locals.list[slot];
+                (m.first, m.map.faces.clone())
+            };
+            for (offset, clip) in faces {
+                let mut f = *frame;
+                for col in 0..4 {
+                    for r in 0..4 {
+                        f.clip[col][r] = clip[col * 4 + r] as f32;
+                    }
+                }
+                f.light[3] = self.shadow_mark;
+                Self::cut_casts(&self.planted, scene, &mut f);
+                let buffer = &self.locals.frames[(first + offset) as usize].0;
+                deep_gpu::alloc::outside(|| {
+                    device.queue.write_buffer(buffer, 0, bytemuck::bytes_of(&f))
+                });
+            }
+        }
+        self.counts.local_maps = self.locals.reports();
     }
 
     /// A light frame's cut (#424): the view's, unless removed geometry still casts
@@ -3255,6 +3481,14 @@ impl Renderer {
                 &stub
             }
         };
+        let local_stub;
+        let locals = match &self.locals.texture {
+            Some((array, _)) => array,
+            None => {
+                local_stub = cascade_stub(&device.device);
+                &local_stub
+            }
+        };
         self.lights_bind = lights_bind(
             &device.device,
             &self.lights_layout,
@@ -3268,6 +3502,9 @@ impl Renderer {
             cascades,
             &self.env,
             self.glass.as_ref().map_or(&self.glass_stub, |g| &g.view),
+            locals,
+            &self.ies,
+            &self.cluster_buffer,
         );
         self.lights_generation += 1;
     }
@@ -3298,8 +3535,11 @@ impl Renderer {
                         (_, true) => Some(1),
                         _ => None,
                     };
-                    self.env.cube =
-                        Some(self.env.prefilter.build(device, key, &source, e.size, filled));
+                    self.env.cube = Some(
+                        self.env
+                            .prefilter
+                            .build(device, key, &source, e.size, filled),
+                    );
                     rebuilt = true;
                 }
                 let to_key = e.mix.as_ref().map(|(to, _)| env::key(sky, to, e.size));
@@ -3317,7 +3557,12 @@ impl Renderer {
                     u.m[0] = e.mix.as_ref().map_or(0.0, |m| m.1) as f32;
                 }
                 let last = (cube.mips - 1) as f32;
-                u.k = [1.0, last, e.intensity as f32, e.rotation.to_radians() as f32];
+                u.k = [
+                    1.0,
+                    last,
+                    e.intensity as f32,
+                    e.rotation.to_radians() as f32,
+                ];
                 u.bg[1] = sky.background_blur as f32 * last;
             }
         }
@@ -3344,7 +3589,12 @@ impl Renderer {
                 Curve::Exp => 0.0,
                 Curve::Exp2 => 1.0,
             };
-            u.fog = [sky.fog_density as f32, curve, h_top as f32, h_density as f32];
+            u.fog = [
+                sky.fog_density as f32,
+                curve,
+                h_top as f32,
+                h_density as f32,
+            ];
             u.fog_color = match sky.fog {
                 Fog::Color(c) => v4(c, 0.0),
                 Fog::Background => [0.0, 0.0, 0.0, 1.0],
@@ -3358,11 +3608,12 @@ impl Renderer {
             // illuminance over the disk's solid angle (never in the environment, which the light
             // itself already lights).
             u.sun[3] = 2.0;
-            if let Some(l) = sky
-                .sun
-                .as_ref()
-                .and_then(|id| scene.lights.iter().find(|l| &l.id == id && l.kind == LightKind::Sun))
-            {
+            if let Some(l) = sky.sun.as_ref().and_then(|id| {
+                scene
+                    .lights
+                    .iter()
+                    .find(|l| &l.id == id && l.kind == LightKind::Sun)
+            }) {
                 let radius = (0.53f64 / 2.0).to_radians();
                 let omega = std::f64::consts::TAU * (1.0 - radius.cos());
                 u.sun = v4([-l.dir[0], -l.dir[1], -l.dir[2]], radius.cos());
@@ -3377,11 +3628,13 @@ impl Renderer {
     }
 
     /// The lights the light policy shades at this frame's view, each with its weight (#421).
-    fn prepare_lights(&mut self, device: &Device, scene: &Scene) {
-        let policy = scene
-            .light_cut
-            .clone()
-            .unwrap_or_else(|| light::policy(&scene.lights, &scene.camera));
+    fn prepare_lights(
+        &mut self,
+        device: &Device,
+        scene: &Scene,
+        policy: light::Policy,
+        dropped: Vec<String>,
+    ) {
         let cam = &scene.camera;
         let view = if cam.perspective {
             [cam.eye[0], cam.eye[1], cam.eye[2], 1.0]
@@ -3389,9 +3642,22 @@ impl Renderer {
             [-cam.forward[0], -cam.forward[1], -cam.forward[2], 0.0]
         };
         let planted = if self.planted.premixed_metallic { 1 } else { 0 }
-            | if self.planted.uncompensated_lobe { 2 } else { 0 }
-            | if self.planted.compensates_environment_only { 4 } else { 0 }
+            | if self.planted.uncompensated_lobe {
+                2
+            } else {
+                0
+            }
+            | if self.planted.compensates_environment_only {
+                4
+            } else {
+                0
+            }
             | if self.planted.ids_ignore_mask { 8 } else { 0 }
+            | if self.planted.local.filter_in_texels {
+                FILTER_IN_TEXELS
+            } else {
+                0
+            }
             | self.planted.lobes;
         let mut u = LightsUniform {
             view: view.map(|v| v as f32),
@@ -3400,16 +3666,76 @@ impl Renderer {
             texels: [0.0; 4],
             forward: v4(cam.forward, if self.cascaded.fade { 1.0 } else { 0.0 }),
             cascades: [[[0.0; 4]; 4]; 4],
+            depths: [0.0; 4],
+            soft: scene.shadowing.soft.map_or([0.0; 4], |s| {
+                [
+                    if s.pcss { 2.0 } else { 1.0 },
+                    s.blocker_taps as f32,
+                    s.filter_taps as f32,
+                    s.max_penumbra as f32,
+                ]
+            }),
+            key: [
+                scene
+                    .sun
+                    .as_ref()
+                    .and_then(|sun| scene.lights.iter().find(|l| l.id == sun.id))
+                    .map_or(0.0, |l| (l.angle.to_radians() * 0.5).tan() as f32),
+                f32::from(scene.shadowing.contact.is_some()),
+                f32::from(scene.sample_turn.is_some()),
+                scene.sample_turn.unwrap_or(0.0) as f32,
+            ],
+            local_size: [self.locals.size as f32; 4],
+            grid: [0.0; 4],
+            locals: [LocalUniform::zeroed(); local::SLOTS],
             items: [[[0.0; 4]; 6]; SHADED],
         };
+        // Each light's local map (#446).
+        let mut local_of = BTreeMap::new();
+        for (slot, m) in self.locals.list.iter().enumerate() {
+            let l = &scene.lights[m.light];
+            let mut clip = [[0.0; 4]; 4];
+            let spot = m.map.faces[0].1;
+            for (col, out) in clip.iter_mut().enumerate() {
+                for (r, v) in out.iter_mut().enumerate() {
+                    *v = if m.map.cube {
+                        // A cube's rotation, world to its frame: scene3d.wgsl's `cube_tap`.
+                        m.map
+                            .axes
+                            .get(col)
+                            .and_then(|a| a.get(r))
+                            .map_or(0.0, |x| *x as f32)
+                    } else {
+                        spot[col * 4 + r] as f32
+                    };
+                }
+            }
+            u.locals[slot] = LocalUniform {
+                clip,
+                pos: v4(l.pos, m.map.far),
+                info: [
+                    m.map.near as f32,
+                    m.first as f32,
+                    m.map.tan as f32,
+                    f32::from(m.map.cube),
+                ],
+                size: [local::radius(l) as f32, m.share as f32, 0.0, 0.0],
+            };
+            local_of.insert(m.light, slot as u32 + 1);
+        }
         // The key sun's cascades, which every receiving material reads (#422).
         if let (Some(sun), false) = (&scene.sun, self.cascaded.list.is_empty()) {
-            if let Some(k) = policy.shaded.iter().position(|&(i, _)| scene.lights[i].id == sun.id) {
+            if let Some(k) = policy
+                .shaded
+                .iter()
+                .position(|&(i, _)| scene.lights[i].id == sun.id)
+            {
                 u.count[1] = k as u32 + 1;
                 u.count[3] = self.cascaded.list.len() as u32;
                 for (i, c) in self.cascaded.list.iter().enumerate() {
                     u.splits[i] = c.far.min(f64::from(f32::MAX)) as f32;
                     u.texels[i] = (2.0 * c.radius / f64::from(self.cascaded.size)) as f32;
+                    u.depths[i] = c.depth as f32;
                     for col in 0..4 {
                         for r in 0..4 {
                             u.cascades[i][col][r] = c.clip[col * 4 + r] as f32;
@@ -3427,6 +3753,13 @@ impl Renderer {
                 LightKind::Area => 3.0,
             };
             let mut intensity = l.intensity * weight;
+            let table = l.distribution.as_ref();
+            intensity *= table.map_or(1.0, |t| t.scale);
+            if let (Some(t), true) = (table, self.planted.local.ies_peak) {
+                // The planted wrong program: a table scaled to its peak, not to its integral.
+                let d = &scene.distributions[t.layer as usize];
+                intensity /= d.table.iter().copied().fold(0.0, f32::max) as f64;
+            }
             if l.kind == LightKind::Spot && self.planted.spot_counts_cone {
                 // The planted wrong program: lm ÷ 2π(1 − cos outer) in place of lm ÷ 4π.
                 intensity *= 2.0 / (1.0 - l.cone[0]).max(1e-6);
@@ -3446,23 +3779,38 @@ impl Renderer {
                     (l.color[2] * intensity) as f32,
                     l.radius as f32,
                 ],
-                [l.cone[0] as f32, l.cone[1] as f32, 0.0, 0.0],
-                l.area
-                    .map_or([0.0; 4], |a| v4(a.right, if a.disk { 1.0 } else { 0.0 })),
-                l.area.map_or([0.0; 4], |a| v4(a.up, 0.0)),
+                [
+                    l.cone[0] as f32,
+                    l.cone[1] as f32,
+                    local_of.get(&i).copied().unwrap_or(0) as f32,
+                    f32::from_bits(l.receiver_bit),
+                ],
+                l.area.map_or(v4(l.axes[0], 0.0), |a| {
+                    v4(a.right, if a.disk { 1.0 } else { 0.0 })
+                }),
+                {
+                    let up = l.area.map_or(l.axes[1], |a| a.up);
+                    v4(up, table.map_or(0.0, |t| f64::from(t.layer) + 1.0))
+                },
             ];
         }
-        // Only the key sun has a shadow map yet; the spot maps the budget would keep land with
-        // local shadows (#446), so every other light asking is reported as dropped.
-        let (_, mut dropped) = light::shadowed(&scene.lights, &policy);
-        for &(i, _) in &policy.shaded {
-            let l = &scene.lights[i];
-            if l.shadow && l.kind == LightKind::Spot && !dropped.contains(&l.id) {
-                dropped.push(l.id.clone());
+        self.counts.shadows_dropped = dropped;
+        // Above eight lights, each tile and slice lists the lights that reach it, by the policy's
+        // order: scene3d.wgsl's `cluster_at` (#446).
+        let grid = clusters::grid(&scene.lights, &policy, cam, scene.size);
+        if let Some(g) = &grid {
+            u.grid = [1.0, g.far as f32, cam.near.max(1e-3) as f32, 0.0];
+            if self.clusters.as_ref() != Some(g) {
+                deep_gpu::alloc::outside(|| {
+                    device.queue.write_buffer(
+                        &self.cluster_buffer,
+                        0,
+                        bytemuck::cast_slice(&g.cells),
+                    )
+                });
             }
         }
-        dropped.sort();
-        self.counts.shadows_dropped = dropped;
+        self.clusters = grid;
         self.counts.lights_left_out = policy.left_out;
         deep_gpu::alloc::outside(|| {
             device
@@ -3704,14 +4052,10 @@ impl Renderer {
         self.update_culls(device);
         // Motion blur by velocity (#419), once every solid's mesh is built.
         self.motion_frame = match (&scene.motion, self.targets.as_ref()) {
-            (Some(m), Some(t)) => self.motion.prepare(
-                device,
-                scene,
-                m,
-                &self.meshes,
-                &t.linear_view,
-                t.size,
-            ),
+            (Some(m), Some(t)) => {
+                self.motion
+                    .prepare(device, scene, m, &self.meshes, &t.linear_view, t.size)
+            }
             _ => None,
         };
     }
@@ -3862,20 +4206,13 @@ impl Renderer {
             };
             let opaque = mesh(None);
             let culled = [mesh(Some(wgpu::Face::Back)), mesh(Some(wgpu::Face::Front))];
-            let shadow = pipeline(
+            let shadow = shadow_pipeline(
                 d,
                 SHADOW_PASS,
-                Some(&shadow_layout),
+                &shadow_layout,
                 module,
                 ("mesh_row_vs", &buffers),
-                Some(("shadow_fs", &[])),
-                Some(wgpu::DepthStencilState {
-                    format: shadow::FORMAT,
-                    depth_write_enabled: Some(true),
-                    depth_compare: Some(wgpu::CompareFunction::Less),
-                    stencil: Default::default(),
-                    bias: Default::default(),
-                }),
+                "shadow_fs",
             );
             self.rows = Some(Rows {
                 kernels,
@@ -3954,7 +4291,9 @@ impl Renderer {
                     }
                     // A cascade the frame doesn't redraw keeps its list and draws nothing.
                     if k < cull::CASCADES || stale.contains(&(k - cull::CASCADES)) {
-                        self.counts.indirect.push((item.clone(), view_name(k), batch_name(key)));
+                        self.counts
+                            .indirect
+                            .push((item.clone(), view_name(k), batch_name(key)));
                     }
                     if self.cpu_cull {
                         let planes = cull::planes(clip);
@@ -4051,6 +4390,10 @@ impl Renderer {
             look.ao,
             internal,
             &camera,
+            scene
+                .shadowing
+                .contact
+                .zip(scene.sun.as_ref().filter(|s| s.shadow).map(|s| s.toward)),
         );
         // A sun shades the solids by its direction and illuminance (w: E ÷ π, the radiance a white
         // surface facing it reflects); with none, the view's own key light, w 0.
@@ -4083,8 +4426,14 @@ impl Renderer {
             ],
             light,
             px: [k as f32, if below { 1.0 } else { 0.0 }, 1.0, forward],
-            sky_top: scene.sky.as_ref().map_or([0.0; 4], |s| v4(s.ambient[0], 1.0)),
-            sky_low: scene.sky.as_ref().map_or([0.0; 4], |s| v4(s.ambient[1], 1.0)),
+            sky_top: scene
+                .sky
+                .as_ref()
+                .map_or([0.0; 4], |s| v4(s.ambient[0], 1.0)),
+            sky_low: scene
+                .sky
+                .as_ref()
+                .map_or([0.0; 4], |s| v4(s.ambient[1], 1.0)),
             inverse_clip: {
                 let inv = op::invert(&rows);
                 std::array::from_fn(|c| std::array::from_fn(|r| inv[r][c] as f32))
@@ -4139,6 +4488,18 @@ impl Renderer {
             .filter(|s| s.shadow && !cascaded)
             .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
         self.prepare_cascades(device, scene, &frame);
+        let policy = scene
+            .light_cut
+            .clone()
+            .unwrap_or_else(|| light::policy(&scene.lights, &scene.camera));
+        let scores = light::scores(&scene.lights, &scene.camera);
+        let shadowed = light::shadowed(&scene.lights, &policy, &scene.shadowing, &scores);
+        self.prepare_locals(device, scene, &frame, &shadowed.kept);
+        let mut dropped = shadowed.dropped;
+        dropped.sort();
+        if self.ies.upload(device, &scene.distributions) {
+            self.rebind_lights(device);
+        }
         self.prepare_env(device, scene, &camera);
         self.sky = scene.sky.as_ref().is_some_and(|s| s.draws_background());
         self.prepare_puffs(device, scene);
@@ -4153,7 +4514,7 @@ impl Renderer {
             self.compiled += 1;
             self.names.push(SKY_PASS);
         }
-        self.prepare_lights(device, scene);
+        self.prepare_lights(device, scene, policy, dropped);
         if let Some(m) = self.shadow.clip {
             let mut light_frame = frame;
             for c in 0..4 {
@@ -4176,7 +4537,11 @@ impl Renderer {
         };
         let tone = ToneUniform {
             // #422's planted draws_black: nothing reaches the final target.
-            exposure: if self.planted.draws_black { 0.0 } else { look.exposure as f32 },
+            exposure: if self.planted.draws_black {
+                0.0
+            } else {
+                look.exposure as f32
+            },
             map,
             white: white as f32,
             contrast: contrast as f32,
@@ -4413,8 +4778,14 @@ impl Renderer {
         let mut see_through = Vec::new();
         for (s, slot) in order {
             let adjust = adjust_of(s) | lobes_of(s);
-            let mut record =
-                solid_record(s, slot.2, slot.3, winding, slot.0 .1 & MAPS_INDEX != 0, adjust);
+            let mut record = solid_record(
+                s,
+                slot.2,
+                slot.3,
+                winding,
+                slot.0 .1 & MAPS_INDEX != 0,
+                adjust,
+            );
             if clear(s) {
                 let c = [s.model[0][3], s.model[1][3], s.model[2][3]];
                 let depth = (0..3)
@@ -4772,12 +5143,14 @@ impl Renderer {
                 }
                 _ => {
                     // A capped cutaway draws its caps from back faces, so nothing culls then.
-                    enc.set_pipeline(match (&self.cut_pipeline, self.capped, *maps >> CULL_SHIFT) {
-                        (Some(cut), true, _) => cut,
-                        (_, _, 1) => &self.mesh_culled[0],
-                        (_, _, 2) => &self.mesh_culled[1],
-                        _ => &self.mesh_pipeline,
-                    });
+                    enc.set_pipeline(
+                        match (&self.cut_pipeline, self.capped, *maps >> CULL_SHIFT) {
+                            (Some(cut), true, _) => cut,
+                            (_, _, 1) => &self.mesh_culled[0],
+                            (_, _, 2) => &self.mesh_culled[1],
+                            _ => &self.mesh_pipeline,
+                        },
+                    );
                     enc.set_bind_group(3, self.maps.by_index(index), &[]);
                 }
             }
@@ -4901,7 +5274,9 @@ impl Renderer {
                     let kept = read_back(device, "scene3d kept", size, |e, staging| {
                         e.copy_buffer_to_buffer(&view.rows, 0, staging, 0, size)
                     });
-                    let words = kept.as_deref().map_or(&[][..], bytemuck::cast_slice::<u8, u32>);
+                    let words = kept
+                        .as_deref()
+                        .map_or(&[][..], bytemuck::cast_slice::<u8, u32>);
                     rows.push(KeptRow {
                         item: item.unwrap_or_default().to_string(),
                         view: view_name(k),
@@ -4944,24 +5319,32 @@ impl Renderer {
 
     /// Every caster's draw: its mesh, its instances and their range, in batch order.
     #[allow(clippy::type_complexity)]
-    fn caster_draws(
-        &self,
-    ) -> Vec<(wgpu::Buffer, wgpu::Buffer, u32, wgpu::Buffer, std::ops::Range<u32>)> {
+    /// What a shadow map draws: `only`, when set, culls to those casters on the CPU (Light:
+    /// casters; Light policy: local shadows), by runs of their instances. With `rows`, the map
+    /// draws the culled batches from their rows, so they're left out here.
+    fn caster_draws(&self, only: Option<&BTreeSet<String>>, rows: bool) -> Vec<local::Draw> {
         let mut draws = Vec::new();
         for id in &self.order {
             let batch = &self.batches[id];
-            for ((shape, ..), set) in batch.solids.iter().chain(&batch.casters) {
-                if set.cull.is_some() {
+            for ((shape, maps, op, _), set) in batch.solids.iter().chain(&batch.casters) {
+                let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
+                    continue;
+                };
+                // A material operator that cuts its coverage casts through its own pipeline.
+                let cuts = self.shadow_cut(*op, *maps);
+                // The rows draw this batch.
+                if rows && set.cull.is_some() && cuts.is_none() {
                     continue;
                 }
-                if let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) {
-                    draws.push((
-                        mesh.vertices.clone(),
-                        mesh.indices.clone(),
-                        mesh.count,
-                        buffer.clone(),
-                        0..set.len(),
-                    ));
+                for range in local::runs(&set.owners, only) {
+                    draws.push(local::Draw {
+                        vertices: mesh.vertices.clone(),
+                        indices: mesh.indices.clone(),
+                        count: mesh.count,
+                        instances: buffer.clone(),
+                        range,
+                        cuts: cuts.clone(),
+                    });
                 }
             }
             // See-through parts cast as their `shadow` says (the record's no-cast flag).
@@ -4969,13 +5352,18 @@ impl Renderer {
                 for (k, ((shape, _), _)) in batch.clear_draws.iter().enumerate() {
                     if let Some(mesh) = self.meshes.get(shape) {
                         let k = k as u32;
-                        draws.push((
-                            mesh.vertices.clone(),
-                            mesh.indices.clone(),
-                            mesh.count,
-                            buffer.clone(),
-                            k..k + 1,
-                        ));
+                        let owner = batch.clear.owners.get(k as usize);
+                        if only.is_some_and(|o| owner.is_none_or(|i| !o.contains(i))) {
+                            continue;
+                        }
+                        draws.push(local::Draw {
+                            vertices: mesh.vertices.clone(),
+                            indices: mesh.indices.clone(),
+                            count: mesh.count,
+                            instances: buffer.clone(),
+                            range: k..k + 1,
+                            cuts: None,
+                        });
                     }
                 }
             }
@@ -4983,14 +5371,28 @@ impl Renderer {
         draws
     }
 
-    /// Every culled batch's draw into view `k`: its mesh, its records and the row list and
-    /// indirect arguments its cull wrote (#484).
+    /// The pipeline and maps a material operator casts through when it cuts its coverage (#446).
+    fn shadow_cut(&self, op: u64, maps: u32) -> Option<(wgpu::RenderPipeline, wgpu::BindGroup)> {
+        if op == 0 {
+            return None;
+        }
+        let m = self.materials.get(&op)?.as_ref().ok()?;
+        let bind = self.op_binds.get(&(op, maps & MAPS_INDEX))?;
+        Some((m.shadow.clone()?, bind.clone()))
+    }
+
+    /// Every culled batch's draw into shadow view `k`: its mesh, its records and the row list and
+    /// indirect arguments its cull wrote (#484). A batch that cuts its coverage isn't one of them:
+    /// the rows' one pipeline can't cut, so it draws from its instances.
     fn row_draws(&self, k: usize) -> Vec<RowDraw> {
         let mut draws = Vec::new();
         for id in &self.order {
             let batch = &self.batches[id];
-            for ((shape, ..), set) in batch.solids.iter().chain(&batch.casters) {
+            for ((shape, maps, op, _), set) in batch.solids.iter().chain(&batch.casters) {
                 let Some(c) = &set.cull else { continue };
+                if self.shadow_cut(*op, *maps).is_some() {
+                    continue;
+                }
                 if let (Some(view), Some(mesh)) = (&c.views[k], self.meshes.get(shape)) {
                     draws.push((
                         mesh.vertices.clone(),
@@ -5009,7 +5411,7 @@ impl Renderer {
         self.shadow.clip?;
         let view = self.shadow_view(device);
         let bind = self.shadow.bind.clone();
-        Some(self.depth_job(SHADOW_PASS, view, bind, cull::KEY_MAP))
+        Some(self.depth_job(SHADOW_PASS, view, bind, None, Some(cull::KEY_MAP)))
     }
 
     /// The casters drawn depth-only into `view` under the light frame `bind` holds.
@@ -5018,10 +5420,14 @@ impl Renderer {
         label: &'static str,
         view: wgpu::TextureView,
         bind: wgpu::BindGroup,
-        cull_view: usize,
+        only: Option<&BTreeSet<String>>,
+        cull_view: Option<usize>,
     ) -> Job {
-        let draws = self.caster_draws();
-        let rows = self.row_draws(cull_view);
+        // A cull's list holds no owners, so a caster set picks its elements from the instances;
+        // a local map has no cull of its own and draws all it holds.
+        let culled = cull_view.filter(|_| only.is_none());
+        let draws = self.caster_draws(only, culled.is_some());
+        let rows = culled.map_or_else(Vec::new, |k| self.row_draws(k));
         let row_pipeline = self.rows.as_ref().map(|r| r.shadow.clone());
         let pipeline = self.shadow.pipeline.clone();
         let profiler = self.profiler.clone();
@@ -5041,13 +5447,19 @@ impl Renderer {
                     timestamp_writes,
                     ..Default::default()
                 });
-                pass.set_pipeline(&pipeline);
                 pass.set_bind_group(0, &bind, &[]);
-                for (vertices, indices, count, instances, range) in &draws {
-                    pass.set_vertex_buffer(0, vertices.slice(..));
-                    pass.set_vertex_buffer(1, instances.slice(..));
-                    pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..*count, 0, range.clone());
+                for d in &draws {
+                    match &d.cuts {
+                        Some((cut, group)) => {
+                            pass.set_pipeline(cut);
+                            pass.set_bind_group(3, group, &[]);
+                        }
+                        None => pass.set_pipeline(&pipeline),
+                    }
+                    pass.set_vertex_buffer(0, d.vertices.slice(..));
+                    pass.set_vertex_buffer(1, d.instances.slice(..));
+                    pass.set_index_buffer(d.indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..d.count, 0, d.range.clone());
                 }
                 if let Some(pipeline) = &row_pipeline {
                     pass.set_pipeline(pipeline);
@@ -5066,23 +5478,37 @@ impl Renderer {
     /// One depth pass per stale cascade, each into its own layer (#422).
     fn cascade_jobs(&self) -> Vec<(String, Job)> {
         let c = &self.cascaded;
-        let Some((_, layers)) = &c.texture else {
-            return Vec::new();
-        };
-        c.stale
-            .iter()
-            .map(|&i| {
-                (
-                    CASCADE_PASS.to_string(),
-                    self.depth_job(
-                        CASCADE_PASS,
-                        layers[i].clone(),
-                        c.frames[i].1.clone(),
-                        cull::CASCADES + i,
-                    ),
-                )
-            })
-            .collect()
+        let mut jobs: Vec<(String, Job)> = Vec::new();
+        if let Some((_, layers)) = &c.texture {
+            jobs.extend(c.stale.iter().map(|&i| {
+                let job = self.depth_job(
+                    CASCADE_PASS,
+                    layers[i].clone(),
+                    c.frames[i].1.clone(),
+                    c.casters.as_ref(),
+                    Some(cull::CASCADES + i),
+                );
+                (CASCADE_PASS.to_string(), job)
+            }));
+        }
+        // One depth pass per face of each stale local map (#446).
+        if let Some((_, layers)) = &self.locals.texture {
+            for &slot in &self.locals.stale {
+                let m = &self.locals.list[slot];
+                for &(offset, _) in &m.map.faces {
+                    let layer = (m.first + offset) as usize;
+                    let job = self.depth_job(
+                        local::PASS,
+                        layers[layer].clone(),
+                        self.locals.frames[layer].1.clone(),
+                        Some(&m.casters),
+                        None,
+                    );
+                    jobs.push((local::PASS.to_string(), job));
+                }
+            }
+        }
+        jobs
     }
 
     /// The frame's passes, each one encode: the geometry pass replays every batch into the
@@ -5177,76 +5603,78 @@ impl Renderer {
                 )
             });
             if let Some((append, _, info, pipeline, fallback, binds, draws)) = &resolve {
-            per_pixel_pass(encoder, [&linear, &ids, &depth], append, binds, draws);
-            timed(
-                &profiler,
-                "scene3d.resolve",
-                encoder,
-                |encoder, timestamps| {
-                    let load = wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    };
-                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("scene3d.resolve"),
-                        color_attachments: &[
-                            Some(wgpu::RenderPassColorAttachment {
-                                view: &linear,
-                                resolve_target: None,
-                                depth_slice: None,
-                                ops: load,
-                            }),
-                            Some(wgpu::RenderPassColorAttachment {
-                                view: &ids,
-                                resolve_target: None,
-                                depth_slice: None,
-                                ops: load,
-                            }),
-                        ],
-                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                            view: &depth,
-                            depth_ops: Some(wgpu::Operations {
-                                load: wgpu::LoadOp::Load,
-                                store: wgpu::StoreOp::Store,
-                            }),
-                            stencil_ops: None,
-                        }),
-                        timestamp_writes: timestamps,
-                        ..Default::default()
-                    });
-                    for (i, b) in binds.iter().enumerate() {
-                        pass.set_bind_group(i as u32, b, &[]);
-                    }
-                    pass.set_pipeline(pipeline);
-                    pass.draw(0..3, 0..1);
-                    pass.set_pipeline(fallback);
-                    for (vertices, indices, count, instances, k, maps) in draws {
-                        pass.set_bind_group(3, maps, &[]);
-                        pass.set_vertex_buffer(0, vertices.slice(..));
-                        pass.set_vertex_buffer(1, instances.slice(..));
-                        pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
-                        pass.draw_indexed(0..*count, 0, *k..*k + 1);
-                    }
-                },
-            );
-            // The frame's count, which `check_fragments` reads once the frame is done.
-            if let Some(staging) = &staging {
-                encoder.copy_buffer_to_buffer(info, 0, staging, 0, 16);
-            }
+                per_pixel_pass(encoder, [&linear, &ids, &depth], append, binds, draws);
+                timed(
+                    &profiler,
+                    "scene3d.resolve",
+                    encoder,
+                    |encoder, timestamps| {
+                        let load = wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        };
+                        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("scene3d.resolve"),
+                            color_attachments: &[
+                                Some(wgpu::RenderPassColorAttachment {
+                                    view: &linear,
+                                    resolve_target: None,
+                                    depth_slice: None,
+                                    ops: load,
+                                }),
+                                Some(wgpu::RenderPassColorAttachment {
+                                    view: &ids,
+                                    resolve_target: None,
+                                    depth_slice: None,
+                                    ops: load,
+                                }),
+                            ],
+                            depth_stencil_attachment: Some(
+                                wgpu::RenderPassDepthStencilAttachment {
+                                    view: &depth,
+                                    depth_ops: Some(wgpu::Operations {
+                                        load: wgpu::LoadOp::Load,
+                                        store: wgpu::StoreOp::Store,
+                                    }),
+                                    stencil_ops: None,
+                                },
+                            ),
+                            timestamp_writes: timestamps,
+                            ..Default::default()
+                        });
+                        for (i, b) in binds.iter().enumerate() {
+                            pass.set_bind_group(i as u32, b, &[]);
+                        }
+                        pass.set_pipeline(pipeline);
+                        pass.draw(0..3, 0..1);
+                        pass.set_pipeline(fallback);
+                        for (vertices, indices, count, instances, k, maps) in draws {
+                            pass.set_bind_group(3, maps, &[]);
+                            pass.set_vertex_buffer(0, vertices.slice(..));
+                            pass.set_vertex_buffer(1, instances.slice(..));
+                            pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+                            pass.draw_indexed(0..*count, 0, *k..*k + 1);
+                        }
+                    },
+                );
+                // The frame's count, which `check_fragments` reads once the frame is done.
+                if let Some(staging) = &staging {
+                    encoder.copy_buffer_to_buffer(info, 0, staging, 0, 16);
+                }
             }
             if let (Some((late, pipeline, binds, draws)), Some(copy)) = (&glass, &glass_copy) {
-            timed(&profiler, glass::PASS, encoder, |encoder, timestamps| {
-                copy.record(encoder, &linear_texture);
-                glass_pass(
-                    encoder,
-                    [&linear, &ids, &depth],
-                    pipeline,
-                    binds,
-                    draws,
-                    late,
-                    timestamps,
-                );
-            });
+                timed(&profiler, glass::PASS, encoder, |encoder, timestamps| {
+                    copy.record(encoder, &linear_texture);
+                    glass_pass(
+                        encoder,
+                        [&linear, &ids, &depth],
+                        pipeline,
+                        binds,
+                        draws,
+                        late,
+                        timestamps,
+                    );
+                });
             }
             // Motion blur by velocity resolves the finished geometry, glass included, before the
             // effects (#419).
@@ -5278,9 +5706,7 @@ impl Renderer {
             let profiler = self.profiler.clone();
             jobs.push((
                 ao::OCCLUSION.into(),
-                Box::new(move |encoder| {
-                    timed(&profiler, ao::OCCLUSION, encoder, |e, _| ao.record(e))
-                }),
+                Box::new(move |encoder| ao.record(&profiler, encoder)),
             ));
         }
         jobs.push((GEOMETRY_PASS.into(), geometry));
@@ -5731,7 +6157,7 @@ impl Renderer {
             job(encoder);
         }
         if let Some(ao) = self.ao_frame() {
-            ao.record(encoder);
+            ao.record(&None, encoder);
         }
         let bundles = self
             .order
@@ -5784,7 +6210,12 @@ impl Renderer {
             .iter()
             .map(|p| PuffRecord {
                 center: v4(p.pos, p.radius),
-                shape: [p.aspect as f32, p.density as f32, p.bright as f32, (p.seed % 65_536) as f32],
+                shape: [
+                    p.aspect as f32,
+                    p.density as f32,
+                    p.bright as f32,
+                    (p.seed % 65_536) as f32,
+                ],
                 light: [
                     p.phase as f32,
                     p.shade as f32,
@@ -6097,7 +6528,12 @@ pub(crate) fn read_texture(
 /// The sky's draw: its pipeline and the solids' four bind groups.
 type SkyDraw = (wgpu::RenderPipeline, [wgpu::BindGroup; 4]);
 /// The puffs' draw: their pipeline, the solids' bind groups, and their instances back to front.
-type PuffDraw = (wgpu::RenderPipeline, [wgpu::BindGroup; 4], wgpu::Buffer, u32);
+type PuffDraw = (
+    wgpu::RenderPipeline,
+    [wgpu::BindGroup; 4],
+    wgpu::Buffer,
+    u32,
+);
 
 /// A puff's instance record (scene3d.wgsl's `puff_vs`).
 #[repr(C)]
@@ -6590,6 +7026,18 @@ impl Module3 {
                 order: 1,
                 reads: Vec::new(),
                 writes: vec!["cascades"],
+                resolution: Resolution::Full,
+                ns_per_px: 0.05,
+                determinism: Determinism::SameMachine,
+            },
+            // Ambient occlusion (#418), drawn only while the look has it on: its cost counts the
+            // depth and normal prepass with the occlusion and the blur.
+            Pass {
+                name: local::PASS.into(),
+                place: "shadows",
+                order: 2,
+                reads: Vec::new(),
+                writes: vec!["local_maps"],
                 resolution: Resolution::Full,
                 ns_per_px: 0.05,
                 determinism: Determinism::SameMachine,

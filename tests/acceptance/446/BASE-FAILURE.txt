@@ -1,0 +1,39 @@
+# #446 acceptance suite at the base, 80ba48fe (Merge pull request #1403), before any implementation.
+#
+# Not run at the base: the surfaces plainly don't exist there, and no cargo binary was built (the owner asked for a
+# fast job). What was checked instead:
+#
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/446/tsconfig.json   -> exit 0, no errors
+#   The fixtures' own numbers, run on the CPU helpers alone: the pool holds 2,863 floor pixels (over 500); AC7 has
+#   281,863 open floor pixels (over 100,000), 7,168 under the furniture's shadow (over 2,000) and 1,024 of shade (over
+#   800); AC8's face shows 3,540 pixels inside its margin, clear of the crank (over 1,500); AC6's ring holds 806 pixels
+#   and its beside band 1,152 (over 400 each); AC3's outside is over 100,000 (over 50,000). AC4's six cameras cover
+#   12.5666 sr of 4π (off 0.015%) and its quadrature of the shape reads 3.97933 against the closed form 0.6π + 2π/3
+#   (off 0.0005%). AC1's disk widths are 12.8 and 38.5 px at 2.5 m, under the fixture's max_penumbra of 128; AC5's near penumbra
+#   measures 29 rows (over 15). Exposure: the measuring fixtures sit at scale 1 with radiance near 1; the house's day look
+#   at EV 11 scales a 2,700 nit wall to 1.1, its night look at EV 1.5 scales a 3.8 nit floor to 1.1.
+#
+# Why each test fails at the base, read from the base's code (crates/deep-gpu-layer, crates/deep-canvas-scene3d,
+# crates/deep-scene3d-render). deep-gpu refuses every --planted name this suite adds at startup (Planted::parse has none
+# of soft_noise_from_frame, local_map_stale, ies_peak_normalized, cascade_unsnapped, cascade_filter_in_texels,
+# cascade_no_penumbra_reach, local_map_ignores_t, local_map_rekeys_on_any_t, cut_key_omits_planes: bad_input, exit 1),
+# so every half that runs one fails there too. cut_color_only is #424's and exists.
+#
+#   soft.test.ts         AC1  the shadow filter's size doesn't follow the light: the penumbra is the same at the foot and
+#                             at 2.5 m ("doesn't harden") and the same at 3° and 9° ("doesn't widen"); a spot draws no map,
+#                             so the plank casts no edge. The seek half may pass at the base; its plant is refused.
+#   point-cache.test.ts AC2  view3d reads no `shadows`, so no frame reports them; point lights have no map at all. The pool
+#                             may pass at the base (#421's shadow: auto), but the test's other half stops it first.
+#   receivers.test.ts   AC3  no `receivers` or `collections`: the lamp lights floor_b through the wall ("is lit outside").
+#   ies.test.ts         AC4  no `distribution`: the lamp stays isotropic (the control and the 2,400 lm flux pass, the
+#                             shape misses); `power: from_file` falls to the default 800 lm, not 1,200.
+#   cascade-edge.test.ts AC5 `cascades.maps` holds no `clip` or `drawn` ("holds 16 numbers" fails on the first walk frame),
+#                             and no cascade grows with the sun's angle.
+#   caster-t.test.ts    AC6  no spot map, so no ring goes dark, and no `shadows` report.
+#   casters.test.ts     AC7  a point light casts nothing at the base: the open floor passes for the wrong reason and the
+#                             table's shadow is missing ("lost its shadow"); `casters: all` doesn't fail either.
+#   engine-cut.test.ts  AC8  the sun half may pass at the base (#424's cut in its pass and key); the spot draws no map, so
+#                             `shadows: whole` leaves the face lit ("doesn't restore"). The new plant is refused.
+#   taste.test.ts       AC9  no TASTE.json: INCONCLUSIVE, never PASS.
+#
+# A run at the base, when one is made, is recorded beside this note by the job that runs it.

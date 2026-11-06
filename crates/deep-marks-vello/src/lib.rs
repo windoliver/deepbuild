@@ -125,10 +125,23 @@ impl Canvas for RenderContext {
 }
 
 /// A group's blend as Vello's: a W3C mode composited source-over, or add as Porter and Duff's
-/// plus.
+/// plus. The eleven modes only the GPU layer draws read as normal here: 2D goldens stay on Vello
+/// CPU, so they're display only (Draw path: GPUI or the GPU layer).
 pub fn blend_mode(blend: Blend) -> BlendMode {
     let mix = match blend {
-        Blend::Normal | Blend::Add => Mix::Normal,
+        Blend::Normal
+        | Blend::Add
+        | Blend::Subtract
+        | Blend::Divide
+        | Blend::LinearBurn
+        | Blend::LinearDodge
+        | Blend::LinearLight
+        | Blend::VividLight
+        | Blend::PinLight
+        | Blend::HardMix
+        | Blend::DarkerColor
+        | Blend::LighterColor
+        | Blend::Dissolve => Mix::Normal,
         Blend::Multiply => Mix::Multiply,
         Blend::Screen => Mix::Screen,
         Blend::Overlay => Mix::Overlay,

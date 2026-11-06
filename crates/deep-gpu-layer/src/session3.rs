@@ -53,6 +53,17 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         ids_by_draw_position: p == Some(Planted::IdsByDrawPosition),
         ids_ignore_mask: p == Some(Planted::IdsIgnoreMask),
         cuts_color_only: p == Some(Planted::CutsColorOnly),
+        local: deep_scene3d_render::local::Planted {
+            stale: p == Some(Planted::LocalMapStale),
+            ignores_t: p == Some(Planted::LocalMapIgnoresT),
+            any_t: p == Some(Planted::LocalMapRekeysOnAnyT),
+            ignores_cut: p == Some(Planted::CutKeyOmitsPlanes),
+            ies_peak: p == Some(Planted::IesPeakNormalized),
+            unsnapped: p == Some(Planted::CascadeUnsnapped),
+            no_reach: p == Some(Planted::CascadeNoPenumbraReach),
+            noise_from_frame: p == Some(Planted::SoftNoiseFromFrame),
+            filter_in_texels: p == Some(Planted::CascadeFilterInTexels),
+        },
         cull: deep_scene3d_render::cull::Plants {
             centers: p == Some(Planted::GpuCullByCenter),
             reversed: p == Some(Planted::CompactInReverse),
