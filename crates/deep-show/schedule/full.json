@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "d080da7e5294b75ea897c36c01b14d540783b4a8c6132ddc78275e75f0f4b16f",
+  "set_digest": "ffcd648c9522bd4b512b2c1a6fd62cd07a3a67473f9ec8f8ad927c1ec44368ac",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -172,6 +172,35 @@
       "module": "look",
       "implementation": {
         "name": "look",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "loop@1": {
+      "digest": "517ccd9ae52d9fbdeefdf713bfcaf8567e551b8688fde54d89c9fdf3ca7b135e",
+      "reference": "loop",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "loop",
+      "implementation": {
+        "name": "loop",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",
