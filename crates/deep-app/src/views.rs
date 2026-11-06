@@ -10,7 +10,7 @@
 //! accessibility tree a screen reader sees and the observed elements a replica reads back are
 //! the same set of nodes.
 
-use std::{cell::Cell, cell::RefCell, rc::Rc, sync::Arc, time::Duration};
+use std::{cell::Cell, cell::RefCell, rc::Rc, sync::mpsc::TryRecvError, sync::Arc, time::Duration};
 
 use gpui_kit::base::dock::{
     register_panel, DockArea, DockAreaState, DockPlacement, DockState, Panel, PanelEvent,
@@ -43,6 +43,10 @@ const CORE: f32 = 6.;
 const SESSION_PAGE: &str = "session-page";
 /// How often an open terminal tab reads its grid again.
 const TERMINAL_TICK: Duration = Duration::from_millis(250);
+/// How often the window looks for what setup said, while it runs (#1556).
+const SET_UP_TICK: Duration = Duration::from_millis(50);
+/// What the window says in place of Set up while setup runs.
+pub const SETTING_UP: &str = "Setting up…";
 
 /// What the views draw over a fixture record: the inbox projection at a log position on the virtual clock. The
 /// replica, the live capture and the registry checks set it before opening the shell; the app sets none, so its
@@ -128,6 +132,8 @@ pub struct Shipped {
     focus_handle: FocusHandle,
     /// What Home's Set up click said, once clicked.
     set_up: Option<String>,
+    /// The wait for what setup says, while it runs off the UI thread (#1556).
+    setting_up: Option<Task<()>>,
     terminal: Option<TerminalTab>,
     /// Whether this is the view's own window, not its panel in the shell.
     popped: bool,
@@ -139,9 +145,31 @@ impl Shipped {
             kind,
             focus_handle: cx.focus_handle(),
             set_up: None,
+            setting_up: None,
             terminal: None,
             popped: false,
         }
+    }
+
+    /// The Set up click: setup runs on a thread of its own (#1556), the window says it's working, and a tick on the UI
+    /// thread picks up what it said.
+    fn start_set_up(&mut self, cx: &mut Context<Self>) {
+        let heard = crate::setup::start();
+        self.setting_up = Some(cx.spawn(async move |this, cx| loop {
+            cx.background_executor().timer(SET_UP_TICK).await;
+            let said = match heard.try_recv() {
+                Ok(said) => said.map_or_else(|error| error, str::to_owned),
+                Err(TryRecvError::Empty) => continue,
+                Err(TryRecvError::Disconnected) => "deep setup stopped without a word".to_owned(),
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.set_up = Some(said);
+                this.setting_up = None;
+                cx.notify();
+            });
+            return;
+        }));
+        cx.notify();
     }
 
     /// Opens the Terminal tab of `session`'s page on what the hub's canvas core holds for it.
@@ -677,24 +705,21 @@ impl Render for Shipped {
                     .child(title("home-title", "Home"))
                     .child(label("home-needs-you", count))
                     .children(self.set_up.is_none().then(|| {
-                        label("set-up", "Set up")
-                            .role(Role::Button)
-                            .aria_label("Set up")
-                            // As the welcome draws it: ink on the ground, as wide as its word.
-                            .self_start()
-                            .my_1()
-                            .px_4()
-                            .rounded_md()
-                            .bg(chrome.ink_primary)
-                            .text_color(chrome.ground)
-                            .hover(|style| style.bg(chrome.ink_secondary))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.set_up = Some(
-                                    crate::setup::set_up()
-                                        .map_or_else(|error| error, str::to_owned),
-                                );
-                                cx.notify();
-                            }))
+                        match self.setting_up {
+                            Some(_) => label("set-up-working", SETTING_UP),
+                            None => label("set-up", "Set up")
+                                .role(Role::Button)
+                                .aria_label("Set up")
+                                // As the welcome draws it: ink on the ground, as wide as its word.
+                                .self_start()
+                                .my_1()
+                                .px_4()
+                                .rounded_md()
+                                .bg(chrome.ink_primary)
+                                .text_color(chrome.ground)
+                                .hover(|style| style.bg(chrome.ink_secondary))
+                                .on_click(cx.listener(|this, _, _, cx| this.start_set_up(cx))),
+                        }
                     }))
                     .children(
                         self.set_up
@@ -857,8 +882,9 @@ impl Render for Shipped {
             }
             Kind::Welcome => {
                 let said = self.set_up.as_deref();
+                let working = said.is_none() && self.setting_up.is_some();
                 let (ground, ink) = (chrome.ground, chrome.ink_primary);
-                let button = (said.is_none() && crate::setup::needed()).then(|| {
+                let button = (said.is_none() && !working && crate::setup::needed()).then(|| {
                     div()
                         .id("set-up")
                         .test_support()
@@ -869,12 +895,7 @@ impl Render for Shipped {
                         .rounded_md()
                         .bg(ink)
                         .text_color(ground)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.set_up = Some(
-                                crate::setup::set_up().map_or_else(|error| error, str::to_owned),
-                            );
-                            cx.notify();
-                        }))
+                        .on_click(cx.listener(|this, _, _, cx| this.start_set_up(cx)))
                         .child("Set up")
                 });
                 page.child(
@@ -899,6 +920,13 @@ impl Render for Shipped {
                         )
                         .child(div().child("Where your agents show, not tell."))
                         .children(button)
+                        .children(working.then(|| {
+                            div()
+                                .id("set-up-working")
+                                .test_support()
+                                .aria_label(SETTING_UP)
+                                .child(SETTING_UP)
+                        }))
                         .children(said.map(|line| div().child(line.to_owned())))
                         .children(said.is_none().then(crate::setup::reason).flatten().map(
                             |line| {
