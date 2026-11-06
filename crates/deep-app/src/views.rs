@@ -713,10 +713,9 @@ impl Render for Shipped {
                             } else {
                                 text.clone()
                             };
-                            // The row reads as its question; its handle is its value, which no one reads as text (#1172).
+                            // The row reads as its question, on the screen and to a screen reader; its handle is nowhere (#1172).
                             label(("ask", index), shown)
                                 .role(Role::Button)
-                                .aria_value(handle.clone())
                                 .rounded_sm()
                                 .hover(|style| style.bg(chrome.hover))
                                 .on_click(move |_, window, cx| {

@@ -23,9 +23,10 @@ mod suite {
         time::Instant,
     };
 
+    use deep_app::events::Fixture;
     use deep_app::views::{Layout, LINE, NEEDS_YOU, SHIPPED_VIEWS, SIDEBAR};
     use deep_replica::{
-        kit, panel_dir, repo_root,
+        fixture_path, kit, panel_dir, repo_root,
         shell::{open_shell, panel_names, rows_of, script_panel, script_tree},
         snapshot::{first_difference, from_observed, Snapshot},
         SCALE, WINDOW,
@@ -178,26 +179,34 @@ mod suite {
 
     fn needs_you_view_snapshot() {
         let snapshot = view_snapshot("needs-you");
-        // Issue #1172: a row reads as its question; its handle is its value.
-        let handles: Vec<&str> = snapshot
-            .flatten()
-            .into_iter()
-            .filter_map(|node| node.value.as_ref()?.as_str())
-            .filter(|value| value.starts_with("ask:"))
+        // Issue #1172: a row reads as its question, and nothing in the window reads a handle.
+        let events = Fixture::load(&fixture_path())
+            .expect("the fixture record parses")
+            .events();
+        let questions: Vec<&str> = expected_rows()
+            .iter()
+            .map(|handle| {
+                events
+                    .iter()
+                    .find(|e| format!("ask:{}", e["id"].as_str().unwrap_or_default()) == *handle)
+                    .and_then(|e| e["data"]["question"].as_str())
+                    .unwrap_or_else(|| panic!("the fixture has no question for {handle}"))
+            })
+            .collect();
+        let nodes = snapshot.flatten();
+        let rows: Vec<&str> = nodes
+            .iter()
+            .filter_map(|node| node.name.as_deref())
+            .filter(|name| questions.contains(name))
             .collect();
         assert_eq!(
-            handles,
-            expected_rows(),
+            rows, questions,
             "the Needs you view lists the projection's rows"
         );
-        assert!(
-            snapshot.flatten().iter().all(|node| !node
-                .name
-                .as_deref()
-                .unwrap_or("")
-                .starts_with("ask:")),
-            "a Needs you row reads as its question, never its handle"
-        );
+        for node in &nodes {
+            let read = format!("{:?} {:?}", node.name, node.value);
+            assert!(!read.contains("ask:"), "a node reads a handle: {read}");
+        }
     }
 
     fn sidebar_view_snapshot() {
