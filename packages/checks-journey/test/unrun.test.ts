@@ -1,9 +1,11 @@
 // Nothing a journey names goes unrun and passes (#37, review of PR #1153): a hover is driven, a key the runner doesn't
 // know is refused rather than skipped, an API journey's step without a request or end-state check without a readback
-// is refused, and a run whose end state holds only readings (a model's or a person's) is never passed.
+// is refused, a run whose end state holds only readings (a model's or a person's) is never passed, and no latency is
+// judged on a margin that isn't a number.
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { checkout, fakeModel, journey, journeyVariant, openWorld, runOptions, type World } from '../../../tests/acceptance/37/helpers.ts';
 import { parseJourney, reviewJourney } from '../src/journey.ts';
+import { judgeLatency } from '../src/latency.ts';
 import { saveScript } from '../src/replay.ts';
 
 let world: World;
@@ -101,3 +103,9 @@ it('never passes a run whose end state holds only readings, a model\'s and a per
   expect(run.outcome).toBe('uncounted');
   expect(run.mask).toBe('no code check of the end state ran: a model\'s reading or a person\'s answer never passes a journey on its own');
 }, 120_000);
+
+it('judges no latency on a margin that is not a number, rather than passing any slowdown', () => {
+  const v = judgeLatency([900, 900, 900], [100, 100, 100], Number('abc'));
+  expect(v.outcome).toBe('INVALID');
+  expect(v.message).toBe('the margin NaN is not a number of percent at or above 0, so no time can be judged against it');
+});
