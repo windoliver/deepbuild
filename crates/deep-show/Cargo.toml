@@ -214,6 +214,8 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
+# Issue #453: the loop canvas module (geometry.shading), in the full build set.
+deep-canvas-loop = { path = "../deep-canvas-loop" }
 deep-sandbox-wasmtime = { path = "../deep-sandbox-wasmtime" }
 # Issue #140: the platform seams and their conformance suites.
 deep-canvas-seams = { path = "../deep-canvas-seams" }

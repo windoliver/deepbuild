@@ -15,13 +15,13 @@ import type { LeaseTable } from '@deepbuild/leases';
 import { after, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import type { Up } from '@deepbuild/env-local';
 import { words } from './claude-settings.js';
-import type { Stacks } from './stacks.js';
+import type { StackWant, Stacks } from './stacks.js';
 import { keepAside, writeSynced } from './vfs.js';
 import { refusal, Refused, ulid, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
 /** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
-export interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number;
+export interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; /** A claim's check that needs the app: it runs on the worktree's warm stack (#580). */ stack?: StackWant; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number;
   /** A claim's check (#30): the command line the command check kind runs in `cwd`, hermetically through host@1; `argv` is what it would be as a shell line. */
   command?: string;
   /** Named command stand-ins in base runs (#874). */
@@ -185,7 +185,7 @@ export class Runs {
   }
 
   /** run.start, and deep_run's runs with the deadline their spec gives, in ms. */
-  async start(params: Obj, deadline?: number, id?: string): Promise<Obj> {
+  async start(params: Obj, deadline?: number, id?: string, stack?: StackWant): Promise<Obj> {
     const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins } = params;
     const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
@@ -206,7 +206,7 @@ export class Runs {
     if (grant.run_as_you !== undefined && typeof grant.run_as_you !== 'boolean') throw new Refused(refusal('type', '/params/grant/run_as_you', 'Give run_as_you as true or false.', grant.run_as_you));
     if (typeof environment !== 'boolean') throw new Refused(refusal('type', '/params/environment', 'Give environment as true when the run needs its folder\'s stack running.', environment));
     const run = await this.launch({
-      run: id ?? `run:${ulid(this.o.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment ? { environment } : {}),
+      run: id ?? `run:${ulid(this.o.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment || stack ? { environment: true } : {}), ...(stack ? { stack } : {}),
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
       ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
       ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
@@ -267,11 +267,25 @@ export class Runs {
       stop = () => controller.abort();
       const empty = { stdout: '', stderr: '', sha256: { stdout: sha256Hex(new Uint8Array()), stderr: sha256Hex(new Uint8Array()) } };
       const replaced = async (): Promise<boolean> => (await this.o.extensions()?.checks().catch(() => []) ?? []).some((c) => c.kind === 'command');
-      ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun }> => {
+      ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun } | { code: null; missing: string }> => {
         if (!byPackage) {
           // #669's planted runner judges the run by its exit code alone, whatever masks it.
           const exitOnly = this.o.plant === 'runner-passes-masked-exit' ? { plant: 'exit-code-only' as const } : {};
-          const record = await runCommandCheck({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env, ...(run.grant.hosts?.length ? { hosts: run.grant.hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly });
+          // A check that needs the app runs on its stack, started from its checkout once the run may start (#580). What
+          // it served is read while it lasts, so a run on another tree, or on an environment that broke its rules, is uncounted.
+          const serving = run.stack ? await this.o.stacks.serve({ ...run.stack, run: run.run, claim: run.claim, check: run.check, folder: run.cwd, expected_ms: run.expected_ms ?? null }) : undefined;
+          if (serving && 'cause' in serving) return { code: null, missing: serving.cause };
+          const hosts = [...(run.grant.hosts ?? []), ...(serving?.hosts ?? [])];
+          let record: CommandRun;
+          try {
+            record = await runCommandCheck({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env: { ...env, ...serving?.env }, ...(hosts.length ? { hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly });
+          } catch (error) {
+            await this.o.stacks.finish(run.run);
+            throw error;
+          }
+          const { uncounted } = await this.o.stacks.finish(run.run);
+          // Its retry had no kept product, so a stack that served another tree again leaves the run missing.
+          if (uncounted && !this.o.stopping()) record = run.stack?.fresh ? { ...record, outcome: 'missing', mask: `its stack served another tree again: ${uncounted}` } : { ...record, outcome: 'uncounted', mask: uncounted };
           return { code: record.exit?.code ?? null, record };
         }
         const result = await this.o.extensions()!.runCheck('command', spec, { checkout: run.cwd, deadline });
