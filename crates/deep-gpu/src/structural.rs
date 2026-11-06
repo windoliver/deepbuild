@@ -28,6 +28,7 @@ pub struct Structural {
     hist: wgpu::ComputePipeline,
     offsets: wgpu::ComputePipeline,
     scatter: wgpu::ComputePipeline,
+    dispatch_args: wgpu::ComputePipeline,
 }
 
 /// One dispatch: its pipeline's bind group and workgroup count, recorded in order.
@@ -99,6 +100,7 @@ impl Structural {
             hist: pipe("sort_hist", false),
             offsets: pipe("sort_offsets", false),
             scatter: pipe("sort_scatter", false),
+            dispatch_args: pipe("dispatch_args", true),
         }
     }
 
@@ -195,6 +197,24 @@ impl Structural {
             ));
             plan._keep.extend([sums, starts, p]);
         }
+        plan
+    }
+
+    /// An indirect dispatch's arguments (#484): the workgroups of `workgroup` invocations that
+    /// `count`'s first word needs, capped at `max`, into `args`, on the GPU.
+    pub fn dispatch_args(
+        &self,
+        d: &wgpu::Device,
+        count: &wgpu::Buffer,
+        args: &wgpu::Buffer,
+        workgroup: u32,
+        max: u32,
+    ) -> Plan {
+        let mut plan = Plan::new();
+        let p = params(d, workgroup, max, 0);
+        plan.dispatches
+            .push(self.dispatch(d, &self.dispatch_args, &p, &[count, args], 1));
+        plan._keep.push(p);
         plan
     }
 
@@ -356,7 +376,7 @@ pub fn spanned<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use deep_gpu::device::{Backend, Gpu};
+    use crate::device::{Backend, Gpu};
 
     fn upload(d: &wgpu::Device, words: &[u32]) -> wgpu::Buffer {
         let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
@@ -367,7 +387,7 @@ mod tests {
         })
     }
 
-    fn read(dev: &deep_gpu::device::Device, b: &wgpu::Buffer, n: u32) -> Vec<u32> {
+    fn read(dev: &crate::device::Device, b: &wgpu::Buffer, n: u32) -> Vec<u32> {
         let d = &dev.device;
         let back = d.create_buffer(&wgpu::BufferDescriptor {
             label: None,
@@ -392,7 +412,7 @@ mod tests {
         v[..n as usize].to_vec()
     }
 
-    fn run(dev: &deep_gpu::device::Device, plan: &Plan) {
+    fn run(dev: &crate::device::Device, plan: &Plan) {
         let mut enc = dev.device.create_command_encoder(&Default::default());
         plan.record(&mut enc);
         dev.queue.submit([enc.finish()]);
@@ -469,9 +489,9 @@ mod tests {
 #[cfg(test)]
 mod timing {
     use super::*;
-    use deep_gpu::device::{Backend, Gpu};
+    use crate::device::{Backend, Gpu};
 
-    fn gpu_ms(dev: &deep_gpu::device::Device, plan: &Plan) -> f64 {
+    fn gpu_ms(dev: &crate::device::Device, plan: &Plan) -> f64 {
         let d = &dev.device;
         let q = plan.queries();
         let set = d.create_query_set(&wgpu::QuerySetDescriptor {

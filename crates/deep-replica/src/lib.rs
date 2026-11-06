@@ -8,6 +8,7 @@ pub mod kit;
 mod replica;
 pub mod shell;
 pub mod snapshot;
+pub mod terminal;
 
 pub use deep_app::notify::{Notifier, Sound, NOTIFY_AFTER};
 pub use replica::{
