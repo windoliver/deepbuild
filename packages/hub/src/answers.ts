@@ -7,6 +7,8 @@ import type { RecordStore } from '@deepbuild/record';
 export interface Answer {
   id: string; session: string; question: string | null; options: string | null;
   answer: string | null; words: string | null; image: string | null;
+  /** The option a provisional ask went on with; null on any other ask. */
+  undoes?: string | null;
 }
 export type DeliveryOutcome = 'delivered' | 'stalled' | 'timed_out' | 'replaced' | 'waiting';
 interface AnswersOptions {
@@ -28,7 +30,7 @@ export class Answers {
     await this.o.settled();
     const thread = `COALESCE((SELECT thread_id FROM sessions WHERE id = '${sql(session)}'), '${sql(session)}')`;
     const mine = scope ?? `COALESCE((SELECT thread_id FROM sessions WHERE id = a.session_id), a.session_id) = ${thread}`;
-    const rows = ((await this.o.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer FROM asks a WHERE a.status = 'answered' AND ${mine}
+    const rows = ((await this.o.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer, iif(a.provisional = 1, a.recommended, NULL) AS undoes FROM asks a WHERE a.status = 'answered' AND ${mine}
       AND NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.delivery = a.id AND d.outcome = 'delivered') ORDER BY a.answered`)) as Omit<Answer, 'words' | 'image'>[])
       .filter((row) => !this.o.excluded(row.id));
     if (!rows.length) return [];
@@ -57,13 +59,17 @@ export class Answers {
 }
 
 /** The answers as the agent reads them, each naming its ask; free text never becomes an authority decision. */
-export function answerText(rows: Answer[]): string {
+export function answerText(rows: Answer[], commitsUnder?: (ask: string) => string[] | undefined): string {
   const lines = rows.map((row) => {
     const chosen = row.answer === null ? null : JSON.parse(row.answer) as unknown;
     const options = row.options === null ? [] : JSON.parse(row.options) as { id: string; label: string }[];
     const label = options.find((o) => o.id === chosen)?.label;
+    // Your answer differs from the option the agent went on with: it hears both, and the commits made under the old one.
+    const under = row.undoes && chosen !== row.undoes && typeof chosen === 'string' && label ? commitsUnder?.(row.id) : undefined;
+    if (under) return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: ${label} (${chosen}), in place of ${options.find((o) => o.id === row.undoes)?.label ?? row.undoes}, which you went on with. Undo it${under.length ? `: the commits made under it are ${under.join(', ')}` : ''}, then move to ${label}.`;
     const beside = [row.words === null || row.words === chosen ? [] : [`your words: "${row.words}"`], row.image === null ? [] : [`a screenshot, sha256 ${row.image}`]].flat();
     if (row.image !== null && row.image === chosen) return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: a screenshot, sha256 ${row.image}${row.words === null ? '' : ` — with your words: "${row.words}"`}.`;
+    if (chosen === 'agent' && row.words) return `Your answer to ask:${row.id}: the agent can do it, so take this step yourself. ${row.words}`;
     return `Your answer to ask:${row.id}${row.question ? ` ("${row.question}")` : ''}: ${label ? `${label} (${String(chosen)})` : String(chosen)}${beside.length ? ` — with ${beside.join(' and ')}` : ''}.`;
   });
   return `DeepBuild delivers your answers:\n${lines.join('\n')}`;
