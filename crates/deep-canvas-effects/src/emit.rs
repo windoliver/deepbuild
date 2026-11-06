@@ -923,6 +923,8 @@ pub struct Options {
     pub attribute_stride_16: bool,
     /// The planted small-array index that wraps (`i mod n`) instead of clamping (#483).
     pub index_wraps: bool,
+    /// The planted indirect dispatch with no guard against its count (#484).
+    pub no_count_guard: bool,
 }
 
 /// The inputs' uniform, the sampler and the texture and storage bindings, in binding order.
@@ -1241,7 +1243,13 @@ fn fs(in: HOut) -> @location(0) vec4<f32> {
 pub fn compute(c: &Checked, options: Options) -> String {
     assert_eq!(c.op.kind, Kind::Compute, "a compute operator");
     let mut w = writer(c, options);
-    w.line(&format!("if gid.x >= {}u {{ return; }}", c.op.elements));
+    // An indirect dispatch's last workgroup holds invocations past its count (#484).
+    if c.op.counted && !options.no_count_guard {
+        let count = input_ident(crate::graph::DISPATCH_COUNT);
+        w.line(&format!("if gid.x >= min({count}[0], {}u) {{ return; }}", c.op.elements));
+    } else {
+        w.line(&format!("if gid.x >= {}u {{ return; }}", c.op.elements));
+    }
     w.line("let e = gid.x;");
     prologue(&mut w);
     let mut m = String::new();
