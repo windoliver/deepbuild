@@ -236,6 +236,8 @@ export interface InboxRow {
   decision: string | null;
   /** On an open task whose check ran and still fails: what's missing, as its card says. null otherwise. */
   missing: Missing | null;
+  /** What you typed beside an ask that typed text can't close, as its card shows it. */
+  words: string[];
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -514,7 +516,7 @@ interface Ask {
   /** For a provisional choice: the files its session edited while it went on with the recommended option. */
   decided: Set<string>;
   /** What the log calls for and the core hasn't appended yet. */
-  pending: { superseded?: string; moot?: Obj; typed?: string };
+  pending: { superseded?: string; moot?: Obj; typed?: string; dropped?: boolean };
   created: number;
   /** How long it waits, as raised: its deadline then, less when it was raised. */
   wait: number;
@@ -528,6 +530,10 @@ interface Ask {
   later?: number;
   /** Raised by a turn that hadn't read a message you typed: it waits until the agent has it, unless due first. */
   unread: boolean;
+  /** An exception the hub raised, not the agent's question: what you type to the agent isn't its answer, and shows beside it. */
+  hubs: boolean;
+  /** Read since it was held: it stands only if the agent raises it again before its next stop (#84). */
+  recheck?: boolean;
   /** Since when it waits for a batch: raised, or read by the agent when raised held for your message. */
   since: number;
   /** What its check still finds missing, when it ran and failed, or the thread it watches has no right reply yet. */
@@ -598,6 +604,10 @@ class AsksCore implements Asks {
   private queue: Promise<unknown> = Promise.resolve();
   /** Sessions with a message you typed that the agent hasn't read yet. */
   private readonly unread = new Set<string>();
+  /** Sessions whose turn is running: a tool call since their last stop. */
+  private readonly running = new Set<string>();
+  /** Sessions whose unread message you typed while a turn ran: a deep_ask of that turn hasn't read it (#84). */
+  private readonly midTurn = new Set<string>();
   /** The asks each batch showed, by its name. */
   private readonly shownIn = new Map<string, string[]>();
   /** How many asks batches showed each UTC day, by day number. */
@@ -652,7 +662,9 @@ class AsksCore implements Asks {
       const row = askSources().find((r) => r.source === source);
       if (!row) throw new AskRefused(`${source} has no row in ask.sources@1, so it can't raise an ask`, { source });
       const now = this.options.now();
-      const filled = this.fill(connection.session, raised, now);
+      const given = this.fill(connection.session, raised, now);
+      // Every task that reaches you can be answered "the agent can do it" in one tap (#84), whatever raised it.
+      const filled = isObj(given) && given.kind === 'unblock' && Array.isArray(given.options) && !(given.options as Obj[]).some((o) => o.id === 'agent') ? { ...given, options: [...given.options as Obj[], { id: 'agent', label: 'The agent can do it', decision: 'none' }] } : given;
       const id = ulid(now);
       // An ask that names its subject is keyed from the subject alone: whatever key its raiser gave is replaced.
       const input = isObj(filled) && isObj(filled.subject) && SUBJECT_KINDS.has(String(filled.kind)) ? { ...filled, key: subjectKey(filled, this.threadOf(connection.session)) } : filled;
@@ -713,7 +725,10 @@ class AsksCore implements Asks {
       const thread = this.threadOf(connection.session);
       const same = this.openIn(thread).find((a) => a.data.kind === data.kind && normalize(a.data.question as string) === normalize(data.question as string)
         && sha256Hex(canonicalize(a.data.pinned_to!)) === sha256Hex(canonicalize(data.pinned_to!)) && (a.plan?.hash ?? null) === ((proposed?.hash as string | undefined) ?? null));
-      if (same) return { handle: same.handle, fresh: false };
+      if (same) {
+        delete same.recheck;
+        return { handle: same.handle, fresh: false };
+      }
       // Where each target came from, read from the record for the ask's session, never from its raiser's words (#1098).
       if (proposed && 'targets' in proposed) proposed.targets = await this.place({ data, handle: `ask:${id}`, session: connection.session ?? '' } as Ask, plan!.steps) as unknown as JsonValue;
       // Past the threshold drafted at setup, the thread's further asks fold into one exception. It's raised first,
@@ -972,7 +987,7 @@ class AsksCore implements Asks {
       return [...this.asks.values()].filter((a) => !a.theirs).map((a) => ({
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
-        request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null,
+        request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null, words: [...a.words],
       }));
     });
   }
@@ -1463,7 +1478,8 @@ class AsksCore implements Asks {
     // hasn't read your message waits, as on its own card, for the agent's next step or a deadline before the next batch.
     const joined = this.open().filter((a) => !a.shown && this.inFold(a) && this.visible(this.asks.get(bare(a.folded!))!));
     if (await this.showNow(joined.filter((a) => !a.unread || this.showBy(a) <= next))) acted = true;
-    if (!batches) return (await this.showNow(waiting())) || acted;
+    // A question held for your message stays held until the agent's stop says whether it still stands (#84).
+    if (!batches) return (await this.showNow(waiting().filter((x) => !(x.unread || x.recheck) || this.showBy(x) <= now))) || acted;
     // The latest batch shows every ask waiting for it since before its time, as the log stands: one held for your
     // message and read after it waits for the next, and a showing that failed to append is appended on the next
     // call, without showing again what the log already shows.
@@ -1722,6 +1738,8 @@ class AsksCore implements Asks {
       for (const kept of [this.stops, this.typedAt, this.continued, this.ended, this.replaced, this.done]) kept.delete(session);
       this.attempts.delete(session);
       this.unread.delete(session);
+      this.running.delete(session);
+      this.midTurn.delete(session);
       this.sessions.delete(session);
       this.endOrder.delete(session);
       this.forgot = true;
@@ -1799,6 +1817,8 @@ class AsksCore implements Asks {
         }
         return;
       case 'agent.stop': {
+        for (const a of this.open()) if (a.session === e.session && a.recheck) a.pending.dropped = true;
+        if (e.session) this.running.delete(e.session);
         // The hook's record of a stop: its cause from the closed set and, from the adapter's facts, who owns the block
         // and its signature. A stop without a signature is its own block, by cause.
         if (!e.session || e.writer !== 'hook') return;
@@ -1856,7 +1876,7 @@ class AsksCore implements Asks {
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
           fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], receiptAlso: [], decided: new Set(), pending: {}, conflict: [],
-          created: e.ts, wait: (d.deadline as number) - e.ts, due: d.deadline as number, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session),
+          created: e.ts, wait: (d.deadline as number) - e.ts, due: d.deadline as number, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session), hubs: e.writer === 'core' && d.kind === 'exception',
           ...(signature === undefined ? {} : { block: { signature, stops: this.coveringStops(d) } }),
         };
         if (request) this.requested.set(request.block, ask.handle);
@@ -1989,22 +2009,27 @@ class AsksCore implements Asks {
         if (target && !target.closed && e.writer === 'core' && target.who.actor === e.actor && target.who.scope === e.scope && typeof d.until === 'number' && d.until < this.dueBy(target)) target.later = d.until;
         return;
       case 'tool.before':
-        // The agent's next step reads what you typed: asks held for it wait like any other now.
+        if (e.session) this.running.add(e.session);
+        // A deep_ask is what a turn that hadn't read your mid-turn message raises: it is no step that reads it.
+        if (d.kind === 'mcp' && d.server === 'deep' && e.session && this.midTurn.has(e.session)) return;
+        // The agent's next step reads what you typed: asks held for it wait like any other now, if they still stand.
         if (!e.session || !this.unread.delete(e.session)) return;
-        for (const a of this.open()) if (a.session === e.session && a.unread) [a.unread, a.since] = [false, e.ts];
+        this.midTurn.delete(e.session);
+        for (const a of this.open()) if (a.session === e.session && a.unread) [a.unread, a.since, a.recheck] = [false, e.ts, true];
         return;
       case 'user.ask': {
         if (d.from === 'person' && e.session) {
           this.unread.add(e.session);
+          if (this.running.has(e.session)) this.midTurn.add(e.session);
           this.typedAt.set(e.session, Math.max(this.typedAt.get(e.session) ?? -Infinity, e.ts));
         }
         if (d.from !== 'person' || typeof d.text !== 'string') return;
         const thread = this.threadOf(e.session);
         const open = this.openIn(thread);
         // Typed text never answers an authority ask: it shows beside it, for one tap on the card.
-        for (const a of open) if (a.data.kind === 'authority') a.words.push(d.text);
+        for (const a of open) if (a.data.kind === 'authority' || a.hubs) a.words.push(d.text);
         // It answers only a question in sight: not one queued for a batch, put off with Later, or in a hidden exception.
-        const question = open.filter((a) => TYPED_KINDS.has(a.data.kind as string) && !a.fold && this.inSight(a)).at(-1);
+        const question = open.filter((a) => TYPED_KINDS.has(a.data.kind as string) && !a.fold && !a.hubs && this.inSight(a)).at(-1);
         if (question && d.text && question.pending.typed === undefined) question.pending.typed = d.text;
         return;
       }
@@ -2084,6 +2109,9 @@ class AsksCore implements Asks {
           await this.options.record.append(as, { ...base, kind: 'ask.superseded', data: { by: ask.pending.superseded } });
         } else if (ask.pending.moot) {
           await this.options.record.append(as, { ...base, v: MOOT_V2.has(String(ask.pending.moot.because)) ? 2 : 1, kind: 'ask.moot', data: ask.pending.moot });
+        } else if (ask.pending.dropped) {
+          // The agent read your message and ended its turn without raising this again: it no longer stands (#84).
+          await this.options.record.append(as, { ...base, kind: 'ask.cancelled', data: { answer: ask.data.default as string, plan_hash: null, decision: 'none' } });
         } else if (ask.pending.typed !== undefined) {
           // Typed in the session: the answer to that question only, unverified, never a decision.
           await this.options.record.append(as, {

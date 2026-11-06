@@ -18,7 +18,7 @@ import { Confirmer } from './confirm.js';
 import { claudeCommand, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, hasCodex, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
-import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
+import { deepHook, hubAddress, installedRoot, lastingNode, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
 import { removeService, startHub, stopIfRunning } from './service.js';
 import { Devices } from './trusted.js';
@@ -128,7 +128,7 @@ async function install(cli: string, quiet = false): Promise<number> {
     const servers = isObj(user.mcpServers) ? user.mcpServers : {};
     // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools. deep-hook
     // serves it, so a session runs one Node server, not two (#824's memory per session).
-    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: process.execPath, args: [cli, 'mcp'] }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } } });
+    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: lastingNode(), args: [cli, 'mcp'] }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } } });
     noteWritten(record, userFile);
     const skill = skillDir();
     if (!existsSync(skill) || record.created.includes(skill)) {
@@ -143,7 +143,8 @@ async function install(cli: string, quiet = false): Promise<number> {
     return stopped(root, 1, why, 'Set up again once that is fixed.');
   }
   if (!quiet) console.log(`DeepBuild added its hooks and status line forwarder to ${settingsFile}, beside yours; its MCP server to ${userFile}; its skill at ${skillDir()}; its safety rules at ${join(root, 'rules.json')}. Its gates are watch-only until you approve a repo's checks. deep setup --undo removes it all.`);
-  if (!quiet) for (const r of relations(root)) console.log(`${r.holds ? 'OK' : 'BROKEN'} ${r.text}`);
+  // Only a relation that doesn't hold needs you; deep doctor lists them all.
+  if (!quiet) for (const r of relations(root)) if (!r.holds) console.log(`BROKEN ${r.text}`);
   const started = await startHub({ cli });
   if (started !== 0) {
     process.stderr.write('deep setup: the hub didn\'t start through its login service; deep doctor names what is missing.\n');
@@ -153,6 +154,11 @@ async function install(cli: string, quiet = false): Promise<number> {
   writeFileSync(finishedFile(root), `${JSON.stringify({ version: deepbuild, at: new Date().toISOString() })}\n`, { mode: 0o600 });
   rmSync(stoppedFile(root), { force: true });
   return code;
+}
+/** What setup says when building deep-hook failed: with no cargo at all, how to get one. */
+export function buildFailure(error: unknown): string {
+  if ((error as { code?: unknown } | null)?.code === 'ENOENT') return "deep-hook isn't built and cargo isn't installed: install Rust with rustup (https://rustup.rs), then run cargo build --locked -p deep-hook in the checkout, or npm run build";
+  return error instanceof Error ? error.message : String(error);
 }
 /** Keeps why setup stopped, and its fix, for the app to show beside Set up; answers `code`. */
 function stopped(root: string, code: number, reason: string, fix: string): number {
@@ -196,7 +202,7 @@ function builtHook(): string {
   // Cargo and rustup live in your account's home, whatever HOME a script runs setup with.
   const home = userInfo().homedir;
   const env = { ...process.env, CARGO_HOME: process.env.CARGO_HOME ?? join(home, '.cargo'), RUSTUP_HOME: process.env.RUSTUP_HOME ?? join(home, '.rustup') };
-  execFileSync('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { cwd: REPO, env, stdio: 'ignore', timeout: 900_000 });
+  try { execFileSync('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { cwd: REPO, env, stdio: 'ignore', timeout: 900_000 }); } catch (error) { throw Error(buildFailure(error)); }
   // The build just made, even where an older release build is newer on disk.
   const built = join(REPO, 'target', 'debug', 'deep-hook');
   if (serves(built) === false) throw Error(`${built} doesn't serve deep-actions after cargo build -p deep-hook`);
@@ -220,8 +226,8 @@ function installCodex(root: string, record: ReturnType<typeof setupRecord>, cli:
   // Both are read before either is written: one that won't parse refuses the pair.
   const [hooksFile, configFile] = [codexHooks(), codexConfig()];
   const [hooksText, configText] = [read(hooksFile), read(configFile)];
-  const [hooks, config] = [withEntries(hooksText, hook), withServer(configText, process.execPath, cli)];
-  recordEntries(root, hook, { node: process.execPath, cli });
+  const [hooks, config] = [withEntries(hooksText, hook), withServer(configText, lastingNode(), cli)];
+  recordEntries(root, hook, { node: lastingNode(), cli });
   for (const [file, before, after] of [[hooksFile, hooksText, hooks], [configFile, configText, config]] as const) {
     if (after === before) continue;
     keepOriginal(root, record, file);

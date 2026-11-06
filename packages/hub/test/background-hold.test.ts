@@ -4,11 +4,16 @@
 // host's run start is the boundary, recorded here. Timers are faked; the record and git run for real.
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { openCheckouts, type CheckoutsOptions } from '@deepbuild/gate';
 import { openRecord, type RecordStore } from '../../../packages/record/src/index.ts';
 import { GateRunner } from '../src/gate-runner.js';
 import { makeRepo, session, ulid } from '../../../tests/acceptance/29/helpers.ts';
 import { cleanRuns, CORE, E2E, J, MINUTE, tempDir907 } from '../../../tests/acceptance/907/helpers.ts';
 
+/** The gate runner's clock, which moves with the faked timers; the record and git keep the real one. */
+let clock = 0;
+/** The clock moves by `ms`, then the hub's poll fires what came due on it, as core.ts calls gate.tick() each poll (#965). */
+const pass = async (gate: GateRunner, ms: number) => { clock += ms; await vi.advanceTimersByTimeAsync(ms); gate.tick(); };
 /** Lets the gate runner's queue, the record's reads and the starts it makes settle; timers stay faked. */
 const settle = async () => { for (let i = 0; i < 200; i++) await new Promise((done) => setImmediate(done)); };
 /** Waits, in real time with timers faked, until `ok` holds or `ms` passes: a start makes the snapshot's checkout first. */
@@ -16,17 +21,21 @@ const until = async (ok: () => boolean, ms = 30_000) => { for (const end = Date.
 
 interface Started { claim: string; check: string; lane: string }
 async function world(): Promise<{ record: RecordStore; gate: GateRunner; started: Started[]; capped: [string, string[]][] }> {
-  const record = await openRecord({ path: join(tempDir907(), 'ledger.db'), now: Date.now });
+  const dir = tempDir907();
+  const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
   await cleanRuns(record, J, 300_000);
+  // The base-commit service (#31) on folders of its own: every claim's snapshot and checkout come from it.
+  const checkouts = await openCheckouts({ store: join(dir, 'store'), root: join(dir, 'checkouts'), kinds: [], host: {} as CheckoutsOptions['host'], leases: {} as CheckoutsOptions['leases'], now: Date.now });
   const started: Started[] = [];
   const capped: [string, string[]][] = [];
   const gate = new GateRunner({
-    raw: (query, params) => record.raw(query, params), now: Date.now, append: (connection, input) => record.append(connection, input), core: CORE,
+    raw: (query, params) => record.raw(query, params), now: () => clock, append: async (connection, input) => { await record.append(connection, input); }, core: CORE,
     start: async (r) => { started.push({ claim: r.claim, check: r.check, lane: r.lane }); return `run:${ulid()}`; },
     // The journey runs on past the test: no run ends.
     ended: () => new Promise<string>(() => undefined),
     slots: () => ({ free: 2 }), budget_ms: 10_000, hold_ms: 60_000,
     capped: (s, checks) => { capped.push([s, checks]); },
+    checkouts: () => checkouts, invalid: async () => undefined, stopping: () => false, stoodIn: async () => undefined,
   });
   return { record, gate, started, capped };
 }
@@ -34,13 +43,13 @@ async function world(): Promise<{ record: RecordStore; gate: GateRunner; started
 async function stop(gate: GateRunner, s: string, n: number): Promise<string> {
   const claim = `claim:${ulid()}`;
   const { dir } = makeRepo({ 'src/cart.ts': `export const total = ${n};\n` });
-  const ran = await gate.stop({ session: s, claim, task: 'task:907', cwd: dir, requirements: [], checks: [{ check: J, approved: 'journey', command: `sh '${J}'`, covers: [], depth: 'unit', on_base: 'passes' }], stopAt: Date.now() });
+  const ran = await gate.stop({ session: s, claim, task: 'task:907', cwd: dir, requirements: [], base: 'b', checks: [{ check: J, approved: 'journey', command: `sh '${J}'`, covers: [], depth: 'unit', on_base: 'passes', asserts: [] }], stopAt: clock });
   expect(ran.slow, 'the 300 s journey is a slow-lane check').toEqual([J]);
   return claim;
 }
 const journeys = (started: Started[], claim: string) => started.filter((x) => x.check === J && x.claim === claim);
 
-beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
+beforeEach(() => { clock = Date.now(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
 afterEach(() => { vi.useRealTimers(); });
 
 describe('#907 background work holds a stop\'s slow checks in the hub, at most 30 minutes', () => {
@@ -49,7 +58,7 @@ describe('#907 background work holds a stop\'s slow checks in the hub, at most 3
     try {
       const s = session();
       const claim = await stop(gate, s, 1);
-      gate.turnEnded(claim, [E2E], Date.now());
+      gate.turnEnded(claim, [E2E], clock);
       await settle();
       expect(journeys(started, claim), `${E2E} still runs in the background, so the journey waits in its place`).toEqual([]);
       gate.backgroundEnded(s);
@@ -63,11 +72,11 @@ describe('#907 background work holds a stop\'s slow checks in the hub, at most 3
     try {
       const s = session();
       const claim = await stop(gate, s, 1);
-      gate.turnEnded(claim, [E2E], Date.now());
-      await vi.advanceTimersByTimeAsync(30 * MINUTE - 1000);
+      gate.turnEnded(claim, [E2E], clock);
+      await pass(gate, 30 * MINUTE - 1000);
       await settle();
       expect(journeys(started, claim), 'nothing starts before 30 minutes from the stop').toEqual([]);
-      await vi.advanceTimersByTimeAsync(1000);
+      await pass(gate, 1000);
       await until(() => journeys(started, claim).length > 0);
       expect(journeys(started, claim).map((x) => x.lane), 'the journey is pending past 30 minutes from the stop: it must start then').toEqual(['slow']);
       expect(capped, 'the session\'s row is told which checks waited 30 minutes, to name what still runs').toEqual([[s, [J]]]);
@@ -79,14 +88,15 @@ describe('#907 background work holds a stop\'s slow checks in the hub, at most 3
     try {
       const s = session();
       const first = await stop(gate, s, 1);
-      gate.turnEnded(first, [E2E], Date.now());
-      await vi.advanceTimersByTimeAsync(20 * MINUTE);
+      gate.turnEnded(first, [E2E], clock);
+      await pass(gate, 20 * MINUTE);
       const second = await stop(gate, s, 2);
-      gate.turnEnded(second, [E2E], Date.now());
-      await vi.advanceTimersByTimeAsync(10 * MINUTE);
-      await settle();
+      gate.turnEnded(second, [E2E], clock);
+      await pass(gate, 10 * MINUTE);
+      // A start makes the snapshot's checkout first, with real git: a wrong start would land within this wait.
+      await until(() => started.some((x) => x.check === J), 5_000);
       expect(started.filter((x) => x.check === J), '30 minutes from the first stop, nothing starts: the second stop has its own 30 minutes').toEqual([]);
-      await vi.advanceTimersByTimeAsync(20 * MINUTE);
+      await pass(gate, 20 * MINUTE);
       await until(() => journeys(started, second).length > 0);
       expect(journeys(started, second).map((x) => x.lane), 'the journey starts on the second snapshot 30 minutes from its stop').toEqual(['slow']);
       expect(journeys(started, first), 'the first snapshot\'s journey never starts: the newer stop took its place').toEqual([]);

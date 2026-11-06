@@ -43,6 +43,14 @@ function matches(deepHook: string, entry: unknown, c: Call, classes: Obj): Promi
   });
 }
 
+/** Whether a block entry of `<dir>/rules.json` reads this shell command, by deep-hook's check mode: your rule reserves it. */
+export async function blocksCall(dir: string, deepHook: string, command: string): Promise<boolean> {
+  const read = JSON.parse(readFileSync(join(dir, 'rules.json'), 'utf8')) as { entries?: Obj; classes?: Obj };
+  const blocks = Object.values(read.entries ?? {}).filter((e) => isObj(e) && e.mode === 'block');
+  const said = await Promise.all(blocks.map((entry) => matches(deepHook, entry, { tool_name: 'Bash', tool_input: { command } }, read.classes ?? {}).catch(() => false)));
+  return said.includes(true);
+}
+
 export type Added = { status: 'installed'; names: string[] } | { status: 'refused'; reason: string };
 
 /**

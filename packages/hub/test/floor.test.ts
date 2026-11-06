@@ -37,7 +37,9 @@ async function claimAfter(change: (repo: string) => void) {
   const tasks = new AskTasks({
     raw: (q, params) => record.raw(q, params), asks: () => { throw Error('no asks here'); }, now, plant: undefined, drafts, work: undefined,
     append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({}),
-    keep: async (bytes) => createHash('sha256').update(bytes).digest('hex'), run: async () => undefined, invalid: async (claim, _commit, reason) => { invalid.push({ claim, reason }); },
+    keep: async (bytes) => createHash('sha256').update(bytes).digest('hex'), run: async () => undefined, invalid: async (claim, _commit, reason) => { invalid.push({ claim, reason }); }, unresolved: () => undefined,
+    // A repo, never a workspace (#67): it lands nowhere, so the workspace calls answer as they do outside one.
+    spaces: { land: async () => undefined, fill: async () => undefined, pin: async () => undefined, keep: async () => false, claimState: async () => undefined, folderOf: () => undefined },
   });
   const task_ref = `session:${session}#0`;
   await tasks.opened({ session, agent: 'claude-code', cwd: repo, thread: 'thread-1', task_ref, text: ASK, prompt: ASK, at: now() });

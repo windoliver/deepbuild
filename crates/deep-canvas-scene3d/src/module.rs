@@ -23,6 +23,9 @@ pub const SHADOW_PASS: &str = "scene3d.shadow";
 /// The key sun's cascades (#422; Light policy: cascades): one depth layer each, by the shadow
 /// pass's steps.
 pub const CASCADE_PASS: &str = "scene3d.cascade";
+/// Instancers above 256 elements culled per view and per shadow map on the GPU (#484; Instance
+/// `instance@1`), the core's own compute pass before the frame's draws.
+pub const CULL_PASS: &str = "scene3d.cull";
 /// Ambient occlusion (#418; Look `look@1`: ao): the opaque solids' depth and normal prepass, the
 /// occlusion and its blur, before the geometry pass reads it; drawn only while the look has ao on.
 pub const AO_PASS: &str = "scene3d.ao";
@@ -337,6 +340,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         Tie::Id => lit_by_id,
         Tie::Order => lit_by_order,
     });
+    r.pass(CULL_PASS, "compute");
     r.pass(AO_PASS, "geometry");
     r.pass(GEOMETRY_PASS, "geometry");
     // #200: the shadow and object-ID passes compile from the core's base steps, which the seal

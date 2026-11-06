@@ -6,7 +6,7 @@ import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync 
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubAddress, installedRoot, lastingNode, rootOf } from './paths.js';
 import { line } from './wire.js';
 
 const LABEL = 'com.deepbuild.hub';
@@ -87,7 +87,9 @@ const quoted = (s: string) => `"${s.replace(/(["\\])/g, '\\$1')}"`;
 
 /** The login service's definition: where it goes, and what it holds. It runs `deep hub run`. */
 function definition(program: string[], logs: string): { file: string; text: string } {
-  const env = { PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  // HOME too: launchd and systemd start a job with the user's own, so a hub set up in another home would read and
+  // write ~/.deepbuild there instead.
+  const env = { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: homedir() };
   if (process.platform === 'darwin') {
     const strings = (items: string[]) => items.map((s) => `<string>${xml(s)}</string>`).join('\n    ');
     return {
@@ -157,7 +159,11 @@ function launch(file: string): string | undefined {
     const domain = `gui/${process.getuid!()}`;
     const loaded = run('launchctl', ['bootstrap', domain, file]);
     if (loaded.status === 0) return undefined;
-    // Already loaded: start it again.
+    // Already loaded: start it again, but only the job this home's plist loaded. One label serves every home, so a
+    // job loaded from another home's plist (a test's, a second checkout's) is that home's hub, never this one's.
+    const path = /^\s*path = (.+)$/m.exec(run('launchctl', ['print', `${domain}/${LABEL}`]).stdout ?? '')?.[1]?.trim();
+    const same = (a: string, b: string) => { try { return realpathSync(a) === realpathSync(b); } catch { return a === b; } };
+    if (path && !same(path, file)) return `${LABEL} is already loaded from ${path}, another home's hub; unload it with launchctl bootout ${domain}/${LABEL} if it is yours to stop, then start this one again`;
     const kicked = run('launchctl', ['kickstart', `${domain}/${LABEL}`]);
     return kicked.status === 0 ? undefined : `launchctl: ${loaded.stderr.trim()} ${kicked.stderr.trim()}`;
   }
@@ -176,7 +182,7 @@ export async function startHub(options: { root?: string; cli: string }): Promise
   const root = rootOf(options.root ?? installedRoot());
   if (await answers(root.socket)) return 0;
   mkdirSync(root.logs, { recursive: true, mode: 0o700 });
-  const program = [process.execPath, realpathSync(options.cli), 'hub', 'run', ...(options.root ? ['--root', root.dir] : [])];
+  const program = [options.root ? process.execPath : lastingNode(), realpathSync(options.cli), 'hub', 'run', ...(options.root ? ['--root', root.dir] : [])];
   if (options.root) {
     // A dev hub: in a session of its own, so its terminal's hangup never reaches it.
     const log = openSync(join(root.logs, 'hub.log'), 'a', 0o600);

@@ -43,7 +43,7 @@ type Role = 'hook' | 'app' | 'cli' | 'mcp';
 const ALLOWED = new Map<string, readonly Role[]>([
   ['hub.health', ['app', 'cli']], ['health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
-  ['inbox.read', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
+  ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
   ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
@@ -315,6 +315,20 @@ class Conn {
  */
 interface Sub { conn: Conn; id: unknown; queued: number; held: string[]; next: number; since: number; watch?: NodeJS.Timeout | undefined }
 /** What the hub reads of a guard@1 entry in rules.json. */
+/** The defaults the core decides from the thread's prompts (#84), each with what it does. */
+const NAMED_RULES: Record<string, 'push' | 'pr' | 'merge'> = { 'push-needs-ask': 'push', 'pr-needs-ask': 'pr', 'merge-needs-ask': 'merge', 'merge-names-head': 'merge' };
+/** What a merge names (#84): deep-hook's read of a shell call, or the MCP tool's own `sha` and pull request number. */
+function mergeNamed(meta: HookMeta, data: Obj): NonNullable<Gated['merge']> {
+  const read = Object.values(meta.notes ?? {}).find((n) => n.startsWith('merge'));
+  if (read !== undefined) {
+    const part = (name: string) => new RegExp(`\\b${name}=(\\S+)`).exec(read)?.[1];
+    const [pr, head] = [part('pr'), part('head')];
+    return { ...(pr ? { pr } : {}), ...(head ? { head } : {}), ...(/ auto\b/.test(read) ? { auto: true } : {}), ...(/ disable\b/.test(read) ? { disable: true } : {}) };
+  }
+  const input = isObj(meta.call?.input) ? meta.call.input : {};
+  const pr = input.pullNumber ?? input.pull_number;
+  return data.effect === 'merge' ? { ...(typeof input.sha === 'string' ? { head: input.sha } : {}), ...(pr !== undefined ? { pr: String(pr) } : {}) } : {};
+}
 interface Guard { match?: unknown; scope?: unknown; mode?: unknown; reason?: unknown; next_step?: unknown; fail_closed?: unknown }
 
 class Hub {
@@ -732,6 +746,7 @@ class Hub {
     const classes = meta.matched.flatMap((n) => /^effect:([\w-]+)$/.exec(String(entries[n]?.match ?? ''))?.slice(1) ?? []);
     if (typeof data.effect === 'string') classes.push(data.effect);
     const authority = [...new Set(classes.filter((c) => AUTHORITY.has(c)))];
+    const named = this.namedDefaults(meta, data, entries);
     const decided = [...new Set(meta.matched.filter((n) => DECIDED_MATCH.test(String(entries[n]?.match ?? ''))).map((n) => String(entries[n]!.match).slice('effect:'.length)))];
     const mcp = data.kind === 'mcp' && typeof data.server === 'string' && typeof data.tool === 'string' ? { server: data.server, tool: data.tool } : undefined;
     // A destructive call is staged first (#347, #1294): what deep-hook read of its reach, or null when it couldn't
@@ -751,12 +766,37 @@ class Hub {
     // A `gh pr create`, or a `gh pr edit` of its body (#87), is checked for its body's Closes against the issue's task
     // (#322), whatever else it needs.
     const pr = data.kind === 'shell' && typeof data.command === 'string' && (isPrCreate(data.command) || isPrEdit(data.command));
-    if (!authority.length && !mcp && !decided.length && stage === undefined && !screen && !resend && !pr) return undefined;
+    const card = this.cardOf(meta);
+    if (!authority.length && !mcp && !decided.length && stage === undefined && !screen && !resend && !pr && !named.length && !card) return undefined;
     const label = mcp ? `${mcp.server} ${mcp.tool}` : screen ? meta.call!.tool : typeof data.command === 'string' ? data.command : String(data.kind);
     const command = typeof data.command === 'string' ? { command: data.command } : {};
     return {
-      label, classes: authority, ...(mcp ? { mcp } : {}), ...(decided.length ? { decided, ...command } : {}), ...(stage !== undefined ? { stage, ...command } : {}), ...(screen ? { screen } : {}), ...(resend ? { resend } : {}), ...(pr ? { pr, ...command } : {}),
+      label, classes: authority, ...(card ? { card } : {}), ...(named.length ? { named, merge: mergeNamed(meta, data) } : {}), ...(mcp ? { mcp } : {}), ...(decided.length ? { decided, ...command } : {}), ...(stage !== undefined ? { stage, ...command } : {}), ...(screen ? { screen } : {}), ...(resend ? { resend } : {}), ...(pr ? { pr, ...command } : {}),
     };
+  }
+  /** A question card's questions (#84): a tool the agent's facts name as a question to the person. */
+  private cardOf(meta: HookMeta): Obj[] | undefined {
+    if (!meta.call) return undefined;
+    const facts = registry().get(meta.agent === 'codex' ? 'codex' : 'claude').facts as Obj;
+    const tools = (facts.questionTools as { tools?: string[] } | undefined)?.tools ?? [];
+    const questions = meta.call.input.questions;
+    return tools.includes(meta.call.tool) && Array.isArray(questions) ? questions as Obj[] : undefined;
+  }
+  /**
+   * The push, PR and merge defaults a call meets (#84), by the entries deep-hook matched and the facts' effect of an
+   * MCP tool: the core reads each against the thread's prompts. Only an entry rules.json holds in block mode counts.
+   */
+  private namedDefaults(meta: HookMeta, data: Obj, entries: Record<string, Guard | undefined>): NonNullable<Gated['named']> {
+    const blocks = (rule: string) => entries[rule]?.mode === 'block';
+    let matched = meta.matched;
+    // The planted wrong program ignores what deep-hook matched and reads the command line as plain text.
+    if (this.plant === 'defaults-match-text') {
+      const words: [string, string[]][] = [['git push', ['push-needs-ask']], ['gh pr create', ['pr-needs-ask']], ['gh pr merge', ['merge-needs-ask', 'merge-names-head']]];
+      matched = words.filter(([w]) => String(data.command ?? '').includes(w)).flatMap(([, rules]) => rules);
+    }
+    const shell = Object.entries(NAMED_RULES).flatMap(([rule, effect]) => (matched.includes(rule) ? [{ rule, effect }] : []));
+    const tool = Object.entries(NAMED_RULES).flatMap(([rule, effect]) => (effect === data.effect ? [{ rule, effect }] : []));
+    return [...shell, ...tool.filter((t) => !shell.some((s) => s.rule === t.rule))].filter((n) => blocks(n.rule));
   }
   /** Whether a hook is a permission prompt the hub holds for its ask: Claude Code's, in a session its facts cover, gates on. */
   private prompted(meta: HookMeta): boolean {
@@ -802,7 +842,7 @@ class Hub {
   private async gateReply(conn: Conn, meta: HookMeta, call: Gated, hold: number, before: unknown, ruled: string): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<{ late: true }>((resolve) => { timer = setTimeout(() => resolve({ late: true }), Math.max(0, hold - Date.now() - HOLD_MARGIN - (before === undefined ? 0 : EXTENSION_HOLD_MS))); });
-    const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; allow?: string; deny?: string; rule?: string; failed?: string }>;
+    const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; allow?: string; deny?: string; answers?: Record<string, string>; rule?: string; failed?: string }>;
     const gate = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
     if (!conn.sock.writable) return;
@@ -813,6 +853,11 @@ class Hub {
       // The deny that reached the agent, late and failed checks included, is kept for a PostToolUse that shows it ran anyway (#1033).
       if (meta.toolUse) this.core.post({ op: 'denied', session: meta.session, call: meta.toolUse, guard: 'rule' in gate && gate.rule ? gate.rule : "the gate's authority hold (#321)", label: call.label });
       return void conn.sock.end(line({ exit: 2, stdout: '', stderr: `${why}\n` }));
+    }
+    // A saved decision answers the card: the call runs with its questions and the decided options, never blocked (#84).
+    if (!('late' in gate) && gate.answers) {
+      const output = { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'DeepBuild answered this from your saved decision.', updatedInput: { questions: meta.call?.input.questions, answers: gate.answers } };
+      return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: output }), stderr: '' }));
     }
     if (before !== undefined) return this.extensionReply(conn, meta, before, hold, ruled);
     // Your standing rule's yes, and why: Claude Code's explicit allow, never past a permission mode that denies the call;
@@ -947,7 +992,7 @@ class Hub {
     // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
     // standing rule or asked at the gate (#23), after every other guard.
     // A destructive command is staged or asked about at the gate (#347, #1294), never blocked outright.
-    const decided = (n: string) => !this.off && (DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
+    const decided = (n: string) => !this.off && (n in NAMED_RULES || DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
     const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!this.off || floor(n)));
     if (blocks.length) {
       meta.blockedBy = blocks;

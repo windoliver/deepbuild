@@ -10,14 +10,17 @@
 //   that can change or destroy and isn't on the server's first list, or whose schema changed since, is held by one
 //   authority ask per server update until you say yes; your yes covers that tool at that digest only.
 //
-// A hold denies the call, naming its ask; once you say yes the same call runs. The sorter #84 builds takes the
-// planted one's place (DEEP_HUB_TEST_SORTER, only tests set it).
+// A hold denies the call, naming its ask; once you say yes the same call runs. #84's sort lives in questions.ts; its
+// proceeds are recorded here, and DEEP_HUB_TEST_SORTER, which only tests set, can still plant one.
 import { readFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AskRefused, type Asks, type PlanInput, type Target } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
+import { execFile } from 'node:child_process';
 import { countMcp, toolLists, type Listed } from './mcp-servers.js';
+import { namedIn, pushBranches, type Named } from './named.js';
+import { offerPlan, type Effect } from './questions.js';
 import type { About } from './standing.js';
 import { AUTHORITY, type Gated, type HookMeta, type Plant } from './wire.js';
 
@@ -37,6 +40,8 @@ export interface HoldOptions {
   /** The core's connection for a session's events. */
   connection(session: string, agent: string): Connection;
   pin(cwd: string, question: string): Promise<Obj>;
+  /** A session.reading on the session's row. */
+  reading(session: string, agent: string, reading: string): Promise<void>;
   /** Copies the session's transcript into the record, so a target it read is placed as read. */
   archived(session: string): Promise<void>;
 }
@@ -46,7 +51,7 @@ export interface HoldOptions {
  * as a delete or a send, or a tool that can destroy, can't be undone from here; a push or a merge reverts.
  */
 function planFor(source: string, does: string, changes: string[], targets: Target[] = []): PlanInput {
-  const undo = /^effect\.(push|merge)$/.test(source) ? 'Revert it with a new commit' : null;
+  const undo = /^effect\.(push|pr|merge)$/.test(source) ? 'Revert it with a new commit' : null;
   return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: undo !== null, cost: 0, ...(targets.length ? { targets } : {}) }], diff: key({ source, does, changes }) };
 }
 /** A `git push`'s words up to the end of its command, git's own flags before `push` skipped. */
@@ -74,9 +79,9 @@ export function pushTargets(line: string): Target[] {
   return [...new Set(refs)].map((ref): Target => ({ kind: 'remote', ref }));
 }
 
-const DOES: Record<string, string> = { push: 'pushes', merge: 'merges', dispatch: 'dispatches', send: 'sends', delete: 'deletes' };
+const DOES: Record<string, string> = { push: 'pushes', pr: 'opens a pull request', merge: 'merges', dispatch: 'dispatches', send: 'sends', delete: 'deletes' };
 const ANSWERS: Record<string, [string, string]> = {
-  push: ['Push it', 'Hold the push'], merge: ['Merge it', 'Hold the merge'], dispatch: ['Dispatch it', 'Hold the dispatch'],
+  commit: ['Commit it', 'Hold the commit'], push: ['Push it', 'Hold the push'], pr: ['Open it', 'Hold the PR'], merge: ['Merge it', 'Hold the merge'], dispatch: ['Dispatch it', 'Hold the dispatch'],
   send: ['Send it', 'Hold it'], delete: ['Delete it', 'Keep it'],
 };
 /** A reply to a pull request's review comment, which posts in your name on a reviewer's thread (#323). */
@@ -95,18 +100,35 @@ export class Holds {
       return undefined;
     }
   }
-  /**
-   * A stop ending on a question the sorter answers "proceed": the proceed, recorded with the question and the rule
-   * once the stop itself is in the record, so the turn it starts begins after it; the words the stop's reply sends.
-   */
-  async proceed(meta: HookMeta, until: number): Promise<string | undefined> {
+  /** The planted sorter's proceed for a stop, if a test named one. */
+  planted(meta: HookMeta): { question: string; rule: string } | undefined {
     const question = meta.fields?.last_assistant_message?.trim() ?? '';
     const rule = this.sorted(question);
-    if (!rule) return undefined;
+    return rule ? { question, rule } : undefined;
+  }
+  /** The proceeds, recorded with each question and its rule once the stop is in the record, so the turn they start begins after it. */
+  async record(meta: HookMeta, proceeds: { question: string; rule: string }[], until: number): Promise<void> {
+    if (this.o.plant === 'proceed-unrecorded') return;
     while (Date.now() < until && !(await this.o.raw(`SELECT 1 FROM events WHERE id = ?`, [meta.id])).length) await new Promise((done) => setTimeout(done, 20));
-    const ts = this.o.now();
-    await this.o.append(this.o.connection(meta.session, meta.agent), { v: 1, id: ulid(ts), kind: 'question.proceeded', ts, data: { question, rule } });
-    return `DeepBuild: proceed ("${question}", by rule ${rule}). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask.`;
+    for (const { question, rule } of proceeds) {
+      const ts = this.o.now();
+      await this.o.append(this.o.connection(meta.session, meta.agent), { v: 1, id: ulid(ts), kind: 'question.proceeded', ts, data: { question: question.slice(0, 8192), rule } });
+    }
+  }
+  /** Keys of the asks offers raised: each waits on its card, and no stop is held for it. */
+  readonly offers = new Set<string>();
+  private offerKey(effect: string, thread: string): string {
+    return key({ offer: effect, thread });
+  }
+  /** An offer that needs your authority: one ask per effect in a thread, which holds the call when it comes. */
+  async offered(meta: Pick<HookMeta, 'session' | 'agent' | 'cwd'>, effect: Effect, question: string): Promise<void> {
+    const [thread] = await this.thread(meta.session);
+    const k = this.offerKey(effect, thread!);
+    this.offers.add(k);
+    if (await this.askOf(k)) return;
+    const source = effect === 'spend' ? 'budget.raise' : `effect.${effect}`;
+    const yes = ANSWERS[effect] ?? ['Go ahead', 'Hold it'];
+    await this.raise(meta.session, meta.agent, meta.cwd, source, k, `The agent offers: "${question}" It needs your authority.`, yes, offerPlan(source, `Let the agent do what it offered: ${question}`));
   }
 
   /** The proceed whose turn the session is in, or undefined: the newest of its proceeds, stops and prompts is a proceed. */
@@ -161,11 +183,100 @@ export class Holds {
       : `DeepBuild is holding this: \`${label}\` needs your authority and waits for ${handle}. Once you say yes, run the same call again.`;
   }
 
+  /** The sessions of `session`'s thread, as a SQL list's values. */
+  private async thread(session: string): Promise<string[]> {
+    const rows = (await this.o.raw(`SELECT id FROM sessions WHERE COALESCE(thread_id, id) = (SELECT COALESCE(thread_id, id) FROM sessions WHERE id = ?) ORDER BY id`, [session])) as { id: string }[];
+    return rows.length ? rows.map((r) => r.id) : [session];
+  }
+  /** What the prompts typed in these sessions name, read by each prompt's `from` (#303): your words alone authorize. */
+  private async named(sessions: string[]): Promise<Set<Named>> {
+    const everyFrom = this.o.plant === 'reads-every-from';
+    const rows = (await this.o.raw(`SELECT json_extract(data, '$.text') AS text, json_extract(data, '$.from') AS origin FROM events WHERE kind = 'user.ask' AND unverified = 0 AND session_id IN (${sessions.map(() => '?').join(',')})`, sessions)) as { text: string; origin: string }[];
+    const named = new Set<Named>();
+    for (const row of rows) if (everyFrom || row.origin === 'person' || row.origin === 'app') for (const n of namedIn(String(row.text))) named.add(n);
+    return named;
+  }
+  /** The commit the thread's newest PASS is pinned to. */
+  private async passed(sessions: string[]): Promise<string | undefined> {
+    const [row] = (await this.o.raw(`SELECT c.commit_sha AS commit_sha FROM verdicts v JOIN claims c ON c.id = v.claim_id WHERE v.outcome = 'PASS' AND c.session_id IN (${sessions.map(() => '?').join(',')}) ORDER BY v.created DESC LIMIT 1`, sessions)) as { commit_sha: string | null }[];
+    return row?.commit_sha ?? undefined;
+  }
+  /** The merges armed with `--auto` the thread hasn't disarmed: each pull request's branch. */
+  private async armed(sessions: string[]): Promise<Map<string, string>> {
+    const rows = (await this.o.raw(`SELECT json_extract(data, '$.reading') AS reading FROM events WHERE kind = 'session.reading' AND json_extract(data, '$.reading') LIKE 'Merge of pull request %' AND session_id IN (${sessions.map(() => '?').join(',')}) ORDER BY log_pos`, sessions)) as { reading: string }[];
+    const armed = new Map<string, string>();
+    for (const { reading } of rows) {
+      const m = /^Merge of pull request (\S+) (?:armed with --auto on branch (\S*)|disarmed)/.exec(reading);
+      if (m?.[2] !== undefined) armed.set(m[1]!, m[2]);
+      else if (m) armed.delete(m[1]!);
+    }
+    return armed;
+  }
+  private branch(cwd: string): Promise<string> {
+    return new Promise((done) => execFile('git', ['-C', cwd, 'branch', '--show-current'], { timeout: 2000 }, (_, out) => done(String(out ?? '').trim())));
+  }
+  /**
+   * The push, PR and merge defaults (#84; design: Requests that name an action, Your written rules, enforced): a call
+   * goes through only when a prompt you typed in the thread names it or you said yes to its authority ask. A merge
+   * also names the commit the claim's PASS is pinned to, and a merge armed with `--auto` holds its branch's pushes.
+   * Why it's denied, naming the rule, or undefined when it runs.
+   */
+  private async namedDefaults(meta: HookMeta, call: Gated): Promise<string | undefined> {
+    const sessions = await this.thread(meta.session);
+    const named = await this.named(sessions);
+    const every = this.o.plant === 'ask-covers-every-effect' && named.size > 0;
+    const unpinned = this.o.plant === 'auto-merge-unpinned';
+    for (const { rule, effect } of call.named!) {
+      if (rule === 'merge-names-head' || every || named.has(effect)) continue;
+      const offer = await this.askOf(this.offerKey(effect, sessions[0]!));
+      if (offer?.decision === 'allow') continue;
+      if (offer) return `DeepBuild denied this (guard ${rule}): ${await this.waiting(`ask:${offer.id}`, call.label)}`;
+      const source = `effect.${effect}`;
+      const k = key({ source, sessions: sessions[0], call: call.label });
+      const asked = await this.askOf(k);
+      if (asked?.decision === 'allow') continue;
+      const handle = asked ? `ask:${asked.id}` : await this.raise(meta.session, meta.agent, meta.cwd, source, k,
+        `Run \`${call.label}\`? It ${DOES[effect]!}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${DOES[effect]!}`, [call.label], effect === 'push' ? pushTargets(call.label) : []));
+      return `DeepBuild denied this (guard ${rule}): no request you typed in this thread names it. ${await this.waiting(handle, call.label)}`;
+    }
+    if (every) return undefined;
+    const rule = 'merge-names-head';
+    if (call.named!.some((n) => n.rule === rule) && !call.merge?.disable && !(unpinned && call.merge?.auto)) {
+      const pass = await this.passed(sessions);
+      if (!pass) return `DeepBuild denied this (guard ${rule}): merge authority covers one head commit, and no claim in this thread has a PASS yet.`;
+      const head = call.merge?.head;
+      if (!head || head.length < 7 || !pass.startsWith(head)) return `DeepBuild denied this (guard ${rule}): merge authority covers one head commit, and this call names ${head ?? 'none'}. Name ${pass}, the commit the claim's PASS is pinned to: --match-head-commit for gh pr merge, sha for the API and the MCP tool.`;
+    }
+    const pr = call.merge?.pr ?? '';
+    if (call.merge?.auto && !unpinned) await this.o.reading(meta.session, meta.agent, `Merge of pull request ${pr} armed with --auto on branch ${await this.branch(meta.cwd)}`);
+    if (call.merge?.disable) for (const armed of (await this.armed(sessions)).keys()) if (!pr || armed === pr) await this.o.reading(meta.session, meta.agent, `Merge of pull request ${armed} disarmed`);
+    if (call.named!.some((n) => n.effect === 'push') && !unpinned) {
+      const armed = await this.armed(sessions);
+      if (armed.size) {
+        const current = await this.branch(meta.cwd);
+        const input = meta.call?.input ?? {};
+        const targets = typeof input.branch === 'string' ? [input.branch] : pushBranches(String(input.command ?? ''), current);
+        for (const [number, branch] of armed) if (targets.includes(branch)) return `DeepBuild denied this (guard ${rule}): a merge of pull request ${number} armed with --auto is pending, so \`${call.label}\` to ${branch} would change what it merges. Run gh pr merge --disable-auto ${number} first; the new head needs its own verdict.`;
+      }
+    }
+    return undefined;
+  }
+
   /** A PreToolUse's call: why it is held, or undefined when it runs. An ask that can't be raised holds it too. */
   async gate(meta: HookMeta, call: Gated): Promise<string | undefined> {
     try {
-      const held = (call.mcp && await this.heldTool(meta, call.mcp.server, call.mcp.tool)) || await this.heldEffect(meta, call);
-      return held && this.waiting(held, call.label);
+      const tool = call.mcp && await this.heldTool(meta, call.mcp.server, call.mcp.tool);
+      if (tool) return await this.waiting(tool, call.label);
+      if (call.named) {
+        // The planted wrong program lets a proceed cover every call of its turn, these too.
+        const covered = this.o.plant === 'proceed-covers-turn' && await this.proceeding(meta.session);
+        const denied = covered ? undefined : await this.namedDefaults(meta, call);
+        if (denied) return denied;
+      }
+      // What the defaults settled needs no proceed's hold: a request you typed, or your yes, covers it.
+      const effects = new Set<string>(call.named?.map((n) => n.effect));
+      const held = await this.heldEffect(meta, { ...call, classes: call.classes.filter((c) => !effects.has(c)) });
+      return held && await this.waiting(held, call.label);
     } catch (error) {
       if (!(error instanceof AskRefused)) throw error;
       return `DeepBuild held this: \`${call.label}\` needs your authority, and no ask could be raised for it (${error.message}).`;

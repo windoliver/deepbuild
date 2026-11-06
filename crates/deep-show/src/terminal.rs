@@ -30,8 +30,8 @@ use crate::shared::FLICKS;
 /// The default history a terminal keeps, in rows.
 const HISTORY: usize = 10_000;
 /// The palette's default foreground and background, before the look's roles.
-const FG: [u8; 3] = [0xe8, 0xe8, 0xe8];
-const BG: [u8; 3] = [0x10, 0x10, 0x10];
+pub const FG: [u8; 3] = [0xe8, 0xe8, 0xe8];
+pub const BG: [u8; 3] = [0x10, 0x10, 0x10];
 /// The three tabs R1 ships on a session's page, before the terminal tab.
 const TABS: [&str; 3] = ["line", "asks", "checks"];
 
@@ -268,6 +268,9 @@ impl<'a> Hub<'a> {
         for t in self.terms.terms.values_mut() {
             while let Some(chunk) = t.feed.get(t.fed).filter(|c| c.at <= to) {
                 t.term.feed(&chunk.bytes);
+                // A recorded chunk has no program to answer, nor a session to read its status.
+                t.term.replies.clear();
+                t.term.statuses.clear();
                 let rows = t.term.take_dirty();
                 let revision = t.updates.len() as u64 + 1;
                 t.updates.push(Update {
@@ -392,8 +395,9 @@ impl<'a> Hub<'a> {
             .filter(|p| *p <= self.now)
             .max();
         out["vsync"] = json!(vsync);
-        // #1172: what the app's grid paints: its ground, and each row's runs of one foreground and background.
+        // #1172: what the app's grid paints: its ground and ink, and each row's runs of one foreground and background.
         out["bg"] = json!(hex(BG));
+        out["fg"] = json!(hex(FG));
         let rows = (0..t.term.rows()).map(|y| self.color_runs(t, y)).collect();
         out["runs"] = Value::Array(rows);
         out

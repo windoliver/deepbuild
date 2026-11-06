@@ -38,10 +38,10 @@ function runner(dir: string, appended: EventInput[], ends: Map<string, (outcome:
   return new GateRunner({
     raw: async () => [{ ms: 60_000 }], now: () => Date.now(), append: async (_c, input) => { appended.push(input); }, core: {} as Connection,
     start: async () => `run${++runs}`, ended: (run) => new Promise((done) => ends.set(run, done)), slots: () => ({ free: 1 }), budget_ms: 10, hold_ms: 100,
-    checkouts: () => checkoutsOf(dir), invalid: async () => undefined, stopping: () => false,
+    checkouts: () => checkoutsOf(dir), invalid: async () => undefined, stopping: () => false, stoodIn: async () => undefined,
   });
 }
-const check = { check: 'slow-check', approved: 'x', command: 'sh slow-check', covers: ['R1'], depth: 'unit' as const, on_base: 'passes' as const };
+const check = { check: 'slow-check', approved: 'x', command: 'sh slow-check', covers: ['R1'], depth: 'unit' as const, on_base: 'passes' as const, asserts: [] };
 const until = async (test: () => boolean) => { for (let i = 0; i < 50 && !test(); i++) await new Promise((r) => setTimeout(r, 20)); };
 
 describe('a slow run outdated by a newer claim', () => {

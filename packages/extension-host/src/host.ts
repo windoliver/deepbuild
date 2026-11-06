@@ -318,6 +318,8 @@ export interface ExtensionHost {
    * saves nothing, and a test that couldn't run (INCONCLUSIVE) saves it. With no key test it reads untested and saves.
    */
   enterSecret(connection: Connection, extension: string, name: string, value: string): Promise<{ test: KeyTest; saved: boolean }>;
+  /** The secrets held by reference for the loaded packages, by name with the package that names them; never a value. */
+  heldSecrets(): Promise<{ secret: string; provider: string }[]>;
   /** A reading of a loaded polled source, as what needs it would read it: from the cache while fresh, else one call. */
   readSource(name: string): Promise<SourceRead>;
   /** Every source call this host made, with its secrets stripped. */
@@ -1505,6 +1507,11 @@ class Host implements ExtensionHost {
       deliver: (item, ctx) => this.channelAsk(ext, name, 'deliver', item, ctx) as Promise<ChannelDelivered>,
       receive: (ctx) => this.channelAsk(ext, name, 'receive', null, ctx) as Promise<ChannelReceived>,
     };
+  }
+  async heldSecrets(): Promise<{ secret: string; provider: string }[]> {
+    const named = [...this.exts.entries()].flatMap(([id, ext]) => (ext.manifest.secrets ?? []).map((s) => ({ secret: s.name, provider: id })));
+    const held = await Promise.all(named.map((n) => this.sources.holds(n.provider, n.secret)));
+    return named.filter((_, i) => held[i]);
   }
   async enterSecret(connection: Connection, extension: string, name: string, value: string): Promise<{ test: KeyTest; saved: boolean }> {
     this.trustedPath(connection, 'a secret is entered');
