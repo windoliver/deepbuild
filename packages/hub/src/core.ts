@@ -3420,7 +3420,7 @@ export class Core {
    */
   private async questionHolds(session: string): Promise<boolean> {
     // The planted wrong programs: one gate never holds, the other holds for every ask, authority and provisional too.
-    if (this.options.plant === 'sends-back-held-stop') return false;
+    if (this.options.plant === 'sends-back-held-stop' || this.options.plant === 'hold-as-choice') return false;
     if (this.options.plant === 'holds-every-ask') return (await this.record.raw(`SELECT 1 FROM asks WHERE session_id = ? AND status IN ('open', 'later') LIMIT 1`, [session])).length > 0;
     const asks = (await this.record.raw(`SELECT key FROM asks WHERE session_id = ? AND status IN ('open', 'later', 'answered') AND id NOT IN (SELECT delivery FROM deliveries WHERE outcome = 'delivered')
       AND (kind IN ('unblock', 'exception') OR (kind IN ('taste', 'choice') AND provisional = 0))`, [session])) as { key: string }[];
@@ -3966,8 +3966,8 @@ export class Core {
         block = [delivered, lane?.sendBack, carried, sized].filter(Boolean).join('\n\n');
       }
       else if (block) this.askingSoon();
-      else if (questionHeld || sorted?.noHold) {
-        // No send-back would follow, so the stop isn't held for your answer (#84); one already given goes with it.
+      else if ((questionHeld && lane) || sorted?.noHold) {
+        // A judged stop whose checks ran waits no longer for them: no send-back follows, so it isn't held for your answer (#84); one already given goes with it.
         block = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
       } else if (!r.places) {
         const waited = this.now();
