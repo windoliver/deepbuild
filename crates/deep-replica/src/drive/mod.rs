@@ -814,16 +814,17 @@ impl Replica {
     fn after_input(&mut self, kind: &str, target: &Target) {
         match self.plant {
             Some(Plant::AnswersYourRecord) if kind == "click" => {
-                let ask = target.name.clone().filter(|n| n.starts_with("ask:"));
-                let option = ask.as_ref().and_then(|ask| {
-                    self.events
-                        .iter()
-                        .find(|e| {
-                            e["kind"] == "ask.created"
-                                && format!("ask:{}", e["id"].as_str().unwrap_or_default()) == *ask
-                        })
-                        .and_then(|e| e["data"]["options"][0]["id"].as_str().map(str::to_owned))
+                // A row reads as its question (#1172), so the ask is the one whose question it shows.
+                let name = target.name.as_deref().unwrap_or_default();
+                let asked = self.events.iter().find(|e| {
+                    e["kind"] == "ask.created"
+                        && e["data"]["question"]
+                            .as_str()
+                            .is_some_and(|question| name.starts_with(question))
                 });
+                let ask = asked.map(|e| format!("ask:{}", e["id"].as_str().unwrap_or_default()));
+                let option = asked
+                    .and_then(|e| e["data"]["options"][0]["id"].as_str().map(str::to_owned));
                 if let (Some((socket, token)), Some(ask), Some(option)) = (&self.hub, ask, option) {
                     let answered = plant::answer(socket, token, &ask, &option);
                     self.trace.push(json!({"planted": "answers-your-record", "ask": ask, "reply": answered.unwrap_or_else(|e| json!(e))}));

@@ -63,6 +63,12 @@ name = "acceptance_326_panels"
 path = "../../tests/acceptance/326/panels/panels.rs"
 harness = false
 
+# AC4's app half, redrafted blind for #1172: Needs you's rows read as questions, not handles.
+[[test]]
+name = "acceptance_326_panels_redraft"
+path = "../../tests/acceptance/326/panels/redraft/panels_redraft.rs"
+harness = false
+
 [[test]]
 name = "acceptance_326_panels_planted"
 path = "../../tests/acceptance/326/panels/planted.rs"
