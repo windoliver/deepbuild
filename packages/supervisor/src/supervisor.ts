@@ -124,12 +124,12 @@ class LocalSupervisor implements Supervisor {
     const above = (p: string): string[] => (dirname(p) === p ? [] : [...above(dirname(p)), p]);
     this.sandbox = process.platform === 'linux'
       ? bubblewrapWith('bubblewrap', guarded.map((g) => (typeof g === 'string' ? { path: g, except: [] } : g)))
-      : seatbeltWith('seatbelt', guarded.flatMap((g) => [
+      : seatbeltWith('seatbelt', [...guarded.flatMap((g) => [
         typeof g === 'string'
           ? `(deny file-write* (subpath ${quote(real(g))}))`
           : `(deny file-write* (require-all (subpath ${quote(real(g.path))}) ${g.except.map((e) => `(require-not (subpath ${quote(real(e))}))`).join(' ')}))`,
         ...above(dirname(real(typeof g === 'string' ? g : g.path))).map((a) => `(deny file-write-unlink (literal ${quote(a)}))`),
-      ]));
+      ]), ...(options.plant === 'sandbox-any-loopback' ? ['(allow network-outbound (remote ip "localhost:*"))'] : [])]);
     for (const kind of options.resources ?? []) {
       this.kinds.set(kind.kind, kind);
       for (const key of kind.keys) this.keys.set(`${kind.kind}:${key}`, {});
@@ -139,9 +139,9 @@ class LocalSupervisor implements Supervisor {
   // ---- Records.
 
   /** Appends as the core; resolves with the event's ID. */
-  private async append(kind: string, data: Record<string, unknown>, subject?: string): Promise<string> {
+  private async append(kind: string, data: Record<string, unknown>, subject?: string, v = 1): Promise<string> {
     const ts = this.options.now();
-    const event: EventInput = { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue, ...(subject ? { subject } : {}) };
+    const event: EventInput = { v, id: ulid(ts), kind, ts, data: data as JsonValue, ...(subject ? { subject } : {}) };
     await this.options.record.append(CORE, event);
     return event.id;
   }
@@ -325,12 +325,19 @@ class LocalSupervisor implements Supervisor {
         const seen = `${run} ${operation} ${target}`;
         if (this.denied.has(seen)) continue;
         this.denied.add(seen);
-        void this.append('sandbox.denied', { run, operation, target: target || '(none)' }, run).catch(() => undefined);
+        void this.recordDenial(run, operation, target || '(none)').catch(() => undefined);
       }
     });
     this.warming = this.warm(10_000).then((live) => {
       if (!live) process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
     });
+  }
+
+  /** A refusal on the run's record, naming who holds the port it tried, when another run holds it (#580). */
+  private async recordDenial(run: string, operation: string, target: string): Promise<void> {
+    const port = operation.startsWith('network') ? /:(\d+)$/.exec(target)?.[1] : undefined;
+    const held = port ? (await this.options.leases?.leases().catch(() => []))?.find((v) => v.lease.resource.kind === 'port' && v.lease.resource.key === port) : undefined;
+    await this.append('sandbox.denied', { run, operation, target, ...(held ? { holder: held.lease.holder } : {}) }, run, 2);
   }
 
   /**
@@ -357,7 +364,7 @@ class LocalSupervisor implements Supervisor {
           const seen = `${run} ${said.operation} ${said.target}`;
           if (this.denied.has(seen)) continue;
           this.denied.add(seen);
-          void this.append('sandbox.denied', { run, operation: said.operation, target: said.target || '(none)' }, run).catch(() => undefined);
+          void this.recordDenial(run, said.operation, said.target || '(none)').catch(() => undefined);
         }
       }).on('error', () => undefined).on('close', resolve);
     });

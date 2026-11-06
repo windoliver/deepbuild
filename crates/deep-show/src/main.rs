@@ -34,6 +34,7 @@ mod query;
 mod registries;
 mod sandbox;
 mod ring;
+mod runs;
 mod scene3d;
 mod seams;
 mod serve;
@@ -950,17 +951,29 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             })
         }
     };
-    let record = entries(input, "record", |o| {
-        Some(RecordObject {
-            session: match o.get("session")? {
-                Value::Null => None,
-                v => Some(v.as_str()?.to_string()),
-            },
-            state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
-            value: optional(o.get("value"), Value::as_f64)?,
-            as_of: optional(o.get("as_of"), Value::as_i64)?,
-        })
-    })?;
+    // #629: a list is a replay's run record entries; an object, the record's objects by handle.
+    let (record, runs) = match input.get("record") {
+        Some(Value::Array(list)) => (
+            BTreeMap::new(),
+            list.iter()
+                .map(|e| runs::entry(e).map(|_| e.clone()))
+                .collect::<Option<Vec<_>>>()?,
+        ),
+        _ => (
+            entries(input, "record", |o| {
+                Some(RecordObject {
+                    session: match o.get("session")? {
+                        Value::Null => None,
+                        v => Some(v.as_str()?.to_string()),
+                    },
+                    state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
+                    value: optional(o.get("value"), Value::as_f64)?,
+                    as_of: optional(o.get("as_of"), Value::as_i64)?,
+                })
+            })?,
+            Vec::new(),
+        ),
+    };
     let claims = entries(input, "claims", |c| {
         let session = c.get("session")?.as_str()?.to_string();
         let requirements = match c.get("requirements") {
@@ -1049,11 +1062,14 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         }),
     };
     let mut placement_planted = placement::Planted::default();
-    // #420's wrong programs live in scene3d's and the building module's operators.
+    // #420's wrong programs live in scene3d's and the building module's operators, #453's in the
+    // loop module's geometry.shading.
     let module_planted = input
         .get("planted")
         .and_then(Value::as_str)
-        .filter(|p| deep_canvas_scene3d::PLANTED.contains(p))
+        .filter(|p| {
+            deep_canvas_scene3d::PLANTED.contains(p) || deep_canvas_loop::PLANTED.contains(p)
+        })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
     let pack_planted = input
@@ -1154,6 +1170,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "sends_without_serial" => Planted::SendsWithoutSerial,
                 "serial_carries_many_sends" => Planted::SerialCarriesManySends,
                 "bound_value_a_frame_late" => Planted::BoundValueAFrameLate,
+                "resolver_reads_summary" => Planted::ResolverReadsSummary,
+                "unparsable_reads_zero" => Planted::UnparsableReadsZero,
                 "keymap_unchecked" => Planted::KeymapUnchecked,
                 "conflicts_unreported" => Planted::ConflictsUnreported,
                 "focused_panel_takes_escape" => Planted::FocusedPanelTakesEscape,
@@ -1339,6 +1357,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         panels,
         docs,
         record,
+        runs,
         claims,
         window,
         display,
@@ -1726,6 +1745,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     if set >= BuildSet::Full {
         // Issue #420: walls, openings, slabs, roofs and stairs as trusted builders.
         out.push(deep_canvas_scene3d::building::module());
+        // Issue #453: the loop's check kinds, geometry.shading first.
+        out.push(deep_canvas_loop::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest

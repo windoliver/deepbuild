@@ -20,7 +20,7 @@ import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type O
 import { citedEvidence, openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust, type ViewShown } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
-import { answers as stackHealthy, composeKind, downStack, leaseKinds, newRun, portKind, SESSION_KINDS, upStack } from '@deepbuild/env-local';
+import { answers as stackHealthy, composeKind, downStack, environmentOf, keysOf, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, WarmStack } from '@deepbuild/env-local';
 import { endsEmpty, freshCount, judgeStop, leftOpen, openCheckouts, priceDefinition, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
 import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
@@ -45,12 +45,13 @@ import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs
 import { coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
-import { GateRunner, type ClaimCheck, type DefinitionState } from './gate-runner.js';
+import { GateRunner, type ClaimCheck, type DefinitionState, type StatePin } from './gate-runner.js';
 import { argsOf, groupUnder, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { Channels, type ChannelAsk } from './channels.js';
+import { Workspaces } from './workspaces.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
@@ -62,7 +63,7 @@ import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromi
 import { Answers, answerText, type Answer } from './answers.js';
 import { RUN_AS_YOU, Runs } from './runs.js';
 import { retain } from './retention.js';
-import { Stacks } from './stacks.js';
+import { Stacks, type StackWant } from './stacks.js';
 import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
@@ -79,6 +80,8 @@ const CODEX_BINARY = /^(?:\S*\/)?codex(?:-[^\s/]+)?(?:\s|$)/;
 /** A Claude Code process: its native binary (`claude`, `claude.exe`, `claude/versions/<version>`) or its npm entry. */
 const CLAUDE_BINARY = /^(?:\S*\/)?claude(?:\.exe)?(?:\s|$)|^\S*\/claude\/versions\/[^\s/]+(?:\s|$)|@anthropic-ai\/claude-code\//;
 const HOUR = 3_600_000;
+/** How often the hub reads what workspaces' verdicts pinned (#67). */
+const DRIFT_MS = 5 * 60_000;
 const DAY = 24 * HOUR;
 /** A value quoted into SQL. */
 const sql = (text: string): string => text.replace(/'/g, "''");
@@ -373,8 +376,12 @@ export class Core {
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   private asks!: Asks;
+  /** What the app last said of macOS and its notifications (#994). */
+  private notifications: string | null = null;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
   private readonly holds: Holds;
+  /** One session's transcript copied into the record now; unset until the archive opens. */
+  private archiveSession?: (session: string) => Promise<void>;
   /** The ask each plug-in change or send waits on, by its session and request ID (#363). */
   private readonly actionAsks = new Map<string, string>();
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
@@ -441,6 +448,8 @@ export class Core {
   private swapped: IndexFill | undefined;
   /** host@1: where every check run starts, is signalled and waited for; the supervisor, unless a test put another in its place. */
   private host!: Host;
+  /** The sessions whose stop a running hub replayed from the spool, to judge once the replay ends (#580). */
+  private readonly lateStops: string[] = [];
   /** env-local's compose kind, with the Docker CLI it found when the hub started (#331). */
   private compose?: ReturnType<typeof composeKind>;
   /** DeepBuild's own headless jobs (#159): their hooks are theirs, never a session's. */
@@ -486,6 +495,10 @@ export class Core {
   private extensions: ExtensionHost | undefined;
   /** The ways to reach you (#65), once the extensions are ready. */
   private channels: Channels | undefined;
+  /** Work outside a repo (#67). */
+  private readonly spaces: Workspaces;
+  /** The project each session entered, for its packs (#67). */
+  private readonly entered = new Map<string, string>();
   /** The supervisor's runs (runs.ts). */
   private readonly runs: Runs;
   /** Each worktree's stack and every stack run a check started (#331, #332). */
@@ -632,7 +645,8 @@ export class Core {
     this.holds = new Holds({
       raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
-      pin: (cwd, question) => this.pinOf(cwd, question),
+      pin: (cwd, question) => this.pinOf(cwd, question), heard: (ask) => this.heardBy(ask),
+      archived: async (session) => { await this.archiveSession?.(session); },
     });
     // Shared build products (#1017): made first, so a session that starts while the hub opens finds them; their builds
     // take the host and the lease queue only once a session's start asks.
@@ -652,7 +666,15 @@ export class Core {
       root: this.root.dir, raw: (query, params) => this.record.raw(query, params), now: this.now, plant: options.plant, holds: this.holds,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
     });
+    this.spaces = new Workspaces({
+      root: this.root.dir, now: this.now, plant: options.plant, record: () => this.record,
+      raw: (query, params) => this.record.raw(query, params), append: (connection, input) => this.append(connection, input),
+      connection: (extra) => this.connection('core', extra), keep: (bytes, source) => this.keep(bytes, source), fetch: (sha256) => this.store.read(sha256),
+      trust: (folder) => this.trust.answer(this.connection('app'), folder, true), plugin: (name) => this.extensions!.stateSource(name),
+      adopted: (session, id) => { this.projects.set(session, id); }, told: (session, cwd, text) => this.later(session, cwd, text), rerun: (claim, checks, state) => this.gate.rerun(claim, checks, state),
+    });
     this.tasks = new AskTasks({
+      spaces: this.spaces,
       raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, now: this.now, plant: options.plant, drafts: options.drafts, work: options.work,
       github: options.github, forge: options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
@@ -687,7 +709,15 @@ export class Core {
     });
     this.gate = new GateRunner({
       raw: (query, params) => this.record.raw(query, params), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
-      start: (r) => this.runApproved(r), ended: (run) => this.runEnded(run), judged: (claim) => this.judged(claim),
+      start: (r) => this.runApproved(r), ended: (run) => this.runEnded(run), judged: (claim) => this.judged(claim), stackStart: (folder, worktree) => this.stacks.expectedStart(folder, worktree),
+      ...(options.plant === 'env-starts-at-every-claim' ? {
+        startsAtClaim: async (folder: string, session: string, worktree: string) => {
+          const run = newRun();
+          if (!this.stacks.wanted(folder)) return;
+          const started = await this.stacks.serve({ run, claim: 'claim:planted', check: 'planted', folder, worktree, session, on_base: 'passes', expected_ms: null });
+          if (!('cause' in started)) await this.stacks.finish(run);
+        },
+      } : {}),
       checkouts: () => this.checkouts, invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), stopping: () => this.stopping,
       stoodIn: (r) => this.tasks.stoodIn(this.connection('core'), r),
       slots: () => ({ free: Math.max(0, Math.floor(CORES / 2) - this.runs.size) }),
@@ -704,8 +734,12 @@ export class Core {
     this.stacks = new Stacks({
       raw: (query, params) => this.record.raw(query, params), now: this.now, plant: options.plant, held: options.held, scrub: (values) => this.scrubbing(values),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), supervisor: () => this.supervisor, leases: () => this.leases,
-      environment: { newRun, up: (spec) => upStack(this.host, { ...spec, compose: this.compose }), down: (run) => downStack(this.host, run), healthy: stackHealthy },
+      environment: {
+        newRun, up: (spec) => upStack(this.host, { ...spec, compose: this.compose }), down: (run) => downStack(this.host, run), healthy: stackHealthy, wanted: environmentOf, keys: keysOf,
+        warm: (o) => new WarmStack({ ...o, host: this.host, compose: this.compose!, plant: options.plant, products: { declared: (f, p) => this.products.declared(f, p), holds: (w, n, k) => this.products.holds(w, n, k), place: (w, n, k, d) => this.products.placeIn(w, n, k, d), keep: (w, n, p, k, s) => this.products.keep(w, n, p, k, s), placeCache: (w, k, p, d) => this.products.placeCache(w, k, p, d), keepCache: (w, k, p, s) => this.products.keepCache(w, k, p, s) } }),
+      },
       stopping: () => this.stopping, session: (id) => this.sessions.get(id), startOf: (pid) => this.startOf(pid, true),
+      pending: (worktree) => this.gate.pendingIn(worktree), idle: (session) => this.live.get(session)?.state !== 'working',
     });
     this.runs = new Runs({
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
@@ -739,7 +773,7 @@ export class Core {
     const storage = this.durable.backend();
     // Each event its own commit: the durable write points a run makes depend only on the events it appends,
     // never on how many arrived together, so a cut at any one can be replayed.
-    this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}) });
+    this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) });
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
@@ -810,6 +844,8 @@ export class Core {
     // The hook programs are checked at start and every 10 minutes on the hub's clock (#993): no hook arrives to say they can't run.
     await this.hookPrograms().catch(() => undefined);
     this.every('hook-programs', 1000, () => this.hookPrograms());
+    // A hook that missed its acknowledgement under load may be the last of its turn: its stop is judged without one to follow it (#580).
+    this.every('spool', 2000, async () => { this.replayLate(); });
     if (this.options.plant !== 'skip-default-at-deadline') this.every('asks', 1000, async () => {
       const now = { wall: Date.now(), at: this.now() };
       if (now.wall - beat.wall > SLEPT) await asks.away(beat.at, now.at);
@@ -838,6 +874,8 @@ export class Core {
     // is env-local's, shared or exclusive.
     const pools = draftedPools(CORES);
     for (const [name, n] of Object.entries(pools)) await leases.declare('core', { name, match: `pool(${n})`, cap: 1000, cooldown: 0, cost: 0 });
+    // The warm stacks' pool (#580): your settings size it, drafted as 4 on the reference Mac, an estimate until week 4 measures it.
+    await leases.declare('core', { name: 'stack.slot', match: `pool(${this.stackSlots()})`, cap: 1000, cooldown: 0, cost: 0 });
     // One compile job pool per host (#1016): every build deep lease runs joins it.
     this.pool = new JobPool(join(this.root.dir, 'jobserver'), poolTokens(CORES));
     this.heavy = new HeavyQueue({
@@ -884,7 +922,7 @@ export class Core {
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
       resources: [port, compose], leases,
       ...(this.options.plant === 'env-holds-lease-for-helper' ? { plant: 'holds-lease-while-taken' as const } : {}),
-      ...(this.options.plant === 'standin-value-in-env' || this.options.plant === 'standin-every-host' || this.options.plant === 'run-ca-in-login-keychain' ? { plant: this.options.plant } : {}),
+      ...(this.options.plant === 'standin-value-in-env' || this.options.plant === 'standin-every-host' || this.options.plant === 'run-ca-in-login-keychain' || this.options.plant === 'sandbox-any-loopback' ? { plant: this.options.plant } : {}),
       ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}),
       ...(this.options.crash ? { crash: this.options.crash } : {}),
       // No run, run-as-you included, writes the record, the agents' config folders or the Node the hub runs on;
@@ -933,6 +971,7 @@ export class Core {
     });
     // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
     const trust = this.trust = await openTrust({ record: this.record, now: this.now });
+    await this.spaces.open();
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite') });
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
@@ -995,12 +1034,14 @@ export class Core {
       return archiving;
     };
     archivePass();
+    this.archiveSession = (session) => archive.session(session);
     // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
     this.wikiBuild = openWikiBuild({
       record: this.record, root: this.root, store: this.store, runner: this.runner, asks, now: this.now, archive: async () => { await archiving; await archivePass(); },
       core: this.connection('core'), cli: this.connection('cli'), plant: this.options.plant, held: this.options.held,
     });
     this.timers.push(setInterval(archivePass, HOUR));
+    this.timers.push(setInterval(() => void this.spaces.driftAll(), DRIFT_MS));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
     this.timers.push(setInterval(() => { if (this.blocked && !this.lost && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
     // Between session starts, a removed or weakened entry of ours in Claude Code's settings goes back at once.
@@ -1010,6 +1051,12 @@ export class Core {
     for (const timer of this.timers) timer.unref();
   }
 
+  /** `stack.slot` in <root>/config.json: how many warm stacks this machine keeps. */
+  private stackSlots(): number {
+    let slot: unknown;
+    try { slot = (JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as { stack?: { slot?: unknown } }).stack?.slot; } catch { /* none yet */ }
+    return typeof slot === 'number' && Number.isInteger(slot) && slot > 0 ? slot : 4;
+  }
   /** What setup wrote to <root>/config.json for the runner: the login shell's PATH and the plan's reserve. */
   private config(): { loginPath: string; reservePct: number; rules: { margin: number; windowMs: number } } {
     let c: Obj = {};
@@ -1202,6 +1249,8 @@ export class Core {
             this.judge(session);
           }
         }).catch(() => undefined);
+        // A stop that missed its acknowledgement has no reply to wait for: the turn it ended is judged now.
+        for (const session of this.lateStops.splice(0)) void this.judgeEnded(session).catch(() => undefined);
         // What was spooled during the replay, and the files it kept if appends came back, are taken now.
         const kept = this.retake;
         this.retake = false;
@@ -1256,6 +1305,7 @@ export class Core {
     // A call whose prompt went to you has run, live or replayed: offered back as a decision to save (#23).
     if (meta.event === 'PostToolUse' && meta.call) void this.offerBack(meta).catch(() => undefined);
     if (drafts.some((d) => d.kind === 'session.end' && d.data.reason === 'clear')) await this.replaced(meta.session);
+    if (drafts.some((d) => d.kind === 'session.end')) void this.leftProject(meta.session);
     if (meta.event === 'UserPromptSubmit' && this.options.plant === 'typed-saves-decision') {
       this.typedAt.set(meta.session, Date.now());
       void this.typedSaves(meta.session).catch(() => undefined);
@@ -1467,6 +1517,7 @@ export class Core {
     // A stop the rule reads as a claim recomputes its tasks' definitions' hashes once the stop is in the record; the
     // agent's final message is what the claim cites, for the validity gate (#29).
     if (claimed) this.lastMessage.set(meta.session, meta.fields?.last_assistant_message ?? '');
+    if (claimed && replayed) this.lateStops.push(meta.session);
     // A stop while a monitor's watch runs isn't final (#997): its claims are made once the watch ends, as this stop
     // reads them now, and its row reads waiting on the watch at every stop, held or not, since its events are the
     // session's next turns.
@@ -1615,7 +1666,7 @@ export class Core {
     const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
     const rules = readJson(join(this.root.dir, 'rules.json'));
     const entries = isObj(rules) && isObj(rules.entries) ? rules.entries : {};
-    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete)$/.test(String(e.match)); });
+    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete|discard-edits|drop-stash)$/.test(String(e.match)); });
     return blocks.length ? { guard: blocks.join(', ').slice(0, 2000), label: callOf(d, effectEntries(this.root.dir)).label.slice(0, 2000) } : undefined;
   }
 
@@ -1651,6 +1702,7 @@ export class Core {
       }
       if (draft.kind === 'session.start') {
         data.loads = await loadsOf(meta.cwd).catch(() => []);
+        if (!foreign) void this.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
         if (!foreign && session) void this.holds.listed(meta.session, live.agent, meta.cwd).catch((error: unknown) => process.stderr.write(`deep hub: tool lists for ${meta.session} not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
         if (!foreign) await this.recheck().catch(() => undefined);
@@ -2657,6 +2709,12 @@ export class Core {
     else setTimeout(() => void this.queue(() => this.seen(fresh.map((row) => row.id))).catch(() => undefined), SHOWN_SOON).unref();
     return this.answerText(fresh);
   }
+  /** A call held on an ask ran again on your yes, so the session has that answer: its stop needn't be sent back to say it. */
+  private async heardBy(ask: string): Promise<void> {
+    const id = ask.replace(/^ask:/, '');
+    if (this.handed.has(id) || (await this.record.raw(`SELECT 1 FROM deliveries WHERE delivery = ? AND outcome = 'delivered' LIMIT 1`, [id])).length) return;
+    await this.outcome(id, 'next_prompt', 'delivered');
+  }
   /** Answers still in flight that a turn now shows: delivered; the rest stay in flight (#906). */
   private async seen(asks: string[]): Promise<void> {
     for (const ask of asks) {
@@ -3070,15 +3128,15 @@ export class Core {
       if (deny) return { deny, rule: "the gate's repeated-send rule (#85)" };
       if (!call.classes.length && !call.mcp && !call.decided?.length && call.stage === undefined) return {};
     }
-    // A cloud resource nobody can be asked about from here stays denied, as with the hub down; a delete whose reach
-    // can't be worked out runs only staged.
+    // A cloud resource nobody can be asked about from here stays denied, as with the hub down; a destructive command
+    // runs only staged.
     if (FOREIGN.has(meta.agent) || !meta.session) {
       if (call.decided?.includes('cloud-resource')) return { deny: 'DeepBuild blocked this: creating a cloud resource the plan doesn\'t name needs your standing rule or your answer, and this session can\'t be asked.' };
       return call.stage !== undefined ? this.staging.gate(meta, call, false) : {};
     }
     const held = await this.holds.gate(meta, call);
     if (held) return { held };
-    // A delete whose reach can't be worked out runs only once what it names is staged, or you said yes (#347).
+    // A destructive command runs only once what it reaches is staged, or you said yes (#347, #1294).
     if (call.stage !== undefined) {
       const staged = await this.staging.gate(meta, call, true);
       if (staged.held) return staged;
@@ -4280,7 +4338,12 @@ export class Core {
     await this.queue(() => this.appendReading(session, live.agent, `Its monitor ${backgrounded([b.what])} ended: ${why}.`)).catch(() => undefined);
     // Another watch still running keeps the row waiting on it; a wake that began a turn meanwhile is judged at its stop.
     if (watching(live).length) return void await this.queue(() => this.appendReading(session, live.agent, waitingOn(watching(live)))).catch(() => undefined);
-    if (!live.judged || live.state === 'working') return;
+    await this.judgeEnded(session);
+  }
+  /** Judges a turn that ended with no stop's reply to hold: its claim is made, its fast lane runs and its slow checks start. */
+  private async judgeEnded(session: string): Promise<void> {
+    const live = this.live.get(session);
+    if (!live?.judged || live.state === 'working') return;
     live.claiming ??= (live.deferred ?? (async () => this.tasks.claim(session, live.agent, live.cwd)))().catch((): string[] => []);
     live.deferred = undefined;
     const judged = await this.queue(() => this.judging({ session, cwd: live.cwd } as HookMeta)).catch(() => undefined);
@@ -4892,6 +4955,12 @@ export class Core {
       case 'canvas.messages': return this.canvasCall({ call: 'messages', session: String(params.session) });
       case 'canvas.user': return this.canvasUser(params, context);
       case 'canvas.drawn': return this.drawnBy(context);
+      case 'workspace.new': return await this.workspaceCall(() => this.spaces.make(String(params.topic ?? ''), typeof params.folder === 'string' ? params.folder : undefined));
+      case 'workspace.move': return await this.workspaceCall(() => this.spaces.move(String(params.id), String(params.folder)));
+      case 'workspace.revert': return await this.workspaceCall(() => this.spaces.revert(String(params.id), String(params.commit)));
+      case 'workspace.diff': return await this.workspaceCall(() => this.spaces.diff(String(params.id)));
+      case 'workspace.drift': return await this.workspaceCall(() => this.spaces.drift(String(params.id)));
+      case 'project.views': return { views: this.extensions!.projectViews() };
       // The app API's views/shown and views/hidden (#262): which views it shows, which decides the while-shown cadences.
       case 'views.shown':
       case 'views.hidden': {
@@ -4900,6 +4969,14 @@ export class Core {
         const report = params as unknown as ViewShown;
         await (method === 'views.shown' ? this.extensions.viewsShown(this.connection('app'), report) : this.extensions.viewsHidden(this.connection('app'), report))
           .catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
+        return { reported: true };
+      }
+      case 'notifications.report': {
+        if (context.role !== 'app') throw refuse('role', '/method', 'Only the app reports its notification setting.', method);
+        const setting = params.setting;
+        if (setting !== 'allowed' && setting !== 'denied' && setting !== 'alerts_none') throw refuse('type', '/params/setting', 'The setting is allowed, denied or alerts_none.', method);
+        this.notifications = setting;
+        await this.asks.notifications(setting !== 'allowed');
         return { reported: true };
       }
       case 'windows.report': return this.runner.report(params as unknown as WindowReport).then(() => { this.tasks.windowChanged(); return { reported: true }; });
@@ -4949,12 +5026,17 @@ export class Core {
     return { folder };
   }
 
+  /** The app that reported the setting left: asks no longer wait on its reading, which `deep doctor` keeps showing. */
+  async notifierGone(): Promise<void> {
+    await this.asks.notifications(false);
+  }
+
   async health(): Promise<Obj> {
     const network = Object.values(networkInterfaces()).flat().some((i) => i && !i.internal) ? 'reachable' : 'unreachable';
     // The timing relations our entries in Claude Code's settings keep, and what the settings watch and recheck put back.
     const claude = { relations: relations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...this.settingsReadings] };
     const codex = { relations: codexRelations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...modified(this.root.dir), ...trustProblems(this.root.dir).map((p) => `Codex's hook list reports ${p}`)], trust: readTrust(this.root.dir) ?? null };
-    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, secrets: await this.secretStore(), network, claude, codex, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
+    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
   private secretStore(): Promise<string> {
@@ -6040,7 +6122,30 @@ export class Core {
    * A claim's checks (#29): the validity gate first, with no model, then the gate runner takes its snapshot and its
    * temporary checkout and runs its fast lane; what the stop waits for.
    */
-  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean }): Promise<void> {
+  /** `deep workspace`'s calls (#67): a refusal says why, on the command's stderr. */
+  private async workspaceCall(call: () => Promise<object>): Promise<Obj> {
+    try {
+      return { ...await call() };
+    } catch (error) {
+      throw new Refused(refusal('type', '/params', error instanceof Error ? error.message : String(error)));
+    }
+  }
+  /** A session started in a project that names packs: they load while it's there, if you trust it (#67). */
+  private async enteredProject(session: string, cwd: string): Promise<void> {
+    if (!existsSync(join(cwd, '.deepbuild', 'packs.json'))) return;
+    try {
+      if ((await this.extensions!.enterProject(cwd)).trusted) this.entered.set(session, cwd);
+    } catch (error) {
+      process.stderr.write(`deep hub: the packs of ${cwd} didn't load: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+  }
+  private async leftProject(session: string): Promise<void> {
+    const cwd = this.entered.get(session);
+    if (!cwd) return;
+    this.entered.delete(session);
+    await this.extensions!.leaveProject(cwd).catch(() => undefined);
+  }
+  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean; state?: StatePin }): Promise<void> {
     const at = this.now();
     this.claimRequirements.set(r.claim, new Map(r.requirements.map((q) => [q.req, { id: q.id, text: q.text }])));
     this.claimScopes.set(r.claim, { task: r.task, base: r.base, cwd: r.cwd });
@@ -6103,7 +6208,7 @@ export class Core {
       // with its output; passing, it proves nothing, as the agent's own checks never pass a claim.
       for (const command of told) checks.push({ check: command, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'own' });
       if (told.length) this.told.set(r.claim, new Set(told));
-      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at, definition: r.definition, same, ...(r.joins ? { joins: true } : {}) });
+      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at, definition: r.definition, same, ...(r.joins ? { joins: true } : {}), ...(r.state ? { state: r.state } : {}) });
       // The verdict is written beside the stop's reply, which waits for it only where it reads the record (#82).
       const written = this.judged(r.claim);
       this.verdictWrites.set(r.claim, written);
@@ -6250,7 +6355,7 @@ export class Core {
    * through host@1, whatever the head's trust; an untrusted head gets no hosts and no credentials, which no drafted
    * check has anyway.
    */
-  private async runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[] }): Promise<string> {
+  private async runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; stack?: StackWant }): Promise<string> {
     // A spec check is a command alone: nothing of it is written. A drafted check and each expected output it
     // references are written from their approved bytes (#322).
     if (r.approved !== null && this.options.plant !== 'runs-disk-bytes') {
@@ -6272,7 +6377,7 @@ export class Core {
       const out = await this.ledger.request(this.connection('core'), { run: id, check: r.check, inputs, issue: paid.task });
       if (out.status !== 'started') throw Error(out.status === 'BLOCKED' ? (out.cause === 'price' ? `${out.missing} is unknown` : `the budget for ${paid.task} has no room for it (${out.ask})`) : `it waits for your answer, ${out.ask}`);
     }
-    const { run } = await this.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? null, ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id);
+    const { run } = await this.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? null, ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.stack && this.stacks.wanted(r.cwd) ? r.stack : undefined);
     if (paid) {
       const charge = () => this.ledger.charge(this.connection('core'), String(run), this.priceOf(r.check, 'costs') ?? this.priceOf(r.check) ?? 0);
       void this.runs.ended(String(run)).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
@@ -6495,7 +6600,7 @@ export class Core {
   /** The retention pass (retention.ts). */
   private async retain(): Promise<void> {
     await retain({
-      raw: (query) => this.record.raw(query), store: this.store, checkouts: this.checkouts, cited: () => citedEvidence(this.record, this.now()), keepNothing: this.options.plant === 'empty-cited',
+      raw: (query) => this.record.raw(query), store: this.store, checkouts: this.checkouts, cited: async () => new Set([...await citedEvidence(this.record, this.now()), ...await this.spaces.pinned()]), keepNothing: this.options.plant === 'empty-cited',
       removed: (sha256) => this.appendCore('evidence.removed', { sha256 }),
     });
   }
@@ -6581,7 +6686,8 @@ export class Core {
     this.stopping = true;
     plantedStop();
     for (const timer of this.timers) clearInterval(timer);
-    this.pool?.close();
+    // The pool's pipe goes with the hub, as its socket does: left in the root with no writer, any read of it blocks.
+    this.pool?.close(true);
     for (const live of this.live.values()) clearTimeout(live.quiet);
     for (const p of this.promises.values()) clearTimeout(p.timer);
     this.watcher?.close();

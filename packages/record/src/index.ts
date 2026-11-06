@@ -97,6 +97,8 @@ export interface RecordOptions {
   commitEach?: boolean;
   schemas?: readonly SchemaEntry[];
   migrations?: readonly Migration[];
+  /** A planted wrong program; only tests set it. #1014's: the turn walk takes a subagent's stop as a turn end. */
+  plant?: 'turn-closes-at-child-stop';
 }
 export interface Row { [column: string]: unknown }
 export interface Table { name: string; primaryKey: string[]; rows: Row[] }
@@ -176,7 +178,7 @@ const SCHEMA_VERSION = 1;
 /** Events a replay reads at a time. */
 const REPLAY_PAGE = 5000;
 /** The kinds that record a decision: only the core appends them, and each commits FULL, in its own commit. */
-const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
+const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
   'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set']);
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
@@ -312,7 +314,7 @@ class SqliteRecord implements RecordStore {
     const columns = this.db.prepare("SELECT name FROM pragma_table_info('events')").all() as { name: string }[];
     if (columns.length && !columns.some((c) => c.name === 'unverified')) this.db.exec('ALTER TABLE events ADD COLUMN unverified INTEGER NOT NULL DEFAULT 0');
     this.db.exec(DDL);
-    this.projector = new Projector(this.db);
+    this.projector = new Projector(this.db, options.plant);
     this.stale = this.projector.ensure();
     const extra = options.schemas ?? [];
     this.registry = registry([...listSchemas(), ...extra]);
