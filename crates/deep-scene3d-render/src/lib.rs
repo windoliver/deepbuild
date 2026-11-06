@@ -680,16 +680,17 @@ struct TextRecord {
 
 /// Whether a solid's shading reads its pixel's quad (#1278): a lit material whose lobe can be
 /// narrower somewhere than the cap on the normal's change across the pixel (α² 0.18 in
-/// `direct()`), which widens it only there, so roughness under 0.18^¼ ≈ 0.651. Maps and an
-/// operator can lower roughness at any pixel, and the glass curtain pattern by 0.45.
+/// `direct()`), which widens it only there, so roughness under 0.18^¼ ≈ 0.651 (0.66 here, a
+/// margin). Maps and an operator can lower roughness at any pixel, and the glass curtain pattern
+/// by 0.45.
 fn reads_quad(s: &Solid, maps: u32, op: u64) -> bool {
     /// The glass curtain's number in `pattern()` (scene3d.wgsl), the one pattern that lowers
     /// roughness.
-    const GLASS: u32 = 8;
+    const CURTAIN: u32 = 8;
     let Some(m) = s.material.filter(|m| !m.unlit) else {
         return false;
     };
-    let lowered = if m.pattern == GLASS { 0.45 } else { 0.0 };
+    let lowered = if m.pattern == CURTAIN { 0.45 } else { 0.0 };
     maps != 0 || op != 0 || m.roughness < 0.66 + lowered
 }
 

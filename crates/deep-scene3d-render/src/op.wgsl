@@ -5,7 +5,7 @@
 
 var<private> op_frame: OpFrame;
 
-// Its depth written, as every lit material's is (#1278: `mesh_late_fs`).
+// Its depth always written, as a lit smooth material's is (#1278: `mesh_late_fs`).
 @fragment
 fn op_mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> LateTargets {
     // The texture coordinates' derivatives, while every pixel of the quad still runs (#423).
