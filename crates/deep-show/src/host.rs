@@ -1,13 +1,15 @@
 //! Issue #402: the panel host for a terminal (`deep-show host <cols> <rows> <history> [planted]`),
 //! a process of its own, apart from the hub. It holds the terminal's emulator and cell grid and
 //! takes the program's output through its stream, on stdin, framed: `D` and the bytes the
-//! program wrote, or `Q` and a query (its grid, rows of it, its modes, or a resize), answered on
+//! program wrote, `X` when the program's modes are reset (#990: it exited, or the shell took its
+//! terminal back), or `Q` and a query (its grid, rows of it, its modes, or a resize), answered on
 //! stdout as one JSON line, after every byte that came before it in the stream is applied. After
-//! each `D` frame it writes `A <bytes applied>`.
+//! each `D` frame it writes `R <hex>`, the emulator's answers to the program's queries in their
+//! order, for the hub to write to the program, `S <hex>` for each program-status report, and
+//! `A <bytes applied>`.
 //!
-//! It has no way to write to the program: a clipboard read through the terminal's escape is
-//! counted and never answered. Only the planted twins report each read (`C <terminator>`) for the
-//! hub to answer.
+//! A clipboard read through the terminal's escape is counted and never answered. Only the planted
+//! twins report each read (`C <terminator>`) for the hub to answer, or drop every answer.
 
 use std::io::{BufWriter, Read, Write};
 
@@ -15,6 +17,10 @@ use deep_canvas_cells::emulator::Terminal;
 use serde_json::{json, Value};
 
 use crate::terminal::{cell_json, grid_json, Colors};
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
 
 /// The host's main loop, until its stream closes.
 pub fn run(args: &[String]) -> i32 {
@@ -24,8 +30,9 @@ pub fn run(args: &[String]) -> i32 {
     };
     let planted = args.get(4).map(String::as_str);
     let mut term = Terminal::new(cols as u16, rows as u16, history);
-    // The look's terminal colors, as the hub draws them (#1003).
+    // The look's terminal colors, as the hub draws them (#1003), and OSC 10 and 11 answer.
     let colors = Colors::of(&crate::hub::shipped_look());
+    term.colors = colors.defaults();
     let stdin = std::io::stdin();
     let mut input = stdin.lock();
     let stdout = std::io::stdout();
@@ -47,7 +54,14 @@ pub fn run(args: &[String]) -> i32 {
             b'D' => {
                 term.feed(&buf);
                 applied += len as u64;
-                if planted.is_some() {
+                let replies = std::mem::take(&mut term.replies);
+                if !replies.is_empty() && planted != Some("queries_dropped") {
+                    let _ = writeln!(out, "R {}", hex(&replies));
+                }
+                for status in std::mem::take(&mut term.statuses) {
+                    let _ = writeln!(out, "S {}", hex(status.as_bytes()));
+                }
+                if planted == Some("answers") {
                     for (_, end) in &term.queries[answered..] {
                         let _ = writeln!(out, "C {end}");
                     }
@@ -55,6 +69,7 @@ pub fn run(args: &[String]) -> i32 {
                 }
                 let _ = writeln!(out, "A {applied}");
             }
+            b'X' => term.reset_modes(),
             b'Q' => {
                 let q: Value = serde_json::from_slice(&buf).unwrap_or(Value::Null);
                 let reply = query(&mut term, &q, &colors);
@@ -98,11 +113,24 @@ fn query(term: &mut Terminal, q: &Value, colors: &Colors) -> Value {
                 .collect();
             json!({"rows": rows})
         }
+        // #990: the screen as the bytes that redraw it, rows and cursor, for the app to draw.
+        Some("screen") => {
+            let mut bytes = String::from("\x1b[2J");
+            for y in 0..term.rows() {
+                let row = Terminal::text_of(term.row(y));
+                bytes.push_str(&format!("\x1b[{};1H{row}", y + 1));
+            }
+            let (x, y) = term.cursor();
+            bytes.push_str(&format!("\x1b[{};{}H", y + 1, x + 1));
+            json!({"cols": term.cols(), "rows": term.rows(), "screen": hex(bytes.as_bytes())})
+        }
         Some("modes") => json!({
             "bracketed_paste": term.modes.bracketed_paste,
             "app_cursor": term.modes.app_cursor,
             "focus_events": term.modes.focus_events,
             "mouse": term.modes.mouse_name(),
+            "alt_screen": term.modes.alt_screen,
+            "keyboard_flags": term.keyboard_flags(),
         }),
         Some("resize") => {
             let (Some(cols), Some(rows)) = (n("cols"), n("rows")) else {

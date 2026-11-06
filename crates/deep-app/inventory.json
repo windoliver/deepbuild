@@ -54,6 +54,7 @@
         "focus",
         "hover",
         "ink_primary",
+        "ink_secondary",
         "raised",
         "selected"
       ],

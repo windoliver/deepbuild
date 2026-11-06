@@ -9,7 +9,7 @@ use deep_canvas::ops;
 use crate::emulator::Color;
 
 /// The xterm 16-color defaults, by ANSI index, as the palette's roles fall back to.
-const ANSI: [[u8; 3]; 16] = [
+pub const ANSI: [[u8; 3]; 16] = [
     [0, 0, 0],
     [205, 49, 49],
     [13, 188, 121],

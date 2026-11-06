@@ -209,3 +209,68 @@ afterwards; it is not part of the suite.
 and scripts, parts at their boxes, roles and opacity channels, write-on, `<use>` and `currentColor`) belong to their
 own suites; this suite's documents need none of them except that `with-use-child` resolves a `<use>` inside a clip
 path.
+
+## Redraft 2 (pattern pairs vs Chrome)
+
+**What changed.** For exactly four pairs, `paint-servers/pattern/{with-x-and-y, patternUnits=objectBoundingBox,
+patternContentUnits=objectBoundingBox, with-viewBox}`, the reference image is now the pinned headless Chrome's render
+of the same SVG, unchanged, at the same 300 × 300 over white, in place of resvg's PNG. Nothing else in #398 changes:
+the same SVGs and document, the same perceptual oracle and ceilings, the same "named in an issue" escape, and the
+same planted-mismatch twins (the subject erased, the frame moved 4 px), now built from the Chrome reference. The other
+32 pairs, `simple-case` and `with-patternTransform` among them, still compare with resvg's PNG. The test names and
+the count (43) are unchanged.
+
+**Why.** resvg rasterizes each pattern tile and snaps tile edges that fall on half device pixels, where Chrome
+antialiases them, so at the 300 × 300 the suite draws resvg's PNG is not a faithful reference for these four: it
+agrees with Chrome within 4 codes on only 96.48%, 96.11%, 92.79% and 99.67% of pixels, and Chrome's own render, as
+"ours", fails the oracle against it on every one (FLIP 0.139, 0.122, 0.124; GMSD 0.129, 0.083, 0.084; `with-viewBox`
+on IoU 0.950). A faithful import would fail the suite. #1175, which follows #398, names a pinned headless Chrome as
+the reference for this import. The owner approved this redraft: "Yes, redraft".
+
+**The pin.** Chrome for Testing 156.0.8078.4 (`chrome-headless-shell`, linux-arm64, Playwright's
+`chromium_headless_shell-1248`). `chrome-reference.mjs` makes the references: it checks `--version` and is
+`BLOCKED` (exit 2, nothing drawn) when the binary is missing or answers another version; `CHROME_BIN` overrides the
+path. Flags: `--headless --disable-gpu --force-color-profile=srgb --force-device-scale-factor=1 --hide-scrollbars
+--default-background-color=ffffffff --window-size=300,300 --screenshot=<png> --user-data-dir=<fresh>`, on the SVG's
+`file://` URL.
+
+**Checked in, not rendered at test time.** The PNGs are in `fixtures/chrome/paint-servers/pattern/` and the test
+holds each one's sha256, so it fails (naming the pair) when a reference is not the one the script made:
+
+| Pair | sha256 |
+|---|---|
+| with-x-and-y | `8611e4742c2c35f2c1d64f23d8939e75cbf39bf65843ab1a38694ac1b8befed4` |
+| patternUnits=objectBoundingBox | `7d4ad317d49a29966f41e69799d947b33178b23679b9b13452ffd50d827dc8e6` |
+| patternContentUnits=objectBoundingBox | `f72952fb5a1e57855424680fd5372a75d43874e1f42f0f8214a2806b99b778ff` |
+| with-viewBox | `967242db11283df50cb8f23b7e86993a0861180e5684a380f9264564bd53aef4` |
+
+This fits the suite: every other reference is a reviewed PNG checked in beside its SVG, the suite stays runnable on
+every machine (a test-time render would make these four pairs `BLOCKED` wherever this exact build is missing, the
+Mac among them), and Chrome's output can't drift with the host under a pin the test can't see. The PNGs are renders
+of resvg's SVGs (Apache-2.0 or MIT, `fixtures/resvg/NOTICE`).
+
+**Calibration** (BASE-FAILURE-redraft2.txt, section 4, on the base's tooling: `perceptual()` and
+`plantedMismatches()` from `elements-helpers.ts`):
+
+| Pair | resvg ≈ Chrome within 4 codes | Chrome as ours vs resvg (before) | Fresh Chrome vs checked-in Chrome (after) | Twin erased | Twin moved 4 px |
+|---|---|---|---|---|---|
+| with-x-and-y | 96.48% | fails 3 (FLIP 0.139, GMSD 0.129, IoU 0.944) | passes (identical bytes) | fails 4 (FLIP 0.953) | fails 4 (FLIP 0.802) |
+| patternUnits=objectBoundingBox | 96.11% | fails 2 (FLIP 0.122, GMSD 0.083) | passes (identical bytes) | fails 4 (FLIP 0.911) | fails 4 (FLIP 0.833) |
+| patternContentUnits=objectBoundingBox | 92.79% | fails 2 (FLIP 0.124, GMSD 0.084) | passes (identical bytes) | fails 4 (FLIP 0.944) | fails 4 (FLIP 0.833) |
+| with-viewBox | 99.67% | fails 1 (IoU 0.9500) | passes (identical bytes) | fails 4 (FLIP 0.893) | fails 4 (FLIP 0.827) |
+
+Chrome's render is byte-deterministic (two runs of the script, and a third render by hand, give the same sha256), so
+its own render passes with every number at its ideal; that shows reproducibility, not the ceilings' slack for a
+second correct renderer. That slack is shown by the two pattern pairs kept on resvg, where the two renderers agree:
+Chrome's render passes against resvg's `simple-case` (FLIP 0.0036) and `with-patternTransform` (FLIP 0.032), inside
+the ceilings set in "The perceptual oracle". Each twin of each Chrome reference fails on all four numbers it can
+move (FLIP, GMSD, ΔE2000, IoU).
+
+**At the base** (`e2e6e1cc`, BASE-FAILURE-redraft2.txt): 43 of 43 pass. This base holds #398's import, which names
+every element outside the list in an `svg_unsupported` warning, so every pair takes the escape before a drawing is
+compared (section 2); the redraft is reached up to that point, and a reference swapped back to resvg's PNG fails its
+pair on the sha256 (section 3). The Chrome comparison itself runs once an import draws a pattern (#1175).
+
+Not done: no base-drawn equivalent of these four SVGs was compared against Chrome (the first redraft's Vello
+controls cover other pairs), and `with-patternTransform`, which agrees with Chrome on 96.54% of pixels within 4 codes
+but passes the oracle against resvg's PNG, stays on resvg as the scope of this redraft says.

@@ -65,6 +65,11 @@ impl Colors {
             None => resolve(c, default),
         }
     }
+
+    /// The default text and background an empty cell is drawn with, which OSC 10 and 11 answer.
+    pub fn defaults(&self) -> [[u8; 3]; 2] {
+        [self.fg, self.bg]
+    }
 }
 /// The three tabs R1 ships on a session's page, before the terminal tab.
 const TABS: [&str; 3] = ["line", "asks", "checks"];
@@ -302,6 +307,9 @@ impl<'a> Hub<'a> {
         for t in self.terms.terms.values_mut() {
             while let Some(chunk) = t.feed.get(t.fed).filter(|c| c.at <= to) {
                 t.term.feed(&chunk.bytes);
+                // A recorded chunk has no program to answer, nor a session to read its status.
+                t.term.replies.clear();
+                t.term.statuses.clear();
                 let rows = t.term.take_dirty();
                 let revision = t.updates.len() as u64 + 1;
                 t.updates.push(Update {
