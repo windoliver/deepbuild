@@ -292,6 +292,8 @@ pub struct Table {
     readings: HashMap<String, Reading>,
     /// The ask.created events, in log order, of every ask some event could still leave open.
     asks: Vec<Value>,
+    /// Each reading's newest value and the time it is as of, in ms (#1172).
+    values: HashMap<String, (f64, u64)>,
 }
 
 /// What a session's state is read from: of its own events, only the newest of each kind it reads, and each claim's
@@ -349,6 +351,14 @@ impl Table {
         if kind == "ask.created" && !self.readings.get(&handle(event)).is_some_and(Reading::done) {
             self.asks.push(event.clone());
         }
+        if kind == "reading.recorded" {
+            let data = &event["data"];
+            if let (Some(reading), Some(value)) = (data["reading"].as_str(), data["value"].as_f64())
+            {
+                let as_of = data["as_of"].as_u64().unwrap_or(0);
+                self.values.insert(reading.to_owned(), (value, as_of));
+            }
+        }
         if kind == "task.created" {
             if let Some(thread) = event["data"]["thread"].as_str() {
                 self.titles
@@ -366,6 +376,11 @@ impl Table {
             .entry(session.to_owned())
             .or_default()
             .apply(event, kind);
+    }
+
+    /// A reading's newest value and the time it is as of, in ms.
+    pub fn value(&self, reading: &str) -> Option<(f64, u64)> {
+        self.values.get(reading).copied()
     }
 
     /// The sessions in the record, in the order they first appear.
