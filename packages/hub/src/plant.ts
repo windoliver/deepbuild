@@ -50,6 +50,8 @@ export type Plant =
   | 'line-at-stop'
   // #1014's: the record's turn walk takes a subagent's stop as a turn end.
   | 'turn-closes-at-child-stop'
+  // #67's: a workspace verdict's key of only the commit, document revisions, check digests, environment and tools.
+  | 'state-left-out-of-key'
   // #340's: a note the waiter delivered recorded as nothing, and the app's words taken for yours with no request ID.
   | 'app-note-unrecorded' | 'app-note-as-person'
   // #340's: a brief with the requirements' text or only at startup, a queue line of the newest message alone,
@@ -161,6 +163,7 @@ const PLANTS: readonly string[] = [
   'new-run-is-evidence', 'counts-waiting-stops',
   'line-at-stop',
   'turn-closes-at-child-stop',
+  'state-left-out-of-key',
   'app-note-unrecorded', 'app-note-as-person',
   'brief-full-text', 'brief-at-startup-only', 'queue-shows-newest', 'continuation-as-person', 'continuation-by-likeness',
   'counts-every-enqueue', 'slow-brief', 'app-note-answers-authority',
