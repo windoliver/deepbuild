@@ -3387,7 +3387,7 @@ export class Core {
     });
     const leases = (await this.leases.leases()).filter((v) => v.lease.holder === `mcp:${session}`);
     const profiles = leases.filter((v) => v.lease.resource.kind === 'browser-profile').map((v) => { const [provider = '', profile = ''] = v.lease.resource.key.split(':'); return { profile, provider, leased: true }; });
-    return reachOf({ tools, profiles });
+    return reachOf({ tools, profiles, credentials: await this.extensions?.heldSecrets().catch(() => []) ?? [] });
   }
   /**
    * Whether a question holds a session's send-back (#325; design: A question holds the send-back): a step only you can
@@ -3874,12 +3874,12 @@ export class Core {
     const lane = judged?.claim ? await this.laneOf(judged.claim, until) : undefined;
     // What the stop ends on, sorted before the stall rule reads whether a question holds its send-back (#84).
     const message = meta.fields?.last_assistant_message?.trim() ?? '';
-    const sorted: Sorted | undefined = judged && !r.places ? await this.questions.atStop(meta, {
+    // A test's planted sorter answers its question first: what it answered "proceed" is sorted no further (#321).
+    const asked = this.holds.planted(meta);
+    const sorted: Sorted | undefined = judged && !r.places && !asked ? await this.questions.atStop(meta, {
       message, requirements: [...(this.claimRequirements.get(judged.claim ?? '')?.values() ?? await this.requirementsOf(meta.session))],
     }).catch(async (e: unknown) => { await this.appendReading(meta.session, meta.agent, `This stop's question could not be sorted: ${e instanceof Error ? e.message : String(e)}`).catch(() => undefined); return undefined; }) : undefined;
-    const asked = this.holds.planted(meta);
-    if (asked) (sorted ?? { proceeds: [] as Sorted['proceeds'] }).proceeds.push(asked);
-    const proceeds = asked && !sorted ? [asked] : sorted?.proceeds ?? [];
+    const proceeds = asked ? [asked] : sorted?.proceeds ?? [];
     // A send-back names the verdict the record holds, so it waits for the lane's verdict to be written.
     if (lane?.sendBack && judged?.claim) await this.verdictWrites.get(judged.claim)?.catch(() => undefined);
     // A stop that did work and ends on an empty message, with requirements open, gets a completion prompt (#82), at
