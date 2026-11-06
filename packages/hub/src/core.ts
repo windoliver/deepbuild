@@ -45,12 +45,13 @@ import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs
 import { coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
-import { GateRunner, type ClaimCheck, type DefinitionState } from './gate-runner.js';
+import { GateRunner, type ClaimCheck, type DefinitionState, type StatePin } from './gate-runner.js';
 import { argsOf, groupUnder, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { Channels, type ChannelAsk } from './channels.js';
+import { Workspaces } from './workspaces.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
@@ -79,6 +80,8 @@ const CODEX_BINARY = /^(?:\S*\/)?codex(?:-[^\s/]+)?(?:\s|$)/;
 /** A Claude Code process: its native binary (`claude`, `claude.exe`, `claude/versions/<version>`) or its npm entry. */
 const CLAUDE_BINARY = /^(?:\S*\/)?claude(?:\.exe)?(?:\s|$)|^\S*\/claude\/versions\/[^\s/]+(?:\s|$)|@anthropic-ai\/claude-code\//;
 const HOUR = 3_600_000;
+/** How often the hub reads what workspaces' verdicts pinned (#67). */
+const DRIFT_MS = 5 * 60_000;
 const DAY = 24 * HOUR;
 /** A value quoted into SQL. */
 const sql = (text: string): string => text.replace(/'/g, "''");
@@ -490,6 +493,10 @@ export class Core {
   private extensions: ExtensionHost | undefined;
   /** The ways to reach you (#65), once the extensions are ready. */
   private channels: Channels | undefined;
+  /** Work outside a repo (#67). */
+  private readonly spaces: Workspaces;
+  /** The project each session entered, for its packs (#67). */
+  private readonly entered = new Map<string, string>();
   /** The supervisor's runs (runs.ts). */
   private readonly runs: Runs;
   /** Each worktree's stack and every stack run a check started (#331, #332). */
@@ -636,7 +643,7 @@ export class Core {
     this.holds = new Holds({
       raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
-      pin: (cwd, question) => this.pinOf(cwd, question),
+      pin: (cwd, question) => this.pinOf(cwd, question), heard: (ask) => this.heardBy(ask),
     });
     // Shared build products (#1017): made first, so a session that starts while the hub opens finds them; their builds
     // take the host and the lease queue only once a session's start asks.
@@ -656,7 +663,15 @@ export class Core {
       root: this.root.dir, raw: (query, params) => this.record.raw(query, params), now: this.now, plant: options.plant, holds: this.holds,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
     });
+    this.spaces = new Workspaces({
+      root: this.root.dir, now: this.now, plant: options.plant, record: () => this.record,
+      raw: (query, params) => this.record.raw(query, params), append: (connection, input) => this.append(connection, input),
+      connection: (extra) => this.connection('core', extra), keep: (bytes, source) => this.keep(bytes, source), fetch: (sha256) => this.store.read(sha256),
+      trust: (folder) => this.trust.answer(this.connection('app'), folder, true), plugin: (name) => this.extensions!.stateSource(name),
+      adopted: (session, id) => { this.projects.set(session, id); }, told: (session, cwd, text) => this.later(session, cwd, text), rerun: (claim, checks, state) => this.gate.rerun(claim, checks, state),
+    });
     this.tasks = new AskTasks({
+      spaces: this.spaces,
       raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, now: this.now, plant: options.plant, drafts: options.drafts, work: options.work,
       github: options.github, forge: options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
@@ -953,6 +968,7 @@ export class Core {
     });
     // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
     const trust = this.trust = await openTrust({ record: this.record, now: this.now });
+    await this.spaces.open();
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite') });
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
@@ -1021,6 +1037,7 @@ export class Core {
       core: this.connection('core'), cli: this.connection('cli'), plant: this.options.plant, held: this.options.held,
     });
     this.timers.push(setInterval(archivePass, HOUR));
+    this.timers.push(setInterval(() => void this.spaces.driftAll(), DRIFT_MS));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
     this.timers.push(setInterval(() => { if (this.blocked && !this.lost && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
     // Between session starts, a removed or weakened entry of ours in Claude Code's settings goes back at once.
@@ -1284,6 +1301,7 @@ export class Core {
     // A call whose prompt went to you has run, live or replayed: offered back as a decision to save (#23).
     if (meta.event === 'PostToolUse' && meta.call) void this.offerBack(meta).catch(() => undefined);
     if (drafts.some((d) => d.kind === 'session.end' && d.data.reason === 'clear')) await this.replaced(meta.session);
+    if (drafts.some((d) => d.kind === 'session.end')) void this.leftProject(meta.session);
     if (meta.event === 'UserPromptSubmit' && this.options.plant === 'typed-saves-decision') {
       this.typedAt.set(meta.session, Date.now());
       void this.typedSaves(meta.session).catch(() => undefined);
@@ -1680,6 +1698,7 @@ export class Core {
       }
       if (draft.kind === 'session.start') {
         data.loads = await loadsOf(meta.cwd).catch(() => []);
+        if (!foreign) void this.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
         if (!foreign && session) void this.holds.listed(meta.session, live.agent, meta.cwd).catch((error: unknown) => process.stderr.write(`deep hub: tool lists for ${meta.session} not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
         if (!foreign) await this.recheck().catch(() => undefined);
@@ -2685,6 +2704,12 @@ export class Core {
     // Claude Code writes a hook's reply into the transcript as the hook ends, so it is read for again soon after.
     else setTimeout(() => void this.queue(() => this.seen(fresh.map((row) => row.id))).catch(() => undefined), SHOWN_SOON).unref();
     return this.answerText(fresh);
+  }
+  /** A call held on an ask ran again on your yes, so the session has that answer: its stop needn't be sent back to say it. */
+  private async heardBy(ask: string): Promise<void> {
+    const id = ask.replace(/^ask:/, '');
+    if (this.handed.has(id) || (await this.record.raw(`SELECT 1 FROM deliveries WHERE delivery = ? AND outcome = 'delivered' LIMIT 1`, [id])).length) return;
+    await this.outcome(id, 'next_prompt', 'delivered');
   }
   /** Answers still in flight that a turn now shows: delivered; the rest stay in flight (#906). */
   private async seen(asks: string[]): Promise<void> {
@@ -4926,6 +4951,12 @@ export class Core {
       case 'canvas.messages': return this.canvasCall({ call: 'messages', session: String(params.session) });
       case 'canvas.user': return this.canvasUser(params, context);
       case 'canvas.drawn': return this.drawnBy(context);
+      case 'workspace.new': return await this.workspaceCall(() => this.spaces.make(String(params.topic ?? ''), typeof params.folder === 'string' ? params.folder : undefined));
+      case 'workspace.move': return await this.workspaceCall(() => this.spaces.move(String(params.id), String(params.folder)));
+      case 'workspace.revert': return await this.workspaceCall(() => this.spaces.revert(String(params.id), String(params.commit)));
+      case 'workspace.diff': return await this.workspaceCall(() => this.spaces.diff(String(params.id)));
+      case 'workspace.drift': return await this.workspaceCall(() => this.spaces.drift(String(params.id)));
+      case 'project.views': return { views: this.extensions!.projectViews() };
       // The app API's views/shown and views/hidden (#262): which views it shows, which decides the while-shown cadences.
       case 'views.shown':
       case 'views.hidden': {
@@ -6087,7 +6118,30 @@ export class Core {
    * A claim's checks (#29): the validity gate first, with no model, then the gate runner takes its snapshot and its
    * temporary checkout and runs its fast lane; what the stop waits for.
    */
-  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean }): Promise<void> {
+  /** `deep workspace`'s calls (#67): a refusal says why, on the command's stderr. */
+  private async workspaceCall(call: () => Promise<object>): Promise<Obj> {
+    try {
+      return { ...await call() };
+    } catch (error) {
+      throw new Refused(refusal('type', '/params', error instanceof Error ? error.message : String(error)));
+    }
+  }
+  /** A session started in a project that names packs: they load while it's there, if you trust it (#67). */
+  private async enteredProject(session: string, cwd: string): Promise<void> {
+    if (!existsSync(join(cwd, '.deepbuild', 'packs.json'))) return;
+    try {
+      if ((await this.extensions!.enterProject(cwd)).trusted) this.entered.set(session, cwd);
+    } catch (error) {
+      process.stderr.write(`deep hub: the packs of ${cwd} didn't load: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+  }
+  private async leftProject(session: string): Promise<void> {
+    const cwd = this.entered.get(session);
+    if (!cwd) return;
+    this.entered.delete(session);
+    await this.extensions!.leaveProject(cwd).catch(() => undefined);
+  }
+  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean; state?: StatePin }): Promise<void> {
     const at = this.now();
     this.claimRequirements.set(r.claim, new Map(r.requirements.map((q) => [q.req, { id: q.id, text: q.text }])));
     this.claimScopes.set(r.claim, { task: r.task, base: r.base, cwd: r.cwd });
@@ -6150,7 +6204,7 @@ export class Core {
       // with its output; passing, it proves nothing, as the agent's own checks never pass a claim.
       for (const command of told) checks.push({ check: command, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'own' });
       if (told.length) this.told.set(r.claim, new Set(told));
-      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at, definition: r.definition, same, ...(r.joins ? { joins: true } : {}) });
+      const ran = await this.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at, definition: r.definition, same, ...(r.joins ? { joins: true } : {}), ...(r.state ? { state: r.state } : {}) });
       // The verdict is written beside the stop's reply, which waits for it only where it reads the record (#82).
       const written = this.judged(r.claim);
       this.verdictWrites.set(r.claim, written);
@@ -6542,7 +6596,7 @@ export class Core {
   /** The retention pass (retention.ts). */
   private async retain(): Promise<void> {
     await retain({
-      raw: (query) => this.record.raw(query), store: this.store, checkouts: this.checkouts, cited: () => citedEvidence(this.record, this.now()), keepNothing: this.options.plant === 'empty-cited',
+      raw: (query) => this.record.raw(query), store: this.store, checkouts: this.checkouts, cited: async () => new Set([...await citedEvidence(this.record, this.now()), ...await this.spaces.pinned()]), keepNothing: this.options.plant === 'empty-cited',
       removed: (sha256) => this.appendCore('evidence.removed', { sha256 }),
     });
   }
@@ -6628,7 +6682,8 @@ export class Core {
     this.stopping = true;
     plantedStop();
     for (const timer of this.timers) clearInterval(timer);
-    this.pool?.close();
+    // The pool's pipe goes with the hub, as its socket does: left in the root with no writer, any read of it blocks.
+    this.pool?.close(true);
     for (const live of this.live.values()) clearTimeout(live.quiet);
     for (const p of this.promises.values()) clearTimeout(p.timer);
     this.watcher?.close();
