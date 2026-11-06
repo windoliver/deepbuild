@@ -5696,6 +5696,27 @@ export interface SandboxDenied {
   evidence?: Array<string>;
 }
 
+/** sandbox.denied@2 */
+export interface SandboxDeniedV2 {
+  v: 2;
+  id: string;
+  kind: "sandbox.denied";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    operation: string;
+    target: string;
+    holder?: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** schedule.run@1 */
 export interface ScheduleRun {
   v: 1;
@@ -6205,6 +6226,104 @@ export interface SpoolRefused {
     file: string;
     offset: number;
     reason: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** stack.served@1 */
+export interface StackServed {
+  v: 1;
+  id: string;
+  kind: "stack.served";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    stack: string;
+    project?: string;
+    checkout: string;
+    ports: { [key: string]: number };
+    ready_ms: number;
+    steps: Array<{
+      step: "services" | "install" | "migrate" | "seed" | "clone" | "app";
+      status: "ran" | "reused";
+      key: string | null;
+      ms: number;
+      product?: {
+        name: string;
+        key: string;
+      };
+    }>;
+    caches: Array<{
+      path: string;
+      digest: string;
+    }>;
+    images: Array<{
+      service: string;
+      image: string;
+      context_digest: string;
+      built: boolean;
+    }>;
+    mounts: Array<{
+      service: string;
+      source: string;
+      target: string;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
+/** stack.waiting@1 */
+export interface StackWaiting {
+  v: 1;
+  id: string;
+  kind: "stack.waiting";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    claim: string;
+    check: string;
+    wait_ms: number;
+    expected_ms: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** state.read@1 */
+export interface StateRead {
+  v: 1;
+  id: string;
+  kind: "state.read";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    workspace: string;
+    task_ref: string;
+    claim: string | null;
+    readings: Array<{
+      touch: string;
+      source: string;
+      digest: string;
+    }>;
+    reads: Array<{
+      req: string;
+      check: string | null;
+      touches: Array<string>;
+    }>;
   };
   evidence?: Array<string>;
 }
@@ -7355,6 +7474,45 @@ export interface WorkItemV2 {
     automated?: boolean;
   }>;
   updated: string;
+}
+
+/** workspace.created@1 */
+export interface WorkspaceCreated {
+  v: 1;
+  id: string;
+  kind: "workspace.created";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    workspace: string;
+    folder: string;
+    topic: string;
+    task_ref: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** workspace.moved@1 */
+export interface WorkspaceMoved {
+  v: 1;
+  id: string;
+  kind: "workspace.moved";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    workspace: string;
+    folder: string;
+    from: string;
+  };
+  evidence?: Array<string>;
 }
 
 /** worktree.created@1 */

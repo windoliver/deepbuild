@@ -1,0 +1,84 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8H1",
+  "kind": "stack.served",
+  "subject": "run:01K74FMXR4T6V8X0Z2B4D6F8H2",
+  "data": {
+    "run": "run:01K74FMXR4T6V8X0Z2B4D6F8H2",
+    "stack": "run:01K74FMXR4T6V8X0Z2B4D6F8H3",
+    "project": "deep-c000",
+    "checkout": "/Users/you/.deepbuild/checkouts/c1",
+    "ports": {
+      "web": 3000,
+      "db": 3001
+    },
+    "ready_ms": 2400,
+    "steps": [
+      {
+        "step": "services",
+        "status": "reused",
+        "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ms": 900
+      },
+      {
+        "step": "install",
+        "status": "reused",
+        "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ms": 60,
+        "product": {
+          "name": "node_modules",
+          "key": "bbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "step": "migrate",
+        "status": "reused",
+        "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ms": 0
+      },
+      {
+        "step": "seed",
+        "status": "reused",
+        "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ms": 0
+      },
+      {
+        "step": "clone",
+        "status": "ran",
+        "key": null,
+        "ms": 180
+      },
+      {
+        "step": "app",
+        "status": "ran",
+        "key": null,
+        "ms": 700
+      }
+    ],
+    "caches": [
+      {
+        "path": ".next/cache",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "images": [
+      {
+        "service": "web",
+        "image": "deep-c000-web:aaaaaaaaaaaa",
+        "context_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "built": true
+      }
+    ],
+    "mounts": [
+      {
+        "service": "db",
+        "source": "/Users/you/.deepbuild/checkouts/c1/db/init",
+        "target": "/docker-entrypoint-initdb.d"
+      }
+    ]
+  },
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017051123
+}
