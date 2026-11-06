@@ -36,6 +36,13 @@ it("keeps a command that only looks a program up, or prints its help or version,
     expect(reachesNetwork(c), c).toBe(true);
 });
 
+it('reads a help or version flag as the program asking for it only before its arguments', () => {
+  // Failed on a classifier that kept any piece holding --help or --version local, so a remote command's flag, or one
+  // given as an option's value, ran in the sandbox and failed there instead of being answered from the recording.
+  for (const c of ['ssh deploy@host node --version', 'ssh host node --version', 'curl -d --help https://x.test', 'gh api repos/o/r -f body=x --version'])
+    expect(reachesNetwork(c), c).toBe(true);
+});
+
 /** A PreToolUse call, as the replay's hook hands it to the answering server. */
 const hookCall = async (hookScript: string, tool_name: string, tool_input: unknown) => {
   const url = /fetch\('([^']+)'/.exec(hookScript)![1]!;
