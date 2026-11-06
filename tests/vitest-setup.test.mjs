@@ -78,6 +78,22 @@ test('a child the file left running is stopped without its exit reaching the fil
   assert.deepEqual(await gone(pids, 3000), [], 'and nothing it started is still running');
 });
 
+test('a child a file starts as it loads, in a file whose tests all skip, is stopped when its worker ends', async (t) => {
+  const dir = root(t, { loads: `import { spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { it } from 'vitest';
+const child = spawn('/bin/sh', ['-c', 'sleep 300 & echo $! > grandchild; exec sleep 301'], { cwd: $DIR, stdio: 'ignore' });
+writeFileSync(join($DIR, 'child'), String(child.pid));
+it.skip('runs nothing', () => {});
+` });
+  const r = spawnSync(process.execPath, args(dir), { cwd: REPO, env: env(), encoding: 'utf8', timeout: 120_000 });
+  for (const end = Date.now() + 10_000; !existsSync(join(dir, 'grandchild')) && Date.now() < end;) await sleep(20);
+  const pids = sleepers(t, dir);
+  assert.equal(r.status, 0, `the fixture's file is skipped, not failed\n${r.stdout}${r.stderr}`);
+  assert.deepEqual(await gone(pids, 3000), [], 'nothing the file started is still running once vitest has ended');
+});
+
 test('a child left running when vitest itself is killed mid-file is stopped when its worker ends', async (t) => {
   const dir = root(t, { leaves: leaves(1500) });
   const vitest = spawn(process.execPath, args(dir), { cwd: REPO, env: env(), stdio: 'ignore' });
