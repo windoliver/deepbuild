@@ -1,0 +1,318 @@
+Base run of tests/acceptance/491 at e2e6e1cc (origin/main, no implementation of #491), on this worktree, deep-motion built
+from the base by each file's beforeAll (cargo build --locked --bin deep-motion):
+NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/491 --no-file-parallelism --reporter=verbose
+
+All 13 tests fail, each on an AssertionError raised by an expect in this suite's own files (helpers.ts accepted/arr,
+whose innermost frame in the check's files is the test line shown under each FAIL); none fails on loading, a build or a
+type error. The type-check, node node_modules/typescript/bin/tsc -p tests/acceptance/491/tsconfig.json, exits 0.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/491
+
+ × occurrence-lists.test.ts > criterion 5: drivers read occurrence lists through count, last, since, next and rank > criterion 5: at t = 3 s the driver reads count 2, last 2.5 s, since 0.5 s, next 4.0 s, rank 1 and last(kicks).gain 0.8 74ms
+   → the kick drivers is accepted: {"ok":false,"code":"bad_marker_kind","path":"markers/k1/kind"}: expected false to be true // Object.is equality
+ × occurrence-lists.test.ts > criterion 5: drivers read occurrence lists through count, last, since, next and rank > criterion 5: at t = 0.5 s count reads 0 and last(kicks).gain takes the driver's fallback 106ms
+   → the kick drivers is accepted: {"ok":false,"code":"bad_marker_kind","path":"markers/k1/kind"}: expected false to be true // Object.is equality
+ × occurrence-lists.test.ts > criterion 5: drivers read occurrence lists through count, last, since, next and rank > criterion 5: next over a list that inputs feed is refused at check, naming the driver 33ms
+   → last over the input-fed list is accepted: {"ok":false,"code":"bad_path","path":"drivers/peek/vars/taps"}: expected false to be true // Object.is equality
+ × tempo-ramp.test.ts > criterion 3: tempo ramps linear in beats, and segments chained to the flick > criterion 3: a 16-beat ramp from 90 to 150 BPM ends 8.1732 s after it starts, within one flick of its closed form 115ms
+   → the ramp is accepted: {"ok":false,"code":"time_unresolved","path":"markers/end/t"}: expected false to be true // Object.is equality
+ × tempo-ramp.test.ts > criterion 3: tempo ramps linear in beats, and segments chained to the flick > criterion 3: a segment whose explicit time is 2 flicks off its chained start is refused, naming both times 46ms
+   → an explicit time on its chained start is accepted: {"ok":false,"code":"time_unresolved","path":"markers/second/t"}: expected false to be true // Object.is equality
+ × layout-glide.test.ts > criterion 6: a frame's layout is a channel target, and a row glides into a grid > criterion 6: a linear key from row to grid over 1 s puts each child at the midpoint of its two layout positions at 0.5 s within 0.5 px, seeking equal to playing 85ms
+   → the played glide is accepted: {"ok":false,"code":"bad_interp","path":"channels/lay/keys/row/interp"}: expected false to be true // Object.is equality
+ × tempo-map.test.ts > criterion 2: a tempo map places its boundaries on downbeats and its beats on the nearest flick > criterion 2: the section boundary written on the downbeat 9:1b lands within one frame of 32 × 60 ÷ 107 s 122ms
+   → the two-section tempo map is accepted: {"ok":false,"code":"time_unresolved","path":"markers/a0/t"}: expected false to be true // Object.is equality
+ × tempo-map.test.ts > criterion 2: a tempo map places its boundaries on downbeats and its beats on the nearest flick > criterion 2: every beat of both sections resolves to its exact time rounded to the nearest flick 104ms
+   → the two-section tempo map is accepted: {"ok":false,"code":"time_unresolved","path":"markers/a0/t"}: expected false to be true // Object.is equality
+ × beat-grid.test.ts > criterion 1: a 120 BPM beat grid is exact to the flick for 100,000 beats > criterion 1: every beat k = 0 … 100,000 of a 120 BPM grid lands at exactly k × 352,800,000 flicks 4020ms
+   → the 120 BPM grid is accepted: {"ok":false,"code":"time_unresolved","path":"markers/b0/t"}: expected false to be true // Object.is equality
+ × beat-grid.test.ts > criterion 1: a 120 BPM beat grid is exact to the flick for 100,000 beats > criterion 1: a planted grid kept in f32 seconds fails the check, its first failure naming the first beat that differs 1147ms
+   → the planted f32 grid is accepted: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × first-marker.test.ts > criterion 6: a marker at the first time a condition holds > criterion 6: with x = −4 + 3t, the marker at first {expr: x − 3} resolves to 7/3 s within one flick 151ms
+   → the first marker is accepted: {"ok":false,"code":"time_unresolved","path":"markers/soon/t"}: expected false to be true // Object.is equality
+ × first-marker.test.ts > criterion 6: a marker at the first time a condition holds > criterion 6: a condition never true before `before` is refused, naming the marker 49ms
+   → the condition true before 2.5 s is accepted: {"ok":false,"code":"time_unresolved","path":"markers/late/t"}: expected false to be true // Object.is equality
+ × literal-time.test.ts > criterion 4: a literal time in a film with a tempo map raises literal_time_with_tempo_map > criterion 4: the cue at the literal 12.5 s raises literal_time_with_tempo_map, and the bar:beat form it offers lands on the same flick 96ms
+   → the answer's notices is an array, got null: expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  beat-grid.test.ts > criterion 1: a 120 BPM beat grid is exact to the flick for 100,000 beats > criterion 1: every beat k = 0 … 100,000 of a 120 BPM grid lands at exactly k × 352,800,000 flicks
+AssertionError: the 120 BPM grid is accepted: {"ok":false,"code":"time_unresolved","path":"markers/b0/t"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:137:64
+    135| /** An answer that accepted its document, with one frame per time, in …
+    136| export function accepted(answer: JsonObject, times: readonly number[],…
+    137|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    138|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    139|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ beat-grid.test.ts:35:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  beat-grid.test.ts > criterion 1: a 120 BPM beat grid is exact to the flick for 100,000 beats > criterion 1: a planted grid kept in f32 seconds fails the check, its first failure naming the first beat that differs
+AssertionError: the planted f32 grid is accepted: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:137:64
+    135| /** An answer that accepted its document, with one frame per time, in …
+    136| export function accepted(answer: JsonObject, times: readonly number[],…
+    137|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    138|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    139|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ beat-grid.test.ts:43:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  first-marker.test.ts > criterion 6: a marker at the first time a condition holds > criterion 6: with x = −4 + 3t, the marker at first {expr: x − 3} resolves to 7/3 s within one flick
+AssertionError: the first marker is accepted: {"ok":false,"code":"time_unresolved","path":"markers/soon/t"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:137:64
+    135| /** An answer that accepted its document, with one frame per time, in …
+    136| export function accepted(answer: JsonObject, times: readonly number[],…
+    137|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    138|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    139|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:146:10
+ ❯ first-marker.test.ts:28:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL  first-marker.test.ts > criterion 6: a marker at the first time a condition holds > criterion 6: a condition never true before `before` is refused, naming the marker
+AssertionError: the condition true before 2.5 s is accepted: {"ok":false,"code":"time_unresolved","path":"markers/late/t"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:137:64
+    135| /** An answer that accepted its document, with one frame per time, in …
+    136| export function accepted(answer: JsonObject, times: readonly number[],…
+    137|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    138|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    139|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:146:10
+ ❯ first-marker.test.ts:36:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL  layout-glide.test.ts > criterion 6: a frame's layout is a channel target, and a row glides into a grid > criterion 6: a linear key from row to grid over 1 s puts each child at the midpoint of its two layout positions at 0.5 s within 0.5 px, seeking equal to playing
+AssertionError: the played glide is accepted: {"ok":false,"code":"bad_interp","path":"channels/lay/keys/row/interp"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:137:64
+    135| /** An answer that accepted its document, with one frame per time, in …
+    136| export function accepted(answer: JsonObject, times: readonly number[],…
+    137|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    138|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    139|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ layout-glide.test.ts:35:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL  literal-time.test.ts > criterion 4: a literal time in a film with a tempo map raises literal_time_with_tempo_map > criterion 4: the cue at the literal 12.5 s raises literal_time_with_tempo_map, and the bar:beat form it offers lands on the same flick
+AssertionError: the answer's notices is an array, got null: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:53:100
+     51| }
+     52| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     53|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     54|   return value as JsonValue[];
+     55| }
+ ❯ literal-time.test.ts:20:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL  occurrence-lists.test.ts > criterion 5: drivers read occurrence lists through count, last, since, next and rank > criterion 5: at t = 3 s the driver reads count 2, last 2.5 s, since 0.5 s, next 4.0 s, rank 1 and last(kicks).gain 0.8
+AssertionError: the kick drivers is accepted: {"ok":false,"code":"bad_marker_kind","path":"markers/k1/kind"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:137:64
+    135| /** An answer that accepted its document, with one frame per time, in …
+    136| export function accepted(answer: JsonObject, times: readonly number[],…
+    137|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    138|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    139|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:146:10
+ ❯ occurrence-lists.test.ts:45:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL  occurrence-lists.test.ts > criterion 5: drivers read occurrence lists through count, last, since, next and rank > criterion 5: at t = 0.5 s count reads 0 and last(kicks).gain takes the driver's fallback
+AssertionError: the kick drivers is accepted: {"ok":false,"code":"bad_marker_kind","path":"markers/k1/kind"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:137:64
+    135| /** An answer that accepted its document, with one frame per time, in …
+    136| export function accepted(answer: JsonObject, times: readonly number[],…
+    137|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    138|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    139|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:146:10
+ ❯ occurrence-lists.test.ts:57:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+ FAIL  occurrence-lists.test.ts > criterion 5: drivers read occurrence lists through count, last, since, next and rank > criterion 5: next over a list that inputs feed is refused at check, naming the driver
+AssertionError: last over the input-fed list is accepted: {"ok":false,"code":"bad_path","path":"drivers/peek/vars/taps"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:137:64
+    135| /** An answer that accepted its document, with one frame per time, in …
+    136| export function accepted(answer: JsonObject, times: readonly number[],…
+    137|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    138|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    139|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:146:10
+ ❯ occurrence-lists.test.ts:65:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
+
+ FAIL  tempo-map.test.ts > criterion 2: a tempo map places its boundaries on downbeats and its beats on the nearest flick > criterion 2: the section boundary written on the downbeat 9:1b lands within one frame of 32 × 60 ÷ 107 s
+AssertionError: the two-section tempo map is accepted: {"ok":false,"code":"time_unresolved","path":"markers/a0/t"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:137:64
+    135| /** An answer that accepted its document, with one frame per time, in …
+    136| export function accepted(answer: JsonObject, times: readonly number[],…
+    137|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    138|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    139|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:146:10
+ ❯ tempo-map.test.ts:37:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯
+
+ FAIL  tempo-map.test.ts > criterion 2: a tempo map places its boundaries on downbeats and its beats on the nearest flick > criterion 2: every beat of both sections resolves to its exact time rounded to the nearest flick
+AssertionError: the two-section tempo map is accepted: {"ok":false,"code":"time_unresolved","path":"markers/a0/t"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:137:64
+    135| /** An answer that accepted its document, with one frame per time, in …
+    136| export function accepted(answer: JsonObject, times: readonly number[],…
+    137|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    138|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    139|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:146:10
+ ❯ tempo-map.test.ts:46:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯
+
+ FAIL  tempo-ramp.test.ts > criterion 3: tempo ramps linear in beats, and segments chained to the flick > criterion 3: a 16-beat ramp from 90 to 150 BPM ends 8.1732 s after it starts, within one flick of its closed form
+AssertionError: the ramp is accepted: {"ok":false,"code":"time_unresolved","path":"markers/end/t"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:137:64
+    135| /** An answer that accepted its document, with one frame per time, in …
+    136| export function accepted(answer: JsonObject, times: readonly number[],…
+    137|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    138|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    139|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:146:10
+ ❯ tempo-ramp.test.ts:26:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/13]⎯
+
+ FAIL  tempo-ramp.test.ts > criterion 3: tempo ramps linear in beats, and segments chained to the flick > criterion 3: a segment whose explicit time is 2 flicks off its chained start is refused, naming both times
+AssertionError: an explicit time on its chained start is accepted: {"ok":false,"code":"time_unresolved","path":"markers/second/t"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:137:64
+    135| /** An answer that accepted its document, with one frame per time, in …
+    136| export function accepted(answer: JsonObject, times: readonly number[],…
+    137|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    138|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    139|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:146:10
+ ❯ tempo-ramp.test.ts:42:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/13]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  13 failed (13)
+   Start at  11:56:22
+   Duration  33.31s (tests 95%, transform 3%, import 2%, worker 1%)
+
+    Isolate  7 workers spawned · ~610ms startup each (spawn + environment, per file)
+             at least ~3.66s faster with isolate: false — reuses workers across files instead of one per file
+

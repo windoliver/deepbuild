@@ -207,6 +207,10 @@ impl deep_canvas::schedule::Canonical for Channel {
         deep_canvas::schedule::Canonical::encode(&(&self.follow, &self.range),
             out,
         );
+        // #491's layout glide, only on a channel that has one.
+        if let Some(glide) = &self.glide {
+            glide.encode(out);
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Clip {
@@ -246,6 +250,11 @@ impl deep_canvas::schedule::Canonical for Marker {
             &(&self.id, &self.kind, &self.start, &self.end),
             out,
         );
+        // #491's tags and payload, only where a marker has them, so every earlier marker keys as
+        // it did.
+        if !self.tags.is_empty() || !self.payload.is_null() {
+            (&self.tags, self.payload.to_string()).encode(out);
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Transport {
@@ -270,9 +279,17 @@ impl deep_canvas::schedule::Canonical for Driver {
                 match input {
                     DriverInput::Time => out.push(0),
                     DriverInput::Control(c) => (1u8, c).encode(out),
+                    DriverInput::List(f) => {
+                        (2u8, &f.list, &f.kinds, (&f.a, &f.b)).encode(out);
+                        (&f.tags, &f.where_).encode(out);
+                    }
                 }
             }
             self.range.encode(out);
+        }
+        // #491's fallback, likewise only where a driver has one.
+        if let Some(fallback) = self.fallback {
+            fallback.encode(out);
         }
     }
 }
