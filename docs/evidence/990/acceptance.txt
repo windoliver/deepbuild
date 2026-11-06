@@ -1,0 +1,58 @@
+# #990 acceptance on branch claude/issue-990-3c5884 over merge base 9120d4e5, at the commit that adds this file (Linux arm64, 2026-11-04T23:04:54Z)
+# 20 pass. The two failures are INCONCLUSIVE by design here: AC7's VoiceOver half and AC8 run on the reference Mac (and AC8 needs the owner's taste call).
+# The base's run is tests/acceptance/990/BASE-FAILURE.txt (it fails at Shift+Enter in normal mode and at the device-attributes query).
+$ npx vitest run --root tests/acceptance/990 --no-file-parallelism --reporter=verbose
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-160-eca715/tests/acceptance/990
+ ✓ access.test.ts > AC7 text another app inserts goes to the session's box, naming the app, and to the program only on your Enter > AC7 Superwhisper's 200-character insert lands in the box with Superwhisper named, reaches the program not at all before your Enter, and whole and once on it 1835ms
+ ✓ access.test.ts > AC7 text another app inserts goes to the session's box, naming the app, and to the program only on your Enter > AC7 a planted tab that drops the insert, and one that types it straight in, each fail 3715ms
+ × access.test.ts > AC7 VoiceOver reads the terminal tab > AC7 live, at the reference Mac with VoiceOver on: the tab is a text area whose value holds the program's last line, its insertion line is the cursor's row, and VoiceOver speaks that row 10ms
+   → INCONCLUSIVE: the VoiceOver test needs a person at the reference Mac with VoiceOver on; run with DEEP_990_LIVE=1 (README: The live runs); this is not a pass
+ × taste.test.ts > AC8 the screenshots and the one taste call on them > AC8 the run takes the composition at the program's cursor cell and the session row's working, blocked and done readings from the app at the reference window, and the owner's recorded call on exactly those says they look right 6ms
+   → INCONCLUSIVE: the screenshots are taken from the app at the reference window on the reference Mac; this is linux, not macOS; this is not a pass
+ ✓ paste.test.ts > AC2 a paste can't end early > AC2 a paste of "touch ~/pasted-ran", ESC[201~ and "rm -rf ~/planted" into bash with bracketed paste on leaves the whole text at the prompt and runs nothing: the planted folder stays 17779ms
+ ✓ paste.test.ts > AC2 a paste can't end early > AC2 a planted paste that keeps the marker runs rm -rf against the planted folder and fails, naming the paste 17739ms
+ ✓ paste.test.ts > SCOPE a paste into a program without bracketed paste sends no marker at all > SCOPE the same text pasted into a program that never turned bracketed paste on reaches it with no ESC[200~ and no ESC[201~, the rest of the text whole 279ms
+ ✓ keys.test.ts > AC1 the byte-level key matrix: keys from the program's modes, with Shift, Option and Control > AC1 the table reads as the bytes it means (spot rows spelled out) 3ms
+ ✓ keys.test.ts > AC1 the byte-level key matrix: keys from the program's modes, with Shift, Option and Control > AC1 Enter, Tab, Backspace, the four arrows and F1–F12, with no modifier, Shift, Option, Control and their pairs, in normal, application-cursor, keyboard-flags-1 and keyboard-flags-31 modes, each reach a real program as the table's bytes 19811ms
+ ✓ keys.test.ts > AC1 the byte-level key matrix: keys from the program's modes, with Shift, Option and Control > AC1 a planted encoder that sends a bare carriage return for Shift+Enter fails, naming the key and the mode 4852ms
+ ✓ keys.test.ts > SCOPE shortcuts match by physical key under any input source > SCOPE under a Russian layout, Control with the keys in the C and D positions (characters с and в) sends ^C and ^D to the program, as under a US layout 377ms
+stdout | queries.test.ts > AC3 the emulator answers the queries a program waits on, in order, and never a clipboard read > AC3 device attributes, cursor position, a mode report, keyboard flags and the foreground and background colors, asked in one write, are answered in that order within 50 ms of it; the clipboard read gets nothing; the colors are the terminal's own
+AC3: the last answer arrived 8.2 ms after the write; each: device attributes (DA1, CSI c) 8.2 ms, cursor position (CPR, CSI 6 n) 8.2 ms, mode report (DECRQM ?2004, CSI ? 2004 $ p) 8.2 ms, keyboard flags (CSI ? u) 8.2 ms, foreground color (OSC 10 ; ?) 8.2 ms, background color (OSC 11 ; ?) 8.2 ms
+ ✓ queries.test.ts > AC3 the emulator answers the queries a program waits on, in order, and never a clipboard read > AC3 device attributes, cursor position, a mode report, keyboard flags and the foreground and background colors, asked in one write, are answered in that order within 50 ms of it; the clipboard read gets nothing; the colors are the terminal's own 2691ms
+ ✓ queries.test.ts > AC3 the emulator answers the queries a program waits on, in order, and never a clipboard read > AC3 a planted emulator that drops the queries makes the program print "timeout" and fails, naming the first query 2581ms
+ ✓ queries.test.ts > SCOPE the answers reach the program through the host's input, ahead of any later key > SCOPE with 20,000 lines of output still ahead of the queries in the stream, a key typed right after the program asked reaches it after all six answers 15265ms
+ ✓ status.test.ts > AC4 program status: readings on the session's row, signal only > AC4 a program that sends the OSC 7501 query and then reports working, blocked and done gets an answer, and its session's row shows the three readings in order; the session's state (waiting) and its verdict are unchanged 2017ms
+ ✓ status.test.ts > AC4 program status: readings on the session's row, signal only > AC4 a planted reading that sets the state fails, naming the reading 1637ms
+ ✓ modes.test.ts > AC5 modes a program set are reset when it exits > AC5 after a program turns on bracketed paste, mouse reporting, keyboard flags, application cursor and the alternate screen and exits, the shell reads your paste as plain text, your click as nothing and Up and Escape as plain keys; the grid is back on the main screen 927ms
+ ✓ modes.test.ts > AC5 modes a program set are reset when it exits > AC5 a host that leaves the modes on sends escape codes to the shell and fails, naming the mode 979ms
+ ✓ modes.test.ts > SCOPE modes are reset when the host restarts the program > SCOPE a terminal whose program turned every mode on and exited, restarted with a new program (`terminal_restart`), gives the new program your paste, click, Up and Escape as plain bytes 1301ms
+ ✓ ime.test.ts > AC6 input methods: the composition at the program's cursor, only committed text to the program > AC6 composing 你好 in pinyin into a program that hid its cursor shows each composition at the program's cursor cell, sends nothing while composing, and sends 你好 once on the commit 1407ms
+ ✓ ime.test.ts > AC6 input methods: the composition at the program's cursor, only committed text to the program > AC6 a planted router that sends composing text sends the word twice and fails 1317ms
+ ✓ ime.test.ts > SCOPE mouse reports use the drawn cell size, not a fixed one > SCOPE two terminals drawn at font sizes 13 and 20: the larger font draws larger cells, and a click at the centre of column 15, row 6 of each, by its drawn cells, reaches its program as that cell 405ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  access.test.ts > AC7 VoiceOver reads the terminal tab > AC7 live, at the reference Mac with VoiceOver on: the tab is a text area whose value holds the program's last line, its insertion line is the cursor's row, and VoiceOver speaks that row
+AssertionError: INCONCLUSIVE: the VoiceOver test needs a person at the reference Mac with VoiceOver on; run with DEEP_990_LIVE=1 (README: The live runs); this is not a pass
+ ❯ inconclusive helpers.ts:33:10
+     31| /** A test that can't be judged here fails with this, never passes (RE…
+     32| export function inconclusive(reason: string): never {
+     33|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     34| }
+     35| export const REFERENCE_MODELS = ['Mac15,7', 'Mac15,12'];
+ ❯ access.test.ts:81:47
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+ FAIL  taste.test.ts > AC8 the screenshots and the one taste call on them > AC8 the run takes the composition at the program's cursor cell and the session row's working, blocked and done readings from the app at the reference window, and the owner's recorded call on exactly those says they look right
+AssertionError: INCONCLUSIVE: the screenshots are taken from the app at the reference window on the reference Mac; this is linux, not macOS; this is not a pass
+ ❯ inconclusive helpers.ts:33:10
+     31| /** A test that can't be judged here fails with this, never passes (RE…
+     32| export function inconclusive(reason: string): never {
+     33|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     34| }
+     35| export const REFERENCE_MODELS = ['Mac15,7', 'Mac15,12'];
+ ❯ taste.test.ts:73:14
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+ Test Files  2 failed | 6 passed (8)
+      Tests  2 failed | 20 passed (22)
+   Start at  15:04:55
+   Duration  217.92s (tests 100%)

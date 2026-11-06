@@ -19,7 +19,7 @@ use gpui_kit::base::dock::{
 use gpui_kit::base::ObservedElement;
 use gpui_kit::{prelude::FluentBuilder as _, *};
 
-use crate::{bound, canvas, chrome, events::Inbox, states, text};
+use crate::{bound, canvas, chrome, events::Inbox, states, states::READINGS, text};
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
 pub const HOME: &str = "deepbuild/home";
@@ -258,6 +258,8 @@ struct Record {
     sessions: Vec<(String, String, states::State)>,
     /// The sidebar's rows (#992), one per session: its words after the title and the status-map entry its mark draws.
     rows: Vec<(String, &'static str)>,
+    /// Each sidebar row's newest readings (#990), oldest first.
+    readings: Vec<Vec<String>>,
     /// When each of the first session's open asks defaults, in event order: on a session's page only.
     deadlines: Vec<u64>,
 }
@@ -320,10 +322,18 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
             .collect(),
         _ => Vec::new(),
     };
+    let readings = match kind {
+        Kind::Sidebar => sessions
+            .iter()
+            .map(|(session, ..)| table.readings(session).to_vec())
+            .collect(),
+        _ => Vec::new(),
+    };
     Record {
         open,
         sessions,
         rows,
+        readings,
         deadlines,
     }
 }
@@ -468,12 +478,32 @@ impl Render for Shipped {
                 .children(record.sessions.iter().zip(&record.rows).enumerate().map(
                     |(index, ((_, task, _), (words, entry)))| {
                         let text = format!("{task} · {words}");
-                        marked(("sidebar-session", index), entry, text)
-                            .role(Role::Button)
-                            .h(px(24.))
-                            .px_1()
-                            .rounded_sm()
-                            .hover(|style| style.bg(chrome.hover))
+                        // Its readings beside it (#990), a line each under the row, quieter than its state.
+                        let readings = record.readings.get(index).cloned().unwrap_or_default();
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                marked(("sidebar-session", index), entry, text)
+                                    .role(Role::Button)
+                                    .h(px(24.))
+                                    .px_1()
+                                    .rounded_sm()
+                                    .hover(|style| style.bg(chrome.hover)),
+                            )
+                            .children(readings.into_iter().enumerate().map(|(n, reading)| {
+                                // A reading wider than the sidebar ends in an ellipsis; its
+                                // accessibility label keeps the whole of it. A block, not the
+                                // label's flex row, so the text is laid out to the row's width
+                                // and can truncate; its line height centers it in the row.
+                                label(("sidebar-reading", index * READINGS + n), reading)
+                                    .block()
+                                    .h(px(18.))
+                                    .line_height(px(18.))
+                                    .pl_4()
+                                    .text_color(chrome.ink_secondary)
+                                    .truncate()
+                            }))
                     },
                 )),
             Kind::Home => match unfinished {
