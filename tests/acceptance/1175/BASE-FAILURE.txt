@@ -1,0 +1,325 @@
+# #1175 acceptance suite run at the base e2e6e1cc (detached), 2026-11-04T19:57:29Z, Linux arm64, pinned Chrome for Testing 156.0.8078.4.
+# Command: NO_COLOR=1 npx vitest run --root tests/acceptance/1175 --no-file-parallelism (binary prebuilt with the same cargo env). Checkout path shown as <checkout>.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1175
+
+stdout | taste.test.ts > #1175 AC3 the screenshots and the one taste call on them > AC3 the run writes elements.svg by the canvas beside Chrome's render and the MathJax formula with a clip, and the owner's recorded call on exactly those says they look right
+#1175 AC3: screenshots written from this run's pixels:
+  target/acceptance/1175/elements-canvas.png  4fc44292259f66747e4a821fbb2b5ae97f0c9ab2e3b61bb4050f5e5860fa6e42
+  target/acceptance/1175/elements-canvas-chrome-x3.png  6d59658ddbe1aedd99745065cb5c16cc6befb0bd83b9afada2eaafd1cba6f14d
+  target/acceptance/1175/mathjax-clip-canvas.png  066bf8d6a50fe7bb8cb21b8b393ac0eed2c23ba66cb9e3ada938b44b30780cd1
+  target/acceptance/1175/mathjax-clip-canvas-chrome-x2.png  2be4a7ea33de23ade1cba862fc3a3cab5d9e521613dc43b2e261ca6d2b34eb41
+
+ ❯ taste.test.ts (1 test | 1 failed) 9925ms
+   ❯ #1175 AC3 the screenshots and the one taste call on them (1)
+     × AC3 the run writes elements.svg by the canvas beside Chrome's render and the MathJax formula with a clip, and the owner's recorded call on exactly those says they look right 4663ms
+ ❯ verdict.test.ts (3 tests | 3 failed) 4729ms
+   ❯ #1175 AC2 a document whose import dropped a visible element presents INCONCLUSIVE, never PASS (3)
+     × AC2 the honest import of elements.svg drops nothing and presents PASS 63ms
+     × AC2 a planted importer that drops <marker> with only a warning presents INCONCLUSIVE, naming marker, never PASS 54ms
+     × AC2 it stays INCONCLUSIVE until the person accepts that issue 46ms
+ ❯ import.test.ts (6 tests | 6 failed) 5397ms
+   ❯ #1175 AC1 elements.svg imports with each element drawn as SVG defines it (5)
+     × AC1 the clipped rect lies inside its clip within 0.5 u 228ms
+     × AC1 the masked rect's alpha follows the mask's luminance within 2 codes 11ms
+     × AC1 the pattern is tiled at its own size 24ms
+     × AC1 the marker sits at the line's end, turned to its tangent within 1° 4ms
+     × AC1 the styled rect is teal: the <style> class rule beats the presentation attribute 3ms
+   ❯ #1175 AC1 compared with the pinned Chrome's render of the same file at the same size (1)
+     × AC1 the canvas's render is within 4 codes of Chrome's at 99% of pixels 2440ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  import.test.ts > #1175 AC1 elements.svg imports with each element drawn as SVG defines it > AC1 the clipped rect lies inside its clip within 0.5 u
+AssertionError: expected [ …(72) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "<clipPath>: the clipped rect's leading edge along x at row 23 is at 15.00 u, where its clip's edge is 20 (within 0.5 u)",
++   "<clipPath>: the clipped rect's trailing edge along x at row 23 is at 45.00 u, where its clip's edge is 40 (within 0.5 u)",
++   "<clipPath>: the clipped rect's leading edge along y at column 23 is at 15.00 u, where its clip's edge is 20 (within 0.5 u)",
++   "<clipPath>: the clipped rect's trailing edge along y at column 23 is at 45.00 u, where its clip's edge is 40 (within 0.5 u)",
++   "<clipPath>: the clipped rect's leading edge along x at row 30 is at 15.00 u, where its clip's edge is 20 (within 0.5 u)",
++   "<clipPath>: the clipped rect's trailing edge along x at row 30 is at 45.00 u, where its clip's edge is 40 (within 0.5 u)",
++   "<clipPath>: the clipped rect's leading edge along y at column 30 is at 15.00 u, where its clip's edge is 20 (within 0.5 u)",
++   "<clipPath>: the clipped rect's trailing edge along y at column 30 is at 45.00 u, where its clip's edge is 40 (within 0.5 u)",
++   "<clipPath>: the clipped rect's leading edge along x at row 37 is at 15.00 u, where its clip's edge is 20 (within 0.5 u)",
++   "<clipPath>: the clipped rect's trailing edge along x at row 37 is at 45.00 u, where its clip's edge is 40 (within 0.5 u)",
++   "<clipPath>: the clipped rect's leading edge along y at column 37 is at 15.00 u, where its clip's edge is 20 (within 0.5 u)",
++   "<clipPath>: the clipped rect's trailing edge along y at column 37 is at 45.00 u, where its clip's edge is 40 (within 0.5 u)",
++   "<clipPath>: the pixel (10, 10), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 11), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 12), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 13), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 14), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 15), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 16), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 17), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 18), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 19), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 20), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 21), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 22), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 23), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 24), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 25), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 26), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 27), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 28), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 29), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 30), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 31), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 32), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 33), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 34), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 35), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 36), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 37), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 38), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 39), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 40), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 41), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 42), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 43), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 44), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 45), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 46), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 47), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 48), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 49), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 50), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 51), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 52), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 53), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 54), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 55), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 56), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 57), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 58), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 59), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 60), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 61), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 62), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 63), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 64), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 65), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 66), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 67), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 68), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++   "<clipPath>: the pixel (10, 69), outside the clip, reads [30,123,52], not the ground: the clipped rect draws outside its clip",
++ ]
+
+ ❯ import.test.ts:27:39
+     25| describe('#1175 AC1 elements.svg imports with each element drawn as SV…
+     26|   it('AC1 the clipped rect lies inside its clip within 0.5 u', () => {
+     27|     expect(MEASURES.clipPath(ours())).toEqual([]);
+       |                                       ^
+     28|   }, 1_800_000);
+     29|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  import.test.ts > #1175 AC1 elements.svg imports with each element drawn as SVG defines it > AC1 the masked rect's alpha follows the mask's luminance within 2 codes
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "<mask>: where the mask's luminance is 0, the masked rect's alpha should be 0 (the pixel [255,255,255] within 2 codes), but 1624 pixels aren't; first (121, 11) reads [32,80,192]",
++ ]
+
+ ❯ import.test.ts:31:35
+     29|
+     30|   it('AC1 the masked rect\'s alpha follows the mask\'s luminance withi…
+     31|     expect(MEASURES.mask(ours())).toEqual([]);
+       |                                   ^
+     32|   }, 1_800_000);
+     33|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  import.test.ts > #1175 AC1 elements.svg imports with each element drawn as SVG defines it > AC1 the pattern is tiled at its own size
+AssertionError: expected [ …(16) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "<pattern>: the tile's leading edge along x at row 25 is at 185.00 u, where 20-unit tiles from (0, 0) put it at 180 (within 0.5 u)",
++   "<pattern>: the tile's trailing edge along x at row 25 is at 185.00 u, where 20-unit tiles from (0, 0) put it at 190 (within 0.5 u)",
++   "<pattern>: the tile's leading edge along x at row 25 is at 205.00 u, where 20-unit tiles from (0, 0) put it at 200 (within 0.5 u)",
++   "<pattern>: the tile's trailing edge along x at row 25 is at 205.00 u, where 20-unit tiles from (0, 0) put it at 210 (within 0.5 u)",
++   "<pattern>: the tile's leading edge along x at row 45 is at 185.00 u, where 20-unit tiles from (0, 0) put it at 180 (within 0.5 u)",
++   "<pattern>: the tile's trailing edge along x at row 45 is at 185.00 u, where 20-unit tiles from (0, 0) put it at 190 (within 0.5 u)",
++   "<pattern>: the tile's leading edge along x at row 45 is at 205.00 u, where 20-unit tiles from (0, 0) put it at 200 (within 0.5 u)",
++   "<pattern>: the tile's trailing edge along x at row 45 is at 205.00 u, where 20-unit tiles from (0, 0) put it at 210 (within 0.5 u)",
++   "<pattern>: the tile's leading edge along y at column 185 is at 25.00 u, where 20-unit tiles from (0, 0) put it at 20 (within 0.5 u)",
++   "<pattern>: the tile's trailing edge along y at column 185 is at 25.00 u, where 20-unit tiles from (0, 0) put it at 30 (within 0.5 u)",
++   "<pattern>: the tile's leading edge along y at column 185 is at 45.00 u, where 20-unit tiles from (0, 0) put it at 40 (within 0.5 u)",
++   "<pattern>: the tile's trailing edge along y at column 185 is at 45.00 u, where 20-unit tiles from (0, 0) put it at 50 (within 0.5 u)",
++   "<pattern>: the tile's leading edge along y at column 205 is at 25.00 u, where 20-unit tiles from (0, 0) put it at 20 (within 0.5 u)",
++   "<pattern>: the tile's trailing edge along y at column 205 is at 25.00 u, where 20-unit tiles from (0, 0) put it at 30 (within 0.5 u)",
++   "<pattern>: the tile's leading edge along y at column 205 is at 45.00 u, where 20-unit tiles from (0, 0) put it at 40 (within 0.5 u)",
++   "<pattern>: the tile's trailing edge along y at column 205 is at 45.00 u, where 20-unit tiles from (0, 0) put it at 50 (within 0.5 u)",
++ ]
+
+ ❯ import.test.ts:35:38
+     33|
+     34|   it('AC1 the pattern is tiled at its own size', () => {
+     35|     expect(MEASURES.pattern(ours())).toEqual([]);
+       |                                      ^
+     36|   }, 1_800_000);
+     37|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  import.test.ts > #1175 AC1 elements.svg imports with each element drawn as SVG defines it > AC1 the marker sits at the line's end, turned to its tangent within 1°
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "<marker>: the marker's edges (left 79.00, right 81.00, top 119.00, bottom 121.00 u) don't make the 12 × 12 marker centred on the line's end (80, 120) within 0.5 u",
++ ]
+
+ ❯ import.test.ts:39:37
+     37|
+     38|   it('AC1 the marker sits at the line\'s end, turned to its tangent wi…
+     39|     expect(MEASURES.marker(ours())).toEqual([]);
+       |                                     ^
+     40|   }, 1_800_000);
+     41|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  import.test.ts > #1175 AC1 elements.svg imports with each element drawn as SVG defines it > AC1 the styled rect is teal: the <style> class rule beats the presentation attribute
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "<style>: the styled rect should be teal [32,128,128] (the class rule beats fill=\"#e0a000\"), but 1444 of its 1444 inside pixels aren't; first (141, 101) reads [224,160,0], the presentation attribute's orange",
++ ]
+
+ ❯ import.test.ts:43:36
+     41|
+     42|   it('AC1 the styled rect is teal: the <style> class rule beats the pr…
+     43|     expect(MEASURES.style(ours())).toEqual([]);
+       |                                    ^
+     44|   }, 1_800_000);
+     45| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  import.test.ts > #1175 AC1 compared with the pinned Chrome's render of the same file at the same size > AC1 the canvas's render is within 4 codes of Chrome's at 99% of pixels
+AssertionError: the share of the canvas's pixels within 4 codes of Chrome's (at least 0.99): expected 0.8139583333333333 to be greater than or equal to 0.99
+ ❯ import.test.ts:58:98
+     56|     expect(twinShare, `the comparison rejects Chrome's render with the…
+     57|     const share = shareWithin(ours(), theirs, 4);
+     58|     expect(share, `the share of the canvas's pixels within 4 codes of …
+       |                                                                                                  ^
+     59|   }, 1_800_000);
+     60| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  taste.test.ts > #1175 AC3 the screenshots and the one taste call on them > AC3 the run writes elements.svg by the canvas beside Chrome's render and the MathJax formula with a clip, and the owner's recorded call on exactly those says they look right
+AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner the screenshots
+  target/acceptance/1175/elements-canvas.png  4fc44292259f66747e4a821fbb2b5ae97f0c9ab2e3b61bb4050f5e5860fa6e42
+  target/acceptance/1175/elements-canvas-chrome-x3.png  6d59658ddbe1aedd99745065cb5c16cc6befb0bd83b9afada2eaafd1cba6f14d
+  target/acceptance/1175/mathjax-clip-canvas.png  066bf8d6a50fe7bb8cb21b8b393ac0eed2c23ba66cb9e3ada938b44b30780cd1
+  target/acceptance/1175/mathjax-clip-canvas-chrome-x2.png  2be4a7ea33de23ade1cba862fc3a3cab5d9e521613dc43b2e261ca6d2b34eb41
+and record the answer in tests/acceptance/1175/TASTE.json (README: The taste call); this is not a pass
+ ❯ inconclusive helpers.ts:34:10
+     32| }
+     33| export function inconclusive(reason: string): never {
+     34|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     35| }
+     36|
+ ❯ taste.test.ts:59:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  verdict.test.ts > #1175 AC2 a document whose import dropped a visible element presents INCONCLUSIVE, never PASS > AC2 the honest import of elements.svg drops nothing and presents PASS
+AssertionError: check's verdict (answer: {"ok":true,"issues":[{"check":"document.validate","code":"svg_unsupported","severity":"warning","ids":["art"],"path":"items/art/params/src","actual":"style","what":"The import doesn't read this element or attribute, so it isn't drawn as the SVG writes it.","fix":"Flatten it into plain paths before importing, or remove it."},{"check":"document.validate","code":"svg_unsupported","severity":"warning","ids":["art"],"path":"items/art/params/src","actual":"clipPath","what":"The import doesn't read this element or attribute, so it isn't drawn as the SVG writes it.","fix":"Flatten it into plain paths before importing, or remove it."},{"check":"document.validate","code":"svg_unsupported","severity":"warning","ids":["art"],"path":"items/art/params/src","actual":"mask","what":"The import doesn't read this element or attribute, so it isn't drawn as the SVG writes it.","fix":"Flatten it into plain paths before importing, or remove it."},{"check":"document.validate","code":"svg_unsupported","severity":"warning","ids":["art"],"path":"items/art/params/src","actual":"pattern","what":"The import doesn't read this element or attribute, so it isn't drawn as the SVG writes it.","fix":"Flatten it into plain paths before importing, or remove it."},{"check":"document.validate","code":"svg_unsupported","severity":"warning","ids":["art"],"path":"items/art/params/src","actual":"marker","what":"The import doesn't read this element or attribute, so it isn't drawn as the SVG writes it.","fix":"Flatten it ) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:44:96
+     42| }
+     43| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     44|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     45|   return value as JsonObject;
+     46| }
+ ❯ verdictOf verdict.test.ts:20:13
+ ❯ verdict.test.ts:32:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  verdict.test.ts > #1175 AC2 a document whose import dropped a visible element presents INCONCLUSIVE, never PASS > AC2 a planted importer that drops <marker> with only a warning presents INCONCLUSIVE, naming marker, never PASS
+AssertionError: raster elements.svg through the planted importer: the SVG imports and draws: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ drawn helpers.ts:216:111
+    214| export function drawn(dir: string, v: VectorDoc, what: string, planted…
+    215|   const { report, image } = raster(dir, v, planted);
+    216|   expect(report['ok'], `raster ${what}: the SVG imports and draws: ${J…
+       |                                                                                                               ^
+    217|   return image!;
+    218| }
+ ❯ verdict.test.ts:40:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  verdict.test.ts > #1175 AC2 a document whose import dropped a visible element presents INCONCLUSIVE, never PASS > AC2 it stays INCONCLUSIVE until the person accepts that issue
+AssertionError: check: issues is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:48:100
+     46| }
+     47| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     48|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     49|   return value as JsonValue[];
+     50| }
+ ❯ check helpers.ts:188:18
+ ❯ verdict.test.ts:57:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  10 failed (10)
+   Start at  11:56:41
+   Duration  23.82s (tests 96%, transform 3%, import 1%)
+
+    Isolate  3 workers spawned · ~746ms startup each (spawn + environment, per file)
+             at least ~1.49s faster with isolate: false — reuses workers across files instead of one per file
+

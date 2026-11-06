@@ -2273,6 +2273,7 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
  "deep-canvas-motion",
+ "deep-text",
  "serde_json",
 ]
 

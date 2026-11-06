@@ -1,0 +1,14 @@
+{
+  "issue": 1175,
+  "criterion": "AC3",
+  "verdict": "looks_right",
+  "who": "JingW6 (owner), in the session: \"Yes, looks right\"",
+  "when": "2026-11-04T21:04:05Z",
+  "screenshots": {
+    "elements-canvas.png": "dc9c6c63ab213ac18377911ffd7f4ff6205e92b8a04fc31d2f43c8c0e33bef31",
+    "elements-canvas-chrome-x3.png": "5278668d82a2169a32246db6c6c5f789319fe64af06ae0bdd33fa851e2618b61",
+    "mathjax-clip-canvas.png": "67806bac9f804fbf7b17a4b1f4359d7198e2f1df1725fd42bcdc30329b2a31f6",
+    "mathjax-clip-canvas-chrome-x2.png": "c36f26c499cbd16a29242a605f2178abe20c45dbaf6639fa357de997715cbd63"
+  },
+  "note": "Shown the four screenshots in the session; the agent's pixel comparison (elements identical, formula 104 px of 676,800 over 4 codes, edges only) was given as information, not as the call."
+}

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { openEvidenceStore } from '@deepbuild/evidence';
 import { openRecord, type Connection } from '@deepbuild/record';
-import { SeriesStore } from '../src/series.js';
+import { SeriesStore, type Rollup } from '../src/series.js';
 
 const dirs: string[] = [];
 afterAll(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
@@ -34,7 +34,7 @@ describe('#262 rollups across a hub restart', () => {
     await land(after, '10:00:30', 6);
     now = at('10:01:05');
     await after.tick();
-    expect((await after.rollup(SOURCE.name, 'minute', at('10:00:00')))?.checkout, 'the 10:00 minute').toEqual({ min: 1, max: 6, mean: 3, last: 6, count: 3 });
+    expect((await after.rollup(SOURCE.name, 'minute', at('10:00:00')) as Record<string, Rollup> | null)?.checkout, 'the 10:00 minute').toEqual({ min: 1, max: 6, mean: 3, last: 6, count: 3 });
 
     // Values land in 10:01, the hub restarts, and the source is never called again: the minute still closes.
     await land(after, '10:01:10', 4);
@@ -42,10 +42,10 @@ describe('#262 rollups across a hub restart', () => {
     const idle = open();
     now = at('10:02:05');
     await idle.tick();
-    expect((await idle.rollup(SOURCE.name, 'minute', at('10:01:00')))?.checkout, 'the 10:01 minute').toEqual({ min: 4, max: 8, mean: 6, last: 8, count: 2 });
+    expect((await idle.rollup(SOURCE.name, 'minute', at('10:01:00')) as Record<string, Rollup> | null)?.checkout, 'the 10:01 minute').toEqual({ min: 4, max: 8, mean: 6, last: 8, count: 2 });
     now = at('11:00:05');
     await idle.tick();
-    expect((await idle.rollup(SOURCE.name, 'hour', at('10:00:00')))?.checkout, 'the 10:00 hour').toEqual({ min: 1, max: 8, mean: 4.2, last: 8, count: 5 });
+    expect((await idle.rollup(SOURCE.name, 'hour', at('10:00:00')) as Record<string, Rollup> | null)?.checkout, 'the 10:00 hour').toEqual({ min: 1, max: 8, mean: 4.2, last: 8, count: 5 });
     const rows = (await record.raw("SELECT span, start FROM rollups WHERE source = ? ORDER BY start, span", [SOURCE.name])) as { span: string; start: number }[];
     expect(rows.map((r) => `${r.span} ${new Date(Number(r.start)).toISOString().slice(11, 16)}`), 'one rollup a window').toEqual(['hour 10:00', 'minute 10:00', 'minute 10:01']);
     await record.close();
