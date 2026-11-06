@@ -13,7 +13,8 @@
 // A hold denies the call, naming its ask; once you say yes the same call runs. The sorter #84 builds takes the
 // planted one's place (DEEP_HUB_TEST_SORTER, only tests set it).
 import { readFileSync } from 'node:fs';
-import { AskRefused, type Asks, type PlanInput } from '@deepbuild/asks';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { AskRefused, type Asks, type PlanInput, type Target } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { countMcp, toolLists, type Listed } from './mcp-servers.js';
@@ -25,6 +26,8 @@ const key = (v: unknown) => sha256Hex(canonicalize(v as JsonValue));
 
 
 export interface HoldOptions {
+  /** The session ran a held call again on your yes to this ask: it has your answer. */
+  heard?(ask: string): Promise<void>;
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   asks: () => Asks;
   now: () => number;
@@ -34,15 +37,41 @@ export interface HoldOptions {
   /** The core's connection for a session's events. */
   connection(session: string, agent: string): Connection;
   pin(cwd: string, question: string): Promise<Obj>;
+  /** Copies the session's transcript into the record, so a target it read is placed as read. */
+  archived(session: string): Promise<void>;
 }
 
 /**
  * The plan an authority ask shows (#69): the one call it holds, what it changes, and its undo. A call the guards class
  * as a delete or a send, or a tool that can destroy, can't be undone from here; a push or a merge reverts.
  */
-function planFor(source: string, does: string, changes: string[]): PlanInput {
+function planFor(source: string, does: string, changes: string[], targets: Target[] = []): PlanInput {
   const undo = /^effect\.(push|merge)$/.test(source) ? 'Revert it with a new commit' : null;
-  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: undo !== null, cost: 0 }], diff: key({ source, does, changes }) };
+  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: undo !== null, cost: 0, ...(targets.length ? { targets } : {}) }], diff: key({ source, does, changes }) };
+}
+/** A `git push`'s words up to the end of its command, git's own flags before `push` skipped. */
+const GIT_PUSH = /\bgit(?:\s+(?:-[cC]\s+\S+|-\S+))*\s+push\b([^;&|)\n]*)/g;
+const VALUED = new Set(['-o', '--push-option', '--receive-pack', '--exec']);
+/** How long a held push waits for its session's transcript, well inside the gate's hold. */
+const ARCHIVE_WAIT_MS = 2000;
+/**
+ * Where a line's pushes go (#1098): each names its remote or URL, the first word after `push` that isn't a flag or
+ * `--repo`'s, and a push that names none goes to git's default, origin. A value the line computes is kept as written,
+ * so it reads unknown on the card.
+ */
+export function pushTargets(line: string): Target[] {
+  const refs = [...line.matchAll(GIT_PUSH)].map(([, rest]) => {
+    const words = (rest ?? '').trim().split(/\s+/).map((w) => w.replace(/^["']|["']$/g, '')).filter(Boolean);
+    for (let at = 0; at < words.length; at++) {
+      const word = words[at]!;
+      if (word === '--repo') return words[at + 1] ?? 'origin';
+      if (word.startsWith('--repo=')) return word.slice('--repo='.length);
+      if (VALUED.has(word)) at++;
+      else if (!word.startsWith('-')) return word;
+    }
+    return 'origin';
+  });
+  return [...new Set(refs)].map((ref): Target => ({ kind: 'remote', ref }));
 }
 
 const DOES: Record<string, string> = { push: 'pushes', merge: 'merges', dispatch: 'dispatches', send: 'sends', delete: 'deletes' };
@@ -157,7 +186,10 @@ export class Holds {
     const question = turn
       ? `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`
       : `Run \`${call.label}\`? It replies in your name to a reviewer's thread on the pull request, a send that needs your authority.`;
-    return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label]));
+    const targets = classes.includes('push') ? pushTargets(call.label) : [];
+    // A failed or late copy leaves a target the session read as unknown, which asks you all the same.
+    if (targets.length) await Promise.race([this.o.archived(meta.session).catch(() => undefined), sleep(ARCHIVE_WAIT_MS)]);
+    return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label], targets));
   }
 
   /**
@@ -165,7 +197,7 @@ export class Holds {
    * raised from its subject so a saved decision that covers it answers it at once, as decided for you. Its handle,
    * and the decision that answered it with its option, if one did.
    */
-  async asked(meta: Pick<HookMeta, 'session' | 'agent' | 'cwd'>, about: About): Promise<{ ask: string; decision?: string; option?: string }> {
+  async asked(meta: Pick<HookMeta, 'session' | 'agent' | 'cwd'>, about: About): Promise<{ ask: string; decision?: string; option?: string; answered?: string }> {
     const pinned_to = await this.o.pin(meta.cwd, about.question);
     const options = [{ id: 'approve', label: about.options[0], decision: 'allow' }, { id: 'decline', label: about.options[1], decision: 'deny' }];
     const ask = await this.o.asks().raise(this.o.connection(meta.session, meta.agent), about.source, {
@@ -174,18 +206,21 @@ export class Holds {
     return { ask, ...(await this.applied(ask)) };
   }
   /** The decision that answered an ask for you, with the option it chose; nothing when none did. */
-  async applied(ask: string): Promise<{ decision?: string; option?: string }> {
+  async applied(ask: string): Promise<{ decision?: string; option?: string; answered?: string }> {
     const [applied] = (await this.o.raw(`SELECT json_extract(data, '$.decision') AS decision FROM events WHERE kind = 'decision.applied' AND json_extract(data, '$.ask') = ? ORDER BY log_pos LIMIT 1`, [ask])) as { decision: string }[];
     if (!applied) return {};
-    const [saved] = (await this.o.raw(`SELECT json_extract(data, '$.answer') AS answer FROM events WHERE kind = 'decision.created' AND id = ?`, [applied.decision.slice('decision:'.length)])) as { answer: string }[];
-    return saved ? { decision: applied.decision, option: saved.answer } : {};
+    const [saved] = (await this.o.raw(`SELECT json_extract(data, '$.answer') AS answer, json_extract(data, '$.ask') AS ask FROM events WHERE kind = 'decision.created' AND id = ?`, [applied.decision.slice('decision:'.length)])) as { answer: string; ask: string }[];
+    return saved ? { decision: applied.decision, option: saved.answer, answered: saved.ask } : {};
   }
 
   /** A call a standing rule decides: allowed or denied by your rule, naming it; held by an ask when none covers it. */
   async decide(meta: HookMeta, about: About): Promise<{ held?: string; allow?: string; deny?: string }> {
-    const { ask, decision, option } = await this.asked(meta, about);
+    const { ask, decision, option, answered } = await this.asked(meta, about);
     const why = this.o.plant === 'rule-without-reason' ? '' : ` by your standing rule ${decision}`;
-    if (decision && option === 'approve') return { allow: `DeepBuild allowed this${why}: ${about.question.replace(/\? No plan names it\.$/, '.')}` };
+    if (decision && option === 'approve') {
+      if (answered) await this.o.heard?.(answered);
+      return { allow: `DeepBuild allowed this${why}: ${about.question.replace(/\? No plan names it\.$/, '.')}` };
+    }
     if (decision) return { deny: `DeepBuild denied this${why}: you said no to it. ${about.question}` };
     return { held: `DeepBuild is holding this: ${about.question} It waits for your answer to ${ask}; once you say yes, run the same call again.` };
   }

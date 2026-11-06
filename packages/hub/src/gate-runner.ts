@@ -11,12 +11,14 @@
 // snapshot, every checkout and a fix check's run on the merge base come from the base-commit service (#31). A slow run a
 // newer claim outdates is recorded stale only when that claim's snapshot changed its check's inputs, by tree (#45). Pure
 // rules live in @deepbuild/gate; this module drives them with the hub's runs and record.
-import { basename } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { baseProof, claimVerdict, ownRead, OverBudget, type Checkouts, type ClaimRequirement, type DeclaredSurface, type RecordedRun, type StandIn, type TempCheckout } from '@deepbuild/gate';
 import { sha256Hex } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import type { BaseResult, Result, Verdict } from '@deepbuild/verdicts';
 import type { Plant } from './plant.js';
+import type { StackWant } from './stacks.js';
 
 /** The surface a drafted check declares it enters through (#874): #31's shape, its check the requirement's own. */
 export type Surface = { kind: string } & Record<string, unknown>;
@@ -42,6 +44,12 @@ export interface ClaimCheck {
    */
   commit?: string;
 }
+/**
+ * What a workspace claim's checks read (#67): the digests its verdict pins, the reading each check's checkout holds
+ * now, and the reading pinned at the definition's lock, which a run on the base commit reads, so a check of state can
+ * be proven: at the base it sees what held when the definition was fixed. Files by their path in the checkout.
+ */
+export interface StatePin { digests: string[]; files: Record<string, string>; pinned: Record<string, string> }
 /** How a claim's definition stands when its checks start (#322): locked; waiting for a lock on its way, which the hold waits for; pending with none; or held by a cause outside the code. */
 export type DefinitionState = 'locked' | 'waiting' | 'pending' | { blocked: string };
 export interface GateOptions {
@@ -50,7 +58,11 @@ export interface GateOptions {
   append(connection: Connection, input: EventInput): Promise<void>;
   core: Connection;
   /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
-  start(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[] }): Promise<string>;
+  start(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; stack?: StackWant }): Promise<string>;
+  /** The start a check's stack needs now, added to its expected time (#580). */
+  stackStart?(folder: string, worktree: string): Promise<number>;
+  /** The planted wrong program's start of a stack at a claim, whatever its lane. */
+  startsAtClaim?(folder: string, session: string, worktree: string): Promise<void>;
   /** Resolves with the run's outcome once it has finished. */
   ended(run: string): Promise<string>;
   /** CPU slots free now. */
@@ -91,6 +103,8 @@ const AUTOMATIC = new Set(['continuation', 'scheduled', 'subagent', 'session', '
 const UNFORESEEN = new Set(['continuation', 'session', 'unknown']);
 /** Ignored dependency folders a checkout gets cloned copy-on-write, so a check starts as it would in the worktree. */
 const DEPENDENCIES = ['node_modules', '.venv'];
+/** What a journey asks of its stack, which the core gives it when the checkout's done.yaml has an environment (#580). */
+const stackOf = (c: Pick<Claim, 'session' | 'cwd'>, check: ClaimCheck, more: Partial<Pick<StackWant, 'base' | 'fresh'>> = {}): { stack?: StackWant } => (check.depth === 'journey' ? { stack: { session: c.session, worktree: c.cwd, on_base: check.on_base, ...more } } : {});
 /** The entry that stands for a claim's definition while it hasn't locked (#322): pending, or BLOCKED by a cause outside the code. */
 const DEFINITION = 'definition';
 const EMPTY_SHA = sha256Hex(new Uint8Array());
@@ -104,7 +118,14 @@ const missingRun = (run: string, cause: string): RecordedRun => ({
 interface Entry { check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; base: string | null; standIn?: StandIn; outcome: string | null; running: boolean; stale: boolean; ends?: number; newer?: string }
 /** A slow check held in its place: what holds it (background work, a due wake-up or cron job, or a prompt within the grace window) and its record. */
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
-interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry> }
+interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; state?: StatePin | undefined }
+/** Writes a state reading into a checkout, where a check reads it. */
+async function hold(dir: string, files: Record<string, string>): Promise<void> {
+  for (const [path, body] of Object.entries(files)) {
+    await mkdir(dirname(join(dir, path)), { recursive: true });
+    await writeFile(join(dir, path), body);
+  }
+}
 
 export class GateRunner {
   /** Each session's claims, oldest first. */
@@ -181,7 +202,7 @@ export class GateRunner {
     // What a base run failed to prove, by name: the engine says only that it failed off its named assertions.
     const whys: string[] = [];
     const v = claimVerdict({
-      claim: c.claim, agent: `session:${c.session.replace(/[^0-9A-Za-z]/g, '')}`, repo: c.cwd, task: c.task, commit: c.snapshot, requirements: c.requirements, now: this.o.now(),
+      claim: c.claim, agent: `session:${c.session.replace(/[^0-9A-Za-z]/g, '')}`, repo: c.cwd, task: c.task, commit: c.snapshot, requirements: c.requirements, now: this.o.now(), ...(c.state ? { state: c.state.digests } : {}),
       checks: [...c.entries.values()].map((e) => {
         const { base, why } = this.baseOf(e) ?? {};
         if (why) whys.push(`${e.check.check} ${why}`);
@@ -201,11 +222,12 @@ export class GateRunner {
     return undefined;
   }
 
-  /** The median of a check's last clean runs on this machine, from the record; null before it has run clean. */
+  /** The median of a check's last clean runs on this machine, from the record, leaving out each run's stack start (#580); null before it has run clean. */
   private async expectedMs(check: string): Promise<number | null> {
-    const rows = (await this.o.raw(`SELECT ended - started AS ms FROM runs WHERE check_id = ? AND outcome = 'passed' AND ended IS NOT NULL ORDER BY ended DESC LIMIT 5`, [check])) as { ms: number }[];
+    const rows = (await this.o.raw(`SELECT id, ended - started AS ms FROM runs WHERE check_id = ? AND outcome = 'passed' AND ended IS NOT NULL ORDER BY ended DESC LIMIT 5`, [check])) as { id: string; ms: number }[];
     if (!rows.length) return null;
-    const sorted = rows.map((r) => Number(r.ms)).sort((a, b) => a - b);
+    const started = (await this.o.raw(`SELECT json_extract(data, '$.run') AS run, json_extract(data, '$.ready_ms') AS ms FROM events WHERE kind = 'stack.served' AND json_extract(data, '$.run') IN (${rows.map(() => '?').join(', ')})`, rows.map((r) => r.id))) as { run: string; ms: number }[];
+    const sorted = rows.map((r) => Number(r.ms) - (started.find((s) => s.run === r.id)?.ms ?? 0)).sort((a, b) => a - b);
     return sorted[Math.floor(sorted.length / 2)]!;
   }
 
@@ -213,7 +235,7 @@ export class GateRunner {
    * A claim made at a stop: its snapshot and checkout, its checks taken in turn for the fast lane, the rest left to
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
-  async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean; same?: boolean }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
+  async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean; same?: boolean; state?: StatePin }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
     // The snapshot and the checkout share one budget (#31): past it the claim is INCONCLUSIVE, naming the reason and
     // the count of untracked files, and none of its checks runs, in the live worktree or anywhere.
     const budget = this.o.checkouts().budget();
@@ -225,12 +247,16 @@ export class GateRunner {
     // takes that claim's snapshot and no checkout: its results carry, and nothing runs (#82).
     const prior = (this.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim).at(-1);
     const ended = (e: Entry | undefined) => e !== undefined && !e.running && e.outcome !== null && e.runs.length > 0;
-    if (r.same && !r.joins && prior?.tree !== undefined && r.checks.length && r.checks.every((c) => ended(prior.entries.get(c.check)))) ({ snapshot, tree } = prior);
+    // What a workspace's checks read is one of their inputs: another reading on the same tree is new work (#67).
+    const stated = (t: string | undefined): string | undefined => (t !== undefined && r.state?.digests.length ? sha256Hex(new TextEncoder().encode(`${t}\n${r.state.digests.join('\n')}`)) : t);
+    if (r.same && !r.joins && prior?.tree !== undefined && r.checks.length && prior.state?.digests.join() === r.state?.digests.join() && r.checks.every((c) => ended(prior.entries.get(c.check)))) ({ snapshot, tree } = prior);
     // A claim with no check to run yet, its definition still to come, takes no snapshot: nothing would run on it.
     else if (r.checks.length || r.joins) {
       try {
         ({ commit: snapshot, tree } = await this.o.checkouts().snapshot(r.cwd, budget));
+        tree = stated(tree);
         checkout = (await this.o.checkouts().checkout({ worktree: r.cwd, commit: snapshot, dependencies: DEPENDENCIES, runs: [r.claim], budget })).dir;
+        if (r.state) await hold(checkout, r.state.files);
       } catch (error) {
         if (!(error instanceof OverBudget)) throw error;
         await this.o.invalid(r.claim, snapshot, error.message, 'INCONCLUSIVE');
@@ -238,11 +264,12 @@ export class GateRunner {
       }
     }
     const readyAt = this.o.now();
+    if (checkout && r.checks.some((c) => c.depth === 'journey')) await this.o.startsAtClaim?.(checkout, r.session, r.cwd);
     const older = (this.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim);
     // At the lock, the definition's checks join the claim's early run (#322): the claim is the one the spec's checks ran for.
     const joined = r.joins ? this.claimOf(r.claim) : undefined;
     const held = checkout === null ? null : Promise.resolve({ dir: checkout, commit: snapshot });
-    const claim: Claim = joined ?? { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, base: r.base, snapshot, tree, checkout: held, requirements: r.requirements, entries: new Map() };
+    const claim: Claim = joined ?? { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, base: r.base, snapshot, tree, checkout: held, requirements: r.requirements, entries: new Map(), state: r.state };
     const last = older.at(-1)?.tree;
     const changed = r.checks.length > 0 && (tree === undefined || last === undefined || tree !== last);
     if (joined) {
@@ -251,6 +278,7 @@ export class GateRunner {
       joined.snapshot = snapshot;
       joined.tree = tree;
       joined.checkout = held ?? joined.checkout;
+      joined.state = r.state;
       this.lockWaits.get(r.claim)?.();
     }
     this.claims.set(r.session, [...older, claim]);
@@ -266,8 +294,12 @@ export class GateRunner {
         claim.entries.set(DEFINITION, { check, claim: r.claim, commit: snapshot, lane: 'fast', runs: [run], base: null, outcome: 'missing', running: false, stale: false });
       }
     }
-    // Older claims' queued places for the same check give way to this one: the newest snapshot wins the queue.
+    // Older claims' queued places for the same check give way to this one: the newest snapshot wins the queue. A stop
+    // claims once per open task, each reaching here when its own snapshot is done, so an older claim arriving after a
+    // newer one gives way to it, never the other way round.
+    const superseded = new Set(older.filter((o) => o.claim > r.claim).flatMap((o) => [...o.entries.keys()]));
     for (const c of r.checks) {
+      if (superseded.has(c.check)) continue;
       const key = `${r.session}\0${c.check}`;
       const queued = this.queue.get(key);
       if (queued) {
@@ -277,7 +309,7 @@ export class GateRunner {
         if (owner) this.cleanup(owner);
       }
       // Outdated only by a snapshot that changed the inputs: the same tree carries the run (#45).
-      for (const o of older) { const e = o.entries.get(c.check); if (e) { e.stale = true; if (changed) e.newer ??= r.claim; } }
+      for (const o of older.filter((x) => x.claim < r.claim)) { const e = o.entries.get(c.check); if (e) { e.stale = true; if (changed) e.newer ??= r.claim; } }
     }
     // A snapshot that changed no check's inputs reuses results and runs nothing (#82; design: Held time is counted):
     // each check that ended on the last claim of the same tree carries its result to this one.
@@ -290,7 +322,7 @@ export class GateRunner {
       return false;
     });
     // The fast lane: on_base fails first, then the rest, each group shortest first, ties in the definition's order.
-    const timed = await Promise.all(toRun.map(async (c, i) => ({ c, i, ms: c.expected_ms ?? (await this.expectedMs(c.check)) ?? 0 })));
+    const timed = await Promise.all(toRun.map(async (c, i) => ({ c, i, ms: (c.expected_ms ?? (await this.expectedMs(c.check)) ?? 0) + (checkout && c.depth === 'journey' ? (await this.o.stackStart?.(checkout, r.cwd)) ?? 0 : 0) })));
     timed.sort((a, b) => (a.c.on_base === 'fails' ? 0 : 1) - (b.c.on_base === 'fails' ? 0 : 1) || a.ms - b.ms || a.i - b.i);
     const free = Array.from({ length: Math.max(0, this.o.slots().free) }, () => readyAt);
     const budgetEnd = r.stopAt + this.o.budget_ms;
@@ -325,9 +357,9 @@ export class GateRunner {
       const e: Entry = { check: c, claim: r.claim, commit: snapshot, lane: 'fast', runs: [], base: null, outcome: null, running: true, stale: false, ends: this.o.now() + ms };
       claim.entries.set(c.check, e);
       try {
-        const run = await this.o.start({ claim: r.claim, check: c.check, approved: c.approved, command: c.command, commit: snapshot, cwd: checkout!, lane: 'fast', expected_ms: ms || null, deadline_ms: c.deadline_ms ?? null, ...(c.references ? { references: c.references } : {}) });
+        const run = await this.o.start({ claim: r.claim, check: c.check, approved: c.approved, command: c.command, commit: snapshot, cwd: checkout!, lane: 'fast', expected_ms: ms || null, deadline_ms: c.deadline_ms ?? null, ...(c.references ? { references: c.references } : {}), ...stackOf(claim, c) });
         e.runs.push(run);
-        e.outcome = await this.o.ended(run);
+        e.outcome = await this.retried(claim, e, checkout!, await this.o.ended(run));
         await this.onBase(claim, e);
       } catch {
         e.outcome = 'missing';
@@ -337,7 +369,7 @@ export class GateRunner {
       if (e.outcome === 'failed' || e.outcome === 'overran') unlocked?.();
       await this.o.judged?.(r.claim);
     });
-    for (const c of slow) claim.entries.set(c.check, { check: c, claim: r.claim, commit: c.commit ?? snapshot, lane: 'slow', runs: [], base: null, outcome: null, running: false, stale: false });
+    for (const c of slow) claim.entries.set(c.check, { check: c, claim: r.claim, commit: c.commit ?? snapshot, lane: 'slow', runs: [], base: null, outcome: null, running: false, stale: superseded.has(c.check) });
     // The hold replies once: when every admitted check has ended, and the lock has landed or a check failed, or when the hold ends.
     let timer: NodeJS.Timeout | undefined;
     await Promise.race([Promise.allSettled([...runs, ...(lockWait ? [lockWait] : [])]), new Promise<void>((done) => { timer = setTimeout(done, Math.max(0, r.stopAt + this.o.hold_ms - this.o.now())); })]).finally(() => clearTimeout(timer));
@@ -346,9 +378,24 @@ export class GateRunner {
     return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, readyAt, budgetCost, changed };
   }
 
+  /**
+   * A journey's uncounted run has one more on the same snapshot, on a stack started with no kept product (#580): when
+   * that one serves another tree too, the run is missing, so its check is BLOCKED.
+   */
+  private async retried(c: Claim, e: Entry, cwd: string, outcome: string): Promise<string> {
+    if (outcome !== 'uncounted' || e.stale || e.check.depth !== 'journey') return outcome;
+    const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: e.lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...stackOf(c, e.check, { fresh: true }) });
+    e.runs.push(run);
+    return this.o.ended(run);
+  }
+  /** Whether a claim in the worktree has a journey still to end: its warm stack isn't the pool's to reclaim (#580). */
+  pendingIn(worktree: string): boolean {
+    return [...this.claims.values()].flat().some((c) => c.cwd === worktree && [...c.entries.values()].some((e) => e.check.depth === 'journey' && !e.stale && (e.outcome === null || e.running)));
+  }
   /** The claim's checkout: the one it holds, or a new one of its snapshot once the last has gone. */
   private checkoutOf(c: Claim): Promise<TempCheckout> {
-    c.checkout ??= this.o.checkouts().checkout({ worktree: c.cwd, commit: c.snapshot, dependencies: DEPENDENCIES, runs: [c.claim] });
+    c.checkout ??= this.o.checkouts().checkout({ worktree: c.cwd, commit: c.snapshot, dependencies: DEPENDENCIES, runs: [c.claim] })
+      .then(async (t) => { if (c.state) await hold(t.dir, c.state.files); return t; });
     return c.checkout;
   }
   /**
@@ -372,10 +419,11 @@ export class GateRunner {
       const surfaces = surface ? [{ ...surface, check } as DeclaredSurface] : [];
       const base = await this.o.checkouts().baseCheckout({ worktree: c.cwd, onto: c.base, claim: c.snapshot, own: this.ownOf(e), dependencies: DEPENDENCIES, surfaces, runs: [token] });
       try {
+        if (c.state) await hold(base.dir, c.state.pinned);
         const standIn = base.standIns.find((s) => s.check === check);
         const reach = standIn?.port ? { env: { DEEP_SURFACE_URL: `http://127.0.0.1:${standIn.port}` }, hosts: [`127.0.0.1:${standIn.port}`] }
           : standIn?.bin ? { standIns: [basename(standIn.bin)] } : {};
-        const run = await this.o.start({ claim: e.claim, check, approved: e.check.approved, command: e.check.command, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...reach });
+        const run = await this.o.start({ claim: e.claim, check, approved: e.check.approved, command: e.check.command, commit: base.commit, cwd: base.dir, lane: e.lane, expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...reach, ...stackOf(c, e.check, { base: true }) });
         e.base = run;
         if (standIn) e.standIn = standIn;
         const outcome = await this.o.ended(run);
@@ -388,6 +436,37 @@ export class GateRunner {
     } catch {
       if (this.o.stopping()) e.outcome = 'stopped';
     }
+  }
+
+  /**
+   * A workspace's drift (#67): these checks of a claim run again on its commit, on the readings now, and the others
+   * keep their results; the claim's verdict is made again from them. False for a claim this runner no longer holds,
+   * as after a restart, or a check it doesn't.
+   */
+  rerun(claim: string, checks: readonly string[], state: StatePin): boolean {
+    const c = this.claimOf(claim);
+    const entries = checks.flatMap((check) => { const e = c?.entries.get(check); return e ? [e] : []; });
+    if (!c || entries.length !== checks.length) return false;
+    c.state = state;
+    for (const e of entries) { e.runs = []; e.outcome = null; e.running = true; }
+    void (async () => {
+      await Promise.all(entries.map(async (e) => {
+        try {
+          const { dir } = await this.checkoutOf(c);
+          await hold(dir, state.files);
+          const run = await this.o.start({ claim: c.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane: 'slow', expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}) });
+          e.runs.push(run);
+          e.outcome = await this.o.ended(run);
+        } catch {
+          e.outcome = 'missing';
+        } finally {
+          e.running = false;
+        }
+      }));
+      await this.o.judged?.(c.claim);
+      this.cleanup(c);
+    })();
+    return true;
   }
 
   /** What a check's newest run of the claim printed, its error output first, cut to its last 2,000 characters. */
@@ -582,9 +661,10 @@ export class GateRunner {
         const { dir: cwd } = own ?? await this.checkoutOf(c);
         const expected = e.check.expected_ms ?? await this.expectedMs(e.check.check);
         e.ends = this.o.now() + (expected ?? 0);
-        const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: 'slow', expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null });
+        const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: 'slow', expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...stackOf(c, e.check) });
         e.runs.push(run);
-        void this.o.ended(run).then(async (outcome) => {
+        void this.o.ended(run).then(async (ended) => {
+          const outcome = await this.retried(c, e, cwd, ended).catch(() => 'missing');
           e.outcome = outcome;
           if (own) {
             if (outcome === 'passed' || outcome === 'failed') this.pinned.set(`${e.commit}\0${e.check.check}`, { run, outcome });

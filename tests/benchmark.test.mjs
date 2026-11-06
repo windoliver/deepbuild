@@ -102,6 +102,38 @@ test('a single workload measurement keeps failed check output and status for lat
   assert.ok(result.elapsedMs > 0 && result.peakBytes > 0);
 });
 
+// #1322: spawnSync stops only /usr/bin/time, so a check stopped past its allowance kept building in perf's kept copy.
+test('a run stopped at its timeout or output limit leaves no process it started', { timeout: 60_000 }, async (t) => {
+  const alive = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      return error.code !== 'ESRCH';
+    }
+  };
+  // The flood ignores the broken pipe it meets once the run is stopped, so only a signal ends the child.
+  for (const [code, flood] of [['ETIMEDOUT', ''], ['ENOBUFS', "process.stdout.on('error', () => {}).write('x'.repeat(33 * 2 ** 20));"]]) {
+    const directory = mkdtempSync(join(tmpdir(), 'deep-benchmark-stop-'));
+    const pids = join(directory, 'pids');
+    const record = `require('fs').appendFileSync(${JSON.stringify(pids)}, process.pid + '\\n');`;
+    // The measured command records its PID, starts a child that records its own, and both wait forever.
+    const child = `${record} ${flood} setInterval(() => {}, 1000);`;
+    const command = [process.execPath, '-e', `${record} require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(child)}], { stdio: 'inherit' }); setInterval(() => {}, 1000);`];
+    let started = [];
+    t.after(() => {
+      for (const pid of started) if (alive(pid)) process.kill(pid, 'SIGKILL');
+      rmSync(directory, { recursive: true, force: true });
+    });
+    assert.throws(() => measureOnce(command, directory, false, 5_000), (error) => error.code === code);
+    // Only real PIDs: a 0 or negative one would make the cleanup's kill reach a whole process group.
+    started = readFileSync(pids, 'utf8').trim().split('\n').map(Number).filter((pid) => Number.isSafeInteger(pid) && pid > 1);
+    assert.equal(started.length, 2, `${code}: both processes started before the run was stopped`);
+    for (let waited = 0; waited < 2_000 && started.some(alive); waited += 50) await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(started.filter(alive), [], `${code}: processes the run started are still running`);
+  }
+});
+
 test('the measured preflight workload has its own frozen time and peak-memory budgets', () => {
   const preflight = { margin: 0.5, limits: { elapsedMs: 300_000 }, initialReason: 'First complete local workload measurement.' };
   const withWorkload = { ...config, preflight };

@@ -314,7 +314,7 @@ pub fn unreadable_handles(doc: &Value, can_read: impl Fn(&str) -> bool) -> Vec<I
             let Some(source) = member(binding, "source").and_then(Value::as_str) else {
                 continue;
             };
-            let Ok(handle) = Handle::parse(source) else {
+            let Ok(handle) = Handle::parse_source(source) else {
                 continue;
             };
             if handle.scheme() != Scheme::Doc && !can_read(source) {

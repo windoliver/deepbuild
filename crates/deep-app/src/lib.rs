@@ -27,11 +27,13 @@ pub mod panel_check;
 #[cfg(feature = "panel-check")]
 pub mod panel_keys;
 pub mod panel_tree;
+pub mod panel_values;
 pub mod question;
 pub mod record;
 pub mod setup;
 pub mod show;
 pub mod shown;
+pub mod single;
 #[cfg(feature = "spike")]
 pub mod spike;
 pub mod states;
@@ -95,12 +97,12 @@ pub fn stocks() -> Vec<Stock> {
     stocks
 }
 
-/// What the menu bar shows: while setup hasn't finished, that it didn't, never a number (#1002); with no hub read, that
-/// (no count is known, so none is drawn); else the one count.
+/// What the menu bar shows: while setup hasn't finished, that it didn't, never a number (#1002); then what the app
+/// can't reach (#994); before the hub has answered, that (no count is known, so none is drawn); else the one count.
 pub fn menu_bar_line() -> String {
-    match setup::count() {
+    match setup::count().or_else(|| notify::reach().short()) {
         Some(line) => line.to_owned(),
-        None if record::with_view(|_| ()).is_none() => "No hub".to_owned(),
+        None if !record::connected() => "No hub".to_owned(),
         None => views::count().to_string(),
     }
 }

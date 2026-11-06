@@ -161,7 +161,7 @@ impl Render for Spike {
         )
         .h_full();
 
-        let count = format!("{} waiting on you", self.waiting());
+        let count = crate::notify::reach().count(format!("{} waiting on you", self.waiting()));
         let content = match &self.panel {
             Some(panel) => div()
                 .flex_1()
