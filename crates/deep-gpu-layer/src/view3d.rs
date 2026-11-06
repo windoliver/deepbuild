@@ -58,6 +58,13 @@ struct Args {
     capture: Capture,
     /// Operator outputs each captured frame reads back (#483).
     read: Vec<String>,
+    /// `cull: "cpu"`: the document drawn from the CPU's f64 cull, the reference a GPU frame is
+    /// judged against (#484).
+    cull_on_cpu: bool,
+    /// Each captured frame reports what each culled list kept (#484).
+    cull_report: bool,
+    /// `(after, to)`: right after frame `after` draws, the session jumps to frame `to` (#484).
+    seeks: Vec<(u64, u64)>,
     window: Option<Window3>,
     latency: Vec<u64>,
     counts: bool,
@@ -401,8 +408,24 @@ fn parse(call: &Value) -> Result<Args, Value> {
         capture,
         read: call["read"]
             .as_array()
-            .map(|r| r.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+            .map(|r| {
+                r.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default(),
+        cull_on_cpu: match call["cull"].as_str() {
+            None => false,
+            Some("cpu") => true,
+            Some(_) => return Err(refused("bad_input", "cull is \"cpu\" when it's given")),
+        },
+        cull_report: call["cull_report"].as_bool().unwrap_or(false),
+        seeks: call["seeks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| Some((s["after"].as_u64()?, s["to"].as_u64()?)))
+            .collect(),
         window,
         latency,
         counts: call["counts"].as_bool().unwrap_or(false),
@@ -475,10 +498,19 @@ fn install(packs: &[(Option<String>, std::path::PathBuf)]) -> Result<Packs, Valu
     for (id, dir) in packs {
         let mut manifest = read(&dir.join("pack.json"))?;
         let Some(fields) = manifest.as_object_mut() else {
-            return Err(refused("bad_input", format!("{}: a pack is an object", dir.display())));
+            return Err(refused(
+                "bad_input",
+                format!("{}: a pack is an object", dir.display()),
+            ));
         };
         let id = id.clone().unwrap_or_else(|| {
-            format!("deepbuild/{}", fields.get("name").and_then(Value::as_str).unwrap_or_default())
+            format!(
+                "deepbuild/{}",
+                fields
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+            )
         });
         fields.insert("id".into(), json!(id));
         if let Some(Value::Object(recipes)) = fields.get_mut("recipes") {
@@ -845,6 +877,21 @@ fn labels_json(scene: &Scene, out: &str) -> Result<(Value, Value), Value> {
     Ok((json!(labels), json!(pages)))
 }
 
+/// The frames a call draws, in order: `frames` of them from `from`, each seek jumping once.
+fn frame_order(from: u64, frames: u64, seeks: &[(u64, u64)]) -> Vec<u64> {
+    let mut left: Vec<(u64, u64)> = seeks.to_vec();
+    let mut n = from;
+    let mut order = Vec::with_capacity(frames as usize);
+    for _ in 0..frames {
+        order.push(n);
+        n = match left.iter().position(|(after, _)| *after == n) {
+            Some(k) => left.remove(k).1,
+            None => n + 1,
+        };
+    }
+    order
+}
+
 pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
     match run(app, out, call) {
         Ok(v) | Err(v) => v,
@@ -899,6 +946,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let opening = std::time::Instant::now();
     let opened = session3::open_doc(app, size, timings, shows, &args.doc)?;
     session3::surface(app, args.surface)?;
+    if args.cull_on_cpu {
+        session3::cull_on_cpu(app);
+    }
     let opening = opening.elapsed();
     let mut build_ms = None;
     let (ui, fx) = (opened.ui.clone(), opened.fx.clone());
@@ -991,7 +1041,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         // The lights the policy last left out: a change is reported once, by ID (#421).
         let mut left_out: Vec<String> = Vec::new();
         let mut dropped: Vec<String> = Vec::new();
-        for n in args.from..args.from + args.frames {
+        for n in frame_order(args.from, args.frames, &args.seeks) {
             // A seek applies every patch up to the frame it opens at.
             let mut patched = false;
             for (k, (frame, writer, ops)) in args.patches.iter().enumerate() {
@@ -1051,7 +1101,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
             levels.collect();
-            let (mut composed, resident) = levels.compose(lowered_doc.as_ref().unwrap_or(&args.doc));
+            let (mut composed, resident) =
+                levels.compose(lowered_doc.as_ref().unwrap_or(&args.doc));
             if !args.hidden.is_empty() {
                 composed = without_layers(&composed, &args.hidden);
             }
@@ -1615,13 +1666,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     let read = app.worker.call(move |state| -> Result<Value, Value> {
                         let device = state.gpu.device();
                         let fx = lock(&fx2);
-                        let ops = fx
-                            .docops
-                            .as_ref()
-                            .ok_or_else(|| refused("bad_input", "read names an operator output, and the document runs no operator"))?;
+                        let ops = fx.docops.as_ref().ok_or_else(|| {
+                            refused(
+                                "bad_input",
+                                "read names an operator output, and the document runs no operator",
+                            )
+                        })?;
                         let mut m = serde_json::Map::new();
                         for k in &keys {
-                            m.insert(k.clone(), crate::opframe::read_one(&device, ops, &Default::default(), k, &dir)?);
+                            m.insert(
+                                k.clone(),
+                                crate::opframe::read_one(
+                                    &device,
+                                    ops,
+                                    &Default::default(),
+                                    k,
+                                    &dir,
+                                )?,
+                            );
                         }
                         Ok(Value::Object(m))
                     })?;
@@ -1680,12 +1742,32 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("encoded".into(), json!(encoded));
                 frame.insert("replayed".into(), json!(c.replayed));
                 frame.insert("instances_written".into(), json!(c.instances_written));
+                frame.insert("cpu_culled".into(), json!(c.cpu_culled));
+                frame.insert("counts_read_back".into(), json!(c.counts_read_back));
+                let draws: Vec<Value> = c
+                    .indirect
+                    .iter()
+                    .map(|(item, view, batch)| json!({"item": item, "view": view, "batch": batch}))
+                    .collect();
+                frame.insert("indirect_draws".into(), json!(draws));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
                 frame.insert("compiled".into(), json!(compiled));
                 frame.insert("segments".into(), Value::Object(edge_segments));
             }
             if args.lod {
                 frame.insert("lod".into(), crate::lod::rows(&choices));
+            }
+            if args.cull_report && capture && !noop {
+                let mut rows = Vec::new();
+                for r in session3::kept(app) {
+                    let bytes: Vec<u8> = r.ids.iter().flat_map(|w| w.to_le_bytes()).collect();
+                    let kept = write_named(out, &bytes, "u32")?;
+                    rows.push(json!({
+                        "item": r.item, "view": r.view, "batch": r.batch,
+                        "count": r.ids.len(), "kept": kept,
+                    }));
+                }
+                frame.insert("cull".into(), json!(rows));
             }
             if args.light_cut {
                 frame.insert("light_cut".into(), crate::lod::cut_json(&evaluated, &cut));

@@ -5,7 +5,7 @@
 //! filter reads it.
 
 use deep_canvas_scene3d::light::{Light, LightKind};
-use deep_canvas_scene3d::scene::Scene;
+use deep_canvas_scene3d::scene::{Scene, Solid};
 
 /// The shadow map's side, in texels.
 pub const SIZE: u32 = 2048;
@@ -157,9 +157,19 @@ fn light_frame(toward: [f64; 3]) -> [[f64; 3]; 3] {
 
 /// Every solid's world corners, from its mesh's bounds or the unit cube.
 pub fn caster_corners(scene: &Scene) -> Vec<(String, [[f64; 3]; 8])> {
+    // A culled element is the GPU's to test (#484).
+    corners_of(scene, |s| s.cast_shadow && s.batch == 0)
+}
+
+/// Every caster's corners, culled elements too: a local map has no cull of its own (#446).
+pub fn local_caster_corners(scene: &Scene) -> Vec<(String, [[f64; 3]; 8])> {
+    corners_of(scene, |s| s.cast_shadow)
+}
+
+fn corners_of(scene: &Scene, casts: impl Fn(&Solid) -> bool) -> Vec<(String, [[f64; 3]; 8])> {
     let mut out = Vec::new();
     for s in scene.layers.iter().flat_map(|l| &l.solids) {
-        if !s.cast_shadow {
+        if !casts(s) {
             continue;
         }
         let [lo, hi] = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
@@ -186,8 +196,10 @@ pub fn caster_corners(scene: &Scene) -> Vec<(String, [[f64; 3]; 8])> {
 /// The tangents of the camera's half angles across and down, squared and summed: the frustum's
 /// spread k² at unit distance.
 fn spread(camera: &deep_canvas_scene3d::scene::Camera) -> f64 {
-    let tx = (camera.size[0] * 0.5 + (camera.centre[0] - camera.size[0] * 0.5).abs()) / camera.scale;
-    let ty = (camera.size[1] * 0.5 + (camera.centre[1] - camera.size[1] * 0.5).abs()) / camera.scale;
+    let tx =
+        (camera.size[0] * 0.5 + (camera.centre[0] - camera.size[0] * 0.5).abs()) / camera.scale;
+    let ty =
+        (camera.size[1] * 0.5 + (camera.centre[1] - camera.size[1] * 0.5).abs()) / camera.scale;
     tx * tx + ty * ty
 }
 
@@ -198,7 +210,10 @@ pub fn auto_far(scene: &Scene, casters: &[(String, [[f64; 3]; 8])]) -> f64 {
     let mut far = c.near + 1.0;
     for (_, corners) in casters {
         for p in corners {
-            let d = dot([p[0] - c.eye[0], p[1] - c.eye[1], p[2] - c.eye[2]], c.forward);
+            let d = dot(
+                [p[0] - c.eye[0], p[1] - c.eye[1], p[2] - c.eye[2]],
+                c.forward,
+            );
             far = far.max(d);
         }
     }
@@ -256,7 +271,12 @@ pub fn cascades(
     });
     let near = cam.near.max(1e-3);
     let count = settings.count.clamp(1, 4);
-    let d = splits(near, far.max(near * 1.001), count, settings.split.clamp(0.0, 1.0));
+    let d = splits(
+        near,
+        far.max(near * 1.001),
+        count,
+        settings.split.clamp(0.0, 1.0),
+    );
     let k2 = spread(cam);
     let [x, y, z] = light_frame(toward);
     // Every caster's depth range along the light.
@@ -275,7 +295,11 @@ pub fn cascades(
             // centered on the far rim when that already holds the near one.
             let zc = (0.5 * (f + n) * (1.0 + k2)).min(f);
             let r = ((f - zc) * (f - zc) + f * f * k2).sqrt();
-            let span = if casters.is_empty() { 2.0 * r } else { zhi - zlo };
+            let span = if casters.is_empty() {
+                2.0 * r
+            } else {
+                zhi - zlo
+            };
             let r = r + reach(soft, r, span, size);
             let center = [
                 cam.eye[0] + cam.forward[0] * zc,
@@ -354,7 +378,13 @@ pub struct LocalMap {
 
 /// A perspective matrix at `pos` looking along `f`, with `r` and `u` across it, `tan` of its half
 /// field, depth 0 at `near` and 1 at `far`.
-fn perspective(pos: [f64; 3], [r, u, f]: [[f64; 3]; 3], tan: f64, near: f64, far: f64) -> [f64; 16] {
+fn perspective(
+    pos: [f64; 3],
+    [r, u, f]: [[f64; 3]; 3],
+    tan: f64,
+    near: f64,
+    far: f64,
+) -> [f64; 16] {
     let a = far / (far - near);
     let b = -near * a;
     let k = 1.0 / tan;

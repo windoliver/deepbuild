@@ -485,6 +485,27 @@ fn part_of(c0: vec3<f32>, c1: vec3<f32>, c2: vec3<f32>) -> vec4<f32> {
     return vec4<f32>(q.xyz, pow(abs(dot(c0, cross(c1, c2))), 1.0 / 3.0));
 }
 
+// A solid's record as storage (the renderer's `SolidRecord`), which a culled batch's vertex stage
+// reads by the row its cull kept (#484).
+struct Element {
+    r0: vec4<f32>,
+    r1: vec4<f32>,
+    r2: vec4<f32>,
+    color: u32,
+    pick: u32,
+    flags: u32,
+    tie: u32,
+    emission: vec4<f32>,
+    base: vec4<f32>,
+    surface: vec4<f32>,
+    specular: vec4<f32>,
+    op: vec4<u32>,
+}
+@group(4) @binding(0) var<storage, read> elements: array<Element>;
+
+// The planted wrong object-ID pass: a row's place in the compacted list taken as its element.
+const IDS_BY_PLACE: bool = false;
+
 @vertex
 fn mesh_vs(
     @location(0) p: vec3<f32>,
@@ -506,6 +527,38 @@ fn mesh_vs(
     @location(14) tangent: vec4<f32>,
     @location(15) op: vec4<u32>,
 ) -> MeshOut {
+    return mesh_out(p, n, Element(r0, r1, r2, color, pick, flags, tie, emission, base, surface, specular, op), uv, tangent);
+}
+
+@vertex
+fn mesh_row_vs(
+    @location(0) p: vec3<f32>,
+    @location(1) n: vec3<f32>,
+    @location(2) row: u32,
+    @location(13) uv: vec4<f32>,
+    @location(14) tangent: vec4<f32>,
+    @builtin(instance_index) place: u32,
+) -> MeshOut {
+    var e = elements[row];
+    if IDS_BY_PLACE {
+        e.pick = elements[place].pick;
+    }
+    return mesh_out(p, n, e, uv, tangent);
+}
+
+fn mesh_out(p: vec3<f32>, n: vec3<f32>, e: Element, uv: vec4<f32>, tangent: vec4<f32>) -> MeshOut {
+    let r0 = e.r0;
+    let r1 = e.r1;
+    let r2 = e.r2;
+    let color = e.color;
+    let pick = e.pick;
+    let flags = e.flags;
+    let tie = e.tie;
+    let emission = e.emission;
+    let base = e.base;
+    let surface = e.surface;
+    let specular = e.specular;
+    let op = e.op;
     var out: MeshOut;
     out.object_n = n;
     out.op = op;

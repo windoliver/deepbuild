@@ -115,6 +115,12 @@ pub struct Solid {
     /// an opacity below 1 draws it see-through after a depth pass of its own; `None` at the
     /// identity.
     pub adjust: Option<Adjust3>,
+    /// Its (prototype, material) batch, from 1, when it's an element of an instancer above
+    /// [`crate::cut::GPU_CULLED_ABOVE`] elements: the renderer culls that batch on the GPU and
+    /// draws it from the count the GPU wrote (#484). 0 for every other solid.
+    pub batch: u32,
+    /// Its row in its instancer, with a batch: where a compact step's kept rows name it (#484).
+    pub row: u32,
 }
 
 /// An item's adjust as a 3D item takes it in shading (Object: adjust; Item and kind: adjust):
@@ -1919,6 +1925,8 @@ fn asset_scene(
                 cut: false,
                 per_pixel: false,
                 adjust: None,
+                batch: 0,
+                row: 0,
             });
         }
     }
@@ -2156,6 +2164,8 @@ pub(crate) fn evaluate_compiled(
                         cut: false,
                         per_pixel: false,
                         adjust: None,
+                        batch: 0,
+                        row: 0,
                     });
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
@@ -2254,6 +2264,8 @@ pub(crate) fn evaluate_compiled(
                             cut: false,
                             per_pixel: false,
                             adjust: None,
+                            batch: 0,
+                            row: 0,
                         });
                     }
                 }
@@ -2333,6 +2345,8 @@ pub(crate) fn evaluate_compiled(
                         cut: false,
                         per_pixel: false,
                         adjust: None,
+                        batch: 0,
+                        row: 0,
                     });
                 }
                 // A curve draws nothing; what follows it (particles along it, #420) reads it
@@ -2440,7 +2454,14 @@ pub(crate) fn evaluate_compiled(
                         axes(&m),
                         flicker,
                     ));
-                    crate::sets::read_light(lights.last_mut(), params, &path, map, &mut tables, assets)?;
+                    crate::sets::read_light(
+                        lights.last_mut(),
+                        params,
+                        &path,
+                        map,
+                        &mut tables,
+                        assets,
+                    )?;
                     sun = Some(Sun {
                         id: id.clone(),
                         toward: normalize(turn(&m, [0.0, 0.0, 1.0])),
@@ -2468,7 +2489,14 @@ pub(crate) fn evaluate_compiled(
                         axes(&m),
                         flicker,
                     ));
-                    crate::sets::read_light(lights.last_mut(), params, &path, map, &mut tables, assets)?;
+                    crate::sets::read_light(
+                        lights.last_mut(),
+                        params,
+                        &path,
+                        map,
+                        &mut tables,
+                        assets,
+                    )?;
                 }
                 // A material draws nothing itself; the objects naming it read it (#418). A group
                 // draws nothing either: its children take its transform and its `visible` (#424).
@@ -2507,6 +2535,25 @@ pub(crate) fn evaluate_compiled(
             layers.push(layer);
         }
     }
+    // The instancers an operator's instances output draws, whatever their count (#484); the
+    // batches of the instancers the GPU culls, each its own across the scene.
+    let mut fed = std::collections::BTreeSet::new();
+    for (id, item) in doc_items {
+        if item.get("kind").and_then(Value::as_str) != Some("gpu.compute@1") {
+            continue;
+        }
+        let outputs = item.pointer("/params/outputs").and_then(Value::as_object);
+        for v in outputs.into_iter().flat_map(|o| o.values()) {
+            let Some(named) = v.pointer("/instances/instancer").and_then(Value::as_str) else {
+                continue;
+            };
+            if !instancers.iter().any(|(_, i)| i == named) {
+                return refused("ref_unresolved", format!("items/{id}/params/outputs"));
+            }
+            fed.insert(named.to_string());
+        }
+    }
+    let mut batches: Vec<(&str, Shape, Option<Material>)> = Vec::new();
     // Each element: its prototype's solids moved from the prototype's world to the instancer's
     // world × the element's own transform, addressed `<instancer>#<id>` (Instance `instance@1`).
     for (l, id) in &instancers {
@@ -2519,6 +2566,14 @@ pub(crate) fn evaluate_compiled(
             .iter()
             .map(|p| crate::cut::inverse(&world(&items, p)))
             .collect();
+        // Above the line, or drawn from an instances output, the GPU culls each (prototype,
+        // material) batch (#484); inside a batch elements upload by stable ID, so survivors in
+        // index order are in stable-ID order.
+        let gpu = elements.len() > crate::cut::GPU_CULLED_ABOVE || fed.contains(id.as_str());
+        let mut elements = elements;
+        if gpu {
+            elements.sort_by_key(|e| e.id);
+        }
         for e in elements {
             let Some(solids) = protos.get(&of[e.proto]) else {
                 return refused("ref_unresolved", format!("{path}/of"));
@@ -2526,6 +2581,15 @@ pub(crate) fn evaluate_compiled(
             let place = matmul(&matmul(&at, &e.at), &from[e.proto]);
             for (k, s) in solids.iter().enumerate() {
                 let mut s = s.clone();
+                if gpu {
+                    s.row = e.row;
+                    let key = (id.as_str(), s.shape, s.material);
+                    let at = batches.iter().position(|b| *b == key);
+                    s.batch = 1 + at.unwrap_or_else(|| {
+                        batches.push(key);
+                        batches.len() - 1
+                    }) as u32;
+                }
                 s.id = if solids.len() == 1 {
                     format!("{id}#{}", e.id)
                 } else {
@@ -2754,10 +2818,12 @@ fn puff(id: &str, params: &Value, pos: Vec3, path: &str) -> Result<Puff, Refused
     let lf = |k: &str, default: f64| -> Result<f64, Refused> {
         match light.and_then(|l| l.get(k)) {
             None => Ok(default),
-            Some(v) => num(Some(v)).filter(|x| (0.0..=1.0).contains(x)).ok_or(Refused {
-                code: "out_of_range",
-                path: format!("{path}/light/{k}"),
-            }),
+            Some(v) => num(Some(v))
+                .filter(|x| (0.0..=1.0).contains(x))
+                .ok_or(Refused {
+                    code: "out_of_range",
+                    path: format!("{path}/light/{k}"),
+                }),
         }
     };
     let near_fade = match params.get("near_fade") {
