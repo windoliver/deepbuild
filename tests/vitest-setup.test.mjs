@@ -68,6 +68,16 @@ test('a child a vitest file leaves running, and the child it started, are stoppe
   assert.deepEqual(await gone(pids, 3000), [], 'nothing the file started is still running once vitest has ended');
 });
 
+test('a child the file left running is stopped without its exit reaching the file, as a promise left pending would', async (t) => {
+  // #29's wrong-program twins leave their command's promise pending: had the command ended while the file's code still
+  // ran, the promise would have woken on a lease table the file had closed, an unhandled error that fails the file.
+  const dir = root(t, { leaves: leaves(0).replace("writeFileSync(join($DIR, 'child')", "child.on('exit', () => { throw Error('the child ended while the file could still see it'); });\n  writeFileSync(join($DIR, 'child')") });
+  const r = spawnSync(process.execPath, args(dir), { cwd: REPO, env: env(), encoding: 'utf8', timeout: 120_000 });
+  const pids = sleepers(t, dir);
+  assert.equal(r.status, 0, `the fixture's file passes, with no error after its test\n${r.stdout}${r.stderr}`);
+  assert.deepEqual(await gone(pids, 3000), [], 'and nothing it started is still running');
+});
+
 test('a child left running when vitest itself is killed mid-file is stopped when its worker ends', async (t) => {
   const dir = root(t, { leaves: leaves(1500) });
   const vitest = spawn(process.execPath, args(dir), { cwd: REPO, env: env(), stdio: 'ignore' });
