@@ -1,7 +1,9 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
 const metrics = ['p50Ms', 'p95Ms', 'peakBytes'];
@@ -28,27 +30,97 @@ export function parseCpuMs(output, platform) {
   return ms;
 }
 
-// Instructions retired by the command and every child it waited for, or null where the report has
-// no counter, as GNU time's hasn't: a missing count is never 0. Unlike time, the count doesn't move
-// with machine load.
+// Instructions retired by the one process /usr/bin/time waited for, or null where the report has no
+// counter, as GNU time's hasn't: a missing count is never 0. macOS adds no child's count to its
+// parent's, so this is not the whole of a command that starts children; countChildren is. Unlike time,
+// the count doesn't move with machine load.
 export function parseInstructions(report, platform) {
   const count = platform === 'darwin' ? Number(report.match(/^\s*(\d+)\s+instructions retired\s*$/m)?.[1]) : NaN;
   return Number.isSafeInteger(count) && count > 0 ? count : null;
 }
 
-// stream shows the command's output as it runs instead of capturing it; a captured run is stopped after timeoutMs.
-export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000) {
+// The two builds of count-children.c, or null where it can't be built, as off macOS: a host with no
+// counter. They live past any one run, since a daemon a run leaves behind still loads the library.
+let counter;
+function counterBuild() {
+  if (counter !== undefined) return counter;
+  counter = null;
+  if (process.platform !== 'darwin') return counter;
+  try {
+    const source = fileURLToPath(new URL('count-children.c', import.meta.url));
+    const cache = join(process.env.XDG_CACHE_HOME || join(homedir(), 'Library/Caches'), 'deepbuild-perf');
+    const directory = join(cache, `counter-${createHash('sha256').update(readFileSync(source)).digest('hex').slice(0, 16)}`);
+    const build = { run: join(directory, 'run'), library: join(directory, 'count.dylib') };
+    if (!existsSync(build.run)) {
+      mkdirSync(cache, { recursive: true, mode: 0o700 });
+      const building = mkdtempSync(`${directory}-`);
+      try {
+        for (const [output, flags] of [['count.dylib', ['-dynamiclib']], ['run', ['-DRUNNER']]]) execFileSync('cc', ['-O2', '-Wall', '-Werror', ...flags, '-o', join(building, output), source], { stdio: 'ignore' });
+        renameSync(building, directory);
+      } catch (error) {
+        // Another run built the same source first.
+        if (!existsSync(build.run)) throw error;
+      } finally {
+        rmSync(building, { recursive: true, force: true });
+      }
+    }
+    counter = build;
+  } catch {
+    // Without a compiler the counts stay missing, and a missing count is never a pass.
+  }
+  return counter;
+}
+
+// Tools benches read a process with. Their counts can't all be read (ps is setuid; lsof's forked helper
+// and a tailed log are out of the library's reach), and none of our code runs in them.
+const observers = new Set(['/bin/ps', '/usr/sbin/lsof', '/usr/bin/log']);
+
+// A run's count from count-children.c's log: the instructions retired of the command and every child
+// it waited for, however deep, and of a child nothing waited for that exited by itself in time. A process
+// that started a child and has no count for it leaves the count null, with its name in uncounted: a child
+// still running has no line of its end, and a parent the library couldn't enter, or a wait it didn't see,
+// leaves the parent's child time above what the log accounts for.
+function countChildren(log, command) {
+  const rows = log.split('\n').filter(Boolean).map((line) => line.split(' '));
+  const select = (wanted) => rows.filter(([kind]) => kind === wanted).map(([, ...fields]) => fields);
+  const unread = select('unread').map(([parent, child, time]) => ({ parent, child, time: Number(time) }));
+  const reaped = select('reap').map(([parent, child, instructions, elapsed, childElapsed]) => ({ parent, child, instructions: Number(instructions), childElapsed: Number(childElapsed), time: Number(elapsed) + Number(childElapsed) }));
+  const waited = new Set([...reaped, ...unread].map(({ child }) => child));
+  const left = select('exit').filter(([child]) => !waited.has(child)).map(([child, instructions, childElapsed]) => ({ child, instructions: Number(instructions), childElapsed: Number(childElapsed) }));
+  const starts = select('start').map(([, child, ...path]) => ({ child, path: path.join(' ') }));
+  const nameOf = (pid) => starts.find(({ child }) => child === pid)?.path ?? command[0];
+  const accounted = new Map();
+  for (const { parent, time } of [...reaped, ...unread]) accounted.set(parent, (accounted.get(parent) ?? 0) + time);
+  const counts = [...reaped, ...left];
+  const ended = new Set([...waited, ...left.map(({ child }) => child)]);
+  const uncounted = [...new Set([
+    ...starts.filter(({ child }) => !ended.has(child)).map(({ path }) => path),
+    ...unread.map(({ child }) => nameOf(child)),
+    ...counts.filter(({ child, childElapsed }) => (accounted.get(child) ?? 0) !== childElapsed).map(({ child }) => nameOf(child)).map((name) => (observers.has(name) ? name : `a child of ${name}`)),
+  ])].filter((name) => !observers.has(name));
+  return { instructions: !reaped.length || uncounted.length ? null : counts.reduce((sum, { instructions }) => sum + instructions, 0), uncounted };
+}
+
+// stream shows the command's output as it runs instead of capturing it; a captured run is stopped after
+// timeoutMs. Every child is counted, which costs the run and each child a few ms to start, so a run judged
+// on time passes follow = false: it runs as it would alone, and its count is parseInstructions's.
+export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, follow = true) {
   if (!['darwin', 'linux'].includes(process.platform)) throw Error('BLOCKED: native peak RSS requires macOS or Linux');
   const flags = process.platform === 'darwin' ? ['-l'] : ['-f', 'peak_rss_kb=%M\ncpu_s=%U %S'];
   const directory = mkdtempSync(join(tmpdir(), 'deep-benchmark-time-'));
   const timing = join(directory, 'time');
+  const counted = join(directory, 'counted');
+  const build = follow ? counterBuild() : null;
   try {
+    if (build) writeFileSync(counted, '');
+    const argv = build ? [build.run, follow ? build.library : '-', ...command] : command;
+    const env = build ? { ...process.env, DEEP_COUNT_LOG: counted } : process.env;
     const started = performance.now();
     // A captured run leads its own process group: spawnSync stops only /usr/bin/time at the timeout or
     // maxBuffer, so the group is stopped with it, or the measured command and its children run on (#1322).
-    const result = spawnSync('/usr/bin/time', [...flags, '-o', timing, ...command], stream
-      ? { cwd, stdio: ['ignore', 'inherit', 'inherit'] }
-      : { cwd, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024, detached: true });
+    const result = spawnSync('/usr/bin/time', [...flags, '-o', timing, ...argv], stream
+      ? { cwd, env, stdio: ['ignore', 'inherit', 'inherit'] }
+      : { cwd, env, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024, detached: true });
     const elapsedMs = performance.now() - started;
     if (result.error) {
       try {
@@ -60,14 +132,17 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000) {
     }
     const report = readFileSync(timing, 'utf8');
     const peakBytes = parsePeakRss(report, process.platform);
-    return { elapsedMs, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions: parseInstructions(report, process.platform), status: result.status, output: stream ? '' : result.stdout + result.stderr };
+    const own = parseInstructions(report, process.platform);
+    const { instructions, uncounted } = !follow ? { instructions: own, uncounted: [] } : build && own !== null ? countChildren(readFileSync(counted, 'utf8'), command) : { instructions: null, uncounted: [] };
+    return { elapsedMs, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions, uncounted, status: result.status, output: stream ? '' : result.stdout + result.stderr };
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 }
 
 // Alternates current and merge-base runs so both see the same machine load: one warmup round, then 20 rounds.
-// Returns [current] or [current, base], each with its instructions retired per round, in round order.
+// Returns [current] or [current, base], each with its instructions retired per round, in round order,
+// and what started a child no count covers.
 export function measure(command, cwd, base) {
   const sides = base ? [[command, cwd], [base.command, base.cwd]] : [[command, cwd]];
   const samples = sides.map(() => []);
@@ -75,22 +150,22 @@ export function measure(command, cwd, base) {
     sides.forEach(([argv, directory], side) => {
       const result = measureOnce(argv, directory);
       if (result.status !== 0) throw Error(`${argv[0]} exited ${result.status}: ${result.output}`);
-      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes, instructions: result.instructions });
+      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes, instructions: result.instructions, uncounted: result.uncounted });
     });
   }
-  return samples.map((side) => ({ ...summarize(side), instructions: side.map(({ instructions }) => instructions) }));
+  return samples.map((side) => ({ ...summarize(side), instructions: side.map(({ instructions }) => instructions), uncounted: [...new Set(side.flatMap(({ uncounted }) => uncounted))] }));
 }
 
 // Judges a task against its merge base on the instructions retired of each alternated round, so the
 // verdict holds on any machine under any load. A pair's difference is current / base - 1; the change
 // is the median difference, and it fails when over the margin, the larger of 2% and the pairs'
-// spread. A missing count makes it INCONCLUSIVE.
-export function judgeInstructions(pairs) {
+// spread. A missing count makes it INCONCLUSIVE; uncounted says what started a child with no count.
+export function judgeInstructions(pairs, uncounted = []) {
   const count = (value) => Number.isSafeInteger(value) && value > 0;
   const missing = pairs.filter((pair) => !count(pair?.current) || !count(pair?.base)).length;
   if (!pairs.length || missing) {
-    return { status: 'INCONCLUSIVE', pairs, change: null, spread: null, margin: null,
-      reason: `instructions retired are missing in ${pairs.length ? `${missing} of ${pairs.length} pairs` : 'every pair: none were measured'}; this host's /usr/bin/time reports no counter` };
+    return { status: 'INCONCLUSIVE', pairs, change: null, spread: null, margin: null, uncounted,
+      reason: `instructions retired are missing in ${pairs.length ? `${missing} of ${pairs.length} pairs` : 'every pair: none were measured'}; ${uncounted.length ? `no count covers ${uncounted.join(', ')}` : "this host's /usr/bin/time reports no counter, or cc can't build the child counter"}` };
   }
   const differences = pairs.map(({ current, base }) => current / base - 1).sort((a, b) => a - b);
   const middle = differences.length / 2;

@@ -1,0 +1,60 @@
+Acceptance tests for #1404 on the base 80ba48fe (no implementation), run on 2026-11-05 on a
+Mac15,7 (M3 Pro) on Battery Power, macOS build 25G241, load averages 52.56 61.42 58.41:
+
+  node --test 'tests/acceptance/1404/*.test.mjs'
+
+Trimmed to one failure reason per test, each cut at 200 characters. The tests in no-count.test.mjs read one perf
+run in a scratch repository whose merge base already had its four budgets; on the base that run
+ended "PASS perf (40.74 s)", exit 0, with every budget's comparison PASS: the tripled child
+and the shell's child unseen, as the issue says. The three tests in no-counter.test.mjs hold on the
+base by the issue's own words ("as it does today"); the README names the mutants they fail on.
+
+# tests 12
+# pass 3
+# fail 9
+# duration 56.7 s
+
+not ok - a child a Node wrapper starts with spawnSync reads at least 95% of its instructions in the budget's
+  child-count.test.mjs
+  the budget read 298 M; its child alone retires 1014 M, so at least 963 M
+
+not ok - a child a Node wrapper starts with spawn reads at least 95% of its instructions in the budget's
+  child-count.test.mjs
+  the budget read 314 M; its child alone retires 1014 M, so at least 963 M
+
+not ok - a child a Node wrapper starts with execFileSync reads at least 95% of its instructions in the budget's
+  child-count.test.mjs
+  the budget read 299 M; its child alone retires 1014 M, so at least 963 M
+
+not ok - a child of a Node child, waited for at each step, reads at least 95% of its instructions in the budget's
+  child-count.test.mjs
+  the budget read 294 M; its child alone retires 1014 M, so at least 963 M
+
+not ok - a child with 3 times the merge base's work reads FAIL behind the same wrapper, and an unchanged one reads PASS
+  judge.test.mjs
+  3 times the child's work reads PASS: {"status":"PASS","pairs":[{"current":300151969,"base":297750054},{"current":294718472,"base":295946334},{"current":295817171,"base":293473885}],"change":0.00798464
+
+not ok - perf reads FAIL on a budget whose child retires 3 times its merge base's behind the same Node wrapper
+  no-count.test.mjs
+  perf read tripled as no verdict line, its comparison "PASS"
+
+not ok - a budget whose shell started a child it reports no count for reads INCONCLUSIVE, naming the budget, never PASS
+  no-count.test.mjs
+  perf read shell-parent as no verdict line, its comparison "PASS"
+
+not ok - a budget that started a child still running when it ended reads INCONCLUSIVE, naming the budget, never PASS, and a budget that started none does not
+  no-count.test.mjs
+  perf read left-running as no verdict line, its comparison "PASS"
+
+ok - a report with no counter reads as a missing count: null, never 0, beside a report that has one
+  holds on the base; see the README's mutants
+
+ok - judgeInstructions reads a missing count INCONCLUSIVE, never PASS, and complete pairs by their counts
+  holds on the base; see the README's mutants
+
+ok - perf on a host with no counter reads a budget with a child INCONCLUSIVE, naming it, with every count missing
+  holds on the base; see the README's mutants
+
+not ok - a planted bench whose child does 3 times the work reads FAIL through measure
+  proof.test.mjs
+  3 times the child's work reads PASS, change 0.0018986327984445994, spread 0.02628000327623381: current 296 M, merge base 295 M
