@@ -1813,9 +1813,11 @@ fn oit_fallback_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
 }
 
 // A frame with a capped cutaway draws its solids through this entry (#424): a cap shades the back
-// face seen through the cut, drawn an eighth of a pixel's depth slope nearer the eye (never past its plane),
+// face seen through the cut, drawn half a pixel's depth slope nearer the eye (never past its plane),
 // so a coplanar front face of a neighbouring part never hides it, while a front face of its own
-// part in front of it still does.
+// part in front of it still does. Half, not less: the one depth a fragment writes holds for every
+// sample it covers, and a neighbour's face is tested at each sample, up to 0.375 px from the
+// pixel's centre at 4× (#1173).
 struct CutTargets {
     @location(0) color: vec4<f32>,
     @location(1) id: vec2<u32>,
@@ -1836,9 +1838,9 @@ fn mesh_cut_fs(in: MeshOut, @builtin(front_facing) front: bool) -> CutTargets {
             let plane = clip.z / clip.w;
             // Nearer is larger under reversed Z, smaller under the planted forward Z.
             if frame.px.w > 0.5 {
-                depth = max(in.pos.z - 0.125 * slope, plane);
+                depth = max(in.pos.z - 0.5 * slope, plane);
             } else {
-                depth = min(in.pos.z + 0.125 * slope, plane);
+                depth = min(in.pos.z + 0.5 * slope, plane);
             }
             depth = clamp(depth, 0.0, 1.0);
         }
