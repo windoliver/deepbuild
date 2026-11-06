@@ -13,7 +13,7 @@
 // A hold denies the call, naming its ask; once you say yes the same call runs. The sorter #84 builds takes the
 // planted one's place (DEEP_HUB_TEST_SORTER, only tests set it).
 import { readFileSync } from 'node:fs';
-import { AskRefused, type Asks, type PlanInput } from '@deepbuild/asks';
+import { AskRefused, type Asks, type PlanInput, type Target } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { countMcp, toolLists, type Listed } from './mcp-servers.js';
@@ -34,15 +34,39 @@ export interface HoldOptions {
   /** The core's connection for a session's events. */
   connection(session: string, agent: string): Connection;
   pin(cwd: string, question: string): Promise<Obj>;
+  /** Copies the session's transcript into the record, so a target it read is placed as read. */
+  archived(session: string): Promise<void>;
 }
 
 /**
  * The plan an authority ask shows (#69): the one call it holds, what it changes, and its undo. A call the guards class
  * as a delete or a send, or a tool that can destroy, can't be undone from here; a push or a merge reverts.
  */
-function planFor(source: string, does: string, changes: string[]): PlanInput {
+function planFor(source: string, does: string, changes: string[], targets: Target[] = []): PlanInput {
   const undo = /^effect\.(push|merge)$/.test(source) ? 'Revert it with a new commit' : null;
-  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: undo !== null, cost: 0 }], diff: key({ source, does, changes }) };
+  return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: undo !== null, cost: 0, ...(targets.length ? { targets } : {}) }], diff: key({ source, does, changes }) };
+}
+/** A `git push`'s words up to the end of its command, git's own flags before `push` skipped. */
+const GIT_PUSH = /\bgit(?:\s+(?:-[cC]\s+\S+|-\S+))*\s+push\b([^;&|)\n]*)/g;
+const VALUED = new Set(['-o', '--push-option', '--receive-pack', '--exec']);
+/**
+ * Where a line's pushes go (#1098): each names its remote or URL, the first word after `push` that isn't a flag or
+ * `--repo`'s, and a push that names none goes to git's default, origin. A value the line computes is kept as written,
+ * so it reads unknown on the card.
+ */
+export function pushTargets(line: string): Target[] {
+  const refs = [...line.matchAll(GIT_PUSH)].map(([, rest]) => {
+    const words = (rest ?? '').trim().split(/\s+/).map((w) => w.replace(/^["']|["']$/g, '')).filter(Boolean);
+    for (let at = 0; at < words.length; at++) {
+      const word = words[at]!;
+      if (word === '--repo') return words[at + 1] ?? 'origin';
+      if (word.startsWith('--repo=')) return word.slice('--repo='.length);
+      if (VALUED.has(word)) at++;
+      else if (!word.startsWith('-')) return word;
+    }
+    return 'origin';
+  });
+  return [...new Set(refs)].map((ref): Target => ({ kind: 'remote', ref }));
 }
 
 const DOES: Record<string, string> = { push: 'pushes', merge: 'merges', dispatch: 'dispatches', send: 'sends', delete: 'deletes' };
@@ -157,7 +181,10 @@ export class Holds {
     const question = turn
       ? `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`
       : `Run \`${call.label}\`? It replies in your name to a reviewer's thread on the pull request, a send that needs your authority.`;
-    return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label]));
+    const targets = classes.includes('push') ? pushTargets(call.label) : [];
+    // A failed copy leaves a target the session read as unknown, which asks you all the same.
+    if (targets.length) await this.o.archived(meta.session).catch(() => undefined);
+    return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label], targets));
   }
 
   /**
