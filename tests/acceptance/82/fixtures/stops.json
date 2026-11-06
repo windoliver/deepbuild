@@ -1,0 +1,34 @@
+{
+  "schema": "dh82.stops@1",
+  "about": "The Proof's 20 recorded stops, 10 from Claude Code and 10 from Codex, each as the turn that ends in it and the claim it made. Each turn is shaped like a recorded session of adapters/corpus (named in `recorded`), retargeted to this suite's repository and redacted: paths, IDs and prompts are the suite's own, the hook payloads and transcript lines are the shapes those sessions recorded. `claim` is the design's stop rule (Every stop is judged): a claim for the open task, or none. `task` names the work item whose `Fix <link>` prompt opens the session's one task.",
+  "claude-code": {
+    "task": 97,
+    "stops": [
+      { "recorded": "claude-code 2.1.308 tools (SessionStart startup)", "steps": [{ "start": "startup" }, { "read": "src/auth.js" }], "words": "I read the auth middleware.", "claim": false, "why": "right after startup, no prompt since" },
+      { "recorded": "claude-code 2.1.308 tools (a typed ask, Read then Edit)", "steps": [{ "typed": "Fix {link}" }, { "read": "src/auth.js" }, { "edit": "note" }], "words": "I changed checkToken's note.", "claim": true, "why": "your ask opened the task and the turn edited a file" },
+      { "recorded": "claude-code 2.1.304 tools (a typed question, two reads)", "steps": [{ "typed": "why does the cart round tax per line?" }, { "read": "src/cart.js" }, { "read": "src/auth.js" }], "words": "Each line's tax is rounded to the cent, as the receipts show it.", "claim": false, "why": "an answer: your typed question opened no task, and the turn only read" },
+      { "recorded": "claude-code 2.1.308 tools (\"Reply with only the word resumed\": a typed prompt, no tool call)", "steps": [{ "typed": "why does the cart round tax per line?" }], "words": "As before: per line.", "claim": false, "why": "an answer with no tool call" },
+      { "recorded": "claude-code 2.1.308 tools (a typed question, then an Edit)", "steps": [{ "typed": "why does the cart round tax per line?" }, { "read": "src/cart.js" }, { "edit": "note" }], "words": "Per line; I also bumped the auth note.", "claim": true, "why": "the same question's turn with one edit in it" },
+      { "recorded": "claude-code 2.1.308 loop (a /loop iteration, turnOrigin scheduled)", "steps": [{ "scheduled": "/loop every 10 minutes: check whether the expired-token check passes yet" }, { "read": "src/auth.js" }], "words": "The expired-token check is still red.", "claim": true, "why": "a turn a scheduled task began, with work" },
+      { "recorded": "claude-code 2.1.299 desktop-peer (another session's message, turnOrigin peer)", "steps": [{ "peer": "<cross-session-message from=\"local_8f6f9e9a-898e-4858-aefe-44dfc1b77684\" name=\"GitHub issue #97\">\nThe expired-token check is still red on main; please look at it.\n</cross-session-message>" }, { "read": "src/auth.js" }], "words": "Looked at it for the other session.", "claim": true, "why": "a turn another session's message began, with work" },
+      { "recorded": "claude-code 2.1.308 subagent (a background subagent's report, origin.handback)", "steps": [{ "handback": "<agent-message from=\"a2711031fe8c87e48\">\n[Subagent hand-back] The text below is the final report of a subagent this session delegated to. The report follows:\n  checkToken still accepts a token whose exp has passed.\n</agent-message>" }, { "read": "src/auth.js" }], "words": "The subagent confirms the bug.", "claim": true, "why": "a turn a subagent's report began, with work" },
+      { "recorded": "claude-code 2.1.308 tools (SessionStart resume)", "steps": [{ "start": "resume" }, { "read": "src/auth.js" }], "words": "Picked up where we left off.", "claim": false, "why": "right after a resume, no prompt since" },
+      { "recorded": "claude-code 2.1.308 clear (SessionEnd clear, a new session from clear)", "steps": [{ "clear": true }, { "read": "src/auth.js" }], "words": "Starting fresh.", "claim": false, "why": "right after /clear, no prompt since" }
+    ]
+  },
+  "codex": {
+    "task": 98,
+    "stops": [
+      { "recorded": "codex 0.166.0-alpha.5.1 tools (a typed ask, a shell call and an apply_patch)", "steps": [{ "start": "startup" }, { "prompt": "Fix {link}" }, { "shell": "cat src/auth.js" }, { "patch": "note" }], "words": "I changed checkToken's note.", "claim": true, "why": "your ask opened the task and the turn patched a file" },
+      { "recorded": "codex 0.166.0-alpha.5.1 tools (a typed prompt, no tool call)", "steps": [{ "prompt": "why does the cart round tax per line?" }], "words": "Each line's tax is rounded to the cent.", "claim": false, "why": "an answer with no tool call" },
+      { "recorded": "codex 0.166.0-alpha.5.1 tools (a typed prompt, no tool call)", "steps": [{ "prompt": "why does the cart round tax per line?" }], "words": "As before: per line.", "claim": false, "why": "an answer with no tool call, a second stop with no new work" },
+      { "recorded": "codex 0.166.0-alpha.5.1 patches (a typed prompt, an apply_patch)", "steps": [{ "prompt": "why does the cart round tax per line?" }, { "patch": "note" }], "words": "Per line; I also bumped the auth note.", "claim": true, "why": "the same question's turn with one edit in it" },
+      { "recorded": "codex 0.160.0 desktop-heartbeat (a <heartbeat> prompt)", "steps": [{ "heartbeat": "check whether the expired-token check passes yet" }, { "shell": "cat src/auth.js" }], "words": "The expired-token check is still red.", "claim": true, "why": "a turn a heartbeat began, with work" },
+      { "recorded": "codex 0.166.0-alpha.5.1 goal (a goal continuation turn, no prompt hook, an apply_patch)", "steps": [{ "goal": "Make the expired-token check pass." }, { "patch": "note" }], "words": "Bumped the note toward the goal.", "claim": true, "why": "a turn the goal's continuation began, with work" },
+      { "recorded": "codex 0.166.0-alpha.5.1 goal (a goal continuation turn, a shell read)", "steps": [{ "goal": "Make the expired-token check pass." }, { "shell": "sed -n '1,10p' src/auth.js" }], "words": "Read the file again.", "claim": true, "why": "a turn the goal's continuation began, with a tool call" },
+      { "recorded": "codex 0.166.0-alpha.5.1 tools (a typed prompt, no tool call)", "steps": [{ "prompt": "is anything else left on the fix?" }], "words": "Only the expired-token check.", "claim": false, "why": "an answer with no tool call" },
+      { "recorded": "codex 0.160.0 desktop-heartbeat (a <heartbeat> prompt, no tool call)", "steps": [{ "heartbeat": "check whether the expired-token check passes yet" }], "words": "beat", "claim": false, "why": "a stop with no work since the turn began" },
+      { "recorded": "codex 0.166.0-alpha.5.1 patches (a typed prompt, an apply_patch)", "steps": [{ "prompt": "can you keep going on the expired-token fix?" }, { "patch": "note" }], "words": "I went on with the fix.", "claim": true, "why": "a typed question's turn with one edit in it" }
+    ]
+  }
+}

@@ -838,11 +838,16 @@ pub fn particles() -> Value {
     let since = g.sub(&t, &first);
     let gens = g.div(&since, &period);
     let gen = g.s("floor@1", json!({"x": gens}));
+    // Past the span, a slot keeps its last generation born inside it until that one's life ends.
+    let span_since = g.sub("span", &first);
+    let last_gens = g.div(&span_since, &period);
+    let last_gen = g.s("floor@1", json!({"x": last_gens}));
+    let gen = g.s("min@1", json!({"a": gen, "b": last_gen}));
     let gp = g.mul(&gen, &period);
     let born_at = g.add(&first, &gp);
     let age = g.sub(&t, &born_at);
     let born = g.s("ge@1", json!({"a": since, "b": 0.0}));
-    let in_span = g.s("le@1", json!({"a": born_at, "b": "span"}));
+    let in_span = g.s("le@1", json!({"a": first, "b": "span"}));
     let zero = g.c(json!(0.0));
     let genc = g.s("max@1", json!({"a": gen, "b": zero}));
     let genu = g.convert(&genc, "u32");

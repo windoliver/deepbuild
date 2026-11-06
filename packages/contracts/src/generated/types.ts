@@ -2977,6 +2977,31 @@ export interface CommandStaged {
   evidence?: Array<string>;
 }
 
+/** command.staged@2 */
+export interface CommandStagedV2 {
+  v: 2;
+  id: string;
+  kind: "command.staged";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    command: string;
+    folders: Array<string>;
+    files?: Array<{
+      path: string;
+      digest: string;
+    }>;
+    until: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** commit.made@1 */
 export interface CommitMade {
   v: 1;
@@ -3827,7 +3852,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -4916,6 +4941,28 @@ export interface OpenItemOpenedV2 {
     text: string;
     item: string;
     from: "agent" | "section" | "bug" | "issue" | "limit" | "placeholder" | "task" | "review_thread";
+    resolved_by?: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** open_item.opened@3 */
+export interface OpenItemOpenedV3 {
+  v: 3;
+  id: string;
+  kind: "open_item.opened";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    text: string;
+    item: string;
+    from: "agent" | "section" | "bug" | "issue" | "limit" | "placeholder" | "task" | "review_thread" | "verdict";
     resolved_by?: string;
   };
   evidence?: Array<string>;
@@ -6162,6 +6209,35 @@ export interface SpoolRefused {
   evidence?: Array<string>;
 }
 
+/** state.read@1 */
+export interface StateRead {
+  v: 1;
+  id: string;
+  kind: "state.read";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    workspace: string;
+    task_ref: string;
+    claim: string | null;
+    readings: Array<{
+      touch: string;
+      source: string;
+      digest: string;
+    }>;
+    reads: Array<{
+      req: string;
+      check: string | null;
+      touches: Array<string>;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** stop.held@1 */
 export interface StopHeld {
   v: 1;
@@ -7308,6 +7384,45 @@ export interface WorkItemV2 {
     automated?: boolean;
   }>;
   updated: string;
+}
+
+/** workspace.created@1 */
+export interface WorkspaceCreated {
+  v: 1;
+  id: string;
+  kind: "workspace.created";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    workspace: string;
+    folder: string;
+    topic: string;
+    task_ref: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** workspace.moved@1 */
+export interface WorkspaceMoved {
+  v: 1;
+  id: string;
+  kind: "workspace.moved";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    workspace: string;
+    folder: string;
+    from: string;
+  };
+  evidence?: Array<string>;
 }
 
 /** worktree.created@1 */

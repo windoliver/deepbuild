@@ -207,6 +207,10 @@ pub enum Planted {
     SerialCarriesManySends,
     /// #401: a frame shows the readings of the latch a frame before its own.
     BoundValueAFrameLate,
+    /// #629: a run's assertion value is read from the agent's summary of the run.
+    ResolverReadsSummary,
+    /// #629: an assertion value that doesn't parse as a number reads 0.
+    UnparsableReadsZero,
     /// #401: install takes any keymap as it is.
     KeymapUnchecked,
     /// #401: two bindings of one chord in one context install with no conflict reported.
@@ -763,6 +767,9 @@ pub struct Scenario {
     pub panels: BTreeMap<String, Panel>,
     pub docs: BTreeMap<String, String>,
     pub record: BTreeMap<String, RecordObject>,
+    /// #629: a replay's run record entries, each as a `run` call's reply gave it (`record` as a
+    /// list).
+    pub runs: Vec<Value>,
     pub claims: BTreeMap<String, Claim>,
     pub window: Option<[f64; 2]>,
     /// The display the window is on, px: full screen fills it (#383).
@@ -1027,9 +1034,13 @@ impl<'a> Hub<'a> {
             pending3d: None,
             scopes: BTreeMap::new(),
             serial: 0,
-            ring: crate::ring::Ring::new(
-                scenario.panels.iter().map(|(id, p)| (id.clone(), p.rect)),
-            ),
+            ring: {
+                let mut ring = crate::ring::Ring::new(
+                    scenario.panels.iter().map(|(id, p)| (id.clone(), p.rect)),
+                );
+                ring.replay(&scenario.runs);
+                ring
+            },
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
