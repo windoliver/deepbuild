@@ -23,6 +23,9 @@ pub const SHADOW_PASS: &str = "scene3d.shadow";
 /// The key sun's cascades (#422; Light policy: cascades): one depth layer each, by the shadow
 /// pass's steps.
 pub const CASCADE_PASS: &str = "scene3d.cascade";
+/// One face of a local light's shadow map (#446; Light policy: local shadows), by the shadow
+/// pass's steps.
+pub const LOCAL_SHADOW_PASS: &str = "scene3d.local_shadow";
 /// Ambient occlusion (#418; Look `look@1`: ao): the opaque solids' depth and normal prepass, the
 /// occlusion and its blur, before the geometry pass reads it; drawn only while the look has ao on.
 pub const AO_PASS: &str = "scene3d.ao";
@@ -344,6 +347,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     r.pass(SHADOW_PASS, "shadows").pass_steps(SHADOW_STEPS);
     // #422: the key sun's cascades, drawn by the shadow pass's own steps, one layer each.
     r.pass(CASCADE_PASS, "shadows").pass_steps(SHADOW_STEPS);
+    r.pass(LOCAL_SHADOW_PASS, "shadows").pass_steps(SHADOW_STEPS);
     r.pass(OBJECT_ID_PASS, "geometry")
         .pass_steps(OBJECT_ID_STEPS);
     r.pass(OUTPUT_PASS, "tone_mapping");

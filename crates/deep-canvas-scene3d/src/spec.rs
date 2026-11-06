@@ -512,6 +512,9 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             p("split", "f32", "", json!(0.5), S, json!(0.5), json!(0.75)),
             p("shadow_far", "m | auto", "m", json!("auto"), S, json!(50), json!(80)),
             p("fade", "bool", "", json!(true), S, json!(true), json!(false)),
+            // What it lights and what shadows it (#446; Light: receivers, casters).
+            p("receivers", "collection | [collection] | all", "", json!("all"), S, json!("all"), json!("all")),
+            p("casters", "collection | [collection] | all", "", json!("all"), S, json!("all"), json!("all")),
         ],
         reads: None,
         fixture: json!({"it": item("light.sun@1", json!({"illuminance": 10_000}))}),
@@ -521,7 +524,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
         let mut params = vec![
             p(
                 "power",
-                "lumens",
+                "lumens | from_file",
                 "lm",
                 json!(800),
                 S,
@@ -551,6 +554,11 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!(true),
             ),
             flicker(),
+            // #446: Light: receivers, casters, IES distribution.
+            p("receivers", "collection | [collection] | all", "", json!("all"), S, json!("all"), json!("all")),
+            p("casters", "collection | [collection] | all", "", json!("all"), S, json!("all"), json!("all")),
+            p("distribution", "sha256", "", Value::Null, S, Value::Null, Value::Null),
+            p("distribution_rotation", "deg", "deg", json!(0), S, json!(0), json!(90)),
         ];
         if kind == "light.area@1" {
             params.push(p(

@@ -97,6 +97,9 @@ pub struct Solid {
     pub lod: Option<Arc<crate::lod::Lod>>,
     /// Inside a band margin, the mask its band's draw keeps pixels by (#425).
     pub mask: Option<crate::lod::Mask>,
+    /// The receiver and caster sets it belongs to, a bit each (#446; Light: receivers, casters).
+    pub receiver_sets: u32,
+    pub caster_sets: u32,
     /// It draws only in the shadow passes: a level the light's projection chose (#425).
     pub cast_only: bool,
     /// How far a cast-only level is drawn inside its surface, along its normals, in its own m.
@@ -661,6 +664,12 @@ pub struct Scene {
     /// The per-pixel resolve's room (#424): the view's `max_fragments`, and the most fragments
     /// the class's GPU memory holds at 16 B each.
     pub fragments: [u64; 2],
+    /// The IES tables its lights read, each an atlas layer (#446).
+    pub distributions: Vec<Arc<crate::ies::Distribution>>,
+    /// The light policy's shadow fields (#446).
+    pub shadowing: crate::light::Shadowing,
+    /// Under samples per frame, the angle this sample turns a soft shadow's disk by (#446).
+    pub sample_turn: Option<f64>,
 }
 
 impl Scene {
@@ -1895,6 +1904,8 @@ fn asset_scene(
                 lod: None,
                 mask: None,
                 cast_only: false,
+                receiver_sets: 0,
+                caster_sets: 0,
                 inset: 0.0,
                 cast_shadow: true,
                 receive_shadow: true,
@@ -2058,6 +2069,8 @@ pub(crate) fn evaluate_compiled(
     let mut protos: HashMap<String, Vec<Solid>> = HashMap::new();
     let mut instancers: Vec<(usize, String)> = Vec::new();
     let mut cutaway = None;
+    // The IES tables the lights name (#446).
+    let mut tables: Vec<Arc<crate::ies::Distribution>> = Vec::new();
     for layer_id in &order {
         let Some(list) = by_layer.get_mut(layer_id) else {
             continue;
@@ -2130,6 +2143,8 @@ pub(crate) fn evaluate_compiled(
                         lod: lod_of(item, &path, [[-0.5; 3], [0.5; 3]], None, map)?,
                         mask: None,
                         cast_only: false,
+                        receiver_sets: 0,
+                        caster_sets: 0,
                         inset: 0.0,
                         cast_shadow: casts(item, &material),
                         receive_shadow: shadows(item, "receive_shadow"),
@@ -2226,6 +2241,8 @@ pub(crate) fn evaluate_compiled(
                             lod: None,
                             mask: None,
                             cast_only: false,
+                            receiver_sets: 0,
+                            caster_sets: 0,
                             inset: 0.0,
                             cast_shadow: casts(item, &material),
                             receive_shadow: shadows(item, "receive_shadow"),
@@ -2303,6 +2320,8 @@ pub(crate) fn evaluate_compiled(
                         mesh: Some(Arc::new(mesh)),
                         mask: None,
                         cast_only: false,
+                        receiver_sets: 0,
+                        caster_sets: 0,
                         inset: 0.0,
                         cast_shadow: casts(item, &material),
                         receive_shadow: shadows(item, "receive_shadow"),
@@ -2421,6 +2440,7 @@ pub(crate) fn evaluate_compiled(
                         axes(&m),
                         flicker,
                     ));
+                    crate::sets::read_light(lights.last_mut(), params, &path, map, &mut tables, assets)?;
                     sun = Some(Sun {
                         id: id.clone(),
                         toward: normalize(turn(&m, [0.0, 0.0, 1.0])),
@@ -2448,6 +2468,7 @@ pub(crate) fn evaluate_compiled(
                         axes(&m),
                         flicker,
                     ));
+                    crate::sets::read_light(lights.last_mut(), params, &path, map, &mut tables, assets)?;
                 }
                 // A material draws nothing itself; the objects naming it read it (#418). A group
                 // draws nothing either: its children take its transform and its `visible` (#424).
@@ -2631,6 +2652,7 @@ pub(crate) fn evaluate_compiled(
     if puffs > cap {
         return refused("out_of_range", "budget/puffs");
     }
+    crate::sets::compile(map, &mut lights, &mut layers)?;
     let mut scene = Scene {
         size,
         camera,
@@ -2650,6 +2672,9 @@ pub(crate) fn evaluate_compiled(
         jitter: [0.0; 2],
         cutaway: None,
         fragments,
+        distributions: tables,
+        shadowing: crate::sets::policy(map)?,
+        sample_turn: None,
     };
     scene.set_cutaway(cutaway);
     Ok(scene)
