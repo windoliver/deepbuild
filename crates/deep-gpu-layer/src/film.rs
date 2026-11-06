@@ -4,6 +4,8 @@
 //! its light theme. The document's 2D writer layers are drawn by Vello GPU into a GPU surface of
 //! their own on the GPU layer's device and shown in the window through the handoff, over the page
 //! in the look's ground, each frame at its own time on the film's clock (`fps`, 60 by default).
+//! `from` opens the film at that frame with nothing drawn before it, and `hash` adds each frame's
+//! `pixel_hash`, the hash of its surface (#430).
 //!
 //! Each frame answers `{frame, gpu_ms, cpu_ms}`. Its GPU time is the GPU layer's part, from the end
 //! of encoding Vello GPU's passes to the device's report that they are done, read on the render
@@ -18,6 +20,7 @@
 //! `--planted stops_at_request` stops the clock at the request and reads the window before the
 //! swap, so its ground is the old look's.
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -28,7 +31,8 @@ use deep_canvas_motion::program::{Program, State};
 use deep_gpu::ring::Mark as RingMark;
 use serde_json::{json, Map, Value};
 
-use crate::marks2d::{close2, open2, show, Marks2};
+use crate::groups::Clock;
+use crate::marks2d::{close2, open2, packs_of, show, Frame2, Marks2};
 use crate::{frames, parity, refused, App, Planted};
 
 const FLICKS_PER_SECOND: i64 = 705_600_000;
@@ -57,14 +61,14 @@ fn look_of(v: &Value) -> Result<(Palette, Type), Value> {
     Ok((resolved.light, resolved.light_type))
 }
 
-/// The film's marks at `t` in a look, and its ground.
+/// The film's marks at `t` in a look, by writer layer, and its ground.
 fn marks_at(
     doc: &Map<String, Value>,
     program: &Program,
     state: &mut State,
     t: i64,
     (palette, ty): &(Palette, Type),
-) -> Result<(Vec<Arc<Drawn>>, Rgb), Value> {
+) -> Result<(Vec<Vec<Arc<Drawn>>>, Rgb), Value> {
     program.evaluate(t, eval::Validity::Full, state);
     let items = eval::items(doc, program, state);
     let record = Record {
@@ -80,12 +84,12 @@ fn marks_at(
         scene::Planted::None,
     )
     .map_err(|r| refused(r.code, r.path))?;
-    let marks = frame
+    let layers = frame
         .layers
         .iter()
-        .flat_map(|l| l.marks.iter().cloned())
+        .map(|l| l.marks.iter().cloned().collect())
         .collect();
-    Ok((marks, frame.ground))
+    Ok((layers, frame.ground))
 }
 
 fn hex(c: &image::Rgba<u8>) -> String {
@@ -94,10 +98,10 @@ fn hex(c: &image::Rgba<u8>) -> String {
 
 /// Frame `n` encoded and submitted on the render side and waited for there: the encode's CPU ms
 /// and the GPU layer's ms from the end of the encode to the work done.
-fn render(app: &App, n: u64, encoded: &Encoded) -> Result<(f64, f64), Value> {
+fn render(app: &App, n: u64, encoded: &Encoded, hash: bool) -> Result<(f64, f64, Option<String>), Value> {
     let encoded = encoded.clone();
     app.worker
-        .call(move |state| -> Result<(f64, f64), String> {
+        .call(move |state| -> Result<(f64, f64, Option<String>), String> {
             let view = state.view2d.as_mut().ok_or("no 2D surface")?;
             let (drawn, encode) = loop {
                 let started = Instant::now();
@@ -114,7 +118,8 @@ fn render(app: &App, n: u64, encoded: &Encoded) -> Result<(f64, f64), Value> {
                 .ok_or("the frame's passes weren't encoded")?;
             let done = view.times(drawn.slot).ok_or("the frame has no times")?;
             let gpu = done.render_done.saturating_duration_since(at);
-            Ok((encode.as_secs_f64() * 1e3, gpu.as_secs_f64() * 1e3))
+            let pixels = hash.then(|| view.read(drawn.slot).map(|b| frames::hex(&b))).flatten();
+            Ok((encode.as_secs_f64() * 1e3, gpu.as_secs_f64() * 1e3, pixels))
         })
         .map_err(|e| refused("render_failed", e))
 }
@@ -149,6 +154,8 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
         .map_or(Some(60), Value::as_u64)
         .filter(|f| *f > 0)
         .ok_or_else(|| bad("fps"))? as i64;
+    let from = call["from"].as_u64().unwrap_or(0);
+    let hash = call["hash"] == true;
     let mut events = Vec::new();
     for e in call["events"].as_array().into_iter().flatten() {
         let frame = e["frame"]
@@ -166,7 +173,15 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
     let program = Program::compile(&doc).map_err(|r| refused(r.code, r.path))?;
     let mut state = program.state();
     let at = |n: u64| n as i64 * FLICKS_PER_SECOND / fps;
-    let (first, ground) = marks_at(&doc, &program, &mut state, at(0), &look)?;
+    let roles = |look: &(Palette, Type)| -> Arc<BTreeMap<String, [f64; 3]>> {
+        Arc::new(
+            look.0
+                .iter()
+                .map(|(k, c)| (k.clone(), c.map(|v| f64::from(v) / 255.0)))
+                .collect(),
+        )
+    };
+    let (first, ground) = marks_at(&doc, &program, &mut state, at(from), &look)?;
 
     app.window(size)?;
     {
@@ -183,7 +198,17 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
         p.pictures = Default::default();
     }
     let baseline = frames::baseline_ns(app);
-    let marks: Marks2 = Arc::new(Mutex::new(Arc::new(first)));
+    let packs = Arc::new(packs_of(call)?);
+    let frame2 = |layers, n, look: &(Palette, Type)| {
+        Arc::new(Frame2 {
+            layers,
+            clock: Clock::of(&doc, at(n)),
+            roles: roles(look),
+            guard: None,
+            packs: packs.clone(),
+        })
+    };
+    let marks: Marks2 = Arc::new(Mutex::new(frame2(first, from, &look)));
     let encoded: Encoded = Arc::new(Mutex::new(None));
     let (ui, error) = open2(app, marks.clone(), size, Some(encoded.clone()))?;
     app.window.as_ref().expect("opened").paint.borrow_mut().ui = Some(ui.clone());
@@ -194,9 +219,10 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
     let mut listed = Vec::with_capacity(count as usize);
     let mut switches = Vec::new();
     let played = (|| -> Result<(), Value> {
-        for n in 0..count {
+        for k in 0..count {
             let mut request = None;
-            while let Some((_, next)) = events.next_if(|(f, _)| *f == n) {
+            let n = from + k;
+            while let Some((_, next)) = events.next_if(|(f, _)| *f == k) {
                 let asked = Instant::now();
                 if stops_at_request {
                     let ms = asked.elapsed().as_secs_f64() * 1e3;
@@ -213,7 +239,7 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
             }
             let started = Instant::now();
             let (drawn, ground) = marks_at(&doc, &program, &mut state, at(n), &look)?;
-            *marks.lock().unwrap_or_else(|e| e.into_inner()) = Arc::new(drawn);
+            *marks.lock().unwrap_or_else(|e| e.into_inner()) = frame2(drawn, n, &look);
             {
                 let win = app.window.as_ref().expect("opened");
                 let mut p = win.paint.borrow_mut();
@@ -222,7 +248,7 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
                 }
             }
             let built = started.elapsed().as_secs_f64() * 1e3;
-            let (encode_ms, layer_gpu_ms) = render(app, n, &encoded)?;
+            let (encode_ms, layer_gpu_ms, pixels) = render(app, k, &encoded, hash)?;
             if let Some(e) = error.lock().unwrap_or_else(|e| e.into_inner()).take() {
                 return Err(e);
             }
@@ -232,7 +258,7 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
             frames::gpui_idle();
             let recorded = ui.take_record();
             let cb = recorded.iter().find_map(|m| match m {
-                RingMark::Sampled { frame, buffer, .. } if *frame == n => Some(*buffer),
+                RingMark::Sampled { frame, buffer, .. } if *frame == k => Some(*buffer),
                 _ => None,
             });
             let window_gpu_ns = cb
@@ -244,14 +270,18 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
                 })
                 .unwrap_or(0)
                 .saturating_sub(baseline);
-            listed.push(json!({
+            let mut row = json!({
                 "frame": n,
                 "gpu_ms": layer_gpu_ms + window_gpu_ns as f64 / 1e6,
                 "cpu_ms": built + encode_ms + ui_time.as_secs_f64() * 1e3,
-            }));
+            });
+            if hash {
+                row["pixel_hash"] = json!(pixels);
+            }
+            listed.push(row);
             if let Some(asked) = request {
-                if app.window.as_ref().expect("opened").paint.borrow().shown != Some(n) {
-                    show(app, n)?;
+                if app.window.as_ref().expect("opened").paint.borrow().shown != Some(k) {
+                    show(app, k)?;
                 }
                 let image = app
                     .window
@@ -261,7 +291,7 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
                     .map_err(|e| refused("no_capture", e))?;
                 let ground = hex(image.get_pixel(4, 4));
                 let ms = asked.elapsed().as_secs_f64() * 1e3;
-                switches.push(json!({"frame": n, "ms": ms, "ground": ground}));
+                switches.push(json!({"frame": k, "ms": ms, "ground": ground}));
             }
         }
         Ok(())

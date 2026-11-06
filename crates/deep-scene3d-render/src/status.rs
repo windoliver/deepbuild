@@ -260,6 +260,30 @@ impl Stage {
         Some(u32::from_le_bytes(data[..4].try_into().ok()?))
     }
 
+    /// Runs the guard from `source` into `target`, both [`FINISHED`], on `device`'s queue (#430: the
+    /// pixels a 2D writer layer's operators wrote).
+    pub fn guard_into(
+        &mut self,
+        device: &Device,
+        guard: &Guard,
+        source: &wgpu::TextureView,
+        target: &wgpu::TextureView,
+    ) {
+        self.arm(device, guard, false);
+        let bind = self.guard_bind(device, source);
+        let mut encoder = device.device.create_command_encoder(&Default::default());
+        full_pass(
+            &mut encoder,
+            GUARD_PASS,
+            target,
+            wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+            &self.guard_f32,
+            &bind,
+            None,
+        );
+        device.queue.submit([encoder.finish()]);
+    }
+
     /// Runs the guard alone over `input` (f32 RGBA, rows top-down, `size`): the guarded image in
     /// the same shape and how many pixels moved (the `guard` call).
     pub fn guard_image(
