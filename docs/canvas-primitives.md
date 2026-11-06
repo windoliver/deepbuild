@@ -302,6 +302,7 @@ The kernel holds only this contract: document shapes, kinds with versions, stabl
 - `aspect: letterbox | extend` (by default letterbox for films and 2D documents, extend for 3D scenes and figures)
 - `look: {asset: look@major, theme: auto | light | dark = auto}`
 - `camera: item ID` (what the document is viewed through when no shot is active); `locale: BCP 47 = en` (the copy table's default; a view setting can change it)
+- `light_policy: {soft, contact, shadowed, local_map, cache}` (Light policy: soft shadows, Light policy: local shadows; a document that names none keeps the sun's fixed filter and draws no local shadow map)
 - `budget: {class, frame_gpu_ms, frame_cpu_ms: ms, gpu_mb: MB, items, instances, vertices, insets, lights, puffs, voices: u32, effects_gpu_ms: ms, ambient_fps: Hz, build_ms, rebuild_ms: ms}` (caps that only tighten the class)
 - `requires: {core: semver, kinds: [family.name@major.minor], modules: {canvas module → semver range}, preview: [name@major]} (each kind's minor is the lowest its used fields need; preview names each preview entry the document uses)`; `packs: [name@version]`
 - `data: {name → number | number[] | string[] | {value, source}}`
