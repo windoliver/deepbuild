@@ -7,6 +7,7 @@
 //!
 //! The math is f64 through deep-canvas's ops module on pinned libm, as the canvas lint requires.
 
+mod blend;
 mod canonical;
 pub mod clock;
 pub mod constraint;
@@ -22,6 +23,8 @@ pub mod modifier;
 mod occurrence;
 pub mod module;
 pub mod program;
+pub mod quat;
+pub mod remap;
 pub mod schedule;
 pub mod spring;
 mod tempo;
