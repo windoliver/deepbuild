@@ -1,0 +1,14 @@
+{
+  "issue": 426,
+  "criterion": "#426.45886847",
+  "verdict": "looks_right",
+  "who": "The owner Tao Feng (\"Record it\"), accepting Claude (claude-opus-5-5)'s check, made at the owner's request in the session (\"can you check for me?\")",
+  "when": "2026-11-07T23:38:22Z",
+  "screenshots": {
+    "product-gradient.png": "8648dba938d016d66eae83e7e68dac40cf5cdaf1c400f722ec3e8cba6561f706",
+    "backdrop-ground.png": "e8630950ed96b0da62852af9815800f546bf3d55429972891df01ad1939b75bf",
+    "blurred-background.png": "ff45fff9e54e3c8ebb6fb321eb072a5d96f81fd5640fa26d46fb622bd23e1e36",
+    "background-fog.png": "c16f69d5c418ab54d2ac76ae4dc206ce6204e819038b302658d8fec48383f058"
+  },
+  "note": "Each picture draws what its fixture asks. Product: a glossy sphere on the dark gradient, with the studio's horizon in its reflection. Backdrop: the grid HDR's lower half spreads out as a floor converging under the box; the flat dark band above is the HDR's uniform upper half, and the box has no shadow because this shot turns the catcher off. Blur: the warm/blue step is a smooth gradient behind the sphere, while the sphere's reflection keeps the step sharper. Fog: the near sphere (about 52 m) fades toward the red sky behind it, the far one (about 1000 m) has gone into the background, and the blue below the horizon shows at the bottom. These are test patterns: the call is that the renderer does what each criterion says, not a judgement on product art."
+}
