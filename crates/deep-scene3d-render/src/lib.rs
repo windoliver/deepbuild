@@ -3990,7 +3990,8 @@ impl Renderer {
             .filter(|s| s.batch == 0);
         let same = solids.clone().count() == self.ties.len()
             && solids.clone().all(|s| self.ties.contains_key(&s.id));
-        if !same && !self.planted.ties_by_submission {
+        // Under a drawn look a rank reads the frame alone, so seeking equals playing (#149).
+        if (!same || look.drawn.is_some()) && !self.planted.ties_by_submission {
             self.ties = tie_ranks(solids);
         }
         self.flip = !self.flip;
@@ -4100,6 +4101,23 @@ impl Renderer {
         {
             return self.prepare(device, scene, look);
         }
+        // Under a drawn look a tie rank is a function of the frame, so a part the move changed
+        // rewrites too, and a frame draws the same however it was reached (#149).
+        let mut moved = moved.to_vec();
+        let ties = look.drawn.as_ref().map(|_| {
+            tie_ranks(scene.layers.iter().flat_map(|l| &l.solids).filter(|s| s.batch == 0))
+        });
+        if let Some(ties) = ties.filter(|t| *t != self.ties) {
+            for (l, layer) in scene.layers.iter().enumerate() {
+                for (i, s) in layer.solids.iter().enumerate() {
+                    if ties.get(&s.id) != self.ties.get(&s.id) && !moved.contains(&(l, i)) {
+                        moved.push((l, i));
+                    }
+                }
+            }
+            self.ties = ties;
+        }
+        let moved = moved.as_slice();
         // A moved part keeps its lobes' entry in the frame's lobe table (#428); one whose lobes
         // aren't there prepares whole.
         let mut lobes = Vec::with_capacity(moved.len());
@@ -4129,11 +4147,12 @@ impl Renderer {
             let Some(batch) = self.batches.get_mut(&layer.id) else {
                 continue;
             };
-            let (Some(s), Some(&(set_key, at, pick, tie))) =
+            let (Some(s), Some(&(set_key, at, pick, _))) =
                 (layer.solids.get(i), batch.solid_slots.get(i))
             else {
                 continue;
             };
+            let tie = self.ties.get(&s.id).copied().unwrap_or(0);
             if let Some(set) = batch.solids.get_mut(&set_key) {
                 let record = solid_record(
                     s,
@@ -4876,7 +4895,8 @@ impl Renderer {
                     // edges it draws don't hide it; one drawn over everything skips depth.
                     flags: u32::from(l.world)
                         | (u32::from(l.edges.is_some()) << 1)
-                        | (u32::from(l.over) << 2),
+                        | (u32::from(l.over) << 2)
+                        | (u32::from(l.joined) << 3),
                     pad: 0,
                 };
                 batch.lines.push(&l.id, bytemuck::bytes_of(&record));

@@ -258,11 +258,13 @@ impl Flat {
             planted: None,
             guard: None,
             other: None,
+            page: None,
+            ground: false,
         };
         let groups = self
             .groups
             .get_or_insert_with(|| Groups::new(&device.device));
-        let (done, _) = groups.compose(device, vello, &layer)?;
+        let (done, ..) = groups.compose(device, vello, &layer)?;
         groups.finish(&device.device, encoder, &done, target, FORMAT, false);
         Ok(())
     }

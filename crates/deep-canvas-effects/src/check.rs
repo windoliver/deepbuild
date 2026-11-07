@@ -119,6 +119,8 @@ pub struct CheckOptions {
     pub trusts_index: bool,
     /// An op table whose noise octave weight is halved.
     pub noise_weight_halved: bool,
+    /// #252's planted class: a stepped operator's carried state computes as exact.
+    pub carried_exact: bool,
 }
 
 struct Ctx<'a> {
@@ -1318,6 +1320,36 @@ impl Ctx<'_> {
     }
 }
 
+/// Where #252's stepped fields may stand: `stepped` on a compute operator, and `carry`, a read of
+/// the previous step and the step index only in a stepped one.
+fn stepped_rules(op: &Operator, issues: &mut Vec<Issue>) {
+    let rule = |issues: &mut Vec<Issue>, path: &str, what: String| {
+        issues.push(Issue::at_path("operator_kind_rule", path, what));
+    };
+    if op.stepped.is_some() && op.kind != Kind::Compute {
+        rule(issues, "stepped", format!("{} is stepped, and only compute work steps", op.id));
+    }
+    if op.stepped.is_some() {
+        return;
+    }
+    for (name, s) in &op.storage {
+        if s.carry.is_some() {
+            rule(issues, &format!("outputs/{name}/carry"), format!("{} carries {name} between frames, and only a stepped operator carries state", op.id));
+        }
+    }
+    for (name, input) in &op.inputs {
+        match &input.from {
+            From::Storage { op: from, output, previous: true } => rule(
+                issues,
+                &format!("inputs/{name}"),
+                format!("{name} reads {from}.{output} as the previous step left it, and only a stepped operator reads an earlier step"),
+            ),
+            From::Step => rule(issues, &format!("inputs/{name}"), format!("{name} reads the fixed step, and only a stepped operator has one")),
+            _ => {}
+        }
+    }
+}
+
 fn input_class(from: &From) -> Class {
     match from {
         // A target the GPU rasterized is same machine, and so is time.
@@ -1327,6 +1359,7 @@ fn input_class(from: &From) -> Class {
         | From::Channel(_)
         | From::Texture3d { .. }
         | From::Seed
+        | From::Step
         | From::Role(_)
         | From::Storage { .. }
         | From::Column { .. }
@@ -1448,6 +1481,7 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
             size: it.resolution.clone(),
             elements: 0,
             counted: false,
+            stepped: None,
             workgroup: 64,
             source: None,
             uses: Vec::new(),
@@ -1510,6 +1544,7 @@ fn check_inner(
         accs: Vec::new(),
     };
     let mut issues = Vec::new();
+    stepped_rules(op, &mut issues);
     let mut textures = Vec::new();
     let mut storage_inputs = Vec::new();
     for (name, input) in &op.inputs {
@@ -1749,6 +1784,13 @@ fn check_inner(
         Class::SameMachine
     }
     .max(floor);
+    // State a stepped operator carries between frames repeats only on the machine that stepped
+    // it, whatever its steps are (#252).
+    let class = match op.stepped {
+        Some(_) if options.carried_exact => Class::Exact,
+        Some(_) => class.max(Class::SameMachine),
+        None => class,
+    };
     if let Some(d) = op.declared {
         if d < class && !options.declared_class {
             let (step, path, why) = match ctx.inexact.clone() {

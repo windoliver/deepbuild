@@ -1,0 +1,27 @@
+Base: main a4d2c5d4 (9bdebdfb, the suite's base, plus 13 later main commits, none of #148), with tests/acceptance/148
+as committed in a5a2bd4b. Run 2026-11-07 on a Mac17,10, Node 24.22.0, Claude Code 2.1.308, Codex 0.166.0-alpha.5.1,
+pi 1.4.0, deep-hook from `cargo build --locked -p deep-hook`:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/148-redraft-ac16 --no-file-parallelism --testTimeout=600000
+
+ ❯ daemon.test.ts (3 tests | 3 failed) 7742ms
+     × both rows say the daemon started before the sync until their own evidence; the restart is one authority ask, run on your answer, never a signal 1937ms
+     × Codex's facts name its restart command and record what a running daemon picks up, for the pinned version 2ms
+     × twin: a hub that runs the restart without your answer fails, naming the daemon 671ms
+
+1. The criterion's test passed step 1 (one daemon, two Codex sessions, both rows in status.read, neither naming the
+   daemon's PID) and failed at step 2, where the sync is proposed:
+
+   Error: agents.propose refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method agents.propose.","path":"/method","actual":"agents.propose","evidence":[]}
+
+2. The facts test failed at its first assertion:
+
+   AssertionError: adapters/codex.facts.json names Codex's own restart command in daemon.restart: undefined: expected false to be true
+
+3. The twin is BLOCKED, as every #148 twin is on the base:
+
+   Error: BLOCKED: the hub with DEEP_HUB_PLANT=restarts-without-answer did not start: ...
+   Error: DEEP_HUB_PLANT=restarts-without-answer names no planted program
+
+Not run past these points: steps 3-6 of the criterion's test and the twin's failure naming the daemon have never run
+against a hub that has them.
