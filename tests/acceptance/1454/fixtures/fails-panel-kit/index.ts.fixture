@@ -1,0 +1,5 @@
+// A plug-in whose panel fails `panel@1` (README: The fixtures). The host's own registerView check takes it: only the
+// kit can refuse it. `.fixture` until helpers.ts copies it.
+export default async function (deep: any): Promise<void> {
+  await deep.registerView('ext.overlay.view', 'panel', 'sidebar');
+}
