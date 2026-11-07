@@ -6054,6 +6054,26 @@ export interface SessionReading {
   evidence?: Array<string>;
 }
 
+/** session.rules_delivered@1 */
+export interface SessionRulesDelivered {
+  v: 1;
+  id: string;
+  kind: "session.rules_delivered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    via: "start" | "prompt" | "notice";
+    pos: number;
+    rules: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
 /** session.start@1 */
 export interface SessionStart {
   v: 1;

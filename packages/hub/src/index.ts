@@ -13,6 +13,7 @@ import { inboxCommand } from './inbox.js';
 import { workspaceCommand } from './workspace-command.js';
 import { installCommand } from './install.js';
 import { memoryCommand } from './memory.js';
+import { rulesCommand } from './rules.js';
 import { undoCommand } from './undo.js';
 import { resolve } from 'node:path';
 import { installedRoot } from './paths.js';
@@ -20,7 +21,7 @@ import { runHub } from './server.js';
 import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
 import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.js';
 
-export { workspaceCommand, backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, memoryCommand, relationItems, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
+export { workspaceCommand, backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, memoryCommand, relationItems, rulesCommand, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
 export { numbersCommand, statusCommand } from './status.js';
 export { showCommand } from './show.js';
 export { kindsCommand } from './canvas.js';
