@@ -1217,6 +1217,14 @@ class LocalRunner implements Runner {
    * newest window readings against `plan.reserve_pct`. An agent with no plan account, or one with no reading yet,
    * keeps nothing waiting here.
    */
+  windowUsed(agent: Agent, home: string): number | undefined {
+    const account = AGENTS[agent]?.account(home, this.o.env);
+    const reading = account ? this.accounts.get(account) : undefined;
+    if (!reading) return undefined;
+    const now = this.o.now();
+    const live = [...reading.windows.values()].filter((w) => w.resets === null || w.resets > now).map((w) => w.used);
+    return live.length ? Math.max(...live) : undefined;
+  }
   atReserve(agent: Agent, home: string): string | undefined {
     const parts = AGENTS[agent];
     if (!parts) return undefined;

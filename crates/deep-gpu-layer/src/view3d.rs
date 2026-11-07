@@ -1531,6 +1531,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 read_targets || overlay,
                 shows && n == args.from,
             )?;
+            // The frame's wall time, from its start (before a seek's restore) until its pixels
+            // are read back (#252).
+            let wall_ms = frame_started.elapsed().as_secs_f64() * 1e3;
             let plain0 = drawn.bytes.clone();
             if settling_now {
                 if settle.len() < n_all as usize {
@@ -1618,6 +1621,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let mut frame = Map::new();
             frame.insert("frame".into(), json!(n));
             frame.insert("settled".into(), json!(settled));
+            // What each stepped operator's carried output holds as this frame drew (#252).
+            let fx2 = fx.clone();
+            let carried = app.worker.call(move |_| lock(&fx2).docops.as_ref().map(|o| o.carried()));
+            if let Some(c) = carried.filter(|c| c.as_object().is_some_and(|m| !m.is_empty())) {
+                frame.insert("carried".into(), c);
+            }
+            if args.timings {
+                frame.insert("wall_ms".into(), json!(wall_ms));
+            }
             frame.insert("samples".into(), samples_report);
             if !notices.is_empty() {
                 frame.insert("notices".into(), json!(notices));
@@ -1682,16 +1694,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                         })?;
                         let mut m = serde_json::Map::new();
                         for k in &keys {
-                            m.insert(
-                                k.clone(),
-                                crate::opframe::read_one(
-                                    &device,
-                                    ops,
-                                    &Default::default(),
-                                    k,
-                                    &dir,
-                                )?,
-                            );
+                            let mut r =
+                                crate::opframe::read_one(&device, ops, &Default::default(), k, &dir)?;
+                            // The class its writer computes, which a golden compares it under (#252).
+                            let item = k.split_once('.').map_or(k.as_str(), |(i, _)| i);
+                            if let (Some(o), Some(c)) = (r.as_object_mut(), ops.class_of(item)) {
+                                o.insert("class".into(), json!(c.name()));
+                            }
+                            m.insert(k.clone(), r);
                         }
                         Ok(Value::Object(m))
                     })?;
