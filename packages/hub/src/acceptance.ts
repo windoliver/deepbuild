@@ -282,7 +282,7 @@ export class Acceptance {
     const past = pastReach(await this.o.runner().output(rec.job), rec.folder, folder);
     if (past) return past;
     if (rec.state !== 'finished' || rec.stop) return rec.refused ?? `it ended ${rec.state}${rec.stop ? `: ${rec.stop.cause}` : ''}`;
-    const changed = (await git(rec.folder, ['status', '--porcelain', '-z', '--untracked-files=all', '--ignored=matching'])).split('\0').filter(Boolean).map((row) => row.slice(3));
+    const changed = (await git(rec.folder, ['status', '--porcelain', '-z', '--untracked-files=all', '--ignored=matching'], { raw: true })).split('\0').filter(Boolean).map((row) => row.slice(3));
     const outside = changed.find((path) => !path.startsWith(`${folder}/`));
     if (outside) return `it wrote ${outside}, outside ${folder}`;
     try { return filesIn(rec.folder, folder); } catch (error) { return (error as Error).message; }
