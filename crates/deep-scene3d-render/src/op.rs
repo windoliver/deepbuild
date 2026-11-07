@@ -120,6 +120,7 @@ pub(crate) fn compile(
     scene: &str,
     groups: [&wgpu::BindGroupLayout; 3],
     forward_z: bool,
+    samples: u32,
     op: &SolidOp,
 ) -> Result<MatOp, String> {
     let item = module::operator_of(&op.id, &op.item).ok_or("not a gpu.material@1 item")?;
@@ -201,6 +202,7 @@ pub(crate) fn compile(
     });
     let pipeline = draw_pipeline(
         d,
+        samples,
         &module,
         &layout,
         forward_z,

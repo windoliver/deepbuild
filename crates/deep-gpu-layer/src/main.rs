@@ -158,6 +158,11 @@ pub enum Planted {
     OutlinesBeforeUpscale,
     /// #1174's wrong program: screen-size labels drawn in the geometry pass, before the upscale.
     LabelsBeforeUpscale,
+    /// #1173's wrong programs (tests/acceptance/1173/README.md: Planted programs).
+    SingleSampleTargets,
+    ClaimsMsaaOverSingleSample,
+    PuffBlockCopy,
+    ResolveAccumulatesFrames,
     /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
     /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on
     /// whatever its spike record says; each sector of a group composited on its own.
@@ -350,6 +355,10 @@ impl Planted {
             "status_without_depth" => Planted::StatusWithoutDepth,
             "outlines_before_upscale" => Planted::OutlinesBeforeUpscale,
             "labels_before_upscale" => Planted::LabelsBeforeUpscale,
+            "single_sample_targets" => Planted::SingleSampleTargets,
+            "claims_msaa_over_single_sample" => Planted::ClaimsMsaaOverSingleSample,
+            "puff_block_copy" => Planted::PuffBlockCopy,
+            "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
@@ -662,7 +671,7 @@ impl App {
             Some("vello_gpu") => marks2d::vello_gpu(self),
             Some("spike2d") => marks2d::spike2d(self, out, call),
             Some("film2d") => film::film2d(self, call),
-            Some("canonical") => live::canonical(self, call),
+            Some("canonical") => live::canonical(self, out, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
             #[cfg(feature = "test-meter")]

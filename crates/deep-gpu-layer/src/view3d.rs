@@ -1862,6 +1862,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             p.overlays.clear();
         }
     }
+    let (msaa, render_targets) = session3::render_targets(app);
     session3::close(app);
     // An over-cap document is refused, its imports still reported: the import comes before the
     // count it makes (#423).
@@ -1924,10 +1925,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         "internal_scale": if below { args.surface.scale } else { 1.0 },
         "upscale": if below { args.surface.upscale.name() } else { "none" },
         "sharpen": args.surface.sharpen,
-        "size_px": size, "internal_px": internal,
+        "size_px": size, "internal_px": internal, "msaa": msaa,
     });
     let mut reply = json!({
         "frames": frames, "passes": passes, "status": status_report, "surface": drew,
+        "render_targets": render_targets,
         "layers": layers_report(&args.doc, &args.hidden),
     });
     if !worlds.is_empty() {
