@@ -90,6 +90,24 @@ and both runs and the CPU the change's own tests account for are reported. A bud
 frozen once it reaches main, and a new one records `INITIAL` with its reason. A
 clone made with `--single-branch` needs `git fetch origin main` first.
 
+## Verdicts on GitHub
+
+DeepBuild can post each verdict as a commit status with the context `deepbuild/verdict`, on the commit it covers. A PASS is `success`; INCONCLUSIVE and BLOCKED are `pending`; FAIL and INVALID are `failure` and `error`. A verdict on uncommitted work waits for a pushed commit with the same files. A head that holds a commit neither a session made nor an account of yours pushed stays `pending`, with `untrusted head` in the description.
+
+Nothing posts until the repo has a delivery rule, and every repo starts with it off. Turn it on in `~/.deepbuild/config.json`, naming the accounts that push for you. The hub posts with the `GH_TOKEN` or `GITHUB_TOKEN` in its own environment, never your `gh` login, which your agents can use too.
+
+```json
+{ "github": { "delivery": { "owner/name": "on" }, "yours": ["your-account"] } }
+```
+
+DeepBuild never changes branch protection itself. To require the status, open the repo's Settings, Branches, edit the default branch's rule, turn on "Require status checks to pass before merging" and add `deepbuild/verdict`. Or run:
+
+```bash
+gh api -X PATCH repos/OWNER/NAME/branches/main/protection/required_status_checks -f 'contexts[]=deepbuild/verdict'
+```
+
+Any account with write access can post that context until [#1325](https://github.com/windoliver/deepbuild/issues/1325) requires it from the gate's own identity.
+
 ## Documentation
 
 | Goal | Start here |

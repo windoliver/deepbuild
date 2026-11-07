@@ -1,0 +1,49 @@
+{
+  "readBy": "OpenCode's files for the hub's sync (#148) only: no adapter reads its sessions yet. From OpenCode's documentation (config and Agent Skills pages); no OpenCode was installed where these were written, so no live list command has read them",
+  "versions": ["1.14.0"],
+  "agent": "opencode",
+  "entries": {
+    "name": "OpenCode",
+    "home": "~/.config/opencode",
+    "mcp": {
+      "file": "~/.config/opencode/opencode.json",
+      "format": "json",
+      "key": "mcp",
+      "transports": {
+        "stdio": {
+          "type": "local",
+          "fields": ["command", "args", "env"],
+          "names": {
+            "env": "environment"
+          },
+          "commandArray": true
+        },
+        "http": {
+          "type": "remote",
+          "fields": ["url", "headers"]
+        }
+      },
+      "refused": [
+        {
+          "transport": "http",
+          "field": "env",
+          "reason": "a remote entry has url and headers"
+        },
+        {
+          "transport": "http",
+          "field": "command",
+          "reason": "a remote entry has url and headers"
+        },
+        {
+          "transport": "http",
+          "field": "args",
+          "reason": "a remote entry has url and headers"
+        }
+      ]
+    },
+    "skills": {
+      "write": "~/.config/opencode/skills",
+      "readFrom": ["~/.config/opencode/skills", "~/.claude/skills", "~/.agents/skills"]
+    }
+  }
+}
