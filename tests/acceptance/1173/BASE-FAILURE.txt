@@ -1,0 +1,167 @@
+# #1173 acceptance suite at the base, e2e6e1cc (Merge pull request #1211), before any implementation.
+# Run: npx vitest run --root tests/acceptance/1173 --no-file-parallelism, on a Linux box (not a Mac), so every test is
+# INCONCLUSIVE: they draw with the GPU layer on macOS's Metal device, and off macOS each fails with a message starting
+# INCONCLUSIVE: before anything is built or drawn (useBuild builds nothing off macOS). 9 fail, 0 pass. This job made no
+# run on a Mac; there, at the base, each criterion test is expected to fail for the base's behavior or a missing reply
+# field (surface.msaa, render_targets, canonical's final), and each planted test with bad_input (no such --planted name).
+
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/agent-a6c2eb9bd5bbb8039/tests/acceptance/1173
+
+ ❯ taste.test.ts (1 test | 1 failed) 50ms
+   ❯ #1173.2197a951 the screenshots before and after and the one taste call on them (1)
+     × #1173.2197a951 the run writes the city, the effects scene and the house before and after, zoomed on an edge and a puff, and the owner's recorded call on exactly those says they look right 42ms
+ ❯ edges.test.ts (2 tests | 2 failed) 40ms
+   ❯ #1173.b5284ee0 a box silhouette drawn at 4× MSAA has pixels of partial coverage along its edge on every frame and every export (2)
+     × #1173.b5284ee0 the turning box at 4× MSAA: partial coverage along its edge in each of frames 0 … 29 and in each export, render-back and frame-budget frame 34ms
+     × #1173.b5284ee0 a planted single-sample target fails, naming the target 1ms
+ ❯ samples.test.ts (2 tests | 2 failed) 152ms
+   ❯ #1173.8d6404d5 the surface reply's msaa equals the sample count scene3d's targets were made with (2)
+     × #1173.8d6404d5 view3d's surface and each canonical render (export, render-back, frame budget) report msaa 4, the sample count of every target scene3d made 114ms
+     × #1173.8d6404d5 a reply that claims MSAA over single-sample targets fails, naming both 18ms
+ ❯ seek.test.ts (2 tests | 2 failed) 56ms
+   ❯ #1173.5b817fce seeking equals playing by pixel hash on the same machine with MSAA on (2)
+     × #1173.5b817fce frames 11 and 29 of the turning box sought in fresh processes equal them played, by pixel hash, at 4× MSAA 33ms
+     × #1173.5b817fce a planted resolve that blends in the previous frame fails, naming the frame 1ms
+ ❯ puffs.test.ts (2 tests | 2 failed) 92ms
+   ❯ #1173.478ff552 a half-resolution puff has no 2 × 2 block of identical pixels inside its soft edge (2)
+     × #1173.478ff552 the half-resolution puffs: no 2 × 2 block of identical pixels inside their soft edge 82ms
+     × #1173.478ff552 a planted block copy fails, naming the emitter 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  edges.test.ts > #1173.b5284ee0 a box silhouette drawn at 4× MSAA has pixels of partial coverage along its edge on every frame and every export > #1173.b5284ee0 the turning box at 4× MSAA: partial coverage along its edge in each of frames 0 … 29 and in each export, render-back and frame-budget frame
+AssertionError: INCONCLUSIVE: the GPU layer draws these pixels on macOS's Metal device; this is linux; this is not a pass
+ ❯ inconclusive helpers.ts:65:10
+     63| /** A test that can't be judged here fails with this, never passes. */
+     64| export function inconclusive(reason: string): never {
+     65|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     66| }
+     67| export const onMetal = (): boolean => process.platform === 'darwin';
+ ❯ requireMetal helpers.ts:70:19
+ ❯ edges.test.ts:53:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  edges.test.ts > #1173.b5284ee0 a box silhouette drawn at 4× MSAA has pixels of partial coverage along its edge on every frame and every export > #1173.b5284ee0 a planted single-sample target fails, naming the target
+AssertionError: INCONCLUSIVE: the GPU layer draws these pixels on macOS's Metal device; this is linux; this is not a pass
+ ❯ inconclusive helpers.ts:65:10
+     63| /** A test that can't be judged here fails with this, never passes. */
+     64| export function inconclusive(reason: string): never {
+     65|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     66| }
+     67| export const onMetal = (): boolean => process.platform === 'darwin';
+ ❯ requireMetal helpers.ts:70:19
+ ❯ edges.test.ts:58:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  puffs.test.ts > #1173.478ff552 a half-resolution puff has no 2 × 2 block of identical pixels inside its soft edge > #1173.478ff552 the half-resolution puffs: no 2 × 2 block of identical pixels inside their soft edge
+AssertionError: INCONCLUSIVE: the GPU layer draws these pixels on macOS's Metal device; this is linux; this is not a pass
+ ❯ inconclusive helpers.ts:65:10
+     63| /** A test that can't be judged here fails with this, never passes. */
+     64| export function inconclusive(reason: string): never {
+     65|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     66| }
+     67| export const onMetal = (): boolean => process.platform === 'darwin';
+ ❯ requireMetal helpers.ts:70:19
+ ❯ puffs.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  puffs.test.ts > #1173.478ff552 a half-resolution puff has no 2 × 2 block of identical pixels inside its soft edge > #1173.478ff552 a planted block copy fails, naming the emitter
+AssertionError: INCONCLUSIVE: the GPU layer draws these pixels on macOS's Metal device; this is linux; this is not a pass
+ ❯ inconclusive helpers.ts:65:10
+     63| /** A test that can't be judged here fails with this, never passes. */
+     64| export function inconclusive(reason: string): never {
+     65|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     66| }
+     67| export const onMetal = (): boolean => process.platform === 'darwin';
+ ❯ requireMetal helpers.ts:70:19
+ ❯ puffs.test.ts:38:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  samples.test.ts > #1173.8d6404d5 the surface reply's msaa equals the sample count scene3d's targets were made with > #1173.8d6404d5 view3d's surface and each canonical render (export, render-back, frame budget) report msaa 4, the sample count of every target scene3d made
+AssertionError: INCONCLUSIVE: the GPU layer draws these pixels on macOS's Metal device; this is linux; this is not a pass
+ ❯ inconclusive helpers.ts:65:10
+     63| /** A test that can't be judged here fails with this, never passes. */
+     64| export function inconclusive(reason: string): never {
+     65|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     66| }
+     67| export const onMetal = (): boolean => process.platform === 'darwin';
+ ❯ requireMetal helpers.ts:70:19
+ ❯ samples.test.ts:45:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  samples.test.ts > #1173.8d6404d5 the surface reply's msaa equals the sample count scene3d's targets were made with > #1173.8d6404d5 a reply that claims MSAA over single-sample targets fails, naming both
+AssertionError: INCONCLUSIVE: the GPU layer draws these pixels on macOS's Metal device; this is linux; this is not a pass
+ ❯ inconclusive helpers.ts:65:10
+     63| /** A test that can't be judged here fails with this, never passes. */
+     64| export function inconclusive(reason: string): never {
+     65|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     66| }
+     67| export const onMetal = (): boolean => process.platform === 'darwin';
+ ❯ requireMetal helpers.ts:70:19
+ ❯ samples.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  seek.test.ts > #1173.5b817fce seeking equals playing by pixel hash on the same machine with MSAA on > #1173.5b817fce frames 11 and 29 of the turning box sought in fresh processes equal them played, by pixel hash, at 4× MSAA
+AssertionError: INCONCLUSIVE: the GPU layer draws these pixels on macOS's Metal device; this is linux; this is not a pass
+ ❯ inconclusive helpers.ts:65:10
+     63| /** A test that can't be judged here fails with this, never passes. */
+     64| export function inconclusive(reason: string): never {
+     65|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     66| }
+     67| export const onMetal = (): boolean => process.platform === 'darwin';
+ ❯ requireMetal helpers.ts:70:19
+ ❯ seek.test.ts:43:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  seek.test.ts > #1173.5b817fce seeking equals playing by pixel hash on the same machine with MSAA on > #1173.5b817fce a planted resolve that blends in the previous frame fails, naming the frame
+AssertionError: INCONCLUSIVE: the GPU layer draws these pixels on macOS's Metal device; this is linux; this is not a pass
+ ❯ inconclusive helpers.ts:65:10
+     63| /** A test that can't be judged here fails with this, never passes. */
+     64| export function inconclusive(reason: string): never {
+     65|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     66| }
+     67| export const onMetal = (): boolean => process.platform === 'darwin';
+ ❯ requireMetal helpers.ts:70:19
+ ❯ seek.test.ts:48:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  taste.test.ts > #1173.2197a951 the screenshots before and after and the one taste call on them > #1173.2197a951 the run writes the city, the effects scene and the house before and after, zoomed on an edge and a puff, and the owner's recorded call on exactly those says they look right
+AssertionError: INCONCLUSIVE: the GPU layer draws these pixels on macOS's Metal device; this is linux; this is not a pass
+ ❯ inconclusive helpers.ts:65:10
+     63| /** A test that can't be judged here fails with this, never passes. */
+     64| export function inconclusive(reason: string): never {
+     65|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     66| }
+     67| export const onMetal = (): boolean => process.platform === 'darwin';
+ ❯ requireMetal helpers.ts:70:19
+ ❯ taste.test.ts:121:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  9 failed (9)
+   Start at  11:56:39
+   Duration  4.30s (import 40%, transform 32%, tests 23%, worker 4%, environment 1%)
+
+    Isolate  5 workers spawned · ~429ms startup each (spawn + environment, per file)
+             at least ~1.72s faster with isolate: false — reuses workers across files instead of one per file
+

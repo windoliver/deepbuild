@@ -609,8 +609,15 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             store_dir.as_deref(),
             (skips, near),
         );
+        let timing = input.get("timing") == Some(&Value::Bool(true));
         if command == "check" {
             let mut checked = checked;
+            if timing {
+                match raster::rank_ms(&doc) {
+                    Ok(rank_ms) => checked["timing"] = json!({"rank_ms": rank_ms}),
+                    Err(r) => return Some(Answer::Now(refused(r.code, &r.path))),
+                }
+            }
             verdict(&mut checked, &accepted(input.get("accepted"))?);
             return Some(Answer::Now(checked));
         }
@@ -623,7 +630,8 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 } else {
                     deep_canvas_graph::view::Router::Orthogonal
                 };
-                raster::geometry(&doc, item, t, &vectors, router)
+                let look = look.as_ref().map(|(l, _)| l);
+                raster::geometry(&doc, item, t, &vectors, router, (look, timing))
             },
         )));
     }
