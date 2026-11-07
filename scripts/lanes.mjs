@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { homedir, hostname, tmpdir } from 'node:os';
+import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inputs as configInputs } from './config-eval.mjs';
 import { inputs as verdictInputs } from './verdict-proofs.mjs';
@@ -22,12 +22,13 @@ export const ownLane = ['tests/acceptance/684/lean.test.ts'];
  * runner. tests/acceptance/327/ holds answers-redraft/, the blind redraft that is #327 AC2's hub-side test (its README);
  * the earlier answers.test.ts there keeps AC7, AC15 and AC16, so the folder runs whole.
  */
-export const alone = ['tests/acceptance/84/', 'tests/acceptance/580/', 'tests/acceptance/67/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/', 'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/490/', 'tests/acceptance/490-redraft-2/', 'tests/acceptance/490-oracle/', 'tests/acceptance/490-oracle-redraft/', 'tests/acceptance/491/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/160/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/', 'tests/acceptance/138/', 'tests/acceptance/185/', 'tests/acceptance/200/', 'tests/acceptance/417/', 'tests/acceptance/418/', 'tests/acceptance/221/', 'tests/acceptance/412/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/claude.test.ts', 'tests/acceptance/1015/codex.test.ts', 'tests/acceptance/1015/focused.test.ts', 'tests/acceptance/1015/waiter.test.ts', 'tests/acceptance/1015/memory.test.ts', 'tests/acceptance/1015/gpu.test.ts', 'tests/acceptance/1015/redraft/own-repo.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1143/', 'tests/acceptance/399/', 'tests/acceptance/87/gate/',
+export const alone = ['tests/acceptance/84/', 'tests/acceptance/580/', 'tests/acceptance/67/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/', 'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/490/', 'tests/acceptance/490-redraft-2/', 'tests/acceptance/490-oracle/', 'tests/acceptance/490-oracle-redraft/', 'tests/acceptance/491/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/160/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/', 'tests/acceptance/138/', 'tests/acceptance/185/', 'tests/acceptance/200/', 'tests/acceptance/417/', 'tests/acceptance/418/', 'tests/acceptance/221/', 'tests/acceptance/412/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/claude.test.ts', 'tests/acceptance/1015/codex.test.ts', 'tests/acceptance/1015/focused.test.ts', 'tests/acceptance/1015/waiter.test.ts', 'tests/acceptance/1015/memory.test.ts', 'tests/acceptance/1015/gpu.test.ts', 'tests/acceptance/1015/redraft/own-repo.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1018/', 'tests/acceptance/1143/', 'tests/acceptance/399/', 'tests/acceptance/87/gate/',
   'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/378/', 'tests/acceptance/420/', 'tests/acceptance/421/', 'tests/acceptance/423/', 'tests/acceptance/424/', 'tests/acceptance/430/', 'tests/group-compositor.test.ts', 'tests/acceptance/446/', 'tests/acceptance/419/', 'tests/acceptance/428/', 'tests/acceptance/1297/', 'tests/acceptance/422/', 'tests/acceptance/425/', 'tests/scene3d-interface.test.ts', 'tests/scene3d-shading.test.ts', 'tests/scene3d-contact.test.ts', 'tests/scene3d-culled-casters.test.ts', 'tests/acceptance/441/', 'tests/acceptance/440/', 'tests/acceptance/443/', 'tests/acceptance/433/', 'tests/acceptance/671/', 'tests/acceptance/1162/', 'tests/acceptance/381/', 'tests/acceptance/398/', 'tests/acceptance/397/', 'tests/acceptance/406/', 'tests/acceptance/238/', 'tests/acceptance/415/', 'tests/acceptance/383/', 'tests/acceptance/384/', 'tests/acceptance/400/', 'tests/acceptance/401/', 'tests/acceptance/105/', 'tests/acceptance/498/', 'tests/acceptance/806/', 'tests/acceptance/402/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/327/', 'tests/acceptance/379/', 'tests/acceptance/777/', 'tests/acceptance/823/', 'tests/acceptance/856/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
   'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/331/', 'tests/acceptance/315/', ...['replay', 'budgets', 'process-start'].map((f) => `tests/acceptance/21/${f}.test.ts`), 'tests/acceptance/348/', 'tests/acceptance/349/', 'tests/acceptance/351/', 'tests/acceptance/355/', 'tests/acceptance/884/', 'tests/acceptance/139/',
   'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/666/fast.test.ts', 'tests/acceptance/668/fast.test.ts', 'tests/acceptance/567/fast.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts', 'tests/acceptance/237/', 'tests/acceptance/34/', 'tests/acceptance/667/', 'tests/acceptance/380/', 'tests/acceptance/382/', 'tests/acceptance/386/', 'tests/acceptance/1174/', 'tests/acceptance/1173/', 'tests/acceptance/371/', 'tests/acceptance/376/', 'tests/acceptance/306/', 'tests/acceptance/403/', 'tests/acceptance/429/', 'tests/acceptance/483/', 'tests/acceptance/484/',
   'tests/acceptance/18/kit/', 'tests/acceptance/18/session/', 'tests/acceptance/18/binding/', ...['callers', 'failures', 'loops', 'mcp', 'prompts', 'record', 'replies'].map((f) => `tests/acceptance/18/mapping/${f}.test.ts`),
   'tests/acceptance/453/',
+  'tests/acceptance/1172/',
   ...['coexist', 'disable', 'install', 'stophold', 'tamper', 'waiter'].map((f) => `tests/acceptance/18/install/${f}.test.ts`), 'tests/acceptance/19/',
   'tests/acceptance/1312/',
   'tests/acceptance/629/',
@@ -81,6 +82,7 @@ export const byHand = ['tests/acceptance/685/', 'tests/acceptance/1202/session.l
  * judging a wall-clock budget, named one by one. A rule by what a file imports marks 386 files, so none is used.
  */
 export const timed = [
+  'tests/acceptance/1018/budgets.test.ts', 'tests/acceptance/1018/redraft-ac6/budgets.test.ts',
   'tests/acceptance/103/budgets.test.ts', 'tests/acceptance/104/budgets.test.ts',
   'tests/acceptance/105/budgets.test.ts', 'tests/acceptance/105/live.test.ts',
   'tests/acceptance/1097/budgets.test.ts', 'tests/acceptance/1098/budgets.test.ts',
@@ -343,6 +345,207 @@ const leaseScript = fileURLToPath(new URL('./lease', import.meta.url));
 const throttleClass = ([command, ...args]) => (command === process.execPath
   && ((args[0]?.endsWith('vitest.mjs') && !args.includes('--no-file-parallelism')) || args[0] === '--test') ? 'test' : 'build');
 
+// How a test run reads (docs/parallel-proof.md, section 10a): each test's state from its runner's report, skips against
+// the `skips` list of known-failures.json, and the evidence record each lane writes. A skip is unrun, so it is never PASS.
+export const named = (path, name) => `${path} › ${name}`;
+/** Whether a list of files and of folders ending in `/` covers a file. */
+export const listed = (list, file) => list.some((entry) => (entry.endsWith('/') ? file.startsWith(entry) : file === entry));
+/** The state that stands among several: technical-design.md's precedence, and undefined when none is below PASS. */
+export const worst = (states) => ['FAIL', 'INVALID', 'BLOCKED', 'INCONCLUSIVE'].find((state) => states.includes(state));
+/** Whether a lane's newly found state takes over from the one it holds: only a worse one does. */
+export const stands = (found, held) => Boolean(found) && (!held || worst([held.state, found.state]) !== held.state);
+// A failure that names its own state keeps it, as runLanes reads one: a check that couldn't run reads BLOCKED.
+const stateOf = (message = '') => message.match(/^(?:\w*Error: )?(BLOCKED|INCONCLUSIVE|INVALID)\b/)?.[1] ?? 'FAIL';
+
+/**
+ * The results in a vitest or node --test report: failures with their state, the tests that passed, by ID, and any skips
+ * with their notes. `noGrant`, when the throttle ended the job with no grant, is its message: its marker is then the
+ * report's only row, since one beside other rows was left by a test's own throttle, not the job's. `cut` says a line
+ * didn't parse. `label` names the job, when it reads a vitest job's whole report.
+ */
+export function reportResults(cwd, text, label = '') {
+  const failures = [], passed = [], skips = [], stack = [], rows = [];
+  const path = (file) => relative(cwd, file.startsWith('file:') ? fileURLToPath(file) : file).split(sep).join('/');
+  let cut = false;
+  for (const [index, line] of text.split('\n').entries()) {
+    if (!line) continue;
+    let row;
+    try { row = JSON.parse(line); } catch {
+      // A line that doesn't parse, such as a record cut short with the next run on, hides whatever its records said:
+      // each file it names is unknown, and the line itself answers for a record cut before its file ends.
+      cut = true;
+      const records = [...line.matchAll(/\{"type":"\w+","file":("(?:[^"\\]|\\.)*")(?=,)/g)];
+      const ids = [...records[0]?.index === 0 ? [] : [`report line ${index + 1}`], ...new Set(records.map(([, file]) => named(path(JSON.parse(file)), '(file)')))];
+      for (const id of ids) failures.push({ id, state: 'INCONCLUSIVE', message: `line ${index + 1} of the report doesn't parse` });
+      continue;
+    }
+    rows.push(row);
+    if (row.type === 'unhandled') failures.push({ id: 'vitest › unhandled error', state: 'FAIL', message: row.message });
+    if (!row.file) continue;
+    const file = path(row.file);
+    // node --test names a test alone; its suites are the tests started around it.
+    if (row.type === 'start') stack[row.nesting] = row.name;
+    const name = row.nesting === undefined ? row.name : [...stack.slice(0, row.nesting), row.name].join(' › ');
+    // A suite node skips whole reports none of its tests, so it stands for them.
+    if (row.type === 'skip' || row.skip || row.todo) {
+      if (row.type !== 'start') skips.push({ id: named(file, name), note: row.note ?? '' });
+      continue;
+    }
+    if (row.suite) continue;
+    if (row.type === 'pass') passed.push(named(file, name));
+    if (row.type === 'fail') failures.push({ id: named(file, name), state: stateOf(row.error?.message), message: row.error?.message?.split('\n')[0] ?? '' });
+  }
+  const noGrant = rows.length === 1 && rows[0].type === 'no-grant' ? rows[0].message : undefined;
+  // The vitest reporter ends its report once all of it landed; a record lost whole leaves nothing else to see.
+  if (label.startsWith('vitest') && !noGrant && !text.endsWith('{"type":"end"}\n')) failures.push({ id: `${label} report`, state: 'INCONCLUSIVE', message: "the report ends before the run did, so a test's result may be missing" });
+  return { failures, passed, ...(skips.length && { skips }), ...(noGrant && { noGrant }), ...(cut && { cut }) };
+}
+
+/** The results in cargo test's output, each test by the target that reruns it, and a target that failed in no test. */
+export function cargoResults(output, status, workspace) {
+  const targets = new Map(workspace.flatMap((crate) => crate.targets.flatMap((target) => [[target.key, target.rerun], ...(target.doc ? [[`doc ${target.doc}`, `-p ${crate.name} --doc`]] : [])])));
+  const failures = [], passed = [], skips = [], failed = new Set();
+  let target = null;
+  for (const line of output.split('\n')) {
+    const running = line.match(/^\s*Running (?:unittests )?(.+?) \(.*?deps\/(\w+)-[0-9a-f]+\)\s*$/);
+    const doc = line.match(/^\s*Doc-tests (\w+)\s*$/);
+    if (running || doc) {
+      const key = running ? `${running[2]} ${running[1]}` : `doc ${doc[1]}`;
+      target = targets.get(key) ?? key;
+    }
+    const test = line.match(/^test (.+?) \.\.\. (ok|FAILED)$/);
+    if (test && test[2] === 'ok') passed.push(`cargo ${target} › ${test[1]}`);
+    if (test && test[2] === 'FAILED') failures.push({ id: `cargo ${target} › ${test[1]}`, state: 'FAIL', message: '' }), failed.add(target);
+    const ignored = line.match(/^test (.+?) \.\.\. ignored(?:, (.*))?$/);
+    if (ignored) skips.push({ id: `cargo ${target} › ${ignored[1]}`, note: ignored[2] ?? '' });
+    // A harness that ran nothing says so, and nothing unrun passes.
+    if (/^test result: INCONCLUSIVE/.test(line)) failures.push({ id: `cargo ${target}`, state: 'INCONCLUSIVE', message: line.slice(13) }), failed.add(target);
+    // cargo names each failed target by the arguments that rerun it.
+    const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
+    if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, state: 'FAIL', message: 'the target failed outside any test it reported' }), failed.add(rerun);
+  }
+  if (status !== 0 && !failed.size) failures.push({ id: 'cargo test', state: 'FAIL', message: output.split('\n').find((line) => /^error/.test(line)) ?? `exited ${status}` });
+  return { failures, passed, ...(skips.length && { skips }) };
+}
+
+const READING_ONLY = 'INCONCLUSIVE (reading only';
+const CRITERION = /#\d+\.[0-9a-f]{8}\b/;
+// A skip that says so: a platform or GPU the machine lacks. These are never listed, and leave the lane INCONCLUSIVE (platform).
+// A note starting BLOCKED is a block, whatever it names: #380's M1 record names deep-gpu.
+const PLATFORM = /\b(?:macOS|Linux|darwin|Metal|GPU|platform)\b/i;
+export const isPlatform = (note) => !note.startsWith('BLOCKED') && PLATFORM.test(note);
+
+/**
+ * Whether a `skips` entry covers a skip: by test ID and exact note prefix, and a note-less entry only a note-less skip.
+ * A reading-only skip is covered by its full note, and never in a timed file or a test carrying a criterion tag. The
+ * approver, not this, confirms what an entry says of itself.
+ */
+function entryCovers(entry, { id, note }, timed) {
+  if (entry.id !== id || isPlatform(note)) return false;
+  if (note.startsWith(READING_ONLY)) return entry.note === note && !listed(timed, id.split(' › ')[0]) && !CRITERION.test(id);
+  return entry.note ? note.startsWith(entry.note) : !note;
+}
+
+/** The skips as those a `skips` entry covers, printed in every summary and changing no state, and those left open. */
+export function readSkips(skips, entries = [], timed = []) {
+  const covered = [], open = [];
+  for (const skip of skips) {
+    const entry = entries.find((candidate) => entryCovers(candidate, skip, timed));
+    if (entry) covered.push({ ...skip, reason: entry.reason });
+    else open.push({ id: skip.id, state: skip.note.startsWith('BLOCKED') ? 'BLOCKED' : 'INCONCLUSIVE', message: skip.note || 'skipped with no note' });
+  }
+  return { covered, open };
+}
+
+const vitestReporter = fileURLToPath(new URL('./proof-vitest-reporter.mjs', import.meta.url));
+const nodeReporter = new URL('./proof-reporter.mjs', import.meta.url).href;
+/**
+ * A test command with its runner's report added beside its usual output, and the environment it needs; null for any
+ * other command. Only vitest's report takes the throttle's marker: node's reporter holds its file open.
+ */
+export function reporting([command, ...args], report) {
+  const at = args.findIndex((arg) => arg.endsWith('vitest.mjs'));
+  if (at >= 0) return { command: [command, ...args.slice(0, at + 2), '--reporter=default', `--reporter=${vitestReporter}`, ...args.slice(at + 2)], env: { DEEP_PROOF_VITEST_REPORT: report } };
+  if (command === process.execPath && args[0] === '--test') return { command: [command, '--test', `--test-reporter=${nodeReporter}`, `--test-reporter-destination=${report}`, '--test-reporter=spec', '--test-reporter-destination=stdout', ...args.slice(1)] };
+  return null;
+}
+
+/** What a test command's run says of each test; null when it left nothing readable, and for any other command. */
+export function testsOf([command, ...args], cwd, { report, output, status }) {
+  if (command === 'cargo' && args[0] === 'test') return cargoResults(output, status, []);
+  if (!existsSync(report)) return null;
+  try {
+    const results = reportResults(cwd, readFileSync(report, 'utf8'));
+    if (results.cut) return null;
+    // vitest's -t leaves every other test skipped with no note: a filter's choice, not a skip.
+    return args.includes('-t') ? { ...results, skips: results.skips?.filter(({ note }) => note) } : results;
+  } catch {
+    return null;
+  }
+}
+
+function skipsList(cwd) {
+  try {
+    return JSON.parse(readFileSync(join(cwd, 'scripts/known-failures.json'), 'utf8')).skips;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * One command's run in a lane: each test's state for the record, the tests that proved nothing, the listed skips, the
+ * state they found, and whether they explain a non-zero exit: a run that failed only by tests naming their own state,
+ * or that the throttle never started, stands on those. A runner killed outright doesn't.
+ */
+export function readRun(results, status, cwd, timed) {
+  const { failures = [], passed = [], skips = [], noGrant } = results ?? {};
+  const { covered, open } = readSkips(skips, skipsList(cwd), timed);
+  const stated = failures.filter(({ state }) => state !== 'FAIL'), unsure = [...stated, ...open];
+  const row = ({ id, state, message }) => ({ id, state, note: message });
+  return {
+    tests: [...passed.map((id) => ({ id, state: 'PASS' })), ...failures.map(row), ...open.map((skip) => ({ ...row(skip), skipped: true })), ...covered.map(({ id, note }) => ({ id, state: 'LISTED', note, skipped: true }))],
+    unsure, covered,
+    explained: Boolean(noGrant) || (stated.length > 0 && stated.length === failures.length && status < 128),
+    found: noGrant ? { state: 'INCONCLUSIVE', error: noGrant } : unsure.length ? { state: worst(unsure.map(({ state }) => state)), error: `${unsure.length} ${unsure.length === 1 ? 'test' : 'tests'} proved nothing` } : undefined,
+  };
+}
+
+/**
+ * The tree hash of what is on disk, uncommitted and untracked files too: HEAD's tree on a clean checkout. A copy of the
+ * index, so a lane's run never touches the real one. Null outside a git repository.
+ */
+export function exactTree(cwd) {
+  const git = (args, env) => spawnSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, ...env } });
+  const index = git(['rev-parse', '--git-path', 'index']);
+  if (index.status !== 0) return null; // Outside git: no tree, so no record. A tree git can't write reads undefined.
+  const directory = mkdtempSync(join(tmpdir(), 'deep-lane-tree-')), copy = { GIT_INDEX_FILE: join(directory, 'index') };
+  try {
+    // Git rechecks a file only if it isn't older than the index, so a copy aged now would hide a same-size edit.
+    // A repository nothing was added to has no index yet, and `git add -A` starts one.
+    const source = resolve(cwd, index.stdout.trim());
+    if (existsSync(source)) {
+      copyFileSync(source, copy.GIT_INDEX_FILE);
+      utimesSync(copy.GIT_INDEX_FILE, statSync(source).atime, statSync(source).mtime);
+    }
+    const written = git(['add', '-A'], copy).status === 0 ? git(['write-tree'], copy) : { status: 1 };
+    return written.status === 0 ? written.stdout.trim() : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+/** A lane's evidence record, which T7 and T8 read: its state, where it ran, on what tree, and each test's state. */
+export function writeRecord(lane, state, tree, tests, more = {}) {
+  if (!tree) throw new Error("git can't write this checkout's tree");
+  const folder = join(homedir(), '.deepbuild', 'lanes');
+  mkdirSync(folder, { recursive: true, mode: 0o700 });
+  const file = join(folder, `${tree}-${lane.replace(/\W+/g, '-')}.json`);
+  writeFileSync(file, `${JSON.stringify({ lane, state, host: hostname(), platform: `${process.platform}-${process.arch}`, tree, tests, ...more }, null, 2)}\n`);
+  return file;
+}
+
 export function runLanes(lanes, { cwd = root } = {}) {
   const failures = [];
   // The release preflight runs every lane; the local one runs a lane with paths only for a change that touches them.
@@ -371,17 +574,20 @@ export function runLanes(lanes, { cwd = root } = {}) {
     const started = performance.now();
     console.log(`RUN ${lane.name}`);
     let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
+    const tree = exactTree(cwd), tests = [], unproven = [], listedSkips = [];
     for (const [command, ...args] of lane.commands) {
-      let directory, descriptor, result, output = '';
+      let directory, descriptor, result, results, output = '';
       try {
         directory = mkdtempSync(join(tmpdir(), 'deep-preflight-output-'));
-        const log = join(directory, 'output');
+        const log = join(directory, 'output'), report = join(directory, 'report');
+        const reported = reporting([command, ...args], report);
         descriptor = openSync(log, 'w', 0o600);
         // One shared descriptor preserves the child's stdout/stderr write order.
         // Through the machine's throttle table, by its class (docs/parallel-proof.md, section 6), and under a cpu.slot
         // of the calling session's through scripts/lease (#1015).
-        result = spawnSync(process.execPath, [throttle, throttleClass([command, ...args]), '--wait', '30', '--', leaseScript, command, ...args], { cwd, stdio: ['ignore', descriptor, descriptor] });
+        result = spawnSync(process.execPath, [throttle, throttleClass([command, ...args]), '--wait', '30', '--', leaseScript, ...reported?.command ?? [command, ...args]], { cwd, env: { ...process.env, ...reported?.env }, stdio: ['ignore', descriptor, descriptor] });
         output = readFileSync(log, 'utf8').trim();
+        results = testsOf([command, ...args], cwd, { report, output, status: result.status });
       } catch (error) {
         result = { status: null, error };
       } finally {
@@ -393,7 +599,12 @@ export function runLanes(lanes, { cwd = root } = {}) {
         }
       }
       if (output) console.log(output);
-      if (result.status !== 0 && !failure) {
+      const run = readRun(results, result.status, cwd, timed);
+      tests.push(...run.tests);
+      unproven.push(...run.unsure);
+      listedSkips.push(...run.covered);
+      let found = run.found;
+      if (result.status !== 0 && !run.explained) {
         const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
         const error = result.error?.message
           ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
@@ -402,12 +613,23 @@ export function runLanes(lanes, { cwd = root } = {}) {
         // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not
         // FAIL, and one that couldn't read all it checks reads INCONCLUSIVE.
         const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED|INCONCLUSIVE)\s+(.+)/) ?? [];
-        failure = { state: result.error ? 'BLOCKED' : state ?? 'FAIL', error: rest ?? error };
+        found = { state: result.error ? 'BLOCKED' : state ?? 'FAIL', error: rest ?? error };
       }
+      if (stands(found, failure)) failure = found;
     }
     const elapsed = ((performance.now() - started) / 1000).toFixed(2);
-    if (failure) failures.push(`${failure.state} ${lane.name}: ${failure.error}\n  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
+    for (const { id, note, reason } of listedSkips) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);
+    const platform = failure?.state === 'INCONCLUSIVE' && unproven.some(({ message }) => isPlatform(message)) ? ' (platform)' : '';
+    const lines = unproven.map(({ id, state, message }) => `  ${state} ${id}${message ? `: ${message}` : ''}\n`).join('');
+    if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
     else console.log(`PASS ${lane.name} (${elapsed} s)`);
+    try {
+      if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests);
+    } catch (error) {
+      // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
+      if (failure && failure.state !== 'INCONCLUSIVE') console.log(`NOTE ${lane.name}: no evidence record: ${error.message}`);
+      else failures.push(`BLOCKED ${lane.name}: no evidence record: ${error.message}\n  Fix: Clear what that names, then run the lane again.`);
+    }
   }
   if (issues) {
     delete process.env.DEEP_OPEN_ISSUES;

@@ -28,7 +28,7 @@ console.log('Warming builds (not timed)');
 warm(root);
 try {
   // Lane output streams as it runs, so a measurement that breaks never hides what ran.
-  const { elapsedMs, cpuMs, peakBytes, instructions, status } = measureOnce([process.execPath, 'scripts/checks.mjs'], root, true);
+  const { elapsedMs, cpuMs, peakBytes, instructions, status } = measureOnce([process.execPath, 'scripts/checks.mjs'], root, true, undefined, false);
   observation = { elapsedMs, cpuMs, peakBytes, instructions, status };
   checkStatus = status === 0 ? 0 : 1;
 } catch (error) {
