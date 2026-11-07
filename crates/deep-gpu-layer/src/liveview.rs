@@ -583,11 +583,12 @@ impl View {
         window: u32,
         look: &Look3,
         labels: &mut Labels,
+        planted: Planted3,
     ) -> Result<View, String> {
         let ((slots, renderer, frames, prepared), base_bytes) = memory::across(device, || {
             let slots: Result<Vec<_>, String> =
                 (0..slots).map(|_| allocate(device, path, size)).collect();
-            let mut renderer = Renderer::new(device, Planted3::default());
+            let mut renderer = Renderer::new(device, planted);
             let mut frames = frames;
             let prepared = match &mut frames {
                 Content::Scene(frames) => match frames.at(0, size, &Offsets::default(), labels) {
@@ -652,6 +653,11 @@ impl View {
     /// Render pipelines its document has needed so far.
     pub fn pipelines(&self) -> u32 {
         self.renderer.pipelines()
+    }
+
+    /// The renderer it draws through.
+    pub fn renderer(&self) -> &Renderer {
+        &self.renderer
     }
 
     /// Plants the upscale's wrong programs (#386).
@@ -826,6 +832,8 @@ impl View {
                 .collect();
             let res = &self.op_resolution;
             let canonical = drawing.canonical && !self.canonical_draws_live_only;
+            // Stepped operators count fixed steps from the exact time, not its f32 (#252).
+            self.ops.clock = Some(t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64);
             self.ops.plan(
                 device,
                 &linear,

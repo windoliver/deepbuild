@@ -1,0 +1,47 @@
+One run of tests/acceptance/342 on the base c12a65bbe9c0fa26a677b2fd65e12146b3a24016, 2026-11-06, Mac17,10, load 80 to 120,
+Node 24.22.2 (Homebrew), Docker 29.5.2 through Colima, deep-hook built. 14 tests, 468 s; pool.test.ts and the file list were
+run again after a fix to this suite, recorded under AC5.
+
+AC1 fails: nothing copies at SessionEnd, and no pass reads ~/.codex/archived_sessions.
+AC2 fails: a verified SessionEnd leaves the stack up, though `deep env down` takes the same stack down in about 2 s.
+AC3 fails: no teardown task is raised.
+AC4 fails: neither happens inside its longest wait, so there is no reading to judge.
+AC5 PASSES on the main test: #580 built this rule. It is here for the volumes and the asking; its plant is BLOCKED.
+AC6 fails at its last step. Every step before it ran: the kill, session.gone, the second stack, the volume and stack standing
+    31 s on, the resume. Why the base keeps the volume past a kill wasn't traced; its code means to take such a stack down.
+The four plants are BLOCKED: the base's hub lists none of them.
+
+ FAIL  archive.test.ts > AC1 in the Claude desktop app, a session deleted or archived at SessionEnd (reason other) leaves a copy holding its last line, read back after its source is gone
+AssertionError: no transcript.archived of session:ad1bc5c1aa10412385cdfe72ec7dbf92 (claude) holds its last line: expected undefined to be defined
+ FAIL  archive.test.ts > AC1 in Codex Desktop, a session deleted or archived at SessionEnd (reason other) leaves a copy holding its last line, read back after its source is gone
+AssertionError: no transcript.archived of session:ba7da26edaba4256bf94f5d19f7a9998 (codex) holds its last line: expected undefined to be defined
+ FAIL  archive.test.ts > AC1 a Codex Desktop thread archived with no hook fired is archived from ~/.codex/archived_sessions, what it said last included
+AssertionError: no transcript.archived of session:6ba58215a25945558e8dcfdb45836de6 (codex) holds its last line: expected undefined to be defined
+ FAIL  budgets.test.ts > AC4 a desktop session's transcript is archived within 5 s of its SessionEnd
+AssertionError: session:12055709a42c45eca46b003aea905b43 (claude) was not archived inside the 31000 ms Codex Desktop leaves the rollout: expected undefined to be defined
+ FAIL  budgets.test.ts > AC4 a session's volumes are reaped within 30 s of its end
+AssertionError: the volume deep-c000_data still stands 60000 ms after its session ended: expected undefined to be defined
+ FAIL  interrupted.test.ts > AC6 killed with SIGKILL the session keeps its volume and stack past the reap budget; resumed and ended by SessionEnd, the volume is gone within 30 s
+AssertionError: the volume deep-c000_data still stands 60000 ms after the resumed session ended: expected undefined to be defined
+ FAIL  interrupted.test.ts > AC6 (wrong program) a reaper that treats the kill as an end (DEEP_HUB_PLANT=reap-on-kill) removes the volume and fails, naming it
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=reap-on-kill did not start: file://~/dev/claude-worktrees/doneright/github-issue-342-413cd0/packages/hub/dist/plant.js:82
+Error: DEEP_HUB_PLANT=reap-on-kill names no planted program
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=pool-asks-which-stack did not start: file://~/dev/claude-worktrees/doneright/github-issue-342-413cd0/packages/hub/dist/plant.js:82
+Error: DEEP_HUB_PLANT=pool-asks-which-stack names no planted program
+ FAIL  teardown.test.ts > AC3 each resource has a task at its cost; "I did it" with it still there leaves the task open; gone, its check passes and only its task closes
+Error: timed out after 30000 ms waiting for a teardown task naming each of instance-6830f2fe, number-d2e68158, instance-69925590; the hub (pid 95822) runs, its stderr ends ""; the unblock tasks raised: []
+ FAIL  teardown.test.ts > AC3 (wrong program) a task closed on your word (DEEP_HUB_PLANT=teardown-closes-on-word) fails this test, naming the resource
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=teardown-closes-on-word did not start: file://~/dev/claude-worktrees/doneright/github-issue-342-413cd0/packages/hub/dist/plant.js:82
+Error: DEEP_HUB_PLANT=teardown-closes-on-word names no planted program
+ FAIL  volumes.test.ts > AC2 after SessionEnd the stack's volume is gone, and the bare volume its agent made stays
+AssertionError: the volume deep-c000_data, which the session started through deep env up, still stands after the session ended: expected undefined to be defined
+ FAIL  volumes.test.ts > AC2 a Codex Desktop thread's Archive ends its session with no hook fired, and its stack's volume is gone
+AssertionError: the volume deep-c000_data still stands after its thread's Archive ended the session: expected undefined to be defined
+ FAIL  volumes.test.ts > AC2 (wrong program) a reaper that removes every volume the session's commands created (DEEP_HUB_PLANT=reap-session-volumes) removes the bare volume and fails this test, naming it
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=reap-session-volumes did not start: file://~/dev/claude-worktrees/doneright/github-issue-342-413cd0/packages/hub/dist/plant.js:82
+Error: DEEP_HUB_PLANT=reap-session-volumes names no planted program
+
+AC5, after the fix: the first run read C's volumes as B's, since C leases B's project name again; volumes are now read by name
+and creation time.
+ pool.test.ts > AC5 with the pool full, idle B's stack and volumes go, C's journey is served, and no ask is raised: PASS, 16 s
+ pool.test.ts > AC5 (wrong program) DEEP_HUB_PLANT=pool-asks-which-stack: BLOCKED, the base's hub lists no such plant

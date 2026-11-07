@@ -44,10 +44,16 @@ fn cut_hides(p: vec3<f32>) -> bool {
     return select(any, all, frame.cut_info.y == 1u);
 }
 
+// The object ID as two 16-bit halves: the multisampled ID target's format (#1173), which the
+// resolve pass joins again.
 struct Targets {
     @location(0) color: vec4<f32>,
-    @location(1) id: u32,
+    @location(1) id: vec2<u32>,
 };
+
+fn targets(color: vec4<f32>, id: u32) -> Targets {
+    return Targets(color, vec2<u32>(id & 0xffffu, id >> 16u));
+}
 
 fn srgb_decode(c: vec3<f32>) -> vec3<f32> {
     let lo = c / 12.92;
@@ -1940,6 +1946,23 @@ fn occlusion(pos: vec2<f32>, albedo: vec3<f32>) -> vec3<f32> {
 // so every derivative the shading takes still sees the whole quad.
 @fragment
 fn mesh_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
+    return mesh(in, front);
+}
+
+// The object ID whole, for a pass drawn after the resolve into its one-sample target (#1173).
+struct Resolved {
+    @location(0) color: vec4<f32>,
+    @location(1) id: u32,
+};
+
+// A transmissive part (#428), drawn over the resolved opaque scene.
+@fragment
+fn glass_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Resolved {
+    let t = mesh(in, front);
+    return Resolved(t.color, t.id.x | (t.id.y << 16u));
+}
+
+fn mesh(in: MeshOut, front: bool) -> Targets {
     // The texture coordinates' derivatives, while every pixel of the quad still runs (#423).
     let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
     // Derivatives first, while every pixel of the quad still runs: the face's normal in its
@@ -2002,7 +2025,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             if alpha < cutoff {
                 // The planted wrong program writes the part's ID through its hole.
                 if (lights.count.z & IDS_THROUGH_MASK) != 0u {
-                    return Targets(vec4<f32>(0.0), in.pick);
+                    return targets(vec4<f32>(0.0), in.pick);
                 }
                 discard;
             }
@@ -2011,18 +2034,18 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
         let facing = m.n;
         let s = with_lobes(in, facing, m.s);
         if (in.flags & UNLIT) != 0u {
-            return Targets(see_through(adjusted(s.base + m.emission, in.op.w), alpha, mode), in.pick);
+            return targets(see_through(adjusted(s.base + m.emission, in.op.w), alpha, mode), in.pick);
         }
         let d = direct(in, facing, s, m.spread, curved);
         // A shadow catcher writes black, as opaque as the share of light its shadow removes, at
         // its strength.
         if (in.flags & CATCH) != 0u {
-            return Targets(vec4<f32>(0.0, 0.0, 0.0, d.removed * alpha * in.base.w), in.pick);
+            return targets(vec4<f32>(0.0, 0.0, 0.0, d.removed * alpha * in.base.w), in.pick);
         }
         if keyed && lights.count.x == 0u && frame.sky_top.w <= 0.0 && env.k.x <= 0.0 {
             let key = 0.45 * occlusion(in.pos.xy, s.base) + 0.55 * max(dot(facing, frame.light.xyz), 0.0);
             let unlit = fogged(adjusted(s.base * key + in.emission.rgb, in.op.w), in.world);
-            return Targets(see_through(unlit, alpha, mode), in.pick);
+            return targets(see_through(unlit, alpha, mode), in.pick);
         }
         var ambient: vec3<f32>;
         if env.k.x > 0.0 {
@@ -2037,7 +2060,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             through = transmitted(in, facing, v, s);
         }
         let lit = fogged(adjusted(d.color + ambient * m.occlusion + m.emission + through, in.op.w), in.world);
-        return Targets(see_through(lit, alpha, mode), in.pick);
+        return targets(see_through(lit, alpha, mode), in.pick);
     }
     let facing = max(dot(n, frame.light.xyz), 0.0);
     // A sun (w > 0) lights by its illuminance over an ambient quarter; with none, the view's own
@@ -2057,7 +2080,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
     let albedo = paint(in.color);
     let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
     let a = in.emission.w;
-    return Targets(vec4<f32>(fogged(adjusted(albedo * lit + in.emission.rgb, in.op.w), in.world) * a, a), in.pick);
+    return targets(vec4<f32>(fogged(adjusted(albedo * lit + in.emission.rgb, in.op.w), in.world) * a, a), in.pick);
 }
 
 // ---- the per-pixel resolve (#424; Object: see-through order): a per-pixel item's fragments
@@ -2093,7 +2116,7 @@ fn oit_fs(in0: MeshOut, @builtin(front_facing) front: bool) -> Targets {
         let prev = atomicExchange(&oit_heads[px.y * oit_info.width + px.x], i + 1u);
         oit_nodes[i] = vec4<u32>(pack2x16float(t.color.rg), pack2x16float(t.color.ba), bitcast<u32>(in.pos.z), prev);
     }
-    return Targets(vec4<f32>(0.0), 0u);
+    return targets(vec4<f32>(0.0), 0u);
 }
 
 // Each pixel's fragments, farthest first, over what's behind them; nothing when the frame ran
@@ -2156,7 +2179,7 @@ fn oit_resolve_fs(@builtin(position) pos: vec4<f32>) -> Targets {
         let c = vec4<f32>(unpack2x16float(color[i - 1u].x), unpack2x16float(color[i - 1u].y));
         acc = c + acc * (1.0 - c.a);
     }
-    return Targets(acc, 0u);
+    return targets(acc, 0u);
 }
 
 // A per-pixel item drawn sorted, only in a frame whose fragments ran out of room.
@@ -2171,12 +2194,14 @@ fn oit_fallback_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Targets {
 }
 
 // A frame with a capped cutaway draws its solids through this entry (#424): a cap shades the back
-// face seen through the cut, drawn an eighth of a pixel's depth slope nearer the eye (never past its plane),
+// face seen through the cut, drawn half a pixel's depth slope nearer the eye (never past its plane),
 // so a coplanar front face of a neighbouring part never hides it, while a front face of its own
-// part in front of it still does.
+// part in front of it still does. Half, not less: the one depth a fragment writes holds for every
+// sample it covers, and a neighbour's face is tested at each sample, up to 0.375 px from the
+// pixel's centre at 4× (#1173).
 struct CutTargets {
     @location(0) color: vec4<f32>,
-    @location(1) id: u32,
+    @location(1) id: vec2<u32>,
     @builtin(frag_depth) depth: f32,
 };
 
@@ -2194,9 +2219,9 @@ fn mesh_cut_fs(in: MeshOut, @builtin(front_facing) front: bool) -> CutTargets {
             let plane = clip.z / clip.w;
             // Nearer is larger under reversed Z, smaller under the planted forward Z.
             if frame.px.w > 0.5 {
-                depth = max(in.pos.z - 0.125 * slope, plane);
+                depth = max(in.pos.z - 0.5 * slope, plane);
             } else {
-                depth = min(in.pos.z + 0.125 * slope, plane);
+                depth = min(in.pos.z + 0.5 * slope, plane);
             }
             depth = clamp(depth, 0.0, 1.0);
         }
@@ -2453,6 +2478,7 @@ struct LineOut {
     @location(3) @interpolate(flat) alpha: vec2<f32>,
     @location(4) @interpolate(flat) color: u32,
     @location(5) @interpolate(flat) pick: u32,
+    @location(6) @interpolate(flat) joined: u32,
 };
 
 @vertex
@@ -2469,6 +2495,7 @@ fn line_vs(
     let cb = frame.clip * vec4<f32>(b.xyz, 1.0);
     out.color = color;
     out.pick = pick;
+    out.joined = (flags >> 3u) & 1u;
     if ca.w <= 0.0 || cb.w <= 0.0 {
         out.pos = OFF;
         return out;
@@ -2528,8 +2555,12 @@ fn line_fs(in: LineOut) -> Targets {
     if cov <= 0.0 {
         discard;
     }
+    // A joined line's pieces meet end to end: a cap's soft edge would show a seam at each joint.
+    if in.joined != 0u && cov < 1.0 && (t <= 0.0 || t >= 1.0) {
+        discard;
+    }
     let alpha = cov * mix(in.alpha.x, in.alpha.y, t);
-    return Targets(vec4<f32>(paint(in.color) * alpha, alpha), select(0u, in.pick, cov >= 0.5));
+    return targets(vec4<f32>(paint(in.color) * alpha, alpha), select(0u, in.pick, cov >= 0.5));
 }
 
 // ---- points: a disc, square or diamond in px or m about the point's projection
@@ -2584,7 +2615,7 @@ fn point_fs(in: PointOut) -> Targets {
     if cov <= 0.0 {
         discard;
     }
-    return Targets(vec4<f32>(paint(in.color) * cov, cov), select(0u, in.pick, cov >= 0.5));
+    return targets(vec4<f32>(paint(in.color) * cov, cov), select(0u, in.pick, cov >= 0.5));
 }
 
 // ---- labels: a quad per glyph from the core's glyph atlas, in a label that faces the camera,
@@ -2659,7 +2690,7 @@ fn text_fs(in: TextOut) -> Targets {
         discard;
     }
     let shown = select(a, 0.0, in.later != 0u);
-    return Targets(vec4<f32>(paint(in.color) * shown, shown), select(0u, in.pick, a >= 0.5));
+    return targets(vec4<f32>(paint(in.color) * shown, shown), select(0u, in.pick, a >= 0.5));
 }
 
 // ---- the sky (#422): drawn first, behind everything, and what fog mixes toward
@@ -2735,7 +2766,7 @@ fn background(d: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn sky_fs(@builtin(position) pos: vec4<f32>) -> Targets {
-    return Targets(vec4<f32>(background(view_ray(pos.xy)), 1.0), 0u);
+    return targets(vec4<f32>(background(view_ray(pos.xy)), 1.0), 0u);
 }
 
 // Fog on a lit surface at `world` (#422; Sky `sky@1` and its height fog): the distance fog by
@@ -2842,6 +2873,6 @@ fn puff_fs(in: PuffOut) -> Targets {
         }
     }
     c = fogged(c * in.shape.z * 0.9, in.world);
-    return Targets(vec4<f32>(c * alpha, alpha), 0u);
+    return targets(vec4<f32>(c * alpha, alpha), 0u);
 }
 
