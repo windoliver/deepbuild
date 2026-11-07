@@ -59,6 +59,7 @@ import { Channels, type ChannelAsk } from './channels.js';
 import { Workspaces } from './workspaces.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
+import { openGitHub, type GitHub, type GitHubPlant } from '@deepbuild/github';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
 import { liveFetch, liveGraphql, recordedFetch, recordedGraphql } from './github-source.js';
 import { OpenItems } from './open-items.js';
@@ -113,6 +114,8 @@ const TURN_GRACE = 100;
 const CURSOR_SAVE = 200;
 /** How long a working session's hooks may go quiet before its transcript's tail is read and, unchanged, it reads unknown. */
 const QUIET_MS = 30_000;
+/** How often the hub reads GitHub's record of the repos sessions work in (#46): a pull request that stops merging has 60 s to wake its session. */
+const GITHUB_PASS_MS = 15_000;
 /** How often the hub checks that the programs its hook entries run are there to run (#993). */
 const HOOK_CHECK_MS = 10 * 60_000;
 /** A call that ended this recently still counts as running when our settings entries change. */
@@ -551,6 +554,7 @@ export class Core {
   private retake = false;
   /** Every session the hooks named, checked or not, by ID. */
   private readonly live = new Map<string, Live>();
+  private github: GitHub | undefined;
   /** The sessions that got their reading for a version past their facts. */
   private readonly versioned = new Set<string>();
   /** Sessions whose caller name the payload contradicted, each read once (#993). */
@@ -820,6 +824,7 @@ export class Core {
         this.stateSoon();
       }
       if (kind.startsWith('ask.') || kind.startsWith('delivery.') || kind === 'session.start' || kind === 'session.end') this.askingSoon();
+      if (kind === 'verdict.made') this.github?.verdicts();
       // A deep_wait or deep_run waiting on what this event settles reads it again now, and answers before the
       // appender's next commit holds this thread with its sync (#823).
       const about = kind === 'decision.applied' && isObj(data) ? data.ask : subject;
@@ -1084,6 +1089,8 @@ export class Core {
       core: this.connection('core'), cli: this.connection('cli'), plant: this.options.plant, held: this.options.held,
     });
     this.timers.push(setInterval(archivePass, HOUR));
+    this.github = this.openGitHub();
+    this.timers.push(setInterval(() => void this.github?.pass(), GITHUB_PASS_MS));
     this.timers.push(setInterval(() => void this.spaces.driftAll(), DRIFT_MS));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
     this.timers.push(setInterval(() => { if (this.blocked && !this.lost && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
@@ -1094,6 +1101,27 @@ export class Core {
     for (const timer of this.timers) timer.unref();
   }
 
+  /** The github extension (#46): what it reads of the hub, and where its status lands. */
+  private openGitHub(): GitHub {
+    const plant = (['posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none'] as const).find((p: GitHubPlant) => p === this.options.plant);
+    return openGitHub({
+      api: this.options.forge ?? 'https://api.github.com', state: join(this.root.dir, 'github.json'), snapshots: join(this.root.dir, 'objects'), raw: (query, params) => this.record.raw(query, params),
+      reads: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
+      posts: () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN,
+      settings: () => {
+        let github: { delivery?: unknown; yours?: unknown } | undefined;
+        try { github = (JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as { github?: typeof github }).github; } catch { /* none yet: nothing is on */ }
+        return { delivery: isObj(github?.delivery) ? github.delivery : {}, yours: Array.isArray(github?.yours) ? github.yours.map(String) : [] };
+      },
+      sessions: () => [...this.live].map(([id, l]) => ({ id, agent: l.agent, cwd: l.cwd })),
+      unguarded: (session, data) => {
+        const ts = this.now();
+        return this.append(this.connection('core', session ? { session: session.id, agent: session.agent } : {}), { v: 1, id: ulid(ts), kind: 'ref.unguarded', ts, ...(session ? { subject: `session:${letters(session.id)}` } : {}), data });
+      },
+      hear: (session, text) => { this.later(session.id, session.cwd, text); this.offer(session.id); },
+      ...(plant ? { plant } : {}),
+    });
+  }
   /** `stack.slot` in <root>/config.json: how many warm stacks this machine keeps. */
   private stackSlots(): number {
     let slot: unknown;
