@@ -30,7 +30,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/149-redraft-ac5
   'tests/acceptance/453/',
   'tests/acceptance/46/', 'packages/github/test/',
   'tests/acceptance/1172/',
-  'tests/acceptance/167/',
+  'tests/acceptance/167/', 'tests/acceptance/1328/',
   ...['coexist', 'disable', 'install', 'stophold', 'tamper', 'waiter'].map((f) => `tests/acceptance/18/install/${f}.test.ts`), 'tests/acceptance/19/',
   'tests/acceptance/1312/',
   'tests/acceptance/629/',
