@@ -1,0 +1,300 @@
+{
+ "family": "ink",
+ "subject": "A lighthouse on a rock",
+ "look": {
+  "id": "drawn-ink-149-look",
+  "ground": {
+   "kind": "paper",
+   "params": {
+    "role": "paper",
+    "seed": "document",
+    "tooth": {
+     "kind": "cold_press",
+     "scale": 14,
+     "depth": 0.3,
+     "seed": 3
+    },
+    "anchor": "world",
+    "zoom": "crossfade_octaves"
+   }
+  },
+  "fills": {
+   "fill": {
+    "kind": "flat"
+   },
+   "slab": {
+    "kind": "ink",
+    "coverage": 0.92,
+    "starve": {
+     "scale": 60,
+     "amount": 0.35
+    },
+    "pinholes": 0.04,
+    "streaks": {
+     "angle": 20,
+     "density": 0.3
+    },
+    "spread": 2,
+    "edge": "squeezed",
+    "seed": "item"
+   }
+  }
+ },
+ "2d": {
+  "format": 1,
+  "id": "drawn-ink-149",
+  "profile": "figure",
+  "title": "A lighthouse on a rock",
+  "description": "A lighthouse on a rock: a #149 acceptance fixture in a 2D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/gull/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 420,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "rock": {
+    "id": "rock",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "rock",
+    "order": "a0",
+    "params": {
+     "d": "M 360 980 C 640 760 1240 760 1560 980 Z",
+     "paint": {
+      "fill": {
+       "fill": "slab",
+       "role": "indigo"
+      }
+     }
+    }
+   },
+   "tower": {
+    "id": "tower",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "tower",
+    "order": "a1",
+    "params": {
+     "d": "M 880 780 L 920 280 L 1040 280 L 1080 780 Z",
+     "paint": {
+      "fill": {
+       "fill": "slab",
+       "role": "vermilion"
+      }
+     }
+    }
+   },
+   "gull": {
+    "id": "gull",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "gull",
+    "order": "a2",
+    "params": {
+     "box": [
+      300,
+      240,
+      90,
+      16
+     ],
+     "paint": {
+      "fill": {
+       "fill": "slab",
+       "role": "ink"
+      }
+     }
+    }
+   }
+  }
+ },
+ "3d": {
+  "format": 1,
+  "id": "drawn-ink-149-3d",
+  "profile": "scene",
+  "title": "A lighthouse on a rock",
+  "description": "A lighthouse on a rock: a #149 acceptance fixture in a 3D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "scene3d": "^1",
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/gull/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": -2,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 1,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a0",
+    "params": {
+     "projection": "perspective",
+     "target": [
+      0,
+      0.6,
+      0
+     ],
+     "position": [
+      0,
+      1.6,
+      7
+     ],
+     "fov": 40,
+     "near": 0.1,
+     "far": 80
+    }
+   },
+   "rock": {
+    "id": "rock",
+    "kind": "mark.sphere@1",
+    "layer": "main",
+    "name": "rock",
+    "order": "a1",
+    "params": {
+     "size": [
+      4,
+      1,
+      3
+     ],
+     "paint": {
+      "fill": {
+       "fill": "slab",
+       "role": "indigo"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      0,
+      0
+     ]
+    }
+   },
+   "tower": {
+    "id": "tower",
+    "kind": "mark.cylinder@1",
+    "layer": "main",
+    "name": "tower",
+    "order": "a2",
+    "params": {
+     "size": [
+      0.7,
+      2.4,
+      0.7
+     ],
+     "paint": {
+      "fill": {
+       "fill": "slab",
+       "role": "vermilion"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      1.6,
+      0
+     ]
+    }
+   },
+   "gull": {
+    "id": "gull",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "gull",
+    "order": "a3",
+    "params": {
+     "size": [
+      0.4,
+      0.05,
+      0.15
+     ],
+     "paint": {
+      "fill": {
+       "fill": "slab",
+       "role": "ink"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -2,
+      2.4,
+      0
+     ]
+    }
+   }
+  }
+ }
+}

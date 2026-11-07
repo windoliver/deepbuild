@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The macOS app shell on gpui-kit (issues #337, #338, #326, #327, #339, #105 and on): the window with its dock panels and shipped views, the menu-bar count, the question card with its arming and confirmation, notifications, setup, capture, and the canvas drawn from the canvas crates. It reads the record only from the hub's socket through one record reader. People run it; deep-replica and deep-gpu-layer build on it.
+The macOS app shell on gpui-kit (issues #337, #338, #326, #327, #339, #105, #1172 and on): the window with its dock panels and shipped views, the menu-bar count, the question card with its arming and confirmation, notifications, setup, capture, and the canvas drawn from the canvas crates. It reads the record only from the hub's socket through one record reader. People run it; deep-replica and deep-gpu-layer build on it.
 
 ## Where new code goes
 
@@ -20,6 +20,7 @@ The app: the top of the stack. It may use the canvas crates (deep-canvas-marks, 
 
 - `screens.rs`: a `harness = false` test target outside `tests/`, since AppKit needs the main thread and preflight's perf run drops a change's own `tests/` files, so this suite counts in its measured workload.
 - `Cargo.toml`: the `acceptance_34` test target points at `tests/acceptance/34`, outside the crate; those tests are written blind and never edited here.
+- `src/spike.rs`: #337's spike window, in no shipped build. It builds under the `spike` feature, through the crate's dev-dependency on itself, for the suites that keep #337's and #79's proof, and for the planted build #1172's suite opens.
 - `panels/`: JavaScript panels that are test fixtures, not app code to tidy. `claude-code/` and `codex/` were written by each agent from `docs/spikes/337/panel-brief.md` and gpui-shell's docs alone; the `338-*` ones fill #338's slots, and `338-cap20`, `338-drop-folded`, `338-hide-newest` and `338-list-superseded` are planted faults the kit must name.
 - `fixtures/quotes.json`: a synthetic seeded random walk recorded once, not market data; the panels read it and the tests compute their expected values from the same recording.
 - `src/trusted_input.rs`: `allow(deprecated)` on `CGDisplayCreateImageForRect`, since one frame of one rect is what the gate needs and ScreenCaptureKit and gpui's capture both stream.

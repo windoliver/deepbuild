@@ -1974,6 +1974,7 @@ version = "0.0.0"
 dependencies = [
  "block2 0.6.2",
  "chrono",
+ "deep-app",
  "deep-canvas-cells",
  "deep-canvas-marks",
  "deep-gpu",
@@ -2021,6 +2022,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-drawn"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-canvas-effects"
 version = "0.0.0"
 dependencies = [
@@ -2050,6 +2059,7 @@ name = "deep-canvas-marks"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-drawn",
  "deep-text",
  "serde_json",
  "sha2 0.10.9",
@@ -2089,6 +2099,7 @@ name = "deep-canvas-scene3d"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-drawn",
  "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-text",
@@ -2185,6 +2196,7 @@ dependencies = [
  "bytemuck",
  "deep-app",
  "deep-canvas",
+ "deep-canvas-drawn",
  "deep-canvas-effects",
  "deep-canvas-graph",
  "deep-canvas-marks",

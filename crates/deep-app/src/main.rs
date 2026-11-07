@@ -1,4 +1,5 @@
-//! `deep-app [--panel DIR [--view NAME]] [MODE]`: the spike's window, with the count in the menu bar.
+//! `deep-app [--panel DIR [--view NAME]] [MODE]`: the app's shell (#1172) over the hub's record, with the one count in
+//! the menu bar. The hub's reader folds the record, and a tick moves the count, the window and a shown card with it.
 //!
 //! Issue #262: with `--view`, the panel draws that plug-in view, and the app reports it shown to the hub every 5 s
 //! while the window shows it (`deep_app::shown`).
@@ -12,7 +13,7 @@
 //! JSON line per notification (`{"tag","title","body"}`), and quits.
 //!
 //! With `DEEP_APP_EXIT_AFTER_FIRST_FRAME` set it prints `first-frame-ms N` once the window
-//! has drawn and quits, which is how the spike measures cold start.
+//! has drawn and quits, which is how cold start is measured.
 //!
 //! Issue #339 adds the cursor window: a small window that follows the cursor and shows one
 //! screen frame, captured only while ⌥Space is held on the keyboard. The modes:
@@ -62,7 +63,7 @@
 
 use std::{path::PathBuf, time::Instant};
 
-use deep_app::{init, menu_bar_line, mount_panel, sessions, Spike};
+use deep_app::{init, menu_bar_line, mount_panel, views};
 use gpui_kit::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -140,6 +141,12 @@ fn main() {
         });
         return;
     }
+    // Issue #1172: macOS has no outside switch for one process's appearance, so a check forces it here.
+    match std::env::var("DEEP_APP_APPEARANCE").as_deref() {
+        Ok("dark") => deep_app::chrome::force_dark(Some(true)),
+        Ok("light") => deep_app::chrome::force_dark(Some(false)),
+        _ => {}
+    }
     // One app per user (#994). A window for a panel or a view is a tool beside it, and runs no notifier.
     let mut held = None;
     if mode == Mode::Window && panel_dir.is_none() && view.is_none() {
@@ -155,10 +162,16 @@ fn main() {
         gpui_kit::init(cx);
         init(cx);
         menu_bar::set_dock_icon();
-        menu_bar::show_title(&menu_bar_line(&sessions()));
-        if let Some(held) = held {
+        // Every window reads the record; only the one app of a user notifies (#994). The planted build shows the spike's
+        // made-up count and no record.
+        #[cfg(not(feature = "plant-spike-window"))]
+        if mode == Mode::Window {
             notifications::start(held, cx);
         }
+        #[cfg(not(feature = "plant-spike-window"))]
+        menu_bar::show_title(&menu_bar_line());
+        #[cfg(feature = "plant-spike-window")]
+        menu_bar::show_title(&deep_app::menu_bar_title(&deep_app::sessions()));
 
         let runtime = deep_app::new_runtime().expect("panel runtime");
         // The window draws its own title bar, with the mark, so it owns the bar's drag.
@@ -167,12 +180,19 @@ fn main() {
             ..gpui_kit::component::TitleBar::window_options()
         };
         open_window(options, cx, move |window, cx| {
-            // A script panel reads its colors from the theme, so it holds the look's roles before one mounts.
-            deep_app::chrome::follow(window, cx);
             let panel = panel_dir.as_ref().map(|dir| {
-                let view = mount_panel(&runtime, dir, window, cx)
-                    .unwrap_or_else(|error| panic!("panel {}: {error:#}", dir.display()));
-                (dir.display().to_string(), view)
+                // A script panel reads its colors from the theme, so it holds the look's roles before one mounts.
+                deep_app::chrome::follow(window, cx);
+                let script: AnyView = mount_panel(&runtime, dir, window, cx)
+                    .unwrap_or_else(|error| panic!("panel {}: {error:#}", dir.display()))
+                    .into();
+                let elements = deep_app::panel_values::elements(dir);
+                if elements.is_empty() {
+                    script
+                } else {
+                    cx.new(|cx| deep_app::panel_values::BoundPanel::new(script, elements, cx))
+                        .into()
+                }
             });
             if let Some(view) = view {
                 let handle = window.window_handle();
@@ -200,7 +220,16 @@ fn main() {
                     mode => trusted::start(mode, cx),
                 }
             });
-            cx.new(|_| Spike::new(panel))
+            #[cfg(feature = "plant-spike-window")]
+            return cx.new(|_| deep_app::Spike::new(None));
+            #[cfg(not(feature = "plant-spike-window"))]
+            {
+                let layout = views::Layout::app(panel.is_some());
+                if let Some(view) = panel {
+                    views::place_extension(view);
+                }
+                cx.new(|cx| views::Shell::new(&layout, window, cx).with_title_bar())
+            }
         })
         .expect("open window");
         cx.activate(true);
@@ -1004,6 +1033,9 @@ mod color_check {
 /// Issue #994: the loop outlives a late or lost hub, trying it on [`HubWatch`]'s schedule, and is the one notifier: a
 /// later launch calls this app forward through `held`. It reads the notification setting at start and each time the
 /// app becomes active, and an ask macOS wouldn't show is logged as not notified, never as notified.
+///
+/// Issue #1172: the same tick moves the menu bar's count, the window and a shown card with the record, in a window for
+/// a panel or a view too, which only leaves the notifying out.
 mod notifications {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -1077,8 +1109,8 @@ mod notifications {
         });
     }
 
-    pub fn start(held: Held, cx: &mut App) {
-        record::install(RecordReader::unopened(
+    pub fn start(held: Option<Held>, cx: &mut App) {
+        record::install(RecordReader::unopened_folded(
             &hub::address(),
             &hub::root().join("control.token"),
         ));
@@ -1086,10 +1118,14 @@ mod notifications {
             let mut notifier = Notifier::new(NOTIFY_AFTER);
             let mut watch = HubWatch::default();
             let (mut begun, mut active) = (false, false);
-            read_setting(&mut notifier);
+            let notifies = held.is_some();
+            let mut shown = (deep_app::menu_bar_line(), 0);
+            if notifies {
+                read_setting(&mut notifier);
+            }
             loop {
                 cx.background_executor().timer(TICK).await;
-                if held.called() {
+                if held.as_ref().is_some_and(Held::called) {
                     eprintln!("deep-app: brought forward");
                     cx.update(|cx| {
                         cx.activate(true);
@@ -1099,25 +1135,36 @@ mod notifications {
                     });
                 }
                 let was_active = std::mem::replace(&mut active, super::menu_bar::app_active());
-                if active && !was_active {
+                if notifies && active && !was_active {
                     read_setting(&mut notifier);
                 }
                 let now = now();
                 watch.tick(now, || record::read(Duration::from_millis(5)));
-                if !begun && record::connected() {
+                if !notifies {
+                    // Only the notifier reads these; a window that doesn't notify lets them go.
+                    record::take_unseen();
+                } else if begun {
+                    post(&mut notifier, now, cx);
+                } else if record::connected() {
                     begin(&mut notifier, cx);
                     begun = true;
-                }
-                if begun {
                     post(&mut notifier, now, cx);
                 }
                 let reach = notifier.reach(watch.down());
-                if reach != notify::reach() {
+                let reached = reach != notify::reach();
+                if reached {
                     notify::publish(reach);
-                    let line = deep_app::menu_bar_line(&deep_app::sessions());
-                    super::menu_bar::show_title(&line);
-                    cx.update(|cx| cx.refresh_windows());
                 }
+                cx.update(|cx| {
+                    let line = deep_app::menu_bar_line();
+                    let at = record::with_view(|view| view.log_pos).unwrap_or(0);
+                    if reached || (&line, at) != (&shown.0, shown.1) {
+                        super::menu_bar::show_title(&line);
+                        shown = (line, at);
+                        cx.refresh_windows();
+                    }
+                    deep_app::card::tick(now, cx);
+                });
             }
         })
         .detach();
@@ -1670,6 +1717,7 @@ mod capture_bug {
 
 #[cfg(target_os = "macos")]
 mod menu_bar {
+
     use deep_app::brand;
     use objc2::{rc::Retained, AllocAnyThread as _, MainThreadMarker};
     use objc2_app_kit::{
