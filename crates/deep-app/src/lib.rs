@@ -1,5 +1,5 @@
-//! The app on gpui-kit. A panel runs under an empty gpui-shell policy plus DeepBuild's one module, `deepbuild`, which
-//! serves recorded quotes. It has no network, files, programs or storage.
+//! The app on gpui-kit. A panel runs under an empty gpui-shell policy plus DeepBuild's one module, `deepbuild`. It has
+//! no network, files, programs or storage.
 //!
 //! Issue #338 adds the app's shell with its shipped views as dock panels ([`views`]), the fixture
 //! record and inbox projection they draw ([`events`]), the canvas as a registered component
@@ -17,9 +17,11 @@ pub mod cells;
 pub mod chrome;
 pub mod commands;
 pub mod confirm;
+pub mod device;
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
+pub mod installed;
 pub mod kinds;
 pub mod notify;
 #[cfg(feature = "panel-check")]
@@ -67,9 +69,12 @@ pub use spike::{
     Spike, SESSION_COUNT,
 };
 
+/// #337's recording. Issue #1454: it left the shipped module with the spike.
+#[cfg(feature = "spike")]
 const QUOTES: &str = include_str!("../fixtures/quotes.json");
 
 /// One recorded stock: its symbol, name and prices, one per tick.
+#[cfg(feature = "spike")]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Stock {
     pub symbol: String,
@@ -78,6 +83,7 @@ pub struct Stock {
 }
 
 /// The recording grouped by symbol, in the order the symbols first appear.
+#[cfg(feature = "spike")]
 pub fn stocks() -> Vec<Stock> {
     let raw: serde_json::Value =
         serde_json::from_str(QUOTES).expect("the recorded quotes are valid JSON");
@@ -110,32 +116,30 @@ pub fn menu_bar_line() -> String {
 /// The rebuilds this panel host has taken.
 pub static REBUILDS: AtomicU64 = AtomicU64::new(0);
 
-/// DeepBuild's module for panels: the recorded quotes and the Needs you inbox, as plain data.
+/// DeepBuild's module for panels: the Needs you inbox, as plain data.
 pub fn deepbuild_module() -> HostModule {
-    let module = HostModule::new("deepbuild")
-        .function("needs_you", |_| needs_you())
-        .function("quotes", |_| {
-            let interval: serde_json::Value = serde_json::from_str(QUOTES).expect("valid JSON");
-            let symbols = stocks()
-                .into_iter()
-                .map(|stock| {
-                    HostValue::Object(vec![
-                        ("symbol".into(), HostValue::Str(stock.symbol)),
-                        ("name".into(), HostValue::Str(stock.name)),
-                        (
-                            "prices".into(),
-                            HostValue::Array(
-                                stock.prices.into_iter().map(HostValue::Number).collect(),
-                            ),
-                        ),
-                    ])
-                })
-                .collect();
-            Ok(HostValue::Object(vec![
-                ("interval_s".into(), json_to_host(&interval["interval_s"])),
-                ("symbols".into(), HostValue::Array(symbols)),
-            ]))
-        });
+    let module = HostModule::new("deepbuild").function("needs_you", |_| needs_you());
+    #[cfg(feature = "spike")]
+    let module = module.function("quotes", |_| {
+        let interval: serde_json::Value = serde_json::from_str(QUOTES).expect("valid JSON");
+        let symbols = stocks()
+            .into_iter()
+            .map(|stock| {
+                HostValue::Object(vec![
+                    ("symbol".into(), HostValue::Str(stock.symbol)),
+                    ("name".into(), HostValue::Str(stock.name)),
+                    (
+                        "prices".into(),
+                        HostValue::Array(stock.prices.into_iter().map(HostValue::Number).collect()),
+                    ),
+                ])
+            })
+            .collect();
+        Ok(HostValue::Object(vec![
+            ("interval_s".into(), json_to_host(&interval["interval_s"])),
+            ("symbols".into(), HostValue::Array(symbols)),
+        ]))
+    });
     #[cfg(feature = "panel-check")]
     let module = module
         // #358: a panel's script is a function of how many rebuilds its host has taken.
@@ -188,6 +192,7 @@ fn needs_you() -> Result<HostValue, HostError> {
     ]))
 }
 
+#[cfg(feature = "spike")]
 fn json_to_host(value: &serde_json::Value) -> HostValue {
     use serde_json::Value;
     match value {

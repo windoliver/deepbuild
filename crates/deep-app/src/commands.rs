@@ -95,6 +95,11 @@ pub enum Entry {
         name: String,
         action: String,
     },
+    /// A page the app ships, by its panel's name (#1454).
+    Shipped {
+        name: String,
+        panel: &'static str,
+    },
     Page {
         name: String,
         panel: PathBuf,
@@ -108,7 +113,9 @@ impl Entry {
     /// What ⌘K shows: a command's name, or `<page>: <value>`.
     pub fn name(&self) -> &str {
         match self {
-            Entry::Command { name, .. } | Entry::Page { name, .. } => name,
+            Entry::Command { name, .. }
+            | Entry::Page { name, .. }
+            | Entry::Shipped { name, .. } => name,
         }
     }
 
@@ -118,7 +125,7 @@ impl Entry {
             Entry::Page {
                 page, param, value, ..
             } => Some(json!({"name": page, "params": {param: value}})),
-            Entry::Command { .. } => None,
+            Entry::Command { .. } | Entry::Shipped { .. } => None,
         }
     }
 }
@@ -239,6 +246,12 @@ impl Palette {
             open,
             _changed: changed,
         }
+    }
+
+    /// What it lists from now on (#1454): the app learns its entries from the hub.
+    pub fn set_entries(&mut self, entries: Vec<Entry>, cx: &mut Context<Self>) {
+        self.entries = entries;
+        cx.notify();
     }
 
     /// Shows it with an empty query, its input focused; `back` takes focus again once it hides.

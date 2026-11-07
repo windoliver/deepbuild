@@ -3,7 +3,9 @@
 //! the view over the fixture record as macOS would in that appearance (light when none is given),
 //! and writes `snapshots/<view>.json` and `screens/<view>.png` under `out`. `--first-screen` draws Home for the HOME it
 //! runs with, over that home's own record, and writes `menu-bar.txt` too (#1002). `--bound` draws the runs' bound values
-//! on the session's return card and in a panel, and writes `bound.json`, each with its bounds (#629).
+//! on the session's return card and in a panel, and writes `bound.json`, each with its bounds (#629). `--window <w>x<h>`
+//! opens that size in points in place of the reference window, as `960x640` for the app's opening size (#1454).
+//! `--panel-kit <dir>` runs `panel@1` on one panel and prints its verdict, for `deep install`.
 //! A launch is timed from this process's spawn to the first-frame line it prints.
 
 fn main() {
@@ -20,14 +22,45 @@ fn main() {
 mod replica {
 
     use deep_app::views::Layout;
-    use deep_replica::{shell::open_shell, snapshot::from_observed};
+    use deep_replica::{
+        shell::{open_shell_with, window_options},
+        snapshot::from_observed,
+    };
     use gpui_kit::test::TestWindowExt;
+    use gpui_kit::{px, size, Bounds, Point, WindowBounds, WindowOptions};
+
+    /// The reference window, or the size `--window` gave.
+    fn window_at(given: Option<(f32, f32)>) -> WindowOptions {
+        let reference = window_options();
+        let Some((width, height)) = given else {
+            return reference;
+        };
+        WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(Bounds {
+                origin: Point::default(),
+                size: size(px(width), px(height)),
+            })),
+            ..reference
+        }
+    }
 
     pub fn run() -> i32 {
-        let (view, out, dark, bound) = match deep_replica::view_args("deep-replica", "dir", true) {
-            Ok(args) => args,
-            Err(code) => return code,
-        };
+        // Issue #1454: `--panel-kit <dir>`, panel@1 on one panel, for `deep install`: one JSON line, its verdict.
+        let mut given = std::env::args().skip(1);
+        if given.next().as_deref() == Some("--panel-kit") {
+            let Some(dir) = given.next() else {
+                eprintln!("usage: deep-replica --panel-kit <dir>");
+                return 2;
+            };
+            let verdict = deep_replica::kit::panel(std::path::Path::new(&dir));
+            println!("{}", verdict.to_json());
+            return i32::from(!verdict.pass);
+        }
+        let (view, out, dark, bound, size) =
+            match deep_replica::view_args("deep-replica", "dir", true) {
+                Ok(args) => args,
+                Err(code) => return code,
+            };
         // gpui's headless window always reports light, so the chrome is told the appearance instead.
         deep_app::chrome::force_dark(dark);
 
@@ -60,8 +93,14 @@ mod replica {
                 return 2;
             }
         }
-        let layout = Layout::shipped(if first { "home" } else { &view });
-        let (handle, _) = cx.update(|cx| open_shell(&layout, cx, |_, _| {}));
+        // The first screen is the pane a person gets (#1454): the app's own layout for this HOME.
+        let layout = if first {
+            Layout::app(false)
+        } else {
+            Layout::shipped(&view)
+        };
+        let options = window_at(size);
+        let (handle, _) = cx.update(|cx| open_shell_with(options, &layout, cx, |_, _| {}));
         phase("window");
         // The first frame is the launch; the line goes out as soon as it is drawn. The second
         // frame, over cleared canvas items, is the one the snapshot reads.
