@@ -7,6 +7,9 @@ use std::collections::BTreeMap;
 
 use serde_json::{json, Map, Value};
 
+/// What a collection target's `op` starts with (Effect and GPU operator: collection targets).
+pub const COLLECTION: &str = "collection:";
+
 /// A refusal, named by its code and by the step, field or source position it's about.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Issue {
@@ -237,12 +240,16 @@ pub enum From {
         output: String,
         previous: bool,
     },
-    /// Storage an operator wrote earlier in the frame.
+    /// Storage an operator wrote earlier in the frame; with `previous` (#252), a stepped
+    /// operator's carried output as the previous fixed step left it.
     Storage {
         op: String,
         output: String,
+        previous: bool,
     },
     Time,
+    /// The fixed step a stepped operator computes, 0 for the first (#252).
+    Step,
     /// A phase in [0, 1) of `period` flicks.
     Phase(u64),
     Seed,
@@ -431,6 +438,17 @@ pub struct StorageOut {
     pub from: Option<Arg>,
     /// The word every row holds when the frame starts (#484); 0 unless it says.
     pub clear: u32,
+    /// Carried state (#252): kept from step to step, with a checkpoint every `every` steps in a
+    /// ring of at most `budget` bytes.
+    pub carry: Option<Carry>,
+}
+
+/// A stepped operator's carried storage output and its checkpoint ring (#252; canvas primitives:
+/// Carried state; Checkpoint ring).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Carry {
+    pub every: u32,
+    pub budget: u64,
 }
 
 /// A compute operator's `instances` output (#484; Operator output): the instancer it draws, and
@@ -473,6 +491,9 @@ pub struct Operator {
     /// Whether a count written earlier in the frame runs it (`elements: {from, max}`, #484), read
     /// through the input [`DISPATCH_COUNT`].
     pub counted: bool,
+    /// A compute operator stepped once per fixed step, `rate` steps a second, not once a frame
+    /// (#252).
+    pub stepped: Option<u32>,
     pub workgroup: u32,
     /// A WGSL-subset source's asset ID, in place of steps.
     pub source: Option<String>,
@@ -505,6 +526,7 @@ const FIELDS: &[&str] = &[
     "elements",
     "workgroup",
     "after",
+    "stepped",
 ];
 /// Fields that hold a program's text in other engines' formats.
 const CODE_FIELDS: &[&str] = &[
@@ -786,8 +808,14 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                 match (
                     target.get("op"),
                     target.get("output").and_then(Value::as_str),
+                    target.get("collection").and_then(Value::as_str),
                 ) {
-                    (Some(op), Some(output)) => From::Target {
+                    // #149: a collection's own target, which the frame draws before its passes.
+                    (_, Some(output), Some(collection)) => From::Target {
+                        op: format!("{COLLECTION}{collection}"),
+                        output: output.into(),
+                    },
+                    (Some(op), Some(output), _) => From::Target {
                         op: op.as_str().unwrap_or("core").into(),
                         output: output.into(),
                     },
@@ -809,6 +837,14 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                 From::Storage {
                     op: s.get("op").and_then(Value::as_str).unwrap_or("").into(),
                     output: s.get("output").and_then(Value::as_str).unwrap_or("").into(),
+                    previous: match s.get("step") {
+                        None => false,
+                        Some(Value::String(p)) if p == "previous" => true,
+                        Some(_) => {
+                            bad(issues, "a storage input's step is previous");
+                            return None;
+                        }
+                    },
                 }
             } else if let Some(p) = f.get("phase") {
                 From::Phase(p.get("period").and_then(Value::as_u64).unwrap_or(0))
@@ -828,6 +864,8 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                         _ => 1,
                     },
                 }
+            } else if f.get("time").and_then(Value::as_str) == Some("step") {
+                From::Step
             } else if f.contains_key("time") || f.contains_key("t") {
                 From::Time
             } else if f.contains_key("seed") {
@@ -859,7 +897,7 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
         }
         (_, Some(t), _) => t,
         (From::Time | From::Phase(_), None, _) => Ty::F32,
-        (From::Seed, None, _) => Ty::U32,
+        (From::Seed | From::Step, None, _) => Ty::U32,
         (From::Role(_), None, _) => Ty::V(Sc::F32, 3),
         _ => {
             bad(issues, "an input declares its type");
@@ -1088,6 +1126,22 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                     ));
                 }
                 let sc = s.get("type").and_then(Value::as_str).and_then(Ty::parse);
+                // Carried state (#252): `carry: {every: steps ≥ 1, budget: bytes}`.
+                let carry = v.get("carry").map(|c| {
+                    let every = c.get("every").and_then(Value::as_u64).and_then(|e| u32::try_from(e).ok());
+                    match (every, c.get("budget").and_then(Value::as_u64)) {
+                        (Some(every @ 1..), Some(budget)) => Some(Carry { every, budget }),
+                        _ => {
+                            issues.push(Issue::at_path(
+                                "operator_type",
+                                &format!("outputs/{name}/carry"),
+                                "carry is {every: steps, at least 1, budget: bytes}",
+                            ));
+                            None
+                        }
+                    }
+                });
+                let carry = carry.flatten();
                 match (sc, s.get("count").and_then(Value::as_u64)) {
                     (Some(Ty::V(sc, 1)), Some(count)) => {
                         storage.insert(
@@ -1097,6 +1151,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                                 count: count as u32,
                                 from: v.get("from").map(arg),
                                 clear: s.get("clear").and_then(Value::as_u64).unwrap_or(0) as u32,
+                                carry,
                             },
                         );
                     }
@@ -1189,6 +1244,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                         from: From::Storage {
                             op: op.into(),
                             output: output.into(),
+                            previous: false,
                         },
                         range: None,
                         default: None,
@@ -1202,6 +1258,17 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
             )),
         }
     }
+    // A stepped operator (#252): `stepped: {rate}`, steps a second of document time.
+    let stepped = match o.get("stepped") {
+        None => None,
+        Some(st) => match st.get("rate").and_then(Value::as_u64).and_then(|r| u32::try_from(r).ok()) {
+            Some(r @ 1..=1000) => Some(r),
+            _ => {
+                issues.push(Issue::at_path("operator_type", "stepped", "stepped is {rate: steps a second, 1 to 1,000}"));
+                None
+            }
+        },
+    };
     let origin = match o.get("origin").and_then(Value::as_str) {
         Some("shipped") => Origin::Shipped,
         Some("pack") => Origin::Pack,
@@ -1237,6 +1304,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
         size,
         elements: elements.and_then(Value::as_u64).unwrap_or(0) as u32,
         counted,
+        stepped,
         workgroup: o.get("workgroup").and_then(Value::as_u64).unwrap_or(64) as u32,
         source,
         uses,

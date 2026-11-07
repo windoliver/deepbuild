@@ -512,6 +512,8 @@ export class GateRunner {
     this.records.set(run, missingRun(run, `${e.check.check} couldn't start: ${error instanceof Error ? error.message : String(error)}`));
     e.runs.push(run);
   }
+  /** The commit a claim's checks run on: its snapshot, once taken (#1537: what its review reads the diff to). */
+  snapshotOf(claim: string): string | undefined { return this.claimOf(claim)?.snapshot; }
   private claimOf(claim: string): Claim | undefined {
     for (const list of this.claims.values()) { const c = list.find((x) => x.claim === claim); if (c) return c; }
     return undefined;
