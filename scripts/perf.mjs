@@ -1,10 +1,10 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compare, fingerprint, judgeInstructions, judgeLimit, measure, measureOnce, validateBudgets, warm } from './benchmark.mjs';
+import { compare, fingerprint, judgeTargets, judgeTask, measureOnce, prepareCopy, validateBudgets } from './benchmark.mjs';
 // The machine's throttle table, beside this script in a checkout; a copy of perf alone, as a test's fixture holds, has
 // no table to wait on.
 const throttle = existsSync(new URL('./throttle.mjs', import.meta.url)) ? await import('./throttle.mjs') : null;
@@ -140,15 +140,6 @@ function ownsLock() {
     return false;
   }
 }
-// A task's report is its command's last stdout line; `<bench> judge` reads it on stdin and prints its verdict.
-function judgeTargets(budget) {
-  const last = (out) => JSON.parse(out.trim().split('\n').at(-1));
-  const ran = spawnSync(budget.command[0], budget.command.slice(1), { cwd: root, encoding: 'utf8', timeout: 3_600_000, maxBuffer: 512 * 1024 * 1024 });
-  if (ran.status !== 0) return { status: 'BLOCKED', reason: `${budget.command.join(' ')} exited ${ran.status}: ${ran.stderr.slice(-1000)}` };
-  const judged = spawnSync(budget.command[0], [budget.command[1], 'judge'], { cwd: root, encoding: 'utf8', input: JSON.stringify({ current: last(ran.stdout), base: null }) });
-  if (judged.status !== 0) return { status: 'BLOCKED', reason: `the judge exited ${judged.status}: ${judged.stderr.slice(-1000)}` };
-  return last(judged.stdout);
-}
 function keptCopy(side) {
   const directory = join(keptRoot(), side, 'copy');
   if (!ownsLock()) throw blocked(`another perf run took ${lock}`, 'Run one preflight at a time in this checkout.');
@@ -178,21 +169,9 @@ function checkRun(directory, timeoutMs) {
     }
   }
 }
-// A directory of npm ci, warm builds and the check workload, timed once like the merge base. The checks
-// read git, so each disposable copy gets its own throwaway repository, committed without the user's
-// hooks or signing. Its origin/main is that commit, as on main itself, so checks that compare with
-// main (repo-rules' size) do the same work on both sides instead of skipping it in the copy.
+// A prepared directory's check workload, timed once like the merge base.
 function checkCopy(directory, timeoutMs) {
-  const git = (...args) => run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'user.name=DeepBuild perf', '-c', 'user.email=perf@example.invalid', ...args], directory, { stdio: 'pipe' });
-  git('init', '-q');
-  git('add', '-A');
-  git('commit', '-qm', 'perf copy');
-  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
-  // target/ links to the kept builds, so ./target/debug binaries stay where the lanes and budgets run
-  // them. It is made after the commit: .gitignore's target/ matches a directory, not a link.
-  symlinkSync(process.env.CARGO_TARGET_DIR, join(directory, 'target'), 'dir');
-  run('npm', ['ci', '--no-audit', '--no-fund'], directory);
-  warm(directory);
+  prepareCopy(directory);
   return measureOnce([process.execPath, 'scripts/checks.mjs'], directory, false, timeoutMs, false);
 }
 // perf is a measured run: it holds timed from before its timer to its end, so its
@@ -289,38 +268,20 @@ try {
   }
   for (const budget of current.tasks) {
     const established = base?.tasks?.find(({ id }) => id === budget.id);
-    let samples, runs;
+    let judged;
     try {
-      samples = measure(budget.command, root, established && { command: established.command, cwd: archive });
-      // Each limit is judged on five timed runs after one untimed warm-up run.
-      const once = () => {
-        const result = measureOnce(budget.command, root, false, undefined, false);
-        if (result.status !== 0) throw Error(`${budget.command[0]} exited ${result.status}: ${result.output}`);
-        return result;
-      };
-      runs = Object.keys(budget.limits).length ? (once(), Array.from({ length: 5 }, once)) : [];
+      judged = judgeTask(budget, established, root, archive);
     } catch (error) {
       verdicts.push(['BLOCKED', `${budget.id}: ${error.message}`, 'Build the measured command; the check lanes build it.']);
       continue;
     }
-    const [now, then = null] = samples;
-    const machine = fingerprint();
-    const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine })]));
-    // Instructions retired don't move with load, so this comparison holds on any machine; it never
-    // changes a limit's verdict.
-    const instructions = then && judgeInstructions(now.instructions.map((current, round) => ({ current, base: then.instructions[round] })), [...new Set([...now.uncounted, ...then.uncounted])]);
-    let outcome;
-    try {
-      // compare holds only the merge-base regression here; the limits are judged above.
-      outcome = compare({ ...budget, limits: {} }, now, then);
-    } catch (error) {
-      verdicts.push(['FAIL', error.message, regressed]);
-    }
+    const { now, then, machine, limits, instructions, outcome, regression } = judged;
+    if (regression) verdicts.push(['FAIL', regression, regressed]);
     console.log(JSON.stringify({ task: budget.id, baseCommit, ...outcome, current: now, base: then, counter, fingerprint: machine, limits, ...instructions && { instructions } }));
     // #854: a task with targets is held to them by its bench's judge, on one more run's report; the judge refuses a
     // reading of any build but release.
     if (budget.targets) {
-      const verdict = judgeTargets(budget);
+      const verdict = judgeTargets(budget, root);
       console.log(JSON.stringify({ task: budget.id, targets: verdict.targets ?? null, status: verdict.status }));
       if (verdict.status !== 'PASS') verdicts.push([verdict.status, `${budget.id}: targets: ${verdict.reason}`, `Bring ${budget.id} back within its targets in ${manifest}, on a release build.`]);
     }
