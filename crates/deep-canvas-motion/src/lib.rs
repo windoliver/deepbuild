@@ -25,6 +25,7 @@ pub mod module;
 pub mod program;
 pub mod quat;
 pub mod remap;
+mod rows;
 pub mod schedule;
 pub mod spring;
 mod tempo;

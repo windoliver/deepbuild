@@ -15,10 +15,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use deep_canvas_marks::data;
 use deep_canvas_marks::look::Look;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Planted, Record, Rgb};
 use deep_canvas_marks::scene::{Blend, Drawn, Scope};
+use deep_canvas_marks::story;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{
     bez, brush, image, rasterizer, rect, sampler, settings, shape, solid, stroke, Canvas, Scopes,
@@ -269,9 +271,10 @@ impl<C: Glyphs> Painter<'_, C> {
     ) -> Result<(), Value> {
         for drawn in marks {
             // A backdrop group's children only shape its coverage, on the GPU layer.
-            let shapes_coverage = drawn.scopes.iter().any(|s| {
-                matches!(s, Scope::Opacity { effect: Some(e), .. } if e.backdrop)
-            });
+            let shapes_coverage = drawn
+                .scopes
+                .iter()
+                .any(|s| matches!(s, Scope::Opacity { effect: Some(e), .. } if e.backdrop));
             if shapes_coverage {
                 continue;
             }
@@ -822,12 +825,48 @@ fn any_roles(value: &Value, palette: &mut scene::Palette) {
 
 /// An item's outline at `t` as subpaths of verbs and points in u, its offset applied, with its
 /// box and box points (#221).
+/// The time a set's periods take to mix its rows for this t, alone (#167 AC7).
+fn mix_ms(id: &str, item: &Value) -> Result<f64, scene::Refused> {
+    let path = format!("items/{id}/params");
+    let params = scene::object_or_empty(item.get("params"));
+    let base = || data::base_rows(id, item, &Default::default());
+    let Some(compiled) = story::compiled(id, params, &path, base)? else {
+        return Ok(0.0);
+    };
+    let at = story::at_of(params, &compiled.periods, &path)?;
+    let start = std::time::Instant::now();
+    std::hint::black_box(compiled.periods.at(&compiled.rows, at));
+    Ok(start.elapsed().as_secs_f64() * 1e3)
+}
+
+/// The time standing takes to rank every period of `doc`'s mark sets, alone (#167 AC7).
+pub fn rank_ms(doc: &Map<String, Value>) -> Result<f64, scene::Refused> {
+    let mut total = 0.0;
+    for (id, item) in scene::object_or_empty(doc.get("items")) {
+        let path = format!("items/{id}/params");
+        let params = scene::object_or_empty(item.get("params"));
+        if item["kind"] != "marks@1" || !params.contains_key("transforms") {
+            continue;
+        }
+        let list = story::listed(params, &path)?;
+        if let [("periods", spec, at), ("standing", rank, rank_at), ..] = list.as_slice() {
+            let rows = data::base_rows(id, item, &Default::default())?;
+            let mut periods = story::Periods::compile(&rows, spec, at)?;
+            let start = std::time::Instant::now();
+            periods.rank(&rows, rank, rank_at)?;
+            total += start.elapsed().as_secs_f64() * 1e3;
+        }
+    }
+    Ok(total)
+}
+
 pub fn geometry(
     doc: &Map<String, Value>,
     item: &str,
     t: i64,
     vectors: &crate::Vectors,
     router: deep_canvas_graph::view::Router,
+    (look, timing): (Option<&Look>, bool),
 ) -> Value {
     let run = || -> Result<Value, Value> {
         let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
@@ -844,6 +883,7 @@ pub fn geometry(
         any_roles(&Value::Object(doc.clone()), &mut palette);
         // And those of the items a vector draws as.
         any_roles(&Value::Object(items.clone()), &mut palette);
+        palette.extend(look.iter().flat_map(|l| l.light.clone()));
         let frame = scene::frame(doc, &items, &palette, &Record::default(), 1.0)
             .map_err(|r| refused(r.code, &r.path))?;
         let mut subpaths: Vec<Value> = Vec::new();
@@ -882,6 +922,26 @@ pub fn geometry(
             }
         }
         let mut answer = json!({"ok": true, "subpaths": subpaths});
+        // A data item at t (#167): a mark set's rows, a scale's domain, an axis's ticks.
+        let story = |r: scene::Refused| refused(r.code, &r.path);
+        if let Some(found) = items.get(item) {
+            match found["kind"].as_str() {
+                Some("marks@1") => {
+                    answer["rows"] =
+                        data::rows_report(item, found, &items, &palette).map_err(story)?;
+                    if timing {
+                        answer["timing"] = json!({"mix_ms": mix_ms(item, found).map_err(story)?});
+                    }
+                }
+                Some("scale@1") => {
+                    answer["domain"] = data::domain_report(item, found, &items).map_err(story)?
+                }
+                Some("axis@1") => {
+                    answer["ticks"] = data::ticks_report(item, found, &items).map_err(story)?
+                }
+                _ => {}
+            }
+        }
         // Its evaluated box at t, geometry only, and the nine box points on it (#221).
         if let Some(b) = crate::place::box_of(doc, &placed, vectors, item) {
             let points: Map<String, Value> = deep_canvas_marks::relations::POINTS

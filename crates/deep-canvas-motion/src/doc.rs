@@ -1221,7 +1221,7 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
 }
 
 /// An occurrence list var: `{list, kinds, a, b, tags, where}` (Driver).
-fn filter_of(f: &Map<String, Value>, path: &str) -> Result<crate::occurrence::Filter, Refused> {
+pub(crate) fn filter_of(f: &Map<String, Value>, path: &str) -> Result<crate::occurrence::Filter, Refused> {
     let text = |k: &str| match f.get(k) {
         None => Ok(None),
         Some(Value::String(s)) => Ok(Some(s.clone())),

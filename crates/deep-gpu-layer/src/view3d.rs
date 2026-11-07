@@ -1042,6 +1042,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         let mut left_out: Vec<String> = Vec::new();
         let mut dropped: Vec<String> = Vec::new();
         for n in frame_order(args.from, args.frames, &args.seeks) {
+            let frame_started = std::time::Instant::now();
             // A seek applies every patch up to the frame it opens at.
             let mut patched = false;
             for (k, (frame, writer, ops)) in args.patches.iter().enumerate() {
@@ -1217,6 +1218,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             {
                 let mut fx = lock(&fx);
                 fx.settings = settings;
+            }
+            if args.look.drawn.is_some() {
+                let assets = Map::new();
+                *lock(&opened.drawn) =
+                    crate::drawn::frame3(&args.doc, &args.look, &assets, &scene, app.planted)?;
             }
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
@@ -1509,6 +1515,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     let _ = ui.latch();
                 }
             }
+            // A frame's CPU: its evaluation, up to handing the scene to the render side.
+            let cpu_ms = frame_started.elapsed().as_secs_f64() * 1e3;
             let mut drawn = session3::draw(
                 app,
                 &opened,
@@ -1827,6 +1835,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             if let Some((gpu_ms, passes)) = &drawn.timing {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
+                frame.insert("cpu_ms".into(), json!(cpu_ms));
                 frame.insert("passes_ms".into(), json!(passes));
             }
             if !clicks.is_empty() {
@@ -1862,6 +1871,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             p.overlays.clear();
         }
     }
+    let (msaa, render_targets) = session3::render_targets(app);
     session3::close(app);
     // An over-cap document is refused, its imports still reported: the import comes before the
     // count it makes (#423).
@@ -1924,10 +1934,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         "internal_scale": if below { args.surface.scale } else { 1.0 },
         "upscale": if below { args.surface.upscale.name() } else { "none" },
         "sharpen": args.surface.sharpen,
-        "size_px": size, "internal_px": internal,
+        "size_px": size, "internal_px": internal, "msaa": msaa,
     });
     let mut reply = json!({
         "frames": frames, "passes": passes, "status": status_report, "surface": drew,
+        "render_targets": render_targets,
         "layers": layers_report(&args.doc, &args.hidden),
     });
     if !worlds.is_empty() {
