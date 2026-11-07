@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "start.approval",
+  "subject": "ask:01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "ask": "ask:01K74FKZVK8Q2X5R7M3N9P4T6X",
+    "repo": "/Users/you/src/shop",
+    "issues": [
+      41
+    ],
+    "agents": [
+      "claude-code"
+    ],
+    "homes": {
+      "claude-code": "/Users/you/.claude"
+    },
+    "modes": {},
+    "at_once": 1,
+    "plan_share": 50,
+    "until": null,
+    "hosts": [
+      "registry.npmjs.org"
+    ],
+    "sandbox": {
+      "claude-code": {
+        "sandboxed": true,
+        "walls": {
+          "writes": true,
+          "credentials": true,
+          "network": true
+        }
+      }
+    }
+  }
+}

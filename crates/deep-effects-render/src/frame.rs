@@ -717,6 +717,7 @@ impl Post for Effects {
         if let Some(ops) = self.docops.as_mut() {
             ops.core = frame.core.iter().map(|(n, v)| (*n, (*v).clone())).collect();
             let res = self.op_resolution.clone();
+            ops.clock = Some(s.t);
             let (rows, recs, out) = ops.plan(
                 device,
                 &cur,
