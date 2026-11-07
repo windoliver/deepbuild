@@ -10,6 +10,7 @@ import { backupCommand, restoreCommand } from './backup.js';
 import { envCommand } from './env.js';
 import { guardCommand } from './guards.js';
 import { inboxCommand } from './inbox.js';
+import { startCommand } from './start-command.js';
 import { workspaceCommand } from './workspace-command.js';
 import { installCommand } from './install.js';
 import { memoryCommand } from './memory.js';
@@ -20,6 +21,7 @@ import { runHub } from './server.js';
 import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
 import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.js';
 
+export { startCommand };
 export { workspaceCommand, backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, memoryCommand, relationItems, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
 export { numbersCommand, statusCommand } from './status.js';
 export { showCommand } from './show.js';
