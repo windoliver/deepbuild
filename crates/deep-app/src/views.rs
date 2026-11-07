@@ -138,6 +138,11 @@ pub struct Shipped {
     focus_handle: FocusHandle,
     /// What Home's Set up click said, once clicked.
     set_up: Option<String>,
+    /// The sidebar's open session and the one keyboard focus is on (#1003).
+    rows: SidebarRows,
+    /// The rows, by index, the replica opens the sidebar with: read at its first frame, when the sidebar also
+    /// takes keyboard focus if one is focused.
+    start: Option<(Option<usize>, Option<usize>)>,
     terminal: Option<TerminalTab>,
     /// Whether this is the view's own window, not its panel in the shell.
     popped: bool,
@@ -145,6 +150,50 @@ pub struct Shipped {
     agents: Option<serde_json::Value>,
     reviewing: Option<String>,
     _agents_poll: Option<Task<()>>,
+}
+
+/// The sidebar's open session, drawn in the selected fill with a bar at its leading edge, and the one keyboard focus
+/// is on, drawn with the focus ring (#1003). Each is a session, not a row, so a row that moves keeps them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SidebarRows {
+    pub selected: Option<String>,
+    pub focused: Option<String>,
+}
+
+impl SidebarRows {
+    /// `key` over the sidebar's `sessions` in their order: up and down move the focus ring a row, return or space
+    /// opens the focused session. Whether it changed anything.
+    pub fn key(&mut self, key: &str, sessions: &[String]) -> bool {
+        let Some(last) = sessions.len().checked_sub(1) else {
+            return false;
+        };
+        let at = self
+            .focused
+            .as_ref()
+            .and_then(|f| sessions.iter().position(|s| s == f));
+        let to = match key {
+            "down" => at.map_or(0, |i| (i + 1).min(last)),
+            "up" => at.map_or(0, |i| i.saturating_sub(1)),
+            "enter" | "space" if at.is_some() => {
+                let changed = self.selected != self.focused;
+                self.selected = self.focused.clone();
+                return changed;
+            }
+            _ => return false,
+        };
+        let changed = at != Some(to);
+        self.focused = Some(sessions[to].clone());
+        changed
+    }
+}
+
+thread_local! {
+    static SIDEBAR_ROWS: std::cell::Cell<(Option<usize>, Option<usize>)> = const { std::cell::Cell::new((None, None)) };
+}
+
+/// The sidebar's selected and focused rows as the next sidebar opens with them, for the replica (#1003).
+pub fn start_sidebar(selected: Option<usize>, focused: Option<usize>) {
+    SIDEBAR_ROWS.with(|rows| rows.set((selected, focused)));
 }
 
 impl Shipped {
@@ -162,6 +211,8 @@ impl Shipped {
             kind,
             focus_handle: cx.focus_handle(),
             set_up: None,
+            rows: SidebarRows::default(),
+            start: (kind == Kind::Sidebar).then(|| SIDEBAR_ROWS.with(std::cell::Cell::get)),
             terminal: None,
             popped: false,
             agents: None,
@@ -659,65 +710,130 @@ impl Render for Shipped {
             .text_xs()
             .text_color(chrome.ink_primary);
         match self.kind {
-            Kind::Sidebar => page
-                .bg(chrome.raised)
-                .child(title("sidebar-title", "Sessions"))
-                // The window's count, which shows Needs you; a fixture's view draws the record alone.
-                .children(decorations.is_none().then(|| {
-                    label("sidebar-count", count_line())
-                        .role(Role::Button)
-                        .h(px(24.))
-                        .px_1()
-                        .rounded_sm()
-                        .hover(|style| style.bg(chrome.hover))
-                        .on_click(|_, window, cx| show(NEEDS_YOU, window, cx))
-                }))
-                // Each agent's MCP servers and skills (#148).
-                .children(decorations.is_none().then(|| {
-                    label("sidebar-agents", "Agents")
-                        .role(Role::Button)
-                        .aria_label("Agents: MCP servers and skills")
-                        .h(px(24.))
-                        .px_1()
-                        .rounded_sm()
-                        .hover(|style| style.bg(chrome.hover))
-                        .on_click(|_, window, cx| show(AGENTS, window, cx))
-                }))
-                .children(record.sessions.iter().zip(&record.rows).enumerate().map(
-                    |(index, ((session, task, _), (words, entry)))| {
-                        let text = format!("{task} · {words}");
-                        let session = session.clone();
-                        // Its readings beside it (#990), a line each under the row, quieter than its state.
-                        let readings = record.readings.get(index).cloned().unwrap_or_default();
-                        div()
-                            .flex()
-                            .flex_col()
-                            .child(
-                                marked(("sidebar-session", index), entry, text)
-                                    .role(Role::Button)
-                                    .h(px(24.))
-                                    .px_1()
-                                    .rounded_sm()
-                                    .hover(|style| style.bg(chrome.hover))
-                                    .on_click(move |_, window, cx| {
-                                        open_session(&session, window, cx)
-                                    }),
+            Kind::Sidebar => {
+                let ids: Vec<String> = record.sessions.iter().map(|(id, ..)| id.clone()).collect();
+                if let Some((selected, focused)) = self.start.take() {
+                    let id = |at: Option<usize>| at.and_then(|i| ids.get(i).cloned());
+                    self.rows = SidebarRows {
+                        selected: id(selected),
+                        focused: id(focused),
+                    };
+                    if self.rows.focused.is_some() {
+                        window.focus(&self.focus_handle, cx);
+                    }
+                }
+                // The ring shows only while keys reach the sidebar, so it never points where they don't go.
+                let focused = (self.focus_handle.is_focused(window))
+                    .then(|| self.rows.focused.clone())
+                    .flatten();
+                let selected = self.rows.selected.clone();
+                page.bg(chrome.raised)
+                    .track_focus(&self.focus_handle)
+                    .on_key_down(cx.listener(move |this, event: &KeyDownEvent, window, cx| {
+                        let was = this.rows.selected.clone();
+                        if this.rows.key(&event.keystroke.key, &ids) {
+                            // Return or space opens the focused session, as a click on its row does.
+                            if let Some(session) = this
+                                .rows
+                                .selected
+                                .clone()
+                                .filter(|s| Some(s) != was.as_ref())
+                            {
+                                open_session(&session, window, cx);
+                            }
+                            cx.notify();
+                        }
+                    }))
+                    .child(title("sidebar-title", "Sessions"))
+                    // The window's count, which shows Needs you; a fixture's view draws the record alone.
+                    .children(decorations.is_none().then(|| {
+                        label("sidebar-count", count_line())
+                            .role(Role::Button)
+                            .h(px(24.))
+                            .px_1()
+                            .rounded_sm()
+                            .hover(|style| style.bg(chrome.hover))
+                            .on_click(|_, window, cx| show(NEEDS_YOU, window, cx))
+                    }))
+                    // Each agent's MCP servers and skills (#148).
+                    .children(decorations.is_none().then(|| {
+                        label("sidebar-agents", "Agents")
+                            .role(Role::Button)
+                            .aria_label("Agents: MCP servers and skills")
+                            .h(px(24.))
+                            .px_1()
+                            .rounded_sm()
+                            .hover(|style| style.bg(chrome.hover))
+                            .on_click(|_, window, cx| show(AGENTS, window, cx))
+                    }))
+                    .children(record.sessions.iter().zip(&record.rows).enumerate().map(
+                        |(index, ((session, task, _), (words, entry)))| {
+                            let text = format!("{task} · {words}");
+                            // Its readings beside it (#990), a line each under the row, quieter than its state.
+                            let readings = record.readings.get(index).cloned().unwrap_or_default();
+                            // The ring is always laid out, so focus moving never shifts a row; it shows on the
+                            // focused row alone.
+                            let ring = if focused.as_ref() == Some(session) {
+                                chrome.focus
+                            } else {
+                                chrome.focus.opacity(0.)
+                            };
+                            let row = marked(("sidebar-session", index), entry, text)
+                                .role(Role::Button)
+                                .h(px(24.))
+                                // Every row leaves room for the bar and a gap after it, so opening one moves no text.
+                                .pl(px(10.))
+                                .pr_1()
+                                .rounded_sm()
+                                .border_2()
+                                .border_color(ring)
+                                .hover(|style| style.bg(chrome.hover))
+                                // The open session: the selected fill, and a bar of the primary ink the row's full
+                                // height at its leading edge, since in dark the fill can only be faint while status
+                                // keeps 3:1 on it.
+                                .when(selected.as_ref() == Some(session), |row| {
+                                    row.relative().bg(chrome.selected).child(
+                                        div()
+                                            .absolute()
+                                            .left_0()
+                                            .top_0()
+                                            .bottom_0()
+                                            .w(px(3.))
+                                            .bg(chrome.ink_primary),
+                                    )
+                                })
+                                .on_click(cx.listener({
+                                    let session = session.clone();
+                                    // A click opens the row and gives the sidebar the keys, so the ring
+                                    // goes on from there.
+                                    move |this, _, window, cx| {
+                                        this.rows = SidebarRows {
+                                            selected: Some(session.clone()),
+                                            focused: Some(session.clone()),
+                                        };
+                                        window.focus(&this.focus_handle, cx);
+                                        open_session(&session, window, cx);
+                                        cx.notify();
+                                    }
+                                }));
+                            div().flex().flex_col().child(row).children(
+                                readings.into_iter().enumerate().map(|(n, reading)| {
+                                    // A reading wider than the sidebar ends in an ellipsis; its
+                                    // accessibility label keeps the whole of it. A block, not the
+                                    // label's flex row, so the text is laid out to the row's width
+                                    // and can truncate; its line height centers it in the row.
+                                    label(("sidebar-reading", index * READINGS + n), reading)
+                                        .block()
+                                        .h(px(18.))
+                                        .line_height(px(18.))
+                                        .pl_4()
+                                        .text_color(chrome.ink_secondary)
+                                        .truncate()
+                                }),
                             )
-                            .children(readings.into_iter().enumerate().map(|(n, reading)| {
-                                // A reading wider than the sidebar ends in an ellipsis; its
-                                // accessibility label keeps the whole of it. A block, not the
-                                // label's flex row, so the text is laid out to the row's width
-                                // and can truncate; its line height centers it in the row.
-                                label(("sidebar-reading", index * READINGS + n), reading)
-                                    .block()
-                                    .h(px(18.))
-                                    .line_height(px(18.))
-                                    .pl_4()
-                                    .text_color(chrome.ink_secondary)
-                                    .truncate()
-                            }))
-                    },
-                )),
+                        },
+                    ))
+            }
             Kind::Home => match unfinished {
                 Some(count) => page
                     .child(title("home-title", "Home"))
@@ -1564,6 +1680,43 @@ impl Render for Shell {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[std::prelude::v1::test]
+    fn the_sidebars_keys_move_the_ring_and_open_the_focused_session_which_keeps_its_row_as_rows_move(
+    ) {
+        let ids = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let sessions = ids(&["a", "b", "c"]);
+        let mut rows = SidebarRows::default();
+        // Down from nothing focuses the first row; down again the second; up and down stop at the ends.
+        assert!(rows.key("down", &sessions));
+        assert!(rows.key("down", &sessions));
+        assert_eq!(rows.focused.as_deref(), Some("b"));
+        rows.key("down", &sessions);
+        assert!(!rows.key("down", &sessions), "the last row holds");
+        rows.key("up", &sessions);
+        rows.key("up", &sessions);
+        assert!(!rows.key("up", &sessions), "the first row holds");
+        // Return opens the focused session; focus moving on leaves it open, so selected and focused differ.
+        rows.key("down", &sessions);
+        assert!(rows.key("enter", &sessions));
+        rows.key("down", &sessions);
+        assert_eq!(
+            rows,
+            SidebarRows {
+                selected: Some("b".into()),
+                focused: Some("c".into())
+            }
+        );
+        // A new session shown first moves every row down a place; the same sessions stay selected and focused.
+        let moved = ids(&["z", "a", "b", "c"]);
+        rows.key("up", &moved);
+        assert_eq!(rows.focused.as_deref(), Some("b"));
+        assert_eq!(rows.selected.as_deref(), Some("b"));
+        // Keys on an empty sidebar change nothing; space opens as return does.
+        assert!(!SidebarRows::default().key("down", &[]));
+        assert!(rows.key("down", &moved) && rows.key("space", &moved));
+        assert_eq!(rows.selected.as_deref(), Some("c"));
+    }
 
     #[std::prelude::v1::test]
     fn a_shipped_view_fills_the_center_and_the_sidebar_view_shows_home() {
