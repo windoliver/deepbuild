@@ -195,6 +195,8 @@ export interface InstallFrom {
 export interface KitRun { slot: string; fill: string; verdict: 'PASS' | 'FAIL' | 'BLOCKED' | 'INVALID' | 'INCONCLUSIVE' }
 /** A view of a project's pack, as the app shows it while you're in the project (#67). */
 export interface ProjectView { name: string; extension: string; commands: { name: string; action: string }[] }
+/** A view of a package you installed, as the app mounts it (#1454): its panel's folder, its pages, and what panel@1 said of these bytes, if it ran. */
+export interface InstalledView extends ProjectView { version: string; folder: string; area: string; pages: { name: string; param: string; values?: string[] }[]; kit: KitRun['verdict'] | null }
 export interface Installed { id: string; version: string; folder: string; digest: string; builtBy: string | null; project: string | null; kits: KitRun[] }
 export interface PackageTests { passed: boolean; testsRun: number; failures: { test: string; message: string }[] }
 /** How an answer reaches a session: into the running turn, in the stop hold, waking an idle session, or at its next prompt. */
@@ -234,6 +236,10 @@ export interface ExtensionHost {
   leaveProject(folder: string): Promise<void>;
   /** What the app shows now: the views and commands of the projects you're in. */
   projectViews(): ProjectView[];
+  /** The views of the packages you installed that are loaded, as the app mounts them (#1454). */
+  installedViews(): InstalledView[];
+  /** What a view's panel kit said of the installed bytes, kept across a restart, as the kits at install are. */
+  keepKit(id: string, run: KitRun): void;
   /** One send or read of a loaded channel (#65), its provider calls made by `ctx.fetch`, the caller's. */
   channel(name: string, op: 'deliver', item: ChannelItem, ctx: ChannelCtx): Promise<ChannelDelivered>;
   channel(name: string, op: 'receive', item: null, ctx: ChannelCtx): Promise<ChannelReceived>;
@@ -385,6 +391,10 @@ export interface ExtensionHost {
 const RUNTIME = fileURLToPath(new URL('../runtime/', import.meta.url));
 const RUNNER = join(RUNTIME, 'runner.mjs');
 const NODE_HOME = dirname(dirname(realpathSync(process.execPath)));
+/** What Node links, where it isn't in its own folder: Homebrew's build loads its libraries from the other formulas. It reads OpenSSL's config from Homebrew's etc too, which a package has no use for, so a package runs with none. */
+const NODE_LIBS = ((prefix) => (prefix ? [join(prefix, 'opt'), join(prefix, 'Cellar')] : []))(/^(.+)\/Cellar\//.exec(NODE_HOME)?.[1]);
+/** The kit every view's panel passes (#326, #1454), which the app's replica runs. */
+const PANEL_KIT = 'panel@1';
 /** How long a package gets to start and register, at its conformance run and at its load. */
 const LOAD_MS = 10_000;
 /** How long a package gets to take a batch of events, or to answer a request on a route. */
@@ -539,6 +549,8 @@ interface Ext {
   views: Map<string, string[]>;
   /** Each view's ⌘K commands (#67), as the app shows them while you're in its project. */
   commands: Map<string, { name: string; action: string }[]>;
+  /** Where each view's panel sits (#1454): its folder, its area and its pages. */
+  panels: Map<string, { folder: string; area: string; pages: InstalledView['pages'] }>;
   /** The sources each check kind it registered reads, as declared (#365). */
   checkReads: Map<string, string[]>;
   /** How many times its code started in this copy: a restart imports a hub package's code afresh. */
@@ -1472,6 +1484,18 @@ class Host implements ExtensionHost {
   projectViews(): ProjectView[] {
     return [...this.inside.keys()].flatMap((project) => this.viewsOf(project));
   }
+  installedViews(): InstalledView[] {
+    return [...this.exts.values()].filter((e) => e.live && e.project === null).flatMap((e) => [...e.panels].map(([name, panel]) => ({
+      name, extension: e.entry.id, version: e.entry.version, ...panel, commands: e.commands.get(name) ?? [],
+      kit: e.entry.kits?.find((k) => k.slot === PANEL_KIT && k.fill === name)?.verdict ?? null,
+    })));
+  }
+  keepKit(id: string, run: KitRun): void {
+    const entry = this.entries[id];
+    if (!entry) return;
+    entry.kits = [...(entry.kits ?? []).filter((k) => k.slot !== run.slot || k.fill !== run.fill), run];
+    this.save('installed.json', this.entries);
+  }
   private packsOf(project: string): Ext[] {
     return [...this.exts.values()].filter((e) => e.project === project);
   }
@@ -1923,7 +1947,7 @@ class Host implements ExtensionHost {
     return {
       entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
-      adapters: new Set(), channels: new Map(), stateSources: [], leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), commands: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
+      adapters: new Set(), channels: new Map(), stateSources: [], leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), commands: new Map(), panels: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -2107,8 +2131,8 @@ class Host implements ExtensionHost {
       await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(path, resolve); });
       const connected = new Promise<Socket>((resolve) => server.once('connection', resolve));
       const started = await supervisor.start({
-        run, argv: [process.execPath, RUNNER, path, folder, entry], cwd: folder, inherit: false, env: { PATH: '/usr/bin:/bin', HOME: folder },
-        grant: { read: [NODE_HOME, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] }, output: { stdout: keep, stderr: keep },
+        run, argv: [process.execPath, RUNNER, path, folder, entry], cwd: folder, inherit: false, env: { PATH: '/usr/bin:/bin', HOME: folder, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}) },
+        grant: { read: [NODE_HOME, ...NODE_LIBS, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] }, output: { stdout: keep, stderr: keep },
       });
       if (started.status !== 'started') throw Error(`the sandbox held it: BLOCKED on ${started.kind}`);
       // Stoppable from here on: an unload while it connects, at close or a revoke, ends its process.
@@ -2706,6 +2730,7 @@ class Host implements ExtensionHost {
         if (refusal === null) {
           ext.views.set(args[0] as string, ((args[3] as { binds?: string[] } | undefined)?.binds ?? []).slice());
           ext.commands.set(args[0] as string, ((args[3] as { commands?: { name: string; action: string }[] } | undefined)?.commands ?? []).map((c) => ({ name: c.name, action: c.action })));
+          ext.panels.set(args[0] as string, { folder: join(ext.folder, args[1] as string), area: args[2] as string, pages: (args[3] as { pages?: InstalledView['pages'] } | undefined)?.pages ?? [] });
           return null;
         }
         if (conformance) ext.refusals.push(refusal);

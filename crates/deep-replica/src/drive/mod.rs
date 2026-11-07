@@ -823,8 +823,8 @@ impl Replica {
                             .is_some_and(|question| name.starts_with(question))
                 });
                 let ask = asked.map(|e| format!("ask:{}", e["id"].as_str().unwrap_or_default()));
-                let option = asked
-                    .and_then(|e| e["data"]["options"][0]["id"].as_str().map(str::to_owned));
+                let option =
+                    asked.and_then(|e| e["data"]["options"][0]["id"].as_str().map(str::to_owned));
                 if let (Some((socket, token)), Some(ask), Some(option)) = (&self.hub, ask, option) {
                     let answered = plant::answer(socket, token, &ask, &option);
                     self.trace.push(json!({"planted": "answers-your-record", "ask": ask, "reply": answered.unwrap_or_else(|e| json!(e))}));
