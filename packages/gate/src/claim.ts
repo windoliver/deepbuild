@@ -91,7 +91,8 @@ function recordOf(claim: ClaimedRuns, c: ClaimedCheck, digest: string, r: Record
   // environment with one set of tools, so each counts for the check it ran for.
   return {
     run: r.run, check: c.check, claim: claim.claim, commit: claim.commit, digest, environment: {}, tools: {},
-    outcome, ended: claim.now, tests_run: r.testsRun, reads: [...r.read], failures, evidence, kept: true,
+    // An exit status says nothing of how many tests ran: the planted gate takes a clean exit for a run that ran one.
+    outcome, ended: claim.now, tests_run: exitOnly && outcome === 'passed' ? Math.max(r.testsRun, 1) : r.testsRun, reads: [...r.read], failures, evidence, kept: true,
     // A run that never started names why (a program the run's PATH lacks, a checkout gone): the machine's, so yours to provide.
     ...(outcome === 'missing' ? { missing: { cause: r.failures[0]?.message ?? 'the run never started', owner: 'you', since: claim.now } } : {}),
     ...(contract ? { contract } : {}),

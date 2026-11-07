@@ -292,7 +292,8 @@ export class Runs {
       } else ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun } | { code: null; missing: string }> => {
         if (!byPackage) {
           // #669's planted runner judges the run by its exit code alone, whatever masks it.
-          const exitOnly = this.o.plant === 'runner-passes-masked-exit' ? { plant: 'exit-code-only' as const } : {};
+          // #33's planted gate reads every command check's result from its exit status alone.
+          const exitOnly = this.o.plant === 'runner-passes-masked-exit' || this.o.plant === 'verdict-from-exit-status' ? { plant: 'exit-code-only' as const } : {};
           // A check that needs the app runs on its stack, started from its checkout once the run may start (#580). What
           // it served is read while it lasts, so a run on another tree, or on an environment that broke its rules, is uncounted.
           const serving = run.stack ? await this.o.stacks.serve({ ...run.stack, run: run.run, claim: run.claim, check: run.check, folder: run.cwd, expected_ms: run.expected_ms ?? null }) : undefined;

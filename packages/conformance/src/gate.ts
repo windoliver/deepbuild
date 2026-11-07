@@ -6,6 +6,7 @@
 //          one per known way to fake a pass) is covered, and every case is well formed.
 //   run:   each case's claim and twin, one session each on a hub of their own; a play passes when the gate's verdict
 //          on its last claim is one the case expects and names what it must.
+import { spawnSync } from 'node:child_process';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -26,6 +27,13 @@ export interface Setup {
   /** Files written into the world's home before the hub starts, path under HOME → text, for the claim (and `twin_files` for the twin). */
   files?: Record<string, string>;
   twin_files?: Record<string, string>;
+  /**
+   * Ignored files the kit writes into the world's repo before the claim's last commit, path → text: what changed with
+   * no commit, such as a cache that warmed, so a flaky check's next run can pass on inputs that didn't change.
+   */
+  last_files?: Record<string, string>;
+  /** Commands this machine must run cleanly for the case to be played, such as `python3 -m pytest --version`; a play without them is BLOCKED, naming the command. */
+  needs?: string[];
   /** How long to wait for the verdict after the last stop; 180 s by default. */
   wait_ms?: number;
 }
@@ -110,6 +118,10 @@ async function play(corpus: string, c: Case, which: 'claim' | 'twin'): Promise<R
   const p = which === 'claim' ? c.claim : c.twin;
   const fault = which === 'claim' ? c.setup?.fault : undefined;
   try {
+    for (const command of c.setup?.needs ?? []) {
+      const r = spawnSync('/bin/sh', ['-c', command], { encoding: 'utf8', timeout: 60_000 });
+      if (r.status !== 0) return { judgement: 'BLOCKED', outcome: 'none', reasons: `this machine can't run \`${command}\`: ${`${r.stderr ?? ''}${r.stdout ?? ''}`.trim().split('\n').pop() ?? ''}` };
+    }
     const w: World = makeWorld(owned, join(corpus, c.dir, 'base'), { drafts: c.drafts, readings: c.readings, installs: c.setup?.installs });
     for (const [path, text] of Object.entries((which === 'claim' ? c.setup?.files : c.setup?.twin_files) ?? {})) writeFileSync(join(w.home, path), text);
     const full = join(w.tmp, 'disk-full');
@@ -123,6 +135,7 @@ async function play(corpus: string, c: Case, which: 'claim' | 'twin'): Promise<R
     for (const [i, folder] of p.commits.entries()) {
       await commitTree(w, s, filesOf(join(corpus, c.dir, folder)), `${c.id} ${which} ${i + 1}`);
       const final = i === p.commits.length - 1;
+      if (final && which === 'claim') for (const [path, text] of Object.entries(c.setup?.last_files ?? {})) writeFileSync(join(w.repo, path), text);
       if (final && fault === 'disk-full') writeFileSync(full, 'full\n');
       if (final && fault === 'hub-killed') {
         const stopping = s.stop(c.stop ?? 'Done.');
