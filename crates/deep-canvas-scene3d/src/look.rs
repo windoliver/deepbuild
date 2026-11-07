@@ -71,6 +71,8 @@ pub struct Look3 {
     pub samples: crate::samples::Samples,
     /// Motion blur (#419), `None` with it off.
     pub blur: Option<crate::samples::Blur>,
+    /// A drawing look's drawn fields (#149): its light, paper, lines and fills.
+    pub drawn: Option<std::sync::Arc<deep_canvas_drawn::spec::Look>>,
 }
 
 /// The EV100 whose exposure scale is 1, a look's default.
@@ -105,6 +107,7 @@ impl Look3 {
             live_samples: 1,
             samples: crate::samples::Samples::default(),
             blur: None,
+            drawn: None,
         }
     }
 
@@ -123,6 +126,17 @@ impl Look3 {
             }
         }
         let mut out = Look3::from_roles(roles);
+        if let Value::Object(def) = look {
+            if def.get("basis").and_then(Value::as_str) == Some("drawing") {
+                let mut lowered = look.clone();
+                deep_canvas::grammar::lower_frame_literals(&mut lowered, (1920, 1080));
+                if let Value::Object(def) = &lowered {
+                    let read = deep_canvas_drawn::spec::Look::read(def)
+                        .map_err(|r| format!("{}: {}", r.code, r.path))?;
+                    out.drawn = Some(std::sync::Arc::new(read));
+                }
+            }
+        }
         if let Some(m) = look.get("materials").and_then(Value::as_object) {
             out.materials = m.clone();
         }

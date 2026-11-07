@@ -192,6 +192,7 @@ export interface AdapterFacts {
     conformance: AdapterFactsText;
     home: Array<AdapterFactsText>;
     path: AdapterFactsText;
+    archived?: AdapterFactsText;
   };
   appLinks: {
     readBy: AdapterFactsText;
@@ -5501,6 +5502,28 @@ export interface ReadingSlice {
   }>;
 }
 
+/** ref.unguarded@1 */
+export interface RefUnguarded {
+  v: 1;
+  id: string;
+  kind: "ref.unguarded";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ref: string;
+    commit: string;
+    pusher: string | null;
+    call: string | null;
+    command: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** request.cost@1 */
 export interface RequestCost {
   v: 1;
@@ -5526,6 +5549,29 @@ export interface RequestCost {
       exact: boolean;
     };
     reading: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** resource.created@1 */
+export interface ResourceCreated {
+  v: 1;
+  id: string;
+  kind: "resource.created";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    resource: string;
+    kind: string;
+    key?: string;
+    cost_usd: number;
+    check: string;
+    cwd: string;
   };
   evidence?: Array<string>;
 }
@@ -5919,6 +5965,24 @@ export interface SessionActivity {
   log_pos?: number;
   data: {
     activity: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.archived@1 */
+export interface SessionArchived {
+  v: 1;
+  id: string;
+  kind: "session.archived";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    transcript: string;
   };
   evidence?: Array<string>;
 }

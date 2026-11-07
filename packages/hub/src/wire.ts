@@ -121,6 +121,8 @@ export interface HookMeta {
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
   /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
   pr?: string;
+  /** A shell call that ran, with what it printed, read against the repo's outside resources (#342). */
+  ran?: { command: string; stdout: string };
   /**
    * A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, a background subagent or
    * command (#907) started, by its call, or a monitor's watch armed or stopped, by its ID (#997).
