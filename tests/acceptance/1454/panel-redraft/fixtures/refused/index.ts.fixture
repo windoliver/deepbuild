@@ -1,0 +1,5 @@
+// A plug-in whose panel fails `panel@1` (README: The fixture). The host's own registerView check takes it: only the kit
+// can refuse it. `.fixture` until refused.test.ts copies it, so no TypeScript run reads it as this repo's.
+export default async function (deep: any): Promise<void> {
+  await deep.registerView('ext.refused.view', 'panel', 'sidebar');
+}
