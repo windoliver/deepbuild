@@ -197,7 +197,7 @@ export const EXTENSION_HOOK_MS = 500;
 export const EXTENSION_HOLD_MS = EXTENSION_HOOK_MS + 500;
 
 /** The test VFS's settings, from DEEP_HUB_TEST_VFS. */
-export interface VfsSettings { points?: string; cutAfter?: number; syncDelayMs?: number; refuse?: string }
+export interface VfsSettings { points?: string; cutAfter?: number; syncDelayMs?: number; refuse?: string; /** Cut right after the nth point of one kind (#148). */ cutAt?: { kind: string; nth: number } }
 
 /** What the core is started with, in its worker or inline. */
 export interface CoreOptions {
