@@ -1,6 +1,6 @@
 # #352 by hand: two worktrees, a Claude Code and a Codex session, and the notices each received
 
-Run 2026-11-06 on the Linux dev box (load average ~9 on 20 cores), at head 1bbb1dfc (the branch merged with main 1972c9de), with a real
+Run 2026-11-07 on the Linux dev box (load average 37-46 on 20 cores), at head fb8061e1 (the branch merged with main 9fe631ac), with a real
 `deep hub run` in a temporary home, real git worktrees of one repo, and each session's hooks fired through the real
 `target/debug/deep-hook` (Claude Code and Codex payloads shaped like the corpus's, through the suite's
 `tests/acceptance/352/helpers.ts`). Nothing stands in for the hub. The script is below the transcript.
@@ -9,57 +9,57 @@ Run 2026-11-06 on the Linux dev box (load average ~9 on 20 cores), at head 1bbb1
 to DeepBuild's notice lines. Step 7 is the record (`events.read`).
 
 ```text
-World: repo /tmp/dl352-n4a7OM/repo; A = Claude Code in wa on claude/issue-90-rounding; B = Codex in wb on codex/issue-91-empty-lines.
+World: repo /tmp/dl352-UgPuwC/repo; A = Claude Code in wa on claude/issue-90-rounding; B = Codex in wb on codex/issue-91-empty-lines.
 
 1. A edits src/cart.js (lines 2) and package.json.
 
 2. B (Codex) starts: who else is in the repo, and on what.
   B was told:
-    DeepBuild: session 49f129ba (claude-code) is also in this repo, on issue #90; it changed src/cart.js (a behavior change).
-    DeepBuild: session 49f129ba (claude-code) is also in this repo, on issue #90; it changed package.json (a dependency change).
+    DeepBuild: session 2446a36a (claude-code) is also in this repo, on issue #90; it changed src/cart.js (a behavior change).
+    DeepBuild: session 2446a36a (claude-code) is also in this repo, on issue #90; it changed package.json (a dependency change).
 
 3. B patches src/cart.js (*** Update File: src/../src/cart.js): before the edit it hears A changed it.
   B was told:
-    DeepBuild: session 49f129ba (claude-code) also changed src/cart.js, line 2, in its worktree (a behavior change), and this session changes it too.
+    DeepBuild: session 2446a36a (claude-code) also changed src/cart.js, line 2, in its worktree (a behavior change), and this session changes it too.
 
 4. A's next tool call: B changed a file A changed.
   A was told:
-    DeepBuild: session 175ce4e0 (codex) also changed src/cart.js in its worktree (a behavior change), and this session changes it too.
+    DeepBuild: session bd174a64 (codex) also changed src/cart.js in its worktree (a behavior change), and this session changes it too.
 
 5. B commits; its pull request #91 merges into main; A's next tool call says to rebase.
   A was told:
-    DeepBuild: session 175ce4e0 (codex)'s pull request #91 merged into main and touched src/cart.js, which this session changed (a behavior change). Rebase onto main before you say done.
+    DeepBuild: session bd174a64 (codex)'s pull request #91 merged into main and touched src/cart.js, which this session changed (a behavior change). Rebase onto main before you say done.
 
 5b. The session map (sessions.read), while A runs `npm test`:
-  175ce4e0 codex: {"repo":"/tmp/dl352-n4a7OM/repo","branch":"codex/issue-91-empty-lines","issue":91,"files":[{"path":"src/cart.js","lines":""}],"running":[],"leases":[],"state":"finished"}
-  49f129ba claude-code: {"repo":"/tmp/dl352-n4a7OM/repo","branch":"claude/issue-90-rounding","issue":90,"files":[{"path":"src/cart.js","lines":"2"},{"path":"package.json","lines":"4"}],"running":["shell call toolu_90725ae937eadd4f63d55 (`npm test`)"],"leases":[],"state":"working"}
+  2446a36a claude-code: {"repo":"/tmp/dl352-UgPuwC/repo","branch":"claude/issue-90-rounding","issue":90,"files":[{"path":"src/cart.js","lines":"2"},{"path":"package.json","lines":"4"}],"running":["shell call toolu_79d78181740ff9ec99c05 (`npm test`)"],"leases":[],"state":"working"}
+  bd174a64 codex: {"repo":"/tmp/dl352-UgPuwC/repo","branch":"codex/issue-91-empty-lines","issue":91,"files":[{"path":"src/cart.js","lines":""}],"running":[],"leases":[],"state":"finished"}
 
 5c. A stops, idle with its waiter; B changes package.json too and its pull request #93 merges: A is woken through its waiter.
   A's waiter exited 2; A was woken with:
-    DeepBuild: session 175ce4e0 (codex)'s pull request #93 merged into main and touched package.json, which this session changed (a dependency change). Rebase onto main before you say done.
+    DeepBuild: session bd174a64 (codex)'s pull request #93 merged into main and touched package.json, which this session changed (a dependency change). Rebase onto main before you say done.
 
 6. A third session on issue #90 (Claude Code, worktree wc on claude/issue-90-again): one "keep which?" ask.
   deep inbox:
-    ask:01M6RR151VWMX9WZ5C4Q1X44JF  choice  26f47c27-4e9c-4b9d-b113-68a645c4d864  3s  shown  Sessions 49f129ba-9b58-4e40-aaf8-1dedbb596bdb (claude-code) and 26f47c27-4e9c-4b9d-b113-68a645c4d864 (claude-code) both work on issue #90 in repo. Keep which?  [keep-0 | keep-1 | keep-both]
+    ask:01M6W3BASBDWPKSSJYB1C17Y1E  choice  b7e2b075-e196-4cbe-83a7-4937e1f83b02  3s  shown  Sessions 2446a36a-8424-4fc9-ab2c-6558048f2cb0 (claude-code) and b7e2b075-e196-4cbe-83a7-4937e1f83b02 (claude-code) both work on issue #90 in repo. Keep which?  [keep-0 | keep-1 | keep-both]
 
 7. The record: each notice.delivered (type, source, files, PR, via).
-  175ce4e0 ← behavior   from 49f129ba files ["src/cart.js"] pr null via SessionStart
-  175ce4e0 ← dependency from 49f129ba files ["package.json"] pr null via SessionStart
-  175ce4e0 ← behavior   from 49f129ba files ["src/cart.js"] pr null via PreToolUse
-  49f129ba ← behavior   from 175ce4e0 files ["src/cart.js"] pr null via PreToolUse
-  49f129ba ← behavior   from 175ce4e0 files ["src/cart.js"] pr 91 via PreToolUse
-  175ce4e0 ← dependency from 49f129ba files ["package.json"] pr null via PreToolUse
-  49f129ba ← dependency from 175ce4e0 files ["package.json"] pr 93 via waiter
-  26f47c27 ← behavior   from 49f129ba files ["src/cart.js"] pr null via SessionStart
-  26f47c27 ← dependency from 49f129ba files ["package.json"] pr null via SessionStart
-  26f47c27 ← behavior   from 175ce4e0 files ["src/cart.js"] pr null via SessionStart
-  26f47c27 ← dependency from 175ce4e0 files ["package.json"] pr null via SessionStart
-  merge.dry_run {"a":"session:175ce4e08f454538b90c07867d83a1c5","b":"session:49f129ba9b584e40aaf81dedbb596bdb","conflicts":[]}
-  pr.merged {"pr":91,"merge_sha":"e6217dfca9091cd08955891bb6650165d30e27e5"}
-  merge.dry_run {"a":"session:175ce4e08f454538b90c07867d83a1c5","b":"session:49f129ba9b584e40aaf81dedbb596bdb","conflicts":[]}
-  pr.merged {"pr":93,"merge_sha":"962ed727f8e526bac099a1b0d4f674267137bbcf"}
-  ask.created {"kind":"choice","question":"Sessions 49f129ba-9b58-4e40-aaf8-1dedbb596bdb (claude-code) and 26f47c27-4e9c-4b9d-b113-68a645c4d864 (claude-code) both work on issue #90 in repo. Keep which?","options":[{"id":"keep-0","label":"Keep 49f129ba (claude-code), stop the other","decision":"none"},{"id":"keep-1","label":"Keep 26f47c27 (claude-code), stop the other","decision":"none"},{"id":"keep-both","label
-  ask.batched {"batch":"now:2026-11-06T15:35:56.226Z","asks":[{"ask":"ask:01M6RR151VWMX9WZ5C4Q1X44JF","plan_hash":null}]}
+  bd174a64 ← behavior   from 2446a36a files ["src/cart.js"] pr null via SessionStart
+  bd174a64 ← dependency from 2446a36a files ["package.json"] pr null via SessionStart
+  bd174a64 ← behavior   from 2446a36a files ["src/cart.js"] pr null via PreToolUse
+  2446a36a ← behavior   from bd174a64 files ["src/cart.js"] pr null via PreToolUse
+  2446a36a ← behavior   from bd174a64 files ["src/cart.js"] pr 91 via PreToolUse
+  bd174a64 ← dependency from 2446a36a files ["package.json"] pr null via PreToolUse
+  2446a36a ← dependency from bd174a64 files ["package.json"] pr 93 via waiter
+  b7e2b075 ← behavior   from 2446a36a files ["src/cart.js"] pr null via SessionStart
+  b7e2b075 ← dependency from 2446a36a files ["package.json"] pr null via SessionStart
+  b7e2b075 ← behavior   from bd174a64 files ["src/cart.js"] pr null via SessionStart
+  b7e2b075 ← dependency from bd174a64 files ["package.json"] pr null via SessionStart
+  merge.dry_run {"a":"session:bd174a64643a49eba6913aa3eb25c34e","b":"session:2446a36a84244fc9ab2c6558048f2cb0","conflicts":[]}
+  pr.merged {"pr":91,"merge_sha":"60813b25dda376661b26b49379bb1316b2af68cf"}
+  merge.dry_run {"a":"session:bd174a64643a49eba6913aa3eb25c34e","b":"session:2446a36a84244fc9ab2c6558048f2cb0","conflicts":[]}
+  pr.merged {"pr":93,"merge_sha":"19dc86f88000fd770747accd7aaf8a7511622505"}
+  ask.created {"kind":"choice","question":"Sessions 2446a36a-8424-4fc9-ab2c-6558048f2cb0 (claude-code) and b7e2b075-e196-4cbe-83a7-4937e1f83b02 (claude-code) both work on issue #90 in repo. Keep which?","options":[{"id":"keep-0","label":"Keep 2446a36a (claude-code), stop the other","decision":"none"},{"id":"keep-1","label":"Keep b7e2b075 (claude-code), stop the other","decision":"none"},{"id":"keep-both","label
+  ask.batched {"batch":"now:2026-11-07T22:51:27.426Z","asks":[{"ask":"ask:01M6W3BASBDWPKSSJYB1C17Y1E","plan_hash":null}]}
 
 8. `deep race 92` from your terminal:
   exit 0: A race on issue #92 started: its sessions settle on the first PASS.
