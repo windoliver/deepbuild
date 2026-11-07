@@ -795,17 +795,6 @@ impl Render for Shipped {
                 .child(label("needs-you-setup", unfinished.unwrap_or_default())),
             Kind::NeedsYou => {
                 page.child(title("needs-you-title", "Needs you"))
-                    .children((!self.popped).then(|| {
-                        label("needs-you-pop-out", "Pop out")
-                            .role(Role::Button)
-                            .aria_label("Pop out Needs you")
-                            .self_start()
-                            .px_1()
-                            .rounded_sm()
-                            .text_color(chrome.ink_secondary)
-                            .hover(|style| style.bg(chrome.hover))
-                            .on_click(|_, _, cx| pop_out(Kind::NeedsYou, cx))
-                    }))
                     .children(record.open.iter().enumerate().map(
                         |(index, (handle, _, question, status))| {
                             let ask = handle.clone();
@@ -835,6 +824,18 @@ impl Render for Shipped {
                                 .when(status == "held", |row| row.italic())
                         },
                     ))
+                    // Below the rows, so a screen reader and a keyboard reach the asks first.
+                    .children((!self.popped).then(|| {
+                        label("needs-you-pop-out", "Pop out")
+                            .role(Role::Button)
+                            .aria_label("Pop out Needs you")
+                            .self_start()
+                            .px_1()
+                            .rounded_sm()
+                            .text_color(chrome.ink_secondary)
+                            .hover(|style| style.bg(chrome.hover))
+                            .on_click(|_, _, cx| pop_out(Kind::NeedsYou, cx))
+                    }))
             }
             Kind::Session => {
                 let (session, task, state) = first(&record);
