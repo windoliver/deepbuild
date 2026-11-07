@@ -16,6 +16,7 @@ import type { CheckResult, CheckRunnerFill, CheckSpec, RunOutcome } from '@deepb
 import { scrubValues } from '@deepbuild/evidence';
 import { after, badDeadline, type Exit, type Host } from '@deepbuild/supervisor';
 import { segmentsOf } from '@deepbuild/gate';
+import { isControl, plantControls, removeControls, unheld, type Control } from './controls.js';
 import { listSource, unrun, type Listed } from './listing.js';
 import { evidence, goTest, nodeTest, under, vitest, type Listing, type Ran, type Reported } from './report.js';
 import { seededBy, type Seeded } from './seeded.js';
@@ -250,6 +251,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
   let temp = join(root, `deep-check-${run.replace(/[^A-Za-z0-9._-]/g, '-')}`);
   try { mkdirSync(temp); } catch { temp = mkdtempSync(join(root, 'deep-check-')); }
   let kill: NodeJS.Timeout | undefined;
+  let controls: Control[] = [];
   try {
     const bin = join(temp, 'bin');
     mkdirSync(bin);
@@ -291,6 +293,8 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     };
     const chunks = { stdout: [] as Buffer[], stderr: [] as Buffer[] };
     let cause = 'exit' as 'exit' | 'deadline' | 'stop';
+    // A run that names its tests runs only those, so a control it never selects proves nothing either way (#1099 adds theirs).
+    if (!filters.length) controls = await plantControls(checkout);
     const started = host.start({
       run, argv: ['/bin/sh', '-c', spec.runner], cwd: checkout, env, inherit: false,
       // Its checkout and its temp folder are its own; it reads the Node it runs on, the programs it names and the runner's loaders.
@@ -368,8 +372,14 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
         ...(go ? [goTest(stdout, checkout)] : []),
       ];
       const malformed = reported.reduce((n, r) => n + r.malformed, 0);
-      const ran = reported.flatMap((r) => r.ran);
-      const failures = reported.flatMap((r) => r.failures);
+      // Controls are never the check's tests: out of its counts and failures; a run whose report shows one of a file it
+      // ran passed, missing or failed elsewhere can't record a failure, so its result isn't kept (#1099).
+      const reportedFailures = reported.flatMap((r) => r.failures);
+      const ranFiles = new Set([...(vitestRun?.files ?? []).map((f) => f.file), ...(nodeRun?.files ?? [])]);
+      const unrecorded = unheld(controls, reported.flatMap((r) => r.ran), reportedFailures, ranFiles);
+      const ran = reported.flatMap((r) => r.ran).filter((t) => !isControl(t.test));
+      const failures = reportedFailures.filter((f) => !isControl(f.test));
+      const controlsFailed = reportedFailures.length > 0 && !failures.length;
       const read = new Set<string>();
       for (const path of new Set(reads?.lines ?? [])) { const rel = under(checkout, path); if (rel) read.add(rel); }
       for (const t of ran) if (t.file) read.add(t.file);
@@ -414,9 +424,11 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
         if (file?.altered) return done('uncounted', { ...rest, mask: `evidence altered ${name}`, evidence: [...ended.evidence, `${name}: ${file.altered}`] }, ran);
       }
       if (malformed) return done('uncounted', { ...rest, mask: 'evidence altered report', evidence: [...ended.evidence, `report: ${malformed} lines its reporter didn't write`] }, ran);
+      if (unrecorded) return done('uncounted', { ...rest, mask: unrecorded, evidence: [...ended.evidence, unrecorded] }, ran);
       if (failures.length) return done('failed', rest, ran);
       // A crash of what the check runs, or any other failing exit: a failed run.
-      if (code !== 0 || exit!.signal !== null) {
+      // The tool's failing exit for the controls alone is no failure of the check's.
+      if ((code !== 0 && !(controlsFailed && code === 1)) || exit!.signal !== null) {
         const message = exit!.signal !== null ? `the command was killed by ${exit!.signal}` : `the command exited ${code}`;
         return done('failed', { ...rest, failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: stderr.trim() || null, assertion: false, message }] }, ran);
       }
@@ -429,7 +441,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       // Every test a file the run ran holds ran, but those the check's own command left out (see listing.ts).
       const runFiles = [...(vitestRun?.files ?? []), ...(nodeRun?.files ?? []).map((file) => ({ file, tool: 'node' as const }))];
       const listed = [...(vitestRun?.listed ?? []), ...(await listedIn(checkout, runFiles, filters.some((f) => f.option === '--test-only')))];
-      const missed = unrun(listed, [...(vitestRun?.ran ?? []), ...(nodeRun?.seen ?? [])], vitestRun?.left ?? [], filters, named);
+      const missed = unrun(listed.filter((l) => !isControl(l.test)), [...(vitestRun?.ran ?? []), ...(nodeRun?.seen ?? [])], vitestRun?.left ?? [], filters, named);
       const dropped = missed.map((t) => ({ test: t.test, file: t.file, line: t.line, stack: null, assertion: false, message: `${t.test} never ran: something other than its source or the check's command left it out` }));
       return done(dropped.length ? 'failed' : 'passed', { ...rest, failures: dropped }, ran);
     } catch (error) {
@@ -439,6 +451,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     }
   } finally {
     clearTimeout(kill);
+    await removeControls(checkout, controls);
     rmSync(temp, { recursive: true, force: true });
   }
 }
