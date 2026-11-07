@@ -141,10 +141,10 @@ export async function startHub(owned: Owned, w: World, env: Record<string, strin
   owned.add(Number(ready.pid));
   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.socket), root: w.root, exit, stderr: () => err };
 }
-/** Kills the hub at once, as a crash would (SIGKILL), and waits for it to be gone. */
+/** Kills the hub as `kill` does (SIGTERM), mid-run, and waits for it to be gone; a SIGKILL is a power cut, whose open claims the record reads as events lost. */
 export async function killHub(hub: Hub): Promise<void> {
-  try { process.kill(hub.pid, 'SIGKILL'); } catch { /* gone */ }
-  await Promise.race([hub.exit, idle(10_000)]);
+  try { process.kill(hub.pid, 'SIGTERM'); } catch { /* gone */ }
+  await Promise.race([hub.exit, idle(30_000)]);
 }
 
 /** One call on the hub's socket as the CLI makes it: the cli role with the control token. */

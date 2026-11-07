@@ -422,7 +422,10 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       }
       // go test's reads reach no read set: its run can fail, never pass.
       if (go && ran.length) return done('uncounted', { ...rest, mask: 'untraced program go' }, ran);
-      if (!ran.length) return done('ran_nothing', rest, ran);
+      // A command that starts no test tool, such as a typecheck, has one result, its exit status (#33): a clean exit
+      // is its pass. A test tool that ran and counted no test ran nothing.
+      const tool = go || [nodeReport, vitestReport].some((r) => (r?.lines.length ?? 0) > 0);
+      if (!ran.length) return tool ? done('ran_nothing', rest, ran) : done('passed', { ...rest, testsRun: 1 }, ran);
       // Every test a file the run ran holds ran, but those the check's own command left out (see listing.ts).
       const runFiles = [...(vitestRun?.files ?? []), ...(nodeRun?.files ?? []).map((file) => ({ file, tool: 'node' as const }))];
       const listed = [...(vitestRun?.listed ?? []), ...(await listedIn(checkout, runFiles, filters.some((f) => f.option === '--test-only')))];

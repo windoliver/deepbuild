@@ -163,7 +163,11 @@ export type Plant =
   | 'trusts-channel-proof' | 'last-writer-wins' | 'live-buttons-after-answer' | 'closes-on-failed-send' | 'takes-turns-at-token' | 'reconnects-every-channel' | 'buttons-for-authority' | 'keeps-unpaired-key'
   // #1018's: runs keyed by session too, a key without the files runs read, a shared run counted once per claim that
   // reads it, a store of the newest result per key, and a carry that copies the source run's evidence whole.
-  | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence';
+  | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence'
+  // #33's: a gate that counts only a drafted spec as approved, so a repo on its maintainer's bootstrap stays watch-only,
+  // one that judges a claim on the bootstrap's commands alone, so a PR says Closes past an unproven criterion, and an
+  // engine that reads a stopped run, a full disk, a missing stack and an expired credential as FAIL.
+  | 'drafted-spec-only' | 'bootstrap-commands-only' | 'failures-as-fail';
 const PLANTS: readonly string[] = [
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
@@ -237,6 +241,7 @@ const PLANTS: readonly string[] = [
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
   'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
   'kind-without-route',
+  'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

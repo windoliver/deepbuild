@@ -6,8 +6,8 @@
 //          one per known way to fake a pass) is covered, and every case is well formed.
 //   run:   each case's claim and twin, one session each on a hub of their own; a play passes when the gate's verdict
 //          on its last claim is one the case expects and names what it must.
-import { readFileSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import {
   REPO, Owned, Session, commitTree, events, filesOf, killHub, lastClaim, makeWorld, replyText, sleep, startHub, taskOf,
   type Ev, type Hub, type Ran, type World,
@@ -21,7 +21,7 @@ interface Play { commits: string[]; expected: Outcome | Outcome[]; names?: strin
 export interface Setup {
   /** Folders of this checkout cloned into the world's repo before its base commit, such as node_modules/vitest. */
   installs?: string[];
-  /** hub-killed: the hub is killed once a run of the claim has started and is started again; disk-full: the record refuses writes from the last stop on. */
+  /** hub-killed: the hub is killed (SIGTERM) once a run of the claim has started, and started again; disk-full: the record refuses writes from the last stop on. */
   fault?: 'hub-killed' | 'disk-full';
   /** Files written into the world's home before the hub starts, path under HOME → text, for the claim (and `twin_files` for the twin). */
   files?: Record<string, string>;
@@ -111,7 +111,7 @@ async function play(corpus: string, c: Case, which: 'claim' | 'twin'): Promise<R
   const fault = which === 'claim' ? c.setup?.fault : undefined;
   try {
     const w: World = makeWorld(owned, join(corpus, c.dir, 'base'), { drafts: c.drafts, readings: c.readings, installs: c.setup?.installs });
-    for (const [path, text] of Object.entries((which === 'claim' ? c.setup?.files : c.setup?.twin_files) ?? {})) writeFileSync(join(w.home, path), text);
+    for (const [path, text] of Object.entries((which === 'claim' ? c.setup?.files : c.setup?.twin_files) ?? {})) { mkdirSync(dirname(join(w.home, path)), { recursive: true }); writeFileSync(join(w.home, path), text); }
     const full = join(w.tmp, 'disk-full');
     const env = fault === 'disk-full' ? { DEEP_HUB_TEST_VFS: JSON.stringify({ refuse: full }) } : {};
     let hub: Hub;
