@@ -19,6 +19,7 @@ import { isPrCreate, isPrEdit } from './forge.js';
 import { registry } from './hookmap.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
+import { cachedRuleFiles, callPaths, handleOf as ruleHandle, isRuleFile, noticesFor, noticeText, readHeld, repoRoot, RULE_EDITS, rulesInFile, rulesOf, type RuleFile, type RuleFileBefore } from './rules.js';
 import { installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { heavyDenial } from './heavy.js';
@@ -58,6 +59,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['wiki.build', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
   ['memory.list', ['cli']], ['memory.act', ['cli']],
+  // The rules page (#344): written from your rule files, a scope's reach before you save it, who a rule reached, a session's set.
+  ['rules.sync', ['app', 'cli']], ['rules.reach', ['app', 'cli']], ['rules.credit', ['app', 'cli']], ['session.rules', ['app', 'cli']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
@@ -684,6 +687,9 @@ class Hub {
     if (this.cantRun.has(meta.agent)) Object.assign(meta, { watchOnly: true, cantRun: true });
     // The planted wrong program consults your standing rules before the guards: their blocks wait for the gate.
     let ruled = this.plant === 'decision-before-guard' && this.gated(meta, parsed.drafts)?.decided ? EMPTY_REPLY : this.reply(meta);
+    // A rule you scoped to paths, at the session's first call inside its scope (#344): its words ride this reply.
+    const notice = meta.watchOnly ? undefined : this.rulesAt(meta, ruled);
+    if (notice) ruled = withWaits(ruled, meta.event, { context: notice });
     // The long waits (#120): each hook shows the waits its call's start or end, and takes the lines waiting for it.
     if (!meta.watchOnly) {
       const now = this.now();
@@ -870,6 +876,40 @@ class Hub {
       return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: output }), stderr: '' }));
     }
     conn.sock.end(ruled);
+  }
+
+  /** The scoped rules each session heard since its start, compaction or resume, by rule ID (#344). */
+  private rulesHeard = new Map<string, Set<string>>();
+  private ruleFiles = new Map<string, { at: number; files: RuleFile[] }>();
+  /**
+   * Your rules at a hook, read here so no call waits on the core (#344): a session's start, compaction or resume lets
+   * each scoped rule be heard once more; a PreToolUse inside a rule's scope carries it once, and an Edit or Write of a
+   * rule file has the file's rules read before it runs. Both go to the core on the hook's meta, to record.
+   */
+  private rulesAt(meta: HookMeta, ruled: string): string | undefined {
+    if (!meta.session || !['claude-code', 'claude', 'codex'].includes(meta.agent)) return undefined;
+    if (meta.event === 'SessionStart' || meta.event === 'SessionEnd') { this.rulesHeard.delete(meta.session); return undefined; }
+    if (meta.event !== 'PreToolUse' || !meta.call) return undefined;
+    const repo = repoRoot(meta.cwd);
+    const paths = repo ? callPaths(meta.call.input, meta.cwd, repo) : [];
+    if (!repo || !paths.length) return undefined;
+    try {
+      const files = cachedRuleFiles(this.ruleFiles, repo);
+      const before: RuleFileBefore[] = RULE_EDITS.has(meta.call.tool)
+        ? paths.filter(isRuleFile).map((file) => ({ file, scope: files.find((f) => f.file === file)?.scope ?? 'all', rules: rulesInFile(join(repo, file)) }))
+        : [];
+      if (before.length) this.ruleFiles.delete(repo);
+      // A call blocked before it runs hears nothing.
+      const blocked = ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0;
+      const heard = this.rulesHeard.get(meta.session) ?? new Set<string>();
+      this.rulesHeard.set(meta.session, heard);
+      const notices = blocked ? [] : noticesFor(rulesOf({ files, typed: [], held: readHeld(this.root.dir), guards: [] }), paths, meta.agent, heard);
+      if (notices.length || before.length) meta.rules = { notices: notices.map(ruleHandle), ...(before.length ? { before } : {}) };
+      return notices.length ? noticeText(notices) : undefined;
+    } catch (error) {
+      process.stderr.write(`deep hub: rules at ${meta.session}'s call: ${error instanceof Error ? error.message : String(error)}\n`);
+      return undefined;
+    }
   }
 
   /**

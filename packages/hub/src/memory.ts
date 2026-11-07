@@ -18,6 +18,8 @@ export type LessonKind = 'guard' | 'shared-rule' | 'removal';
 export interface Lesson {
   id: string; kind: LessonKind; text: string; rank: number; claim: string; scope: string;
   sources: { at: string | null; path: string | null; quote: string }[];
+  /** Why a rule on the rules page is offered for removal (#344): the guard that enforces it, or its scope's count of sessions. */
+  why?: string;
 }
 type Raw = RecordStore['raw'];
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
@@ -31,7 +33,7 @@ const NEVER = /^never run `([^`]+)`/i;
 const REJECTED = /(?:^|[.!?]\s+|\n\s*)rejected:[ \t]*`([^`\n]{1,200})`/g;
 /** What an agent's host writes under the user's role: a repo's AGENTS.md, as a Codex rollout carries it, or its environment. */
 const INJECTED = /^\s*(?:<|# AGENTS\.md)/;
-const decisionKey = (lesson: string): string => sha256(`memory ${lesson}`);
+export const decisionKey = (lesson: string): string => sha256(`memory ${lesson}`);
 const rejectedKey = (scope: string, direction: string): string => sha256(`rejected ${scope} ${direction}`);
 
 /** The folder each repo's sessions worked in, read from the first of its transcripts that names one. */
