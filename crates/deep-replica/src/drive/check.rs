@@ -14,7 +14,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use deep_app::views::{Kind, HOME, SESSION, WELCOME};
+use deep_app::views::{Kind, AGENTS, HOME, SESSION, WELCOME};
 use gpui_kit::ElementId;
 use serde_json::{json, Value};
 
@@ -239,6 +239,7 @@ fn shipped(root: &Path) -> Vec<View> {
                     Kind::Home => Some(HOME),
                     Kind::Session => Some(SESSION),
                     Kind::Welcome => Some(WELCOME),
+                    Kind::Agents => Some(AGENTS),
                     Kind::Sidebar | Kind::NeedsYou | Kind::Line => None,
                 },
                 panel: None,

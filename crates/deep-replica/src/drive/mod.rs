@@ -28,7 +28,7 @@ use std::{
 use deep_app::{
     events::{inbox, Fixture, Row},
     notify::{Notifier, NOTIFY_AFTER},
-    views::{AppState, Kind, Layout, HOME, NEEDS_YOU, SESSION, WELCOME},
+    views::{AppState, Kind, Layout, AGENTS, HOME, NEEDS_YOU, SESSION, WELCOME},
 };
 use gpui_kit::{test::TestWindowExt as _, *};
 use image::RgbaImage;
@@ -215,7 +215,7 @@ impl Replica {
             }
         };
         let from = word("from", &["fixture", "record_copy", "empty"], "fixture")?;
-        let center = word("center", &[NEEDS_YOU, HOME, SESSION, WELCOME], NEEDS_YOU)?;
+        let center = word("center", &[NEEDS_YOU, HOME, SESSION, WELCOME, AGENTS], NEEDS_YOU)?;
         let theme = word("theme", &["light", "dark"], "light")?;
         let clock = word("clock", &["virtual", "real"], "virtual")?;
         let scale = match &args["scale"] {
