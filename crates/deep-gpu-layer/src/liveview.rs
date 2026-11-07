@@ -832,6 +832,8 @@ impl View {
                 .collect();
             let res = &self.op_resolution;
             let canonical = drawing.canonical && !self.canonical_draws_live_only;
+            // Stepped operators count fixed steps from the exact time, not its f32 (#252).
+            self.ops.clock = Some(t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64);
             self.ops.plan(
                 device,
                 &linear,

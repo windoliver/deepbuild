@@ -716,6 +716,7 @@ impl Post for Effects {
         self.build_docops(device);
         if let Some(ops) = self.docops.as_mut() {
             let res = self.op_resolution.clone();
+            ops.clock = Some(s.t);
             let (rows, recs, out) = ops.plan(
                 device,
                 &cur,

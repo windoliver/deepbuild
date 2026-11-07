@@ -1,0 +1,10 @@
+{
+  "#1333.f14d14bc": ["red-only", "blames-head", "never-pauses", "whole-lanes-bisect"],
+  "#1333.747cd5ee": ["unverified-revert", "stays-paused", "no-reopen"],
+  "#1333.aded8275": ["flaky-holds", "unfiled"],
+  "#1333.ed47bc1a": ["asks-on-conflict", "asks-every-tick", "no-attempt"],
+  "#1333.87ce4575": ["issue-named-only", "the base's scripts/lanes.mjs"],
+  "#1333.6c0af23f": ["asks-a-model", "dispatches-ci"],
+  "scope: schedule": ["every-tick"],
+  "scope: 14 days": ["no-age"]
+}

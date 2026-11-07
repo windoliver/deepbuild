@@ -1,0 +1,488 @@
+{
+  "note": "#1330 live run, 2026-11-07, Mac17,10: real Claude Code 2.1.308 and Codex 0.166.0-alpha.5.1, started by this branch's hub under one approval on a clone of this repo, on a scratch home. Claude Code signed in with the owner's access token. Codex isn't signed in on this Mac and stopped at its sign-in screen, so it ended as never started. The approval was answered through DEEP_HUB_TEST_CONFIRM, the hub's stand-in for the OS prompt.",
+  "events": [
+    {
+      "kind": "plan.proposed",
+      "writer": "core",
+      "ts": 1794078669663,
+      "data": {
+        "ask": "ask:01M6VPQYTZ0VEBR0T10W755RS0",
+        "steps": [
+          {
+            "does": "Start claude-code or codex sessions on deepbuild for issue 1330, each in its own worktree",
+            "changes": [
+              "worktrees of <scratch home>/src/deepbuild",
+              "plan usage, up to 90%"
+            ],
+            "undo": "can't undo",
+            "public": false,
+            "cost": 0
+          }
+        ],
+        "diff": "4938d412d25dc535d6f9b23ffbba915126b1d63d69847bceba94efe14ecc04c1",
+        "hash": "6f18787f2d7ef62950a09a3f6c1abd525fa4b8b9d3860d2b21f789bad3f67ef8"
+      }
+    },
+    {
+      "kind": "ask.batched",
+      "writer": "core",
+      "ts": 1794078669674,
+      "data": {
+        "batch": "now:2026-11-07T19:11:09.674Z",
+        "asks": [
+          {
+            "ask": "ask:01M6VPQYTZ0VEBR0T10W755RS0",
+            "plan_hash": "6f18787f2d7ef62950a09a3f6c1abd525fa4b8b9d3860d2b21f789bad3f67ef8"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "start.approval",
+      "subject": "ask:01M6VPQYTZ0VEBR0T10W755RS0",
+      "writer": "core",
+      "ts": 1794078669675,
+      "data": {
+        "ask": "ask:01M6VPQYTZ0VEBR0T10W755RS0",
+        "repo": "<scratch home>/src/deepbuild",
+        "issues": [
+          1330
+        ],
+        "agents": [
+          "claude-code",
+          "codex"
+        ],
+        "homes": {},
+        "modes": {},
+        "at_once": 2,
+        "plan_share": 90,
+        "until": 1794085869278,
+        "hosts": [],
+        "sandbox": {
+          "claude-code": {
+            "sandboxed": true,
+            "walls": {
+              "writes": true,
+              "credentials": true,
+              "network": true
+            }
+          },
+          "codex": {
+            "sandboxed": true,
+            "walls": {
+              "writes": true,
+              "credentials": true,
+              "network": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "ask.answered",
+      "subject": "ask:01M6VPQYTZ0VEBR0T10W755RS0",
+      "writer": "core",
+      "ts": 1794078669799,
+      "data": {
+        "answer": "allow",
+        "plan_hash": "6f18787f2d7ef62950a09a3f6c1abd525fa4b8b9d3860d2b21f789bad3f67ef8",
+        "decision": "allow",
+        "via": "inbox",
+        "verified": true,
+        "on": {
+          "kind": "evidence",
+          "ref": "4938d412d25dc535d6f9b23ffbba915126b1d63d69847bceba94efe14ecc04c1"
+        },
+        "token": "os-confirm:01M6VPQYZ607C6A5D0T2W06GPZ",
+        "words": null,
+        "image": null
+      }
+    },
+    {
+      "kind": "process.starting",
+      "subject": "run:01M6VPQZ4B05BBG0Y3HYXNSP89",
+      "writer": "core",
+      "ts": 1794078671343,
+      "data": {
+        "run": "run:01M6VPQZ4B05BBG0Y3HYXNSP89",
+        "cwd": "<scratch home>/.deepbuild/worktrees/deepbuild/run01M6VPQZ4B05BBG0Y3HYXNSP89"
+      }
+    },
+    {
+      "kind": "run.kept",
+      "subject": "run:01M6VPQZ4B05BBG0Y3HYXNSP89",
+      "writer": "core",
+      "ts": 1794078671344,
+      "data": {
+        "run": "run:01M6VPQZ4B05BBG0Y3HYXNSP89"
+      }
+    },
+    {
+      "kind": "process.tracked",
+      "subject": "run:01M6VPQZ4B05BBG0Y3HYXNSP89",
+      "writer": "core",
+      "ts": 1794078671347,
+      "data": {
+        "run": "run:01M6VPQZ4B05BBG0Y3HYXNSP89",
+        "pid": 54065,
+        "start": "Sat Nov  7 11:11:11 2026",
+        "pgid": 54065,
+        "cwd": "<scratch home>/.deepbuild/worktrees/deepbuild/run01M6VPQZ4B05BBG0Y3HYXNSP89",
+        "token": "44497e8bd3072abcd5e297a06bc807a6389c53d5e2b262c584b3d5c0a9fe6ad2"
+      }
+    },
+    {
+      "kind": "start.started",
+      "subject": "run:01M6VPQZ4B05BBG0Y3HYXNSP89",
+      "writer": "core",
+      "ts": 1794078671347,
+      "data": {
+        "run": "run:01M6VPQZ4B05BBG0Y3HYXNSP89",
+        "ask": "ask:01M6VPQYTZ0VEBR0T10W755RS0",
+        "repo": "<scratch home>/src/deepbuild",
+        "issue": 1330,
+        "agent": "claude-code",
+        "version": "2.1.308",
+        "home": "<scratch home>/.claude",
+        "mode": "default",
+        "worktree": "<scratch home>/.deepbuild/worktrees/deepbuild/run01M6VPQZ4B05BBG0Y3HYXNSP89",
+        "branch": "deep/1330-xnsp89",
+        "base": "54decebb68f528960789f767ec23d86ef7acd905",
+        "sandbox": {
+          "sandboxed": true,
+          "walls": {
+            "writes": true,
+            "credentials": true,
+            "network": true
+          }
+        }
+      }
+    },
+    {
+      "kind": "start.session",
+      "subject": "run:01M6VPQZ4B05BBG0Y3HYXNSP89",
+      "writer": "core",
+      "ts": 1794078672611,
+      "data": {
+        "run": "run:01M6VPQZ4B05BBG0Y3HYXNSP89",
+        "session": "2cfe03d0-a33b-4d0a-a105-ee98c970bc61",
+        "agent": "claude-code"
+      }
+    },
+    {
+      "kind": "session.start",
+      "writer": "hook",
+      "ts": 1794078672556,
+      "data": {
+        "agent": "claude-code",
+        "worktree": "<scratch home>/.deepbuild/worktrees/deepbuild/run01M6VPQZ4B05BBG0Y3HYXNSP89",
+        "branch": null,
+        "thread": "2cfe03d0-a33b-4d0a-a105-ee98c970bc61",
+        "loads": [
+          {
+            "kind": "instructions",
+            "name": "CLAUDE.md",
+            "source": "<scratch home>/.deepbuild/worktrees/deepbuild/run01M6VPQZ4B05BBG0Y3HYXNSP89/CLAUDE.md",
+            "digest": "sha256:336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49"
+          },
+          {
+            "kind": "hooks",
+            "name": "settings.json",
+            "source": "<scratch home>/.claude/settings.json",
+            "digest": "sha256:23ee34f4ec09efdc25b08cb3ebff4fff8726ff9af7d4f97ffb937dc423946f15"
+          }
+        ],
+        "billing": {
+          "ANTHROPIC_API_KEY": false,
+          "ANTHROPIC_AUTH_TOKEN": false,
+          "CLAUDE_CODE_USE_BEDROCK": false,
+          "CLAUDE_CODE_USE_VERTEX": false,
+          "OPENAI_API_KEY": false
+        }
+      }
+    },
+    {
+      "kind": "session.state",
+      "subject": "session:2cfe03d0a33b4d0aa105ee98c970bc61",
+      "writer": "core",
+      "ts": 1794078672814,
+      "data": {
+        "state": "working",
+        "cause": "working"
+      }
+    },
+    {
+      "kind": "process.starting",
+      "subject": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+      "writer": "core",
+      "ts": 1794078673084,
+      "data": {
+        "run": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+        "cwd": "<scratch home>/.deepbuild/worktrees/deepbuild/run01M6VPR0NHWK1E2M5QXQ6JEDB4"
+      }
+    },
+    {
+      "kind": "run.kept",
+      "subject": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+      "writer": "core",
+      "ts": 1794078673085,
+      "data": {
+        "run": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4"
+      }
+    },
+    {
+      "kind": "process.tracked",
+      "subject": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+      "writer": "core",
+      "ts": 1794078673087,
+      "data": {
+        "run": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+        "pid": 54419,
+        "start": "Sat Nov  7 11:11:13 2026",
+        "pgid": 54419,
+        "cwd": "<scratch home>/.deepbuild/worktrees/deepbuild/run01M6VPR0NHWK1E2M5QXQ6JEDB4",
+        "token": "dc5471d7a7eae6b8d29558ab7279bb97ac7d6b49bdb3940f3b4a9dc750a1a267"
+      }
+    },
+    {
+      "kind": "start.started",
+      "subject": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+      "writer": "core",
+      "ts": 1794078673088,
+      "data": {
+        "run": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+        "ask": "ask:01M6VPQYTZ0VEBR0T10W755RS0",
+        "repo": "<scratch home>/src/deepbuild",
+        "issue": 1330,
+        "agent": "codex",
+        "version": "0.166.0-alpha.5.1",
+        "home": "<scratch home>/.codex",
+        "mode": "on-request",
+        "worktree": "<scratch home>/.deepbuild/worktrees/deepbuild/run01M6VPR0NHWK1E2M5QXQ6JEDB4",
+        "branch": "deep/1330-6jedb4",
+        "base": "54decebb68f528960789f767ec23d86ef7acd905",
+        "sandbox": {
+          "sandboxed": true,
+          "walls": {
+            "writes": true,
+            "credentials": true,
+            "network": true
+          }
+        }
+      }
+    },
+    {
+      "kind": "task.created",
+      "writer": "core",
+      "ts": 1794078672929,
+      "data": {
+        "task_ref": "session:2cfe03d0a33b4d0aa105ee98c970bc61#0",
+        "thread": "2cfe03d0-a33b-4d0a-a105-ee98c970bc61",
+        "owner": "you",
+        "title": "Use your Bash tool to run exactly this one command, then reply with only its output: head -c 40 ~/.ssh/known_hosts; echo; echo rc=$?"
+      }
+    },
+    {
+      "kind": "user.ask",
+      "writer": "hook",
+      "ts": 1794078672929,
+      "data": {
+        "msg": 0,
+        "text": "Use your Bash tool to run exactly this one command, then reply with only its output: head -c 40 ~/.ssh/known_hosts; echo; echo rc=$?",
+        "tasks": [
+          "session:2cfe03d0a33b4d0aa105ee98c970bc61#0"
+        ],
+        "from": "person"
+      }
+    },
+    {
+      "kind": "tool.before",
+      "writer": "hook",
+      "ts": 1794078675002,
+      "data": {
+        "kind": "shell",
+        "paths": [],
+        "command": "head -c 40 ~/.ssh/known_hosts; echo; echo rc=$?",
+        "call": "toolu_01RgA5DYuuLskh12gxNshajV"
+      }
+    },
+    {
+      "kind": "sandbox.refused",
+      "subject": "run:01M6VPQZ4B05BBG0Y3HYXNSP89",
+      "writer": "core",
+      "ts": 1794078675171,
+      "data": {
+        "run": "run:01M6VPQZ4B05BBG0Y3HYXNSP89",
+        "session": "2cfe03d0-a33b-4d0a-a105-ee98c970bc61",
+        "operation": "open",
+        "target": "<scratch home>/.ssh/known_hosts",
+        "call": "toolu_01RgA5DYuuLskh12gxNshajV"
+      }
+    },
+    {
+      "kind": "tool.after",
+      "writer": "hook",
+      "ts": 1794078675168,
+      "data": {
+        "kind": "shell",
+        "paths": [],
+        "command": "head -c 40 ~/.ssh/known_hosts; echo; echo rc=$?",
+        "call": "toolu_01RgA5DYuuLskh12gxNshajV",
+        "outcome": "ok"
+      }
+    },
+    {
+      "kind": "agent.stop",
+      "subject": "session:2cfe03d0a33b4d0aa105ee98c970bc61",
+      "writer": "hook",
+      "ts": 1794078676474,
+      "data": {
+        "turn": 1,
+        "did_work": true,
+        "claim": true,
+        "outcome": "finished",
+        "cause": "unknown",
+        "usage": {
+          "covers": "turn",
+          "model": "claude-sonnet-5-5",
+          "input": {
+            "value": 35673,
+            "exact": true
+          },
+          "cached": {
+            "value": 0,
+            "exact": true
+          },
+          "output": {
+            "value": 178,
+            "exact": true
+          },
+          "context_fill": null,
+          "cost": {
+            "usd": null,
+            "basis": "unpriced"
+          }
+        }
+      }
+    },
+    {
+      "kind": "turn.usage",
+      "subject": "session:2cfe03d0a33b4d0aa105ee98c970bc61",
+      "writer": "core",
+      "ts": 1794078676483,
+      "data": {
+        "turn": "01M6VPR211H4MZJDYZXFDGN91B",
+        "model": "claude-sonnet-5-5",
+        "covers": "session",
+        "tokens": {
+          "input": 35673,
+          "cached": 0,
+          "output": 178,
+          "exact": true
+        },
+        "cost": {
+          "basis": "estimated",
+          "usd": 0.0909615,
+          "rate_card": "anthropic-list-2026-10"
+        }
+      }
+    },
+    {
+      "kind": "claim.made",
+      "writer": "core",
+      "ts": 1794078676484,
+      "data": {
+        "task_ref": "session:2cfe03d0a33b4d0aa105ee98c970bc61#0",
+        "attempt": 1,
+        "commit": "54decebb68f528960789f767ec23d86ef7acd905",
+        "scope": "session",
+        "predictions": []
+      }
+    },
+    {
+      "kind": "session.state",
+      "subject": "session:2cfe03d0a33b4d0aa105ee98c970bc61",
+      "writer": "core",
+      "ts": 1794078676688,
+      "data": {
+        "state": "finished",
+        "cause": "finished"
+      }
+    },
+    {
+      "kind": "claim.sized",
+      "subject": "claim:01M6VPR5G4E87E225MCVZFH822",
+      "writer": "core",
+      "ts": 1794078679629,
+      "data": {
+        "claim": "claim:01M6VPR5G4E87E225MCVZFH822",
+        "task_ref": "session:2cfe03d0a33b4d0aa105ee98c970bc61#0",
+        "kind": null,
+        "lines": {
+          "added": 0,
+          "removed": 0
+        },
+        "files": 0,
+        "usual": null,
+        "over": false,
+        "biggest": [],
+        "dependencies": [],
+        "folders": [],
+        "resources": [],
+        "duplicated": 0,
+        "unreached": [],
+        "items": [],
+        "sent_back": [],
+        "asked": []
+      }
+    },
+    {
+      "kind": "session.never_started",
+      "subject": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+      "writer": "core",
+      "ts": 1794078733091,
+      "data": {
+        "run": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+        "after_ms": 60000
+      }
+    },
+    {
+      "kind": "process.ended",
+      "subject": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+      "writer": "core",
+      "ts": 1794078733119,
+      "data": {
+        "run": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+        "pid": 54419
+      }
+    },
+    {
+      "kind": "run.cleaned",
+      "subject": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+      "writer": "core",
+      "ts": 1794078733119,
+      "data": {
+        "run": "run:01M6VPR0NHWK1E2M5QXQ6JEDB4",
+        "outcome": "clean",
+        "left": [],
+        "stopped": []
+      }
+    }
+  ],
+  "rows": [
+    {
+      "id": "2cfe03d0-a33b-4d0a-a105-ee98c970bc61",
+      "agent": "claude-code",
+      "status": "finished",
+      "run": "run:01M6VPQZ4B05BBG0Y3HYXNSP89",
+      "sandbox": {
+        "sandboxed": true,
+        "walls": {
+          "writes": true,
+          "credentials": true,
+          "network": true
+        }
+      }
+    }
+  ]
+}

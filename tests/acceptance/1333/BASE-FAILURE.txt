@@ -1,0 +1,65 @@
+# #1333 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (9bdebdfb: no scripts/main-watch.mjs, no scripts/known-failures-check.mjs, nothing new in the lint lane)
+
+$ node --test 'tests/acceptance/1333/*.test.mjs'
+(run in this checkout at a load of 400 on this Mac; 18 s. Every failure is an AssertionError at the test's own first
+check. Each tick fails with "Error: Cannot find module '<checkout>/scripts/main-watch.mjs'", which the dumps show. The
+first line of each message follows its test's name.)
+
+✖ #1333.ed47bc1a a revert that conflicts starts an attempt and raises no ask; if that attempt ends with main still red, one ask is raised and landings stay paused
+    the conflicting revert started no attempt on issue #9102: no claude or codex run was told #9102
+✖ #1333.aded8275 a test that fails once and passes on repeats reads INCONCLUSIVE, is filed, and pauses nothing
+    the flaky test never failed on main's head, so nothing was judged
+✖ #1333.87ce4575 a known-failures.json entry with no open issue fails the lane, naming the entry
+    the lint lane in scripts/lanes.mjs doesn't run scripts/known-failures-check.mjs
+✖ every known-failures.json entry names an issue and the date it was added, and the lane fails one older than 14 days, naming it
+    the lint lane didn't fail the entry added 20 days ago, naming it
+✖ the scheduled job runs the unit and lint lanes on main's head after 5 landings and not before, each run under the throttle's grant and the hub's lease
+    the first tick on a repository didn't run the unit lane's adds two numbers on main
+✖ #1333.f14d14bc a planted landing that breaks a test is named by the job within one schedule, and landings stop; a job that reports only that main is red fails, naming the missing landing
+    the first tick ran no lane on main, so there is no clean run to start from
+✖ #1333.747cd5ee the revert lands, the issue reopens naming the failure, and landings resume, with no ask raised
+    nothing landed on main after the break: the revert of <sha> never landed
+✖ #1333.6c0af23f the job makes no model call and starts no hosted workflow
+    the job didn't run its course (a tick failed, or it ran no test after the landings, or never called gh), so nothing shows it works without a model
+
+ℹ tests 8
+ℹ pass 0
+ℹ fail 8
+
+## The throwaway implementation
+
+In a scratch tree (this checkout's scripts/ plus the blind job's throwaway implementation, twins/README.md), at a load
+of 330 to 460, each file run on its own: 8 of 8 pass. watch.test.mjs took 83 s, conflict.test.mjs 89 s,
+flaky.test.mjs 57 s, schedule.test.mjs 43 s and known-failures.test.mjs 18 s.
+
+## The planted wrong programs
+
+Each run the same way, the twin over the implementation, its one test file, four at a time. Every twin fails the test
+of its criterion. The first line of that failure, and any other test of the same file it fails, follow.
+
+| Twin | Caught by | Its message | Also fails |
+|---|---|---|---|
+| red-only | #1333.f14d14bc | the job named no landing: the first tick due after the break printed no line naming landing <sha> (PR #9202) with its issue #9102 | #1333.747cd5ee |
+| blames-head | #1333.f14d14bc | the job named no landing: … landing <sha> (PR #9202) with its issue #9102 | #1333.747cd5ee, #1333.6c0af23f (its later ticks exit non-zero) |
+| never-pauses | #1333.f14d14bc | landings never read paused while main was red: ["open: landings open", …] | |
+| whole-lanes-bisect | #1333.f14d14bc | the job ran more than the failing test on the landings since the last clean run | |
+| unverified-revert | #1333.747cd5ee | the revert landed before the failing test (adds two numbers) passed on it | |
+| stays-paused | #1333.747cd5ee | landings didn't resume once main was clean: landings paused: main is red: … | |
+| no-reopen | #1333.747cd5ee | issue #9102, which the broken landing closed, wasn't reopened | |
+| flaky-holds | #1333.aded8275 | no line of the job's run reads INCONCLUSIVE for "settles on a repeat" | |
+| unfiled | #1333.aded8275 | the flaky test wasn't filed once as an issue naming "settles on a repeat": [] | |
+| asks-on-conflict | #1333.ed47bc1a | an ask was raised before the attempt ended | |
+| asks-every-tick | #1333.ed47bc1a | the attempt ended with main still red, and 2 asks were raised, not one: … | |
+| no-attempt | #1333.ed47bc1a | the conflicting revert started no attempt on issue #9102: no claude or codex run was told #9102 | |
+| issue-named-only | #1333.87ce4575 | the lint lane's failure doesn't name the entry tests/closed.test.mjs › its issue was closed | |
+| the base's lanes.mjs | #1333.87ce4575 | the lint lane in scripts/lanes.mjs doesn't run scripts/known-failures-check.mjs | the 14-day Scope test |
+| asks-a-model | #1333.6c0af23f | the job started an agent CLI | |
+| dispatches-ci | #1333.6c0af23f | the job started or touched a hosted workflow | |
+| every-tick | the schedule Scope test | a tick ran lanes after 1 landing, before the set 5 | |
+| no-age | the 14-day Scope test | the lint lane didn't fail the entry added 20 days ago, naming it | |
+
+The first asks-every-tick twin crashed on its second tick (a `git checkout -b` of a branch its first tick left), so it
+never asked twice and AC4 passed it. That was the twin's fault, not the test's. The kept twin asks again at each tick
+while main stays red, and AC4 fails it as above.
