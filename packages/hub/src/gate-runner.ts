@@ -13,7 +13,7 @@
 // rules live in @deepbuild/gate; this module drives them with the hub's runs and record.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { baseProof, claimVerdict, ownRead, OverBudget, type Checkouts, type ClaimRequirement, type DeclaredSurface, type RecordedRun, type StandIn, type TempCheckout } from '@deepbuild/gate';
+import { baseProof, claimVerdict, ownRead, OverBudget, type Checkouts, type ClaimRequirement, type DeclaredSurface, type JudgeFault, type RecordedRun, type StandIn, type TempCheckout } from '@deepbuild/gate';
 import { sha256Hex } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import type { BaseResult, Result, Verdict } from '@deepbuild/verdicts';
@@ -121,6 +121,8 @@ const stackOf = (c: Pick<Claim, 'session' | 'cwd'>, check: ClaimCheck, more: Par
 /** The entry that stands for a claim's definition while it hasn't locked (#322): pending, or BLOCKED by a cause outside the code. */
 const DEFINITION = 'definition';
 const EMPTY_SHA = sha256Hex(new Uint8Array());
+/** The fault the kit gate@1 plays on every verdict this hub makes (#33): DEEP_HUB_TEST_JUDGE_FAULT, which only the kit sets; the server refuses a name it doesn't know. */
+const JUDGE_FAULT = process.env.DEEP_HUB_TEST_JUDGE_FAULT as JudgeFault | undefined || undefined;
 /** The record of a run that never started for a cause outside the code: BLOCKED, naming the cause, yours to clear. */
 const missingRun = (run: string, cause: string): RecordedRun => ({
   run, outcome: 'missing', testsRun: 0, failures: [{ test: DEFINITION, file: '', line: 0, stack: null, assertion: false, message: cause }], evidence: [], read: [], mask: null, exit: null,
@@ -461,7 +463,7 @@ export class GateRunner {
           ...(e.running || e.waiting || queued.has(e) ? { state: 'running' as const } : e.runs.length || e.group ? { state: 'ended' as const } : e.stale ? { state: 'never_started' as const, never_started: 'newer_claim' as const } : {}),
         };
       }),
-    });
+    }, JUDGE_FAULT ? { fault: JUDGE_FAULT } : {});
     for (const e of c.entries.values()) {
       if (e.base && e.baseFrom && e.baseFrom.claim !== c.claim) carried.push(`${e.check.check} carried its base run ${e.baseFrom.run} from ${e.baseFrom.claim} in ${e.baseFrom.session}`);
     }
@@ -696,7 +698,8 @@ export class GateRunner {
     return c.checkout;
   }
   /**
-   * A fix check that passed on the snapshot runs on the merge base, in a temporary checkout from the service (#31),
+   * A fix check that passed on the snapshot runs on the merge base, in a temporary checkout from the service (#31), and so
+   * does any other check that failed there (#33: an inherited failure),
    * through the same command check kind, with the files its run read under the test, fixture and script folders taken
    * from the snapshot (#875); its record is what the verdict engine judges the fix by: passing there, or failing off
    * the assertions it names, makes the claim INVALID. A base run that can't be made is no run on the base, which
@@ -708,7 +711,9 @@ export class GateRunner {
    * requirement's `stand_in`.
    */
   private async onBase(c: Claim, e: Entry): Promise<void> {
-    if (e.check.on_base !== 'fails' || e.outcome !== 'passed') return;
+    // A fix check runs there once it passed, to prove the fix; any other once it failed, so a failure the merge base
+    // shares reads as inherited, BLOCKED, never as the claim's own FAIL (design: How runs become one of five verdicts).
+    if (e.outcome !== (e.check.on_base === 'fails' ? 'passed' : 'failed')) return;
     const check = e.check.check;
     const token = `${e.claim} ${check} base`;
     const surface = this.o.plant === 'stand-in-surface-dropped' ? null : e.check.surface ?? null;
