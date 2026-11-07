@@ -132,3 +132,9 @@ harness = false
 name = "acceptance_994_window"
 path = "../../tests/acceptance/994/window.rs"
 harness = false
+
+# Issue #1454: the refused panel's blind redraft, which needs no window. AppKit needs the main thread, so no libtest harness.
+[[test]]
+name = "acceptance_1454_panel_redraft"
+path = "../../tests/acceptance/1454/panel-redraft/app/refused.rs"
+harness = false
