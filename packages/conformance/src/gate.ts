@@ -26,8 +26,20 @@ export interface Setup {
   /** Files written into the world's home before the hub starts, path under HOME → text, for the claim (and `twin_files` for the twin). */
   files?: Record<string, string>;
   twin_files?: Record<string, string>;
-  /** How long to wait for the verdict after the last stop; 180 s by default. */
+  /** How long to wait for the claim's verdict after its last stop, 180 s by default; the twin always waits the default. */
   wait_ms?: number;
+  /**
+   * The definition the twin is handed instead of the case's `drafts`: for a row the definition itself decides (no check,
+   * a check below its requirement's depth, a check that passes on the base, your answer), the clean twin is the same
+   * change under a definition that can prove it.
+   */
+  twin_drafts?: unknown[];
+  /**
+   * The fault the hub's verdicts are made under for each play (DEEP_HUB_TEST_JUDGE_FAULT; @deepbuild/gate's JudgeFault),
+   * for a row of the verdict table no commit can reach: a broken record or evidence slot, or what the hub doesn't
+   * gather yet (a waiver, a contract, your answer). The twin's is usually none; `answered-pass` stands for your yes.
+   */
+  judge?: { claim?: string; twin?: string };
 }
 export interface Case { id: string; covers: string[]; dir: string; prompt: string; stop?: string; drafts?: unknown[]; readings?: unknown[]; setup?: Setup; claim: Play; twin: Play }
 interface Manifest { kit: string; cases: Case[] }
@@ -110,10 +122,11 @@ async function play(corpus: string, c: Case, which: 'claim' | 'twin'): Promise<R
   const p = which === 'claim' ? c.claim : c.twin;
   const fault = which === 'claim' ? c.setup?.fault : undefined;
   try {
-    const w: World = makeWorld(owned, join(corpus, c.dir, 'base'), { drafts: c.drafts, readings: c.readings, installs: c.setup?.installs });
+    const w: World = makeWorld(owned, join(corpus, c.dir, 'base'), { drafts: which === 'twin' && c.setup?.twin_drafts ? c.setup.twin_drafts : c.drafts, readings: c.readings, installs: c.setup?.installs });
     for (const [path, text] of Object.entries((which === 'claim' ? c.setup?.files : c.setup?.twin_files) ?? {})) { mkdirSync(dirname(join(w.home, path)), { recursive: true }); writeFileSync(join(w.home, path), text); }
     const full = join(w.tmp, 'disk-full');
-    const env = fault === 'disk-full' ? { DEEP_HUB_TEST_VFS: JSON.stringify({ refuse: full }) } : {};
+    const judge = c.setup?.judge?.[which];
+    const env = { ...(fault === 'disk-full' ? { DEEP_HUB_TEST_VFS: JSON.stringify({ refuse: full }) } : {}), ...(judge ? { DEEP_HUB_TEST_JUDGE_FAULT: judge } : {}) };
     let hub: Hub;
     try { hub = await startHub(owned, w, env); } catch (error) { return { judgement: 'BLOCKED', outcome: 'none', reasons: (error as Error).message.slice(0, 300) }; }
     const s = new Session(owned, w);
@@ -134,7 +147,7 @@ async function play(corpus: string, c: Case, which: 'claim' | 'twin'): Promise<R
       } else last = await s.stop(c.stop ?? 'Done.');
     }
     const reply = last ? replyText(last) : '';
-    const wait = c.setup?.wait_ms ?? 180_000;
+    const wait = (which === 'claim' ? c.setup?.wait_ms : undefined) ?? 180_000;
     let all: Ev[] = [];
     let decided: { claims: Ev[]; verdict: Ev | undefined } = { claims: [], verdict: undefined };
     const deadline = Date.now() + wait;

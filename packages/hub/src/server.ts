@@ -9,6 +9,7 @@ import { writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import { basename, dirname, join } from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { JUDGE_FAULTS } from '@deepbuild/gate';
 import type { HookRequestLine } from '@deepbuild/adapters';
 import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
@@ -1208,6 +1209,9 @@ function writeToken(root: Root): string {
  */
 export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   const plant = plantOf(process.env.DEEP_HUB_PLANT);
+  // The kit gate@1's fault for rows no commit reaches (#33): only the kit sets it, and a name it doesn't know stops the hub.
+  const fault = process.env.DEEP_HUB_TEST_JUDGE_FAULT;
+  if (fault && !(JUDGE_FAULTS as readonly string[]).includes(fault)) throw Error(`DEEP_HUB_TEST_JUDGE_FAULT=${fault} names no fault the kit plays`);
   plantedStart(plant);
   const vfs = process.env.DEEP_HUB_TEST_VFS ? (JSON.parse(process.env.DEEP_HUB_TEST_VFS) as VfsSettings) : undefined;
   // Both read at one moment, so with no test clock the hub's is the wall clock exactly.
