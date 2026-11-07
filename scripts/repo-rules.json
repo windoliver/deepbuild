@@ -414,6 +414,10 @@
           "spec": "0.0.0",
           "why": "Issue #20: the hub runs the transcript archive, a first-party extension on by default, once an hour on its record, evidence store and asks core."
         },
+        "@deepbuild/github": {
+          "spec": "0.0.0",
+          "why": "Issue #46: the hub runs the github extension, first-party and on by default, which posts each verdict as a commit status and reads each push."
+        },
         "@deepbuild/asks": {
           "spec": "0.0.0",
           "why": "Issue #236: the asks core the supervisor raises its unblock asks through, opened on the hub's record."
@@ -1501,6 +1505,14 @@
         "@deepbuild/wiki": {
           "spec": "0.0.0",
           "why": "Issue #63: an install writes its findings as wiki claims, and a cite's known-from is the wiki's knownOf."
+        }
+      }
+    },
+    "packages/github/package.json": {
+      "dependencies": {
+        "@deepbuild/gate": {
+          "spec": "0.0.0",
+          "why": "Issue #46: head trust is the gate's rule, and the reading's types are the gate's, so a head's status follows the rule the core applies."
         }
       }
     },
