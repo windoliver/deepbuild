@@ -241,7 +241,7 @@ export class Acceptance {
       : [`Write one test per criterion, each in a file of its own under ${folder}/, plus any plants the issue names. Each test's name carries its criterion's tag:`, '', ...this.criteria(e).map((c) => `${c.tag} ${c.text}`)];
     return [
       `You are DeepBuild's blind acceptance job for ${e.issue}. Your working folder is a checkout of the base commit ${e.base}. You read only this issue, that checkout and the design documents in it: ${e.design.join(', ')}. You never see the work.`,
-      `You write only under ${folder}/. A test enters through a surface the issue or the design names and asserts the issue's expected values with the test framework's own assertions, so that a new-behavior test loads on the base and fails there at an assertion in its file. A criterion that begins "Unchanged:" is no new behavior. The hub runs each test file on its own as \`${e.command} <file>\`, with no network.`,
+      `You write only under ${folder}/. A test enters through a surface the issue or the design names and asserts the issue's expected values with the test framework's own assertions, so that a new-behavior test loads on the base and fails there at an assertion in its file. A criterion that begins "Unchanged:" is no new behavior. The hub runs each test file on its own as \`${e.command} <file>\`, with no network, and counts a run only when every program it starts is Node: a test that runs git, a shell or any other program counts for nothing. Import what the issue adds inside each test, so the file loads on the base.`,
       '', ...rules, '', '## The issue', '', e.body,
     ].join('\n');
   }
