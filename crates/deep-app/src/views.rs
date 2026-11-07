@@ -41,6 +41,9 @@ pub const LINE_HEIGHT: f32 = 120.;
 const ROW_HEIGHT: f32 = 18.;
 /// A status mark's colored core, in points: at least the look's `core_min_px`.
 const CORE: f32 = 6.;
+/// How much of its text the row planted to cut off draws, short enough to fit in any sidebar.
+#[cfg(feature = "plant-row")]
+const CUT_TO: usize = 24;
 /// The panel the hub's canvas core knows a session's page by.
 const SESSION_PAGE: &str = "session-page";
 /// How often an open terminal tab reads its grid again.
@@ -112,6 +115,26 @@ impl Kind {
             Kind::Agents => AGENTS,
         }
     }
+}
+
+/// #124's wrong session rows, for the UI check to name: in a replica only, with the `plant-row` feature.
+#[cfg(feature = "plant-row")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowPlant {
+    /// Draws its text whole, past its frame.
+    PastFrame,
+    /// Draws its text cut off, and names only what it drew.
+    CutOff,
+}
+
+#[cfg(feature = "plant-row")]
+thread_local! {
+    static ROW_PLANT: Cell<Option<RowPlant>> = const { Cell::new(None) };
+}
+
+#[cfg(feature = "plant-row")]
+pub fn plant_row(plant: Option<RowPlant>) {
+    ROW_PLANT.with(|row| row.set(plant));
 }
 
 thread_local! {
@@ -606,7 +629,22 @@ fn status(
 /// A status mark for a status-map entry, and its words.
 fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElement<Stateful<Div>> {
     let glyph = states::glyph(entry);
+    #[cfg(feature = "plant-row")]
+    let text = match ROW_PLANT.get() {
+        Some(RowPlant::CutOff) if text.chars().count() > CUT_TO => {
+            format!("{}…", text.chars().take(CUT_TO).collect::<String>())
+        }
+        _ => text,
+    };
     let name = format!("{glyph} {text}");
+    // Past the row's width the text ends in an ellipsis; the row's name keeps the whole of it.
+    let words = div().flex_1().min_w_0().truncate();
+    #[cfg(feature = "plant-row")]
+    let words = if ROW_PLANT.get() == Some(RowPlant::PastFrame) {
+        div().flex_none()
+    } else {
+        words
+    };
     div()
         .id(id)
         .test_support()
@@ -623,7 +661,7 @@ fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElemen
                 .bg(rgb(states::color(entry))),
         )
         .child(glyph)
-        .child(text)
+        .child(words.child(text))
 }
 
 /// The bound values on `surface`, one accessibility node each named by its surface, its ID and

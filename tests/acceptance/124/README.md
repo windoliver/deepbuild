@@ -231,3 +231,261 @@ button the snapshot holds, a missing text `locate.none`, and the snapshot is unc
   issue's numbers are judged in the live file).
 - **Real clock as the wrong program** for criterion 3 is probabilistic in principle; with a 4 ms counter over five points and seconds of
   wall time, two equal real-clock runs are not expected.
+
+## Criteria 6 to 8, and the two Scope lines with no criterion of their own
+
+Added blind on November 6 at base commit `c12a65bb`, by a job that saw only the issue with its November 3 reopen comment, the design
+(Replica; Extension API; Dogfooding; How runs become one of five verdicts) and the code at that commit. No hit test, probe or UI check
+exists there. The files: `ac6-scrim.test.ts`, `ac7-ui-check.test.ts`, `ac8-shown.test.ts`, `scope-merge-base.test.ts`, `ui-helpers.ts`,
+`fixtures/panels/{scrim-dialog,audit-clean,audit-marks}`, `fixtures/stress/text.events.jsonl`. The commands above run them.
+
+### New surface (additions to The surface; everything above stands)
+
+**`act`, a pointer action.** Pointer actions are `click`, `double_click`, `hover`, `drag`, `scroll`, and `type` or `set` with a locator
+(they click first). Before one, the replica hit-tests the exact point it will use, and that test sends the app nothing: no move, no
+press, no hover. The element that would receive the event is the top one at the point, so a dialog's button inside its scrim's box
+receives its own click.
+
+- Delivered: the existing reply plus `result: "delivered"`. The reply says nothing about what the target did: no key like `handled`,
+  `saved`, `success`. A button with no handler gets the same word.
+- Another element would receive it: `{ok: false, error: {code: "refused", message, covered_by: {role, name, bounds}, point: [x, y],
+  box: [x, y, w, h]}}`. `message` holds the name, `bounds` are that element's real bounds, `point` the point tested, `box` the target's.
+  Nothing is sent, and a refused action fails the journey as any errored call does (`step <i>: act`, its failure text naming the element).
+
+**`probe`, a new call.** `{"call": "probe", "replica": "...", "locator": Locator}`. It answers the action's hit test without acting:
+`{ok, t, point, box, receiver: {role, name, bounds}, clear: bool}`. `point` is the point a click would use, `receiver` what would get
+it, `clear` whether that is the target. It sends the app nothing, is no entry in a recording's `actions`, and answers the same twice.
+`SCHEMAS.deep_drive` in `packages/hub/src/tools.ts` takes it (add `probe` to `call`'s enum and to the "Give one of" check).
+
+**`launch.fixture`.** `launch.fixture: "<absolute path>"` is a record fixture in the format of #338's
+`docs/spikes/338/fixtures/needs-you.events.jsonl` (lines of `{session_id, event}`), read in place of that default when `from` is
+`fixture`. A path that can't be read is `refused`, never the default record.
+
+**`ui_check`, a new call.** It needs no replica; send it to a fresh process.
+
+```jsonc
+{"call": "ui_check", "ui_check": {
+  "changed": ["crates/deep-app/src/views.rs"],  // repo-relative paths of the files the change touches
+  "fixture": "<absolute path>" | null,          // the record every render draws, as launch.fixture
+  "panel": "<absolute path>" | null,            // a panel package, mounted as launch.panel, whose loaded files are also views' files
+  "promise": "nothing_visible" | null,          // the change promises nothing visible changes
+  "base": {"drive": "<absolute path>",          // a deep-drive built at the merge base; it is spawned with `--out <dir>`
+           "panel": "<absolute path>" | null}   // the panel's folder at the merge base; null: the same panel
+         | null}}
+```
+
+The reply is `{ok, t, claim, views, findings, not_covered, differs, evidence}`:
+
+- `claim`: `FAIL` when a finding exists or, under the promise, a pair differs; else `INCONCLUSIVE` when `not_covered` isn't empty, nothing
+  rendered, or the promise has no `base`; else `PASS`.
+- `views`: one `{view, files, renders}` per view that loads a changed file, in any order. `view` is the panel's name in
+  `crates/deep-app/inventory.json` (`deepbuild/sidebar` draws the session row, in `crates/deep-app/src/views.rs`). `files` are the
+  repo-relative files it loads: a panel's entry and every file it imports, never a file beside them that nothing imports.
+- `renders`: exactly four: `{size: [w, h], scale: 2, theme, path, sha256, w, h, snapshot, findings, base?}`, at the reference window
+  `[1512, 982]` and one narrow width, each light and dark. `path` is the window's PNG; `snapshot` is `see`'s shape for that render.
+- A finding, in its render's `findings` and in the top-level list: `{audit, view, size, theme, node: {role, name, bounds}, box, frame,
+  text}`. `outside_frame`: `node` is the element, `frame` its bounds, `box` the extent actually drawn, past the frame. `cut_off`: `node`
+  is the element, `text` the text as drawn, and its accessible name doesn't hold the full value. `no_name`: `node` is a control with no
+  accessible name and no drawn text. `raw_key`: `text` is the key as drawn and `box` its bounds. `frame` and `text` are null where they
+  don't apply.
+- `not_covered`: the changed files no rendered view loads.
+- `base` on a render, with `ui_check.base`: `{path, sha256, same}`, the same view at the same size and theme from the merge base's build.
+  `same` is true only if the two PNGs are pixel for pixel equal. `differs`: `[{view, size, theme}]`, one per pair that differs.
+- `evidence`: `{slot, state: "captured", sha256}` per render.
+
+The merge base's side is driven through `launch`, `see`, `screenshot` and `close` alone, so a merge base with no `ui_check` still
+renders. `DEEP_DRIVE_PLANT` applies to every render of the process it's set on, and not to `base.drive`.
+
+### New planted programs
+
+- `no-hit-test`: pointer actions skip the hit test; `probe` is left alone.
+- `row-label-past-frame`: the real session row draws its label past its frame, as it does at the base on the stress set (below).
+- `row-branch-cut-off`: the real session row draws cut off, with an accessibility name holding only the cut-off text, so a session titled
+  with a branch name loses it. It draws nothing past its frame. Each plant changes what the row draws or names, never the audit.
+
+### Fixtures
+
+- `fixtures/panels/scrim-dialog`: a draft (`Draft: Release notes, second pass`), Save, a dialog open at launch with "Keep editing", and its
+  transparent scrim, a button named `Scrim` over the whole panel. Pressing the scrim closes the dialog and discards the draft
+  (`Draft discarded`). `Scrim events <n>` counts every pointer event the scrim is sent. `Ignores clicks` has no handler.
+- `fixtures/panels/audit-marks` and `audit-clean`: `audit-marks` has an icon-only button with no name and the raw key
+  `panel.actions.save_label` drawn as text; `audit-clean` has them put right. Each also has a text button with no name of its own, which is
+  no finding. `audit-clean/main.js` imports `words.js`; `audit-clean/unloaded.js` sits beside it and nothing imports it.
+- `fixtures/stress/text.events.jsonl`: the stress set for text. Six sessions, each titled with one string: a repo, a branch and a worktree
+  path with no spaces, an issue title, a model ID and a command (`ui-helpers.ts`, `STRESS`); every session has the long branch and worktree
+  in its `session.start`, and the command's session has a reading holding the command.
+
+### Criteria, tests and wrong programs
+
+| ID | Criterion (short) | Tests | Wrong programs it must fail on |
+|---|---|---|---|
+| `#124.770659f5` | A click on Save under the transparent scrim is refused naming it, draft unchanged | `ac6-scrim.test.ts`: "with the scrim over Save the click is refused..."; "every pointer action under the scrim is refused..."; "a journey that clicks under the scrim fails..." | A click that reaches the scrim; a refusal naming anything but the scrim's real node; any event sent to it, moves included |
+| `#124.770659f5` | With the scrim gone the click is delivered and says so | "with the scrim gone the click is delivered...": also the scrim's pixels over Save are none, and a handler-less button gets `delivered` | A result that reports what the target did; a hit test that refuses a dialog's own button |
+| `#124.770659f5` | The probe names the scrim without dismissing it | "the probe on Save names the scrim without dismissing it...": same answer as the refusal, same point as the click | A probe that moves the pointer, dismisses, or counts as an action |
+| `#124.770659f5` | The planted driver dismisses the dialog, discards the draft and fails, naming the scrim | "a planted driver that clicks Save's box centre...": the name comes from the probe's real answer, the same judge as the honest run, and the verdict engine sends it back | `DEEP_DRIVE_PLANT=no-hit-test` |
+| `#124.5bbd73d9` | The check on the session row renders it four ways | `ac7-ui-check.test.ts`: "a change to the session row renders it four ways..."; "the honest row draws nothing past its frame..." | Judge tests: three renders, one size, no narrow width, one picture twice, dark drawn light |
+| `#124.5bbd73d9` | Fails a planted label past its frame and a cut-off branch name, naming each | "a planted label drawn past its frame fails..."; "a planted cut-off branch name..." | `row-label-past-frame`, `row-branch-cut-off`; each finding is checked against the render's own snapshot, and the first against ink in the PNG past the row's frame |
+| `#124.5bbd73d9` | A file no view loads is not covered; the UI claim is INCONCLUSIVE, never PASS | "a change to a file no view loads..."; "a clean view beside a file no view loads..."; "a finding beside a file no view loads fails..." | Judge tests: PASS beside an uncovered file, an unlisted file. A program that calls everything in a panel's folder loaded, or only its entry |
+| `#124.ca19630a` | The pictures and recording from the replica at the reference window; one taste call, recorded; without it INCONCLUSIVE, never PASS | `ac8-shown.test.ts`: "the check run takes the screenshots..."; "the taste call's rule..." | The rule test: nothing recorded, a call on other files, no name, another criterion, `looks_wrong` |
+
+Scope tests, untagged: `ac7-ui-check.test.ts` "the panel with both gets one finding of each..." and "the same panel put right gets none..."
+(an icon-only control with no name, a raw string key); "long repo, branch and worktree paths..." and "an honest ellipsis isn't a finding..."
+(the stress set); `scope-merge-base.test.ts` (the merge base beside the change: four matching pairs and PASS, rendered by the base's own
+build; a visible change fails naming each pair; the promise with no base is INCONCLUSIVE; the real session row).
+
+### The taste call
+
+`ac8-shown.test.ts` takes every picture from the replica and writes them to `$DD124_SHOTS`, or `target/acceptance/124/`:
+
+| File | What it shows |
+|---|---|
+| `saved-highlights.png` | The save form driven to Save, with Save and the field highlighted in the strip |
+| `masked-mid-scroll.png` | One frame of the masked recording, mid-scroll |
+| `scrim-refusal.png` | The scrim panel after the refused click, with Save highlighted in the strip |
+| `dark-launch.png` | The save form on a dark launch |
+| `masked-scroll.apng` | The recording of the masked scroll |
+
+It checks their form only. Those files are attached to the PR and shown to you in the session; that part is the implementing agent's and no
+test sees it. Your answer goes in `tests/acceptance/124/TASTE.json`, the one file added to this folder after this redraft, and only to
+record it (#1174's form):
+
+```json
+{"issue": 124, "criterion": "#124.ca19630a", "verdict": "looks_right" | "looks_wrong", "who": string, "when": "ISO 8601 time",
+ "files": {"saved-highlights.png": sha256, "masked-mid-scroll.png": sha256, "scrim-refusal.png": sha256, "dark-launch.png": sha256, "masked-scroll.apng": sha256}, "note"?: string}
+```
+
+No `TASTE.json` is INCONCLUSIVE. A call with no name or time, on another criterion, or whose `files` aren't this run's SHA-256s is
+INCONCLUSIVE. `looks_wrong` fails, and `looks_right` on exactly this run's files passes. The virtual clock makes the hashes repeat
+(criterion 3), so a call stands until the pictures change.
+
+### What the implementer owes outside this folder
+
+`deep-drive` (the calls and plants above), `probe` in `packages/hub/src/tools.ts`, and the session row itself: at the base the real row
+draws past its frame on the stress set (the repo row puts 106 pixels of ink in the 12 px band right of the frame at the reference window,
+light, and short rows put 0), so the honest row has to end within its frame with its full text in its accessible name, as the sidebar's
+readings already do. `scripts/lanes.mjs` already lists this folder as `alone`; nothing new is owed there.
+
+### Judgment calls a redraft may revisit
+
+- **"Nothing is sent" counts moves.** The scrim's counter counts `on_mouse_move` too, because a read-only probe that moves the pointer
+  isn't read-only, and the base's click starts with a move. GPUI's own `hit_test` is `pub(crate)`, so the implementer has to read the frame
+  another way (the observed elements' paint order, for instance). If that can't be done without a move, this is the assertion to dispute.
+- **The scrim is a Button.** A script's plain `div` gets no accessibility node, whatever its `role`, so nothing could name it. The scrim is a
+  transparent `Button` inside a positioned `div`; the pixel comparison in the delivered test holds that it draws nothing over Save.
+- **The planted driver's "fails, naming the scrim"** is read two ways, and both are tested: the judge's problems, named from the probe's
+  answer, and the journey's assertion `scrim-still-up`, sent back by the verdict engine.
+- **Refused and timing.** An action under a scrim is `refused` with `covered_by`, whether at once or after a wait up to its `timeout`.
+- **A pointer action** includes `scroll`, `drag`, and `type` with a locator (which clicks first); `set` isn't tested, the fixture has no input.
+  A drag's drop point isn't hit-tested here.
+- **The "branch name"** is a session titled with the branch, since the base row draws no branch. A row that draws `session.start`'s
+  branch itself is equally judged, if `row-branch-cut-off` cuts it.
+- **The narrow width** is any width under 1512; the issue names no number. Which other views `views.rs` touches, and any findings on them,
+  aren't judged: the honest test reads `deepbuild/sidebar` alone, so a real defect elsewhere makes the claim FAIL there, not this suite.
+  The clean-panel tests audit the panel's view alone, so the record's rows beside it don't count.
+- **A file no view loads** is `crates/deep-replica/src/live.rs` (the live capture, a tool beside the app) and `audit-clean/unloaded.js`.
+  A check that decides by Rust module graph or by `inventory.json` both fit.
+- **`ui_check` is a call of the binary**, not yet of `deep mcp`: the hub starts a process per launch, the issue names no agent use of the mode,
+  and a check runs it. `probe` is an agent's call, so the strict schema takes it.
+- **Reading a PNG** in criteria 6 and 7 is arithmetic (size, mean luma, equal pixels, ink past a frame), never a judgment of how it looks;
+  the taste call alone does that.
+- **Findings and `claim`** are this job's shape; the UI claim is the reply's word, not yet a verdict-engine run.
+
+## Redraft, November 6 (`ac5-lease.test.ts`, the count in `#124.b8efd107`)
+
+Redrafted from the same inputs as the first draft and the criterion: the issue, the design (One role per credential; Replica, Cost)
+and the code at base `c12a65bb` (`Core.mcpHello`, `Core.bind`, `hookmap.ts`, `drive.ts`, #806's `Stand`, #26's binding tests), never an
+implementation. The first draft sent the Codex session's calls with no PreToolUse, so each was refused `unbound` before it reached
+the lease; a Codex `deep mcp` binds to nothing and each call binds only by its own stamp. Every call now goes through `Stand.stamp`,
+as #806's do. The judge also samples processes through the third launch's call instead of after it, and holds the exact count after
+the launches, after the close and after the third launch gets its place. Its names, helpers and planted hub are unchanged.
+
+## Redraft, November 7 (`ac2-isolation.test.ts`, focus in `#124.ca91d3c1`)
+
+Redrafted from the same inputs as the first draft and the criterion: the issue, the design (Replica) and base `c12a65bb`, never an
+implementation. The planted `moves-focus` replica wasn't named: on macOS 27.2, `lsappinfo info -only <key>` no longer prints
+`"ApplicationType"="Foreground"`, `"pid"=…` or `"CFBundleIdentifier"="…"`; it prints its record, with `type="Foreground"`,
+`pid = 123` and `bundleID="…"`. So the "registered as a foreground app" line never fired, the frontmost app's PID was always null,
+and the planted tests never found the bundle to put the front app back. Cooperative activation (macOS 14 and later) also keeps
+`activateIgnoringOtherApps` from changing the frontmost app, so that line can't catch the plant either; it stays as it was. The
+three readers (`foreground`, `frontApp`'s PID, the planted tests' bundle id) now take either format. The judge's lines, names,
+samples and the clipboard, sound and ask checks are unchanged. Measured on the base: the honest replica's judge returns no
+problems, and `moves-focus` is named `moved focus: the replica registered as a foreground app`. A plant test can still pass when
+someone switches apps during it, since any change of the frontmost app is judged as moved focus (Judgment calls: Your app).
+
+## Criterion 9: a journey's UI check at every step (added November 7)
+
+Added blind on November 7 at base commit `c12a65bb`, by a job that saw only the issue with the owner's new Scope line and criterion,
+the design (Replica; Replica `deep_drive`; How runs become one of five verdicts, journeys and app journeys) and the code at that commit,
+plus this folder's earlier blind files. No check over a journey, no step audit and no device exists there. The files:
+`ac9-journey-steps.test.ts`, `scope-ac9-device.test.ts`, `journey-helpers.ts`,
+`fixtures/panels/{journey-cover,journey-cover-twin,device-insets,device-insets-twin}`. `ui-helpers.ts` is used unchanged. Run them with
+`npx vitest run --root tests/acceptance/124 --no-file-parallelism ac9`.
+
+### New surface (additions to The surface; everything above stands)
+
+**`ui_check.journey`.** `ui_check` takes a journey: `{"call": "ui_check", "ui_check": {"journey": [<deep_drive arguments>]}}`, the calls in
+order, a `launch` first, with no `replica` (the check adds the handle, and a `close` when the journey has none). The other `ui_check` fields
+may be left out; then `views` and `not_covered` are empty and the claim rests on the steps. The check replays the journey in a fresh replica
+and audits the screen after every step: step `i` is the `i`-th call after the launch, as `close`'s `journey.steps` numbers it. With
+`launch.panel`, it audits the nodes the panel draws, the same rule as the clean-panel tests above, so the shell's rows beside it don't count.
+The reply adds:
+
+- `journey`: `close`'s journey for the replay, `{outcome, tests_run, failures, steps, evidence}`.
+- `steps`: one `{step: i, id: "step i: <call>", snapshot, findings}` per step, in order, `id` the journey's own step id, `snapshot` `see`'s
+  shape for the screen after that step.
+- Each finding also carries `step: i` and `by: {role, name, bounds}`, and is in its step's `findings` and the top-level list. Three new
+  audits: `under_sibling`, a node drawn under a sibling, `by` the sibling over it; `under_system_bar`, `by: {role: "system_bar", name: null,
+  bounds}`; `under_keyboard`, `by: {role: "keyboard", name: null, bounds}`. `node` is the covered element with its real bounds, `box` the part
+  of it covered (the overlap of the two boxes), `size` and `theme` the launch's.
+- `claim`: `FAIL` when a finding exists; else `INCONCLUSIVE` when a step has no audit or the journey didn't pass (it ran nothing, having
+  no `expect`, or it failed); else `PASS`. Only the first two are tested; a failed journey is never PASS either way.
+
+**`launch.device`.** `{"system_bar": <points>, "keyboard": <points>}`: the replica draws a system bar that tall over the window's top edge
+for the whole run, and an on-screen keyboard that tall over the bottom edge while a text input has focus, each across the window's width.
+In device pixels at the reference window and scale 2, `{system_bar: 24, keyboard: 300}` puts the bar at `[0, 0, 3024, 48]` and the keyboard at
+`[0, 1364, 3024, 600]`. With no `device` there is neither. `SCHEMAS.deep_drive` in `packages/hub/src/tools.ts` takes it in `launch`.
+
+### Fixtures
+
+- `fixtures/panels/journey-cover`: three pages, each but the last with "Next". Page 3 has "Publish" and, in the same row, its sibling
+  "Promo banner", drawn after it and filled `#e8590c`, an orange nothing else draws; "Hide banner" takes the banner away. With
+  `COVERED = true` the banner lies over Publish. `journey-cover-twin` is the same file with `COVERED = false`, the one line that differs:
+  the banner lies beside Publish. The journey: step 1 asserts "Page 1 of 3", steps 2 and 3 click Next, step 4 clicks "Hide banner",
+  step 5 asserts Publish visible. So only the screen after step 3 has a node under a sibling, and the journey's assertions pass either way.
+- `fixtures/panels/device-insets`: "Account" 4 points from the panel's top, a "Message" field mid-panel (labelled by the text before it),
+  and "Send" pinned 12 points above the bottom. `device-insets-twin` is the same file with `SAFE = true`: Account 48 points down and Send
+  under the field. The journey launches with `device: {system_bar: 24, keyboard: 300}`; step 1 asserts "Compose a message", step 2
+  clicks the field, step 3 asserts again.
+
+At the base, a plain run of each fixture draws what this says: on page 3 the banner's box holds Publish's and 9,440 of Publish's 11,200
+pixels are orange (0 on the twin); Account is at `[24, 8, 200, 56]` and Send at `[24, 1884, 160, 56]` (twin: `[24, 96, ...]` and
+`[24, 496, ...]`).
+
+### Criteria, tests and wrong programs
+
+| ID | Criterion (short) | Tests | Wrong programs it must fail on |
+|---|---|---|---|
+| `#124.f1263f80` | A planted button under a sibling at step 3 of a journey fails, naming the step and the node | `ac9-journey-steps.test.ts`: "a planted button under a sibling at step 3...": a plain run shows the banner over Publish after step 3 (its box and its pixels) and nothing covered at the end; the check audits all five steps, the journey passes, the claim is `FAIL`, and the one finding is `under_sibling` at step 3 alone, naming Publish at its real bounds under "Promo banner", `box` the overlap, `id` `step 3: act`; "the twin journey...": every step audited, page 3 reached with the two apart, no finding, `PASS`; "the same journey with its assertions taken out...": `ran_nothing`, steps still audited, `INCONCLUSIVE` | A check of the end screen alone, of the launch alone, or of the rendered views alone (none names step 3). Judge tests: the end screen alone saying PASS, no steps, a skipped step, a step with no snapshot, a finding at step 4, the sibling named as the covered node, no `by`, a wrong box, a finding missing from the top-level list or filed under another step |
+
+Scope tests, untagged: `scope-ac9-device.test.ts`. On `device-insets` with the device, Account is named `under_system_bar` at every step and
+Send `under_keyboard` at steps 2 and 3, not 1, each at its real bounds with the bar's and the keyboard's boxes; the claim is `FAIL`. The twin
+gets nothing and `PASS`; the plant with no device gets nothing and `PASS`; the hub's strict check takes `launch.device`.
+
+### Judgment calls a redraft may revisit
+
+- **The surface for "a journey".** The check takes the journey as its list of `deep_drive` calls in `ui_check.journey` and replays it, as
+  a journey check replays a recorded run, rather than a launch flag that audits an agent's live run. `ui_check` stays a call of the binary.
+  The step numbering is the replica's own (`step i` from the first call after launch), so "step 3" is the third call.
+- **What "fails" is.** The UI claim is `FAIL`; the journey's own outcome stays `passed`, since its assertions pass, and the claim is the
+  reply's word, as in criterion 7. Whether a finding should also fail the journey for the verdict engine is left to a redraft.
+- **One audit per step, at the launch's size and theme.** The step check doesn't render each step four ways, as a changed view is.
+- **"Under a sibling"** is judged on the snapshot: two nodes of one parent whose boxes overlap, the later-drawn one on top. Here both are
+  buttons, because a script's plain `div` gets no accessibility node; the base's snapshot puts every panel node under the window, so they
+  are siblings there. Paint order is shown by the plain run's pixels, never asked of the check.
+- **The system bar and the on-screen keyboard.** The design names neither for the replica: a fixed status bar appears only in an app
+  journey's device profile (iOS simulator, Android emulator), and no on-screen keyboard appears at all. The issue's Scope line names both,
+  so `launch.device` is this job's choice: a bar over the top edge and a keyboard over the bottom, given in points, the keyboard up only
+  while a text input has focus. If the owner means something else (a device model, the macOS menu bar, the Accessibility Keyboard),
+  `scope-ac9-device.test.ts` is the file to redraft; the criterion's file doesn't depend on it.
+- **The panel's nodes only.** With a panel, the shell's "Needs you" heading and session row are left out: at the base they lie under a
+  24-point bar and a 300-point keyboard too, and the shell has no device-aware layout.
