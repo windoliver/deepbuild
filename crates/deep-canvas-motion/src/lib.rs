@@ -22,6 +22,7 @@ pub mod modifier;
 mod occurrence;
 pub mod module;
 pub mod program;
+mod rows;
 pub mod schedule;
 pub mod spring;
 mod tempo;
