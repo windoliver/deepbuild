@@ -54,6 +54,8 @@ import { argsOf, groupUnder, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { Teardowns } from './teardowns.js';
+import { Agents, type Sync } from './agents.js';
+import { NEWER_SET, OLDER_SET } from './status.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { Channels, type ChannelAsk } from './channels.js';
 import { Workspaces } from './workspaces.js';
@@ -524,6 +526,8 @@ export class Core {
   private readonly stacks: Stacks;
   /** Each outside resource a session created, and its teardown task (#342). */
   private readonly teardowns: Teardowns;
+  /** The Agents page's syncs (#148): servers and skills written into each agent's own files. */
+  private readonly agents: Agents;
   /** Each session's deep_drive replicas (#124). */
   private readonly replicas: Replicas;
   /** The screen each session's computer use last switched to, one it leases (#332). */
@@ -775,6 +779,14 @@ export class Core {
     this.teardowns = new Teardowns({
       raw: (query, params) => this.record.raw(query, params), held: options.held, append: (session, agent, kind, data) => this.appendSession(session, agent, kind, data),
       reading: (session, agent, text) => this.appendReading(session, agent, text), raise: (session, agent, ask) => this.raiseTask(session, agent, ask),
+    });
+    this.agents = new Agents({
+      root: this.root.dir, plant: options.plant, durable: this.durable, now: this.now, held: options.held,
+      raise: async (source, ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), source, ask, plan as never); },
+      synced: async (data) => { await this.ready; await this.appendCore('agents.synced', data); },
+      wanted: async () => { await this.ready; return ((await this.record.raw("SELECT data FROM events WHERE kind = 'agents.synced' ORDER BY log_pos")) as { data: string }[]).map((r) => JSON.parse(r.data) as Obj); },
+      sessions: () => [...this.sessions.values()].filter((s) => !s.ended).map((s) => ({ id: s.id, agent: s.agent, pid: s.pid, start: s.start })),
+      older: (sync) => this.olderSet(sync),
     });
     this.runs = new Runs({
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
@@ -1089,6 +1101,8 @@ export class Core {
     this.timers.push(setInterval(() => { if (this.blocked && !this.lost && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
     // Between session starts, a removed or weakened entry of ours in Claude Code's settings goes back at once.
     if (this.options.plant !== 'restores-at-session-start-only') this.watchSettings();
+    // A sync a stop cut short is recovered from its journal before anything else is synced (#148).
+    void this.agents.recoverAtStart().catch((error: unknown) => process.stderr.write(`deep hub: agent syncs not recovered: ${error instanceof Error ? error.message : String(error)}\n`));
     // The promised checks the record still holds wait on, armed again (#120).
     await this.restorePromises().catch(() => undefined);
     for (const timer of this.timers) timer.unref();
@@ -1211,6 +1225,39 @@ export class Core {
         if (text && text !== last?.text) await this.queue(() => this.appendReading(s.id, s.agent, text));
       }
     }
+  }
+  /**
+   * A sync landed (#148): each live session of an agent it reached that started before it runs the older set, until
+   * its own evidence shows otherwise; for Codex, whose sessions share a daemon, that daemon is named by its PID.
+   */
+  private async olderSet(sync: Sync): Promise<void> {
+    await this.ready;
+    const at = sync.completed ?? this.now();
+    const reached = new Set(sync.agents);
+    for (const s of [...this.sessions.values()]) {
+      if (s.ended || !reached.has(s.agent === 'claude' ? 'claude-code' : s.agent)) continue;
+      const [row] = (await this.record.raw(`SELECT MAX(ts) AS ts FROM events WHERE session_id = ? AND kind = 'session.start'`, [s.id])) as { ts: number | null }[];
+      if (row?.ts === null || row?.ts === undefined || row.ts > at) continue;
+      const text = s.agent === 'codex'
+        ? `${OLDER_SET} Codex's daemon (pid ${s.pid}${s.start ? `, started ${s.start}` : ''}) started before sync:${sync.id} landed, so this session loads the new MCP servers and skills only once it starts from a daemon started since.`
+        : `${OLDER_SET} it started before sync:${sync.id} landed, and loads the new MCP servers and skills only once it starts again.`;
+      await this.queue(() => this.appendReading(s.id, s.agent, text));
+    }
+  }
+  /** A session's start from a process started after the sync its row names: its own evidence of the new set (#148). */
+  private async newSet(session: Session, meta: HookMeta): Promise<void> {
+    // Its own start: its transcript, from a process of its agent's own binary, a Codex daemon started since included.
+    if (meta.transcript && resolve(meta.transcript) !== session.transcript) return;
+    // npm's Codex runs as node with its bin script, its native build as codex itself.
+    const binaries = meta.agent === 'codex' ? [CODEX_BINARY, /@openai\/codex\/bin\/codex\.js(?:\s|$)/] : meta.agent === 'claude-code' || meta.agent === 'claude' ? [CLAUDE_BINARY] : [];
+    const args = binaries.length ? await argsOf(meta.ppid) : '';
+    if (binaries.length && !binaries.some((b) => b.test(args))) return;
+    const ppid = meta.ppid;
+    const [last] = (await this.record.raw(`SELECT ts, json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [session.id, `${OLDER_SET}%`, `${NEWER_SET}%`])) as { ts: number; text: string }[];
+    if (!last || last.text.startsWith(NEWER_SET)) return;
+    const started = Date.parse((await this.startOf(ppid, true)) ?? '');
+    if (!(started > last.ts)) return;
+    await this.queue(() => this.appendReading(session.id, session.agent, `${NEWER_SET} its process started after the sync its row named, so it loads the MCP servers and skills synced since.`));
   }
   /** A session.reading for the session, appended as the core. */
   private appendReading(session: string, agent: string, reading: string): Promise<void> {
@@ -1420,6 +1467,8 @@ export class Core {
       }
     }
     await this.enrich(drafts, meta, session && verified ? session : undefined);
+    // A session's start is its own evidence of the set it loads (#148), from the process it starts in.
+    if (meta.event === 'SessionStart' && session && !FOREIGN.has(meta.agent)) void this.newSet(session, meta).catch(() => undefined);
     // The session's newest stop, with its cause and owner read: one whose task is open holds the turns DeepBuild
     // would start there until the task closes (#85); any other stop ends an earlier hold.
     const stopped = meta.session && !meta.fields?.agent_id ? drafts.find((d) => d.kind === 'agent.stop') : undefined;
@@ -3188,6 +3237,9 @@ export class Core {
    */
   async toolGate(meta: HookMeta, call: Gated): Promise<{ held?: string; allow?: string; deny?: string; rule?: string; answers?: Record<string, string> }> {
     await this.ready;
+    // A synced server is called only from a session in its scope (#148).
+    const scoped = call.mcp ? this.agents.scopeDenial(call.mcp.server, meta.cwd) : undefined;
+    if (scoped) return { deny: scoped, rule: "the server's scope (#148)" };
     // A question card is sorted like a question at a stop (#84).
     if (call.card) {
       if (FOREIGN.has(meta.agent) || !meta.session) return {};
@@ -3311,6 +3363,7 @@ export class Core {
   }
   /** Your answer to an ask the done gate raised (#325): an issue's budget approved, a stalled claim split, funded or accepted, a switch left off. */
   private delivery(d: Delivery): void {
+    if (this.agents.delivered(d.ask, d.option, d.decision)) return;
     const fail = (what: string) => (error: unknown) => process.stderr.write(`deep hub: ${what} for ${d.ask} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
     const budget = this.budgetAsks.get(d.ask);
     if (budget) {
@@ -5082,6 +5135,11 @@ export class Core {
       case 'ask.undo': return this.undo(params, context);
       case 'offer.save': return this.saveOffered(params, context);
       case 'staged.undo': return this.staging.undo(params);
+      case 'agents.propose': await this.ready; return this.agents.propose(params);
+      case 'agents.read': return this.agents.read();
+      case 'agents.restart': await this.ready; return this.agents.restart(params);
+      case 'agents.undo': return this.agents.undo(params);
+      case 'mcp.exec': return this.agents.exec(params);
       case 'device.pair': return this.pair(params);
       case 'device.unpair': return this.unpair(params, context);
       case 'channel.link': return this.link(params);

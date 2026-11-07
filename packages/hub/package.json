@@ -20,6 +20,11 @@
       "types": "./src/mcp.ts",
       "development": "./src/mcp.ts",
       "default": "./dist/mcp.js"
+    },
+    "./mcp-exec": {
+      "types": "./src/mcp-exec.ts",
+      "development": "./src/mcp-exec.ts",
+      "default": "./dist/mcp-exec.js"
     }
   },
   "scripts": { "build": "tsc -p tsconfig.json && node native/build.mjs" },
