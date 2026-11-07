@@ -680,6 +680,8 @@ pub struct Scene {
     pub shadowing: crate::light::Shadowing,
     /// Under samples per frame, the angle this sample turns a soft shadow's disk by (#446).
     pub sample_turn: Option<f64>,
+    /// #464: what the look's print finish draws from at this frame's t and the document's seed.
+    pub print: deep_canvas_marks::print::Frame,
 }
 
 impl Scene {
@@ -2834,6 +2836,12 @@ pub(crate) fn evaluate_compiled(
         distributions: tables,
         shadowing: crate::sets::policy(map)?,
         sample_turn: None,
+        print: deep_canvas_marks::print::frame(
+            &look.print,
+            map.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32,
+            t,
+            false,
+        ),
     };
     scene.set_cutaway(cutaway);
     Ok(scene)
