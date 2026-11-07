@@ -37,16 +37,17 @@ function testFiles(root: string, dir = root, out: string[] = []): string[] {
   return out;
 }
 
-/** The control block for a file, by the tool and module form its own text uses; null for a file of another tool. */
-function blockFor(text: string, name: string): string | null {
+/** The control block for a file, by the tool and module form its own text uses; null for a file of another tool. Its names carry the run's draw, so two runs' controls in one file never clash. */
+function blockFor(text: string, name: string, draw: string): string | null {
   const esm = /^\s*(import|export)\s/m.test(text);
   const n = JSON.stringify(name);
+  const [t, e] = [`__deepControl${draw}`, `__deepCheck${draw}`];
   if (/['"]vitest['"]/.test(text)) {
-    return esm ? `\nimport { test as __deepControl, expect as __deepExpect } from 'vitest';\n__deepControl(${n}, () => { __deepExpect(0).toBe(1); });\n`
+    return esm ? `\nimport { test as ${t}, expect as ${e} } from 'vitest';\n${t}(${n}, () => { ${e}(0).toBe(1); });\n`
       : `\nrequire('vitest').test(${n}, () => { require('vitest').expect(0).toBe(1); });\n`;
   }
   if (/['"]node:test['"]/.test(text)) {
-    return esm ? `\nimport __deepControl from 'node:test';\nimport __deepAssert from 'node:assert';\n__deepControl(${n}, () => { __deepAssert.strictEqual(0, 1); });\n`
+    return esm ? `\nimport ${t} from 'node:test';\nimport ${e} from 'node:assert';\n${t}(${n}, () => { ${e}.strictEqual(0, 1); });\n`
       : `\nrequire('node:test')(${n}, () => { require('node:assert').strictEqual(0, 1); });\n`;
   }
   return null;
@@ -59,8 +60,9 @@ export function plantControls(checkout: string): Promise<Control[]> {
     for (const file of testFiles(checkout)) {
       const path = join(checkout, file);
       const text = readFileSync(path, 'utf8');
-      const name = `${CONTROL}${randomBytes(6).toString('hex')}`;
-      const block = blockFor(text, name);
+      const draw = randomBytes(6).toString('hex');
+      const name = `${CONTROL}${draw}`;
+      const block = blockFor(text, name, draw);
       if (!block) continue;
       const body = text.endsWith('\n') ? text : `${text}\n`;
       // The control's assertion is the block's last line, after the file's lines and the blank one the block opens with.
