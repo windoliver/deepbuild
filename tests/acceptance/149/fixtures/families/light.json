@@ -1,0 +1,339 @@
+{
+ "family": "light",
+ "subject": "A pear on a sill",
+ "look": {
+  "id": "drawn-light-149-look",
+  "ground": {
+   "kind": "paper",
+   "params": {
+    "role": "paper",
+    "seed": "document",
+    "tooth": {
+     "kind": "cold_press",
+     "scale": 14,
+     "depth": 0.3,
+     "seed": 3
+    },
+    "anchor": "world",
+    "zoom": "crossfade_octaves"
+   }
+  },
+  "lines": {
+   "line": {
+    "kind": "exact",
+    "width": 2
+   },
+   "contour": {
+    "kind": "exact",
+    "width": 6
+   }
+  },
+  "light": {
+   "dir": 135,
+   "elevation": 45,
+   "rim": [
+    {
+     "role": "vermilion",
+     "width": 3.5,
+     "dir": 160,
+     "on": "lit"
+    },
+    {
+     "role": "wine",
+     "width": 3.5,
+     "dir": 20,
+     "on": "lit"
+    }
+   ],
+   "cast": {
+    "role": "shade",
+    "length": 90,
+    "softness": 6
+   },
+   "weight": 0.6,
+   "relief": {
+    "from": "tooth",
+    "strength": 0.4
+   }
+  }
+ },
+ "2d": {
+  "format": 1,
+  "id": "drawn-light-149",
+  "profile": "figure",
+  "title": "A pear on a sill",
+  "description": "A pear on a sill: a #149 acceptance fixture in a 2D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/fly/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 240,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "sill": {
+    "id": "sill",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "sill",
+    "order": "a0",
+    "params": {
+     "box": [
+      320,
+      760,
+      1280,
+      120
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "pear": {
+    "id": "pear",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "pear",
+    "order": "a1",
+    "params": {
+     "d": "M 960 300 C 1080 320 1040 460 1120 560 C 1200 690 1080 780 960 780 C 840 780 720 690 800 560 C 880 460 840 320 960 300 Z",
+     "paint": {
+      "fill": {
+       "role": "ochre"
+      },
+      "stroke": {
+       "role": "ink",
+       "line": "contour"
+      }
+     }
+    }
+   },
+   "fly": {
+    "id": "fly",
+    "kind": "circle@1",
+    "layer": "main",
+    "name": "fly",
+    "order": "a2",
+    "params": {
+     "center": [
+      420,
+      260
+     ],
+     "r": 18,
+     "paint": {
+      "fill": {
+       "role": "ink"
+      },
+      "stroke": {
+       "role": "ink",
+       "line": "contour"
+      }
+     }
+    }
+   }
+  },
+  "collections": {
+   "lit": {
+    "members": [
+     "pear",
+     "fly"
+    ]
+   }
+  }
+ },
+ "3d": {
+  "format": 1,
+  "id": "drawn-light-149-3d",
+  "profile": "scene",
+  "title": "A pear on a sill",
+  "description": "A pear on a sill: a #149 acceptance fixture in a 3D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "scene3d": "^1",
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/fly/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": -1.8,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 0.6,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a0",
+    "params": {
+     "projection": "perspective",
+     "target": [
+      0,
+      0.6,
+      0
+     ],
+     "position": [
+      0,
+      1.6,
+      7
+     ],
+     "fov": 40,
+     "near": 0.1,
+     "far": 80
+    }
+   },
+   "sill": {
+    "id": "sill",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "sill",
+    "order": "a1",
+    "params": {
+     "size": [
+      6,
+      0.3,
+      2
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      -0.15,
+      0
+     ]
+    }
+   },
+   "pear": {
+    "id": "pear",
+    "kind": "mark.sphere@1",
+    "layer": "main",
+    "name": "pear",
+    "order": "a2",
+    "params": {
+     "size": [
+      1.4,
+      1.8,
+      1.4
+     ],
+     "paint": {
+      "fill": {
+       "role": "ochre"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      0.9,
+      0
+     ]
+    }
+   },
+   "fly": {
+    "id": "fly",
+    "kind": "mark.sphere@1",
+    "layer": "main",
+    "name": "fly",
+    "order": "a3",
+    "params": {
+     "size": [
+      0.15,
+      0.15,
+      0.15
+     ],
+     "paint": {
+      "fill": {
+       "role": "ink"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -1.8,
+      1.8,
+      0
+     ]
+    }
+   }
+  },
+  "collections": {
+   "lit": {
+    "members": [
+     "pear",
+     "fly"
+    ]
+   }
+  }
+ }
+}
