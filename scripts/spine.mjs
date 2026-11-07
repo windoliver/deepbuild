@@ -14,6 +14,7 @@
 // here: its criteria read INCONCLUSIVE. A criterion is the highest of its tests by the verdict table's precedence, and
 // INVALID with none; so is the task of its criteria. Reading the criteria and reopening use your `gh` sign-in.
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -85,10 +86,29 @@ function results(dir, files) {
   return out;
 }
 
+/**
+ * An issue split into parts (its body's `### Parts`, each line `- #n …`) closes when every part has: each part's line
+ * is its criterion, by the same ID rule, and reads as that part's own verdict at the issue's commit.
+ */
+function parts(issue, commit) {
+  const r = run(ROOT, 'gh', ['issue', 'view', String(issue), '-R', SLUG, '--json', 'body', '-q', '.body'], 120_000);
+  const section = (r.stdout ?? '').split(/^###\s+Parts\s*$/m)[1]?.split(/^#{1,6}\s/m)[0] ?? '';
+  return [...section.matchAll(/^\s*- (#(\d+) .+)$/gm)].map(([, text, part]) => {
+    const id = `#${issue}.${createHash('sha256').update(text.trim().replace(/\s+/g, ' ')).digest('hex').slice(0, 8)}`;
+    return { id, outcome: judge(Number(part), commit).verdict };
+  });
+}
+
 /** One task judged at its commit: each criterion by its tests, and the task by the highest. */
 function judge(issue, commit) {
   const read = readIssue(ROOT, { commits: [{ message: `Closes #${issue}` }] });
   if (!read || read.blocked) return { issue, commit, verdict: 'BLOCKED', criteria: [], reopen: null, why: read?.blocked ?? 'no issue' };
+  if (!read.criteria.length) {
+    const criteria = parts(issue, commit);
+    const verdict = criteria.length ? PRECEDENCE.find((o) => criteria.some((c) => c.outcome === o)) : 'INVALID';
+    const failing = criteria.find((c) => c.outcome === verdict && c.outcome !== 'PASS');
+    return { issue, commit, verdict, criteria, reopen: failing ? { criterion: failing.id } : null };
+  }
   const files = landed(commit, issue);
   let tests = [];
   let why = '';
