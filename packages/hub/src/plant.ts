@@ -11,6 +11,8 @@ import { createServer, type Server } from 'node:net';
 export type Plant =
   // #46's: a poster that takes HEAD for the commit a verdict covers, and a recorder that marks every push it reads, or none.
   | 'posts-on-head' | 'unguarded-marks-every-push' | 'unguarded-marks-none'
+  // #1537's: the hub holds the shipped message kind with no route into a gate run.
+  | 'kind-without-route'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
@@ -225,6 +227,7 @@ const PLANTS: readonly string[] = [
   'proceed-unrecorded', 'keys-ask-from-words', 'sends-back-held-stop', 'holds-every-ask', 'proceed-alone', 'sends-back-no-tool', 'records-switch-only', 'link-from-agent-url',
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
+  'kind-without-route',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
