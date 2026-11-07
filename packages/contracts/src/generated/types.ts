@@ -387,6 +387,50 @@ export interface AdapterFacts {
   };
   classifyStop?: AdapterFactsOperation;
   skills?: AdapterFactsOperation;
+  entries?: {
+    readBy?: string;
+    name: string;
+    home?: string;
+    mcp?: {
+      file: string;
+      format: "json" | "toml";
+      key: string;
+      perProject?: string;
+      transports: {
+        stdio?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+        http?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+      };
+      refused: Array<{
+        transport: "stdio" | "http";
+        field: string;
+        reason?: string;
+      }>;
+      list?: Array<string>;
+    };
+    skills?: {
+      write: string;
+      readFrom: Array<string>;
+    };
+  };
+  daemon?: {
+    readBy?: string;
+    restart: Array<string>;
+    picksUp: { [key: string]: {
+      "hooks.json": boolean;
+      mcp_servers: boolean;
+      readBy?: string;
+    } };
+  };
 }
 
 export type AdapterFactsV2Text = string;
@@ -668,6 +712,50 @@ export interface AdapterFactsV2 {
     readBy: AdapterFactsV2Text;
     conformance: AdapterFactsV2Text;
     source: AdapterFactsV2Text;
+  };
+  entries?: {
+    readBy?: string;
+    name: string;
+    home?: string;
+    mcp?: {
+      file: string;
+      format: "json" | "toml";
+      key: string;
+      perProject?: string;
+      transports: {
+        stdio?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+        http?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+      };
+      refused: Array<{
+        transport: "stdio" | "http";
+        field: string;
+        reason?: string;
+      }>;
+      list?: Array<string>;
+    };
+    skills?: {
+      write: string;
+      readFrom: Array<string>;
+    };
+  };
+  daemon?: {
+    readBy?: string;
+    restart: Array<string>;
+    picksUp: { [key: string]: {
+      "hooks.json": boolean;
+      mcp_servers: boolean;
+      readBy?: string;
+    } };
   };
 }
 
@@ -1586,6 +1674,56 @@ export interface AgentStopV5 {
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
+  };
+  evidence?: Array<string>;
+}
+
+/** agents.synced@1 */
+export interface AgentsSynced {
+  v: 1;
+  id: string;
+  kind: "agents.synced";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    sync: string;
+    item: {
+      kind: "server" | "skill";
+      server?: {
+        name: string;
+        transport: "stdio" | "http";
+        command?: string;
+        args?: Array<string>;
+        env?: { [key: string]: string };
+        url?: string;
+        headers?: { [key: string]: string };
+        secrets?: Array<string>;
+        scope?: {
+          repos: Array<string>;
+        };
+      };
+      skill?: {
+        name: string;
+        repo: string;
+        commit: string;
+        path: string;
+        digest: string;
+        files: Array<{
+          rel: string;
+          mode: number;
+          sha: string;
+        }>;
+        license: string;
+        scripts: Array<string>;
+        findings: Array<string>;
+      };
+    };
+    agents: Array<string>;
   };
   evidence?: Array<string>;
 }

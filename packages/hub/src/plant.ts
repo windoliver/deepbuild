@@ -62,6 +62,10 @@ export type Plant =
   // substitutes on every allowed host, and the run's CA added to the login keychain.
   | 'standin-value-in-env' | 'env-loads-by-value' | 'standin-every-host' | 'run-ca-in-login-keychain'
   | 'runs-disk-bytes'
+  // #148's: a sync that writes each file as it plans it, replaces from the plan you were shown, keeps a file's original
+  // again before each write, renames without flushing the folder, writes entries unchecked against the agent's facts, and
+  // restarts Codex's daemon as soon as it asks.
+  | 'writes-before-parsing' | 'replaces-from-first-plan' | 'copies-original-each-write' | 'no-folder-flush' | 'skips-entry-check' | 'restarts-without-answer'
   // #325's: a stalled-claim rule that counts any new run as new evidence, and one that counts the stops a question holds.
   | 'new-run-is-evidence' | 'counts-waiting-stops'
   // #120's: the long-wait lines wait for the turn's stop, so a long turn of short calls shows none while it runs.
@@ -185,6 +189,7 @@ const PLANTS: readonly string[] = [
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
+  'writes-before-parsing', 'replaces-from-first-plan', 'copies-original-each-write', 'no-folder-flush', 'skips-entry-check', 'restarts-without-answer',
   'new-run-is-evidence', 'counts-waiting-stops',
   'line-at-stop',
   'turn-closes-at-child-stop',

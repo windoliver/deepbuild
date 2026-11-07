@@ -1005,5 +1005,52 @@
   "readUsage": {
     "readBy": "a turn's usage from the transcript: the model that answered, tokens by the agent's own count, a cost only with its basis",
     "conformance": "claude/readUsage/model-switch"
+  },
+  "entries": {
+    "readBy": "where the hub's sync (#148) writes and reads this agent's MCP servers and skills, at user level only, and the fields it refuses; checked against each entry before a plan shows",
+    "name": "Claude Code",
+    "mcp": {
+      "file": "~/.claude.json",
+      "format": "json",
+      "key": "mcpServers",
+      "perProject": "projects",
+      "transports": {
+        "stdio": {
+          "type": "stdio",
+          "fields": ["command", "args", "env"]
+        },
+        "http": {
+          "type": "http",
+          "fields": ["url", "headers", "env"]
+        }
+      },
+      "refused": [
+        {
+          "transport": "stdio",
+          "field": "url",
+          "reason": "a stdio entry runs a command"
+        },
+        {
+          "transport": "stdio",
+          "field": "headers",
+          "reason": "a stdio entry runs a command"
+        },
+        {
+          "transport": "http",
+          "field": "command",
+          "reason": "an http entry names a URL"
+        },
+        {
+          "transport": "http",
+          "field": "args",
+          "reason": "an http entry names a URL"
+        }
+      ],
+      "list": ["mcp", "list"]
+    },
+    "skills": {
+      "write": "~/.claude/skills",
+      "readFrom": ["~/.claude/skills"]
+    }
   }
 }
