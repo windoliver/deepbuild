@@ -1,5 +1,5 @@
-//! The wrong programs criterion 2's fixture must catch (`DEEP_DRIVE_PLANT`): each lifts one of the guards that keep a
-//! replica's input inside it, and lets that one thing reach your Mac or your record.
+//! The wrong programs the suites must catch (`DEEP_DRIVE_PLANT`): each lifts one of the guards that keep a replica's
+//! input inside it and lets that one thing reach your Mac or your record, or draws the wrong the UI check must name.
 
 use std::{
     io::{BufRead, BufReader, Write},
@@ -24,6 +24,12 @@ pub enum Plant {
     PageDropsParam,
     /// ⌘K ranks by the live app's recency file, which a replica never reads (#366 criterion 6).
     RanksByLiveRecency,
+    /// Pointer actions go straight to their target's box centre, whatever would get them (#124 criterion 6).
+    NoHitTest,
+    /// The session row draws its label past its frame (#124 criterion 7).
+    RowLabelPastFrame,
+    /// The session row draws its text cut off and names only what it drew (#124 criterion 7).
+    RowBranchCutOff,
 }
 
 impl Plant {
@@ -35,6 +41,9 @@ impl Plant {
             "starts-sound" => Some(Plant::StartsSound),
             "page-drops-param" => Some(Plant::PageDropsParam),
             "ranks-by-live-recency" => Some(Plant::RanksByLiveRecency),
+            "no-hit-test" => Some(Plant::NoHitTest),
+            "row-label-past-frame" => Some(Plant::RowLabelPastFrame),
+            "row-branch-cut-off" => Some(Plant::RowBranchCutOff),
             _ => None,
         }
     }

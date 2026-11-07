@@ -63,4 +63,106 @@ impl Gpu3 {
         }
         Ok((bytes, scene))
     }
+
+    /// #464: a 2D frame through the look's print finish on this machine's GPU: `base` (RGBA over
+    /// the ground) and each separation's coverage (RGBA, its alpha) in, the printed RGBA out.
+    pub fn print(
+        &mut self,
+        params: &deep_scene3d_render::print::Params,
+        base: &[u8],
+        covs: &[Vec<u8>],
+        size: [u32; 2],
+    ) -> Option<Vec<u8>> {
+        use deep_scene3d_render::print::{Coverage, Printer};
+        let d = &self.device.device;
+        let format = wgpu::TextureFormat::Rgba8Unorm;
+        let upload = |bytes: &[u8]| {
+            let t = d.create_texture(&wgpu::TextureDescriptor {
+                label: Some("print snapshot"),
+                size: wgpu::Extent3d {
+                    width: size[0],
+                    height: size[1],
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            self.device.queue.write_texture(
+                t.as_image_copy(),
+                bytes,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(size[0] * 4),
+                    rows_per_image: None,
+                },
+                t.size(),
+            );
+            t.create_view(&Default::default())
+        };
+        let source = upload(base);
+        let inks: Vec<wgpu::TextureView> = covs.iter().map(|c| upload(c)).collect();
+        let out = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("print snapshot out"),
+            size: wgpu::Extent3d {
+                width: size[0],
+                height: size[1],
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = out.create_view(&Default::default());
+        let mut encoder = d.create_command_encoder(&Default::default());
+        Printer::new(d).record(
+            d,
+            &mut encoder,
+            params,
+            &source,
+            &Coverage::Textures(inks.iter().collect()),
+            &view,
+            format,
+            None,
+        );
+        let row = (size[0] * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+        let buffer = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("print snapshot read back"),
+            size: u64::from(row) * u64::from(size[1]),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        encoder.copy_texture_to_buffer(
+            out.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: None,
+                },
+            },
+            out.size(),
+        );
+        self.device.queue.submit([encoder.finish()]);
+        let (tx, rx) = std::sync::mpsc::channel();
+        buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+            let _ = tx.send(r);
+        });
+        let _ = d.poll(wgpu::PollType::wait_indefinitely());
+        rx.recv().ok()?.ok()?;
+        let data = buffer.slice(..).get_mapped_range().ok()?;
+        let w = (size[0] * 4) as usize;
+        Some(
+            (0..size[1] as usize)
+                .flat_map(|y| data[y * row as usize..y * row as usize + w].to_vec())
+                .collect(),
+        )
+    }
 }
