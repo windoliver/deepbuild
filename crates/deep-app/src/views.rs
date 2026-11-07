@@ -170,6 +170,7 @@ fn add_tab(view: AnyView, window: &mut Window, cx: &mut App) {
     let slot = cx.new(|cx| Slot {
         view: Some(view),
         focus_handle: cx.focus_handle(),
+        page: true,
     });
     SLOT.with(|current| *current.borrow_mut() = Some(slot.downgrade()));
     dock.update(cx, |dock, cx| {
@@ -339,6 +340,7 @@ pub fn register_views(cx: &mut App) {
         let slot = cx.new(|cx| Slot {
             view: NEXT_EXTENSION.with(|next| next.borrow_mut().take()),
             focus_handle: cx.focus_handle(),
+            page: false,
         });
         SLOT.with(|current| *current.borrow_mut() = Some(slot.downgrade()));
         Arc::new(slot)
@@ -400,6 +402,8 @@ pub fn shipped(kind: Kind, cx: &mut App) -> AnyView {
 pub struct Slot {
     view: Option<AnyView>,
     focus_handle: FocusHandle,
+    /// Whether it fills the page region, where a view sits inset as a shipped page does.
+    page: bool,
 }
 
 impl Panel for Slot {
@@ -422,6 +426,7 @@ impl Render for Slot {
             .size_full()
             .relative()
             .overflow_hidden()
+            .when(self.page, |slot| slot.p_2())
             .child(
                 canvas(
                     |bounds, _, _| SLOT_BOUNDS.with(|slot| slot.set(Some(bounds))),
