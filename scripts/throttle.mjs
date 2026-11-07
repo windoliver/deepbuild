@@ -1,7 +1,8 @@
 // The per-machine throttle table (docs/parallel-proof.md, section 6): a host-local lock table under
 // ~/.deepbuild/throttle/ that grants build, bay pair, test and timed by class, so a neighbour's build never runs
 // while a budget is timed. `throttle.mjs <class> [--wait <min>] -- <command>` acquires, runs, releases and exits
-// with the child's status; acquire and release serve the scripts that hold a grant themselves.
+// with the child's status; acquire and release serve the scripts that hold a grant themselves. `throttle.mjs window`
+// opens a budget window (section 12a): a timed grant that waits for every slot to empty, around budget-window.mjs.
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { appendFileSync, linkSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -163,7 +164,8 @@ function grantable(table, procs, request) {
   }
   // Every holder outside the chain has finished or waits in the throttle, through a descendant's request. A bay
   // pair's holder never counts as waiting for a top-level request: the pair's work resumes the moment it is answered.
-  const waiting = (grant) => (grant.class !== 'bay-pair' || request.nested)
+  // A window takes no holder as waiting: it drains every slot, and a waiting holder's nested request is served first.
+  const waiting = (grant) => !request.window && (grant.class !== 'bay-pair' || request.nested)
     && table.requests.some((other) => other.id !== request.id && chain(procs, other.pid).includes(grant.pid));
   if (!outside.every(waiting)) return false;
   // A top-level request waits for load below the cores, as the log shows. A nested one, in a chain that holds a grant
@@ -174,19 +176,20 @@ function grantable(table, procs, request) {
 /**
  * Takes a grant of `cls`, waiting at most `wait` minutes; null when none came. A build or test request from a chain
  * that holds a grant, and a timed request from one that holds timed, passes through: it holds its ancestor's grant
- * and is released with it. The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants.
+ * and is released with it. The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants. A wait doesn't
+ * run down while a window is open: a window outlasts a wait, and only its end decides when the next build starts.
  */
-export function acquire(cls, { wait = 30 } = {}) {
+export function acquire(cls, { wait = 30, window = false } = {}) {
   if (!LIMITS[cls]) throw Error(`no throttle class ${cls}; the classes are ${CLASSES.join(', ')}`);
   const pid = process.pid;
-  const deadline = Date.now() + wait * 60_000;
+  let deadline = Date.now() + wait * 60_000, polled = Date.now();
   const request = locked((table, procs) => {
     const held = inherited(table, procs, chain(procs, pid));
     if (held.length && (cls === 'build' || cls === 'test' || (cls === 'timed' && held.some((grant) => grant.class === 'timed')))) {
       log({ event: 'passed', class: cls, pid, through: process.env.DEEP_THROTTLE });
       return { pass: true };
     }
-    const entry = { id: randomBytes(8).toString('hex'), class: cls, pid, start: procs.get(pid).start, nested: held.length > 0, seq: (table.seq = (table.seq ?? 0) + 1) };
+    const entry = { id: randomBytes(8).toString('hex'), class: cls, pid, start: procs.get(pid).start, nested: held.length > 0, window, seq: (table.seq = (table.seq ?? 0) + 1) };
     table.requests.push(entry);
     return entry;
   });
@@ -195,11 +198,14 @@ export function acquire(cls, { wait = 30 } = {}) {
     const grant = locked((table, procs) => {
       const pending = table.requests.find((other) => other.id === request.id);
       if (!pending) return 'timeout';
-      if (!grantable(table, procs, pending)) return Date.now() > deadline ? (table.requests.splice(table.requests.indexOf(pending), 1), 'timeout') : null;
+      const now = Date.now();
+      if ([...table.grants, ...table.requests].some((other) => other.window && other.id !== request.id)) deadline += now - polled;
+      polled = now;
+      if (!grantable(table, procs, pending)) return now > deadline ? (table.requests.splice(table.requests.indexOf(pending), 1), 'timeout') : null;
       table.requests.splice(table.requests.indexOf(pending), 1);
       const taken = new Set(table.grants.filter((other) => other.class === cls).map((other) => other.index));
       const index = Array.from({ length: LIMITS[cls] }, (_, k) => k + 1).find((k) => !taken.has(k));
-      const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, index };
+      const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index };
       table.grants.push(entry);
       const load = loadavg()[0], cores = cpus().length;
       log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, wait });
@@ -214,10 +220,13 @@ export function acquire(cls, { wait = 30 } = {}) {
   }
 }
 
-/** Whether this process or an ancestor holds a grant of `cls`, by the table; DEEP_THROTTLE, which a child can drop, isn't read. */
-export const holds = (cls) => locked((table, procs) => {
+/**
+ * Whether this process or an ancestor holds a grant of `cls`, with `window` a budget window's, by the table;
+ * DEEP_THROTTLE, which a child can drop, isn't read.
+ */
+export const holds = (cls, { window = false } = {}) => locked((table, procs) => {
   const mine = chain(procs, process.pid);
-  return table.grants.some((grant) => grant.class === cls && mine.includes(grant.pid));
+  return table.grants.some((grant) => grant.class === cls && (!window || grant.window) && mine.includes(grant.pid));
 });
 
 /**
@@ -244,17 +253,20 @@ export function release(grant) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const split = args.indexOf('--');
-  const [cls, ...options] = split < 0 ? args : args.slice(0, split);
-  const command = split < 0 ? [] : args.slice(split + 1);
+  const [named, ...options] = split < 0 ? args : args.slice(0, split);
+  // A window is a measured run's top-level timed, with its wait.
+  const window = named === 'window' && split < 0;
+  const cls = window ? 'timed' : named;
+  const command = window ? [process.execPath, fileURLToPath(new URL('budget-window.mjs', import.meta.url))] : split < 0 ? [] : args.slice(split + 1);
   const waitAt = options.indexOf('--wait');
-  const wait = waitAt < 0 ? 30 : Number(options[waitAt + 1]);
+  const wait = waitAt < 0 ? (window ? 60 : 30) : Number(options[waitAt + 1]);
   if (!LIMITS[cls] || !command.length || !(wait >= 0) || options.length !== (waitAt < 0 ? 0 : 2)) {
-    console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min>] -- <command>`);
+    console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min>] -- <command>, or throttle.mjs window [--wait <min>]`);
     process.exit(2);
   }
   let grant;
   try {
-    grant = acquire(cls, { wait });
+    grant = acquire(cls, { wait, window });
   } catch (error) {
     // The table couldn't be read or written, so nothing ran: BLOCKED, never a failure of the command.
     console.log(`BLOCKED throttle: ${error.message}\n  Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.`);
@@ -266,6 +278,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(`INCONCLUSIVE no grant: no ${cls} grant came within ${wait} min\n  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.`);
     process.exit(3);
   }
+  if (window) log({ event: 'window-open', id: grant.id, pid: process.pid });
   const child = spawn(command[0], command.slice(1), { stdio: 'inherit', env: { ...process.env, DEEP_THROTTLE: grant.token } });
   // A terminal's SIGINT reaches the whole group, the command too, so it isn't sent again; a SIGTERM or SIGHUP sent to
   // this process alone is passed on.
@@ -274,6 +287,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // This process exits next, which frees a grant a release couldn't give back.
   const giveBack = () => {
     try {
+      if (window) log({ event: 'window-close', id: grant.id, pid: process.pid });
       release(grant);
     } catch {}
   };
