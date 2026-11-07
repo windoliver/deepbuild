@@ -29,6 +29,7 @@ mod golden;
 mod groups;
 mod guard;
 mod host;
+mod indexed;
 mod interp_suite;
 mod levels;
 mod live;
@@ -38,6 +39,7 @@ mod marks2d;
 mod opframe;
 mod parity;
 mod plugin;
+mod print2d;
 mod reference;
 mod scene;
 mod seam;
@@ -285,6 +287,13 @@ pub enum Planted {
     StepsPerFrame,
     RingKeepsEveryCheckpoint,
     CarriedClassExact,
+    // #464: print and pixel looks' wrong programs (tests/acceptance/464/README.md).
+    VignettePixels,
+    GrainFromT,
+    PartialCoverage,
+    PuffFullOpacity,
+    LightAfterUpscale,
+    FlickerWallTime,
 }
 
 impl Planted {
@@ -458,6 +467,12 @@ impl Planted {
             "steps_per_frame" => Planted::StepsPerFrame,
             "ring_keeps_every_checkpoint" => Planted::RingKeepsEveryCheckpoint,
             "carried_class_exact" => Planted::CarriedClassExact,
+            "vignette_pixels" => Planted::VignettePixels,
+            "grain_from_t" => Planted::GrainFromT,
+            "partial_coverage" => Planted::PartialCoverage,
+            "puff_full_opacity" => Planted::PuffFullOpacity,
+            "light_after_upscale" => Planted::LightAfterUpscale,
+            "flicker_wall_time" => Planted::FlickerWallTime,
             _ => return None,
         })
     }
