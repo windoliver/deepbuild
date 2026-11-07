@@ -166,9 +166,9 @@ fn sheet_at(p: vec2<f32>) -> vec4<f32> {
         let speck = smoothstep(0.26, 0.04, fine(p, 32.0).z) * smoothstep(0.4, 0.75, g.y);
         c = mix(c, c * vec3<f32>(0.82, 0.66, 0.46), speck * u.b.x);
     }
-    // Craquelure: thin dark lines along cell borders.
+    // Craquelure: thin dark lines where two cells meet.
     if (u.b.z > 0.0) {
-        c *= 1.0 - u.b.z * smoothstep(0.66, 0.74, fine(p, u.b.y).z);
+        c *= 1.0 - u.b.z * smoothstep(0.05, 0.015, fine(p, u.b.y).x);
     }
     // A plate mark: a pressed rectangle's edge, inset from the sheet.
     if (u.c.y > 0.0) {
@@ -188,6 +188,17 @@ fn sheet_at(p: vec2<f32>) -> vec4<f32> {
         let inside = step(r.x, sheet.x) * step(sheet.x, r.x + r.z) * step(r.y, sheet.y) * step(sheet.y, r.y + r.w);
         c = mix(c, vec3<f32>(0.93, 0.86, 0.66), inside * 0.45);
     }
+    // A backlit screen: dim but for the pools of light its lamps throw through it.
+    let lamps = u32(u.d.z);
+    if (lamps > 0u) {
+        var glow = vec3<f32>(0.0);
+        for (var n = 0u; n < lamps; n++) {
+            let d = length(p - u.list[i].xy) / 320.0;
+            glow += decode(u.list[i + 1u].rgb) / (1.0 + d * d);
+            i += 2u;
+        }
+        c = encode(decode(c) * (0.3 + 0.8 * glow));
+    }
     if ((u.kind.w & 4u) != 0u) {
         c = decode(c);
     }
@@ -200,13 +211,17 @@ fn load(px: vec2<f32>) -> vec4<f32> {
 }
 
 fn blurred(px: vec2<f32>) -> f32 {
+    // A surface has no coverage edge of its own to blur.
+    if ((u.kind.w & 2u) != 0u) {
+        return 1.0;
+    }
     return textureSampleLevel(soft, clamped, px / u.size, 0.0).a;
 }
 
 // How lit a pixel is, 0..1: a 2D item's dome under the look's light, or a 3D surface's own light.
 fn tone_at(px: vec2<f32>, c: vec4<f32>) -> f32 {
     if ((u.kind.w & 2u) != 0u) {
-        return clamp(luma(c.rgb) / max(c.a, 1e-4), 0.0, 1.0);
+        return clamp(luma(c.rgb) / max(luma(u.color.rgb), 0.02), 0.0, 1.0);
     }
     let q = (px - u.box_.xy - u.box_.zw * 0.5) / max(u.box_.zw * 0.5, vec2<f32>(1.0));
     return clamp(0.5 + 0.5 * dot(q, u.light.xy), 0.0, 1.0);
@@ -256,7 +271,7 @@ fn ink(px: vec2<f32>, c0: vec4<f32>, q: vec2<f32>) -> f32 {
     let g = fine(q, 8.0);
     if (u.b.w > 1.5) {
         // Ragged: the edge breaks where the fine grain falls.
-        let e = 1.0 - load(px + (g.xy - 0.5) * 8.0).a;
+        let e = 1.0 - load(px + (g.yw - 0.5) * 8.0).a;
         a *= 1.0 - e * smoothstep(0.4, 0.6, g.w);
     }
     a *= 1.0 - u.a.z * smoothstep(0.45, 0.72, fine(q, u.a.y / 4.0).y);
@@ -280,18 +295,22 @@ fn wash(px: vec2<f32>, q: vec2<f32>, h: f32) -> f32 {
     let g = fine(q, 10.0);
     var at = px;
     if (u.b.y > 0.5) {
-        at += (g.xy - 0.5) * u.b.x * 2.0;
+        at += (g.yw - 0.5) * u.b.x * 2.0;
     }
     let s = blurred(at);
     var a = max(load(at).a, smoothstep(0.1, 0.6, s));
     // Pigment pools toward the edge, and settles into the tooth's pits.
     var density = 0.62 + 0.38 * u.a.x * (1.0 - s) * 2.0;
     density *= 1.0 + u.a.y * (0.5 - h);
+    if ((u.kind.w & 2u) != 0u) {
+        // A surface has no edge to pool toward, so its pigment drifts in slow patches.
+        density *= 0.7 + 0.6 * fine(q, 30.0).y;
+    }
     let n = u32(u.a.z);
     for (var k = 0u; k < n; k++) {
         let center = u.box_.xy + vec2<f32>(rand(u.kind.y + k * 2u), rand(u.kind.y + k * 2u + 1u)) * u.box_.zw;
-        let d = length(px - center) / (u.a.w * 0.5) + (g.y - 0.5) * 0.4;
-        density *= 1.0 - 0.3 * smoothstep(1.0, 0.7, d) + 0.25 * smoothstep(0.1, 0.0, abs(d - 1.0));
+        let d = length(px - center) / (u.a.w * 0.5) + (g.y - 0.5) * 0.9;
+        density *= 1.0 - 0.14 * smoothstep(1.0, 0.5, d) + 0.1 * smoothstep(0.14, 0.0, abs(d - 1.0));
     }
     a *= 1.0 - textureLoad(resist, vec2<i32>(px), 0).a;
     return a * clamp(density, 0.0, 1.0);
@@ -308,7 +327,8 @@ fn hatch(px: vec2<f32>, c0: vec4<f32>, p: vec2<f32>) -> f32 {
     var q = p;
     let g = fine(p, 12.0);
     let follow = u.b.x;
-    let tone = tone_at(px, c0);
+    // A little grain in the tone, so a band of hatching frays instead of ending on a ruled edge.
+    let tone = tone_at(px, c0) + (g.y - 0.5) * 0.14;
     var passes = 1u;
     var cross = u.a.w > 0.5;
     let bands = u32(u.b.y);
@@ -325,7 +345,7 @@ fn hatch(px: vec2<f32>, c0: vec4<f32>, p: vec2<f32>) -> f32 {
     }
     var a = 0.0;
     if (follow > 1.5) {
-        q += (g.xy - 0.5) * u.a.y * 6.0;
+        q += (g.yw - 0.5) * u.a.y * 6.0;
     }
     for (var k = 0u; k < passes; k++) {
         let deg = u.a.x + f32(k) * 17.0;
@@ -447,10 +467,9 @@ fn lit(px: vec2<f32>, c0: vec4<f32>) -> vec4<f32> {
     let base = decode(clamp(c0.rgb / c0.a, vec3<f32>(0.0), vec3<f32>(1.0)));
     let hue = base / max(max(base.r, max(base.g, base.b)), 1e-4);
     var light = vec3<f32>(0.0);
-    let p = px * u.m.x + u.m.yz;
     for (var k = 0u; k < u32(u.a.y); k++) {
         let lamp = u.list[k * 2u];
-        let d = length(p - lamp.xy) / 400.0;
+        let d = length(px - lamp.xy) / 400.0;
         light += decode(u.list[k * 2u + 1u].rgb) * hue / (1.0 + d * d);
     }
     let room = min(light, vec3<f32>(1.0) - base);
@@ -551,6 +570,7 @@ fn blit(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
 // where nothing draws. The field lies on the surface: a point's two longest axes, in u.
 struct V {
     inv: mat4x4<f32>,
+    // The eye, and the target's px to the frame's in w.
     eye: vec4<f32>,
     ids: vec4<u32>,
     // A rim's direction toward it, its width as a share of a turn, in `rim.w`; its color follows.
@@ -562,7 +582,7 @@ struct V {
 @group(1) @binding(1) var object_ids: texture_2d<u32>;
 @group(1) @binding(2) var depth3: texture_depth_2d;
 
-const U_PER_METER: f32 = 100.0;
+const U_PER_METER: f32 = 300.0;
 
 fn world_at(px: vec2<f32>, depth: f32) -> vec3<f32> {
     let ndc = vec2<f32>(px.x / u.size.x * 2.0 - 1.0, 1.0 - px.y / u.size.y * 2.0);
@@ -615,22 +635,24 @@ fn medium3(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
         let toward = max(dot(n, v.rim.xyz), 0.0);
         return vec4<f32>(mix(lit3.rgb, v.rim_color.rgb, clamp(edge * toward * v.rim.w, 0.0, 1.0)), 1.0);
     }
-    let s = shade(at.xy, lit3, on_surface(w, n));
+    let p = on_surface(w, n);
+    let s = shade(at.xy, lit3, p);
     // The ground takes the surface's light, so what a medium leaves bare reads as lit paper.
     let light = luma(lit3.rgb) / max(luma(u.color.rgb), 0.02);
+    let bare = u.ground.rgb * (1.0 - 0.35 * (1.0 - select(1.0, tooth_at(p), (u.kind.w & 1u) != 0u)));
     if (u.kind.x == 6u) {
         return vec4<f32>(lit3.rgb * (1.0 - s.a) + s.rgb * min(light, 1.5), 1.0);
     }
     if (u.kind.x == 0u) {
-        return vec4<f32>(u.ground.rgb * min(light, 1.5) * (1.0 - s.a) + s.rgb, 1.0);
+        return vec4<f32>(bare * min(light, 1.5) * (1.0 - s.a) + s.rgb, 1.0);
     }
-    return vec4<f32>((u.ground.rgb * (1.0 - s.a) + s.rgb) * min(light, 1.5), 1.0);
+    return vec4<f32>((bare * (1.0 - s.a) + s.rgb) * min(light, 1.5), 1.0);
 }
 
 // A collection's target in 3D: its pressure, or full coverage, where its item draws.
 @fragment
 fn target3(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
-    if (textureLoad(object_ids, vec2<i32>(at.xy), 0).r != v.ids.x) {
+    if (textureLoad(object_ids, vec2<i32>(at.xy * v.eye.w), 0).r != v.ids.x) {
         discard;
     }
     let value = u.press.x;

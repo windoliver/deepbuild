@@ -204,6 +204,8 @@ pub struct Line {
     pub edges: Option<Arc<EdgesOf>>,
     /// Drawn over whatever is in front of it: the planted `edges_skip_depth`'s line.
     pub over: bool,
+    /// Its segments are one drawn line's pieces (#149), so their caps draw no soft edge.
+    pub joined: bool,
 }
 
 /// A mesh-edge line's mesh, its kind and the matrix that places the mesh.
@@ -1062,6 +1064,7 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
         })?,
         _ => None,
     };
+    let written = points.len();
     let (points, along) = match drawn_line.as_ref().and_then(|l| l.profile.as_ref()) {
         Some(p) => profiled_points(&points, p),
         None => {
@@ -1073,13 +1076,18 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
     let base = drawn_line.as_ref().and_then(|l| l.width);
     let widths: Vec<f64> = match params.get("width") {
         None | Some(Value::Null) => along.iter().map(|k| base.unwrap_or(1.5) * k).collect(),
-        Some(Value::Array(w)) if w.len() == n => w
-            .iter()
-            .map(|x| num(Some(x)).filter(|&x| x >= 0.0))
-            .collect::<Option<Vec<_>>>()
-            .map_or_else(|| refused("out_of_range", format!("{path}/width")), Ok)?,
+        Some(Value::Array(w)) if w.len() == written => {
+            let w = w
+                .iter()
+                .map(|x| num(Some(x)).filter(|&x| x >= 0.0))
+                .collect::<Option<Vec<_>>>()
+                .map_or_else(|| refused("out_of_range", format!("{path}/width")), Ok)?;
+            // A profile multiplies each point's own width, at the written point it grew from.
+            let at = |i: usize| i * written.saturating_sub(1) / n.saturating_sub(1).max(1);
+            (0..n).map(|i| w[at(i)] * along[i]).collect()
+        }
         Some(v) => match num(Some(v)).filter(|&x| x >= 0.0) {
-            Some(w) => vec![w; n],
+            Some(w) => along.iter().map(|k| w * k).collect(),
             None => return refused("out_of_range", format!("{path}/width")),
         },
     };
@@ -1107,6 +1115,7 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
         color: paint(look, params, &path)?,
         edges: None,
         over: false,
+        joined: drawn_line.is_some(),
     })
 }
 
@@ -1383,6 +1392,7 @@ fn edge_line(
         color: paint(look, params, &path)?,
         edges: Some(Arc::new(source)),
         over: false,
+        joined: false,
     })
 }
 
@@ -1399,6 +1409,9 @@ fn drawn_light(look: &Look3) -> Option<Sun> {
         cascades: Cascades::default(),
     })
 }
+
+/// The u a drawn look's sizes span on a surface, a metre.
+const U_PER_METER: f64 = 300.0;
 
 /// `points` split finely enough to carry a line profile, with its width multiplier at each.
 fn profiled_points(points: &[Vec3], p: &deep_canvas_drawn::spec::Profile) -> (Vec<Vec3>, Vec<f64>) {
@@ -1417,9 +1430,14 @@ fn profiled_points(points: &[Vec3], p: &deep_canvas_drawn::spec::Profile) -> (Ve
         s.push(s[s.len() - 1] + deep_canvas::ops::hypot(deep_canvas::ops::hypot(d[0], d[1]), d[2]));
     }
     let total = s.last().copied().unwrap_or(0.0).max(1e-9);
+    // A profile's flick is in u, and this line's arc length in metres.
+    let metres = deep_canvas_drawn::spec::Profile {
+        flick: p.flick / U_PER_METER,
+        ..p.clone()
+    };
     let widths = s
         .iter()
-        .map(|at| deep_canvas_drawn::geometry::width_along(p, *at, total))
+        .map(|at| deep_canvas_drawn::geometry::width_along(&metres, *at, total))
         .collect();
     (fine, widths)
 }
