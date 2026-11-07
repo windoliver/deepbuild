@@ -119,6 +119,42 @@ pub fn decide(app: &mut App, call: &Value) -> Value {
     }
 }
 
+/// #149's `pixel_hash` oracle: a snapshot's RGBA8 rows by hash against `<store>/<fixture>.golden.json`,
+/// which keeps no picture. The blank guard reads the snapshot alone, before anything else.
+fn pixel_hash(call: &Value, store: &str, fixture: &str, fp: &Value) -> Value {
+    let oracle = "pixel_hash";
+    let snapshot = call["png"].as_str().and_then(|p| std::fs::read(p).ok());
+    let Some(b) = snapshot.as_deref().and_then(rgba) else {
+        return json!({"verdict": "BLOCKED", "reason": "no_snapshot", "fingerprint": fp, "oracle": oracle});
+    };
+    if blank(&b) {
+        return json!({"verdict": "BLOCKED", "reason": "blank", "fingerprint": fp, "oracle": oracle});
+    }
+    let pixels = hex(b.as_raw());
+    let path = std::path::Path::new(store).join(format!("{fixture}.golden.json"));
+    let record = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok());
+    let Some(record) = record else {
+        return json!({"verdict": "BLOCKED", "reason": "no_golden", "fingerprint": fp, "oracle": oracle,
+            "numbers": {"pixels": pixels}});
+    };
+    if record["fingerprint"] != *fp {
+        let changed: Vec<Value> = ["os", "gpu", "driver", "wgpu"]
+            .iter()
+            .filter(|k| record["fingerprint"][**k] != fp[**k])
+            .map(|k| json!({"field": k, "golden": record["fingerprint"][*k], "run": fp[*k]}))
+            .collect();
+        return json!({"verdict": "INCONCLUSIVE", "reason": "environment_changed", "fingerprint": fp,
+            "oracle": oracle, "changed": changed, "numbers": {"pixels": pixels}});
+    }
+    json!({
+        "verdict": if record["pixels"] == pixels.as_str() { "PASS" } else { "FAIL" },
+        "fingerprint": fp, "oracle": oracle,
+        "numbers": {"pixels": pixels, "golden_pixels": record["pixels"]},
+    })
+}
+
 /// `golden`: a snapshot against its fixture's golden.
 pub fn golden(app: &mut App, out: &str, call: &Value) -> Value {
     let (Some(store), Some(fixture)) = (call["store"].as_str(), call["fixture"].as_str()) else {
@@ -135,6 +171,9 @@ pub fn golden(app: &mut App, out: &str, call: &Value) -> Value {
         for (k, v) in env {
             fp[k.as_str()] = v.clone();
         }
+    }
+    if call["oracle"] == "pixel_hash" {
+        return pixel_hash(call, store, fixture, &fp);
     }
     let fails_missing = app.planted == Some(Planted::FailsMissingSnapshot);
     let any_environment = app.planted == Some(Planted::ComparesAnyEnvironment);

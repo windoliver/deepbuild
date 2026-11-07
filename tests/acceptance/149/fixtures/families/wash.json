@@ -1,0 +1,312 @@
+{
+ "family": "wash",
+ "subject": "Boats in harbour fog",
+ "look": {
+  "id": "drawn-wash-149-look",
+  "ground": {
+   "kind": "paper",
+   "params": {
+    "role": "paper",
+    "seed": "document",
+    "tooth": {
+     "kind": "cold_press",
+     "scale": 14,
+     "depth": 0.3,
+     "seed": 3
+    },
+    "anchor": "world",
+    "zoom": "crossfade_octaves"
+   }
+  },
+  "fills": {
+   "fill": {
+    "kind": "flat"
+   },
+   "pool": {
+    "kind": "wash",
+    "pool": 0.6,
+    "granulation": 0.4,
+    "blooms": {
+     "count": 3,
+     "size": 120
+    },
+    "bleed": 6,
+    "wet_in_wet": true,
+    "oversize": 0.1,
+    "resist": {
+     "by": "sails"
+    },
+    "seed": "item"
+   }
+  }
+ },
+ "2d": {
+  "format": 1,
+  "id": "drawn-wash-149",
+  "profile": "figure",
+  "title": "Boats in harbour fog",
+  "description": "Boats in harbour fog: a #149 acceptance fixture in a 2D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/hull/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 160,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "water": {
+    "id": "water",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "water",
+    "order": "a0",
+    "params": {
+     "box": [
+      160,
+      560,
+      1600,
+      400
+     ],
+     "paint": {
+      "fill": {
+       "fill": "pool",
+       "role": "indigo"
+      }
+     }
+    }
+   },
+   "hull": {
+    "id": "hull",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "hull",
+    "order": "a1",
+    "params": {
+     "d": "M 620 620 L 1160 620 L 1060 720 L 720 720 Z",
+     "paint": {
+      "fill": {
+       "fill": "pool",
+       "role": "wine"
+      }
+     }
+    }
+   },
+   "sail": {
+    "id": "sail",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "sail",
+    "order": "a2",
+    "params": {
+     "d": "M 880 600 L 880 240 L 1100 600 Z",
+     "paint": {
+      "fill": {
+       "role": "ground"
+      }
+     }
+    }
+   }
+  },
+  "collections": {
+   "sails": {
+    "members": [
+     "sail"
+    ]
+   }
+  }
+ },
+ "3d": {
+  "format": 1,
+  "id": "drawn-wash-149-3d",
+  "profile": "scene",
+  "title": "Boats in harbour fog",
+  "description": "Boats in harbour fog: a #149 acceptance fixture in a 3D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "scene3d": "^1",
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/hull/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": -0.6,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 0.6,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a0",
+    "params": {
+     "projection": "perspective",
+     "target": [
+      0,
+      0.6,
+      0
+     ],
+     "position": [
+      0,
+      1.6,
+      7
+     ],
+     "fov": 40,
+     "near": 0.1,
+     "far": 80
+    }
+   },
+   "water": {
+    "id": "water",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "water",
+    "order": "a1",
+    "params": {
+     "size": [
+      8,
+      0.1,
+      5
+     ],
+     "paint": {
+      "fill": {
+       "fill": "pool",
+       "role": "indigo"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      -0.05,
+      0
+     ]
+    }
+   },
+   "hull": {
+    "id": "hull",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "hull",
+    "order": "a2",
+    "params": {
+     "size": [
+      1.6,
+      0.4,
+      0.6
+     ],
+     "paint": {
+      "fill": {
+       "fill": "pool",
+       "role": "wine"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -0.6,
+      0.2,
+      0
+     ]
+    }
+   },
+   "sail": {
+    "id": "sail",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "sail",
+    "order": "a3",
+    "params": {
+     "size": [
+      0.05,
+      1.4,
+      0.8
+     ],
+     "paint": {
+      "fill": {
+       "role": "ground"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -0.6,
+      1.1,
+      0
+     ]
+    }
+   }
+  },
+  "collections": {
+   "sails": {
+    "members": [
+     "sail"
+    ]
+   }
+  }
+ }
+}

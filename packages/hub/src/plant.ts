@@ -37,6 +37,9 @@ export type Plant =
   // reclaims a stack whose journey runs; and a sandbox that admits any loopback port.
   | 'env-reuses-stale-install' | 'env-keeps-database' | 'env-keeps-redis' | 'env-reuses-web-image' | 'env-keeps-db-mount' | 'env-second-install-store'
   | 'env-clones-next-whole' | 'env-starts-at-every-claim' | 'pool-reclaims-running' | 'sandbox-any-loopback'
+  // #342's: a reaper that takes every volume a session's commands made, a teardown task closed on your word, a pool
+  // that asks which stack to stop, and a reaper that takes a killed session's stack.
+  | 'reap-session-volumes' | 'teardown-closes-on-word' | 'pool-asks-which-stack' | 'reap-on-kill'
   | 'bundle-raw-logs' | 'doctor-hides-token' | 'doctor-not-checked-first' | 'doctor-takes-any-flag' | 'stop-hold-wide-margin'
   | 'answer-skips-held-stop' | 'stop-hold-releases-without-answer' | 'both-routes' | 'stop-hold-polls' | 'no-stop-count' | 'stop-count-never-resets'
   | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-under-stop-only' | 'waiter-polls' | 'waiter-checks-every-5s'
@@ -159,6 +162,7 @@ const PLANTS: readonly string[] = [
   'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project', 'env-clone-without-record',
   'env-reuses-stale-install', 'env-keeps-database', 'env-keeps-redis', 'env-reuses-web-image', 'env-keeps-db-mount', 'env-second-install-store',
   'env-clones-next-whole', 'env-starts-at-every-claim', 'pool-reclaims-running', 'sandbox-any-loopback',
+  'reap-session-volumes', 'teardown-closes-on-word', 'pool-asks-which-stack', 'reap-on-kill',
   'stops-at-first-bad-line', 'remove-spool-after-normal', 'drops-post-tool-use', 'replay-appends-twice',
   'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline',
   'evidence-checks-path-first', 'binds-first-stamp', 'unbound-reads-all', 'errors-without-actual', 'errors-unscrubbed', 'trusts-index',

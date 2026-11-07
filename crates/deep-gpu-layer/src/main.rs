@@ -19,6 +19,7 @@ mod columns;
 mod compare;
 mod compile;
 mod conformance;
+mod drawn;
 mod effects;
 mod film;
 mod fixtures;
@@ -158,6 +159,11 @@ pub enum Planted {
     OutlinesBeforeUpscale,
     /// #1174's wrong program: screen-size labels drawn in the geometry pass, before the upscale.
     LabelsBeforeUpscale,
+    /// #1173's wrong programs (tests/acceptance/1173/README.md: Planted programs).
+    SingleSampleTargets,
+    ClaimsMsaaOverSingleSample,
+    PuffBlockCopy,
+    ResolveAccumulatesFrames,
     /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
     /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on
     /// whatever its spike record says; each sector of a group composited on its own.
@@ -212,6 +218,8 @@ pub enum Planted {
     /// environment prefiltered one mip a frame; the specular lobe uncompensated, or compensated on
     /// environment light alone; metallic premixed into one F0 before shading.
     DrawsBlack,
+    InkFillFlat,
+    RimKeepsFirst,
     DropsClouds,
     /// #424's wrong programs.
     AddWritesDepth,
@@ -350,6 +358,10 @@ impl Planted {
             "status_without_depth" => Planted::StatusWithoutDepth,
             "outlines_before_upscale" => Planted::OutlinesBeforeUpscale,
             "labels_before_upscale" => Planted::LabelsBeforeUpscale,
+            "single_sample_targets" => Planted::SingleSampleTargets,
+            "claims_msaa_over_single_sample" => Planted::ClaimsMsaaOverSingleSample,
+            "puff_block_copy" => Planted::PuffBlockCopy,
+            "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
@@ -384,6 +396,8 @@ impl Planted {
             "anisotropy_one" => Planted::AnisotropyOne,
             "normal_map_as_srgb" => Planted::NormalMapAsSrgb,
             "draws_black" => Planted::DrawsBlack,
+            "ink_fill_flat" => Planted::InkFillFlat,
+            "rim_keeps_first" => Planted::RimKeepsFirst,
             "drops_clouds" => Planted::DropsClouds,
             "add_writes_depth" => Planted::AddWritesDepth,
             "add_skips_depth_test" => Planted::AddWithoutDepthTest,
@@ -661,8 +675,8 @@ impl App {
             Some("window2d") => marks2d::window2d(self, out, call),
             Some("vello_gpu") => marks2d::vello_gpu(self),
             Some("spike2d") => marks2d::spike2d(self, out, call),
-            Some("film2d") => film::film2d(self, call),
-            Some("canonical") => live::canonical(self, call),
+            Some("film2d") => film::film2d(self, out, call),
+            Some("canonical") => live::canonical(self, out, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
             #[cfg(feature = "test-meter")]
@@ -718,6 +732,11 @@ fn main() {
     if first.as_deref() == Some("decode-worker") {
         let rest: Vec<String> = args.collect();
         std::process::exit(deep_codecs::serve(deep_codecs::DECODE_WORKER, &rest));
+    }
+    // #149: a copy of this binary started as a film's encode tool.
+    if first.as_deref() == Some("encode-tool") {
+        let rest: Vec<String> = args.collect();
+        std::process::exit(deep_codecs::serve(deep_codecs::ENCODE_TOOL, &rest));
     }
     if first.as_deref() != Some("run") {
         bad_input();
