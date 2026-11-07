@@ -127,11 +127,26 @@ fn text_numbers(doc: &Map<String, Value>, id: &str, item: &Value) -> Vec<Value> 
         return Vec::new();
     }
     let p = object_or_empty(item.get("params"));
+    let items = object_or_empty(doc.get("items"));
+    let on_anchor = |path: &str| {
+        let source = crate::data::anchor_source(path, items)?;
+        Some(json!({"item": id, "text": path, "source": source}))
+    };
+    if let Some(Value::String(source)) = item.pointer("/params/text/counter/source") {
+        return on_anchor(source).into_iter().collect();
+    }
     if let Some(Value::String(t)) = p.get("template") {
+        let slots = deep_canvas::template::parts(t).unwrap_or_default();
+        let anchors = slots.iter().filter_map(|part| match part {
+            deep_canvas::template::Part::Slot(slot) => on_anchor(slot),
+            deep_canvas::template::Part::Words(_) => None,
+        });
+        let anchors: Vec<Value> = anchors.collect();
         let doc = Value::Object(doc.clone());
         return deep_canvas::template::story_numbers(&doc, t)
             .into_iter()
             .map(|(slot, text)| json!({"item": id, "text": text, "source": {"story": slot}}))
+            .chain(anchors)
             .collect();
     }
     let (Some(quote), Some(Value::String(raw))) = (p.get("quote"), p.get("raw")) else {
@@ -381,12 +396,53 @@ fn glyph_issues(items: &Map<String, Value>, ty: &Type, issues: &mut Vec<Issue>) 
     }
 }
 
+/// Each mark set's transforms read at check, standing ranked among them, and every row a log
+/// scale can't place, each named.
+fn story_issues(items: &Map<String, Value>) -> Vec<Issue> {
+    let mut out = Vec::new();
+    let refused = |id: &str, r: scene::Refused| {
+        Issue::error(
+            r.code,
+            id,
+            r.path.clone(),
+            json!(r.path),
+            "the document's data doesn't reach this mark set or scale as it says",
+        )
+    };
+    for (id, item) in items {
+        match item.get("kind").and_then(Value::as_str) {
+            Some("marks@1") => {
+                if let Err(r) = crate::data::rows(id, item, items, &Default::default()) {
+                    out.push(refused(id, r));
+                }
+            }
+            Some("scale@1") if item.pointer("/params/type") == Some(&json!("log")) => {
+                match crate::data::log_rows(id, items) {
+                    Ok(rows) => out.extend(rows.into_iter().map(|row| {
+                        Issue::error(
+                            "log_domain",
+                            &row,
+                            format!("items/{id}/params/type"),
+                            json!(row),
+                            "a value at or below 0 has no place on a log scale; use a symlog scale, or filter the row out",
+                        )
+                    })),
+                    Err(r) => out.push(refused(id, r)),
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 /// The module's issues for `doc`, which the core check passed, in `look`; `min` stands in for the
 /// look's status distance (#417 AC9's planted wrong check).
 pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Issue> {
     let items = object_or_empty(doc.get("items"));
     let mut issues = roles_apart(items, look);
     issues.extend(numbers(doc).1);
+    issues.extend(story_issues(items));
     // Status can show wherever a status binding is.
     let status_shows = doc
         .get("status_bindings")
