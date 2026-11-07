@@ -281,6 +281,11 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
           const url = prUrlIn(typeof payload.tool_response === 'string' ? payload.tool_response : JSON.stringify(payload.tool_response ?? ''));
           if (url) meta.pr = url;
         }
+        if (callKind === 'shell' && typeof call.command === 'string' && mapped.outcome !== 'failed') {
+          const response = payload.tool_response;
+          meta.ran = { command: call.command, stdout: typeof response === 'string' ? response : isObj(response) && typeof response.stdout === 'string' ? response.stdout : '' };
+          meta.ran.stdout = meta.ran.stdout.slice(0, 65_536);
+        }
       }
       const loop = loopFact(name, tool, event, payload, typeof data.command === 'string' ? data.command : scrub(str(at(payload, 'tool_input.description')) || tool));
       if (loop) meta.loop = loop;

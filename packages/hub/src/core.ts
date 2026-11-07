@@ -53,6 +53,7 @@ import type { KeyFacts } from './shared-runs.js';
 import { argsOf, groupUnder, parents, startOf } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
+import { Teardowns } from './teardowns.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { Channels, type ChannelAsk } from './channels.js';
 import { Workspaces } from './workspaces.js';
@@ -84,6 +85,8 @@ const CODEX_BINARY = /^(?:\S*\/)?codex(?:-[^\s/]+)?(?:\s|$)/;
 /** A Claude Code process: its native binary (`claude`, `claude.exe`, `claude/versions/<version>`) or its npm entry. */
 const CLAUDE_BINARY = /^(?:\S*\/)?claude(?:\.exe)?(?:\s|$)|^\S*\/claude\/versions\/[^\s/]+(?:\s|$)|@anthropic-ai\/claude-code\//;
 const HOUR = 3_600_000;
+/** How often open sessions' rollouts are looked for in their agent's archived folder: no hook says one moved (#342). */
+const ARCHIVED_THREADS_MS = 5000;
 /** How often the hub reads what workspaces' verdicts pinned (#67). */
 const DRIFT_MS = 5 * 60_000;
 const DAY = 24 * HOUR;
@@ -173,6 +176,8 @@ const asRefused = (error: unknown): unknown => {
  */
 interface Session {
   id: string; agent: string; pid: number; start: string; cwd: string; transcript: string; ended: boolean;
+  /** Ended by a kill, a crash or a shutdown, with no SessionEnd: it can be resumed, and keeps its stacks until it ends (#342). */
+  interrupted?: boolean;
   /**
    * Whether a second hook named its process as their parent (#992): the agent's process, then, which the hub watches
    * for its end, and no wrapper that stays for one hook alone.
@@ -394,6 +399,8 @@ export class Core {
   private readonly switches = new Map<string, string[]>();
   /** One session's transcript copied into the record now; unset until the archive opens. */
   private archiveSession?: (session: string) => Promise<void>;
+  /** The sessions whose transcripts their agents moved to an archived folder; unset until the archive opens. */
+  private archivedSessions?: () => Promise<Set<string>>;
   /** The ask each plug-in change or send waits on, by its session and request ID (#363). */
   private readonly actionAsks = new Map<string, string>();
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
@@ -515,6 +522,8 @@ export class Core {
   private readonly runs: Runs;
   /** Each worktree's stack and every stack run a check started (#331, #332). */
   private readonly stacks: Stacks;
+  /** Each outside resource a session created, and its teardown task (#342). */
+  private readonly teardowns: Teardowns;
   /** Each session's deep_drive replicas (#124). */
   private readonly replicas: Replicas;
   /** The screen each session's computer use last switched to, one it leases (#332). */
@@ -759,8 +768,13 @@ export class Core {
         newRun, up: (spec) => upStack(this.host, { ...spec, compose: this.compose }), down: (run) => downStack(this.host, run), healthy: stackHealthy, wanted: environmentOf, keys: keysOf,
         warm: (o) => new WarmStack({ ...o, host: this.host, compose: this.compose!, plant: options.plant, products: { declared: (f, p) => this.products.declared(f, p), holds: (w, n, k) => this.products.holds(w, n, k), place: (w, n, k, d) => this.products.placeIn(w, n, k, d), keep: (w, n, p, k, s) => this.products.keep(w, n, p, k, s), placeCache: (w, k, p, d) => this.products.placeCache(w, k, p, d), keepCache: (w, k, p, s) => this.products.keepCache(w, k, p, s) } }),
       },
-      stopping: () => this.stopping, session: (id) => this.sessions.get(id), startOf: (pid) => this.startOf(pid, true),
+      stopping: () => this.stopping, session: (id) => this.sessions.get(id),
       pending: (worktree) => this.gate.pendingIn(worktree), idle: (session) => this.live.get(session)?.state !== 'working',
+      plantedAsk: async (session, question) => { await this.raiseTask(session, this.sessions.get(session)?.agent ?? 'claude-code', { kind: 'unblock', question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', steps: [question], where: 'your terminal', why: 'The pool is full', unblocks: [`session:${letters(session)}`], proves: 'stack.slot', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(new TextEncoder().encode(question)), pinned_to: { kind: 'evidence', ref: sha256Hex(new TextEncoder().encode(question)) } }); },
+    });
+    this.teardowns = new Teardowns({
+      raw: (query, params) => this.record.raw(query, params), held: options.held, append: (session, agent, kind, data) => this.appendSession(session, agent, kind, data),
+      reading: (session, agent, text) => this.appendReading(session, agent, text), raise: (session, agent, ask) => this.raiseTask(session, agent, ask),
     });
     this.runs = new Runs({
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
@@ -874,7 +888,10 @@ export class Core {
       const now = { wall: Date.now(), at: this.now() };
       if (now.wall - beat.wall > SLEPT) await asks.away(beat.at, now.at);
       beat = now;
-      if (await due()) await asks.tick();
+      if (await due()) {
+        await asks.tick();
+        for (const { handle, data, resource } of await this.teardowns.defaulted()) void this.didIt(handle, resource.session, data).catch(() => undefined);
+      }
       await this.continues();
     });
     this.index = openIndex(this.root.wiki, this.options.index);
@@ -1059,6 +1076,8 @@ export class Core {
     };
     archivePass();
     this.archiveSession = (session) => archive.session(session);
+    this.archivedSessions = () => archive.archived();
+    this.every('archived-threads', ARCHIVED_THREADS_MS, () => this.archivedThreads());
     // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
     this.wikiBuild = openWikiBuild({
       record: this.record, root: this.root, store: this.store, runner: this.runner, asks, now: this.now, archive: async () => { await archiving; await archivePass(); },
@@ -1182,7 +1201,7 @@ export class Core {
     this.askingSoon();
     for (const [owner, agents] of Object.entries(RUN_BY)) {
       const problem = found.filter((u) => u.agent === owner).map(describe).join('; ');
-      const open = (await this.record.raw(`SELECT id, agent, last_seen FROM sessions WHERE agent IN (${agents.map(() => '?').join(', ')}) AND id NOT IN (SELECT session_id FROM events WHERE kind IN ('session.end', 'session.gone') AND session_id IS NOT NULL)`, [...agents])) as { id: string; agent: string; last_seen: number | null }[];
+      const open = (await this.record.raw(`SELECT id, agent, last_seen FROM sessions WHERE agent IN (${agents.map(() => '?').join(', ')}) AND id NOT IN (SELECT session_id FROM events WHERE kind IN ('session.end', 'session.gone', 'session.archived') AND session_id IS NOT NULL)`, [...agents])) as { id: string; agent: string; last_seen: number | null }[];
       for (const s of open) {
         // A reading counts as the session seen, so one quiet for a day reads BLOCKED only if it already did.
         const quiet = (s.last_seen ?? 0) < this.now() - DAY;
@@ -1329,7 +1348,12 @@ export class Core {
     // A call whose prompt went to you has run, live or replayed: offered back as a decision to save (#23).
     if (meta.event === 'PostToolUse' && meta.call) void this.offerBack(meta).catch(() => undefined);
     if (drafts.some((d) => d.kind === 'session.end' && d.data.reason === 'clear')) await this.replaced(meta.session);
-    if (drafts.some((d) => d.kind === 'session.end')) void this.leftProject(meta.session);
+    if (drafts.some((d) => d.kind === 'session.end')) {
+      void this.leftProject(meta.session);
+      // Copied now, verified or not: a desktop app deletes what follows this hook (#342), and a copy changes nothing.
+      void this.archiveSession?.(meta.session).catch((error: unknown) => process.stderr.write(`deep hub: archive of ${meta.session}: ${error instanceof Error ? error.message : String(error)}\n`));
+    }
+    if (meta.ran && meta.cwd) void this.teardowns.saw({ session: meta.session, agent: meta.agent, cwd: meta.cwd, call: meta.toolUse ?? meta.id, ...meta.ran }).catch(() => undefined);
     if (meta.event === 'UserPromptSubmit' && this.options.plant === 'typed-saves-decision') {
       this.typedAt.set(meta.session, Date.now());
       void this.typedSaves(meta.session).catch(() => undefined);
@@ -1375,13 +1399,7 @@ export class Core {
       // Only an event checked against its session acts on it: an unverified SessionEnd ends nothing.
       // pi resumes a session it replaced in the same process, so the same session can start again.
       if (meta.event === 'SessionStart' && meta.agent === 'pi') session.ended = false;
-      if (meta.event === 'SessionEnd') {
-        session.ended = true;
-        this.stacks.endFor(session.id);
-        // Its replicas end with it, and their leases with them (#124).
-        this.replicas.endFor(session.id);
-        this.stamps = this.stamps.filter((stamp) => stamp.session !== session.id);
-      }
+      if (meta.event === 'SessionEnd') this.sessionOver(session);
       // A replayed PreToolUse was let through late; its call has run, so it stamps nothing a later call could bind.
       if (verified && meta.stamp && !replayed) this.stamps.push({ session: session.id, tool: meta.stamp.tool, digest: meta.stamp.digest });
     }
@@ -2439,10 +2457,44 @@ export class Core {
       this.startChecked.delete(session.id);
       // The process is gone, so its ID may start another: no session is bound to the start time cached for it.
       if (![...this.sessions.values()].some((s) => !s.ended && s.pid === session.pid)) this.starts.delete(session.pid);
-      const live = this.live.get(session.id);
-      if (live) { clearTimeout(live.quiet); this.live.delete(session.id); this.gate.ended(session.id); this.askingSoon(); }
+      session.interrupted = true;
+      if (this.options.plant === 'reap-on-kill') this.stacks.endFor(session.id);
+      this.letGoLive(session.id);
       const ts = this.now();
       await this.append(this.connection('core', { session: session.id, agent: session.agent }), { v: 1, id: ulid(ts), kind: 'session.gone', ts, subject: `session:${letters(session.id)}`, data: { pid: session.pid, start: session.start } }).catch(() => undefined);
+      this.endedOrder.delete(session.id);
+      this.endedOrder.add(session.id);
+      this.forgetEnded();
+    }
+  }
+  /** A session has ended, by its SessionEnd or its Archive: what it started goes with it (#342). */
+  private sessionOver(session: Session): void {
+    session.ended = true;
+    session.interrupted = false;
+    this.stacks.endFor(session.id);
+    // Its replicas end with it, and their leases with them (#124).
+    this.replicas.endFor(session.id);
+    this.stamps = this.stamps.filter((stamp) => stamp.session !== session.id);
+  }
+  private letGoLive(id: string): void {
+    const live = this.live.get(id);
+    if (live) { clearTimeout(live.quiet); this.live.delete(id); this.gate.ended(id); this.askingSoon(); }
+  }
+  /**
+   * Codex Desktop's Archive fires no hook and moves the rollout to its archived folder (#80), so that move is the session's
+   * end: the rollout is copied from there and the session ends as a SessionEnd ends it (#342). An interrupted session's Archive
+   * ends it too. One whose rollout is back where it was has been unarchived, and goes on.
+   */
+  private async archivedThreads(): Promise<void> {
+    const open = [...this.sessions.values()].filter((s) => (!s.ended || s.interrupted) && !existsSync(s.transcript));
+    if (!open.length) return;
+    const archived = await this.archivedSessions!();
+    for (const session of open) {
+      if (!archived.has(letters(session.id)) || (session.ended && !session.interrupted)) continue;
+      await this.archiveSession!(session.id).catch(() => undefined);
+      this.sessionOver(session);
+      this.letGoLive(session.id);
+      await this.appendSession(session.id, session.agent, 'session.archived', { transcript: session.transcript });
       this.endedOrder.delete(session.id);
       this.endedOrder.add(session.id);
       this.forgetEnded();
@@ -4924,7 +4976,7 @@ export class Core {
     const resumed = meta.fields?.source === 'resume' || (meta.agent === 'codex' && meta.fields?.source === 'startup');
     if (binary && transcript === session.transcript && meta.event === 'SessionStart' && resumed
       && (session.ended || await this.startOf(session.pid, true) !== session.start) && binary.test(await argsOf(meta.ppid))) {
-      Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd, ended: false, watched: false });
+      Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd, ended: false, interrupted: false, watched: false });
       return true;
     }
     // pi resumes a session from a new process, by its file: its start takes the session over once the old process is gone.
@@ -5385,7 +5437,7 @@ export class Core {
     if (data.provisional === true && chosen && chosen.id !== data.recommended && row.session && this.options.plant !== 'records-switch-only') await this.provisionalSwitched(handle, row.session, data).catch(() => undefined);
     await answered();
     // "I did it" to a task proved by a spec check runs that check again at once (#323): a claim never passes on it alone.
-    if (data.kind === 'unblock' && chosen?.id === 'done' && row.session && typeof data.proves === 'string' && this.checksOf(this.sessions.get(row.session)?.cwd ?? '').has(data.proves)) {
+    if (data.kind === 'unblock' && chosen?.id === 'done' && row.session && typeof data.proves === 'string' && this.checksOf((await this.teardowns.of(data))?.cwd ?? this.sessions.get(row.session)?.cwd ?? '').has(data.proves)) {
       void this.didIt(handle, row.session, data).catch((error: unknown) => process.stderr.write(`deep hub: ${handle}'s check did not run again: ${error instanceof Error ? error.message : String(error)}\n`));
     }
     // Your waiver of an open item closes it (#323).
@@ -5432,29 +5484,47 @@ export class Core {
    * with what's missing; one that passes leaves it closed.
    */
   private async didIt(handle: string, session: string, data: Obj): Promise<void> {
-    const cwd = this.sessions.get(session)!.cwd;
+    // A teardown task's session may be long over: its check runs on the folder that session worked in, for its own
+    // resource, with no claim, so one resource's check passing says nothing of another's task on the same check (#342).
+    const resource = await this.teardowns.of(data);
     const name = String(data.proves);
-    const check = this.checksOf(cwd).get(name)!;
-    const live = this.liveOf({ session, agent: this.sessions.get(session)!.agent, cwd } as HookMeta);
-    const task_ref = await this.turnTaskOf(session, live);
-    // Run on a snapshot of the session's folder, in a temporary checkout of it, as a claim's checks are (#29).
-    const commit = (await this.checkouts.snapshot(cwd)).commit;
-    const ts = this.now();
-    const id = ulid(ts);
-    const checkout = await this.checkouts.checkout({ worktree: cwd, commit, dependencies: ['node_modules', '.venv'], runs: [`claim:${id}`] });
-    const [before] = (await this.record.raw(`SELECT COUNT(*) AS n FROM claims WHERE session_id = ? AND subject_ref = ?`, [session, task_ref])) as { n: number }[];
-    await this.append(this.connection('core', { session, agent: live.agent }), { v: 2, id, kind: 'claim.made', ts, data: { task_ref, attempt: (before?.n ?? 0) + 1, commit, scope: 'session', predictions: [] } });
-    const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
-    const { run } = await this.runs.start({ check: name, claim: `claim:${id}`, commit, argv: ['/bin/sh', '-c', check.run], command: check.run, cwd: checkout.dir }, deadline);
-    const outcome = await this.runEnded(String(run)).finally(() => this.checkouts.ended(checkout, `claim:${id}`).catch(() => undefined));
-    if (outcome === 'passed') return;
-    const [done] = (await this.record.raw(`SELECT json_extract(data, '$.findings') AS findings FROM events WHERE kind = 'run.finished' AND subject = ? LIMIT 1`, [String(run)])) as { findings: string | null }[];
-    const findings = (JSON.parse(done?.findings ?? '[]') as string[]).slice(0, 5);
+    const agent = resource?.agent ?? this.sessions.get(session)!.agent;
+    if (resource && this.options.plant === 'teardown-closes-on-word') return;
+    let findings: string[] = [];
+    try {
+      const cwd = resource?.cwd ?? this.sessions.get(session)!.cwd;
+      const check = this.checksOf(cwd).get(name);
+      if (!check) throw Error(`${name} is no check of ${cwd}'s spec any more`);
+      // Run on a snapshot of the session's folder, in a temporary checkout of it, as a claim's checks are (#29).
+      const commit = (await this.checkouts.snapshot(cwd)).commit;
+      const ts = this.now();
+      const id = ulid(ts);
+      const checkout = await this.checkouts.checkout({ worktree: cwd, commit, dependencies: ['node_modules', '.venv'], runs: [`claim:${id}`] });
+      if (!resource) {
+        const live = this.liveOf({ session, agent, cwd } as HookMeta);
+        const task_ref = await this.turnTaskOf(session, live);
+        const [before] = (await this.record.raw(`SELECT COUNT(*) AS n FROM claims WHERE session_id = ? AND subject_ref = ?`, [session, task_ref])) as { n: number }[];
+        await this.append(this.connection('core', { session, agent }), { v: 2, id, kind: 'claim.made', ts, data: { task_ref, attempt: (before?.n ?? 0) + 1, commit, scope: 'session', predictions: [] } });
+      }
+      const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
+      const { run } = await this.runs.start({ check: name, claim: `claim:${id}`, commit, argv: ['/bin/sh', '-c', check.run], command: check.run, cwd: checkout.dir, ...(resource?.key === undefined ? {} : { env: { DEEP_RESOURCE_KEY: resource.key } }) }, deadline);
+      const outcome = await this.runEnded(String(run)).finally(() => this.checkouts.ended(checkout, `claim:${id}`).catch(() => undefined));
+      if (outcome === 'passed') return;
+      const [done] = (await this.record.raw(`SELECT json_extract(data, '$.findings') AS findings FROM events WHERE kind = 'run.finished' AND subject = ? LIMIT 1`, [String(run)])) as { findings: string | null }[];
+      findings = (JSON.parse(done?.findings ?? '[]') as string[]).slice(0, 5);
+    } catch (error) {
+      // A teardown task closes on its check alone: one that couldn't run leaves the task with you.
+      if (!resource) throw error;
+      findings = [error instanceof Error ? error.message : String(error)];
+    }
     const reasons = [`${name} still fails after your "I did it"${findings.length ? `: ${findings.join('; ')}` : ''}`];
-    const fields = ['kind', 'question', 'options', 'recommended', 'default', 'steps', 'where', 'why', 'unblocks', 'proves', 'fallback', 'provisional', 'owner', 'pinned_to'];
+    const fields = ['kind', 'question', 'options', 'recommended', 'default', 'steps', 'where', 'why', 'unblocks', 'proves', 'cost_usd', 'fallback', 'provisional', 'owner', 'pinned_to'];
     const again = { ...Object.fromEntries(fields.filter((f) => f in data).map((f) => [f, data[f]])), key: sha256Hex(canonicalize({ again: handle, key: data.key ?? null } as JsonValue)) };
-    await this.asks.raise(this.connection('core', { session, agent: live.agent }), 'deep_ask.unblock', again);
-    await this.asks.stillFails(name, reasons);
+    await this.raiseTask(session, agent, again);
+    if (!resource) await this.asks.stillFails(name, reasons);
+  }
+  private async raiseTask(session: string, agent: string, ask: Obj): Promise<void> {
+    await this.asks.raise(this.connection('core', { session, agent }), 'deep_ask.unblock', ask);
   }
   /** asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it. */
   private async undo(params: Obj, context: CallContext): Promise<Obj> {
