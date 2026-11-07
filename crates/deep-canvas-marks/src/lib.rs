@@ -11,6 +11,7 @@
 //! gradients on fills and strokes ([`paint`]), soft masks and each item's adjust, with the module's
 //! own check ([`check`]).
 
+pub mod animator;
 pub mod check;
 pub mod code;
 pub mod data;

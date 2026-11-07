@@ -731,7 +731,11 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 if p == "write_fades_fills_from_start"
                     || p == "import_skips_clip_path"
                     || p == "import_drops_marker"
-                    || p == "status_distance_0_03" =>
+                    || p == "status_distance_0_03"
+                    || p == "triangle_peaks_at_start"
+                    || p == "on_curve_left_edge"
+                    || p == "roll_moves_every_grapheme"
+                    || p == "weight_snaps_to_static" =>
             {
                 (Planted::None, false, false)
             }
@@ -789,8 +793,24 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             look,
             config,
             blend_inputs,
+            text_plant: match input.get("planted").and_then(Value::as_str) {
+                Some("triangle_peaks_at_start") => {
+                    deep_canvas_marks::animator::Plant::TrianglePeaksAtStart
+                }
+                Some("on_curve_left_edge") => deep_canvas_marks::animator::Plant::OnCurveLeftEdge,
+                Some("roll_moves_every_grapheme") => {
+                    deep_canvas_marks::animator::Plant::RollMovesEveryGrapheme
+                }
+                _ => deep_canvas_marks::animator::Plant::None,
+            },
+            snaps_weight: input.get("planted").and_then(Value::as_str)
+                == Some("weight_snaps_to_static"),
         };
         let mut request = request;
+        // #496: the runs this line shapes, its check included, counted from here.
+        deep_text::cache::record();
+        let _ = deep_text::cache::take_log();
+        raster::preshape(&request);
         let (checked, vectors) = check(
             &request.doc,
             Some(&request.look),
@@ -798,9 +818,11 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             (skips, near),
         );
         request.vectors = vectors;
-        return Some(Answer::Now(
-            refused_by_check(&checked).unwrap_or_else(|| raster::answer(request)),
-        ));
+        let mut answer = refused_by_check(&checked).unwrap_or_else(|| raster::answer(request));
+        if answer.get("ok") == Some(&Value::Bool(true)) {
+            answer["shaped"] = json!(deep_text::cache::take_log().len());
+        }
+        return Some(Answer::Now(answer));
     }
     let request = match command {
         "frames" => {
