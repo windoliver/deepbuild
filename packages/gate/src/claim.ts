@@ -163,10 +163,12 @@ export function claimVerdict(given: ClaimedRuns, options: { plant?: VerdictPlant
     // script, named `<mask> in <file>`): either can't fail. The kind's other uncounted causes (an untraced program,
     // altered evidence) name no mask the rule reads.
     const mask = exitOnly ? null : maskIn(c.command) ?? c.runs.map((r) => r.mask).find((m): m is string => m !== null && maskIn(m) !== null) ?? null;
+    // A run whose report showed a control passed, or none at all, can't record a failure: its check can't fail (#1099).
+    const unrecorded = exitOnly ? undefined : c.runs.map((r) => r.mask).find((m): m is string => m?.startsWith("the report can't record a failure") ?? false);
     checks.push({
       check: c.check, digest, source: c.source, depth: c.depth ?? 'unit', proof: c.proof ?? 'test_run', covers: [...c.covers],
       ...(c.inputs ? { inputs: [...c.inputs] } : {}), ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(c.needed !== undefined ? { runs: c.needed } : {}),
-      ...(mask !== null ? { cant_fail: `exit status masked by \`${mask}\`` } : {}),
+      ...(mask !== null ? { cant_fail: `exit status masked by \`${mask}\`` } : unrecorded ? { cant_fail: unrecorded } : {}),
       ...(c.contract ? { contract: c.contract } : {}),
       ...(c.base ? { base: c.base } : {}),
       ...(c.state ? { state: c.state } : {}), ...(c.never_started ? { never_started: c.never_started } : {}),

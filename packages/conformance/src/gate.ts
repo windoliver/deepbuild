@@ -148,7 +148,7 @@ async function play(corpus: string, c: Case, which: 'claim' | 'twin'): Promise<R
     for (const [i, folder] of p.commits.entries()) {
       await commitTree(w, s, filesOf(join(corpus, c.dir, folder)), `${c.id} ${which} ${i + 1}`);
       const final = i === p.commits.length - 1;
-      if (final && which === 'claim') for (const [path, text] of Object.entries(c.setup?.last_files ?? {})) writeFileSync(join(w.repo, path), text);
+      if (final && which === 'claim') for (const [path, text] of Object.entries(c.setup?.last_files ?? {})) { mkdirSync(dirname(join(w.repo, path)), { recursive: true }); writeFileSync(join(w.repo, path), text); }
       if (final && fault === 'disk-full') writeFileSync(full, 'full\n');
       if (final && fault === 'hub-killed') {
         const stopping = s.stop(c.stop ?? 'Done.');
