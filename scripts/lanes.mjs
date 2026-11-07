@@ -188,9 +188,13 @@ export const checks = [
   // The event catalogue holds every kind the design docs and the open issues name (#605). It reads the
   // contracts package the typecheck lane builds.
   { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.' },
-  // Every link from the design docs and the open issues into docs/*.md lands on a heading or an <a id> (#910). It
-  // reads the open issues the catalogue drift lane fetched.
-  { name: 'design links', commands: [[process.execPath, 'scripts/design-links.mjs']], fix: 'Point each link named above at a heading or <a id> its doc has, or give the doc back the heading it linked; offline, run again with network and gh signed in.' },
+  // Every link from the design docs and the open issues into docs/*.md lands on a heading or an <a id> (#910), and
+  // every `deep` command and agent tool an open issue names is in the design or planned (#1329). It reads the open
+  // issues the catalogue drift lane fetched.
+  { name: 'design links and names', commands: [[process.execPath, 'scripts/design-links.mjs']], fix: 'Point each link named above at a heading or <a id> its doc has, or give the doc back the heading it linked; add each name above to the design in code, or to scripts/planned-names.txt as `<name> #<issue>` while its design waits; remove a stale planned name; offline, run again with network and gh signed in.' },
+  // Public text names no product the project only studied (#1329): the change's added lines, its commit messages and
+  // the open issues, against the salted hashes in scripts/studied-names.json.
+  { name: 'public text', commands: [[process.execPath, 'scripts/public-text.mjs']], fix: 'Restate each finding above in our own words, without the name; a name DeepBuild runs, links, calls, reads or writes leaves the list in its own pull request; offline, run again with network and gh signed in.' },
   // The fixture corpus (#47): every covered agent version has a recorded set holding each event its
   // facts list, each set replays clean through its adapter, and the corpus stays under 200 MB.
   { name: 'corpus', commands: [[process.execPath, 'scripts/corpus.mjs', 'check']], fix: 'Follow the Fix line under each corpus failure above.' },
