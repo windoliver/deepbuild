@@ -520,8 +520,11 @@ export class Core {
   /** The screen each session's computer use last switched to, one it leases (#332). */
   private readonly onScreen = new Map<string, string>();
   private readonly subscribers = new Map<string, number>();
-  /** Appends handed to the record and not yet settled: a read waits for them, so it sees every hook acknowledged before it. */
-  private readonly inflight = new Set<Promise<unknown>>();
+  /**
+   * Appends handed to the record and not yet settled, by event ID: a read waits for them, so it sees every hook
+   * acknowledged before it.
+   */
+  private readonly inflight = new Map<Promise<unknown>, string>();
   private streaming = false;
   private restream = false;
   /** The full page after the last one read, built ahead for a reader paging in order. */
@@ -747,7 +750,7 @@ export class Core {
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
     });
     this.answers = new Answers({
-      raw: (query, params) => this.record.raw(query, params), settled: () => Promise.allSettled([...this.inflight]),
+      raw: (query, params) => this.record.raw(query, params), settled: (except) => Promise.allSettled([...this.inflight].flatMap(([append, id]) => (id === except ? [] : [append]))),
       excluded: (id) => this.handed.has(id) || this.prompts.has(`ask:${id}`),
       delivered: options.plant === 'words-only-at-turn-start' ? undefined : (session) => { const live = this.live.get(session); if (live) live.words ??= 'answer'; },
       append: (data, v) => this.appendCore('delivery.outcome', data, { subject: data.delivery, ...(v === 2 ? { v } : {}) }),
@@ -1122,7 +1125,7 @@ export class Core {
     if (this.lost) throw Error(this.blocked);
     const appended = this.record.append(connection, input);
     // No read waits for a backfill: nobody was acknowledged for its events.
-    if (!backfill) this.inflight.add(appended);
+    if (!backfill) this.inflight.set(appended, input.id);
     try {
       await appended;
     } catch (error) {
@@ -1311,7 +1314,7 @@ export class Core {
     // A spooled line whose hook the hub already recorded live changes nothing: no count, no stamp, no append.
     if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
       // Its live copy may be acknowledged and still on its way to the record.
-      await Promise.allSettled([...this.inflight]);
+      await Promise.allSettled([...this.inflight.keys()]);
       const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id = ? LIMIT 1`, [meta.id]);
       if (known.length) {
         // Unless deep-hook gave up on an acknowledgement the hub sent just too late: the live copy is in the record
@@ -2683,8 +2686,8 @@ export class Core {
    * joined to it) not yet delivered, nor handed to its waiter and not yet seen in a turn; or, with `scope`, the
    * answered asks it names.
    */
-  private async waitingFor(session: string, scope?: string): Promise<Answer[]> {
-    return this.answers.waitingFor(session, scope);
+  private async waitingFor(session: string, scope?: string, hook?: string): Promise<Answer[]> {
+    return this.answers.waitingFor(session, scope, hook);
   }
   /** The answers as the agent reads them, each naming its ask. */
   private answerText(rows: Answer[]): string {
@@ -3879,7 +3882,8 @@ export class Core {
           this.unread.delete(ask);
           if (woken) await this.outcome(ask, 'next_prompt', 'delivered');
         }
-        const waiting = await this.waitingFor(meta.session);
+        // Never behind the prompt's own event, which answers no ask: a resume commits FULL once the evidence it names is synced (#1410).
+        const waiting = await this.waitingFor(meta.session, undefined, meta.id);
         if (status && !waiting.length && !r.later.length && !this.promiseDueFor(meta.session)) {
           // The prompt's event read as the session working; it stays as it was, since no model runs on it.
           const live = this.live.get(meta.session);
@@ -4541,7 +4545,7 @@ export class Core {
     let from = spliced?.get(meta.id)?.from;
     spliced?.delete(meta.id);
     if (from === undefined) {
-      await Promise.allSettled([...this.inflight]);
+      await Promise.allSettled([...this.inflight.keys()]);
       const [row] = (await this.record.raw(`SELECT json_extract(data, '$.from') AS f FROM events WHERE id = ?`, [meta.id])) as { f: string | null }[];
       from = row ? row.f ?? 'unknown' : undefined;
     }
@@ -5176,7 +5180,7 @@ export class Core {
    * reflects at least that log_pos, so a consumer that subscribes after it misses nothing.
    */
   private async reflecting(read: () => Promise<Obj>): Promise<Obj> {
-    await Promise.allSettled([...this.inflight]);
+    await Promise.allSettled([...this.inflight.keys()]);
     const end = this.record.raw('SELECT coalesce(max(log_pos), 0) AS log_pos FROM events');
     const result = read();
     result.catch(() => undefined);
@@ -5194,7 +5198,7 @@ export class Core {
     this.ahead = undefined;
     let out: { log_pos: number; events: string };
     if (ahead) {
-      await Promise.allSettled([...this.inflight]);
+      await Promise.allSettled([...this.inflight.keys()]);
       out = { log_pos: ahead.log_pos, events: ahead.events };
     } else {
       const read = await this.reflecting(async () => ({ events: await this.page(after, limit, kinds) }));
