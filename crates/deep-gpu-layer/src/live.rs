@@ -76,6 +76,8 @@ pub struct Plants {
     ),
     render_back_live_only: bool,
     settles_with_fallback: bool,
+    /// #431's: a core that builds the velocity and emission targets for every frame.
+    builds_unread_targets: bool,
 }
 
 impl Plants {
@@ -106,6 +108,7 @@ impl Plants {
             ops: crate::effects::operator_plants(p),
             render_back_live_only: p == Some(Planted::RenderBackDrawsLiveOnly),
             settles_with_fallback: p == Some(Planted::SettlesWithFallback),
+            builds_unread_targets: p == Some(Planted::BuildsUnreadTargets),
         }
     }
 }
@@ -1269,6 +1272,7 @@ impl Live {
                 &self.args.fail_pipelines,
             );
             v.canonical_draws_live_only = self.plants.render_back_live_only;
+            v.want_targets(&rev.doc, self.plants.builds_unread_targets);
             for i in v.ops.issues() {
                 if !ses.issues.contains(&i) {
                     ses.issues.push(i);
@@ -2060,9 +2064,20 @@ impl Live {
     /// The writers' counts, the cache and the device, after the frame's queue drained.
     fn memory(&self) -> Value {
         let mut writers: BTreeMap<&str, (u64, Vec<Value>)> = BTreeMap::new();
+        // Each core target the writer's views hold (#431), at what the meter counts and the
+        // device's own size for it.
+        let mut targets: BTreeMap<&str, Vec<Value>> = BTreeMap::new();
         for s in self.sessions.iter().filter(|s| s.state == State::Live) {
             let e = writers.entry(s.writer.as_str()).or_insert((0, Vec::new()));
             e.0 += s.view.as_ref().and_then(View::own_bytes).unwrap_or(0);
+            let rows = targets.entry(s.writer.as_str()).or_default();
+            for (target, bytes, device_bytes) in s
+                .view
+                .as_ref()
+                .map_or(Vec::new(), |v| v.targets(&self.device))
+            {
+                rows.push(json!({"session": s.id, "target": target, "bytes": bytes, "device_bytes": device_bytes}));
+            }
         }
         for (writer, e) in writers.iter_mut() {
             for (key, bytes) in self.results.charged(writer) {
@@ -2078,7 +2093,7 @@ impl Live {
         }
         let (entries, bytes) = self.results.totals();
         json!({
-            "writers": writers.into_iter().map(|(w, (count, results))| json!({"writer": w, "count_bytes": count, "results": results})).collect::<Vec<_>>(),
+            "writers": writers.into_iter().map(|(w, (count, results))| json!({"writer": w, "count_bytes": count, "results": results, "targets": targets.remove(w).unwrap_or_default()})).collect::<Vec<_>>(),
             "cache": {"entries": entries, "bytes": bytes.unwrap_or(0)},
             "device_bytes": memory::allocated(&self.device),
         })
@@ -2360,6 +2375,7 @@ fn render_canonical(
     let (options, planted) = plants.ops;
     view.ops = DocOps::new(device, &doc, options, planted, fail);
     view.canonical_draws_live_only = plants.render_back_live_only;
+    view.want_targets(&doc, plants.builds_unread_targets);
     let (rung, resolution) = live.unwrap_or((Rung::Base, 1.0));
     let drawing = Drawing {
         rung,

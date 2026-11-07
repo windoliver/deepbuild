@@ -119,6 +119,12 @@ pub struct CheckOptions {
     pub trusts_index: bool,
     /// An op table whose noise octave weight is halved.
     pub noise_weight_halved: bool,
+    /// A check without the rule that refuses an implicit derivative where pixels may diverge
+    /// (#431's planted check): the graph goes on to naga.
+    pub no_divergence_rule: bool,
+    /// The showpiece and export classes, where a material operator may take its 17th to 32nd
+    /// fetches (Operator cost and limits).
+    pub wide_fetches: bool,
 }
 
 struct Ctx<'a> {
@@ -246,8 +252,8 @@ pub fn const_type(step: &Step) -> Result<Ty, String> {
 /// A seeded step's literal fields (`noise@1`, `fbm@1`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Seeded {
-    /// 0 for none: the noise repeats every `period` lattice cells on each axis.
-    pub period: u32,
+    /// Per axis of p, 0 for none: the noise repeats every `period` lattice cells along it.
+    pub period: [u32; 3],
     pub octaves: u32,
     pub lacunarity: f64,
     pub gain: f64,
@@ -268,12 +274,27 @@ pub fn seeded_fields(s: &Step) -> Result<Seeded, String> {
                 .ok_or_else(|| format!("{k} is a number")),
         }
     };
-    let period = num("period", 0.0)?;
-    if period < 0.0 || period.fract() != 0.0 || period > f64::from(MAX_PERIOD) {
-        return Err(format!(
-            "period is a whole number of cells, 0 to {MAX_PERIOD}"
-        ));
+    // One whole number of cells for every axis, or a list, one per axis of p (#431).
+    let bad_period = || {
+        format!(
+            "period is a whole number of cells, 0 to {MAX_PERIOD}, or a list of them, one per axis"
+        )
+    };
+    let whole = |v: &Value| {
+        v.as_f64()
+            .filter(|x| *x >= 0.0 && x.fract() == 0.0 && *x <= f64::from(MAX_PERIOD))
+    };
+    match s.fields.get("period") {
+        None => {}
+        Some(Value::Array(a)) if (1..=3).contains(&a.len()) => {
+            if a.iter().any(|v| whole(v).is_none()) {
+                return Err(bad_period());
+            }
+        }
+        Some(v) if whole(v).is_some() => {}
+        Some(_) => return Err(bad_period()),
     }
+    let period = deep_canvas::steps::period_of(s.fields.get("period"));
     let octaves = num("octaves", 4.0)?;
     if !(1.0..=8.0).contains(&octaves) || octaves.fract() != 0.0 {
         return Err("octaves is 1 to 8".into());
@@ -282,7 +303,7 @@ pub fn seeded_fields(s: &Step) -> Result<Seeded, String> {
     if !(1.0..=8.0).contains(&lacunarity) {
         return Err("lacunarity is 1 to 8".into());
     }
-    if period > 0.0 && lacunarity.fract() != 0.0 {
+    if period.iter().any(|p| *p > 0) && lacunarity.fract() != 0.0 {
         return Err(format!(
             "fbm with a period takes a whole-number lacunarity, not {lacunarity}: each octave must repeat within the period"
         ));
@@ -292,11 +313,59 @@ pub fn seeded_fields(s: &Step) -> Result<Seeded, String> {
         return Err("gain is 0 to 1".into());
     }
     Ok(Seeded {
-        period: period as u32,
+        period,
         octaves: octaves as u32,
         lacunarity,
         gain,
     })
+}
+
+/// Whether a step takes implicit derivatives: `ddx`, `ddy`, `fwidth`, `triplanar` and a `sample`
+/// with no `lod` (Step and the closed step list).
+pub fn implicit_derivative(s: &Step) -> bool {
+    matches!(
+        s.op.as_str(),
+        "ddx@1" | "ddy@1" | "fwidth@1" | "triplanar@1"
+    ) || (s.op == "sample@1" && !s.args.contains_key("lod"))
+}
+
+/// A `cells@1`'s own fields: `jitter` from 0 to 1 (1 by default) and its metric (euclidean by
+/// default).
+pub fn cell_fields(s: &Step) -> Result<(f64, deep_canvas::steps::Metric), String> {
+    let jitter = match s.fields.get("jitter") {
+        None => 1.0,
+        Some(v) => v
+            .as_f64()
+            .filter(|j| (0.0..=1.0).contains(j))
+            .ok_or("jitter is 0 to 1")?,
+    };
+    let metric = match s.fields.get("metric") {
+        None => deep_canvas::steps::Metric::Euclidean,
+        Some(v) => v
+            .as_str()
+            .and_then(deep_canvas::steps::Metric::parse)
+            .ok_or("metric is euclidean, manhattan or chebyshev")?,
+    };
+    Ok((jitter, metric))
+}
+
+/// A `homography@1`'s literal quad: four finite `[x, y]` corners, in the unit square's order
+/// (0, 0), (1, 0), (1, 1), (0, 1).
+pub fn quad_of(v: &Value) -> Result<[[f64; 2]; 4], String> {
+    let corners: Vec<[f64; 2]> = v
+        .as_array()
+        .filter(|a| a.len() == 4)
+        .ok_or("quad is four [x, y] corners")?
+        .iter()
+        .map(|p| {
+            p.as_array()
+                .filter(|a| a.len() == 2)
+                .and_then(|a| Some([a[0].as_f64()?, a[1].as_f64()?]))
+                .filter(|p| p.iter().all(|x| x.is_finite()))
+                .ok_or("quad is four [x, y] corners")
+        })
+        .collect::<Result<_, _>>()?;
+    Ok([corners[0], corners[1], corners[2], corners[3]])
 }
 
 fn pick_lane(c: char) -> Option<u8> {
@@ -378,14 +447,18 @@ impl Ctx<'_> {
                 "when guards a compute write only",
             ));
         }
-        let derivative = matches!(s.op.as_str(), "ddx@1" | "ddy@1" | "fwidth@1")
-            || (s.op == "sample@1" && !s.args.contains_key("lod"));
-        if derivative && (divergent || s.when.is_some()) {
-            return Err(Issue::at_step(
-                "operator_kind_rule",
-                id,
-                "derivative_in_divergent_flow: a derivative under a when or in a repeat with a stop_if",
-            ));
+        if implicit_derivative(s)
+            && (divergent || s.when.is_some())
+            && !self.options.no_divergence_rule
+        {
+            return Err(Issue {
+                reason: Some("derivative_in_divergent_flow"),
+                ..Issue::at_step(
+                    "operator_kind_rule",
+                    id,
+                    format!("{} takes implicit derivatives, which need every pixel of a quad to run it together: not under a when or in a repeat with a stop_if; use sample_grad with gradients taken before the loop, or sample with a lod", s.op),
+                )
+            });
         }
         let name = s.op.split('@').next().unwrap_or("");
         if name == "repeat" {
@@ -609,6 +682,90 @@ impl Ctx<'_> {
                 seeded_fields(s).map_err(bad)?;
                 Ty::F32
             }
+            "noise3" | "cells" => {
+                let p = float(&need("p")?).map_err(bad)?;
+                let dims = match p {
+                    Ty::V(Sc::F32, 2) => 2,
+                    Ty::V(Sc::F32, 3) if name == "cells" => 3,
+                    _ if name == "cells" => {
+                        return Err(bad("cells' p is a vec2 or a vec3<f32>".into()))
+                    }
+                    _ => return Err(bad("noise3's p is a vec2<f32>".into())),
+                };
+                match need("seed")? {
+                    Ty::Int | Ty::V(Sc::U32, 1) => {}
+                    t => return Err(bad(format!("{} takes a u32 seed, not {}", s.op, t.wgsl()))),
+                }
+                seeded_fields(s).map_err(bad)?;
+                if name == "noise3" {
+                    Ty::V(Sc::F32, 3)
+                } else {
+                    cell_fields(s).map_err(bad)?;
+                    self.cost(
+                        id,
+                        def,
+                        &args,
+                        &Ty::F32,
+                        trips * if dims == 3 { 3 } else { 1 },
+                    );
+                    return Ok(vec![
+                        (Some("f1".into()), Ty::F32),
+                        (Some("f2".into()), Ty::F32),
+                        (Some("id".into()), Ty::U32),
+                        (Some("center".into()), Ty::V(Sc::F32, dims)),
+                    ]);
+                }
+            }
+            "spline" => {
+                if float(&need("x")?).map_err(bad)? != Ty::F32 {
+                    return Err(bad("spline's x is an f32".into()));
+                }
+                let points = s.fields.get("points").unwrap_or(&Value::Null);
+                if let Err(m) = deep_canvas::steps::spline_points(points) {
+                    let code = match points.as_array() {
+                        Some(a) if a.len() > deep_canvas::steps::SPLINE_POINTS => "operator_limit",
+                        _ => "operator_type",
+                    };
+                    return Err(Issue::at_step(code, id, m));
+                }
+                Ty::F32
+            }
+            "homography" => {
+                match s.fields.get("quad") {
+                    Some(q) => {
+                        quad_of(q).map_err(bad)?;
+                    }
+                    None => match need("quad")? {
+                        Ty::Arr(Sc::F32, 2, 4) => {}
+                        t => {
+                            return Err(bad(format!(
+                                "homography's quad is four [x, y] corners, not {}",
+                                t.wgsl()
+                            )))
+                        }
+                    },
+                }
+                Ty::Mat(3)
+            }
+            "to_hsl" | "from_hsl" | "adjust" => {
+                let port = def.ports[0];
+                if float(&need(port)?).map_err(bad)? != Ty::V(Sc::F32, 3) {
+                    return Err(bad(format!("{}'s {port} is a vec3", s.op)));
+                }
+                if name == "adjust" {
+                    let mode = s.fields.get("mode").and_then(Value::as_str).unwrap_or("");
+                    if !deep_canvas::steps::ADJUST_MODES.contains(&mode) {
+                        return Err(bad(format!(
+                            "adjust takes a mode: one of {}",
+                            deep_canvas::steps::ADJUST_MODES.join(", ")
+                        )));
+                    }
+                    if float(&need("x")?).map_err(bad)? != Ty::F32 {
+                        return Err(bad("adjust's x is an f32".into()));
+                    }
+                }
+                Ty::V(Sc::F32, 3)
+            }
             "rand" => {
                 match need("key")? {
                     Ty::Int | Ty::V(Sc::U32, 1) => {}
@@ -683,6 +840,33 @@ impl Ctx<'_> {
                 }
                 if let Some(lod) = args.get("lod") {
                     float(lod).map_err(bad)?;
+                }
+                Ty::V(Sc::F32, 4)
+            }
+            // The level from the gradients given, never from the quad's.
+            "sample_grad" => {
+                match need("tex")? {
+                    Ty::Tex(Tex::Float) => {}
+                    t => {
+                        return Err(bad(format!(
+                            "sample_grad reads a float texture, not {}",
+                            t.wgsl()
+                        )))
+                    }
+                }
+                for p in ["uv", "dx", "dy"] {
+                    if float(&need(p)?).map_err(bad)? != Ty::V(Sc::F32, 2) {
+                        return Err(bad(format!("sample_grad's {p} is a vec2")));
+                    }
+                }
+                Ty::V(Sc::F32, 4)
+            }
+            "backdrop" => {
+                if float(&need("uv")?).map_err(bad)? != Ty::V(Sc::F32, 2) {
+                    return Err(bad("backdrop's uv is a vec2".into()));
+                }
+                if float(&need("lod")?).map_err(bad)? != Ty::F32 {
+                    return Err(bad("backdrop's lod is an f32".into()));
                 }
                 Ty::V(Sc::F32, 4)
             }
@@ -1328,6 +1512,8 @@ fn input_class(from: &From) -> Class {
         | From::Texture3d { .. }
         | From::Seed
         | From::Role(_)
+        | From::Spline(_)
+        | From::Asset(_)
         | From::Storage { .. }
         | From::Column { .. }
         | From::Attribute { .. } => Class::Exact,
@@ -1521,7 +1707,8 @@ fn check_inner(
                 "an input and a step share a name",
             ));
         }
-        if matches!(input.ty, Ty::Tex(_)) != matches!(input.from, From::Target { .. })
+        if matches!(input.ty, Ty::Tex(_))
+            != matches!(input.from, From::Target { .. } | From::Asset(_))
             || matches!(input.ty, Ty::Tex3(_)) != matches!(input.from, From::Texture3d { .. })
         {
             issues.push(Issue::at_path(
@@ -1655,15 +1842,23 @@ fn check_inner(
             format!("{total} steps inlined, past 2,048"),
         )]);
     }
-    if ctx.fetches > max_fetches(op.kind) {
+    let cap = match (op.kind, options.wide_fetches) {
+        (Kind::Material, true) => max_fetches(Kind::Pass),
+        (kind, _) => max_fetches(kind),
+    };
+    if ctx.fetches > cap {
         return Err(vec![Issue::at_path(
             "operator_limit",
             "steps",
             format!(
-                "{} fetches per invocation, past {} in a {} operator",
+                "{} fetches per invocation, past {cap} in a {} operator{}",
                 ctx.fetches,
-                max_fetches(op.kind),
-                op.kind.name()
+                op.kind.name(),
+                if op.kind == Kind::Material && !options.wide_fetches {
+                    " outside the showpiece and export classes"
+                } else {
+                    ""
+                }
             ),
         )]);
     }

@@ -185,6 +185,7 @@ fn operator_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
             ),
         ));
     }
+    out.extend(binding_rules(doc, id, &checked.op));
     // #483: what an operator's outputs hold counts in the class's operator storage (Operator
     // budgets by class), its own and the document's together, the largest named.
     let cap_mb: u64 = match class {
@@ -235,6 +236,95 @@ fn operator_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
         }
     }
     out
+}
+
+/// #431: `backdrop` reads the opaque scene's copy, which only a see-through part's material
+/// (alpha_mode blend or transmission above 0) has, and `shadow_filter` runs only in a see-through
+/// part's shadow passes under `shadow: colored`; each material that names the operator elsewhere
+/// is refused, naming the step or the output and the material.
+fn binding_rules(doc: &Value, id: &str, op: &graph::Operator) -> Vec<Raised> {
+    let mut out = Vec::new();
+    if op.kind != Kind::Material {
+        return out;
+    }
+    let at = |p: &str| format!("items/{id}/params/{p}");
+    let reads = backdrop_step(&op.steps);
+    let filters = op.outputs.contains_key("shadow_filter");
+    for (mid, m) in doc["items"].as_object().into_iter().flatten() {
+        let p = &m["params"];
+        if m["kind"] != "material@1" || p["op"].as_str() != Some(id) {
+            continue;
+        }
+        let blend = p["alpha_mode"] == "blend";
+        let see_through = blend || p["transmission"].as_f64().is_some_and(|t| t > 0.0);
+        if let (Some(step), false) = (&reads, see_through) {
+            out.push(raised(
+                "operator_kind_rule",
+                at(&format!("steps/{step}")),
+                format!("{id}'s step {step} reads the backdrop, which only a see-through part's material has: {mid} is neither alpha_mode blend nor transmission above 0"),
+            ));
+        }
+        if filters && !(see_through && p["shadow"] == "colored") {
+            out.push(raised(
+                "operator_kind_rule",
+                at("outputs/shadow_filter"),
+                format!("{id}'s output shadow_filter runs only in a see-through part's shadow passes under shadow: colored, and material {mid} isn't one"),
+            ));
+        }
+    }
+    out
+}
+
+/// Every material binding a document's operators break (#431's backdrop and shadow_filter
+/// rules), as issues: `{code, severity, path, step, what}`. A view that draws without the
+/// document's whole check still refuses these.
+pub fn binding_refusals(doc: &Value) -> Vec<Value> {
+    let mut out = Vec::new();
+    for (id, item) in doc["items"].as_object().into_iter().flatten() {
+        let Some(o) = operator_of(id, item).and_then(|v| graph::read(&v).ok()) else {
+            continue;
+        };
+        for r in binding_rules(doc, id, &o) {
+            let mut i =
+                json!({"code": r.code, "severity": r.severity, "path": r.path, "what": r.what});
+            if let Some((_, step)) = r.path.split_once("/params/steps/") {
+                i["step"] = json!(step);
+            }
+            out.push(i);
+        }
+    }
+    out
+}
+
+/// Whether any operator of `doc` reads the core's target `output` (#431: velocity and emission
+/// are built only while one does).
+pub fn reads_core(doc: &Value, output: &str) -> bool {
+    doc["items"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .any(|(_, item)| {
+            OPERATOR_KINDS.iter().any(|(_, k)| item["kind"] == *k)
+                && item["params"]["inputs"]
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .any(|(_, i)| {
+                        let t = &i["from"]["texture"];
+                        let t = t.get("target").unwrap_or(t);
+                        t["op"] == "core" && t["output"] == output
+                    })
+        })
+}
+
+/// The first step, in any body, that reads the backdrop (#431).
+pub fn backdrop_step(steps: &std::collections::BTreeMap<String, graph::Step>) -> Option<String> {
+    steps.iter().find_map(|(id, s)| {
+        if s.op == "backdrop@1" {
+            return Some(id.clone());
+        }
+        s.body.as_ref().and_then(|b| backdrop_step(&b.steps))
+    })
 }
 
 /// What a group's pass may read: its target, never another writer's layer or an earlier frame.
