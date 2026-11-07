@@ -1676,5 +1676,113 @@
         "decision": "none"
       }
     }
+  },
+  {
+    "source": "agents.sync",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Sync the MCP server forge (stdio, every repo, its secrets FORGE_TOKEN by handle through deep mcp-exec)? It writes ~/.claude.json, which Claude Code reads. It writes ~/.codex/config.toml, which Codex reads. DeepBuild writes only its own entries, at user level; deep undo sync:01K9F2W3X4Y5Z6A7B8C9D0E1F0 takes them out.",
+        "options": [
+          {
+            "id": "apply",
+            "label": "Apply it",
+            "decision": "allow"
+          },
+          {
+            "id": "keep",
+            "label": "Leave the agents as they are",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1763139600000,
+        "fallback": "you",
+        "default": "keep",
+        "provisional": false,
+        "owner": "you",
+        "key": "9c2f4e6a8b0d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "9c2f4e6a8b0d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "agents.conflict",
+    "kind": "choice",
+    "fixture": {
+      "ask": {
+        "kind": "choice",
+        "question": "~/.codex/config.toml changed while sync:01K9F2W3X4Y5Z6A7B8C9D0E1F0 was writing it, and the change means: ~/.codex/config.toml holds your own forge, which DeepBuild's entry would replace. DeepBuild left it as you have it. Write DeepBuild's entry over it, or keep yours?",
+        "options": [
+          {
+            "id": "apply",
+            "label": "Write DeepBuild's entry",
+            "decision": "none"
+          },
+          {
+            "id": "keep",
+            "label": "Keep mine",
+            "decision": "none"
+          }
+        ],
+        "recommended": "keep",
+        "deadline": 1763139600000,
+        "fallback": "you",
+        "default": "keep",
+        "provisional": false,
+        "owner": "you",
+        "key": "9c2f4e6a8b0d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "9c2f4e6a8b0d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "agents.restart",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Restart Codex's daemon (pid 4100) with `codex app-server daemon restart`? It interrupts the sessions it serves: 019a0000-0000-7000-8000-000000000001, 019a0000-0000-7000-8000-000000000002, which then start with the new set of MCP servers and hooks.",
+        "options": [
+          {
+            "id": "restart",
+            "label": "Restart it",
+            "decision": "allow"
+          },
+          {
+            "id": "later",
+            "label": "Not now",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1762621200000,
+        "fallback": "you",
+        "default": "later",
+        "provisional": false,
+        "owner": "you",
+        "key": "9c2f4e6a8b0d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "9c2f4e6a8b0d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
   }
 ]

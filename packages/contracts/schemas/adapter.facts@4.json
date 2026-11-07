@@ -1253,6 +1253,270 @@
     },
     "skills": {
       "$ref": "#/$defs/operation"
+    },
+    "entries": {
+      "type": "object",
+      "description": "Where the agent keeps its MCP servers and skills, and its rules for each entry (#148): the file and format it reads servers from, the fields and transports it accepts, the fields it refuses by transport, and the folders it reads skills from. A sync checks every entry against these before its plan shows.",
+      "properties": {
+        "readBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "home": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "mcp": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "format": {
+              "enum": [
+                "json",
+                "toml"
+              ],
+              "type": "string",
+              "x-closure": {
+                "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                "reopens": "a new major of this schema",
+                "mark": "exhaustive"
+              }
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "perProject": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "transports": {
+              "type": "object",
+              "properties": {
+                "stdio": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 8192
+                      },
+                      "maxItems": 64
+                    },
+                    "names": {
+                      "type": "object",
+                      "propertyNames": {
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "maxLength": 8192
+                      }
+                    },
+                    "commandArray": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "fields"
+                  ],
+                  "additionalProperties": false
+                },
+                "http": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 8192
+                      },
+                      "maxItems": 64
+                    },
+                    "names": {
+                      "type": "object",
+                      "propertyNames": {
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "maxLength": 8192
+                      }
+                    },
+                    "commandArray": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "fields"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "refused": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "transport": {
+                    "enum": [
+                      "stdio",
+                      "http"
+                    ],
+                    "type": "string",
+                    "x-closure": {
+                      "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                      "reopens": "a new major of this schema",
+                      "mark": "exhaustive"
+                    }
+                  },
+                  "field": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                },
+                "required": [
+                  "transport",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "maxItems": 64
+            }
+          },
+          "required": [
+            "file",
+            "format",
+            "key",
+            "transports",
+            "refused"
+          ],
+          "additionalProperties": false
+        },
+        "skills": {
+          "type": "object",
+          "properties": {
+            "write": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "readFrom": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "maxItems": 64
+            }
+          },
+          "required": [
+            "write",
+            "readFrom"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "daemon": {
+      "type": "object",
+      "description": "A daemon shared by sessions (#148), as Codex's app server: its own restart command (the arguments after the agent's command), and per covered version whether a running daemon picks up a changed hooks file and MCP servers.",
+      "properties": {
+        "readBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "restart": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "maxItems": 64
+        },
+        "picksUp": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z.+-]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "hooks.json": {
+                "type": "boolean"
+              },
+              "mcp_servers": {
+                "type": "boolean"
+              },
+              "readBy": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "required": [
+              "hooks.json",
+              "mcp_servers"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "restart",
+        "picksUp"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [
