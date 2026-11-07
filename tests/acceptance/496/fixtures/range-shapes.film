@@ -1,0 +1,21 @@
+{
+ "format": 1,
+ "id": "range-shapes",
+ "profile": "film",
+ "title": "Range shapes",
+ "description": "A 10-unit title whose one animator selects units by its own range, 20% to 70% by fraction, in the shape and ease the test sets; range-shapes.expected.json lists each unit's amount from Lottie's range-selector formulas.",
+ "size": [720, 160],
+ "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+ "transport": {"span": "1s", "frame_rate": "60/1"},
+ "items": {
+  "word": {
+   "id": "word", "kind": "text@1", "layer": "main", "name": "Word", "order": "a1", "at": {"pos": [16, 16, 0]},
+   "params": {
+    "text": "ABCDEFGHIJ", "size": 48,
+    "animators": [
+     {"units": "grapheme", "range": {"from": 0.2, "to": 0.7, "basis": "fraction"}, "shape": "square", "ease": {"high": 0, "low": 0}, "mode": "add", "props": {"y": 24}}
+    ]
+   }
+  }
+ }
+}

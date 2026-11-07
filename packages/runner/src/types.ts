@@ -6,8 +6,11 @@ import type { Supervisor } from '@deepbuild/supervisor';
 
 export type Agent = 'claude-code' | 'codex' | 'pi';
 /** draft: the drafting job; review: the review check's second model; read: wiki reads and reading by reference;
- *  smoke: an agent release's live smoke test, the one kind that may run a version its facts don't cover yet. */
-export type JobKind = 'draft' | 'review' | 'read' | 'smoke';
+ *  smoke: an agent release's live smoke test, the one kind that may run a version its facts don't cover yet;
+ *  acceptance: the blind acceptance job (#1328), the one kind that writes, and only its issue's test folder. */
+export type JobKind = 'draft' | 'review' | 'read' | 'smoke' | 'acceptance';
+/** One thing a blind job reads, by handle: an issue's body, a design document or a criterion by its SHA-256, or the base commit. */
+export interface JobInput { kind: 'issue' | 'design' | 'base' | 'criterion'; ref: string; sha256?: string }
 /** A stdio MCP server, as Claude Code's mcpServers entries take it. */
 export interface McpServer { command: string; args?: string[]; env?: Record<string, string> }
 /** A sub-agent, as Claude Code's `--agents` entries take it. */
@@ -28,6 +31,10 @@ export interface JobSpec {
   claim?: string;
   /** When it needs code: its folder is a checkout of this commit of this repo, and nothing else of it. */
   checkout?: { repo: string; commit: string };
+  /** An acceptance job's inputs, exactly: its record lists them, and it reads nothing else. */
+  inputs?: JobInput[];
+  /** An acceptance job's one folder it writes, in its checkout: `tests/acceptance/<issue>`. */
+  writes?: string;
   /** The only MCP servers it gets; their tools are allowed without asking. */
   mcp?: Record<string, McpServer>;
   /** Sub-agents it may hand work to, by name, each on its own model: Claude Code's `--agents`, with its Task tool. */
@@ -73,6 +80,8 @@ export interface JobRecord {
   refused?: string;
   /** Its own folder under <root>/jobs/, kept after it ends. */
   folder: string;
+  /** What it was given to read, when it is a blind job. */
+  inputs?: JobInput[];
   /** The binary it resolved on the login shell's PATH, and its version. */
   binary?: { path: string; version: string };
   /** Recorded before the prompt is written. */
@@ -136,6 +145,8 @@ export interface Runner {
   /** Why the plan window of the account `agent` runs on in `home` keeps a drafting job waiting at your reserve (#322), or undefined. */
   atReserve(agent: Agent, home: string): string | undefined;
   planWindows(): Map<string, { used: number; resets: number | null; at: number }>;
+  /** The most used of the live plan windows of the account `agent` runs on in `home`, in percent, or undefined with no reading (#1330's plan share). */
+  windowUsed(agent: Agent, home: string): number | undefined;
   /** Re-reads the clock, windows, answers and budgets, and starts what may start. */
   tick(): Promise<void>;
   close(): Promise<void>;

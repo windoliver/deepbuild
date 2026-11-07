@@ -1,0 +1,382 @@
+Base run of tests/acceptance/496 at b52f7357 (origin/main, no implementation of #496). The worktree this suite was written in
+held another job's uncommitted edits by then, so the run is on a clean export of the base commit (git archive b52f7357)
+with this folder copied in, deep-canvas-render built from it by each file's beforeAll (cargo build --locked --bin
+deep-canvas-render), and npm ci for vitest and TypeScript:
+NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/496 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+
+15 of 15 tests fail, each on an AssertionError raised by an expect in this suite's own files; none fails on loading, a build
+or a type error. At the base, raster reports no glyph transform, advance, outline or coverage and no `shaped` count, knows
+none of the four planted names (bad_input), refuses the counter's `clock` notation, and draws a glyph shift on a counter.
+AC6 fails as INCONCLUSIVE, its one honest reading. The type-check,
+node node_modules/typescript/bin/tsc -p tests/acceptance/496/tsconfig.json, exits 0, and
+node tests/acceptance/496/lottie-reference.mjs --check says the sidecar matches the formulas.
+
+
+ RUN  v5.0.5 <base>/tests/acceptance/496
+
+ × counter-roll.test.ts > AC5 #496.16281962 a rolling counter: what changes rolls half way at mid-span, what stays holds still > AC5 #496.16281962 at 4.56 s the minutes' ones digit and both seconds digits are half way, old half a cell up, new half a cell below rest, inside their clip, while the hours' digits and the minutes' tens hold still bit for bit 910ms
+   → the counter: raster line 1 draws the document: {"ok":false,"code":"format_notation","issues":[{"check":"document.validate","code":"format_notation","severity":"error","ids":["clock"],"path":"items/clock/params/text/counter/format/notation","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+ × counter-roll.test.ts > AC5 #496.16281962 a rolling counter: what changes rolls half way at mid-span, what stays holds still > AC5 #496.16281962 seeking to 4.56 s draws the counter exactly as playing every frame to it does 596ms
+   → the counter played: raster line 1 draws the document: {"ok":false,"code":"format_notation","issues":[{"check":"document.validate","code":"format_notation","severity":"error","ids":["clock"],"path":"items/clock/params/text/counter/format/notation","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+ × counter-roll.test.ts > AC5 #496.16281962 a rolling counter: what changes rolls half way at mid-span, what stays holds still > AC5 #496.16281962 a planted roll that moves every grapheme moves the hours' digits and fails, naming the first of them 80ms
+   → the planted roll: raster line 1 draws the document: {"ok":false,"code":"format_notation","issues":[{"check":"document.validate","code":"format_notation","severity":"error","ids":["clock"],"path":"items/clock/params/text/counter/format/notation","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+ × variable-weight.test.ts > AC3 #496.0e4aa65f a weight a channel drives draws the variable font's outlines and advances, shaped at check > AC3 #496.0e4aa65f at 1.175 s MOTION draws weight 900's outlines and advances, and at 0 s weight 100's, within 0.01 u 1029ms
+   → MOTION driven and still, line 1: texts.motion.glyphs[0].transform is an array, got undefined: expected false to be true // Object.is equality
+ × variable-weight.test.ts > AC3 #496.0e4aa65f a weight a channel drives draws the variable font's outlines and advances, shaped at check > AC3 #496.0e4aa65f playing the 4.7 s at 60 fps shapes nothing after check: every line after the first shapes no run 6035ms
+   → frame 0: shaped is an integer, got undefined: expected false to be true // Object.is equality
+ × variable-weight.test.ts > AC3 #496.0e4aa65f a weight a channel drives draws the variable font's outlines and advances, shaped at check > AC3 #496.0e4aa65f a planted build that snaps to the nearest bundled static weight draws weight 600's advances at 1.175 s and fails, naming the item 149ms
+   → the snapping build and the stills: raster line 1 draws the document: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × on-curve.test.ts > AC4 #496.2552ca08 text on a circle: each grapheme's centre on the path by arc length, turned to the tangent > AC4 #496.2552ca08 with offset 50 u, grapheme 2 of a 20 u monospaced run is centred at arc length 100 u, at (100·cos 1, 100·sin 1) within 0.1 u, turned to the tangent within 0.1° 912ms
+   → the text on the circle: texts.arc.glyphs[0].transform is an array, got undefined: expected false to be true // Object.is equality
+ × on-curve.test.ts > AC4 #496.2552ca08 text on a circle: each grapheme's centre on the path by arc length, turned to the tangent > AC4 #496.2552ca08 repeated, with offset keyed 0 → 100 u over 4.7 s and cycled, the frame at 4.7 s places every grapheme where the frame at 0 does 157ms
+   → repeat frame 0: texts.arc.glyphs[0].transform is an array, got undefined: expected false to be true // Object.is equality
+ × on-curve.test.ts > AC4 #496.2552ca08 text on a circle: each grapheme's centre on the path by arc length, turned to the tangent > AC4 #496.2552ca08 a planted layout that puts each grapheme's left edge on its arc-length point lands grapheme 2 10 u further along and fails, naming the grapheme 77ms
+   → the planted layout: raster line 1 draws the document: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × range-shapes.test.ts > AC2 #496.7f7f12df range shapes against Lottie's formulas, a planted triangle, and a noise selector played and seeked > AC2 #496.7f7f12df each of the six shapes with four eases (high and low) gives Lottie's amount at each of the 10 units, start 20%, end 70%, within 1e-6 1190ms
+   → square, ease high 0 low 0: texts.word.glyphs[0].transform is an array, got undefined: expected false to be true // Object.is equality
+ × range-shapes.test.ts > AC2 #496.7f7f12df range shapes against Lottie's formulas, a planted triangle, and a noise selector played and seeked > AC2 #496.7f7f12df a planted triangle that peaks at the range's start fails the same comparison 77ms
+   → the range shapes: raster line 1 draws the document: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × range-shapes.test.ts > AC2 #496.7f7f12df range shapes against Lottie's formulas, a planted triangle, and a noise selector played and seeked > AC2 #496.7f7f12df a noise selector at 2 Hz gives each unit the same amount at every 60 fps frame of 2 s whether the film is played or seeked 2461ms
+   → played frame 0: texts.word.glyphs[0].transform is an array, got undefined: expected false to be true // Object.is equality
+ × glyph-shift.test.ts > AC1 #496.c9814144 a glyph shift moves no glyph, and is refused on a counter or a bound value > AC1 #496.c9814144 scrambling SCRAMBLE: at every 60 fps frame of 2 s each glyph sits where the unshifted run's does, bit for bit, while some glyphs change 950ms
+   → the unshifted title: texts.title.glyphs[0].transform is an array, got undefined: expected false to be true // Object.is equality
+ × glyph-shift.test.ts > AC1 #496.c9814144 a glyph shift moves no glyph, and is refused on a counter or a bound value > AC1 #496.c9814144 a glyph shift on a counter, and on a bound value, is refused naming the item; the same animator lifting by y is accepted on each 232ms
+   → count: the glyph shift is refused: {"ok":true,"width":720,"height":360,"offscreen":0,"texts":{"count":{"shown":"—","glyphs":[{"font":"crates/deep-text/fonts/Inter-Regular.ttf","size":24,"id":1462,"x":0,"y":24.23046875,"grapheme":0,"role":"ink","lang":null}]}},"backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"},"headless":{"name":"headless.vello-cpu","version":"0.3.0"}},"golden":true,"renderer":{"name":"vello_cpu","version":"0.3.0","pipeline":"f32","simd":"scalar"}}: expected true to be false // Object.is equality
+ × taste.test.ts > AC6 #496.dc1c7447 the screenshots, the recording and the one taste call on them > AC6 #496.dc1c7447 the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS 2ms
+   → INCONCLUSIVE: the check run's pictures are not in docs/evidence/496/: motion-weight.png, text-on-circle.png, rolling-counter.png, text-animators.apng; this is not a pass
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  counter-roll.test.ts > AC5 #496.16281962 a rolling counter: what changes rolls half way at mid-span, what stays holds still > AC5 #496.16281962 at 4.56 s the minutes' ones digit and both seconds digits are half way, old half a cell up, new half a cell below rest, inside their clip, while the hours' digits and the minutes' tens hold still bit for bit
+AssertionError: the counter: raster line 1 draws the document: {"ok":false,"code":"format_notation","issues":[{"check":"document.validate","code":"format_notation","severity":"error","ids":["clock"],"path":"items/clock/params/text/counter/format/notation","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ helpers.ts:165:109
+    163| /** `raster` answers that drew, each one checked `ok`. */
+    164| export function drawn(answers: JsonObject[], what: string): JsonObject…
+    165|   answers.forEach((a, i) => expect(a['ok'], `${what}: raster line ${i …
+       |                                                                                                             ^
+    166|   return answers;
+    167| }
+ ❯ drawn helpers.ts:165:11
+ ❯ draw counter-roll.test.ts:93:83
+ ❯ counter-roll.test.ts:97:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  counter-roll.test.ts > AC5 #496.16281962 a rolling counter: what changes rolls half way at mid-span, what stays holds still > AC5 #496.16281962 seeking to 4.56 s draws the counter exactly as playing every frame to it does
+AssertionError: the counter played: raster line 1 draws the document: {"ok":false,"code":"format_notation","issues":[{"check":"document.validate","code":"format_notation","severity":"error","ids":["clock"],"path":"items/clock/params/text/counter/format/notation","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ helpers.ts:165:109
+    163| /** `raster` answers that drew, each one checked `ok`. */
+    164| export function drawn(answers: JsonObject[], what: string): JsonObject…
+    165|   answers.forEach((a, i) => expect(a['ok'], `${what}: raster line ${i …
+       |                                                                                                             ^
+    166|   return answers;
+    167| }
+ ❯ drawn helpers.ts:165:11
+ ❯ counter-roll.test.ts:104:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  counter-roll.test.ts > AC5 #496.16281962 a rolling counter: what changes rolls half way at mid-span, what stays holds still > AC5 #496.16281962 a planted roll that moves every grapheme moves the hours' digits and fails, naming the first of them
+AssertionError: the planted roll: raster line 1 draws the document: {"ok":false,"code":"format_notation","issues":[{"check":"document.validate","code":"format_notation","severity":"error","ids":["clock"],"path":"items/clock/params/text/counter/format/notation","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ helpers.ts:165:109
+    163| /** `raster` answers that drew, each one checked `ok`. */
+    164| export function drawn(answers: JsonObject[], what: string): JsonObject…
+    165|   answers.forEach((a, i) => expect(a['ok'], `${what}: raster line ${i …
+       |                                                                                                             ^
+    166|   return answers;
+    167| }
+ ❯ drawn helpers.ts:165:11
+ ❯ draw counter-roll.test.ts:93:83
+ ❯ counter-roll.test.ts:111:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  glyph-shift.test.ts > AC1 #496.c9814144 a glyph shift moves no glyph, and is refused on a counter or a bound value > AC1 #496.c9814144 scrambling SCRAMBLE: at every 60 fps frame of 2 s each glyph sits where the unshifted run's does, bit for bit, while some glyphs change
+AssertionError: the unshifted title: texts.title.glyphs[0].transform is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:78:100
+     76| }
+     77| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     78|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     79|   return value as JsonValue[];
+     80| }
+ ❯ glyphOf helpers.ts:186:21
+ ❯ helpers.ts:208:82
+ ❯ textOf helpers.ts:208:68
+ ❯ glyph-shift.test.ts:37:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  glyph-shift.test.ts > AC1 #496.c9814144 a glyph shift moves no glyph, and is refused on a counter or a bound value > AC1 #496.c9814144 a glyph shift on a counter, and on a bound value, is refused naming the item; the same animator lifting by y is accepted on each
+AssertionError: count: the glyph shift is refused: {"ok":true,"width":720,"height":360,"offscreen":0,"texts":{"count":{"shown":"—","glyphs":[{"font":"crates/deep-text/fonts/Inter-Regular.ttf","size":24,"id":1462,"x":0,"y":24.23046875,"grapheme":0,"role":"ink","lang":null}]}},"backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"},"headless":{"name":"headless.vello-cpu","version":"0.3.0"}},"golden":true,"renderer":{"name":"vello_cpu","version":"0.3.0","pipeline":"f32","simd":"scalar"}}: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ glyph-shift.test.ts:69:84
+     67|       expect(lifted['ok'], `${id}: the animator lifting by y is accept…
+     68|       const shifted = raster(b, bound(id, clone(params), scrambler(SHI…
+     69|       expect(shifted['ok'], `${id}: the glyph shift is refused: ${show…
+       |                                                                                    ^
+     70|       expect(mentions(shifted, id), `${id}: the refusal names the item…
+     71|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  on-curve.test.ts > AC4 #496.2552ca08 text on a circle: each grapheme's centre on the path by arc length, turned to the tangent > AC4 #496.2552ca08 with offset 50 u, grapheme 2 of a 20 u monospaced run is centred at arc length 100 u, at (100·cos 1, 100·sin 1) within 0.1 u, turned to the tangent within 0.1°
+AssertionError: the text on the circle: texts.arc.glyphs[0].transform is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:78:100
+     76| }
+     77| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     78|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     79|   return value as JsonValue[];
+     80| }
+ ❯ glyphOf helpers.ts:186:21
+ ❯ helpers.ts:208:82
+ ❯ textOf helpers.ts:208:68
+ ❯ on-curve.test.ts:61:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  on-curve.test.ts > AC4 #496.2552ca08 text on a circle: each grapheme's centre on the path by arc length, turned to the tangent > AC4 #496.2552ca08 repeated, with offset keyed 0 → 100 u over 4.7 s and cycled, the frame at 4.7 s places every grapheme where the frame at 0 does
+AssertionError: repeat frame 0: texts.arc.glyphs[0].transform is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:78:100
+     76| }
+     77| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     78|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     79|   return value as JsonValue[];
+     80| }
+ ❯ glyphOf helpers.ts:186:21
+ ❯ helpers.ts:208:82
+ ❯ textOf helpers.ts:208:68
+ ❯ on-curve.test.ts:68:143
+ ❯ on-curve.test.ts:68:129
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  on-curve.test.ts > AC4 #496.2552ca08 text on a circle: each grapheme's centre on the path by arc length, turned to the tangent > AC4 #496.2552ca08 a planted layout that puts each grapheme's left edge on its arc-length point lands grapheme 2 10 u further along and fails, naming the grapheme
+AssertionError: the planted layout: raster line 1 draws the document: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ helpers.ts:165:109
+    163| /** `raster` answers that drew, each one checked `ok`. */
+    164| export function drawn(answers: JsonObject[], what: string): JsonObject…
+    165|   answers.forEach((a, i) => expect(a['ok'], `${what}: raster line ${i …
+       |                                                                                                             ^
+    166|   return answers;
+    167| }
+ ❯ drawn helpers.ts:165:11
+ ❯ on-curve.test.ts:76:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  range-shapes.test.ts > AC2 #496.7f7f12df range shapes against Lottie's formulas, a planted triangle, and a noise selector played and seeked > AC2 #496.7f7f12df each of the six shapes with four eases (high and low) gives Lottie's amount at each of the 10 units, start 20%, end 70%, within 1e-6
+AssertionError: square, ease high 0 low 0: texts.word.glyphs[0].transform is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:78:100
+     76| }
+     77| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     78|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     79|   return value as JsonValue[];
+     80| }
+ ❯ glyphOf helpers.ts:186:21
+ ❯ helpers.ts:208:82
+ ❯ textOf helpers.ts:208:68
+ ❯ range-shapes.test.ts:44:28
+ ❯ shapeFailures range-shapes.test.ts:41:11
+ ❯ range-shapes.test.ts:55:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  range-shapes.test.ts > AC2 #496.7f7f12df range shapes against Lottie's formulas, a planted triangle, and a noise selector played and seeked > AC2 #496.7f7f12df a planted triangle that peaks at the range's start fails the same comparison
+AssertionError: the range shapes: raster line 1 draws the document: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ helpers.ts:165:109
+    163| /** `raster` answers that drew, each one checked `ok`. */
+    164| export function drawn(answers: JsonObject[], what: string): JsonObject…
+    165|   answers.forEach((a, i) => expect(a['ok'], `${what}: raster line ${i …
+       |                                                                                                             ^
+    166|   return answers;
+    167| }
+ ❯ drawn helpers.ts:165:11
+ ❯ shapeFailures range-shapes.test.ts:39:19
+ ❯ range-shapes.test.ts:59:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  range-shapes.test.ts > AC2 #496.7f7f12df range shapes against Lottie's formulas, a planted triangle, and a noise selector played and seeked > AC2 #496.7f7f12df a noise selector at 2 Hz gives each unit the same amount at every 60 fps frame of 2 s whether the film is played or seeked
+AssertionError: played frame 0: texts.word.glyphs[0].transform is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:78:100
+     76| }
+     77| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     78|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     79|   return value as JsonValue[];
+     80| }
+ ❯ glyphOf helpers.ts:186:21
+ ❯ helpers.ts:208:82
+ ❯ textOf helpers.ts:208:68
+ ❯ range-shapes.test.ts:72:121
+ ❯ range-shapes.test.ts:72:96
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  taste.test.ts > AC6 #496.dc1c7447 the screenshots, the recording and the one taste call on them > AC6 #496.dc1c7447 the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: INCONCLUSIVE: the check run's pictures are not in docs/evidence/496/: motion-weight.png, text-on-circle.png, rolling-counter.png, text-animators.apng; this is not a pass
+ ❯ inconclusive helpers.ts:110:10
+    108| /** The criterion stays open, whatever the reason: never a pass (AGENT…
+    109| export function inconclusive(reason: string): never {
+    110|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+    111| }
+    112|
+ ❯ taste.test.ts:23:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  variable-weight.test.ts > AC3 #496.0e4aa65f a weight a channel drives draws the variable font's outlines and advances, shaped at check > AC3 #496.0e4aa65f at 1.175 s MOTION draws weight 900's outlines and advances, and at 0 s weight 100's, within 0.01 u
+AssertionError: MOTION driven and still, line 1: texts.motion.glyphs[0].transform is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:78:100
+     76| }
+     77| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     78|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     79|   return value as JsonValue[];
+     80| }
+ ❯ glyphOf helpers.ts:186:21
+ ❯ helpers.ts:208:82
+ ❯ textOf helpers.ts:208:68
+ ❯ variable-weight.test.ts:48:20
+ ❯ draw variable-weight.test.ts:48:6
+ ❯ variable-weight.test.ts:54:51
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  variable-weight.test.ts > AC3 #496.0e4aa65f a weight a channel drives draws the variable font's outlines and advances, shaped at check > AC3 #496.0e4aa65f playing the 4.7 s at 60 fps shapes nothing after check: every line after the first shapes no run
+AssertionError: frame 0: shaped is an integer, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ int helpers.ts:86:90
+     84| }
+     85| export function int(value: JsonValue | undefined, what: string): numbe…
+     86|   expect(Number.isInteger(value), `${what} is an integer, got ${JSON.s…
+       |                                                                                          ^
+     87|   return value as number;
+     88| }
+ ❯ variable-weight.test.ts:67:42
+ ❯ variable-weight.test.ts:67:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+ FAIL  variable-weight.test.ts > AC3 #496.0e4aa65f a weight a channel drives draws the variable font's outlines and advances, shaped at check > AC3 #496.0e4aa65f a planted build that snaps to the nearest bundled static weight draws weight 600's advances at 1.175 s and fails, naming the item
+AssertionError: the snapping build and the stills: raster line 1 draws the document: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ helpers.ts:165:109
+    163| /** `raster` answers that drew, each one checked `ok`. */
+    164| export function drawn(answers: JsonObject[], what: string): JsonObject…
+    165|   answers.forEach((a, i) => expect(a['ok'], `${what}: raster line ${i …
+       |                                                                                                             ^
+    166|   return answers;
+    167| }
+ ❯ drawn helpers.ts:165:11
+ ❯ draw variable-weight.test.ts:47:10
+ ❯ variable-weight.test.ts:75:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/15]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  15 failed (15)
+   Start at  13:24:49
+   Duration  17.29s (tests 100%)
+

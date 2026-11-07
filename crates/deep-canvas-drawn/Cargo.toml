@@ -1,0 +1,14 @@
+[package]
+name = "deep-canvas-drawn"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #149: drawn looks' data. A look's light, paper, line profiles and drawn fills as read and
+# checked, and the geometry they draw from: a profile's widths, weight by light, rims and cast
+# shadows. Named deep-canvas* so the canvas lint reads it. It draws nothing: deep-gpu-layer's
+# drawn passes read what it resolves.
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

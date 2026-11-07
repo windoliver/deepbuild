@@ -63,6 +63,13 @@ fn planted_of(v: Option<&Value>) -> Option<Planted> {
             "pulse_leaves_residue" => Planted::PulseLeavesResidue,
             "back_ignores_params" => Planted::BackIgnoresParams,
             "beat_grid_f32_seconds" => Planted::BeatGridF32,
+            "placement_f32_seconds" => Planted::PlacementF32Seconds,
+            "replay_at_rate_1" => Planted::ReplayAtRate1,
+            "blend_per_component" => Planted::BlendPerComponent,
+            "slerp_long_arc" => Planted::SlerpLongArc,
+            "unkeyed_resets_to_base" => Planted::UnkeyedResetsToBase,
+            "ramp_sums_per_frame" => Planted::RampSumsPerFrame,
+            "hitstop_matches_parent_time" => Planted::HitstopMatchesParentTime,
             _ => return None,
         },
         Some(_) => return None,
@@ -201,6 +208,7 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         json!({"hash": track_hash(&program.options.input), "entries": program.options.input.len()})
     });
     let mut frames = Vec::with_capacity(times.len());
+    let mut degenerate: Vec<Value> = Vec::new();
     let mut previous: Option<i64> = None;
     for &t in &times {
         let f = frame_with(doc, &program, t, Validity::Full, &mut state);
@@ -252,21 +260,45 @@ fn eval_line(input: &Map<String, Value>) -> Value {
             .placements
             .iter()
             .zip(&f.placements)
-            .map(|(p, (id, local))| {
+            .enumerate()
+            .map(|(i, (p, (id, local)))| {
                 let wraps =
                     previous.map_or(0, |prev| p.wraps(motion, position(motion, prev).0, f.doc_t));
+                let rates: Map<String, Value> = program
+                    .placement_rates(i, f.doc_t)
+                    .into_iter()
+                    .map(|(channel, rate)| {
+                        (channel, match rate.as_slice() {
+                            [one] => json!(one),
+                            many => json!(many),
+                        })
+                    })
+                    .collect();
                 (
                     id.clone(),
                     json!({
                         "iteration": local.map(|l| l.iteration),
                         "local": local.map(|l| l.local),
                         "passes": wraps,
+                        "rates": rates,
                     }),
                 )
             })
             .collect();
+        let remaps: Map<String, Value> = motion
+            .remaps
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                let parent = program.remap_parent(i, f.doc_t);
+                let child = r.child(parent);
+                let reading = json!({"child": child, "rate": r.rate(parent), "active": f64::from(u8::from(r.active(parent))), "progress": r.progress(parent)});
+                (r.id.clone(), reading)
+            })
+            .collect();
         let mut frame = json!({
             "t": f.t,
+            "frame": program.frame_index(f.doc_t),
             "doc_t": f.doc_t,
             "pass": f.pass,
             "passes": passes,
@@ -279,6 +311,15 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         });
         if let Some(track) = &track {
             frame["input"] = track.clone();
+        }
+        if !remaps.is_empty() {
+            frame["remaps"] = Value::Object(remaps);
+        }
+        let aimless: Vec<&str> = motion.constraints.iter().zip(&state.degenerate).filter(|(_, d)| **d).map(|(c, _)| c.id.as_str()).collect();
+        for id in aimless {
+            let notice = json!({"code": "look_at_degenerate", "constraint": id, "t": f.t});
+            frame["notices"].as_array_mut().map(|n| n.push(notice.clone())).unwrap_or_else(|| frame["notices"] = json!([notice.clone()]));
+            degenerate.push(notice);
         }
         // #491: each laid-out item's box at this time, where the document lays any out.
         if let Some(boxes) = program.boxes(f.doc_t).filter(|b| !b.is_empty()) {
@@ -304,8 +345,8 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         .collect();
     let mut answer = json!({"ok": true, "order": program.order_names, "frames": frames, "markers": markers, "cuts": cuts, "hash": hash});
     // #491: the notices the check raised, such as literal_time_with_tempo_map.
-    if !motion.notices.is_empty() {
-        answer["notices"] = json!(motion.notices);
+    if !motion.notices.is_empty() || !degenerate.is_empty() {
+        answer["notices"] = json!(motion.notices.iter().chain(&degenerate).collect::<Vec<_>>());
     }
     // #490: each channel's and driver's bound, the one the hard-range check reads.
     if flag("bounds") == Some(true) {
