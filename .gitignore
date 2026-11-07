@@ -19,3 +19,8 @@ tests/acceptance/124/fixtures/panels/*/gpui-kit.d.ts
 tests/acceptance/124/fixtures/panels/*/jsconfig.json
 crates/deep-replica/tests/fixtures/*/gpui-kit.d.ts
 crates/deep-replica/tests/fixtures/*/jsconfig.json
+
+# #149's full-size frames: tests/acceptance/149/taste.test.ts writes them from the canvas's own
+# frames, and docs/evidence/149/preview/ holds what a reader sees.
+docs/evidence/149/*.png
+docs/evidence/149/*.apng
