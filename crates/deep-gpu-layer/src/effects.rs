@@ -991,6 +991,7 @@ pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
             exact_f32_floor: p == Some(Planted::F32CompareFloorExact),
             trusts_index: p == Some(Planted::TrustsWriteIndex),
             noise_weight_halved: p == Some(Planted::NoiseWeightHalved),
+            carried_exact: p == Some(Planted::CarriedClassExact),
         },
     )
 }
@@ -1007,6 +1008,8 @@ pub fn operator_hooks(p: Option<Planted>) -> deep_effects_render::docops::Hooks 
         ties_decreasing: p == Some(Planted::SortTiesDecreasing),
         compact_by_atomic: p == Some(Planted::CompactByAtomic),
         dispatch_without_guard: p == Some(Planted::DispatchWithoutGuard),
+        steps_per_frame: p == Some(Planted::StepsPerFrame),
+        keeps_every_checkpoint: p == Some(Planted::RingKeepsEveryCheckpoint),
     }
 }
 

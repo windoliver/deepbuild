@@ -1148,6 +1148,8 @@ pub fn inputs(
                     .unwrap_or(Value::Null);
                 typed_literal(&v, &input.ty)
             }
+            // The step a stepped operator computes, which its runtime sets each step (#252).
+            From::Step => Val::N(Sc::U32, vec![0.0]),
             From::Time | From::Phase(_) | From::Seed => continue,
         };
         out.insert(name.clone(), v);

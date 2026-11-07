@@ -30,6 +30,8 @@ pub const NEEDS_YOU: &str = "deepbuild/needs-you";
 pub const SESSION: &str = "deepbuild/session";
 pub const LINE: &str = "deepbuild/line";
 pub const WELCOME: &str = "deepbuild/welcome";
+/// Issue #148: each agent's MCP servers and skills, the agents each is synced to, and a sync's per-file diff to approve.
+pub const AGENTS: &str = "deepbuild/agents";
 
 /// The shipped views a replica snapshots, by the ids the record uses.
 pub const SHIPPED_VIEWS: [&str; 3] = ["needs-you", "sidebar", "session"];
@@ -43,6 +45,11 @@ const CORE: f32 = 6.;
 const SESSION_PAGE: &str = "session-page";
 /// How often an open terminal tab reads its grid again.
 const TERMINAL_TICK: Duration = Duration::from_millis(250);
+/// How often the Agents page reads the hub's model again.
+const AGENTS_TICK: Duration = Duration::from_secs(2);
+/// The diff lines the Agents page shows of each file, and the width a line is cut to, in points.
+const DIFF_LINES: usize = 8;
+const DIFF_WIDTH: f32 = 1060.;
 
 /// What the views draw over a fixture record: the inbox projection at a log position on the virtual clock. The
 /// replica, the live capture and the registry checks set it before opening the shell; the app sets none, so its
@@ -80,16 +87,18 @@ pub enum Kind {
     Session,
     Line,
     Welcome,
+    Agents,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 6] = [
+    pub const ALL: [Kind; 7] = [
         Kind::Sidebar,
         Kind::Home,
         Kind::NeedsYou,
         Kind::Session,
         Kind::Line,
         Kind::Welcome,
+        Kind::Agents,
     ];
 
     pub fn name(self) -> &'static str {
@@ -100,6 +109,7 @@ impl Kind {
             Kind::Session => SESSION,
             Kind::Line => LINE,
             Kind::Welcome => WELCOME,
+            Kind::Agents => AGENTS,
         }
     }
 }
@@ -136,6 +146,10 @@ pub struct Shipped {
     terminal: Option<TerminalTab>,
     /// Whether this is the view's own window, not its panel in the shell.
     popped: bool,
+    /// The Agents page's model, as the hub last gave it (`agents.read`), and the sync whose diff it shows.
+    agents: Option<serde_json::Value>,
+    reviewing: Option<String>,
+    _agents_poll: Option<Task<()>>,
 }
 
 /// The sidebar's open session, drawn in the selected fill with a bar at its leading edge, and the one keyboard focus
@@ -184,6 +198,15 @@ pub fn start_sidebar(selected: Option<usize>, focused: Option<usize>) {
 
 impl Shipped {
     pub fn new(kind: Kind, cx: &mut Context<Self>) -> Self {
+        // The Agents page reads the hub's model while it is open.
+        let poll = (kind == Kind::Agents).then(|| {
+            cx.spawn(async move |this, cx| loop {
+                if this.update(cx, |this, cx| this.read_agents(cx)).is_err() {
+                    return;
+                }
+                cx.background_executor().timer(AGENTS_TICK).await;
+            })
+        });
         Self {
             kind,
             focus_handle: cx.focus_handle(),
@@ -192,6 +215,18 @@ impl Shipped {
             start: (kind == Kind::Sidebar).then(|| SIDEBAR_ROWS.with(std::cell::Cell::get)),
             terminal: None,
             popped: false,
+            agents: None,
+            reviewing: None,
+            _agents_poll: poll,
+        }
+    }
+
+    /// Reads the Agents page's model; a changed one draws.
+    fn read_agents(&mut self, cx: &mut Context<Self>) {
+        let page = crate::record::call("agents.read", json!({}));
+        if page.is_some() && page != self.agents {
+            self.agents = page;
+            cx.notify();
         }
     }
 
@@ -500,7 +535,7 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
                 table.state(&session),
             )]
         }
-        Kind::Home | Kind::NeedsYou | Kind::Welcome => Vec::new(),
+        Kind::Home | Kind::NeedsYou | Kind::Welcome | Kind::Agents => Vec::new(),
     };
     let deadlines = match (kind, sessions.first()) {
         (Kind::Session, Some((first, ..))) => {
@@ -719,6 +754,17 @@ impl Render for Shipped {
                             .rounded_sm()
                             .hover(|style| style.bg(chrome.hover))
                             .on_click(|_, window, cx| show(NEEDS_YOU, window, cx))
+                    }))
+                    // Each agent's MCP servers and skills (#148).
+                    .children(decorations.is_none().then(|| {
+                        label("sidebar-agents", "Agents")
+                            .role(Role::Button)
+                            .aria_label("Agents: MCP servers and skills")
+                            .h(px(24.))
+                            .px_1()
+                            .rounded_sm()
+                            .hover(|style| style.bg(chrome.hover))
+                            .on_click(|_, window, cx| show(AGENTS, window, cx))
                     }))
                     .children(record.sessions.iter().zip(&record.rows).enumerate().map(
                         |(index, ((session, task, _), (words, entry)))| {
@@ -1030,6 +1076,7 @@ impl Render for Shipped {
                         )),
                 )
             }
+            Kind::Agents => agents_page(page, self, chrome, cx),
             Kind::Line => {
                 // The session's line: from its task to where it stands now.
                 let (_, task, state) = first(&record);
@@ -1041,6 +1088,401 @@ impl Render for Shipped {
             }
         }
     }
+}
+
+/// A path as the Agents page shows it: under your home as `~/...`.
+fn home_path(path: &str) -> String {
+    match std::env::var("HOME") {
+        Ok(home) if !home.is_empty() && path.starts_with(&format!("{home}/")) => {
+            format!("~{}", &path[home.len()..])
+        }
+        _ => path.to_owned(),
+    }
+}
+
+/// One row of the Agents page: its name, what it is, and where it went, one accessibility node named by all three.
+fn agents_row(
+    id: impl Into<ElementId>,
+    cells: [String; 3],
+    chrome: &chrome::Chrome,
+) -> ObservedElement<Stateful<Div>> {
+    let name = cells.join(" · ");
+    let [what, how, wh] = cells;
+    div()
+        .id(id)
+        .test_support()
+        .role(Role::Label)
+        .aria_label(name)
+        .flex()
+        .gap_4()
+        .h(px(22.))
+        .items_center()
+        .child(
+            div()
+                .w(px(200.))
+                .font_weight(FontWeight::MEDIUM)
+                .child(what),
+        )
+        .child(
+            div()
+                .w(px(300.))
+                .text_color(chrome.ink_secondary)
+                .child(how),
+        )
+        .child(div().flex_1().child(wh))
+}
+
+/// The Agents page (#148): the agents installed, each MCP server and skill with the agents it is synced to, what each
+/// agent has that DeepBuild doesn't manage, and the syncs waiting for you; the one you review shows its diff per file,
+/// and Apply opens its ask, whose answer carries it out.
+fn agents_page(
+    page: Stateful<Div>,
+    view: &Shipped,
+    chrome: &chrome::Chrome,
+    cx: &mut Context<Shipped>,
+) -> Stateful<Div> {
+    let empty = json!({});
+    let model = view.agents.as_ref().unwrap_or(&empty);
+    let list = |key: &str| model[key].as_array().cloned().unwrap_or_default();
+    let agents = list("agents");
+    let name_of = |id: &str| {
+        agents
+            .iter()
+            .find(|a| a["id"] == id)
+            .and_then(|a| a["name"].as_str())
+            .unwrap_or(id)
+            .to_owned()
+    };
+    let names = |ids: &serde_json::Value| {
+        ids.as_array()
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|id| id.as_str())
+                    .map(&name_of)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default()
+    };
+    let named = |installed: bool| {
+        agents
+            .iter()
+            .filter(|a| (a["installed"] == true) == installed)
+            .filter_map(|a| a["name"].as_str().map(str::to_owned))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let section = |id: &'static str, text: &'static str| {
+        label(id, text)
+            .mt_4()
+            .mb_1()
+            .font_weight(FontWeight::SEMIBOLD)
+    };
+    let servers = list("servers").into_iter().enumerate().map(|(i, s)| {
+        let spec = &s["spec"];
+        let scope = spec["scope"]["repos"]
+            .as_array()
+            .filter(|r| !r.is_empty())
+            .map_or("every repo".to_owned(), |repos| {
+                let repos: Vec<String> = repos
+                    .iter()
+                    .filter_map(|r| r.as_str())
+                    .map(|r| r.rsplit('/').next().unwrap_or(r).to_owned())
+                    .collect();
+                format!("scoped to {}", repos.join(", "))
+            });
+        let secrets = spec["secrets"]
+            .as_array()
+            .filter(|v| !v.is_empty())
+            .map(|v| {
+                let v: Vec<&str> = v.iter().filter_map(|x| x.as_str()).collect();
+                format!(" · {} by handle", v.join(", "))
+            })
+            .unwrap_or_default();
+        let how = format!(
+            "{} · {scope}{secrets}",
+            spec["transport"].as_str().unwrap_or("stdio")
+        );
+        agents_row(
+            ("agents-server", i),
+            [
+                s["name"].as_str().unwrap_or_default().to_owned(),
+                how,
+                format!("Synced to {}", names(&s["agents"])),
+            ],
+            chrome,
+        )
+    });
+    let skills = list("skills").into_iter().enumerate().map(|(i, k)| {
+        let repo = k["repo"].as_str().unwrap_or_default();
+        let commit = k["commit"].as_str().unwrap_or_default();
+        let how = format!(
+            "{} at {} · {}",
+            repo.rsplit('/').next().unwrap_or(repo),
+            &commit[..commit.len().min(7)],
+            k["path"].as_str().unwrap_or_default()
+        );
+        let pin = if k["differs"] == true {
+            "differs from its pin: an update waits for you"
+        } else {
+            "matches its pin"
+        };
+        agents_row(
+            ("agents-skill", i),
+            [
+                k["name"].as_str().unwrap_or_default().to_owned(),
+                how,
+                format!("Synced to {} · {pin}", names(&k["agents"])),
+            ],
+            chrome,
+        )
+    });
+    let yours = agents
+        .iter()
+        .filter(|a| a["installed"] == true)
+        .enumerate()
+        .map(|(i, a)| {
+            let mine: Vec<&str> = a["yours"]
+                .as_array()
+                .map(|v| v.iter().filter_map(|x| x.as_str()).collect())
+                .unwrap_or_default();
+            agents_row(
+                ("agents-yours", i),
+                [
+                    a["name"].as_str().unwrap_or_default().to_owned(),
+                    if mine.is_empty() {
+                        "nothing of yours".to_owned()
+                    } else {
+                        mine.join(", ")
+                    },
+                    "Yours: DeepBuild leaves these alone".to_owned(),
+                ],
+                chrome,
+            )
+        })
+        .collect::<Vec<_>>();
+    let syncs = list("syncs");
+    let waiting: Vec<serde_json::Value> = syncs
+        .iter()
+        .filter(|s| s["status"] == "proposed")
+        .cloned()
+        .collect();
+    let rows = waiting
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let id = s["id"].as_str().unwrap_or_default().to_owned();
+            let files = s["files"].as_array().map_or(0, Vec::len);
+            let reached: Vec<String> = s["files"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .flat_map(|f| f["agents"].as_array().cloned().unwrap_or_default())
+                .filter_map(|a| a.as_str().map(name_of))
+                .fold(Vec::new(), |mut all, a| {
+                    if !all.contains(&a) {
+                        all.push(a);
+                    }
+                    all
+                });
+            div()
+                .flex()
+                .items_center()
+                .gap_4()
+                .child(agents_row(
+                    ("agents-waiting", i),
+                    [
+                        format!(
+                            "{} {}",
+                            s["kind"].as_str().unwrap_or_default(),
+                            s["name"].as_str().unwrap_or_default()
+                        ),
+                        format!("{files} files · {}", reached.join(", ")),
+                        String::new(),
+                    ],
+                    chrome,
+                ))
+                .child(
+                    label(("agents-review", i), "Review the diff")
+                        .role(Role::Button)
+                        .aria_label(format!(
+                            "Review the diff of {}",
+                            s["name"].as_str().unwrap_or_default()
+                        ))
+                        .px_2()
+                        .rounded_sm()
+                        .border_1()
+                        .border_color(chrome.divider)
+                        .hover(|style| style.bg(chrome.hover))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.reviewing = Some(id.clone());
+                            cx.notify();
+                        })),
+                )
+        })
+        .collect::<Vec<_>>();
+    let review = view
+        .reviewing
+        .as_ref()
+        .and_then(|id| waiting.iter().find(|s| s["id"] == id.as_str()))
+        .map(|s| review_panel(s, &name_of, chrome, cx));
+    page.overflow_y_scroll()
+        .child(title("agents-title", "Agents"))
+        .child(label(
+            "agents-installed",
+            format!("Installed: {}", named(true)),
+        ))
+        .child(
+            label(
+                "agents-missing",
+                format!("Not installed here: {}", named(false)),
+            )
+            .text_color(chrome.ink_secondary),
+        )
+        .child(section("agents-servers-title", "MCP servers"))
+        .children(servers)
+        .child(section("agents-skills-title", "Skills"))
+        .children(skills)
+        .child(section("agents-yours-title", "Already in each agent"))
+        .children(yours)
+        .child(section("agents-waiting-title", "Waiting for you"))
+        .children(rows)
+        .children(review)
+}
+
+/// One sync's diff, file by file, each with the agents that read it, then Apply, which opens its ask.
+fn review_panel(
+    sync: &serde_json::Value,
+    name_of: &dyn Fn(&str) -> String,
+    chrome: &chrome::Chrome,
+    cx: &mut Context<Shipped>,
+) -> Stateful<Div> {
+    let ask = sync["ask"].as_str().unwrap_or_default().to_owned();
+    let refused = sync["refused"].as_array().cloned().unwrap_or_default();
+    let files = sync["files"].as_array().cloned().unwrap_or_default();
+    // A diff line holds one row: a longer one ends in an ellipsis inside its block.
+    let mono = |text: &str| text::Label {
+        family: deep_text_gpui::Role::Mono.family(),
+        width: Some(DIFF_WIDTH),
+        max_lines: Some(1),
+        ..text::Label::new(text)
+    };
+    let blocks = files.iter().enumerate().map(|(i, f)| {
+        let readers: Vec<String> = f["agents"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|a| a.as_str().map(name_of))
+            .collect();
+        let read = match readers.len() {
+            0 => String::new(),
+            1 => format!("read by {}", readers[0]),
+            _ => format!("read by {}: one write reaches both", readers.join(" and ")),
+        };
+        let lines: Vec<String> = f["diff"]
+            .as_str()
+            .unwrap_or_default()
+            .lines()
+            .skip(2)
+            .take(DIFF_LINES)
+            .map(str::to_owned)
+            .collect();
+        div()
+            .flex()
+            .flex_col()
+            .mt_2()
+            .child(agents_row(
+                ("agents-file", i),
+                [
+                    home_path(f["path"].as_str().unwrap_or_default()),
+                    read,
+                    String::new(),
+                ],
+                chrome,
+            ))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .p_2()
+                    .bg(chrome.raised)
+                    .border_1()
+                    .border_color(chrome.divider)
+                    .children(lines.iter().enumerate().map(|(n, line)| {
+                        let color = match line.chars().next() {
+                            Some('+') => chrome.ink_primary,
+                            Some('-') => chrome.ink_secondary,
+                            _ => chrome.ink_tertiary,
+                        };
+                        text::label(&format!("agents-diff-{i}-{n}"), mono(line), color, None)
+                    })),
+            )
+    });
+    let refusals = refused.iter().enumerate().map(|(i, r)| {
+        label(
+            ("agents-refused", i),
+            format!(
+                "Not for {}: it refuses the field {} ({})",
+                name_of(r["agent"].as_str().unwrap_or_default()),
+                r["field"].as_str().unwrap_or_default(),
+                r["reason"].as_str().unwrap_or_default()
+            ),
+        )
+        .text_color(chrome.ink_secondary)
+    });
+    div()
+        .id("agents-review-panel")
+        .mt_3()
+        .p_3()
+        .border_1()
+        .border_color(chrome.divider)
+        .rounded_md()
+        .flex()
+        .flex_col()
+        // Apply and Close beside the title, so they show however long the diff runs.
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    label(
+                        "agents-review-title",
+                        format!(
+                            "Approve the sync of {}: DeepBuild writes only its own entries, at user level",
+                            sync["name"].as_str().unwrap_or_default()
+                        ),
+                    )
+                    .flex_1()
+                    .font_weight(FontWeight::SEMIBOLD),
+                )
+                .child(
+                    label("agents-apply", "Apply")
+                        .role(Role::Button)
+                        .aria_label("Apply the sync")
+                        .px_4()
+                        .rounded_md()
+                        .bg(chrome.ink_primary)
+                        .text_color(chrome.ground)
+                        .hover(|style| style.bg(chrome.ink_secondary))
+                        .on_click(move |_, window, cx| crate::card::present_ask(&ask, window, cx)),
+                )
+                .child(
+                    label("agents-close", "Close")
+                        .role(Role::Button)
+                        .px_4()
+                        .rounded_md()
+                        .border_1()
+                        .border_color(chrome.divider)
+                        .hover(|style| style.bg(chrome.hover))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.reviewing = None;
+                            cx.notify();
+                        })),
+                ),
+        )
+        .children(refusals)
+        .children(blocks)
 }
 
 /// A session's Terminal tab: its rows through the cell grid, or the line saying where it runs.
@@ -1126,7 +1568,7 @@ impl Layout {
     /// The app's shell (#1172): Needs you and the session's page in the center, with the welcome pane first while
     /// setup hasn't finished, or a mounted panel's view first.
     pub fn app(panel: bool) -> Self {
-        let mut center = vec![NEEDS_YOU.to_owned(), SESSION.to_owned()];
+        let mut center = vec![NEEDS_YOU.to_owned(), SESSION.to_owned(), AGENTS.to_owned()];
         if panel {
             center.insert(0, EXTENSION.into());
         } else if crate::setup::needed() {
