@@ -5640,6 +5640,28 @@ export interface ReadingSlice {
   }>;
 }
 
+/** ref.unguarded@1 */
+export interface RefUnguarded {
+  v: 1;
+  id: string;
+  kind: "ref.unguarded";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ref: string;
+    commit: string;
+    pusher: string | null;
+    call: string | null;
+    command: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** request.cost@1 */
 export interface RequestCost {
   v: 1;
