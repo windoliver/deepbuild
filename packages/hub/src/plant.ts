@@ -9,6 +9,8 @@ import { createServer, type Server } from 'node:net';
 
 /** The planted wrong programs a test selects with DEEP_HUB_PLANT; only tests set it. */
 export type Plant =
+  // #46's: a poster that takes HEAD for the commit a verdict covers, and a recorder that marks every push it reads, or none.
+  | 'posts-on-head' | 'unguarded-marks-every-push' | 'unguarded-marks-none'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
@@ -151,6 +153,7 @@ export type Plant =
   // reads it, a store of the newest result per key, and a carry that copies the source run's evidence whole.
   | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence';
 const PLANTS: readonly string[] = [
+  'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
   'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project', 'env-clone-without-record',
