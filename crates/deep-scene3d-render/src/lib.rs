@@ -4655,7 +4655,8 @@ impl Renderer {
                     // edges it draws don't hide it; one drawn over everything skips depth.
                     flags: u32::from(l.world)
                         | (u32::from(l.edges.is_some()) << 1)
-                        | (u32::from(l.over) << 2),
+                        | (u32::from(l.over) << 2)
+                        | (u32::from(l.joined) << 3),
                     pad: 0,
                 };
                 batch.lines.push(&l.id, bytemuck::bytes_of(&record));

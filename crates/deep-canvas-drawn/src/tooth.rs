@@ -35,6 +35,31 @@ pub fn cells(p: [f64; 2], seed: u32, period: u32) -> f64 {
     nearest.min(1.0)
 }
 
+/// How far a point is from where two cells meet, as the second nearest less the nearest: 0 on a
+/// border, on the same lattice as [`cells`].
+pub fn borders(p: [f64; 2], seed: u32, period: u32) -> f64 {
+    let (ix, iy) = (p[0].floor(), p[1].floor());
+    let wrap = |v: i64| -> u32 { v.rem_euclid(i64::from(period.max(1))) as u32 };
+    let (mut first, mut second) = (f64::MAX, f64::MAX);
+    for dy in -2..=2i64 {
+        for dx in -2..=2i64 {
+            let (cx, cy) = (ix as i64 + dx, iy as i64 + dy);
+            let h = lattice(wrap(cx), wrap(cy), seed);
+            let (jx, jy) = (
+                f64::from(h & 0xffff) / 65536.0,
+                f64::from(h >> 16) / 65536.0,
+            );
+            let d = ops::hypot(cx as f64 + jx - p[0], cy as f64 + jy - p[1]);
+            if d < first {
+                (first, second) = (d, first);
+            } else if d < second {
+                second = d;
+            }
+        }
+    }
+    (second - first).min(1.0)
+}
+
 fn lattice(x: u32, y: u32, seed: u32) -> u32 {
     let mix = |mut v: u32| {
         v = v.wrapping_mul(0x9e37_79b1);
@@ -101,15 +126,15 @@ pub fn tile(kind: u32, seed: u32) -> Vec<f32> {
     stretched(|p| height(kind, p, seed))
 }
 
-/// Four channels a pass reads per texel: the tooth, then a slow noise, cells and a fine noise that
-/// fills read (starving, pinholes, granulation), all repeating with the tile.
-pub fn channels(kind: u32, seed: u32) -> Vec<[f32; 4]> {
-    let tooth = tile(kind, seed);
+/// Four channels a pass reads per texel: cell borders for cracks, then a slow noise, cells and a
+/// fine noise that fills read (starving, pinholes, granulation), all repeating with the tile.
+pub fn channels(seed: u32) -> Vec<[f32; 4]> {
+    let cracks = stretched(|p| borders(p, seed ^ 8, TEETH));
     let slow = stretched(|p| fbm2([p[0] / 4.0, p[1] / 4.0], seed ^ 5, 4, 2.0, 0.5, TEETH / 4));
     let holes = stretched(|p| cells(p, seed ^ 6, TEETH));
     let fine = stretched(|p| fbm2(p, seed ^ 7, 3, 2.0, 0.6, TEETH));
     (0..TILE * TILE)
-        .map(|i| [tooth[i], slow[i], holes[i], fine[i]])
+        .map(|i| [cracks[i], slow[i], holes[i], fine[i]])
         .collect()
 }
 

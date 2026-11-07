@@ -2453,6 +2453,7 @@ struct LineOut {
     @location(3) @interpolate(flat) alpha: vec2<f32>,
     @location(4) @interpolate(flat) color: u32,
     @location(5) @interpolate(flat) pick: u32,
+    @location(6) @interpolate(flat) joined: u32,
 };
 
 @vertex
@@ -2469,6 +2470,7 @@ fn line_vs(
     let cb = frame.clip * vec4<f32>(b.xyz, 1.0);
     out.color = color;
     out.pick = pick;
+    out.joined = (flags >> 3u) & 1u;
     if ca.w <= 0.0 || cb.w <= 0.0 {
         out.pos = OFF;
         return out;
@@ -2526,6 +2528,10 @@ fn line_fs(in: LineOut) -> Targets {
     let dist = length(p - (in.a + d * t));
     let cov = clamp(mix(in.r.x, in.r.y, t) + 0.5 - dist, 0.0, 1.0);
     if cov <= 0.0 {
+        discard;
+    }
+    // A joined line's pieces meet end to end: a cap's soft edge would show a seam at each joint.
+    if in.joined != 0u && cov < 1.0 && (t <= 0.0 || t >= 1.0) {
         discard;
     }
     let alpha = cov * mix(in.alpha.x, in.alpha.y, t);

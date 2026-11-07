@@ -355,9 +355,29 @@ fn ramp(palette: &Palette, noise: &spec::Noise, path: &str) -> Result<Vec<[f64; 
 
 /// The lamps of a look's backlit screen, as evaluated at t.
 fn lamps(d: &Dress<'_>, back: &spec::Back) -> Result<Vec<Lamp>, Refused> {
+    lamps_of(back, d.items, d.palette)
+}
+
+/// The lamps of `look`'s backlit screen among `items`; none for a look with no screen.
+pub fn screen_lamps(
+    look: &Look,
+    items: &Map<String, Value>,
+    palette: &Palette,
+) -> Result<Vec<Lamp>, Refused> {
+    match look.light.as_ref().and_then(|l| l.back.as_ref()) {
+        Some(back) => lamps_of(back, items, palette),
+        None => Ok(Vec::new()),
+    }
+}
+
+fn lamps_of(
+    back: &spec::Back,
+    items: &Map<String, Value>,
+    palette: &Palette,
+) -> Result<Vec<Lamp>, Refused> {
     let mut out = Vec::new();
     for id in &back.lamps {
-        let Some(item) = d.items.get(id) else {
+        let Some(item) = items.get(id) else {
             continue;
         };
         let paint = object_or_empty(item.pointer("/params/paint/fill"));
@@ -368,7 +388,7 @@ fn lamps(d: &Dress<'_>, back: &spec::Back) -> Result<Vec<Lamp>, Refused> {
         let path = format!("items/{id}/params/paint/fill/role");
         out.push(Lamp {
             at: center_of(item),
-            color: unit(role_color(d.palette, role, &path)?),
+            color: unit(role_color(palette, role, &path)?),
         });
     }
     Ok(out)

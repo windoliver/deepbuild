@@ -24,6 +24,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use deep_canvas_drawn::medium::Lamp;
 use deep_canvas_marks::drawn::{self, View};
 use deep_canvas_marks::look::{self, Distance};
 use deep_canvas_marks::scene::{self, Drawn, Palette, Record, Rgb, Type};
@@ -78,9 +79,13 @@ fn marks_at(
     state: &mut State,
     t: i64,
     (palette, ty): &(Palette, Type),
-) -> Result<(Vec<Vec<Arc<Drawn>>>, Rgb, Option<View>), Value> {
+) -> Result<(Vec<Vec<Arc<Drawn>>>, Rgb, Option<View>, Vec<Lamp>), Value> {
     program.evaluate(t, eval::Validity::Full, state);
     let mut items = eval::items(doc, program, state);
+    let lamps = match &ty.drawn {
+        Some(look) => drawn::screen_lamps(look, &items, palette).map_err(|r| refused(r.code, r.path))?,
+        None => Vec::new(),
+    };
     let view = drawn::view_of(doc, &mut items);
     if let Some(v) = &view {
         drawn::through(v, &mut items);
@@ -103,7 +108,7 @@ fn marks_at(
         .iter()
         .map(|l| l.marks.iter().cloned().collect())
         .collect();
-    Ok((layers, frame.ground, view))
+    Ok((layers, frame.ground, view, lamps))
 }
 
 fn hex(c: &image::Rgba<u8>) -> String {
@@ -218,9 +223,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 .collect(),
         )
     };
-    let (first, ground, view) = marks_at(&doc, &program, &mut state, at(from), &look)?;
+    let (first, ground, view, lamps) = marks_at(&doc, &program, &mut state, at(from), &look)?;
     // The paper's fields hold still; only where the pixels land moves with the camera.
     let page = page_of(&look.1, view.as_ref(), &doc, &roles(&look), call)?;
+    let first_page = page.as_ref().map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
 
     app.window(size)?;
     {
@@ -248,7 +254,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             page,
         })
     };
-    let marks: Marks2 = Arc::new(Mutex::new(frame2(first, from, &look, page.clone())));
+    let marks: Marks2 = Arc::new(Mutex::new(frame2(first, from, &look, first_page)));
     let encoded: Encoded = Arc::new(Mutex::new(None));
     let (ui, error) = open2(app, marks.clone(), size, Some(encoded.clone()))?;
     app.window.as_ref().expect("opened").paint.borrow_mut().ui = Some(ui.clone());
@@ -279,8 +285,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 look = next;
             }
             let started = Instant::now();
-            let (drawn, ground, view) = marks_at(&doc, &program, &mut state, at(n), &look)?;
-            let page = page.as_ref().map(|p| Arc::new(p.seen_through(view.as_ref())));
+            let (drawn, ground, view, lamps) = marks_at(&doc, &program, &mut state, at(n), &look)?;
+            let page = page.as_ref().map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
             *marks.lock().unwrap_or_else(|e| e.into_inner()) = frame2(drawn, n, &look, page);
             {
                 let win = app.window.as_ref().expect("opened");

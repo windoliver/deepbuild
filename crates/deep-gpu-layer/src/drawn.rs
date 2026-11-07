@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use deep_canvas_drawn::geometry::{direction, seeded};
-use deep_canvas_drawn::medium::{words, Medium};
+use deep_canvas_drawn::medium::{words, Lamp, Medium};
 use deep_canvas_drawn::spec::{Anchor, Look, ReliefFrom, Zoom, TEETH};
 use deep_canvas_drawn::tooth;
 use deep_canvas_marks::drawn::View;
@@ -67,6 +67,8 @@ pub struct Page {
     pub relief: Option<(bool, f64)>,
     /// Each collection's members, which a target and a resist read.
     pub collections: BTreeMap<String, Vec<String>>,
+    /// A backlit screen's lamps this frame, in the page's u.
+    pub lamps: Vec<Lamp>,
 }
 
 fn rgb(palette: &BTreeMap<String, [f64; 3]>, role: &str) -> Result<[f64; 3], Value> {
@@ -224,14 +226,16 @@ impl Page {
                     )
                 })
                 .collect(),
+            lamps: Vec::new(),
         })
     }
 }
 
 impl Page {
-    /// The same paper with this frame's camera.
-    pub fn seen_through(&self, view: Option<&View>) -> Page {
+    /// The same paper with this frame's camera and lamps.
+    pub fn seen_through(&self, view: Option<&View>, lamps: Vec<Lamp>) -> Page {
         let mut page = self.clone();
+        page.lamps = lamps;
         let (scale, offset) = view.copied().unwrap_or(View::NONE).to_world();
         if self.scale_follows {
             (page.scale, page.offset, page.zoom) = (scale, offset, 1.0 / scale);
@@ -422,7 +426,7 @@ impl Drawn {
             mipmap_filter: wgpu::MipmapFilterMode::Linear,
             ..Default::default()
         };
-        let grain = tile(device, [tooth::TILE as u32; 2], tooth::channels(0, 0x5eed));
+        let grain = tile(device, [tooth::TILE as u32; 2], tooth::channels(0x5eed));
         let empty = tile(device, [1, 1], vec![[0.0; 4]]);
         Drawn {
             paper: pipeline("paper", FORMAT),
@@ -697,6 +701,11 @@ impl Drawn {
         for t in &sheet.tape {
             list.push(t.map(f));
         }
+        for lamp in &page.lamps {
+            list.push([f(lamp.at[0]), f(lamp.at[1]), 0.0, 0.0]);
+            list.push(rgb(lamp.color));
+        }
+        w[9][2] = page.lamps.len() as f32;
         w[12] = [
             sheet.folds.len() as u32,
             page.seed,
@@ -987,13 +996,14 @@ impl Drawn {
         frame: &PostFrame<'_>,
         item: u32,
         rim: Option<&Rim3>,
+        scale: f32,
     ) -> wgpu::BindGroup {
         let mut words: Vec<f32> = inverse(&frame.clip).to_vec();
         words.extend([
             frame.eye[0] as f32,
             frame.eye[1] as f32,
             frame.eye[2] as f32,
-            1.0,
+            scale,
         ]);
         words.extend([item, 0, 0, 0].map(f32::from_bits));
         let (t, a, c) = rim.map_or(([0.0; 3], 0.0, [0.0; 3]), |r| (r.toward, r.amount, r.color));
@@ -1060,7 +1070,7 @@ impl Drawn {
             pipeline: copy,
             groups: [
                 base(self, &ground, frame.linear),
-                self.view3(device, frame, 0, None),
+                self.view3(device, frame, 0, None, 1.0),
             ],
             into: out.clone(),
         }];
@@ -1069,7 +1079,7 @@ impl Drawn {
                 pipeline: paper3,
                 groups: [
                     base(self, &ground, frame.linear),
-                    self.view3(device, frame, 0, None),
+                    self.view3(device, frame, 0, None, 1.0),
                 ],
                 into: out.clone(),
             });
@@ -1090,7 +1100,7 @@ impl Drawn {
                 pipeline: medium3.clone(),
                 groups: [
                     base(self, &w, frame.linear),
-                    self.view3(device, frame, *id, None),
+                    self.view3(device, frame, *id, None, 1.0),
                 ],
                 into: out.clone(),
             });
@@ -1105,7 +1115,7 @@ impl Drawn {
                 pipeline: medium3.clone(),
                 groups: [
                     base(self, &w, frame.linear),
-                    self.view3(device, frame, *id, Some(rim)),
+                    self.view3(device, frame, *id, Some(rim), 1.0),
                 ],
                 into: out.clone(),
             });
@@ -1123,7 +1133,13 @@ impl Drawn {
                 pipeline: target3.clone(),
                 groups: [
                     base(self, &w, frame.linear),
-                    self.view3(device, frame, *id, None),
+                    self.view3(
+                        device,
+                        frame,
+                        *id,
+                        None,
+                        frame.size[0] as f32 / t.width() as f32,
+                    ),
                 ],
                 into: view,
             });
