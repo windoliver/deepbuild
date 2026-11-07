@@ -23,9 +23,9 @@ afterEach(async () => {
 });
 
 /** `deep lease -- /bin/sh -c LEAVES_ONE` under `home`: its exit status, how long it took, and the sleep's PID. */
-async function leased(home: string): Promise<{ code: number | null; ms: number; left: number }> {
+async function leased(home: string, env: Record<string, string> = {}): Promise<{ code: number | null; ms: number; left: number }> {
   const started = Date.now();
-  const run = spawn(process.execPath, [MAIN, 'lease', '--', '/bin/sh', '-c', LEAVES_ONE], { stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin', HOME: home } });
+  const run = spawn(process.execPath, [MAIN, 'lease', '--', '/bin/sh', '-c', LEAVES_ONE], { stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin', HOME: home, ...env } });
   let out = '';
   run.stdout!.on('data', (d) => { out += String(d); });
   run.stderr!.on('data', (d) => { out += String(d); });
@@ -46,6 +46,16 @@ it('with no hub, deep lease ends with its command\'s status when the command\'s 
   const home = join(dir, 'home');
   mkdirSync(home);
   const r = await leased(home);
+  expect(r.ms, `deep lease ended ${r.ms} ms after it started: it waited for the sleep the command left behind`).toBeLessThan(5000);
+  expect(r.code, 'deep lease exits with the command\'s status').toBe(3);
+  expect(running(r.left), `the sleep (pid ${r.left}) the command left behind runs on`).toBe(true);
+}, 15_000);
+
+it('already leased (DEEP_LEASED set, as under a leased build or suite), deep lease ends with its command\'s status when its first process ends', async () => {
+  dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-lease-exit-')));
+  const home = join(dir, 'home');
+  mkdirSync(home);
+  const r = await leased(home, { DEEP_LEASED: '1' });
   expect(r.ms, `deep lease ended ${r.ms} ms after it started: it waited for the sleep the command left behind`).toBeLessThan(5000);
   expect(r.code, 'deep lease exits with the command\'s status').toBe(3);
   expect(running(r.left), `the sleep (pid ${r.left}) the command left behind runs on`).toBe(true);
