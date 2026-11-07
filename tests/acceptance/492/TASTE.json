@@ -1,0 +1,18 @@
+{
+  "issue": 492,
+  "criterion": "#492.f894a6dc",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation in the session (\"validate the screnshot if needed for me\"); not the owner's own call",
+  "when": "2026-11-07T05:30:10Z",
+  "screenshots": {
+    "mix-placement.png": "8442a186e24bddba44ef93215f59e91f5558581bf11c56b164ea66022d9ad5dd",
+    "mix-placement.apng": "41c5e6aff8a03b7a131ae1acc8ea3bce6f4e1eb962cae2c480fc3e6e2181bdbb",
+    "add-placement.png": "cdbdf17c0a32e608c453f91c50813e9214e13f1942d77158456d9bf2605e73fe",
+    "add-placement.apng": "5e4c8b4b6cdda4b34590c9766ab146ae5f66f404383bf74268cfbf218547636f",
+    "quantized-channel.png": "c2130bac10abf02783074c6016dc1ba0472d8664da1922c49526fd6846c6df6c",
+    "quantized-channel.apng": "17455e6a0f23ba44d9263ac4eaf4fbf0d634ad7836631a8f17dfd67d3d66ba8a",
+    "time-remap.png": "1810a6c6481e2b36659a94163a069991cab82a089557df6e83d562f0c457a2ae",
+    "time-remap.apng": "4a70a123af875f62a2f0439b174193748642f1670c93400d7f8b8344b5c4c27e"
+  },
+  "note": "Read the four stills, then a contact sheet of seven frames from each recording, and decoded all 48 frames of all four recordings: every moving square sits within 1 px of its closed form, so the numbers back what the eye reads. Mix: the bottom square drifts right at the net of its 0.5 and 0.25 weights, not at either clip's speed. Add: the bob rides on the walk, and the lower square keeps the upper's x. Quantized: the lower square stops in 8 steps beside a smooth one. Time remap: the ramp runs ahead then slows, the hitstop falls behind at each hold and rejoins. The films are plain squares on a transparent ground: this judges motion, not finish."
+}

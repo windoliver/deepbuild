@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "01K9F2W3X4Y5Z6A7B8C9D0E1F2",
+  "kind": "agents.synced",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1762534800000,
+  "data": {
+    "sync": "sync:01K9F2W3X4Y5Z6A7B8C9D0E1F0",
+    "item": {
+      "kind": "server",
+      "server": { "name": "forge", "transport": "stdio", "command": "/usr/local/bin/forge-mcp", "args": ["--stdio"], "secrets": ["FORGE_TOKEN"] }
+    },
+    "agents": ["claude-code", "codex", "pi"]
+  }
+}

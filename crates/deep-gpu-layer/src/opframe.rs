@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use deep_canvas_effects::graph;
 use deep_effects_render::compile::compile_planted;
-use deep_effects_render::docops::{DocOps, Hooks, Times};
+use deep_effects_render::docops::{DocOps, Hooks, Untimed};
 use deep_effects_render::runner::{Frame, LINEAR};
 use deep_gpu::device::Device;
 use serde_json::{json, Map, Value};
@@ -22,22 +22,6 @@ pub fn wants(call: &Value) -> bool {
     ["operators", "data", "size", "repeat", "read", "pool_marker"]
         .iter()
         .any(|k| call.get(*k).is_some())
-}
-
-/// No timer: the frame writes its own timestamps.
-struct NoTimes;
-
-impl Times for NoTimes {
-    fn start(&mut self, _: &'static str, _: &mut wgpu::CommandEncoder) -> Option<usize> {
-        None
-    }
-    fn render(&self, _: Option<usize>) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
-        None
-    }
-    fn compute(&self, _: Option<usize>) -> Option<wgpu::ComputePassTimestampWrites<'_>> {
-        None
-    }
-    fn end(&mut self, _: Option<usize>, _: &mut wgpu::CommandEncoder) {}
 }
 
 fn words(path: &str) -> Result<Vec<u8>, Value> {
@@ -488,7 +472,7 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
             let mut at = 0u32;
             let mut spans = Vec::new();
             for r in &recs {
-                let used = r.record_passes(&mut enc, &mut NoTimes, set.as_ref().map(|s| (s, at)));
+                let used = r.record_passes(&mut enc, &mut Untimed, set.as_ref().map(|s| (s, at)));
                 spans.push((r.mark, at, used));
                 at += used;
             }
