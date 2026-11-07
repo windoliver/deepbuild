@@ -255,6 +255,10 @@
         },
         "path": {
           "$ref": "#/$defs/text"
+        },
+        "archived": {
+          "$ref": "#/$defs/text",
+          "description": "Where the agent moves a transcript it archives, as `path` names one."
         }
       },
       "required": [
