@@ -1,0 +1,128 @@
+Base run of tests/acceptance/492-gaps at c12a65bb (no implementation of #492), deep-motion and deep-show built from the
+base by each file's beforeAll (cargo build --locked --bin <name>):
+NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/492-gaps --no-file-parallelism --reporter=verbose
+
+All 4 tests fail, each on an AssertionError from an expect in this suite's own files. None fails on loading, a build or
+a type error. The type-check, node node_modules/typescript/bin/tsc -p tests/acceptance/492-gaps/tsconfig.json, exits 0.
+
+Why each fails: the corpus folder doesn't exist at the base. The base's drivers refuse a world's occurrence list
+(ref_unresolved, naming pond_world.occurrences), so the refusal doesn't name the remap and three twins are refused, and
+the base refuses every map but reverse, so the half-rate twin is refused too.
+
+Dry run, not part of the base state: with a throwaway document recorded by the base's corpus_record in the corpus folder
+for one run, then removed, the changed-copy test passed and the first corpus test passed its file assertions and failed
+only because the default kit reads no corpus at the base. That document held a look.finish@1 item so a module would take
+it. No world test could be dry-run: nothing at the base implements them.
+
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/492-gaps
+
+ × corpus-join.test.ts > criterion 13, the corpus half: replace-keeps-unkeyed joins the migration corpus > criterion 13: the corpus file holds the fixture and its recorded values, and the default kit's migration part names it and passes 5ms
+   → the corpus file exists: <repo>/crates/deep-show/kit-corpus/replace-keeps-unkeyed.json: expected false to be true // Object.is equality
+ × corpus-join.test.ts > criterion 13, the corpus half: replace-keeps-unkeyed joins the migration corpus > criterion 13: a copy of the corpus file with one recorded value changed fails the kit, naming the document, the item and the time 1ms
+   → the corpus file exists: <repo>/crates/deep-show/kit-corpus/replace-keeps-unkeyed.json: expected false to be true // Object.is equality
+ × world-remap.test.ts > criterion 7, the world half: a remap that can pass its parent over a world that takes inputs > criterion 7: a reverse remap whose target reads a world that takes inputs is refused, naming the remap and the read 478ms
+   → the refusal names the remap rewind_take: {"ok":false,"code":"ref_unresolved","path":"drivers/fall_read/vars/hits/list","driver":"fall_read","list":"pond_world.occurrences"}: expected false to be true // Object.is equality
+ × world-remap.test.ts > criterion 7, the world half: a remap that can pass its parent over a world that takes inputs > criterion 7: the twins are accepted: the same reverse remap over a world with no inputs or off the reading item, and a half-rate remap over the same target 7ms
+   → each twin is accepted:
+  reverse over a world with no inputs field: {"ok":false,"code":"ref_unresolved","path":"drivers/fall_read/vars/hits/list","driver":"fall_read","list":"pond_world.occurrences"}
+  reverse over a world with an empty inputs map: {"ok":false,"code":"ref_unresolved","path":"drivers/fall_read/vars/hits/list","driver":"fall_read","list":"pond_world.occurrences"}
+  reverse beside a world with inputs, read by an item outside the target: {"ok":false,"code":"ref_unresolved","path":"drivers/fall_read/vars/hits/list","driver":"fall_read","list":"pond_world.occurrences"}
+  half rate over the target that reads a world with inputs: {"ok":false,"code":"out_of_range","path":"time_remaps/rewind_take/map"}: expected [ …(4) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  corpus-join.test.ts > criterion 13, the corpus half: replace-keeps-unkeyed joins the migration corpus > criterion 13: the corpus file holds the fixture and its recorded values, and the default kit's migration part names it and passes
+AssertionError: the corpus file exists: <repo>/crates/deep-show/kit-corpus/replace-keeps-unkeyed.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ corpusFile corpus-join.test.ts:22:77
+     20|
+     21| function corpusFile(): JsonObject {
+     22|   expect(existsSync(CORPUS_FILE), `the corpus file exists: ${CORPUS_FI…
+       |                                                                             ^
+     23|   return obj(JSON.parse(readFileSync(CORPUS_FILE, 'utf8')) as JsonValu…
+     24| }
+ ❯ corpus-join.test.ts:49:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  corpus-join.test.ts > criterion 13, the corpus half: replace-keeps-unkeyed joins the migration corpus > criterion 13: a copy of the corpus file with one recorded value changed fails the kit, naming the document, the item and the time
+AssertionError: the corpus file exists: <repo>/crates/deep-show/kit-corpus/replace-keeps-unkeyed.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ corpusFile corpus-join.test.ts:22:77
+     20|
+     21| function corpusFile(): JsonObject {
+     22|   expect(existsSync(CORPUS_FILE), `the corpus file exists: ${CORPUS_FI…
+       |                                                                             ^
+     23|   return obj(JSON.parse(readFileSync(CORPUS_FILE, 'utf8')) as JsonValu…
+     24| }
+ ❯ corpus-join.test.ts:85:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  world-remap.test.ts > criterion 7, the world half: a remap that can pass its parent over a world that takes inputs > criterion 7: a reverse remap whose target reads a world that takes inputs is refused, naming the remap and the read
+AssertionError: the refusal names the remap rewind_take: {"ok":false,"code":"ref_unresolved","path":"drivers/fall_read/vars/hits/list","driver":"fall_read","list":"pond_world.occurrences"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ world-remap.test.ts:18:94
+     16|     const [answer] = evalDocs(motion.bin(), [scene('refused', world(PO…
+     17|     expect(answer!['ok'], `the document is refused: ${show(answer)}`).…
+     18|     expect(mentions(answer, REMAP), `the refusal names the remap ${REM…
+       |                                                                                              ^
+     19|     expect(mentions(answer, WORLD) || mentions(answer, READ), `the ref…
+     20|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  world-remap.test.ts > criterion 7, the world half: a remap that can pass its parent over a world that takes inputs > criterion 7: the twins are accepted: the same reverse remap over a world with no inputs or off the reading item, and a half-rate remap over the same target
+AssertionError: each twin is accepted:
+  reverse over a world with no inputs field: {"ok":false,"code":"ref_unresolved","path":"drivers/fall_read/vars/hits/list","driver":"fall_read","list":"pond_world.occurrences"}
+  reverse over a world with an empty inputs map: {"ok":false,"code":"ref_unresolved","path":"drivers/fall_read/vars/hits/list","driver":"fall_read","list":"pond_world.occurrences"}
+  reverse beside a world with inputs, read by an item outside the target: {"ok":false,"code":"ref_unresolved","path":"drivers/fall_read/vars/hits/list","driver":"fall_read","list":"pond_world.occurrences"}
+  half rate over the target that reads a world with inputs: {"ok":false,"code":"out_of_range","path":"time_remaps/rewind_take/map"}: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "reverse over a world with no inputs field: {\"ok\":false,\"code\":\"ref_unresolved\",\"path\":\"drivers/fall_read/vars/hits/list\",\"driver\":\"fall_read\",\"list\":\"pond_world.occurrences\"}",
++   "reverse over a world with an empty inputs map: {\"ok\":false,\"code\":\"ref_unresolved\",\"path\":\"drivers/fall_read/vars/hits/list\",\"driver\":\"fall_read\",\"list\":\"pond_world.occurrences\"}",
++   "reverse beside a world with inputs, read by an item outside the target: {\"ok\":false,\"code\":\"ref_unresolved\",\"path\":\"drivers/fall_read/vars/hits/list\",\"driver\":\"fall_read\",\"list\":\"pond_world.occurrences\"}",
++   "half rate over the target that reads a world with inputs: {\"ok\":false,\"code\":\"out_of_range\",\"path\":\"time_remaps/rewind_take/map\"}",
++ ]
+
+ ❯ world-remap.test.ts:31:74
+     29|     const answers = evalDocs(motion.bin(), twins.map(([, doc]) => doc)…
+     30|     const refused = twins.flatMap(([what], i) => (answers[i]!['ok'] ==…
+     31|     expect(refused, `each twin is accepted:\n  ${refused.join('\n  ')}…
+       |                                                                          ^
+     32|   }, TIMEOUT);
+     33| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed (4)
+   Start at  21:25:28
+   Duration  2.57s (tests 96%, transform 2%, import 1%)
+

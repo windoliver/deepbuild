@@ -1,0 +1,80 @@
+{
+  "format": 1,
+  "id": "mix-order-free",
+  "profile": "film",
+  "title": "Mix order free",
+  "description": "Two mix placements from two writers on one item: mix-left keys x, y and a rotation at weight 0.8, mix-right keys x and a rotation at weight 0.7 and no y, so the weights sum to 1.5.",
+  "size": [320, 180],
+  "transport": { "span": "4s" },
+  "layers": {
+    "left": { "writer": "agent-a", "title": "Left", "order": "a0" },
+    "right": { "writer": "agent-b", "title": "Right", "order": "a1" }
+  },
+  "items": {
+    "dot": {
+      "id": "dot", "kind": "rect@1", "layer": "left", "name": "Dot", "order": "a0",
+      "params": {
+        "box": [0, 0, 20, 20], "paint": { "fill": { "role": "ink" } },
+        "quat": [0, 0, 0.17364817766693033, 0.984807753012208]
+      },
+      "at": { "pos": [10, 20, 0] }
+    }
+  },
+  "clips": {
+    "clip-left": {
+      "span": "4s",
+      "channels": {
+        "x": {
+          "target": "slot:s/at/pos/0", "type": "f32",
+          "keys": {
+            "a": { "t": "0s", "value": 40, "interp": "linear" },
+            "b": { "t": "4s", "value": 20, "interp": "linear" }
+          }
+        },
+        "y": {
+          "target": "slot:s/at/pos/1", "type": "f32",
+          "keys": {
+            "a": { "t": "0s", "value": 26, "interp": "linear" },
+            "b": { "t": "4s", "value": 38, "interp": "linear" }
+          }
+        },
+        "turn": {
+          "target": "slot:s/params/quat", "type": "quat",
+          "keys": {
+            "a": { "t": "0s", "value": [0, 0, 0.42261826174069944, 0.9063077870366499], "interp": "linear" },
+            "b": { "t": "4s", "value": [0, 0, 0.42261826174069944, 0.9063077870366499], "interp": "linear" }
+          }
+        }
+      }
+    },
+    "clip-right": {
+      "span": "4s",
+      "channels": {
+        "x": {
+          "target": "slot:s/at/pos/0", "type": "f32",
+          "keys": {
+            "a": { "t": "0s", "value": -10, "interp": "linear" },
+            "b": { "t": "4s", "value": 6, "interp": "linear" }
+          }
+        },
+        "turn": {
+          "target": "slot:s/params/quat", "type": "quat",
+          "keys": {
+            "a": { "t": "0s", "value": [0, 0, -0.6427876096865393, -0.766044443118978], "interp": "linear" },
+            "b": { "t": "4s", "value": [0, 0, -0.6427876096865393, -0.766044443118978], "interp": "linear" }
+          }
+        }
+      }
+    }
+  },
+  "placements": {
+    "mix-left": {
+      "clip": "clip-left", "slots": { "s": "dot" }, "start": "0s", "blend": "mix", "influence": 0.8,
+      "layer": "left", "order": "a0"
+    },
+    "mix-right": {
+      "clip": "clip-right", "slots": { "s": "dot" }, "start": "0s", "blend": "mix", "influence": 0.7,
+      "layer": "right", "order": "a1"
+    }
+  }
+}

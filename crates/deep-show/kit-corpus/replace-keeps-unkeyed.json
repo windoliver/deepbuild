@@ -1,0 +1,319 @@
+{
+  "name": "replace-keeps-unkeyed",
+  "document": {
+    "format": 1,
+    "id": "replace-keeps-unkeyed",
+    "profile": "film",
+    "title": "Replace keeps unkeyed",
+    "description": "Placement first keys x and visible and ends with extend after hold; placement second, a later replace, keys only y.",
+    "size": [
+      320,
+      180
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "layers": {
+      "main": {
+        "writer": "agent-a",
+        "title": "Main",
+        "order": "a0"
+      }
+    },
+    "items": {
+      "dot": {
+        "id": "dot",
+        "kind": "rect@1",
+        "layer": "main",
+        "name": "Dot",
+        "order": "a0",
+        "params": {
+          "box": [
+            0,
+            0,
+            20,
+            20
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            100,
+            50,
+            0
+          ]
+        },
+        "visible": true
+      }
+    },
+    "clips": {
+      "clip-first": {
+        "span": "1s",
+        "channels": {
+          "x": {
+            "target": "slot:s/at/pos/0",
+            "type": "f32",
+            "keys": {
+              "a": {
+                "t": "0s",
+                "value": 0,
+                "interp": "linear"
+              },
+              "b": {
+                "t": "1s",
+                "value": 7.25,
+                "interp": "linear"
+              }
+            }
+          },
+          "shown": {
+            "target": "slot:s/visible",
+            "type": "bool",
+            "keys": {
+              "a": {
+                "t": "0s",
+                "value": true,
+                "interp": "hold"
+              },
+              "b": {
+                "t": "0.5s",
+                "value": false,
+                "interp": "hold"
+              }
+            }
+          }
+        }
+      },
+      "clip-second": {
+        "span": "1s",
+        "channels": {
+          "y": {
+            "target": "slot:s/at/pos/1",
+            "type": "f32",
+            "keys": {
+              "a": {
+                "t": "0s",
+                "value": 0,
+                "interp": "linear"
+              },
+              "b": {
+                "t": "1s",
+                "value": 3,
+                "interp": "linear"
+              }
+            }
+          }
+        }
+      }
+    },
+    "placements": {
+      "first": {
+        "clip": "clip-first",
+        "slots": {
+          "s": "dot"
+        },
+        "start": "0s",
+        "extend": {
+          "after": "hold"
+        },
+        "order": "a0"
+      },
+      "second": {
+        "clip": "clip-second",
+        "slots": {
+          "s": "dot"
+        },
+        "start": "2s",
+        "order": "a1"
+      }
+    }
+  },
+  "modules": {
+    "building": "1.0.0",
+    "cells": "1.0.0",
+    "data": "1.0.0",
+    "effects": "1.0.0",
+    "graph": "1.0.0",
+    "look": "1.0.0",
+    "loop": "1.0.0",
+    "marks2d": "1.0.0",
+    "motion": "1.0.0",
+    "record": "1.0.0",
+    "sandbox": "1.0.0",
+    "scene3d": "1.0.0",
+    "sheet": "1.0.0",
+    "text": "1.0.0",
+    "vector": "1.0.0"
+  },
+  "times": [
+    0,
+    352800000,
+    1058400000,
+    1764000000,
+    2116800000
+  ],
+  "values": {
+    "0": {
+      "dot": {
+        "at": {
+          "pos": [
+            100,
+            50,
+            0
+          ]
+        },
+        "id": "dot",
+        "kind": "rect@1",
+        "layer": "main",
+        "name": "Dot",
+        "order": "a0",
+        "params": {
+          "box": [
+            0,
+            0,
+            20,
+            20
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "visible": true
+      }
+    },
+    "352800000": {
+      "dot": {
+        "at": {
+          "pos": [
+            100,
+            50,
+            0
+          ]
+        },
+        "id": "dot",
+        "kind": "rect@1",
+        "layer": "main",
+        "name": "Dot",
+        "order": "a0",
+        "params": {
+          "box": [
+            0,
+            0,
+            20,
+            20
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "visible": true
+      }
+    },
+    "1058400000": {
+      "dot": {
+        "at": {
+          "pos": [
+            100,
+            50,
+            0
+          ]
+        },
+        "id": "dot",
+        "kind": "rect@1",
+        "layer": "main",
+        "name": "Dot",
+        "order": "a0",
+        "params": {
+          "box": [
+            0,
+            0,
+            20,
+            20
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "visible": true
+      }
+    },
+    "1764000000": {
+      "dot": {
+        "at": {
+          "pos": [
+            100,
+            50,
+            0
+          ]
+        },
+        "id": "dot",
+        "kind": "rect@1",
+        "layer": "main",
+        "name": "Dot",
+        "order": "a0",
+        "params": {
+          "box": [
+            0,
+            0,
+            20,
+            20
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "visible": true
+      }
+    },
+    "2116800000": {
+      "dot": {
+        "at": {
+          "pos": [
+            100,
+            50,
+            0
+          ]
+        },
+        "id": "dot",
+        "kind": "rect@1",
+        "layer": "main",
+        "name": "Dot",
+        "order": "a0",
+        "params": {
+          "box": [
+            0,
+            0,
+            20,
+            20
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "visible": true
+      }
+    }
+  },
+  "snapshots": {
+    "0": "ca502e3b2777ec4e31515d70a74fc135d355b470d4cf920fce8ba5a794bbd4cd",
+    "352800000": "1516b21572cdecd2baad775e49c4a2d235b7ce37c9692d90df6b9e0df92f820c",
+    "1058400000": "1516b21572cdecd2baad775e49c4a2d235b7ce37c9692d90df6b9e0df92f820c",
+    "1764000000": "1516b21572cdecd2baad775e49c4a2d235b7ce37c9692d90df6b9e0df92f820c",
+    "2116800000": "1516b21572cdecd2baad775e49c4a2d235b7ce37c9692d90df6b9e0df92f820c"
+  },
+  "accepted": []
+}

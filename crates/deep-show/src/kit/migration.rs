@@ -169,8 +169,13 @@ fn corpus_files(dir: &Path) -> Vec<(String, Value)> {
     out
 }
 
-/// Whether a document holds an item of one of `module`'s kinds.
+/// Whether a document holds an item of one of `module`'s kinds, or for motion, anything that
+/// moves: a document of bare kinds would otherwise reach no module, and pass unread.
 fn uses(hub: &Hub<'_>, doc: &Value, module: &str) -> bool {
+    let moves = |section: &str| doc[section].as_object().is_some_and(|m| !m.is_empty());
+    if module == "motion" && (moves("placements") || moves("channels")) {
+        return true;
+    }
     doc["items"]
         .as_object()
         .into_iter()
