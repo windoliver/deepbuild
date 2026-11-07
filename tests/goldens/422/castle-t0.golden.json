@@ -1,10 +1,10 @@
 {
   "fixture": "castle-t0",
   "fingerprint": {
-    "os": "26.7.1 (25G241)",
-    "gpu": "Apple M3 Pro",
+    "os": "14.7.7 (23H723)",
+    "gpu": "Apple M3",
     "driver": "Metal",
     "wgpu": "30.0.1"
   },
-  "digest": "0450b7d4af9aa25b28f8b398ce40931a5a867d3ba0097b6d2d091cc4615c442f"
+  "digest": "5268e5c1d1c1813b44e125fdfff5dc933da618a93284fc785e40af8a1367479c"
 }
