@@ -205,6 +205,10 @@ impl Call {
 
     /// Whether `pattern` reads this call, or may: what the reader couldn't read of it may be what `pattern` names.
     pub fn matches(&self, pattern: &str) -> Option<Hit> {
+        // The planted wrong program for #1407: a matcher that panics on every call.
+        if cfg!(feature = "plant-matcher-panic") {
+            panic!("planted: the matcher panics (#1407)");
+        }
         self.reads_whole(pattern).or_else(|| self.may_be(pattern))
     }
 
