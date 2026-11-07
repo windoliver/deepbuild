@@ -1,0 +1,36 @@
+Base commit: c12a65bb (Merge pull request #1281 from windoliver/claude/issue-1108-c657d3)
+Built first: npm ci; npm run build --workspaces; cargo build --locked -q -p deep-hook
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/46 --no-file-parallelism --silent=false
+Date: 2026-11-06  Machine: Mac17,10 (Apple M5 Max, 64 GiB, not a reference Mac), 1-minute load about 100
+Node: /opt/homebrew/bin/node v24.22.2, a Homebrew build. The brief's ~/.local/share/fnm/node-versions/v24.22.0 does not exist on this machine; .node-version says 24.22.0.  vitest 5.0.5
+Exit code: 1
+Result: Test Files 6 failed | 1 skipped (7); Tests 26 failed | 2 skipped (28). Duration 1031 s. reader.test.ts collected no tests.
+
+Why each fails. No test passed at the base.
+
+Missing surface:
+  reader.test.ts (AC4, all 5 tests): Cannot find module '../../../packages/github/src/index.ts'. The file fails at its import, so none of its tests ran.
+  AC10, AC11 plants (posts-on-head, unguarded-marks-every-push, unguarded-marks-none): BLOCKED: the hub didn't start, DEEP_HUB_PLANT=<plant> names no planted program. They have not been seen failing on the wrong program.
+
+Named assertions, on the real hub with the harness's whole path running (session, commit, real push to the bare repo, claim, verdict.made in the record):
+  AC1 older-commit test, AC2, AC3 (6 tests), AC5 (2), AC6 (2), AC9 hub test, AC8 call count: "no commit status on <sha> within 30000 ms" (AC5's second test: 90000 ms). The base has no poster.
+     AC5's first test passed its verdictOn step on a real stop first. AC6's two tests passed their no-rule and rule-off steps first, which the base does trivially by never posting, and failed at the rule-on step.
+  AC8 three rate-limit tests: "no the first POST within 30000 ms".
+  AC8 lane test: "some lane must run tests/acceptance/46/budgets.test.ts with --no-file-parallelism": the folder isn't in `alone` in scripts/lanes.mjs.
+  AC9 README test: "a README section names the context deepbuild/verdict".
+  AC10 scenario: every step up to the last passed, among them a real verdict on a real snapshot commit (verdict.commit differs from HEAD) with nothing posted, then "no commit status on <sha> within 90000 ms" on the pushed commit with the snapshot's tree.
+  AC11 scenario: both pushes reached the bare repo, then "the push of <sha> to refs/heads/feature, which no guarded call named, was not recorded as unguarded" after 90 s.
+  AC7: "<session> never woke, 180.01 s after main moved; the forge saw 0 pull reads". Both sessions were idle with live waiters first.
+
+BLOCKED by this machine, not by the base:
+  AC1 first test: "BLOCKED: the world's check must pass on <sha>, and its verdict is INCONCLUSIVE". Homebrew's Node links /opt/homebrew/opt/libuv, which the check sandbox refuses ("file system sandbox blocked open()"), so the run is uncounted. A real PASS can't be made here, so this test's status step did not run.
+
+Skipped:
+  AC8 timing test: INCONCLUSIVE (not a reference Mac: Mac17,10 / Apple M5 Max / 64 GiB). Its one reading: no status within 10000 ms. The merge base was not built or measured.
+  live.test.ts: skipped; DEEPBUILD_46_LIVE_REPO and DEEPBUILD_46_LIVE_TOKEN are unset. No live GitHub call was made.
+
+Type check: tsc -p tests/acceptance/46/tsconfig.json in tree fails on the one missing module, packages/github/src/index.ts. With a declaration-only stub of the README's surface in a copy outside the repo it reports no errors, all files checked.
+
+Forge checks, in a throwaway script outside this folder: every route answered as the README's table says (activity paging, compare's 404 on the zero SHA, null then real mergeable, 201 and 422 on statuses (its 401 path was not probed), 403 and forge.refused on protection and rulesets, forced 429).
+
+Not verified: no implementation exists, so no test's passing path has run. The expected statuses, the wake's text, ref.unguarded@1, the backoff timing and the three plants' failure messages have never been observed. reader.test.ts's bodies have never executed.

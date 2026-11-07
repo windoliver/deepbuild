@@ -1,0 +1,317 @@
+{
+  "title": "agents.synced@1",
+  "description": "A sync from the Agents page that landed (#148): an MCP server or a skill, as you approved it, in every chosen agent's own file at user level. The record's wanted set: a restore plans each again, every entry checked against its agent's facts. A server's secrets are named, never held. Only the core appends it.",
+  "x-since": "R2",
+  "x-stability": "preview",
+  "x-tracking": "#148",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "agents.synced"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "sync": {
+          "type": "string",
+          "pattern": "^sync:[0-9A-Za-z]+$",
+          "description": "The sync's handle, which deep undo takes.",
+          "maxLength": 8192
+        },
+        "item": {
+          "type": "object",
+          "description": "What it added: a server's spec, its secrets by name only, or a skill's source, commit, folder, pin and files' digests.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "server",
+                "skill"
+              ],
+              "type": "string",
+              "x-closure": {
+                "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                "reopens": "a new major of this schema",
+                "mark": "exhaustive"
+              },
+              "maxLength": 8192
+            },
+            "server": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "transport": {
+                  "enum": [
+                    "stdio",
+                    "http"
+                  ],
+                  "type": "string",
+                  "x-closure": {
+                    "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                    "reopens": "a new major of this schema",
+                    "mark": "exhaustive"
+                  },
+                  "maxLength": 8192
+                },
+                "command": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "maxItems": 256
+                },
+                "env": {
+                  "type": "object",
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "maxLength": 8192
+                  }
+                },
+                "url": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "maxLength": 8192
+                  }
+                },
+                "secrets": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "maxItems": 64
+                },
+                "scope": {
+                  "type": "object",
+                  "properties": {
+                    "repos": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 8192
+                      },
+                      "maxItems": 256
+                    }
+                  },
+                  "required": [
+                    "repos"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "name",
+                "transport"
+              ],
+              "additionalProperties": false
+            },
+            "skill": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "repo": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "commit": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$",
+                  "maxLength": 8192
+                },
+                "files": {
+                  "type": "array",
+                  "maxItems": 4096,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "rel": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 8192
+                      },
+                      "mode": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 4095
+                      },
+                      "sha": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$",
+                        "maxLength": 8192
+                      }
+                    },
+                    "required": [
+                      "rel",
+                      "mode",
+                      "sha"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "license": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "scripts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "maxItems": 4096
+                },
+                "findings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "maxItems": 4096
+                }
+              },
+              "required": [
+                "name",
+                "repo",
+                "commit",
+                "path",
+                "digest",
+                "files",
+                "license",
+                "scripts",
+                "findings"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "maxItems": 16,
+          "description": "The agents it reached, by their facts files' names."
+        }
+      },
+      "required": [
+        "sync",
+        "item",
+        "agents"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

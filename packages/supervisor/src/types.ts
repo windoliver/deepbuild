@@ -56,6 +56,11 @@ export interface StartSpec {
   holder?: string;
   /** It keeps running when the hub stops (a hosted terminal, #104): a supervisor opened later adopts the run rather than reaping it, and its cleanup still stops it. */
   keep?: boolean;
+  /**
+   * The program confines itself in its own sandbox (an agent's, in a session DeepBuild starts, #1330): macOS can't nest
+   * Seatbelt, so the supervisor's isn't applied and the grant is unused. Its processes are still owned and stopped.
+   */
+  own_sandbox?: boolean;
   /** Where the caller takes the run's output as it comes, beside the digests in its exit. */
   output?: { stdout(chunk: Buffer): void; stderr(chunk: Buffer): void };
 }

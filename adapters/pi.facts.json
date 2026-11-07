@@ -146,5 +146,54 @@
     "conformance": "pi/toolDetail/paths",
     "command": { "shell": "tool_input.command" },
     "paths": { "read": "tool_input.path", "edit": "tool_input.path", "write": "tool_input.path" }
+  },
+  "entries": {
+    "readBy": "where the hub's sync (#148) writes and reads this agent's MCP servers and skills, at user level only, and the fields it refuses; checked against each entry before a plan shows",
+    "name": "pi",
+    "mcp": {
+      "file": "~/.pi/agent/mcp.json",
+      "format": "json",
+      "key": "mcpServers",
+      "transports": {
+        "stdio": {
+          "fields": ["command", "args", "env"]
+        },
+        "http": {
+          "fields": ["url", "headers"]
+        }
+      },
+      "refused": [
+        {
+          "transport": "stdio",
+          "field": "url",
+          "reason": "a stdio entry runs a command"
+        },
+        {
+          "transport": "stdio",
+          "field": "headers",
+          "reason": "a stdio entry runs a command"
+        },
+        {
+          "transport": "http",
+          "field": "command",
+          "reason": "an http entry has url, headers and oauth"
+        },
+        {
+          "transport": "http",
+          "field": "args",
+          "reason": "an http entry has url, headers and oauth"
+        },
+        {
+          "transport": "http",
+          "field": "env",
+          "reason": "an http entry has url, headers and oauth"
+        }
+      ],
+      "list": ["mcp", "list", "--json"]
+    },
+    "skills": {
+      "write": "~/.pi/agent/skills",
+      "readFrom": ["~/.pi/agent/skills", "~/.agents/skills"]
+    }
   }
 }
