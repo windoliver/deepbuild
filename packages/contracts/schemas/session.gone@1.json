@@ -1,6 +1,6 @@
 {
   "title": "session.gone@1",
-  "description": "A session's agent process is proven gone, with no SessionEnd: no process has its ID, or the one that has it started at another time. The session has ended.",
+  "description": "A session's agent process is proven gone, with no SessionEnd: no process has its ID, or the one that has it started at another time. The session is interrupted: it can be resumed, and keeps its stacks until it ends (#342).",
   "x-since": "R1",
   "x-stability": "stable",
   "x-feeds": [],

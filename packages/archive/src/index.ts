@@ -42,6 +42,8 @@ export interface Archive {
   pass(): Promise<void>;
   /** Copies one session's transcript now, so what it read so far is in the record for a question asked about it (#1156). */
   session(id: string): Promise<void>;
+  /** The sessions whose transcript its agent moved to its archived folder, by their letters: Codex Desktop's Archive fires no hook (#342). */
+  archived(): Promise<Set<string>>;
 }
 
 const DAY = 86_400_000;
@@ -86,8 +88,8 @@ function homeOf(home: unknown, env: ArchiveOptions['env']): string | undefined {
   return undefined;
 }
 
-/** Every transcript the adapters' facts name, walked one path segment at a time. */
-async function sources(options: ArchiveOptions): Promise<Source[]> {
+/** Every transcript the adapters' facts name, walked one path segment at a time; with `archived`, only those in an agent's archived folder. */
+async function sources(options: ArchiveOptions, archived = false): Promise<Source[]> {
   const found: Source[] = [];
   const places: { agent: string; transcripts: unknown; folderNames?: number }[] = [...options.adapters.names().map((agent) => {
     const facts = options.adapters.get(agent).facts;
@@ -97,19 +99,22 @@ async function sources(options: ArchiveOptions): Promise<Source[]> {
     if (!isObj(transcripts) || typeof transcripts.path !== 'string') continue;
     const home = homeOf(transcripts.home, options.env);
     if (!home) continue;
-    const segments = transcripts.path.split('/').map(segmentPattern);
-    const walk = async (dir: string, depth: number, session: string | undefined): Promise<void> => {
-      const last = depth === segments.length - 1;
-      const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-      for (const entry of entries) {
-        const m = segments[depth]!.exec(entry.name);
-        if (!m || (last ? !entry.isFile() : !entry.isDirectory())) continue;
-        const id = m[1] ?? session;
-        if (last) { if (id) found.push({ agent, session: id, path: join(dir, entry.name), ...(folderNames === undefined ? {} : { folderNames }) }); }
-        else await walk(join(dir, entry.name), depth + 1, id);
-      }
-    };
-    await walk(home, 0, undefined);
+    for (const path of archived ? [transcripts.archived] : [transcripts.path, transcripts.archived]) {
+      if (typeof path !== 'string') continue;
+      const segments = path.split('/').map(segmentPattern);
+      const walk = async (dir: string, depth: number, session: string | undefined): Promise<void> => {
+        const last = depth === segments.length - 1;
+        const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+        for (const entry of entries) {
+          const m = segments[depth]!.exec(entry.name);
+          if (!m || (last ? !entry.isFile() : !entry.isDirectory())) continue;
+          const id = m[1] ?? session;
+          if (last) { if (id) found.push({ agent, session: id, path: join(dir, entry.name), ...(folderNames === undefined ? {} : { folderNames }) }); }
+          else await walk(join(dir, entry.name), depth + 1, id);
+        }
+      };
+      await walk(home, 0, undefined);
+    }
   }
   return found;
 }
@@ -317,6 +322,9 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
     },
     async session(id) {
       for (const source of await sources(options)) if (letters(source.session) === letters(id)) await copy(source);
+    },
+    async archived() {
+      return new Set((await sources(options, true)).map((source) => letters(source.session)));
     },
   };
 }
