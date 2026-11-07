@@ -3906,8 +3906,9 @@ export class Core {
   }
   /** Every rule on the page: each repo a session worked in, your user-level files and the rules you typed. */
   private async allRules(guards: readonly { name: string; rule: string }[]): Promise<{ rules: Rule[]; files: RuleFile[] }> {
-    const worktrees = (await this.record.raw('SELECT DISTINCT worktree FROM sessions WHERE worktree IS NOT NULL')) as { worktree: string }[];
-    const repos = [...new Set(worktrees.map((w) => repoRoot(w.worktree)).filter((r): r is string => r !== undefined))].sort();
+    // The record's sessions, and the ones whose hooks reached the hub but aren't folded into it yet.
+    const worktrees = [...((await this.record.raw('SELECT DISTINCT worktree FROM sessions WHERE worktree IS NOT NULL')) as { worktree: string }[]).map((w) => w.worktree), ...[...this.routes.values()].map((r) => r.cwd)];
+    const repos = [...new Set(worktrees.map((w) => repoRoot(w)).filter((r): r is string => r !== undefined))].sort();
     const files = [...repos.flatMap((repo) => readRuleFiles(repo, null)), ...readRuleFiles(undefined)];
     return { rules: rulesOf({ files, typed: await this.typedRules(), held: await this.heldRules(), guards }), files };
   }

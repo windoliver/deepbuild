@@ -68,6 +68,8 @@ pub fn panel_dir(name: &str) -> PathBuf {
 
 /// The view name `--first-screen` stands for: the app's first screen, Home, drawn for the HOME it runs with.
 pub const FIRST_SCREEN: &str = "first-screen";
+/// The rules page (#344), drawn from the HOME it runs with: `wiki/rules.md` as `deep rules sync` wrote it.
+pub const RULES_PAGE: &str = "rules";
 
 /// `--view <id> --out <out>` from the command line, the view a shipped one (or `--first-screen`), and where `replica`
 /// takes them, `--appearance <light|dark>` as whether macOS is set to dark (#882) and `--bound <file>`, the runs and
@@ -100,7 +102,10 @@ pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
         eprintln!("usage: {bin} --view <id> --out <{out}>");
         return Err(2);
     };
-    if view != FIRST_SCREEN && !deep_app::views::SHIPPED_VIEWS.contains(&view.as_str()) {
+    if view != FIRST_SCREEN
+        && view != RULES_PAGE
+        && !deep_app::views::SHIPPED_VIEWS.contains(&view.as_str())
+    {
         let shipped = deep_app::views::SHIPPED_VIEWS;
         eprintln!("{bin}: {view} is not a shipped view; the views are {shipped:?}");
         return Err(2);
