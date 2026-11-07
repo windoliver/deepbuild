@@ -16,13 +16,13 @@ export { executeClaim, runHeavy, runTiming, slot, verdictMemory } from './exec.j
 export type { ExecCheck, Executed, ExecutedCheck, ExecuteOptions, HeavyOptions, HeavyResult, Load, TimedRun, VerdictMemory } from './exec.js';
 export { baseProof, openCheckouts, OverBudget } from './checkouts.js';
 export type { BaseCheckout, BaseRun, Budget, CheckoutPlant, Checkouts, CheckoutsOptions, ClaimCheckInput, ClaimCheckRun, ClaimInput, ClaimRun, Cited, DeclaredSurface, Snapshot, StandIn, TempCheckout } from './checkouts.js';
-export { claimVerdict } from './claim.js';
+export { claimVerdict, JUDGE_FAULTS } from './claim.js';
 export { admitKind } from './kinds.js';
 export { priceDefinition } from './price.js';
 export type { PaidKind, Pricing } from './price.js';
 export { freshCount, judgeStop } from './stalls.js';
 export type { StallCount, StallRule } from './stalls.js';
-export type { ClaimedCheck, ClaimedRuns, ClaimRequirement, RecordedFailure, RecordedRun, VerdictPlant } from './claim.js';
+export type { ClaimedCheck, ClaimedRuns, ClaimRequirement, JudgeFault, RecordedFailure, RecordedRun, VerdictPlant } from './claim.js';
 export { addedLines, endsEmpty, errorShape, leftOpen, limitsIn, openTasks, placeholders, solveLine, toldToRun, unitless } from './open.js';
 export type { LeftOpen, TaskListFacts } from './open.js';
 export { attributeStack, environmentFindings } from './stack.js';
