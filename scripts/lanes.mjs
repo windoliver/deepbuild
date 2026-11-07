@@ -29,6 +29,7 @@ export const alone = ['tests/acceptance/84/', 'tests/acceptance/580/', 'tests/ac
   'tests/acceptance/18/kit/', 'tests/acceptance/18/session/', 'tests/acceptance/18/binding/', ...['callers', 'failures', 'loops', 'mcp', 'prompts', 'record', 'replies'].map((f) => `tests/acceptance/18/mapping/${f}.test.ts`),
   'tests/acceptance/453/',
   'tests/acceptance/1172/',
+  'tests/acceptance/167/',
   ...['coexist', 'disable', 'install', 'stophold', 'tamper', 'waiter'].map((f) => `tests/acceptance/18/install/${f}.test.ts`), 'tests/acceptance/19/',
   'tests/acceptance/1312/',
   'tests/acceptance/629/',
