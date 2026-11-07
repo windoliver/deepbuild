@@ -204,6 +204,8 @@ pub struct Line {
     pub edges: Option<Arc<EdgesOf>>,
     /// Drawn over whatever is in front of it: the planted `edges_skip_depth`'s line.
     pub over: bool,
+    /// Its segments are one drawn line's pieces (#149), so their caps draw no soft edge.
+    pub joined: bool,
 }
 
 /// A mesh-edge line's mesh, its kind and the matrix that places the mesh.
@@ -670,12 +672,16 @@ pub struct Scene {
     /// The per-pixel resolve's room (#424): the view's `max_fragments`, and the most fragments
     /// the class's GPU memory holds at 16 B each.
     pub fragments: [u64; 2],
+    /// #149: each item's paint at t, under a drawing look: what its drawn fills and lines read.
+    pub painted: BTreeMap<String, Value>,
     /// The IES tables its lights read, each an atlas layer (#446).
     pub distributions: Vec<Arc<crate::ies::Distribution>>,
     /// The light policy's shadow fields (#446).
     pub shadowing: crate::light::Shadowing,
     /// Under samples per frame, the angle this sample turns a soft shadow's disk by (#446).
     pub sample_turn: Option<f64>,
+    /// #464: what the look's print finish draws from at this frame's t and the document's seed.
+    pub print: deep_canvas_marks::print::Frame,
 }
 
 impl Scene {
@@ -951,6 +957,17 @@ fn origin(m: &Affine3) -> Vec3 {
 }
 
 fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
+    // #149: a noise fill's first stop, or a line's own role, or the ink a named fill leaves out.
+    let drawn = params.pointer("/paint/fill/noise/stops/0/role").or_else(|| {
+        params
+            .pointer("/paint/fill/role")
+            .is_none()
+            .then(|| params.pointer("/paint/stroke/role"))
+            .flatten()
+    });
+    if let Some(c) = drawn.and_then(Value::as_str).and_then(|r| look.role(r)) {
+        return Ok(c);
+    }
     let role = params
         .get("paint")
         .and_then(|p| p.get("fill"))
@@ -1040,16 +1057,39 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
                 .map(|(i, v)| point_of(items, v, &format!("{path}/points/{i}")))
                 .collect::<Result<Vec<_>, _>>()
         })?;
+    // #149: a named line's width and its profile along the line.
+    let named = params.pointer("/paint/stroke/line").and_then(Value::as_str);
+    let drawn_line = match (named, look.drawn.as_ref()) {
+        (Some(name), Some(d)) => d.line(name).map_err(|r| Refused {
+            code: r.code,
+            path: r.path,
+        })?,
+        _ => None,
+    };
+    let written = points.len();
+    let (points, along) = match drawn_line.as_ref().and_then(|l| l.profile.as_ref()) {
+        Some(p) => profiled_points(&points, p),
+        None => {
+            let flat = vec![1.0; points.len()];
+            (points, flat)
+        }
+    };
     let n = points.len();
+    let base = drawn_line.as_ref().and_then(|l| l.width);
     let widths: Vec<f64> = match params.get("width") {
-        None | Some(Value::Null) => vec![1.5; n],
-        Some(Value::Array(w)) if w.len() == n => w
-            .iter()
-            .map(|x| num(Some(x)).filter(|&x| x >= 0.0))
-            .collect::<Option<Vec<_>>>()
-            .map_or_else(|| refused("out_of_range", format!("{path}/width")), Ok)?,
+        None | Some(Value::Null) => along.iter().map(|k| base.unwrap_or(1.5) * k).collect(),
+        Some(Value::Array(w)) if w.len() == written => {
+            let w = w
+                .iter()
+                .map(|x| num(Some(x)).filter(|&x| x >= 0.0))
+                .collect::<Option<Vec<_>>>()
+                .map_or_else(|| refused("out_of_range", format!("{path}/width")), Ok)?;
+            // A profile multiplies each point's own width, at the written point it grew from.
+            let at = |i: usize| i * written.saturating_sub(1) / n.saturating_sub(1).max(1);
+            (0..n).map(|i| w[at(i)] * along[i]).collect()
+        }
         Some(v) => match num(Some(v)).filter(|&x| x >= 0.0) {
-            Some(w) => vec![w; n],
+            Some(w) => along.iter().map(|k| w * k).collect(),
             None => return refused("out_of_range", format!("{path}/width")),
         },
     };
@@ -1077,6 +1117,7 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
         color: paint(look, params, &path)?,
         edges: None,
         over: false,
+        joined: drawn_line.is_some(),
     })
 }
 
@@ -1353,7 +1394,54 @@ fn edge_line(
         color: paint(look, params, &path)?,
         edges: Some(Arc::new(source)),
         over: false,
+        joined: false,
     })
+}
+
+/// A drawing look's key: its `dir` around the page, and its `elevation` toward the viewer.
+fn drawn_light(look: &Look3) -> Option<Sun> {
+    let l = look.drawn.as_ref()?.light.as_ref()?;
+    let (dir, up) = (deep_canvas::ops::rad(l.dir), deep_canvas::ops::rad(l.elevation));
+    let (c, s) = (deep_canvas::ops::cos(up), deep_canvas::ops::sin(up));
+    Some(Sun {
+        id: "look.light".into(),
+        toward: [c * deep_canvas::ops::cos(dir), c * deep_canvas::ops::sin(dir), s],
+        illuminance: std::f64::consts::PI,
+        shadow: l.cast.is_some(),
+        cascades: Cascades::default(),
+    })
+}
+
+/// The u a drawn look's sizes span on a surface, a metre.
+const U_PER_METER: f64 = 300.0;
+
+/// `points` split finely enough to carry a line profile, with its width multiplier at each.
+fn profiled_points(points: &[Vec3], p: &deep_canvas_drawn::spec::Profile) -> (Vec<Vec3>, Vec<f64>) {
+    const PIECES: usize = 16;
+    let mut fine = Vec::new();
+    for pair in points.windows(2) {
+        for k in 0..PIECES {
+            let t = k as f64 / PIECES as f64;
+            fine.push([0, 1, 2].map(|i| pair[0][i] + (pair[1][i] - pair[0][i]) * t));
+        }
+    }
+    fine.extend(points.last());
+    let mut s = vec![0.0];
+    for pair in fine.windows(2) {
+        let d = [0, 1, 2].map(|i| pair[1][i] - pair[0][i]);
+        s.push(s[s.len() - 1] + deep_canvas::ops::hypot(deep_canvas::ops::hypot(d[0], d[1]), d[2]));
+    }
+    let total = s.last().copied().unwrap_or(0.0).max(1e-9);
+    // A profile's flick is in u, and this line's arc length in metres.
+    let metres = deep_canvas_drawn::spec::Profile {
+        flick: p.flick / U_PER_METER,
+        ..p.clone()
+    };
+    let widths = s
+        .iter()
+        .map(|at| deep_canvas_drawn::geometry::width_along(&metres, *at, total))
+        .collect();
+    (fine, widths)
 }
 
 /// A solid's color: its paint's role, or the look's `muted` when it names none.
@@ -2052,6 +2140,7 @@ pub(crate) fn evaluate_compiled(
     let mut doc_value: Option<Value> = None;
     let mut bounds: Vec<Vec3> = Vec::new();
     let mut sun = None;
+    let mut painted = BTreeMap::new();
     let mut lights = Vec::new();
     let mut sky = None;
     let mut puffs = 0u64;
@@ -2102,6 +2191,9 @@ pub(crate) fn evaluate_compiled(
             let path = format!("items/{id}/params");
             let empty = Value::Object(Map::new());
             let params = item.get("params").unwrap_or(&empty);
+            if let (true, Some(p)) = (look.drawn.is_some(), params.get("paint")) {
+                painted.insert(id.clone(), p.clone());
+            }
             match kind {
                 "mark.box@1" | "mark.cylinder@1" | "mark.sphere@1" => {
                     let shape = match kind {
@@ -2717,6 +2809,10 @@ pub(crate) fn evaluate_compiled(
         return refused("out_of_range", "budget/puffs");
     }
     crate::sets::compile(map, &mut lights, &mut layers)?;
+    // #149: a drawing look lights its marks from its own light, with no Light item.
+    if let (None, true, Some(l)) = (&sun, lights.is_empty(), drawn_light(look)) {
+        sun = Some(l);
+    }
     let mut scene = Scene {
         size,
         camera,
@@ -2724,6 +2820,7 @@ pub(crate) fn evaluate_compiled(
         layers,
         overlays,
         sun,
+        painted,
         lights,
         sky,
         others,
@@ -2739,6 +2836,12 @@ pub(crate) fn evaluate_compiled(
         distributions: tables,
         shadowing: crate::sets::policy(map)?,
         sample_turn: None,
+        print: deep_canvas_marks::print::frame(
+            &look.print,
+            map.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32,
+            t,
+            false,
+        ),
     };
     scene.set_cutaway(cutaway);
     Ok(scene)

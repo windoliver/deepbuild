@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@1",
+  "schema": "adapter.facts@4",
   "versions": ["2.1.299", "2.1.304", "2.1.308"],
   "agent": "claude",
   "hookTimeouts": {
@@ -43,6 +43,32 @@
         "dontAsk"
       ],
       "prompt": "stdin"
+    },
+    "started": {
+      "readBy": "a session DeepBuild starts under your approval (#1330): the unmodified CLI in a terminal the hub hosts, your words the prompt's argument and never typed in, its permission mode set at launch (the one that asks before acting unless the approval names another) and its sandbox's settings beside it; the environment drops the variables that mark a nested session, and names the account's home only when it isn't the default",
+      "args": ["--permission-mode", "{mode}", "--settings", "{settings}", "{prompt}"],
+      "asks": "default",
+      "modes": { "default": "default", "acceptEdits": "acceptEdits", "plan": "plan", "dontAsk": "dontAsk", "bypassPermissions": "bypassPermissions" },
+      "skipping": ["bypassPermissions"],
+      "nested": ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT", "CLAUDE_PROJECT_DIR"],
+      "home": "CLAUDE_CONFIG_DIR",
+      "defaultHome": "~/.claude",
+      "trust": { "readBy": "the worktree a start made is one you approved, so it starts trusted: nothing types into the folder-trust dialog", "file": "~/.claude.json", "homeFile": ".claude.json", "set": "projects.{worktree}.hasTrustDialogAccepted" }
+    }
+  },
+  "sandbox": {
+    "readBy": "a session DeepBuild starts runs inside the agent's own sandbox (#1330): per version, the settings that turn it on, the walls they hold, and how the agent's way out is turned off. {credentials} is the folders no command may read, {hosts} the hosts the approval names, {sockets} the hub's socket. A wall not named here is not held, and a version not listed starts with no sandbox and says so. Checked on 2.1.308 (spikes/1330): its hooks run outside the sandbox and reach the hub",
+    "conformance": "claude/sandbox/walls",
+    "versions": {
+      "2.1.308": {
+        "settings": "{\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":true,\"allowUnsandboxedCommands\":false,\"filesystem\":{\"denyRead\":\"{credentials}\"},\"network\":{\"allowedDomains\":\"{hosts}\",\"allowUnixSockets\":\"{sockets}\"}}}",
+        "walls": {
+          "writes": "a command writes only its worktree and the temp folders",
+          "credentials": "a command can't read the credential folders: sandbox.filesystem.denyRead",
+          "network": "a command reaches only the hosts the approval names: sandbox.network.allowedDomains; the agent's own API calls run outside its sandbox"
+        },
+        "wayOut": { "call": "dangerouslyDisableSandbox", "setting": "sandbox.allowUnsandboxedCommands", "off": false }
+      }
     }
   },
   "modelFamily": {
@@ -1005,5 +1031,52 @@
   "readUsage": {
     "readBy": "a turn's usage from the transcript: the model that answered, tokens by the agent's own count, a cost only with its basis",
     "conformance": "claude/readUsage/model-switch"
+  },
+  "entries": {
+    "readBy": "where the hub's sync (#148) writes and reads this agent's MCP servers and skills, at user level only, and the fields it refuses; checked against each entry before a plan shows",
+    "name": "Claude Code",
+    "mcp": {
+      "file": "~/.claude.json",
+      "format": "json",
+      "key": "mcpServers",
+      "perProject": "projects",
+      "transports": {
+        "stdio": {
+          "type": "stdio",
+          "fields": ["command", "args", "env"]
+        },
+        "http": {
+          "type": "http",
+          "fields": ["url", "headers", "env"]
+        }
+      },
+      "refused": [
+        {
+          "transport": "stdio",
+          "field": "url",
+          "reason": "a stdio entry runs a command"
+        },
+        {
+          "transport": "stdio",
+          "field": "headers",
+          "reason": "a stdio entry runs a command"
+        },
+        {
+          "transport": "http",
+          "field": "command",
+          "reason": "an http entry names a URL"
+        },
+        {
+          "transport": "http",
+          "field": "args",
+          "reason": "an http entry names a URL"
+        }
+      ],
+      "list": ["mcp", "list"]
+    },
+    "skills": {
+      "write": "~/.claude/skills",
+      "readFrom": ["~/.claude/skills"]
+    }
   }
 }

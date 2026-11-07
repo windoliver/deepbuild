@@ -316,7 +316,10 @@ fn check(
     let mut issues: Vec<_> = result
         .issues
         .into_iter()
-        .filter(|i| !(i.code == "module_missing" && drawn_here(&i.actual)))
+        .filter(|i| {
+            let effects = i.path == "requires/modules/effects";
+            !(i.code == "module_missing" && (drawn_here(&i.actual) || effects))
+        })
         .collect();
     let (found, vectors) = deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), twin);
     issues.extend(found);
@@ -405,6 +408,7 @@ fn check(
         // template's story numbers, a quote's quotation and a formula's numbers.
         "numbers": numbers,
         "notices": result.notices.iter().map(|n| n.to_json()).collect::<Vec<_>>(),
+        "lowered": result.lowered,
     });
     (answer, vectors)
 }
@@ -619,6 +623,15 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 }
             }
             verdict(&mut checked, &accepted(input.get("accepted"))?);
+            // #149: a look's `fw` and `fh` read the document it draws.
+            if let (Some((_, def)), Some(frame)) = (
+                look.as_ref(),
+                deep_canvas::document::frame_of(&Value::Object(doc.clone())),
+            ) {
+                let mut lowered = def.clone();
+                deep_canvas::grammar::lower_frame_literals(&mut lowered, frame);
+                checked["lowered_look"] = lowered;
+            }
             return Some(Answer::Now(checked));
         }
         let item = input.get("item")?.as_str()?;

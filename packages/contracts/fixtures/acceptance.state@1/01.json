@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7C",
+  "kind": "acceptance.state",
+  "data": {
+    "issue": "https://github.com/windoliver/deepbuild/issues/1328",
+    "entry": {
+      "state": "running",
+      "jobs": [
+        "run:01K74G3A5C7E9G1J3M5P7R9T1V"
+      ]
+    }
+  }
+}

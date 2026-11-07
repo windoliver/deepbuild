@@ -19,6 +19,7 @@ mod columns;
 mod compare;
 mod compile;
 mod conformance;
+mod drawn;
 mod effects;
 mod film;
 mod fixtures;
@@ -28,6 +29,7 @@ mod golden;
 mod groups;
 mod guard;
 mod host;
+mod indexed;
 mod interp_suite;
 mod levels;
 mod live;
@@ -37,6 +39,7 @@ mod marks2d;
 mod opframe;
 mod parity;
 mod plugin;
+mod print2d;
 mod reference;
 mod scene;
 mod seam;
@@ -217,6 +220,8 @@ pub enum Planted {
     /// environment prefiltered one mip a frame; the specular lobe uncompensated, or compensated on
     /// environment light alone; metallic premixed into one F0 before shading.
     DrawsBlack,
+    InkFillFlat,
+    RimKeepsFirst,
     DropsClouds,
     /// #424's wrong programs.
     AddWritesDepth,
@@ -278,6 +283,17 @@ pub enum Planted {
     MipsLevel0Only,
     MipsKeptUnderOldKey,
     PoolWithoutClear,
+    // #252: stepped carried state's wrong programs.
+    StepsPerFrame,
+    RingKeepsEveryCheckpoint,
+    CarriedClassExact,
+    // #464: print and pixel looks' wrong programs (tests/acceptance/464/README.md).
+    VignettePixels,
+    GrainFromT,
+    PartialCoverage,
+    PuffFullOpacity,
+    LightAfterUpscale,
+    FlickerWallTime,
 }
 
 impl Planted {
@@ -393,6 +409,8 @@ impl Planted {
             "anisotropy_one" => Planted::AnisotropyOne,
             "normal_map_as_srgb" => Planted::NormalMapAsSrgb,
             "draws_black" => Planted::DrawsBlack,
+            "ink_fill_flat" => Planted::InkFillFlat,
+            "rim_keeps_first" => Planted::RimKeepsFirst,
             "drops_clouds" => Planted::DropsClouds,
             "add_writes_depth" => Planted::AddWritesDepth,
             "add_skips_depth_test" => Planted::AddWithoutDepthTest,
@@ -446,6 +464,15 @@ impl Planted {
             "mips_level0_only" => Planted::MipsLevel0Only,
             "mips_kept_under_old_key" => Planted::MipsKeptUnderOldKey,
             "pool_without_clear" => Planted::PoolWithoutClear,
+            "steps_per_frame" => Planted::StepsPerFrame,
+            "ring_keeps_every_checkpoint" => Planted::RingKeepsEveryCheckpoint,
+            "carried_class_exact" => Planted::CarriedClassExact,
+            "vignette_pixels" => Planted::VignettePixels,
+            "grain_from_t" => Planted::GrainFromT,
+            "partial_coverage" => Planted::PartialCoverage,
+            "puff_full_opacity" => Planted::PuffFullOpacity,
+            "light_after_upscale" => Planted::LightAfterUpscale,
+            "flicker_wall_time" => Planted::FlickerWallTime,
             _ => return None,
         })
     }
@@ -670,7 +697,7 @@ impl App {
             Some("window2d") => marks2d::window2d(self, out, call),
             Some("vello_gpu") => marks2d::vello_gpu(self),
             Some("spike2d") => marks2d::spike2d(self, out, call),
-            Some("film2d") => film::film2d(self, call),
+            Some("film2d") => film::film2d(self, out, call),
             Some("canonical") => live::canonical(self, out, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
@@ -727,6 +754,11 @@ fn main() {
     if first.as_deref() == Some("decode-worker") {
         let rest: Vec<String> = args.collect();
         std::process::exit(deep_codecs::serve(deep_codecs::DECODE_WORKER, &rest));
+    }
+    // #149: a copy of this binary started as a film's encode tool.
+    if first.as_deref() == Some("encode-tool") {
+        let rest: Vec<String> = args.collect();
+        std::process::exit(deep_codecs::serve(deep_codecs::ENCODE_TOOL, &rest));
     }
     if first.as_deref() != Some("run") {
         bad_input();

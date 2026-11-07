@@ -200,3 +200,21 @@ fn a_replica_launched_dark_draws_its_chrome_dark() {
         ground[1]
     );
 }
+
+/// GPUI paints no glyph wholly past a clip, so a line a clip cuts spells only its start: the audit still reads it.
+#[test]
+fn a_line_its_clip_cuts_is_still_audited_past_its_frame() {
+    let mut drive = Drive::start("cut-line");
+    let file = "crates/deep-replica/tests/fixtures/cut-line-panel/main.js";
+    let panel = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/cut-line-panel");
+    let reply = drive.call(json!({"call": "ui_check", "ui_check": {"changed": [file], "panel": panel}}));
+    assert_eq!(reply["ok"], true, "{reply}");
+    let findings = reply["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 4, "one in each render: {findings:?}");
+    for finding in findings {
+        assert_eq!(finding["audit"], "outside_frame");
+        let (frame, drawn) = (boxed(&finding["frame"]), boxed(&finding["box"]));
+        assert!(drawn[0] + drawn[2] > frame[0] + frame[2], "{finding}");
+    }
+    assert_eq!(reply["claim"], "FAIL");
+}
