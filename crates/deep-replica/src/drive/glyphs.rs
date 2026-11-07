@@ -187,14 +187,21 @@ fn run(text: String, glyphs: &[(GlyphKey, Sprite)]) -> Run {
         text,
         bounds: whole(x0, y0, x1, y1),
         visible,
-        drawn: if visible { whole(dx0, dy0, dx1, dy1) } else { [0; 4] },
+        drawn: if visible {
+            whole(dx0, dy0, dx1, dy1)
+        } else {
+            [0; 4]
+        },
         cut: false,
     }
 }
 
 /// The shaped line `glyphs` starts, when they run up to their clip's far edge, as a line cut off there does. The
 /// shortest such line, then the first by its text, so a run reads the same every time.
-fn started(lines: &HashMap<Vec<GlyphKey>, String>, glyphs: &[(GlyphKey, Sprite)]) -> Option<String> {
+fn started(
+    lines: &HashMap<Vec<GlyphKey>, String>,
+    glyphs: &[(GlyphKey, Sprite)],
+) -> Option<String> {
     let (_, last) = glyphs.last()?;
     let (right, clip) = (
         last.bounds.origin.x.0 + last.bounds.size.width.0,
