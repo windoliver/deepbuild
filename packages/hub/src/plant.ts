@@ -16,6 +16,9 @@ export type Plant =
   | 'posts-on-head' | 'unguarded-marks-every-push' | 'unguarded-marks-none'
   // #1537's: the hub holds the shipped message kind with no route into a gate run.
   | 'kind-without-route'
+  // #33's gate@1 corpus: a gate that counts a check whose own files the claim edited as approved, reads a command check's
+  // result from its exit status alone, judges a retry's run alone, or counts only files under the test folders as a check's own.
+  | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
@@ -242,6 +245,7 @@ const PLANTS: readonly string[] = [
   'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
   'kind-without-route',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
+  'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
