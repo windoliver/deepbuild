@@ -50,6 +50,8 @@ test-leave-out-data = []
 test-leave-out-motion = []
 test-ease-in-motion = []
 test-ease-renumbered = []
+# Issue #493: the planted layout that registers camera@1 in the scene3d module, not the core.
+test-camera-in-scene3d = []
 # Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
 # deep-show): the full set without sandbox; test.mesh, whose kind takes a provider's mesh at check;
 # test.prog, whose registry packs fill with programs; a planted sandbox module that requires logic;
