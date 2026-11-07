@@ -68,6 +68,8 @@ import { apiHost, networkCheck, reachable, slackConfig, slackThread, slackThread
 import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
 import { Answers, answerText, type Answer } from './answers.js';
 import { RUN_AS_YOU, Runs } from './runs.js';
+import { Kinds, type ReviewOf } from './kinds.js';
+import type { CheckSpec } from '@deepbuild/conformance';
 import { retain } from './retention.js';
 import { Stacks, type StackWant } from './stacks.js';
 import { checkArguments } from './tools.js';
@@ -523,6 +525,9 @@ export class Core {
   private readonly entered = new Map<string, string>();
   /** The supervisor's runs (runs.ts). */
   private readonly runs: Runs;
+  private readonly checkKinds: Kinds;
+  /** Each claim's checks of a kind other than command, by check (#1537): its spec, and the claim's session for a review. */
+  private readonly kindChecks = new Map<string, Map<string, { spec: CheckSpec; of: ReviewOf }>>();
   /** Each worktree's stack and every stack run a check started (#331, #332). */
   private readonly stacks: Stacks;
   /** Each outside resource a session created, and its teardown task (#342). */
@@ -786,7 +791,17 @@ export class Core {
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), stored: (put, what) => this.stored(put, what),
       invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), recorded: (run, record) => this.gate.recorded(run, record), keyed: (key, run, record) => this.gate.keyed(key, run, record),
       stopping: () => this.stopping, stacks: this.stacks, store: () => this.store, host: () => this.host, supervisor: () => this.supervisor, leases: () => this.leases, extensions: () => this.extensions,
+      kind: (run, checkout, deadline) => {
+        const of = this.kindChecks.get(run.claim)?.get(run.check)?.of ?? { claim: run.claim, task: '', agent: 'claude-code', transcript: undefined };
+        const spec = run.spec as unknown as CheckSpec;
+        // A review reads the diff from the merge base to the claim's snapshot, both in the hub's object store, which
+        // reads the repo's objects as alternates; the checkout is the snapshot's tree alone.
+        if (spec.kind === 'review') return this.checkKinds.run({ ...spec, head: this.gate.snapshotOf(run.claim) ?? run.commit } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+        return this.checkKinds.run(spec, { checkout, deadline, now: this.now }, of);
+      },
     });
+    // The check kinds the hub holds (#1537): command, review, numbers and the work kinds, each with its routes.
+    this.checkKinds = new Kinds({ host: () => this.host, submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
       raw: (query) => this.record.raw(query), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
@@ -5141,6 +5156,7 @@ export class Core {
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.runner.list() };
+      case 'checks.kinds': return { kinds: this.checkKinds.list() };
       case 'job.output': return { stdout: await this.runner.output(String(params.job)) };
       case 'canvas.show': return this.showCli(params, context);
       case 'canvas.revisions': return this.canvasCall({ call: 'revisions', doc: String(params.doc) });
@@ -6452,8 +6468,9 @@ export class Core {
       const told = r.joins ? [] : toldToRun(message);
       const cited = told.reduce((m, command) => m.replaceAll(`\`${command}\``, command), message);
       // The validity gate reads the claim against its definition: a claim with none yet, and none on its way, has nothing to be read against.
+      // A number's cited query is the numbers check's to re-run (#1537), never a run or a file the session had to make or read.
       const [log, trusted] = await reads;
-      const findings = log === undefined ? [] : validityGate({ claim: { claim: r.claim, message: cited }, checkout: r.cwd, deliverables: r.deliverables, session: log }).map((f) => f.why);
+      const findings = log === undefined ? [] : validityGate({ claim: { claim: r.claim, message: this.checkKinds.uncited(cited) }, checkout: r.cwd, deliverables: r.deliverables, session: log }).map((f) => f.why);
       // A claim that fails the validity gate goes back naming what's missing, before any check runs.
       if (findings.length) return { fast: [], slow: [], snapshot: r.commit, readyAt: this.now(), findings };
       // The planted wrong program runs no check before the definition locks, the repo's spec included.
@@ -6489,6 +6506,26 @@ export class Core {
           }
         }
       }
+      // The checks of the other kinds the hub holds (#1537), each run through its kind: a drafted check whose bytes name
+      // a work kind; the review on every claim that opens or updates a PR, its second model through the runner under
+      // your reserve (#87); and the numbers check on every claim whose words state a number with the query behind it.
+      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.live.get(r.session)?.agent ?? 'claude-code', transcript: this.sessions.get(r.session)?.transcript };
+      const kinded = new Map<string, { spec: CheckSpec; of: ReviewOf }>();
+      for (const c of checks) {
+        const spec = c.source === 'definition' && c.approved ? this.checkKinds.definitionSpec(await this.store.read(c.approved).catch(() => new Uint8Array())) : undefined;
+        if (spec) kinded.set(c.check, { spec, of });
+      }
+      if (!r.joins) {
+        const add = (check: string, spec: CheckSpec | undefined, command: string): void => {
+          if (!spec) return;
+          checks.push({ check, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec' });
+          kinded.set(check, { spec, of });
+        };
+        if (await this.prOf(r.session)) add('review', this.checkKinds.reviewSpec(r.base, r.commit, this.root.dir), `review ${r.base}..${r.commit}`);
+        const numbers = this.checkKinds.numbersSpec(cited);
+        if (numbers) add(`numbers: ${numbers.numbers.map((n) => n.stated).join(', ')}`, numbers, numbers.numbers.map((n) => `${n.stated}: ${n.query.sql} on ${n.query.database}`).join('; '));
+      }
+      if (kinded.size) this.kindChecks.set(r.claim, kinded);
       // Each told command runs once on the claim's snapshot as the agent's own check: failing, it sends the claim back
       // with its output; passing, it proves nothing, as the agent's own checks never pass a claim.
       for (const command of told) checks.push({ check: command, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'own' });
@@ -6679,7 +6716,9 @@ export class Core {
       const out = await this.ledger.request(this.connection('core'), { run: id, check: r.check, inputs, issue: paid.task });
       if (out.status !== 'started') throw Error(out.status === 'BLOCKED' ? (out.cause === 'price' ? `${out.missing} is unknown` : `the budget for ${paid.task} has no room for it (${out.ask})`) : `it waits for your answer, ${out.ask}`);
     }
-    const { run } = await this.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? null, ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, r.overlay !== undefined, r.stack && this.stacks.wanted(r.cwd) ? r.stack : undefined);
+    // A check of another kind runs its spec through the kinds the hub holds, within its kind's budget unless it names a deadline (#1537).
+    const kinded = this.kindChecks.get(r.claim)?.get(r.check);
+    const { run } = await this.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? (kinded ? this.checkKinds.deadline(kinded.spec.kind) : null), ...(kinded ? { spec: kinded.spec } : {}), ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, r.overlay !== undefined, r.stack && this.stacks.wanted(r.cwd) ? r.stack : undefined);
     if (paid) {
       const charge = () => this.ledger.charge(this.connection('core'), String(run), this.priceOf(r.check, 'costs') ?? this.priceOf(r.check) ?? 0);
       void this.runs.ended(String(run)).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
