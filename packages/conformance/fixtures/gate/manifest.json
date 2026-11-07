@@ -50,6 +50,1465 @@
         ],
         "expected": "PASS"
       }
+    },
+    {
+      "id": "masked-test-script",
+      "covers": [
+        "row:cant_fail"
+      ],
+      "dir": "cases/masked-test-script",
+      "prompt": "Fix the cart total: it adds a cent to every order, and keep npm test green",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order, and keep npm test green",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/npm-test.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "INVALID",
+        "names": [
+          "can't fail",
+          "|| true"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "check-passes-on-base",
+      "covers": [
+        "row:fix_unproven_on_base"
+      ],
+      "dir": "cases/check-passes-on-base",
+      "prompt": "Make the cart total count each item's quantity",
+      "drafts": [
+        {
+          "ask": "Make the cart total count each item's quantity",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "An item counts once per unit of its quantity, 500 for two of 250",
+              "source_line": "ask#L1",
+              "refuted_by": "two items of 250 cents whose total is not 500",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "twin_drafts": [
+          {
+            "ask": "Make the cart total count each item's quantity",
+            "requirements": [
+              {
+                "id": "R1",
+                "text": "An item counts once per unit of its quantity, 500 for two of 250",
+                "source_line": "ask#L1",
+                "refuted_by": "two items of 250 cents whose total is not 500",
+                "check": ".deepbuild/checks/qty.sh",
+                "on_base": "fails",
+                "asserts": [
+                  "test/qty.test.js:7"
+                ],
+                "depth": "unit",
+                "oracle": "code",
+                "near_misses": []
+              }
+            ],
+            "deliverables": [
+              "src/cart.js"
+            ],
+            "budget": null
+          }
+        ]
+      },
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "INVALID",
+        "names": [
+          "passes on the merge base"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "head"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "linter-deleted",
+      "covers": [
+        "row:missing"
+      ],
+      "dir": "cases/linter-deleted",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "BLOCKED",
+        "names": [
+          "missing",
+          "./bin/cartlint"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "tests-removed",
+      "covers": [
+        "row:ran_nothing"
+      ],
+      "dir": "cases/tests-removed",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "INVALID",
+        "names": [
+          "ran nothing"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "slow-check-still-running",
+      "covers": [
+        "row:runs_to_come"
+      ],
+      "dir": "cases/slow-check-still-running",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": [],
+              "expected_ms": 600000
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "wait_ms": 3000
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "pending"
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "spec-red-on-base",
+      "covers": [
+        "row:inherited"
+      ],
+      "dir": "cases/spec-red-on-base",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "BLOCKED",
+        "names": [
+          "inherited"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "untraced-child",
+      "covers": [
+        "row:too_few_clean_runs"
+      ],
+      "dir": "cases/untraced-child",
+      "prompt": "Stamp each cart total with the time it was taken",
+      "drafts": [
+        {
+          "ask": "Stamp each cart total with the time it was taken",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total stays the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "passes",
+              "asserts": [],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "INCONCLUSIVE",
+        "names": [
+          "0 of 1 clean runs"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "fixture-rewritten",
+      "covers": [
+        "row:only_own_checks"
+      ],
+      "dir": "cases/fixture-rewritten",
+      "prompt": "Refactor the cart total into a plain loop",
+      "drafts": [
+        {
+          "ask": "Refactor the cart total into a plain loop",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total stays the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "passes",
+              "asserts": [],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "INCONCLUSIVE",
+        "names": [
+          "only by the agent's own checks"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "own-command-only",
+      "covers": [
+        "row:claim_only_own_checks"
+      ],
+      "dir": "cases/own-command-only",
+      "prompt": "Tidy the cart module's comment",
+      "stop": "Done: the comment is tidy. Run `npm test` to see the cart still adds up.",
+      "drafts": [
+        {
+          "ask": "Tidy the cart module's comment",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total stays the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": null,
+              "on_base": "passes",
+              "asserts": [],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "twin_drafts": [
+          {
+            "ask": "Tidy the cart module's comment",
+            "requirements": [
+              {
+                "id": "R1",
+                "text": "The cart total stays the sum of its items' cents, 350 for 250 and 100",
+                "source_line": "ask#L1",
+                "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+                "check": ".deepbuild/checks/cart.sh",
+                "on_base": "passes",
+                "asserts": [],
+                "depth": "unit",
+                "oracle": "code",
+                "near_misses": []
+              }
+            ],
+            "deliverables": [
+              "src/cart.js"
+            ],
+            "budget": null
+          }
+        ],
+        "judge": {
+          "claim": "no-requirements"
+        }
+      },
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "INCONCLUSIVE",
+        "names": [
+          "only by the agent's own checks"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "head"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "no-check-selected",
+      "covers": [
+        "row:no_check"
+      ],
+      "dir": "cases/no-check-selected",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": null,
+              "on_base": "fails",
+              "asserts": [],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "twin_drafts": [
+          {
+            "ask": "Fix the cart total: it adds a cent to every order",
+            "requirements": [
+              {
+                "id": "R1",
+                "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+                "source_line": "ask#L1",
+                "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+                "check": ".deepbuild/checks/cart.sh",
+                "on_base": "fails",
+                "asserts": [
+                  "test/cart.test.js:7"
+                ],
+                "depth": "unit",
+                "oracle": "code",
+                "near_misses": []
+              }
+            ],
+            "deliverables": [
+              "src/cart.js"
+            ],
+            "budget": null
+          }
+        ]
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "INVALID",
+        "names": [
+          "no check was selected"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "requirement-uncovered",
+      "covers": [
+        "row:no_check_at_depth"
+      ],
+      "dir": "cases/requirement-uncovered",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            },
+            {
+              "id": "R2",
+              "text": "A total prints with its cents, $3.50 for 350",
+              "source_line": "ask#L1",
+              "refuted_by": "a total of 350 that prints otherwise",
+              "check": null,
+              "on_base": "passes",
+              "asserts": [],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "twin_drafts": [
+          {
+            "ask": "Fix the cart total: it adds a cent to every order",
+            "requirements": [
+              {
+                "id": "R1",
+                "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+                "source_line": "ask#L1",
+                "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+                "check": ".deepbuild/checks/cart.sh",
+                "on_base": "fails",
+                "asserts": [
+                  "test/cart.test.js:7"
+                ],
+                "depth": "unit",
+                "oracle": "code",
+                "near_misses": []
+              }
+            ],
+            "deliverables": [
+              "src/cart.js"
+            ],
+            "budget": null
+          }
+        ]
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "INVALID",
+        "names": [
+          "covered by no check at depth"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "waits-on-you",
+      "covers": [
+        "row:waits_on_answer"
+      ],
+      "dir": "cases/waits-on-you",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "person",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "wait_ms": 20000,
+        "twin_drafts": [
+          {
+            "ask": "Fix the cart total: it adds a cent to every order",
+            "requirements": [
+              {
+                "id": "R1",
+                "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+                "source_line": "ask#L1",
+                "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+                "check": ".deepbuild/checks/cart.sh",
+                "on_base": "fails",
+                "asserts": [
+                  "test/cart.test.js:7"
+                ],
+                "depth": "unit",
+                "oracle": "code",
+                "near_misses": []
+              }
+            ],
+            "deliverables": [
+              "src/cart.js"
+            ],
+            "budget": null
+          }
+        ]
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "pending"
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "rate-unreadable",
+      "covers": [
+        "row:runs_needed_unreadable"
+      ],
+      "dir": "cases/rate-unreadable",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "rate-unreadable"
+        }
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "BLOCKED",
+        "names": [
+          "accepted failure rate 0%"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "quick-check-failed",
+      "covers": [
+        "row:never_started"
+      ],
+      "dir": "cases/quick-check-failed",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "quick-check-failed"
+        }
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "pending",
+        "names": []
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "records-conflict",
+      "covers": [
+        "row:conflicting_records"
+      ],
+      "dir": "cases/records-conflict",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "conflicting-record"
+        }
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "INVALID",
+        "names": [
+          "differ",
+          "so neither counts"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "contract-unreported",
+      "covers": [
+        "row:no_contract_report"
+      ],
+      "dir": "cases/contract-unreported",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "contract-unreported"
+        }
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "INVALID",
+        "names": [
+          "no contract report"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "contract-short",
+      "covers": [
+        "row:contract_invalid"
+      ],
+      "dir": "cases/contract-short",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "contract-short"
+        }
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "INVALID",
+        "names": [
+          "1 of 2 elements compared"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "failures-waived",
+      "covers": [
+        "row:all_failures_waived"
+      ],
+      "dir": "cases/failures-waived",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total stays the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "passes",
+              "asserts": [],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "waived"
+        }
+      },
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "INCONCLUSIVE",
+        "names": [
+          "every failure of its runs is waived"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "evidence-missing-outside",
+      "covers": [
+        "row:evidence_missing_outside"
+      ],
+      "dir": "cases/evidence-missing-outside",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "evidence-missing-outside"
+        }
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "BLOCKED",
+        "names": [
+          "evidence stdout missing for a cause outside the code"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "evidence-no-digest",
+      "covers": [
+        "row:evidence_no_digest"
+      ],
+      "dir": "cases/evidence-no-digest",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "evidence-no-digest"
+        }
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "INCONCLUSIVE",
+        "names": [
+          "evidence stdout captured with no digest"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "evidence-missing",
+      "covers": [
+        "row:evidence_missing"
+      ],
+      "dir": "cases/evidence-missing",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "evidence-missing"
+        }
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "INCONCLUSIVE",
+        "names": [
+          "evidence stdout missing"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "evidence-truncated",
+      "covers": [
+        "row:evidence_truncated"
+      ],
+      "dir": "cases/evidence-truncated",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "evidence-truncated"
+        }
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "INCONCLUSIVE",
+        "names": [
+          "evidence stdout truncated: 1 of 2"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "state-not-a-digest",
+      "covers": [
+        "row:bad_state_digest"
+      ],
+      "dir": "cases/state-not-a-digest",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "state-not-a-digest"
+        }
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "INVALID",
+        "names": [
+          "isn't a sha256"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "answered-fail",
+      "covers": [
+        "row:answered_fail"
+      ],
+      "dir": "cases/answered-fail",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "person",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "answered-fail",
+          "twin": "answered-pass"
+        }
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "FAIL",
+        "names": [
+          "your answer to ask:gatekit is FAIL"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "ask-unanswered",
+      "covers": [
+        "row:ask_unanswered"
+      ],
+      "dir": "cases/ask-unanswered",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "person",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "judge": {
+          "claim": "ask-unanswered",
+          "twin": "answered-pass"
+        }
+      },
+      "claim": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "INCONCLUSIVE",
+        "names": [
+          "ask:gatekit ended unanswered"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "passes-on-retry",
+      "covers": [
+        "row:flaky"
+      ],
+      "dir": "cases/passes-on-retry",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/vitest.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.mjs:5"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.mjs"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "installs": [
+          "node_modules"
+        ]
+      },
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "INCONCLUSIVE",
+        "names": [
+          "failed and passed on its attempts"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
     }
   ]
 }
