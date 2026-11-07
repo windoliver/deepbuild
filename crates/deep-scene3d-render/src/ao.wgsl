@@ -13,6 +13,9 @@ struct Ao {
     opts: vec4<u32>,
     // AO px per px of the frame's targets.
     scale: vec4<f32>,
+    // Toward the key light and the contact shadow's length in m; its samples in steps.x (#446).
+    contact: vec4<f32>,
+    steps: vec4<u32>,
 };
 
 @group(0) @binding(0) var depth_t: texture_depth_2d;
@@ -71,6 +74,37 @@ fn basis(n: vec3<f32>) -> mat3x3<f32> {
     return mat3x3<f32>(t, b, n);
 }
 
+// The key light's contact shadow (#446; Light policy: soft shadows): a fixed march over the
+// prepass's depth toward the light for its short length. A surface blocks the ray only within two
+// steps of it: further in front, the ray passes behind that surface as the camera sees it. A hit
+// reads darker the nearer it is, so a contact shadow fades out along the march.
+fn contact(p: vec3<f32>, n: vec3<f32>) -> f32 {
+    let count = ao.steps.x;
+    let span = ao.contact.w;
+    let stride = span / f32(max(count, 1u));
+    let start = p + n * stride * 0.5;
+    for (var i = 0u; i < count; i++) {
+        let s = start + ao.contact.xyz * stride * (f32(i) + 0.5);
+        let c = ao.clip * vec4<f32>(s, 1.0);
+        if c.w <= 1e-6 {
+            return 1.0;
+        }
+        let ndc = c.xy / c.w;
+        let at = vec2<f32>((ndc.x * 0.5 + 0.5) * ao.size.x, (0.5 - ndc.y * 0.5) * ao.size.y);
+        if at.x < 0.0 || at.y < 0.0 || at.x >= ao.size.x || at.y >= ao.size.y {
+            return 1.0;
+        }
+        let q_px = vec2<i32>(at);
+        let dq = textureLoad(depth_t, q_px, 0);
+        if dq > c.z / c.w {
+            if distance(world_at(q_px, dq), s) < 2.0 * stride {
+                return (f32(i) + 0.5) / f32(count);
+            }
+        }
+    }
+    return 1.0;
+}
+
 @fragment
 fn ao_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let px = vec2<i32>(pos.xy);
@@ -81,6 +115,10 @@ fn ao_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     }
     let n = normalize(textureLoad(normal_t, px, 0).xyz);
     let p = world_at(px, d);
+    let touch = select(1.0, contact(p, n), ao.steps.x > 0u);
+    if ao.size.w <= 0.0 {
+        return vec4<f32>(1.0, touch, 1.0, 1.0);
+    }
     let radius = ao.size.z;
     let bias = 0.02 * radius;
     // The R2 sequence offset by the pixel's Hilbert index: a fixed pattern, never a frame's.
@@ -122,7 +160,7 @@ fn ao_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         occluded += clamp((2.0 * radius - dist) / radius, 0.0, 1.0);
     }
     let v = clamp(1.0 - ao.size.w * occluded / f32(count), 0.0, 1.0);
-    return vec4<f32>(v, v, v, 1.0);
+    return vec4<f32>(v, touch, v, 1.0);
 }
 
 // One edge-aware 5 × 5 blur: neighbours on the same surface (near its tangent plane, with a
@@ -160,5 +198,5 @@ fn blur_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         }
     }
     let v = select(1.0, sum / weight, weight > 0.0);
-    return vec4<f32>(v, v, v, 1.0);
+    return vec4<f32>(v, textureLoad(raw_t, px, 0).g, v, 1.0);
 }

@@ -125,8 +125,10 @@ const issueNumber = (source_id: string): number | undefined => { const m = /(\d+
 
 // ---- Definitions handed to the kernel, and the work source's readings.
 
-interface Requirement { expected_ms?: number; deadline_ms?: number; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; targets?: string[]; paid?: PaidKind; timing?: boolean }
+interface Requirement { expected_ms?: number; deadline_ms?: number; runs?: number; held_out?: HeldOut[]; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; targets?: string[]; paid?: PaidKind; timing?: boolean }
 interface Author { handle: string; role: string; automated?: boolean }
+/** A held-out variant of a check (#1018): the files written over the claim's checkout for a run of its own, kept by digest. */
+export interface HeldOut { files: Record<string, string> }
 interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[]; kind?: unknown; plan?: unknown }
 /**
  * A task's plan (#324), handed with its definition: whether it marks the issue as large, and its scope section, the
@@ -205,7 +207,7 @@ export interface AskTaskOptions {
    * `definition` says whether the task's definition is locked; `joins` that the claim's checks already started once,
    * before its definition locked, and these join them.
    */
-  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references' | 'timing'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean; state?: StatePin }): Promise<void>;
+  run(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references' | 'runs' | 'held_out' | 'timing'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean; state?: StatePin }): Promise<void>;
   /** Records the core's INVALID verdict on a claim, naming why: the floor, before any check counts. */
   invalid(claim: string, commit: string, reason: string): Promise<void>;
   /** The targets of a claim's requirements that didn't resolve before its runs (#323): each verdict made on it is INVALID, naming them. */
@@ -389,6 +391,7 @@ export class AskTasks {
         ...(targets.length ? { targets } : {}),
         // A timing check says so (#352), so a run of it that fails under load is rerun alone.
         ...(check && r.timing === true ? { timing: true } : {}),
+        ...(typeof r.runs === 'number' ? { runs: r.runs } : {}), ...(Array.isArray(r.held_out) ? { held_out: await this.heldOut(r.held_out as Obj[], String(r.id)) } : {}),
         // A check that costs money says what it spends on (#325), so the lock prices it.
         ...(check && PAID.has(String(r.paid)) ? { paid: r.paid as PaidKind } : {}),
       });
@@ -459,7 +462,7 @@ export class AskTasks {
     let fresh = true;
     try {
       await this.o.append(this.o.connection(session, agent), {
-        v: 8, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
+        v: 9, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
         data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
       });
     } catch (error) {
@@ -484,6 +487,16 @@ export class AskTasks {
     }
   }
 
+  /** A check's held-out variants as handed: each file's bytes kept by digest, so only the digests reach the definition. */
+  private async heldOut(handed: Obj[], req: string): Promise<HeldOut[]> {
+    const variants: HeldOut[] = [];
+    for (const [i, v] of handed.entries()) {
+      const files: Record<string, string> = {};
+      for (const [path, bytes] of Object.entries((v.files ?? {}) as Record<string, string>)) files[path] = await this.o.keep(Buffer.from(String(bytes)), `${req} held-out variant ${i + 1}: ${path}`);
+      variants.push({ files });
+    }
+    return variants;
+  }
   /** The kind of issue and the plan a task's definition was handed with (#324), found again by the lock's digest of it. */
   async scopeOf(task_ref: string): Promise<{ kind: string | null; plan: Plan | null }> {
     const [row] = (await this.o.raw(`SELECT id FROM definitions WHERE task_ref = ? AND state IN ('locked', 'revised') LIMIT 1`, [task_ref])) as { id: string }[];
@@ -735,6 +748,7 @@ export class AskTasks {
       check: r.check, approved: r.check_sha256, on_base: onBase(r), asserts: r.asserts, req: r.id, surface: r.surface ?? null,
       ...(r.expected_ms !== undefined ? { expected_ms: r.expected_ms } : {}), ...(r.deadline_ms !== undefined ? { deadline_ms: r.deadline_ms } : {}),
       ...(r.references?.length ? { references: r.references } : {}), ...(r.command ? { command: r.command } : {}), ...(r.paid ? { paid: r.paid } : {}), ...(r.timing ? { timing: true } : {}),
+      ...(r.runs !== undefined ? { runs: r.runs } : {}), ...(r.held_out?.length ? { held_out: r.held_out } : {}),
     }] : []));
     // Each requirement by its handle (req:<task>#R<n>, as verdict.made names them), with the check that covers it.
     const handles = stored.map((r, i) => ({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, id: r.id, text: r.criterion ? `${r.criterion}, ${r.text}` : r.text, depth: r.depth, oracle: r.oracle, on_base: onBase(r), check: r.check }));

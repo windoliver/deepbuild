@@ -1,6 +1,6 @@
 {
   "title": "definition.locked@8",
-  "description": "A definition of done was locked: its hash, the issue's revision and the base commit, each requirement with its author (marked automated when its work source's reading says so), its check's approved bytes by digest, the expected outputs its check references by digest, the command its check runs where the check isn't a drafted file, the criterion ID it quotes, the surface its check declares it enters through, and the targets it names (#323). Only the core appends it. @7 (#325): a requirement whose check costs money says what it spends on, `paid`, so the lock prices it. @8 (#352): a requirement whose check is a timing check says so, `timing`, so a run of it that fails under load is rerun alone.",
+  "description": "A definition of done was locked: its hash, the issue's revision and the base commit, each requirement with its author (marked automated when its work source's reading says so), its check's approved bytes by digest, the expected outputs its check references by digest, the command its check runs where the check isn't a drafted file, the criterion ID it quotes, the surface its check declares it enters through, and the targets it names (#323). Only the core appends it. @7 (#325): a requirement whose check costs money says what it spends on, `paid`, so the lock prices it. Since @8, a requirement may name the clean runs it needs and its held-out variants (#1018).",
   "x-since": "R1",
   "x-stability": "stable",
   "x-feeds": [
@@ -324,9 +324,36 @@
                   "mark": "exhaustive"
                 }
               },
-              "timing": {
-                "type": "boolean",
-                "description": "Its check is a timing check: a run that fails while the machine's load is past its core count is rerun alone once, and the rerun decides."
+              "runs": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535,
+                "description": "How many clean runs its check needs; one when absent."
+              },
+              "held_out": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "files": {
+                      "type": "object",
+                      "propertyNames": {
+                        "pattern": "^[0-9A-Za-z_.-][0-9A-Za-z_./@+-]*$"
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$",
+                        "description": "A SHA-256, in lower-case hex.",
+                        "maxLength": 8192
+                      }
+                    }
+                  },
+                  "required": [
+                    "files"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Its check's held-out variants: each the files written over the claim's checkout for a run of its own, kept by digest and never sent to the agent."
               }
             },
             "required": [

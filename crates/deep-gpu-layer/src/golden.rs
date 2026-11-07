@@ -125,7 +125,11 @@ pub fn golden(app: &mut App, out: &str, call: &Value) -> Value {
         return refused("bad_input", "golden takes a store and a fixture");
     };
     // #422: `hash` compares the two images' RGBA8 pixels exactly, after the same guards.
-    let oracle = if call["oracle"] == "hash" { "hash" } else { "perceptual" };
+    let oracle = if call["oracle"] == "hash" {
+        "hash"
+    } else {
+        "perceptual"
+    };
     let mut fp = fingerprint(app);
     if let Some(env) = call["environment"].as_object() {
         for (k, v) in env {

@@ -142,9 +142,11 @@ Each step is one issue and one PR, following AGENTS.md:
 - **Failures on main stay as they are.** A step that changes how a lane reads results lists the FAIL IDs on main before and after, and they match.
 - **No option, flag or fallback** beyond what a step names; rollback is reverting its PR.
 
-### 10a. Open owner decision (gates T9)
+### 10a. Owner decision (gates T9)
 
 Two questions for the owner, asked once, gate T9b. Before T9b lands, a run of the unit lane on main lists every pass the new skip rule turns INCONCLUSIVE, with its skip site, and that list goes to the owner with these questions.
+
+**Answered on 2026-11-06: (a) on both.** The `skips` list holds seven BLOCKED-by-design tests, in `380/cts-exact`, `39/app.live`, `45/baseline` and `45/classify`. It holds no reading-only skip. Each site is in a timed file or carries a criterion tag, except the three in `160/budgets.test.ts`, whose notes hold a measurement that changes every run, so a full note can't key them.
 
 1. **An approved BLOCKED-by-design test.** `380/cts-exact.test.ts` skips with `BLOCKED: no record from an M1 …` unless `DEEPBUILD_M1_RECORD` is set.
    - **(a, recommended)** A `skips` entry may list an approved BLOCKED-by-design test. The lane keeps the state its other tests give, and every summary prints the listed BLOCKED test.
@@ -154,6 +156,8 @@ Two questions for the owner, asked once, gate T9b. Before T9b lands, a run of th
    - **(b)** Each makes its lane INCONCLUSIVE when it fires.
 
 Whatever the answers, a skip is unrun and never PASS (invariant 2): an unlisted skip makes its lane INCONCLUSIVE, one whose note starts with BLOCKED makes it BLOCKED, and platform and GPU skips are never listed and leave the lane INCONCLUSIVE (platform). A change to the `skips` key of `scripts/known-failures.json` needs a signed approval tag; the approver, not a parser, confirms that a gate is an opt-in variable or a retirement.
+
+Each lane writes its evidence record to `~/.deepbuild/lanes/<tree>-<lane>.json`: the lane, its state, the host, the platform, the tree hash and each test's ID, state and note, with `skipped` on a test that never ran. The tree hash is of what is on disk, uncommitted and untracked files too, so a clean checkout's is `HEAD^{tree}`.
 
 ## 11. Invariants
 
@@ -192,9 +196,15 @@ T9 is one design step split in two issues to stay under 400 lines: T9a names the
 
 Agents run day and night, so no idle period exists for budgets, and a per-PR budget queue was the efficiency bottleneck. The owner decided on 2026-11-02 that budgets leave the PR's path but stay tied to each commit. [How we know version 0 works](technical-design.md#how-we-know-version-0-works) says so: each issue's budgets are measured on a reference Mac by a benchmark in the scheduled budget window, compared with the merge base, with the samples, margins and reference Macs it sets.
 
-- **The window.** A few times a day `throttle.mjs` opens a budget window on each reference Mac: it stops granting build, test and bay pair, lets running grants finish, runs `scripts/budget-window.mjs`, then reopens. Agents keep thinking and editing; only their next build or test waits.
-- **What it measures.** Every commit merged since the last window, each against its own merge base, 20 samples a side, with each issue's budget numbers unchanged. A commit merged during a window is measured in the next one.
-- **What it records.** One evidence record per commit, in T9b's record shape. A pass closes that commit's issue when its other criteria are already proven. A miss leaves the issue open, naming the regression and the commit, and files a budget follow-up. A commit not yet measured leaves its issue open, never closed.
+- **The window.** A few times a day `throttle.mjs` opens a budget window on each reference Mac: it stops granting build, test and bay pair, lets running grants finish, runs `scripts/budget-window.mjs`, then reopens. Agents keep thinking and editing; only their next build or test waits. `throttle.mjs window [--wait <min>]` is a top-level timed grant with a measured run's 60-minute wait that takes no holder as waiting, so every slot empties, and a caller's grant wait doesn't run down while a window is pending or open. The throttle log marks it with `window-open` and `window-close`.
+- **What starts it.** A schedule on each reference Mac, in a checkout of main that no session works in, such as this crontab line. It is installed by hand, and only there: a window elsewhere drains the machine for readings.
+
+  ```
+  0 3,9,15,21 * * * zsh -lc 'cd ~/doneright && node scripts/throttle.mjs window' >> ~/.deepbuild/budget-window.log 2>&1
+  ```
+
+- **What it measures.** Every commit merged since the last window, each against its own merge base, 20 samples a side, with each issue's budget numbers unchanged. A commit merged during a window is measured in the next one. Merged means on the first-parent line of `origin/main`. A merge commit is measured by its branch tip against `git merge-base` of its parents, so a branch never answers for what landed on main beside it; a commit with one parent, against that parent. The window judges the tasks of `benchmarks/budgets.json` as perf does. A mark under `~/.deepbuild/budget-window/` says how far it got and moves only past a commit it recorded, so a window that dies loses nothing. The first window on a machine only sets the mark. Any record moves it: an INCONCLUSIVE commit isn't measured again, and its issue stays open with the reason on the record.
+- **What it records.** One evidence record per commit, in T9b's record shape, with `commit` and `base` added. A pass closes that commit's issue when its other criteria are already proven: every line under `### Acceptance criteria` is ticked, except the budget criteria, so a `Part of #n` merge ticks those it proved. A miss leaves the issue open, naming the regression and the commit, and files a budget follow-up. A commit not yet measured leaves its issue open, never closed, so a pass leaves the issue open while a later commit of it waits in the same window. A load at or above the cores during a task makes that task INCONCLUSIVE.
 - **PRs.** A PR whose issue has reference-Mac budget criteria merges as `Part of #n` on its other criteria; the window proves the rest.
 - **Who runs it.** Agents never run or edit the window. `budget-window.mjs` joins the guard's list, so a change to it needs a signed approval tag.
 

@@ -180,3 +180,22 @@ test('a budget counts on either reference Mac and is a reading on any other', ()
   // Conditions still hold on both.
   assert.equal(judgeLimit({ limit: 100, runs: within, fingerprint: { ...air, power: 'battery' } }).status, 'INCONCLUSIVE');
 });
+
+// #1404: what the real benches do. Each of these left a parent's child time unaccounted for until it was
+// handled, and read as an uncounted child: a bare name walked along PATH, a clean environment, a child
+// nothing waits for that finishes in time, and ps, whose count no one can read.
+test('a command counts whole however its children were started', { skip: process.platform !== 'darwin' }, () => {
+  const cases = {
+    'a bare name walked along PATH': "spawnSync('sh', ['-c', ':'], { env: { PATH: '/nonexistent:/also/not:/bin' } })",
+    'a clean environment': `spawnSync(process.execPath, ['-e', "require('node:child_process').spawnSync('/usr/bin/true')"], { env: {} })`,
+    // Its parent leaves first, so no one is left to reap it: it reports itself, in time for the end of the run.
+    'a child nothing waits for': `spawnSync(process.execPath, ['-e', "require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 300)'], { detached: true, stdio: 'ignore' }).unref()"]); await new Promise((done) => setTimeout(done, 3000))`,
+    ps: "spawnSync('/bin/ps', ['-p', '1'])",
+  };
+  for (const [name, script] of Object.entries(cases)) {
+    const run = measureOnce([process.execPath, '--input-type=module', '-e', `import { spawn, spawnSync } from 'node:child_process'; ${script};`], process.cwd());
+    assert.equal(run.status, 0, `${name}: ${run.output}`);
+    assert.deepEqual(run.uncounted, [], name);
+    assert.ok(run.instructions > 0, `${name}: ${run.instructions}`);
+  }
+});

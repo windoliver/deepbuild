@@ -15,6 +15,8 @@ import type { LeaseTable } from '@deepbuild/leases';
 import { after, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import type { Up } from '@deepbuild/env-local';
 import { words } from './claude-settings.js';
+import type { RunKey } from './gate-runner.js';
+import { FINDINGS, findingOf, type KeyFacts } from './shared-runs.js';
 import type { StackWant, Stacks } from './stacks.js';
 import { keepAside, writeSynced } from './vfs.js';
 import { refusal, Refused, ulid, type Plant } from './wire.js';
@@ -26,6 +28,8 @@ export interface Run { run: string; check: string; claim: string; commit: string
   command?: string;
   /** Named command stand-ins in base runs (#874). */
   stand_ins?: string[];
+  /** What its key is made of (#1018): a gate run's, kept with its finish so any claim with an equal key reads it. */
+  key?: RunKey;
   /** Recovered runs with withheld environment values cannot run again unchanged (#996). */
   withheld?: string[] }
 /**
@@ -58,11 +62,13 @@ export interface RunsOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   sync(): Promise<void>;
   appendAsCore(input: { v: number; id: string; kind: string; ts: number; subject?: string; data: Obj }): Promise<void>;
-  appendCore(kind: string, data: Obj, extra?: { subject?: string }): Promise<void>;
+  appendCore(kind: string, data: Obj, extra?: { subject?: string; v?: number }): Promise<void>;
   stored(put: PutResult, what: string): Promise<Evidence>;
   invalid(claim: string, commit: string, reason: string, outcome?: 'INVALID' | 'INCONCLUSIVE'): Promise<void>;
   /** The gate runner keeps a claim's check run's closed record for its verdict. */
   recorded(run: string, record: CommandRun): CommandRun;
+  /** The gate runner keys a run once it has ended (#1018): what run.finished keeps of its key. */
+  keyed(key: RunKey, run: string, record: CommandRun): Promise<KeyFacts>;
   stopping: () => boolean;
   stacks: Stacks;
   store: () => EvidenceStore;
@@ -116,6 +122,8 @@ export class Runs {
   private journal: Record<string, Run> = {};
   /** Each run in flight, by its handle: what it is, its end, and how to stop it. */
   private readonly live = new Map<string, { run: Run; done: Promise<void>; stop(): void }>();
+  /** The held-out variants' runs still to finish (#1018), whose findings their finish withholds, keyed or not. */
+  private readonly heldOut = new Set<string>();
   constructor(private readonly o: RunsOptions) {}
 
   /** How many runs are in flight. */
@@ -184,8 +192,8 @@ export class Runs {
     this.o.point();
   }
 
-  /** run.start, and deep_run's runs with the deadline their spec gives, in ms. */
-  async start(params: Obj, deadline?: number, id?: string, stack?: StackWant): Promise<Obj> {
+  /** run.start, and deep_run's runs with the deadline their spec gives, in ms; a gate run's with its key, and whether it's a held-out variant's (#1018); a claim's check that needs the app with its stack (#580). */
+  async start(params: Obj, deadline?: number, id?: string, key?: RunKey, heldOut = false, stack?: StackWant): Promise<Obj> {
     const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins } = params;
     const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
@@ -205,12 +213,15 @@ export class Runs {
     }
     if (grant.run_as_you !== undefined && typeof grant.run_as_you !== 'boolean') throw new Refused(refusal('type', '/params/grant/run_as_you', 'Give run_as_you as true or false.', grant.run_as_you));
     if (typeof environment !== 'boolean') throw new Refused(refusal('type', '/params/environment', 'Give environment as true when the run needs its folder\'s stack running.', environment));
+    const handle = id ?? `run:${ulid(this.o.now())}`;
+    if (heldOut) this.heldOut.add(handle);
     const run = await this.launch({
-      run: id ?? `run:${ulid(this.o.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment || stack ? { environment: true } : {}), ...(stack ? { stack } : {}),
+      run: handle, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment || stack ? { environment: true } : {}), ...(stack ? { stack } : {}),
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
       ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
       ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
-    });
+      ...(key ? { key } : {}),
+    }).catch((error: unknown) => { this.heldOut.delete(handle); throw error; });
     return { run };
   }
 
@@ -356,30 +367,35 @@ export class Runs {
         const [stdout, stderr] = evidence;
         if (stdout !== undefined && stderr !== undefined) record = { ...record, output: { ...record.output, sha256: { stdout, stderr } } };
         record = this.o.recorded(run.run, record);
+        // Its key (#1018), once it has ended: kept with its finish, so any claim with an equal key reads it, after a restart too.
+        const key = run.key ? await this.o.keyed(run.key, run.run, record) : undefined;
         const outcome = record.outcome;
-        const findings = outcome === 'stopped' ? ['hub stopped'] : record.mask !== null ? [`uncounted: ${record.mask}`] : record.failures.slice(0, 20).map((f) => `${f.test} (${f.file}:${f.line}): ${f.message}`);
+        const findings = outcome === 'stopped' ? ['hub stopped'] : record.mask !== null ? [`uncounted: ${record.mask}`] : record.failures.slice(0, FINDINGS).map(findingOf);
         // What the kind's result names as its evidence beyond the output (a replacing kind's content keys) is kept with the findings.
         findings.push(...record.evidence.filter((e) => !/^(stdout|stderr) [0-9a-f]{64}$/.test(e)).slice(0, 20));
         const first = record.failures[0];
-        await this.finish(run, outcome, findings, evidence, {
+        // A held-out variant's run keeps its outcome and counts in the record, never what it failed on: its fixture is unseen.
+        const hidden = this.heldOut.delete(run.run) || key?.withheld === true;
+        await this.finish(run, outcome, hidden ? (record.failures.length ? ['failed on a held-out variant of its fixtures'] : []) : findings, evidence, {
           tests_run: record.testsRun, passed: Math.max(0, record.testsRun - new Set(record.failures.map((f) => f.test)).size),
-          assertion: first?.assertion ? first.test : null, points_to: first ? `${first.file}:${first.line}` : null,
-        });
+          assertion: first?.assertion && !hidden ? first.test : null, points_to: first && !hidden ? `${first.file}:${first.line}` : null,
+        }, key);
         return;
       }
+      const hidden = this.heldOut.delete(run.run);
       const outcome = this.o.stopping() ? 'stopped' : overran ? 'overran' : missing ? 'missing' : code === 0 ? 'passed' : 'failed';
-      const findings = this.o.stopping() ? ['hub stopped'] : overran ? [`still running at its deadline of ${words(run.deadline!)}, so it was stopped`] : missing ? [`its stack never came up: ${missing}`] : failed ? [failed] : [];
+      const findings = this.o.stopping() ? ['hub stopped'] : overran ? [`still running at its deadline of ${words(run.deadline!)}, so it was stopped`] : missing ? [`its stack never came up: ${missing}`] : failed ? [hidden ? 'failed on a held-out variant of its fixtures' : failed] : [];
       await this.finish(run, outcome, findings, evidence);
     });
     this.live.set(run.run, { run, done, stop });
     void done.finally(() => this.o.leases().release(lease.id, []).catch(() => undefined)).finally(() => this.live.delete(run.run));
     return run.run;
   }
-  private async finish(run: Run, outcome: string, findings: string[], evidence: string[], counts: { tests_run: number; passed: number; assertion: string | null; points_to: string | null } = { tests_run: 0, passed: 0, assertion: null, points_to: null }): Promise<void> {
+  private async finish(run: Run, outcome: string, findings: string[], evidence: string[], counts: { tests_run: number; passed: number; assertion: string | null; points_to: string | null } = { tests_run: 0, passed: 0, assertion: null, points_to: null }, key?: KeyFacts): Promise<void> {
     await this.o.appendCore('run.finished', {
       run: run.run, outcome, tests_run: counts.tests_run, passed: counts.passed, runs: 1, evidence, check: run.check, assertion: counts.assertion, expected: null, actual: null, step: null,
-      points_to: counts.points_to, findings, environment: `${process.platform}-${process.arch}`,
-    }, { subject: run.run });
+      points_to: counts.points_to, findings, environment: `${process.platform}-${process.arch}`, ...(key ? { key: { ...key } } : {}),
+    }, { subject: run.run, v: 2 });
     // The journal keeps the run until its finish is durable, so a cut before then reruns it.
     await this.o.sync();
     this.writeJournal((runs) => { delete runs[run.run]; });

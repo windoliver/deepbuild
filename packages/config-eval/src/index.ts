@@ -13,11 +13,28 @@ import { defaultLauncher } from './launcher.js';
 
 export { archivedTasks } from './archive.js';
 
-/** A real past task, as read from the transcript archive: the handle of the message that asked for it, when, the repo, the commit it started from and your words. */
-export interface ReplayTask { id: string; at: number; repo: string; commit: string; prompt: string }
-/** The agent's whole view: its model, prompt, folder and environment. */
-export interface AgentRun { model: string; prompt: string; cwd: string; env: Record<string, string> }
-export interface AgentResult { ok: boolean; result?: string; usage?: { input: number; output: number } }
+/** One outside call the original session made, with its result, as its transcript holds them (#1108). */
+export interface RecordedCall {
+  /** Claude Code's tool name: `Bash`, or `mcp__<server>__<tool>`. */
+  tool: string;
+  input: unknown;
+  /** The tool result's text. */
+  result: string;
+  error?: boolean;
+}
+/**
+ * A real past task, as read from the transcript archive: the handle of the message that asked for it, when, the repo,
+ * the commit it started from, your words, and the outside calls its session made, when it made one.
+ */
+export interface ReplayTask { id: string; at: number; repo: string; commit: string; prompt: string; recording?: RecordedCall[] }
+/** The agent's whole view: its model, prompt, folder and environment; and the recording its outside calls are answered from. */
+export interface AgentRun { model: string; prompt: string; cwd: string; env: Record<string, string>; recording?: RecordedCall[] }
+/** One outside call a run made, and whether the recording answered it. */
+export interface Made { tool: string; input: unknown; answered: boolean }
+/** A run's end: with the outside calls it made. */
+export interface AgentResult { ok: boolean; result?: string; usage?: { input: number; output: number }; calls?: Made[] }
+/** One outside call a replayed agent made, as the replay recorded it: `answered` false got the not-in-the-recording error. */
+export interface ReplayCall { task: string; side: 'base' | 'change'; repeat: number; tool: string; input: unknown; answered: boolean }
 export interface JudgeRequest { model: string; prompt: string; outputs: { label: string; text: string }[] }
 /** A score from 0 to 1. */
 export interface Grade { label: string; score: number }
@@ -50,6 +67,10 @@ export interface EvalReport {
   /** The change regresses on the tasks after the cutoff, and `after.broke` names the tasks it broke. */
   held: boolean;
   usage: { ms: number; plan_share: number | null };
+  /** Every outside call of every run: the replay's record. */
+  calls: ReplayCall[];
+  /** Each pair either side of which made a call the recording can't answer, with those calls; it counts as a failed pair. */
+  diverged: { task: string; calls: ReplayCall[] }[];
 }
 
 /** The metrics the eval captures: the judge's grade of a run's output, and the tokens the agent reported. */
@@ -140,7 +161,7 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
   const { plan, root } = options;
   const hash = planHash(plan);
   const refusedWith = (reason: string): EvalReport => ({
-    plan, hash, runs: [], after: refusedComparison(reason), before: refusedComparison(reason), held: false, usage: { ms: performance.now() - started, plan_share: null },
+    plan, hash, runs: [], after: refusedComparison(reason), before: refusedComparison(reason), held: false, usage: { ms: performance.now() - started, plan_share: null }, calls: [], diverged: [],
   });
   const why = refusal(options);
   if (why) return refusedWith(why);
@@ -169,6 +190,7 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
   const grading: Promise<void>[] = [];
   const graded = plan.measures.some((m) => m.name === 'grade');
   const runs: ReplayRun[] = [];
+  const calls: ReplayCall[] = [];
   const outputs = new Map<ReplayRun, string>();
   const nothing = (): Record<string, number | null> => Object.fromEntries(plan.measures.map((m) => [m.name, null]));
   const next = async (): Promise<void> => {
@@ -188,13 +210,16 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
     const files = plan.variants[job.side].files;
     let dir: string | undefined;
     try {
-      const made = await checkout(task, files, root);
-      dir = made.dir;
-      const result = await launcher.work({ model: plan.models.agent, prompt: task.prompt, cwd: dir, env: { ...env } });
-      if (!result.ok) return;
+      const out = await checkout(task, files, root);
+      dir = out.dir;
+      const result = await launcher.work({ model: plan.models.agent, prompt: task.prompt, cwd: dir, env: { ...env }, ...(task.recording ? { recording: task.recording } : {}) });
+      const made = (result.calls ?? []).map((c) => ({ task: job.task, side: job.side, repeat: r.repeat, tool: c.tool, input: c.input, answered: c.answered }));
+      calls.push(...made);
+      // A run that made a call the recording can't answer is no longer the same task: it counts as failed.
+      if (!result.ok || made.some((c) => !c.answered)) return;
       r.ok = true;
       if ('tokens' in r.metrics) r.metrics.tokens = result.usage ? result.usage.input + result.usage.output : null;
-      outputs.set(r, await workOf(dir, made.start, result.result ?? '', Object.keys(files)));
+      outputs.set(r, await workOf(dir, out.start, result.result ?? '', Object.keys(files)));
     } catch {
       r.ok = false;
       r.metrics = nothing();
@@ -207,8 +232,11 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
   runs.sort((a, b) => a.task.localeCompare(b.task) || a.side.localeCompare(b.side) || a.repeat - b.repeat);
   const usedAtEnd = usedAtStart === null ? null : ((await launcher.planUsed?.()) ?? null);
   const after = compareReplay({ plan, runs });
+  calls.sort((a, b) => a.task.localeCompare(b.task) || a.side.localeCompare(b.side) || a.repeat - b.repeat);
+  const unanswered = calls.filter((c) => !c.answered);
+  const diverged = [...new Set(unanswered.map((c) => c.task))].map((task) => ({ task, calls: unanswered.filter((c) => c.task === task) }));
   return {
-    plan, hash, runs, after, before: compareReplay({ plan, runs }, plan.fitted), held: after.outcome === 'regresses',
+    plan, hash, runs, after, before: compareReplay({ plan, runs }, plan.fitted), held: after.outcome === 'regresses', calls, diverged,
     usage: { ms: performance.now() - started, plan_share: usedAtStart !== null && usedAtEnd !== null && usedAtEnd >= usedAtStart ? usedAtEnd - usedAtStart : null },
   };
 }

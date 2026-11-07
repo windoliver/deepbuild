@@ -17,6 +17,15 @@ plant-posts-unchecked = []
 # event and reads the record by walking them all.
 plant-drops-close = []
 plant-walks-events = []
+# Issue #1172's wrong programs, in no shipped build (tests/acceptance/1172): the app opening the spike window with its
+# 1,000 generated sessions and made-up count, Needs you rows that show each ask's handle, and a terminal tab that writes
+# its rows with the chrome's text outside the cell grid.
+plant-spike-window = ["spike"]
+plant-handle-rows = []
+plant-tab-text = []
+# Issue #1172: #337's spike window, in no shipped build: the suites that keep its proof build it, through the dev
+# dependency on this crate below.
+spike = []
 
 # Issue #337: the gpui-kit spike. Pinned to one gpui-kit commit, since gpui-shell is at
 # milestone M0 and unpublished. No `webview` feature: the app has no web view.
@@ -79,6 +88,7 @@ wgpu = { version = "30", default-features = false, features = ["std", "metal"] }
 pollster = "0.4"
 
 [dev-dependencies]
+deep-app = { path = ".", features = ["spike"] }
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
 
 # Real pixels from GPUI's offscreen Metal renderer; AppKit needs the main thread, so no libtest
