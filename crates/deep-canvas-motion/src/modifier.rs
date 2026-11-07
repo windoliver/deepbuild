@@ -9,6 +9,8 @@ use deep_canvas::ops;
 
 use deep_canvas::ease::Named;
 
+use crate::curve::Jump;
+
 /// How a wave or a noise counts its cycles.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Rate {
@@ -52,6 +54,12 @@ pub enum Kind {
     Limits {
         min: f64,
         max: f64,
+    },
+    /// Steps the channel's time, not its value (Channel and key: quantize jump), so it applies
+    /// before the keys are read.
+    Quantize {
+        hz: f64,
+        jump: Jump,
     },
 }
 
@@ -136,6 +144,7 @@ impl Modifier {
                 let held = value.clamp(*min, *max);
                 value + k * (held - value)
             }
+            Kind::Quantize { .. } => value,
         }
     }
 }
@@ -179,6 +188,7 @@ impl Modifier {
                 let (a, b) = scaled(amount * s0, amount * s1);
                 (lo + a.min(0.0), hi + b.max(0.0))
             }
+            Kind::Quantize { .. } => (lo, hi),
             Kind::Limits { min, max } => {
                 // value + k(clamp(value) − value): the clamp's move, mixed by k, from each end.
                 let at = |v: f64| v + k * (v.clamp(*min, *max) - v);
