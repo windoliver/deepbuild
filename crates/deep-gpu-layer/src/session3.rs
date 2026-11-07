@@ -14,14 +14,14 @@ use deep_gpu::view::{Config, Ui, View};
 use deep_scene3d_render::status::{self, SharedStage, Stage};
 use deep_scene3d_render::surface::{Surface, Upscale};
 use deep_scene3d_render::{Counts, Module3, Planted as Planted3, Profiler};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::worker::{Scene3Session, Worker, SLOTS, WORKERS};
 use crate::{effects, refused, App, Planted};
 
 pub use deep_scene3d_render::status::lock;
 
-fn planted3(p: Option<Planted>) -> Planted3 {
+pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
     Planted3 {
         forward_z: p == Some(Planted::ForwardZ),
         encodes_twice: p == Some(Planted::EncodesTwice),
@@ -86,6 +86,20 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         .iter()
         .position(|q| p == Some(*q))
         .map_or(0, |i| 16 << i),
+        ..msaa_planted(p)
+    }
+}
+
+/// #1173's wrong programs alone, which every scene3d render takes, the live window's and the
+/// canonical ones too.
+pub(crate) fn msaa_planted(p: Option<Planted>) -> Planted3 {
+    Planted3 {
+        single_sample: matches!(
+            p,
+            Some(Planted::SingleSampleTargets | Planted::ClaimsMsaaOverSingleSample)
+        ),
+        resolve_accumulates: p == Some(Planted::ResolveAccumulatesFrames),
+        ..Default::default()
     }
 }
 
@@ -105,6 +119,8 @@ pub struct Opened {
     pub profiler: Option<Profiler>,
     /// The status stage, attached only where status can show.
     pub stage: Option<SharedStage>,
+    /// #149: what a drawing look lays over this frame's surfaces.
+    pub drawn: Arc<Mutex<crate::drawn::Frame3>>,
 }
 
 /// Opens the session: a view at `size` whose render module is scene3d with the effects between
@@ -173,6 +189,8 @@ fn open_with(
     let path = on.path;
     let fx_planted = effects::planted_fx(on.planted);
     let timings = timings && on.backend != Backend::Noop;
+    let drawn3 = Arc::new(Mutex::new(crate::drawn::Frame3::default()));
+    let opened3 = drawn3.clone();
     on.worker
         .call(move |state| -> Result<Opened, String> {
             let (module, shared) = Module3::new(planted);
@@ -180,7 +198,12 @@ fn open_with(
             let mut effects = Effects::new(Default::default(), fx_planted);
             setup(&mut effects);
             let fx = Arc::new(Mutex::new(effects));
-            lock(&shared).post = Some(Box::new(fx::Shared(fx.clone())));
+            let drawn = crate::drawn::Post3::new(
+                Box::new(fx::Shared(fx.clone())),
+                drawn3.clone(),
+                fx.clone(),
+            );
+            lock(&shared).post = Some(Box::new(drawn));
             let stage = if with_stage {
                 let device = state.gpu.recover()?;
                 let stage = Arc::new(Mutex::new(Stage::new(&device)));
@@ -216,6 +239,7 @@ fn open_with(
                 fx,
                 profiler,
                 stage,
+                drawn: opened3,
             })
         })
         .map_err(|e| refused("no_session", e))
@@ -306,6 +330,34 @@ pub fn pipelines(app: &mut App) -> Vec<&'static str> {
                 .map_or_else(Vec::new, |r| r.compiled_names().to_vec())
         })
     })
+}
+
+/// The surface's `msaa` and the targets the session's geometry pass draws into (#1173).
+pub fn render_targets(app: &mut App) -> (Value, Value) {
+    let claims = app.planted == Some(Planted::ClaimsMsaaOverSingleSample);
+    app.worker
+        .call(move |state| {
+            let s = state.scene3d.as_ref()?;
+            let shared = lock(&s.shared);
+            Some(msaa(shared.renderer.as_ref()?, claims))
+        })
+        .unwrap_or((Value::Null, Value::Null))
+}
+
+/// `renderer`'s sample count, as the surface reports it (4 under the planted claim), and its
+/// geometry pass's targets.
+pub(crate) fn msaa(renderer: &deep_scene3d_render::Renderer, claims: bool) -> (Value, Value) {
+    let targets = renderer.render_targets();
+    let count = if claims {
+        deep_scene3d_render::MSAA
+    } else {
+        targets[0].1
+    };
+    let listed: Vec<Value> = targets
+        .iter()
+        .map(|(name, n)| json!({"name": name, "sample_count": n}))
+        .collect();
+    (json!(count), json!(listed))
 }
 
 pub fn close(app: &mut App) {
