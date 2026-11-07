@@ -12,7 +12,8 @@ use super::{
 };
 use crate::cost::Coefficients;
 use crate::grammar::{
-    forms_for, Handle, Id, Path, Refusal, Section, Time, TimeContext, UnitContext, UnitLiteral,
+    forms_for, lower_frame_literals, Handle, Id, Path, Refusal, Section, Time, TimeContext,
+    UnitContext, UnitLiteral,
 };
 use crate::kinds::{
     lookup, parse_kind, parse_required, Entry, Lookup, ParamType, Registry, Version,
@@ -114,6 +115,14 @@ fn check_by(
     let mut notices = Vec::new();
     let mut draws = Vec::new();
     let mut lowered = copy_of(doc);
+    // `fw` and `fh` read the document's design size (Units and axes).
+    if let (Some(size), Some(Value::Object(items))) = (frame_of(doc), lowered.get_mut("items")) {
+        for item in items.values_mut() {
+            if let Some(params) = item.get_mut("params") {
+                lower_frame_literals(params, size);
+            }
+        }
+    }
 
     check_envelope(doc, &mut issues);
     check_transport(doc, &mut issues);
@@ -1553,6 +1562,17 @@ fn check_at(key: &str, at_value: &Value, issues: &mut Vec<Issue>) {
                     "not a number finite at f32",
                 ));
             }
+        } else if name == "anchor" {
+            // `ID#anchor`: a mark set's `#head`, drawn at the revealed end (Item and kind).
+            if !value.as_str().is_some_and(|a| a.contains('#')) {
+                issues.push(Issue::error(
+                    "out_of_range",
+                    key,
+                    path,
+                    value.clone(),
+                    "not `ID#anchor`",
+                ));
+            }
         } else {
             issues.push(Issue::error(
                 "unknown_field",
@@ -1861,6 +1881,13 @@ fn check_params(
     for (name, n) in converted {
         params.insert(name, json!(n));
     }
+}
+
+/// A document's design size, as `fw` and `fh` read it.
+pub fn frame_of(doc: &Value) -> Option<(u32, u32)> {
+    let size = member(doc, "size")?.as_array()?;
+    let side = |i: usize| size.get(i)?.as_f64().map(|v| v as u32);
+    Some((side(0)?, side(1)?))
 }
 
 /// A unit literal's value in a field declared in `unit`, as an f64.

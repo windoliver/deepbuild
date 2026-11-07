@@ -1514,7 +1514,9 @@ impl Renderer {
             let start = Instant::now();
             let end = start + Duration::from_secs(seconds);
             let vsync = Duration::from_nanos(1_000_000_000 / 60);
-            let at = |flicks: i64| start + Duration::from_nanos((flicks.max(0) as u64) * 10 / 7056);
+            // 705,600,000 flicks a second.
+            let at =
+                |flicks: i64| start + Duration::from_nanos((flicks.max(0) as u64) * 10_000 / 7056);
             let mut drawn = Vec::new();
             let mut frame = 1u64;
             loop {
@@ -1536,7 +1538,7 @@ impl Renderer {
                 if Instant::now() >= end {
                     break;
                 }
-                let t = (elapsed.as_nanos() * 7056 / 10) as i64;
+                let t = (elapsed.as_nanos() * 7056 / 10_000) as i64;
                 record.pinned = pinned_at_0 + t;
                 self.present(&mut session, doc, look, view, &record, t, false, true)?;
                 frame += 1;

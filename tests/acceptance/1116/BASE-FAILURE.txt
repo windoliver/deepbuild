@@ -1,0 +1,60 @@
+# #1116 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (c12a65bb: no `window` in throttle.mjs, no budget-window.mjs, not in the guard regex)
+
+$ node --test 'tests/acceptance/1116/*.test.mjs'
+(a scratch tree: the base's scripts/, this suite and typescript linked in; 8 s. Every failure is an AssertionError. The
+first line of each message follows its test's name.)
+
+✖ budget-window.mjs joins the guard regex: an unsigned change to it fails the guard
+    an unsigned change to budget-window.mjs passed the guard
+✖ a window off the reference Macs is a reading: its record is INCONCLUSIVE and its issue stays open
+    the record off the reference Macs
+✖ a window that gets no grant at a load above the cores measures nothing, reopens, and leaves its commit for the next
+    (the run's first line isn't INCONCLUSIVE no grant: the base prints BLOCKED throttle: usage)
+✖ a window killed mid-sample reopens, closes nothing, and leaves its commit for the next
+    the window ended with no sample to stop it at
+✖ budget-window.mjs run by hand, with a forged DEEP_THROTTLE, measures nothing and closes nothing
+    the next window didn't measure <commit>
+✖ a commit that raises its own margin to hide a 2× regression doesn't pass: budget numbers stay unchanged
+    no record for the commit
+✖ #1116.8a08ae16 a window drains every slot before its first sample and reopens after its last
+    the window took no sample
+✖ #1116.8e06730a three commits merged between windows get three records, each against its own merge base, with 20 samples a side
+    the window's records aren't one per merged commit
+✖ #1116.dead61b9 a planted 2× regression in one of three commits leaves only that issue open, naming that commit, with one budget follow-up
+    the regressed commit's record
+✖ #1116.5aa02a5a a commit merged during a window is measured in the next one, and till then its issue stays open
+    the window took no sample
+✖ a pass leaves its issue open while another of its criteria isn't proven
+    the commit was to pass
+✖ #1116.96a59f57 an agent's build requested during a window starts within a minute of the window ending
+    the window took no sample
+
+ℹ tests 12
+ℹ pass 0
+ℹ fail 12
+
+## The planted wrong programs
+
+Run on this Mac17,10, 18 cores, at a load of 90 to 220, three suites at a time, in scratch trees: the base's scripts/
+plus the blind job's throwaway window, which passes 12 of 12 there, with one fault planted. "Kept" programs are in twins/;
+the others were one-line changes to the throwaway window, and weren't kept, since no criterion names them.
+
+| Program | Kept | Fails |
+|---|---|---|
+| no-drain | yes | #1116.8a08ae16, and the load test, since it grants at any load |
+| releases-early | yes | #1116.8a08ae16, #1116.96a59f57 |
+| first-parent-base | yes | #1116.8e06730a, and the unproven-criterion test, which reads the base too |
+| ignores-regression | yes | #1116.dead61b9 |
+| merge-side | yes | #1116.8e06730a, #1116.dead61b9 |
+| marks-the-end | yes | #1116.5aa02a5a, and the unproven-criterion test, which needs that record |
+| stays-shut | yes | #1116.96a59f57 (a slow run: every window holds 70 s more, so the suite takes about 12 minutes) |
+| closes-on-any-pass: a pass closes the issue, proven or not | no | a pass leaves its issue open |
+| no-reference-gate: limits aren't judged | no | a window off the reference Macs |
+| own-margin: the commit's own margin judges it, on p50 alone | no | a commit that raises its own margin |
+| marks-at-start: the mark moves to the tip before the first sample | no | a window killed mid-sample |
+| no-grant-check: any DEEP_THROTTLE lets the script run | no | run by hand with a forged DEEP_THROTTLE |
+| measures-at-any-load: a top-level timed ignores the load | no | a window that gets no grant |
+
+The guard test has no twin: the base's own proof-guard.mjs is the wrong program, above.
