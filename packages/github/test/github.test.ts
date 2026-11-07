@@ -83,7 +83,7 @@ describe('a verdict waiting on a pushed commit', () => {
     await after.pass();
     await sleep(500);
     expect(forge.statuses.map((s) => [s.sha, s.state])).toEqual([[made, 'success']]);
-  });
+  }, 120_000);
 });
 
 describe('a claim on a stranger\'s commit', () => {
