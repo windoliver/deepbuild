@@ -634,7 +634,7 @@ fn type_of(
 ) -> Result<Type, Refusal> {
     let mut ty = Type {
         fonts: fonts.clone(),
-        fallback: Vec::new(),
+        ..Type::default()
     };
     for (role, font) in font_roles {
         ty.fonts.insert(role.clone(), fonts[font]);
@@ -753,6 +753,12 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
     };
     if def.get("legend").is_some_and(|l| l != "auto") {
         return Err(Refusal::Bad("legend".into()));
+    }
+    // #149: a look's drawn fields, at any frame: the frame only gives their `fw` and `fh` a size.
+    let mut drawn = Value::Object(def.clone());
+    deep_canvas::grammar::lower_frame_literals(&mut drawn, (1920, 1080));
+    if let Value::Object(drawn) = &drawn {
+        deep_canvas_drawn::spec::check(drawn).map_err(|r| Refusal::Bad(r.path))?;
     }
     let status = status_map(def)?;
     let fonts = fonts(def, bundled)?;
