@@ -22,12 +22,21 @@ const EDGE_TOLERANCE: f64 = 0.05;
 
 /// The palette a look (a shipped look's ID, a look@1 or a role map `{light, dark}`) gives a theme.
 pub fn palette(look: &Value, theme: &str) -> Result<Palette, Value> {
+    palette_where(look, theme, deep_canvas_marks::look::Distance::Everywhere)
+}
+
+/// [`palette`], with the status distance held `at`: where status can show, for a document's look.
+pub fn palette_where(
+    look: &Value,
+    theme: &str,
+    at: deep_canvas_marks::look::Distance,
+) -> Result<Palette, Value> {
     let theme = match theme {
         "light" => Theme::Light,
         "dark" => Theme::Dark,
         _ => return Err(refused("bad_input", "view/theme")),
     };
-    match crate::look(Some(look), deep_canvas_marks::look::Distance::Everywhere) {
+    match crate::look(Some(look), at) {
         Some(Ok((look, _))) => Ok(palette_of(&look, theme).clone()),
         Some(Err(refusal)) => Err(refusal.to_json()),
         None => Err(refused("bad_input", "look")),

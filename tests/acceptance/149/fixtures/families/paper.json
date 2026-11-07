@@ -1,0 +1,296 @@
+{
+ "family": "paper",
+ "subject": "A folded sea chart",
+ "look": {
+  "id": "drawn-paper-149-look",
+  "lines": {
+   "line": {
+    "kind": "exact",
+    "width": 3,
+    "pressure": 0.6
+   }
+  },
+  "fills": {
+   "fill": {
+    "kind": "flat",
+    "pressure": 0.8
+   }
+  },
+  "ground": {
+   "kind": "paper",
+   "params": {
+    "role": "paper",
+    "seed": "document",
+    "tooth": {
+     "kind": "canvas",
+     "scale": 16,
+     "depth": 0.4,
+     "seed": 5
+    },
+    "age": {
+     "folds": 2,
+     "creases": 3,
+     "stains": {
+      "count": 6,
+      "size": 120,
+      "role": "ochre"
+     },
+     "foxing": 0.2,
+     "plate_mark": {
+      "inset": 48,
+      "depth": 0.3
+     },
+     "craquelure": {
+      "scale": 30,
+      "amount": 0.2
+     },
+     "tarnish": {
+      "ramp": [
+       "ochre",
+       "sepia"
+      ],
+      "width": 14
+     },
+     "tape": [
+      [
+       120,
+       60,
+       220,
+       48
+      ]
+     ],
+     "seed": "document"
+    },
+    "anchor": "world",
+    "zoom": "crossfade_octaves"
+   }
+  }
+ },
+ "2d": {
+  "format": 1,
+  "id": "drawn-paper-149",
+  "profile": "figure",
+  "title": "A folded sea chart",
+  "description": "A folded sea chart: a #149 acceptance fixture in a 2D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/ship/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 400,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "coast": {
+    "id": "coast",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "coast",
+    "order": "a0",
+    "params": {
+     "d": "M 200 800 C 520 640 760 760 1040 620 C 1280 500 1520 560 1720 400",
+     "paint": {
+      "stroke": {
+       "role": "sepia",
+       "line": "line"
+      }
+     }
+    }
+   },
+   "route": {
+    "id": "route",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "route",
+    "order": "a1",
+    "params": {
+     "d": "M 360 880 L 760 520 L 1240 300",
+     "paint": {
+      "stroke": {
+       "role": "vermilion",
+       "line": "line"
+      }
+     }
+    }
+   },
+   "ship": {
+    "id": "ship",
+    "kind": "circle@1",
+    "layer": "main",
+    "name": "ship",
+    "order": "a2",
+    "params": {
+     "center": [
+      360,
+      880
+     ],
+     "r": 16,
+     "paint": {
+      "fill": {
+       "role": "indigo"
+      }
+     }
+    }
+   }
+  }
+ },
+ "3d": {
+  "format": 1,
+  "id": "drawn-paper-149-3d",
+  "profile": "scene",
+  "title": "A folded sea chart",
+  "description": "A folded sea chart: a #149 acceptance fixture in a 3D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "scene3d": "^1",
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/ship/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": -2,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 0.5,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a0",
+    "params": {
+     "projection": "perspective",
+     "target": [
+      0,
+      0.6,
+      0
+     ],
+     "position": [
+      0,
+      1.6,
+      7
+     ],
+     "fov": 40,
+     "near": 0.1,
+     "far": 80
+    }
+   },
+   "sheet": {
+    "id": "sheet",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "sheet",
+    "order": "a1",
+    "params": {
+     "size": [
+      7,
+      0.02,
+      4
+     ],
+     "paint": {
+      "fill": {
+       "fill": "fill",
+       "role": "paper"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      0,
+      0
+     ]
+    }
+   },
+   "ship": {
+    "id": "ship",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "ship",
+    "order": "a2",
+    "params": {
+     "size": [
+      0.5,
+      0.25,
+      0.25
+     ],
+     "paint": {
+      "fill": {
+       "role": "indigo"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -2,
+      0.15,
+      1
+     ]
+    }
+   }
+  }
+ }
+}

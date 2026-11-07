@@ -1,0 +1,7 @@
+Base c12a65bb. Not run here (no cargo, no GPU); this is the expected failure, read from the base's code.
+
+At the base the surface this test drives doesn't exist. `deep-gpu run`'s `layers` call (crates/deep-gpu) takes
+neither `target_costs` nor a `{collection, output, resolution, mips}` texture target on an operator input, and
+nothing runs a group's `passes`, so the check refuses the document or the call answers `bad_input`. `answered(...)`
+fails the test at its first assertion ("layers was answered, not refused"), and even a reply with no `target_costs`
+fails `arr(reply['target_costs'], ...)`. A run off macOS fails with `INCONCLUSIVE:` before the build is used.

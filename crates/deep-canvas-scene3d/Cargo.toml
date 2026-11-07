@@ -18,6 +18,7 @@ canvas_text = true
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
+deep-canvas-drawn = { path = "../deep-canvas-drawn" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-text = { path = "../deep-text" }

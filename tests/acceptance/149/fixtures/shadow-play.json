@@ -1,0 +1,300 @@
+{
+ "family": "shadow-play",
+ "subject": "The fox and the crow, as a coloured shadow play",
+ "look": {
+  "id": "drawn-shadow-149-look",
+  "ground": {
+   "kind": "paper",
+   "params": {
+    "role": "paper",
+    "seed": "document",
+    "tooth": {
+     "kind": "silk",
+     "scale": 10,
+     "depth": 0.15,
+     "seed": 2
+    },
+    "anchor": "world",
+    "zoom": "crossfade_octaves"
+   }
+  },
+  "light": {
+   "dir": 135,
+   "elevation": 45,
+   "cast": {
+    "role": "shade",
+    "length": 70,
+    "softness": 3
+   },
+   "back": {
+    "lamps": [
+     "lamp-a",
+     "lamp-b"
+    ],
+    "transmission": {
+     "fox": 0.5,
+     "crow": 0,
+     "tree": 1
+    }
+   }
+  }
+ },
+ "probes": {
+  "fox": [
+   240,
+   320,
+   120,
+   70
+  ],
+  "crow": [
+   695,
+   130,
+   60,
+   40
+  ],
+  "tree": [
+   640,
+   190,
+   180,
+   40
+  ]
+ },
+ "collections": [
+  "fox",
+  "crow",
+  "tree"
+ ],
+ "doc": {
+  "format": 1,
+  "id": "drawn-shadow-149",
+  "profile": "figure",
+  "title": "The fox and the crow",
+  "description": "A fable told by coloured puppets on a backlit screen.",
+  "size": [
+   960,
+   540
+  ],
+  "transport": {
+   "span": "6s"
+  },
+  "requires": {
+   "modules": {
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "collections": {
+   "fox": {
+    "members": [
+     "fox-body",
+     "fox-tail"
+    ]
+   },
+   "crow": {
+    "members": [
+     "crow-body",
+     "crow-beak"
+    ]
+   },
+   "tree": {
+    "members": [
+     "tree-trunk",
+     "tree-crown"
+    ]
+   }
+  },
+  "channels": {
+   "lamp-walk": {
+    "target": "items/lamp-a/params/center/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 160,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "6s",
+      "value": 450,
+      "interp": "linear"
+     }
+    }
+   },
+   "fox-creep": {
+    "target": "items/fox-tail/at/pos/1",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "3s",
+      "value": -12,
+      "interp": "linear"
+     },
+     "k2": {
+      "t": "6s",
+      "value": 0,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "lamp-a": {
+    "id": "lamp-a",
+    "kind": "circle@1",
+    "layer": "main",
+    "name": "lamp-a",
+    "order": "a0",
+    "params": {
+     "center": [
+      160,
+      300
+     ],
+     "r": 40,
+     "paint": {
+      "fill": {
+       "role": "lamp"
+      }
+     }
+    }
+   },
+   "lamp-b": {
+    "id": "lamp-b",
+    "kind": "circle@1",
+    "layer": "main",
+    "name": "lamp-b",
+    "order": "a1",
+    "params": {
+     "center": [
+      800,
+      240
+     ],
+     "r": 40,
+     "paint": {
+      "fill": {
+       "role": "lamp_cool"
+      }
+     }
+    }
+   },
+   "tree-trunk": {
+    "id": "tree-trunk",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "tree-trunk",
+    "order": "b0",
+    "params": {
+     "d": "M 660 500 L 700 200 L 760 200 L 800 500 Z",
+     "paint": {
+      "fill": {
+       "role": "moss"
+      }
+     }
+    }
+   },
+   "tree-crown": {
+    "id": "tree-crown",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "tree-crown",
+    "order": "b1",
+    "params": {
+     "box": [
+      620,
+      90,
+      220,
+      150
+     ],
+     "paint": {
+      "fill": {
+       "role": "moss"
+      }
+     }
+    }
+   },
+   "fox-body": {
+    "id": "fox-body",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "fox-body",
+    "order": "c0",
+    "params": {
+     "box": [
+      220,
+      300,
+      170,
+      110
+     ],
+     "paint": {
+      "fill": {
+       "role": "vermilion"
+      }
+     }
+    }
+   },
+   "fox-tail": {
+    "id": "fox-tail",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "fox-tail",
+    "order": "c1",
+    "params": {
+     "d": "M 220 340 C 150 320 110 360 90 420 C 150 420 190 400 220 390 Z",
+     "paint": {
+      "fill": {
+       "role": "vermilion"
+      }
+     }
+    }
+   },
+   "crow-body": {
+    "id": "crow-body",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "crow-body",
+    "order": "d0",
+    "params": {
+     "box": [
+      680,
+      120,
+      90,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "indigo"
+      }
+     }
+    }
+   },
+   "crow-beak": {
+    "id": "crow-beak",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "crow-beak",
+    "order": "d1",
+    "params": {
+     "d": "M 680 140 L 640 150 L 680 165 Z",
+     "paint": {
+      "fill": {
+       "role": "indigo"
+      }
+     }
+    }
+   }
+  }
+ }
+}

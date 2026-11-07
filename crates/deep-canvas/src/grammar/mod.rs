@@ -41,7 +41,9 @@ pub use path::{gen_path, gen_path_mutant, Path, Section};
 pub use rational::Rational;
 pub use seeded::Seeded;
 pub use time::{gen_time, gen_time_mutant, Span, Time, TimeContext, FLICKS_PER_SECOND};
-pub use unit::{forms_for, gen_unit, gen_unit_mutant, Unit, UnitContext, UnitLiteral};
+pub use unit::{
+    forms_for, gen_unit, gen_unit_mutant, lower_frame_literals, Unit, UnitContext, UnitLiteral,
+};
 
 /// The most segments an ID has.
 pub const MAX_SEGMENTS: usize = 8;

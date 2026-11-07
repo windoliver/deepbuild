@@ -15,6 +15,7 @@ pub mod check;
 pub mod code;
 pub mod data;
 pub mod dirty;
+pub mod drawn;
 pub mod ends;
 pub mod finish;
 pub mod function;

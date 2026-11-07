@@ -1,0 +1,332 @@
+{
+ "family": "hatch",
+ "subject": "A stone arch",
+ "look": {
+  "id": "drawn-hatch-149-look",
+  "ground": {
+   "kind": "paper",
+   "params": {
+    "role": "paper",
+    "seed": "document",
+    "tooth": {
+     "kind": "cold_press",
+     "scale": 14,
+     "depth": 0.3,
+     "seed": 3
+    },
+    "anchor": "world",
+    "zoom": "crossfade_octaves"
+   }
+  },
+  "light": {
+   "dir": 135,
+   "elevation": 45
+  },
+  "fills": {
+   "fill": {
+    "kind": "flat"
+   },
+   "tone": {
+    "kind": "hatch",
+    "angle": 45,
+    "gap": 7,
+    "width": 1,
+    "follow": "outline",
+    "by_tone": [
+     {
+      "below": 0.3,
+      "passes": 3,
+      "cross": true
+     },
+     {
+      "below": 0.6,
+      "passes": 2,
+      "cross": false
+     },
+     {
+      "below": 1,
+      "passes": 1,
+      "cross": false
+     }
+    ],
+    "stipple": {
+     "dot": 1.5,
+     "density": 0.3
+    },
+    "min_width": 1,
+    "seed": "item"
+   }
+  }
+ },
+ "2d": {
+  "format": 1,
+  "id": "drawn-hatch-149",
+  "profile": "figure",
+  "title": "A stone arch",
+  "description": "A stone arch: a #149 acceptance fixture in a 2D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/swift/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 300,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "arch": {
+    "id": "arch",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "arch",
+    "order": "a0",
+    "params": {
+     "d": "M 560 900 L 560 500 C 560 240 1360 240 1360 500 L 1360 900 L 1180 900 L 1180 520 C 1180 400 740 400 740 520 L 740 900 Z",
+     "paint": {
+      "fill": {
+       "fill": "tone",
+       "role": "ink"
+      },
+      "stroke": {
+       "role": "ink",
+       "line": "line"
+      }
+     }
+    }
+   },
+   "swift": {
+    "id": "swift",
+    "kind": "circle@1",
+    "layer": "main",
+    "name": "swift",
+    "order": "a1",
+    "params": {
+     "center": [
+      300,
+      300
+     ],
+     "r": 20,
+     "paint": {
+      "fill": {
+       "fill": "tone",
+       "role": "ink"
+      }
+     }
+    }
+   }
+  }
+ },
+ "3d": {
+  "format": 1,
+  "id": "drawn-hatch-149-3d",
+  "profile": "scene",
+  "title": "A stone arch",
+  "description": "A stone arch: a #149 acceptance fixture in a 3D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "scene3d": "^1",
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/swift/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": -2,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": -0.4,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a0",
+    "params": {
+     "projection": "perspective",
+     "target": [
+      0,
+      0.6,
+      0
+     ],
+     "position": [
+      0,
+      1.6,
+      7
+     ],
+     "fov": 40,
+     "near": 0.1,
+     "far": 80
+    }
+   },
+   "left": {
+    "id": "left",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "left",
+    "order": "a1",
+    "params": {
+     "size": [
+      0.7,
+      2.4,
+      0.7
+     ],
+     "paint": {
+      "fill": {
+       "fill": "tone",
+       "role": "ink"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -1.2,
+      1.2,
+      0
+     ]
+    }
+   },
+   "right": {
+    "id": "right",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "right",
+    "order": "a2",
+    "params": {
+     "size": [
+      0.7,
+      2.4,
+      0.7
+     ],
+     "paint": {
+      "fill": {
+       "fill": "tone",
+       "role": "ink"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      1.2,
+      1.2,
+      0
+     ]
+    }
+   },
+   "lintel": {
+    "id": "lintel",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "lintel",
+    "order": "a3",
+    "params": {
+     "size": [
+      3.2,
+      0.6,
+      0.7
+     ],
+     "paint": {
+      "fill": {
+       "fill": "tone",
+       "role": "ink"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      2.7,
+      0
+     ]
+    }
+   },
+   "swift": {
+    "id": "swift",
+    "kind": "mark.sphere@1",
+    "layer": "main",
+    "name": "swift",
+    "order": "a4",
+    "params": {
+     "size": [
+      0.2,
+      0.2,
+      0.2
+     ],
+     "paint": {
+      "fill": {
+       "fill": "tone",
+       "role": "ink"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -2,
+      2.4,
+      1
+     ]
+    }
+   }
+  }
+ }
+}

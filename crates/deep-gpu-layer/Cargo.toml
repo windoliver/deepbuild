@@ -31,6 +31,7 @@ test-spike = []
 [dependencies]
 deep-gpu = { path = "../deep-gpu" }
 deep-canvas = { path = "../deep-canvas" }
+deep-canvas-drawn = { path = "../deep-canvas-drawn" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-text = { path = "../deep-text" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }

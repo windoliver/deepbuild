@@ -1,0 +1,455 @@
+{
+ "family": "targets",
+ "subject": "A crayon fish",
+ "look": {
+  "id": "drawn-targets-149-look",
+  "ground": {
+   "kind": "paper",
+   "params": {
+    "role": "paper",
+    "seed": "document",
+    "tooth": {
+     "kind": "cold_press",
+     "scale": 14,
+     "depth": 0.3,
+     "seed": 3
+    },
+    "anchor": "world",
+    "zoom": "crossfade_octaves"
+   }
+  },
+  "lines": {
+   "line": {
+    "kind": "exact",
+    "width": 2
+   },
+   "crayon": {
+    "kind": "crayon",
+    "width": 7,
+    "pressure": 0.55
+   }
+  },
+  "fills": {
+   "fill": {
+    "kind": "flat"
+   },
+   "wax-fill": {
+    "kind": "flat",
+    "pressure": 0.6
+   }
+  }
+ },
+ "2d": {
+  "format": 1,
+  "id": "drawn-targets-149",
+  "profile": "figure",
+  "title": "A crayon fish",
+  "description": "A crayon fish: a #149 acceptance fixture in a 2D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/bubble/at/pos/1",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": -300,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "school": {
+    "id": "school",
+    "kind": "group@1",
+    "layer": "main",
+    "name": "school",
+    "order": "a0",
+    "params": {
+     "passes": [
+      {
+       "op": "wax",
+       "params": {},
+       "grow": 0
+      }
+     ]
+    }
+   },
+   "fish": {
+    "id": "fish",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "fish",
+    "order": "a1",
+    "params": {
+     "d": "M 620 540 C 800 340 1120 340 1300 540 L 1460 420 L 1460 660 L 1300 540 C 1120 740 800 740 620 540 Z",
+     "paint": {
+      "fill": {
+       "fill": "wax-fill",
+       "role": "vermilion"
+      }
+     }
+    },
+    "parent": "school"
+   },
+   "scale": {
+    "id": "scale",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "scale",
+    "order": "a2",
+    "params": {
+     "d": "M 760 540 C 860 480 960 480 1060 540",
+     "paint": {
+      "stroke": {
+       "role": "ink",
+       "line": "crayon"
+      }
+     }
+    },
+    "parent": "school"
+   },
+   "bubble": {
+    "id": "bubble",
+    "kind": "circle@1",
+    "layer": "main",
+    "name": "bubble",
+    "order": "a3",
+    "params": {
+     "center": [
+      420,
+      620
+     ],
+     "r": 26,
+     "paint": {
+      "stroke": {
+       "role": "indigo",
+       "line": "crayon"
+      }
+     }
+    }
+   },
+   "wax": {
+    "id": "wax",
+    "kind": "gpu.pass@1",
+    "layer": "main",
+    "name": "wax",
+    "order": "z0",
+    "params": {
+     "origin": "composed",
+     "about": "A crayon medium over its collection's own pressure.",
+     "inputs": {
+      "press": {
+       "type": "texture",
+       "from": {
+        "texture": {
+         "target": {
+          "collection": "fish",
+          "output": "pressure",
+          "resolution": "half",
+          "mips": false
+         }
+        }
+       }
+      },
+      "src": {
+       "type": "texture",
+       "from": {
+        "texture": {
+         "target": {
+          "op": "core",
+          "output": "color"
+         }
+        }
+       }
+      }
+     },
+     "steps": {
+      "uv": {
+       "op": "screen_uv@1"
+      },
+      "p": {
+       "op": "sample@1",
+       "args": {
+        "tex": "press",
+        "uv": "uv",
+        "lod": 0
+       }
+      },
+      "c": {
+       "op": "sample@1",
+       "args": {
+        "tex": "src",
+        "uv": "uv",
+        "lod": 0
+       }
+      },
+      "out": {
+       "op": "mix@1",
+       "args": {
+        "a": "c",
+        "b": "p",
+        "t": 0.25
+       }
+      }
+     },
+     "outputs": {
+      "color": "out",
+      "blend": "replace"
+     },
+     "resolution": "full",
+     "cost": {
+      "ns_per_px": 2
+     },
+     "fallback": "look"
+    }
+   }
+  },
+  "collections": {
+   "fish": {
+    "members": [
+     "fish",
+     "scale"
+    ]
+   }
+  }
+ },
+ "3d": {
+  "format": 1,
+  "id": "drawn-targets-149-3d",
+  "profile": "scene",
+  "title": "A crayon fish",
+  "description": "A crayon fish: a #149 acceptance fixture in a 3D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "scene3d": "^1",
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/bubble/at/pos/1",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0.4,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 2.2,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a0",
+    "params": {
+     "projection": "perspective",
+     "target": [
+      0,
+      0.6,
+      0
+     ],
+     "position": [
+      0,
+      1.6,
+      7
+     ],
+     "fov": 40,
+     "near": 0.1,
+     "far": 80
+    }
+   },
+   "fish": {
+    "id": "fish",
+    "kind": "mark.sphere@1",
+    "layer": "main",
+    "name": "fish",
+    "order": "a1",
+    "params": {
+     "size": [
+      2.6,
+      1.2,
+      0.8
+     ],
+     "paint": {
+      "fill": {
+       "fill": "wax-fill",
+       "role": "vermilion"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      1.2,
+      0
+     ]
+    }
+   },
+   "bubble": {
+    "id": "bubble",
+    "kind": "mark.sphere@1",
+    "layer": "main",
+    "name": "bubble",
+    "order": "a2",
+    "params": {
+     "size": [
+      0.3,
+      0.3,
+      0.3
+     ],
+     "paint": {
+      "fill": {
+       "role": "indigo"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -2,
+      0.4,
+      0
+     ]
+    }
+   },
+   "wax": {
+    "id": "wax",
+    "kind": "gpu.pass@1",
+    "layer": "main",
+    "name": "wax",
+    "order": "z0",
+    "params": {
+     "origin": "composed",
+     "about": "A crayon medium over its collection's own pressure.",
+     "inputs": {
+      "press": {
+       "type": "texture",
+       "from": {
+        "texture": {
+         "target": {
+          "collection": "fish",
+          "output": "pressure",
+          "resolution": "half",
+          "mips": false
+         }
+        }
+       }
+      },
+      "src": {
+       "type": "texture",
+       "from": {
+        "texture": {
+         "target": {
+          "op": "core",
+          "output": "color"
+         }
+        }
+       }
+      }
+     },
+     "steps": {
+      "uv": {
+       "op": "screen_uv@1"
+      },
+      "p": {
+       "op": "sample@1",
+       "args": {
+        "tex": "press",
+        "uv": "uv",
+        "lod": 0
+       }
+      },
+      "c": {
+       "op": "sample@1",
+       "args": {
+        "tex": "src",
+        "uv": "uv",
+        "lod": 0
+       }
+      },
+      "out": {
+       "op": "mix@1",
+       "args": {
+        "a": "c",
+        "b": "p",
+        "t": 0.25
+       }
+      }
+     },
+     "outputs": {
+      "color": "out",
+      "blend": "replace"
+     },
+     "resolution": "full",
+     "cost": {
+      "ns_per_px": 2
+     },
+     "fallback": "look",
+     "chain": "effects",
+     "order": "a0"
+    }
+   }
+  },
+  "collections": {
+   "fish": {
+    "members": [
+     "fish"
+    ]
+   }
+  }
+ }
+}

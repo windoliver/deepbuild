@@ -1,0 +1,15 @@
+#149 AC5 redraft at the base, c12a65bb (Merge pull request #1281), before any implementation.
+
+Not run at the base: the surfaces plainly don't exist there, and no cargo binary was built.
+
+- film.rs refuses a document with a camera@1 item (parity::three_d), so all 14 fixtures fail in 2D.
+- scene3d's paint() reads only paint.fill.role, so a noise fill and a stroke-only mark.line@1 are refused in 3D, and its
+  stroke() refuses paint.stroke on a sphere or a cylinder.
+- deep-canvas-marks, deep-canvas, deep-canvas-scene3d and deep-gpu-layer hold no "collection" field, so nothing reads a
+  collection target.
+- Fixtures that do draw in 3D draw the look's new fields as nothing, so the hold on the fields being on fails: frame 4 is
+  one picture with its fields off.
+
+Checked instead, on node with no GPU: `framing` passes on all 14 fixtures (a first draft of the noise panels failed it,
+at u = 4.3 and 955.7 once a box's near face was counted), and `judge` passes a modelled right program and fails each
+modelled wrong one (README). `tsc --noEmit -p` was not run: this worktree has no node_modules.

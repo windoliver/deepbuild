@@ -69,6 +69,11 @@ pub type Palette = BTreeMap<String, Rgb>;
 pub struct Type {
     pub fonts: BTreeMap<String, &'static str>,
     pub fallback: Vec<&'static str>,
+    /// #149: the look's drawn fields, when marks are dressed by them.
+    pub drawn: Option<Arc<deep_canvas_drawn::spec::Look>>,
+    /// #149's wrong programs: only a look's first rim, and every ink fill flat.
+    pub first_rim: bool,
+    pub flat_ink: bool,
 }
 
 impl Type {
@@ -213,6 +218,8 @@ pub struct Effect {
     pub backdrop: bool,
     /// With dissolve: the hash takes the video frame index too.
     pub dancing: bool,
+    /// #149: the marks inside are a fill or a line's coverage, laid through this medium.
+    pub medium: Option<Arc<deep_canvas_drawn::medium::Medium>>,
 }
 
 /// A group's blend (Frame and group: blend modes): the 16 W3C modes and add, which Vello draws,
@@ -364,7 +371,12 @@ impl Effect {
         if dancing && blend != Some(Blend::Dissolve) {
             return refuse("bad_doc", path("dancing"));
         }
-        Ok((!passes.is_empty() || dancing).then_some(Effect { passes, backdrop, dancing }))
+        Ok((!passes.is_empty() || dancing).then_some(Effect {
+            passes,
+            backdrop,
+            dancing,
+            medium: None,
+        }))
     }
 }
 
@@ -421,6 +433,9 @@ impl Scope {
                         k.text(&p.op).number(p.grow.unwrap_or(-1.0));
                         k.text(&Value::Object(p.params.clone()).to_string());
                         k.text(&p.item.as_ref().map_or(String::new(), Value::to_string));
+                    }
+                    if let Some(m) = &e.medium {
+                        k.text(&format!("{m:?}"));
                     }
                 }
             }
@@ -1268,7 +1283,7 @@ pub(crate) fn fill_of(
 }
 
 /// The box of `verbs`' points, `[x, y, w, h]`, a gradient's box on a path.
-fn bounds_of(verbs: &[Verb]) -> [f64; 4] {
+pub(crate) fn bounds_of(verbs: &[Verb]) -> [f64; 4] {
     let mut b = [
         f64::INFINITY,
         f64::INFINITY,
@@ -1469,6 +1484,21 @@ impl Paints<'_> {
             let path = format!("{path}/steps");
             let steps = paint::steps(self.palette, s, &path)?;
             return Ok(Fill::Solid(steps.color(self.step(id, &steps, &path)?)));
+        }
+        // #149: a noise fill draws its ramp through the drawn pass, and a named fill or line takes
+        // the ink when it names no role.
+        if let Some(n) = p.get("noise") {
+            let first = n.pointer("/stops/0/role");
+            return Ok(Fill::Solid(role(
+                self.palette,
+                first,
+                &format!("{path}/noise/stops/0/role"),
+            )?));
+        }
+        if !p.contains_key("role") && (p.contains_key("fill") || p.contains_key("line")) {
+            let ink = Value::String("ink".into());
+            let at = format!("{path}/role");
+            return Ok(Fill::Solid(role(self.palette, Some(&ink), &at)?));
         }
         Ok(Fill::Solid(role(
             self.palette,
@@ -1700,7 +1730,7 @@ pub type Column = Vec<(f64, f64)>;
 
 /// `color` painted along a stroke's length at each point's opacity from `alphas`, or solid when
 /// there is no opacity column.
-fn along_alphas(color: Rgb, alphas: &Column) -> Fill {
+pub(crate) fn along_alphas(color: Rgb, alphas: &Column) -> Fill {
     let Some((last, _)) = alphas.last() else {
         return Fill::Solid(color);
     };
@@ -4375,6 +4405,25 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         || stroke.is_some_and(|s| s.contains_key("taper") || s.contains_key("wave"))
         || paint.get("shade").is_some_and(|v| !v.is_null())
         || joined_under(ctx, id, "opacity").is_some();
+    // #149: a lamp of a backlit screen is light, and draws nothing of its own.
+    if let Some(look) = &ctx.ty.drawn {
+        let lamps = look.light.as_ref().and_then(|l| l.back.as_ref());
+        if lamps.is_some_and(|b| b.lamps.iter().any(|l| l == id)) {
+            return Ok(None);
+        }
+    }
+    // A look dresses an item it lights or lays strokes on, or that names its fills and lines.
+    let dressing = ctx.ty.drawn.as_ref().filter(|look| {
+        let names = |side: &str, keys: [&str; 2]| {
+            let p = paint.get(side).and_then(Value::as_object);
+            p.is_some_and(|p| keys.iter().any(|k| p.contains_key(*k)))
+        };
+        look.light.is_some()
+            || look.strokes.is_some()
+            || names("fill", ["fill", "noise"])
+            || names("stroke", ["line", "line"])
+    });
+    let kinetic = kinetic || dressing.is_some();
     let r1 = place.moves() && r1_paint(paint) && !kinetic;
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
     let adjust = Adjust::read(item, ctx.palette, id)?;
@@ -4748,9 +4797,31 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         paint.get("shade"),
         &format!("{paint_path}/shade"),
     )?;
-    let drawn_marks = match &shade {
-        None => drawn(marks),
-        Some(shade) => marks
+    let drawn_marks = match (&shade, dressing) {
+        (None, Some(look)) => {
+            let dress = crate::drawn::Dress {
+                look,
+                doc: ctx.paints.doc,
+                items: ctx.items,
+                palette: ctx.palette,
+                first_rim: ctx.ty.first_rim,
+                flat_ink: ctx.ty.flat_ink,
+            };
+            crate::drawn::dress(&dress, id, paint, marks)?
+                .into_iter()
+                .map(|(mark, inner)| {
+                    let mut all = scopes.clone();
+                    all.extend(inner);
+                    Arc::new(Drawn {
+                        mark,
+                        clip,
+                        scopes: all,
+                    })
+                })
+                .collect()
+        }
+        (None, None) => drawn(marks),
+        (Some(shade), _) => marks
             .into_iter()
             .flat_map(|mark| shaded(id, mark, shade, &scopes, clip))
             .collect(),

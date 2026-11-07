@@ -164,6 +164,34 @@ impl Unit {
     }
 }
 
+/// Every `fw` and `fh` literal in `value` in place as its number of u against a frame of `frame`
+/// (Units and axes: frame-relative sizes convert at check). Anything else stays as it is.
+pub fn lower_frame_literals(value: &mut serde_json::Value, frame: (u32, u32)) {
+    use serde_json::Value;
+    match value {
+        Value::String(text) => {
+            let Ok(literal) = UnitLiteral::parse(text) else {
+                return;
+            };
+            if !matches!(literal.unit(), Unit::Fw | Unit::Fh) {
+                return;
+            }
+            let ctx = UnitContext {
+                frame,
+                ..UnitContext::default()
+            };
+            if let Ok(u) = literal.convert("u", &ctx) {
+                *value = serde_json::json!(u.to_f64());
+            }
+        }
+        Value::Array(list) => list.iter_mut().for_each(|v| lower_frame_literals(v, frame)),
+        Value::Object(map) => map
+            .values_mut()
+            .for_each(|v| lower_frame_literals(v, frame)),
+        _ => {}
+    }
+}
+
 /// The forms a field declared in `unit` takes, each a literal the printer wrote (`1m`, `1cm`,
 /// …), the bare number left out; empty for an unknown unit.
 pub fn forms_for(unit: &str) -> Vec<String> {

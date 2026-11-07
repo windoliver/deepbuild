@@ -1,0 +1,253 @@
+{
+ "family": "offset",
+ "subject": "A kite over hills",
+ "look": {
+  "id": "drawn-offset-149-look",
+  "ground": {
+   "kind": "paper",
+   "params": {
+    "role": "paper",
+    "seed": "document",
+    "tooth": {
+     "kind": "cold_press",
+     "scale": 14,
+     "depth": 0.3,
+     "seed": 3
+    },
+    "anchor": "world",
+    "zoom": "crossfade_octaves"
+   }
+  },
+  "fills": {
+   "fill": {
+    "kind": "flat"
+   },
+   "slid": {
+    "kind": "flat",
+    "offset": {
+     "dx": "1/300fw",
+     "dy": 6,
+     "oversize": 0.1,
+     "seed": 9
+    }
+   }
+  }
+ },
+ "2d": {
+  "format": 1,
+  "id": "drawn-offset-149",
+  "profile": "figure",
+  "title": "A kite over hills",
+  "description": "A kite over hills: a #149 acceptance fixture in a 2D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/kite/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 200,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "hills": {
+    "id": "hills",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "hills",
+    "order": "a0",
+    "params": {
+     "d": "M 120 900 C 480 640 900 860 1280 680 C 1500 580 1680 640 1800 700 L 1800 960 L 120 960 Z",
+     "paint": {
+      "fill": {
+       "fill": "slid",
+       "role": "moss"
+      },
+      "stroke": {
+       "role": "ink",
+       "line": "line"
+      }
+     }
+    }
+   },
+   "kite": {
+    "id": "kite",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "kite",
+    "order": "a1",
+    "params": {
+     "d": "M 960 180 L 1110 340 L 960 560 L 810 340 Z",
+     "paint": {
+      "fill": {
+       "fill": "slid",
+       "role": "vermilion"
+      },
+      "stroke": {
+       "role": "ink",
+       "line": "line"
+      }
+     }
+    }
+   }
+  }
+ },
+ "3d": {
+  "format": 1,
+  "id": "drawn-offset-149-3d",
+  "profile": "scene",
+  "title": "A kite over hills",
+  "description": "A kite over hills: a #149 acceptance fixture in a 3D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "scene3d": "^1",
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/kite/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 1.2,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a0",
+    "params": {
+     "projection": "perspective",
+     "target": [
+      0,
+      0.6,
+      0
+     ],
+     "position": [
+      0,
+      1.6,
+      7
+     ],
+     "fov": 40,
+     "near": 0.1,
+     "far": 80
+    }
+   },
+   "hills": {
+    "id": "hills",
+    "kind": "mark.sphere@1",
+    "layer": "main",
+    "name": "hills",
+    "order": "a1",
+    "params": {
+     "size": [
+      7,
+      1.4,
+      3
+     ],
+     "paint": {
+      "fill": {
+       "fill": "slid",
+       "role": "moss"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      -0.3,
+      0
+     ]
+    }
+   },
+   "kite": {
+    "id": "kite",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "kite",
+    "order": "a2",
+    "params": {
+     "size": [
+      0.8,
+      1.1,
+      0.04
+     ],
+     "paint": {
+      "fill": {
+       "fill": "slid",
+       "role": "vermilion"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      2.1,
+      0
+     ]
+    }
+   }
+  }
+ }
+}

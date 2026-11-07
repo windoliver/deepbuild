@@ -240,6 +240,8 @@ pub struct DocOps {
     storage: BTreeMap<(String, String), wgpu::Buffer>,
     /// Each compute operator's texture outputs, by (item, output).
     textures: BTreeMap<(String, String), OutTex>,
+    /// #149: each collection target this frame drew, by the (op, output) its readers name.
+    pub collections: BTreeMap<(String, String), wgpu::TextureView>,
     /// Each pass operator's own target, with its size; each iterate's two ping-pong targets.
     targets: BTreeMap<String, ([u32; 2], wgpu::Texture)>,
     /// Each pass operator's target in the last frame planned, by item.
@@ -304,6 +306,7 @@ impl DocOps {
             ops: Vec::new(),
             storage: BTreeMap::new(),
             textures: BTreeMap::new(),
+            collections: BTreeMap::new(),
             targets: BTreeMap::new(),
             drawn: BTreeMap::new(),
             plans: BTreeMap::new(),
@@ -697,7 +700,9 @@ impl DocOps {
                 depth.cloned().unwrap_or_else(|| src.clone())
             }
             From::Target { op, output } | From::Texture3d { op, output, .. } => {
-                if let Some(t) = self.textures.get(&(op.clone(), output.clone())) {
+                if let Some(v) = self.collections.get(&(op.clone(), output.clone())) {
+                    v.clone()
+                } else if let Some(t) = self.textures.get(&(op.clone(), output.clone())) {
                     t.tex.create_view(&Default::default())
                 } else if let Some(v) = iterated.get(op) {
                     v.clone()

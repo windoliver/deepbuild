@@ -1,0 +1,316 @@
+{
+ "family": "strokes",
+ "subject": "A wheat field",
+ "look": {
+  "id": "drawn-strokes-149-look",
+  "ground": {
+   "kind": "paper",
+   "params": {
+    "role": "paper",
+    "seed": "document",
+    "tooth": {
+     "kind": "cold_press",
+     "scale": 14,
+     "depth": 0.3,
+     "seed": 3
+    },
+    "anchor": "world",
+    "zoom": "crossfade_octaves"
+   }
+  },
+  "strokes": {
+   "on": "crop",
+   "density": 0.002,
+   "size": [
+    8,
+    22
+   ],
+   "orient": "flow",
+   "palette": {
+    "all": [
+     "ochre",
+     "moss"
+    ]
+   },
+   "layers": 2,
+   "dry": 0.3,
+   "seed": "item"
+  }
+ },
+ "2d": {
+  "format": 1,
+  "id": "drawn-strokes-149",
+  "profile": "figure",
+  "title": "A wheat field",
+  "description": "A wheat field: a #149 acceptance fixture in a 2D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/crow/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 640,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "field": {
+    "id": "field",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "field",
+    "order": "a0",
+    "params": {
+     "box": [
+      0,
+      500,
+      1920,
+      580
+     ],
+     "paint": {
+      "fill": {
+       "role": "ochre"
+      }
+     }
+    }
+   },
+   "sky": {
+    "id": "sky",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "sky",
+    "order": "a1",
+    "params": {
+     "box": [
+      0,
+      0,
+      1920,
+      500
+     ],
+     "paint": {
+      "fill": {
+       "role": "lamp_cool"
+      }
+     }
+    }
+   },
+   "crow": {
+    "id": "crow",
+    "kind": "circle@1",
+    "layer": "main",
+    "name": "crow",
+    "order": "a2",
+    "params": {
+     "center": [
+      300,
+      220
+     ],
+     "r": 22,
+     "paint": {
+      "fill": {
+       "role": "ink"
+      }
+     }
+    }
+   }
+  },
+  "collections": {
+   "crop": {
+    "members": [
+     "field",
+     "sky"
+    ]
+   }
+  }
+ },
+ "3d": {
+  "format": 1,
+  "id": "drawn-strokes-149-3d",
+  "profile": "scene",
+  "title": "A wheat field",
+  "description": "A wheat field: a #149 acceptance fixture in a 3D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "scene3d": "^1",
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/crow/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": -2,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 1,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a0",
+    "params": {
+     "projection": "perspective",
+     "target": [
+      0,
+      0.6,
+      0
+     ],
+     "position": [
+      0,
+      1.6,
+      7
+     ],
+     "fov": 40,
+     "near": 0.1,
+     "far": 80
+    }
+   },
+   "field": {
+    "id": "field",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "field",
+    "order": "a1",
+    "params": {
+     "size": [
+      12,
+      0.1,
+      8
+     ],
+     "paint": {
+      "fill": {
+       "role": "ochre"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      0,
+      0
+     ]
+    }
+   },
+   "barn": {
+    "id": "barn",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "barn",
+    "order": "a2",
+    "params": {
+     "size": [
+      1.6,
+      1.2,
+      1.2
+     ],
+     "paint": {
+      "fill": {
+       "role": "wine"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      1.4,
+      0.6,
+      -1
+     ]
+    }
+   },
+   "crow": {
+    "id": "crow",
+    "kind": "mark.sphere@1",
+    "layer": "main",
+    "name": "crow",
+    "order": "a3",
+    "params": {
+     "size": [
+      0.2,
+      0.2,
+      0.2
+     ],
+     "paint": {
+      "fill": {
+       "role": "ink"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -2,
+      2.2,
+      0
+     ]
+    }
+   }
+  },
+  "collections": {
+   "crop": {
+    "members": [
+     "field",
+     "barn"
+    ]
+   }
+  }
+ }
+}

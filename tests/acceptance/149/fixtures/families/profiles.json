@@ -1,0 +1,291 @@
+{
+ "family": "profiles",
+ "subject": "A heron in reeds",
+ "look": {
+  "id": "drawn-profiles-149-look",
+  "ground": {
+   "kind": "paper",
+   "params": {
+    "role": "paper",
+    "seed": "document",
+    "tooth": {
+     "kind": "cold_press",
+     "scale": 14,
+     "depth": 0.3,
+     "seed": 3
+    },
+    "anchor": "world",
+    "zoom": "crossfade_octaves"
+   }
+  },
+  "lines": {
+   "line": {
+    "kind": "exact",
+    "width": 2
+   },
+   "nib": {
+    "kind": "brush",
+    "width": 12,
+    "dry": 0.3,
+    "pressure": 0.8,
+    "profile": {
+     "taper_in": 0.2,
+     "taper_out": 0.3,
+     "swell": 0.6,
+     "flick": 14,
+     "overshoot": 6,
+     "breaks": {
+      "every": 240,
+      "gap": 6
+     },
+     "double": {
+      "offset": 3,
+      "opacity": 0.4
+     },
+     "dry_tail": 0.4,
+     "seed": 5
+    }
+   }
+  }
+ },
+ "2d": {
+  "format": 1,
+  "id": "drawn-profiles-149",
+  "profile": "figure",
+  "title": "A heron in reeds",
+  "description": "A heron in reeds: a #149 acceptance fixture in a 2D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/reed/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 90,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "neck": {
+    "id": "neck",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "neck",
+    "order": "a0",
+    "params": {
+     "d": "M 860 760 C 760 600 1000 520 900 360 C 860 300 780 300 700 340",
+     "paint": {
+      "stroke": {
+       "role": "ink",
+       "line": "nib"
+      }
+     }
+    }
+   },
+   "back": {
+    "id": "back",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "back",
+    "order": "a1",
+    "params": {
+     "d": "M 860 760 C 1020 720 1140 760 1260 860",
+     "paint": {
+      "stroke": {
+       "role": "ink",
+       "line": "nib"
+      }
+     }
+    }
+   },
+   "reed": {
+    "id": "reed",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "reed",
+    "order": "a2",
+    "params": {
+     "d": "M 1460 980 C 1440 760 1490 540 1460 300",
+     "paint": {
+      "stroke": {
+       "role": "moss",
+       "line": "nib"
+      }
+     }
+    }
+   }
+  }
+ },
+ "3d": {
+  "format": 1,
+  "id": "drawn-profiles-149-3d",
+  "profile": "scene",
+  "title": "A heron in reeds",
+  "description": "A heron in reeds: a #149 acceptance fixture in a 3D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "scene3d": "^1",
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "drift": {
+    "target": "items/reed/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 0.5,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a0",
+    "params": {
+     "projection": "perspective",
+     "target": [
+      0,
+      0.6,
+      0
+     ],
+     "position": [
+      0,
+      1.6,
+      7
+     ],
+     "fov": 40,
+     "near": 0.1,
+     "far": 80
+    }
+   },
+   "neck": {
+    "id": "neck",
+    "kind": "mark.line@1",
+    "layer": "main",
+    "name": "neck",
+    "order": "a1",
+    "params": {
+     "points": [
+      [
+       -0.6,
+       0,
+       0
+      ],
+      [
+       -0.4,
+       1,
+       0
+      ],
+      [
+       -0.8,
+       1.8,
+       0
+      ],
+      [
+       -1.4,
+       1.9,
+       0
+      ]
+     ],
+     "paint": {
+      "stroke": {
+       "role": "ink",
+       "line": "nib"
+      }
+     }
+    }
+   },
+   "reed": {
+    "id": "reed",
+    "kind": "mark.line@1",
+    "layer": "main",
+    "name": "reed",
+    "order": "a2",
+    "params": {
+     "points": [
+      [
+       1.6,
+       0,
+       0
+      ],
+      [
+       1.5,
+       1,
+       0
+      ],
+      [
+       1.7,
+       2.4,
+       0
+      ]
+     ],
+     "paint": {
+      "stroke": {
+       "role": "moss",
+       "line": "nib"
+      }
+     }
+    }
+   }
+  }
+ }
+}

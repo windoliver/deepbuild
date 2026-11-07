@@ -1082,6 +1082,35 @@
       "initialReason": "Issue #103 first measurement: the merge base has no typed edges. One process opens a record, the asks core, the supervisor and project trust, loads a provider and a user in the hub, then the user reads the provider's reading through its edge 1,000 times from inside its own code. The issue's 1 ms a reading adds across an edge stays in tests/acceptance/103/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "canvas-drawn-frames",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "drawn-frames"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frame_gpu_p95_ms": 10,
+        "frame_cpu_p95_ms": 4
+      },
+      "initialReason": "Issue #149 first measurement: the merge base has no drawn looks. A release deep-gpu plays each family's fixture (tests/acceptance/149/fixtures/families/<family>.json) at 1080p, in 2D through film2d and in 3D through view3d, 300 timed frames after 30 warm ones, five runs after a warm-up one. tests/acceptance/149/budgets.test.ts holds the worst family's p95s to the showpiece class's limits by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-paper-cost",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "paper-cost"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "paper_added_gpu_ms": 0.2
+      },
+      "initialReason": "Issue #149 first measurement: the merge base has no paper. A release deep-gpu plays the paper family's 2D film with its paper and on a flat ground, 300 timed frames after 30 warm ones, five runs after a warm-up one. tests/acceptance/149/budgets.test.ts holds the difference of the two medians to paper_added_gpu_ms by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "canvas-look-switch",
       "command": [
         "node",
