@@ -192,7 +192,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     const providers = (registry().get(name).facts as JsonObject).providers;
     if (!isObj(providers) || !isObj(providers[provider])) {
       meta.watchOnly = true;
-      meta.paseo.lacks = `This session runs ${provider || 'an unnamed provider'} through paseo, which DeepBuild's paseo facts have no entry for, so it is watch-only: nothing is held, answered or sent for it. The facts it lacks: bridge (its pinned bridge version), permissions (its permission quirks), modelCheck (the check of the exact model before the first prompt) and timeouts.`;
+      meta.paseo.lacks = `This session runs ${provider || 'an unnamed provider'} through paseo, which DeepBuild's paseo facts have no entry for, so it is watch-only: nothing is held, answered or sent for it, while its fail_closed guard entries still deny. The facts it lacks: bridge (its pinned bridge version), permissions (its permission quirks), modelCheck (the check of the exact model before the first prompt) and timeouts.`;
     }
   }
   const tool = str(payload.tool_name);
@@ -202,7 +202,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if ((event === 'PreToolUse' || event === 'PermissionRequest' || event === 'PostToolUse') && tool) {
     meta.call = { mode: str(payload.permission_mode), tool, input: isObj(payload.tool_input) ? payload.tool_input : {}, suggestions: Array.isArray(payload.permission_suggestions) ? payload.permission_suggestions : [] };
   }
-  // A session on a version its agent's facts don't cover has its holds and blocks watch-only. Only a reply that holds
+  // A session on a version its agent's facts don't cover has its holds and every block but the floor watch-only. Only a reply that holds
   // or blocks reads the version here; the core reads it for every other hook, off the acknowledgement's path.
   const replies = event === 'Stop' || event === 'PermissionRequest' || (event === 'PreToolUse' && request.matched.length > 0);
   // An agent whose transcript names no version says it in the payload.
