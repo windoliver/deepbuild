@@ -296,7 +296,12 @@ export class Runs {
           // A check that needs the app runs on its stack, started from its checkout once the run may start (#580). What
           // it served is read while it lasts, so a run on another tree, or on an environment that broke its rules, is uncounted.
           const serving = run.stack ? await this.o.stacks.serve({ ...run.stack, run: run.run, claim: run.claim, check: run.check, folder: run.cwd, expected_ms: run.expected_ms ?? null }) : undefined;
-          if (serving && 'cause' in serving) return { code: null, missing: serving.cause };
+          // A stack that never came up is a missing run the gate reads, naming why, so the check is BLOCKED (#33), never left
+          // with no run; one the hub's stop cut short is stopped.
+          if (serving && 'cause' in serving) {
+            const failures = [{ test: '(stack)', file: '.', line: 1, stack: null, assertion: false, message: `its stack never came up: ${serving.cause}` }];
+            return { code: null, record: { run: run.run, outcome: this.o.stopping() ? 'stopped' : 'missing', testsRun: 0, failures, evidence: [], read: [], mask: null, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun };
+          }
           const hosts = [...(run.grant.hosts ?? []), ...(serving?.hosts ?? [])];
           let record: CommandRun;
           try {

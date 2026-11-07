@@ -50,6 +50,215 @@
         ],
         "expected": "PASS"
       }
+    },
+    {
+      "id": "mode-hub-killed",
+      "covers": [
+        "mode:hub-killed",
+        "row:stopped"
+      ],
+      "dir": "cases/mode-hub-killed",
+      "prompt": "Make the shop serve the cart total at /total",
+      "stop": "Done: the README describes the shop.",
+      "drafts": [
+        {
+          "ask": "Make the shop serve the cart total at /total",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart still totals 250 and 100 cents as 350",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total the shop serves as anything but 350",
+              "check": ".deepbuild/checks/total.sh",
+              "on_base": "passes",
+              "asserts": [],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "README.md"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "fault": "hub-killed"
+      },
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "INCONCLUSIVE",
+        "names": [
+          "stopped"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "head"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "mode-disk-full",
+      "covers": [
+        "mode:disk-full"
+      ],
+      "dir": "cases/mode-disk-full",
+      "prompt": "Make the shop serve the cart total at /total",
+      "stop": "Done: the README describes the shop.",
+      "drafts": [
+        {
+          "ask": "Make the shop serve the cart total at /total",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The shop still totals a cart of 250 and 100 cents as 350",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total the shop serves as anything but 350",
+              "check": ".deepbuild/checks/total.sh",
+              "on_base": "passes",
+              "asserts": [],
+              "depth": "journey",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "README.md"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "fault": "disk-full"
+      },
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "BLOCKED",
+        "names": [
+          "watch-only"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "head"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "mode-env-missing",
+      "covers": [
+        "mode:env-missing"
+      ],
+      "dir": "cases/mode-env-missing",
+      "prompt": "Make the shop serve the cart total at /total",
+      "stop": "Done: the README describes the shop.",
+      "drafts": [
+        {
+          "ask": "Make the shop serve the cart total at /total",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The shop still totals a cart of 250 and 100 cents as 350",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total the shop serves as anything but 350",
+              "check": ".deepbuild/checks/total.sh",
+              "on_base": "passes",
+              "asserts": [],
+              "depth": "journey",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "README.md"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "twin_files": {
+          "shop-env/server.mjs": "// The shop's web server: its health route and the cart total, on the port the stack leases it.\nimport { createServer } from 'node:http';\nimport { createRequire } from 'node:module';\n\nconst { total } = createRequire(`${process.cwd()}/`)('./src/cart.js');\ncreateServer((req, res) => {\n  const url = new URL(req.url ?? '/', 'http://127.0.0.1');\n  if (url.pathname === '/health') return res.end('ok');\n  if (url.pathname === '/total') return res.end(String(total((url.searchParams.get('items') ?? '').split(',').map((cents) => ({ cents: Number(cents) })))));\n  res.statusCode = 404;\n  res.end();\n}).listen(Number(process.env.web), '127.0.0.1');\n"
+        }
+      },
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "BLOCKED",
+        "names": [
+          "missing"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "head"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
+      "id": "mode-token-expired",
+      "covers": [
+        "mode:token-expired"
+      ],
+      "dir": "cases/mode-token-expired",
+      "prompt": "Make the shop serve the cart total at /total",
+      "stop": "Done: the README describes the shop.",
+      "drafts": [
+        {
+          "ask": "Make the shop serve the cart total at /total",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The shop still totals a cart of 250 and 100 cents as 350",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total the shop serves as anything but 350",
+              "check": ".deepbuild/checks/total.sh",
+              "on_base": "passes",
+              "asserts": [],
+              "depth": "journey",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "README.md"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "files": {
+          ".shop/token.json": "{\"token\": \"shop-token-0123456789\", \"expires\": 1577836800000}\n"
+        },
+        "twin_files": {
+          ".shop/token.json": "{\"token\": \"shop-token-0123456789\", \"expires\": 4102444800000}\n"
+        }
+      },
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "BLOCKED",
+        "names": [
+          "you",
+          "SHOP_TOKEN"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "head"
+        ],
+        "expected": "PASS"
+      }
     }
   ]
 }
