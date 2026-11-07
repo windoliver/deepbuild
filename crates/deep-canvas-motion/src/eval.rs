@@ -284,11 +284,12 @@ pub fn written(doc: &Map<String, Value>, program: &Program, state: &State) -> Ma
         .iter()
         .filter_map(|f| program.items.get(f.item?))
         .map(String::as_str)
+        .chain(program.rows.iter().map(|r| r.item.as_str()))
         .collect();
     let items = match doc.get("items") {
         Some(Value::Object(items)) => items
             .iter()
-            .filter(|(id, _)| named.contains(id.as_str()))
+            .filter(|(id, item)| named.contains(id.as_str()) || reads_data(item))
             .map(|(id, item)| (id.clone(), item.clone()))
             .collect(),
         _ => Map::new(),
@@ -329,7 +330,28 @@ fn evaluated(
         };
         write(item, &field.path, value);
     }
+    for rows in &program.rows {
+        if let Some(item) = items.get_mut(&rows.item) {
+            rows.write(item, state.t);
+        }
+    }
+    // A counter on a driver of a data value reads that value at t on the evaluated item, as a
+    // template's keyed data value does (`params/data/<name>`).
+    let data = || {
+        let held = program.fields.iter();
+        held.filter_map(|f| Some((f.data.as_ref()?, state.slots[f.slot])))
+    };
+    for item in items.values_mut().filter(|i| reads_data(i)) {
+        for (name, value) in data() {
+            write(item, &["params".into(), "data".into(), name.clone()], json!(value));
+        }
+    }
     items
+}
+
+/// Whether an item shows a counter, which may read a driver's data value.
+fn reads_data(item: &Value) -> bool {
+    item.pointer("/params/text/counter").is_some()
 }
 
 /// Evaluates `doc`, compiled as `program`, at `t`.

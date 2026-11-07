@@ -373,6 +373,10 @@ impl deep_canvas::schedule::Canonical for Field {
         );
         self.written.encode(out);
         self.enumerated.encode(out);
+        // Only a keyed data value holds one, so every other field keeps its key.
+        if let Some(name) = &self.data {
+            name.encode(out);
+        }
     }
 }
 impl Canonical for Op {

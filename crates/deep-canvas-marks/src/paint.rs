@@ -318,6 +318,17 @@ fn mix(a: Oklab, b: Oklab, f: f64) -> Oklab {
     }
 }
 
+/// The color `f` of the way from `a` to `b` in OKLab.
+pub fn oklab_mix(a: Rgb, b: Rgb, f: f64) -> Oklab {
+    mix(lab(a), lab(b), f)
+}
+
+/// An OKLab color in 8-bit sRGB.
+pub fn rgb_of(c: Oklab) -> Rgb {
+    let c = oklab_to_srgb(c);
+    [c.r, c.g, c.b].map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
+}
+
 fn delta(p: Oklab, q: Oklab) -> f64 {
     ops::sqrt((p.l - q.l) * (p.l - q.l) + (p.a - q.a) * (p.a - q.a) + (p.b - q.b) * (p.b - q.b))
 }
