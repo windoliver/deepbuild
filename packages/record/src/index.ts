@@ -282,6 +282,8 @@ class SqliteRecord implements RecordStore {
   private readonly evidenceWriter: EvidenceWriter | undefined;
   private readonly queue: Pending[] = [];
   private scheduled = false;
+  /** A FULL commit waiting for the evidence it names to sync: every commit after it waits too, so the log keeps arrival order. */
+  private syncing: Promise<void> | undefined;
   /** The one stop every close waits for, once a close began. */
   private closing: Promise<void> | undefined;
   private inFlight = 0;
@@ -562,7 +564,10 @@ class SqliteRecord implements RecordStore {
     }
     this.sealed(prepared);
     if (CORE_ONLY.has(input.kind) || this.options.commitEach) {
-      const [outcome] = this.commit([prepared], CORE_ONLY.has(input.kind) || this.resumes([prepared]) ? 'full' : 'normal');
+      const mode = CORE_ONLY.has(input.kind) || this.resumes([prepared]) ? 'full' : 'normal';
+      const synced = this.evidenceSynced([prepared], mode);
+      if (synced) await synced;
+      const [outcome] = this.commit([prepared], mode);
       if (!outcome!.ok) throw outcome!.error;
       return outcome!.appended;
     }
@@ -599,29 +604,60 @@ class SqliteRecord implements RecordStore {
       if (checked && !byRule) this.queue.push({ prepared: checked, resolve: () => undefined, reject: () => undefined });
       if (!this.scheduled) {
         this.scheduled = true;
-        setImmediate(() => this.flush());
+        setImmediate(() => void this.flush());
       }
     });
   }
 
-  /** Commits the queued stream events in one NORMAL batch, each taking its log_pos inside the commit. */
-  private flush(): void {
-    this.scheduled = false;
+  /**
+   * Commits the queued stream events in one NORMAL batch, each taking its log_pos inside the commit. A FULL one waits
+   * for the evidence it names, still scheduled, so a read that settles the queue waits for it too.
+   */
+  private async flush(): Promise<void> {
     const batch = this.queue.splice(0);
-    if (!batch.length) return;
-    let outcomes: Outcome[];
+    let outcomes: Outcome[] = [];
     try {
       const items = batch.map((p) => p.prepared);
-      outcomes = this.commit(items, this.resumes(items) ? 'full' : 'normal');
+      const mode = this.resumes(items) ? 'full' : 'normal';
+      const synced = this.evidenceSynced(items, mode);
+      if (synced) await synced;
+      if (items.length) outcomes = this.commit(items, mode);
     } catch (error) {
       for (const p of batch) p.reject(error as Error);
-      return;
+    } finally {
+      this.scheduled = false;
+      if (this.queue.length) {
+        this.scheduled = true;
+        setImmediate(() => void this.flush());
+      }
     }
     for (const [i, outcome] of outcomes.entries()) {
       const pending = batch[i]!;
       if (outcome.ok) pending.resolve(outcome.appended);
       else pending.reject(outcome.error);
     }
+  }
+
+  /**
+   * Before a commit: the evidence a FULL one names, synced with its folders (#1410), so a commit that survives a power
+   * cut never names a file that didn't; and any commit waits for a FULL one already waiting, so a later event never
+   * lands first. The sync runs off this thread. A record opened without a store holds no files to sync. Undefined
+   * when there is nothing to wait for, so such a commit stays in this turn.
+   */
+  private evidenceSynced(items: readonly Prepared[], mode: Durability): Promise<void> | undefined {
+    const named = mode === 'full' && this.options.evidence ? items.flatMap((p) => p.evidence) : [];
+    return this.syncing || named.length ? this.syncNamed(items, named) : undefined;
+  }
+  private async syncNamed(items: readonly Prepared[], named: string[]): Promise<void> {
+    while (this.syncing) await this.syncing;
+    if (!named.length) return;
+    const synced = this.options.evidence!.sync(named);
+    const waiting = (this.syncing = synced.then(() => undefined, () => undefined).finally(() => { if (this.syncing === waiting) this.syncing = undefined; }));
+    await synced.catch((error: unknown) => {
+      // Nothing of the commit is in the log, as when the storage refuses it: its sessions have lost events.
+      for (const p of items) if (p.session) this.markLost(p.session);
+      throw new RecordError('storage', `the evidence a FULL commit names could not be synced: ${error instanceof Error ? error.message : String(error)}`);
+    });
   }
 
   /**
