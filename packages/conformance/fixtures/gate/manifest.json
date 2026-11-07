@@ -1,0 +1,55 @@
+{
+  "kit": "gate@1",
+  "cases": [
+    {
+      "id": "seeded-bug",
+      "covers": [
+        "seeded-bug",
+        "row:failed"
+      ],
+      "dir": "cases/seeded-bug",
+      "prompt": "Fix the cart total: it adds a cent to every order",
+      "stop": "Done: the cart total is fixed.",
+      "drafts": [
+        {
+          "ask": "Fix the cart total: it adds a cent to every order",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "The cart total is the sum of its items' cents, 350 for 250 and 100",
+              "source_line": "ask#L1",
+              "refuted_by": "a cart of 250 and 100 cents whose total is not 350",
+              "check": ".deepbuild/checks/cart.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/cart.test.js:7"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": []
+            }
+          ],
+          "deliverables": [
+            "src/cart.js"
+          ],
+          "budget": null
+        }
+      ],
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "FAIL",
+        "names": [
+          "test/cart.test.js:7"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    }
+  ]
+}
