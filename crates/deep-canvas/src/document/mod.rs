@@ -63,6 +63,7 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "look",
     "camera",
     "locale",
+    "light_policy",
     "budget",
     "requires",
     "packs",

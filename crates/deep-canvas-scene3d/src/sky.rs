@@ -222,7 +222,10 @@ pub fn parse(
             num(m.get("radius")).ok_or_else(|| bad("moon/radius"))?,
         ]),
     };
-    let sun = params.get("sun").and_then(Value::as_str).map(str::to_string);
+    let sun = params
+        .get("sun")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let source = |v: &Value, k: &str| -> Result<Source, Refused> {
         match v.as_str() {
             Some("sky") => Ok(Source::Sky),

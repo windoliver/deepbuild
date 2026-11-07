@@ -3737,6 +3737,77 @@ export interface DefinitionLockedV8 {
       criterion?: string;
       targets?: Array<string>;
       paid?: "live call" | "hosted browser run" | "model job";
+      runs?: number;
+      held_out?: Array<{
+        files: { [key: string]: string };
+      }>;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** definition.locked@9 */
+export interface DefinitionLockedV9 {
+  v: 9;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+        automated?: boolean;
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+      references?: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      command?: string;
+      criterion?: string;
+      targets?: Array<string>;
+      paid?: "live call" | "hosted browser run" | "model job";
+      runs?: number;
+      held_out?: Array<{
+        files: { [key: string]: string };
+      }>;
       timing?: boolean;
     }>;
     deliverables: Array<string>;
@@ -5619,6 +5690,47 @@ export interface RunFinished {
     points_to: string | null;
     findings: Array<string>;
     environment: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** run.finished@2 */
+export interface RunFinishedV2 {
+  v: 2;
+  id: string;
+  kind: "run.finished";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    outcome: "passed" | "failed" | "ran_nothing" | "missing" | "overran" | "stopped" | "uncounted";
+    tests_run: number;
+    passed: number;
+    runs: number;
+    evidence: Array<string>;
+    check: string;
+    assertion: string | null;
+    expected: string | null;
+    actual: string | null;
+    step: string | null;
+    points_to: string | null;
+    findings: Array<string>;
+    environment: string;
+    key?: {
+      id: string;
+      stem: string;
+      paths: Array<string>;
+      claim: string;
+      session: string;
+      base: boolean;
+      withheld: boolean;
+      plain: boolean;
+    };
   };
   evidence?: Array<string>;
 }

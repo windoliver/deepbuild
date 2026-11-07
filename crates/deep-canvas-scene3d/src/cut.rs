@@ -257,7 +257,12 @@ pub fn elements(params: &Value, path: &str) -> Result<(Vec<String>, Vec<Element>
             let y = num(Some(y)).ok_or_else(|| bad("yaw"))?;
             at = local_of(pos, [0.0, y, 0.0], scale, [1.0; 3]);
         }
-        out.push(Element { id, row: i as u32, proto, at });
+        out.push(Element {
+            id,
+            row: i as u32,
+            proto,
+            at,
+        });
     }
     Ok((of, out))
 }

@@ -11,12 +11,22 @@ const DECISIONS = {
   'AGENTS.md': { heading: '## The four invariants', what: 'one of the four invariants', row: () => true },
   'docs/technical-design.md': { heading: '## Decisions', what: 'a row under Decisions', row: (line) => line.startsWith('|') },
 };
-// The proof lanes' own code, lanes.mjs, which names the test paths and the timed tests, the throttle and perf, which
-// decide when a budget counts, affected.mjs, which decides which tests a change runs, and the bays, which decide what
+// The proof lanes' own code, lanes.mjs, which names the test paths and the timed tests, the throttle, perf and the
+// budget window, which decide when a budget counts, affected.mjs, which decides which tests a change runs, and the bays, which decide what
 // a proof's build reuses: once main holds the lanes, the change runs its own copy of them, so an edit of them is an
 // edit of the checks. So is an edit of a test runner's config (RUNNER_CONFIG), which can stub the code under test
 // only where it finds the change.
-const LANES_CODE = /^scripts\/(?:proof[^/]*|lanes|throttle|perf|affected|bays)\.mjs$/;
+const LANES_CODE = /^scripts\/(?:proof[^/]*|lanes|throttle|perf|budget-window|affected|bays)\.mjs$/;
+// The skips the lanes let stand are a decision of the same weight, so that key is guarded. Only that key: affected.mjs
+// --record rewrites the rest of the file on main.
+const SKIPS_FILE = 'scripts/known-failures.json';
+const skipsIn = (text) => {
+  try {
+    return JSON.stringify(JSON.parse(text ?? '{}').skips ?? null);
+  } catch {
+    return text;
+  }
+};
 
 // The files the merge base's runner configs name by path from the config's folder, resolved as vite
 // resolves them: those under the test paths, other than tests, named anywhere in a config, as
@@ -86,9 +96,12 @@ export function guard({ root, change, issue }, approvals, say) {
     };
     for (const path of commit.merge?.conflicts ?? []) for (const edit of conflictEdits(root, commit, path, relevant)) judge(edit, path, ...edit.test ? [named(path, edit.test)] : []);
     if (lanesOnMain) for (const path of (commit.merge?.conflicts ?? []).filter(isCheck)) judge(checkEdit(path, ' in resolving a merge conflict'), path);
+    // A conflict's resolution keeps either side's list, or it is an edit of its own.
+    if (lanesOnMain && commit.merge?.conflicts.includes(SKIPS_FILE) && !commit.merge.parents.some((parent) => skipsIn(show(root, parent, SKIPS_FILE)) === skipsIn(show(root, commit.sha, SKIPS_FILE)))) judge({ detail: `${SKIPS_FILE}: the skips key changed in resolving a merge conflict` }, SKIPS_FILE);
     for (const file of commit.files) {
       if (commit.merge?.conflicts.includes(file.path)) continue;
       if (lanesOnMain && isCheck(file.path) && file.hunks.length) judge(checkEdit(file.path, ''), file.path);
+      if (lanesOnMain && file.path === SKIPS_FILE && skipsIn(show(root, commit.parent, file.path)) !== skipsIn(show(root, commit.sha, file.path))) judge({ detail: `${file.path}: the skips key changed` }, file.path);
       // Node resolves a bare import through each node_modules folder above the importing file, so a
       // package committed in one may stand in for the one installed.
       if (lanesOnMain && file.hunks.length && underTests(file.path)) judge({ detail: `${file.path}: a package committed under node_modules, which a test's import may resolve to in place of the one installed` }, file.path);
