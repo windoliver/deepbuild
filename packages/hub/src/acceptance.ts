@@ -192,10 +192,11 @@ export class Acceptance {
       void (async () => {
         const taken = d.drafts.find((x) => x.job === delivery.option);
         if (taken) d.commit = await this.swap(e, d, taken, false);
+        d.outcome = taken ? 'swapped' : 'stands';
         e.queued = delivery.option !== 'hold';
         await this.save(e);
         await this.pump();
-      })().catch((error: unknown) => { e.why = String(error); });
+      })().catch((error: unknown) => { e.why = String(error); return this.save(e); }).catch(() => undefined);
     }
   }
 
