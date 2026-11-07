@@ -76,10 +76,11 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
     rev: maybe({ type: 'integer', description: 'With no document or patch, render back this revision of the document; null for the current one.' }),
   }),
   deep_drive: object({
-    call: { type: 'string', enum: ['launch', 'act', 'wait_for', 'see', 'screenshot', 'record', 'expect', 'close'] },
+    call: { type: 'string', enum: ['launch', 'act', 'wait_for', 'see', 'probe', 'screenshot', 'record', 'expect', 'close'] },
     replica: maybe(str('The replica, as launch answered it; null only for launch.', HANDLE('replica'))),
     launch: maybe(object({
       from: oneOf(['fixture', 'record_copy', 'empty'], 'null for fixture.'),
+      fixture: maybe(str('A record fixture, by its absolute path, read when from is fixture; null for the default one.')),
       panel: maybe(str('A panel package, by its absolute path, mounted in the sidebar.')),
       size: PAIR,
       scale: maybe(INT),
