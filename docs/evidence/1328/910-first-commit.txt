@@ -1,0 +1,11 @@
+fe581d923ef5d86ed9dd1242ac31d754a69abd66 2f43a66911824a4b303d165f931faaecc831209c
+DeepBuild <hub@deepbuild.invalid>
+Acceptance tests for #910, written blind
+
+Part of #910
+
+A	tests/acceptance/910/README.md
+A	tests/acceptance/910/helpers.mjs
+A	tests/acceptance/910/issue-link.test.mjs
+A	tests/acceptance/910/offline.test.mjs
+A	tests/acceptance/910/renamed-heading.test.mjs
