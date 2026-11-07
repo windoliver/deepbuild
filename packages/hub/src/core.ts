@@ -69,6 +69,7 @@ import { Answers, answerText, type Answer } from './answers.js';
 import { RUN_AS_YOU, Runs } from './runs.js';
 import { retain } from './retention.js';
 import { Stacks, type StackWant } from './stacks.js';
+import { Starts } from './starts.js';
 import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
@@ -473,6 +474,8 @@ export class Core {
   private compose?: ReturnType<typeof composeKind>;
   /** DeepBuild's own headless jobs (#159): their hooks are theirs, never a session's. */
   private runner!: Runner;
+  /** Sessions started without your Send, under a run you approved (#1330). */
+  private sessionStarts!: Starts;
   /** Setup's wiki build (#356). */
   private wikiBuild!: { build(): Promise<WikiBuilt>; forget(claim: string): Promise<string> };
   /** The taste calls each session was given since it started, and the sessions whose first prompt was read for its screen (#111). */
@@ -1010,6 +1013,12 @@ export class Core {
       record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env, keychain,
       settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
     });
+    this.sessionStarts = new Starts({
+      root: this.root.dir, socket: this.root.socket, lock: this.root.lock, loginPath: () => this.config().loginPath, now: this.now, plant: this.options.plant,
+      supervisor: () => this.supervisor, asks: () => asks, raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
+      agentAbove: (peer) => this.agentAbove(peer), windowUsed: (agent, home) => this.runner.windowUsed(agent as JobSpec['agent'], home),
+    });
+    await this.sessionStarts.open();
     // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
     const trust = this.trust = await openTrust({ record: this.record, now: this.now });
     await this.spaces.open();
@@ -1353,6 +1362,7 @@ export class Core {
       // Copied now, verified or not: a desktop app deletes what follows this hook (#342), and a copy changes nothing.
       void this.archiveSession?.(meta.session).catch((error: unknown) => process.stderr.write(`deep hub: archive of ${meta.session}: ${error instanceof Error ? error.message : String(error)}\n`));
     }
+    if (meta.printed) void this.sessionStarts.refusals(meta.session, meta.toolUse, meta.printed).catch(() => undefined);
     if (meta.ran && meta.cwd) void this.teardowns.saw({ session: meta.session, agent: meta.agent, cwd: meta.cwd, call: meta.toolUse ?? meta.id, ...meta.ran }).catch(() => undefined);
     if (meta.event === 'UserPromptSubmit' && this.options.plant === 'typed-saves-decision') {
       this.typedAt.set(meta.session, Date.now());
@@ -1390,6 +1400,8 @@ export class Core {
       await this.appendReading(meta.session, meta.agent, meta.caller).catch(() => undefined);
     }
     const verified = meta.watchOnly ? false : await this.verify(meta);
+    // A session's first hook from under a run DeepBuild started (#1330): its start.session first, so its first event names the run.
+    if (meta.session) await this.sessionStarts.sessionOf(meta.session, meta.ppid, meta.agent).catch(() => undefined);
     if (meta.watchOnly && meta.session && !this.versioned.has(meta.session)) {
       this.versioned.add(meta.session);
       await this.appendReading(meta.session, meta.agent, meta.paseo?.lacks ?? `This session runs ${meta.agent} ${meta.version}, past the versions its facts cover: it is recorded unverified, and its holds and blocks are watch-only until the live smoke test widens the range to ${meta.version}.`).catch(() => undefined);
@@ -5039,7 +5051,12 @@ export class Core {
   private async sessionRows(): Promise<Record<string, unknown>[]> {
     const rows = (await this.record.table('sessions')).rows as Record<string, unknown>[];
     for (const id of [...this.answerWaiting]) if (!(await this.waitingFor(id)).length) this.answerWaiting.delete(id);
-    return rows.map((row) => (this.answerWaiting.has(String(row.id)) ? { ...row, delivery: 'answer waiting: neither deep-hook\'s waiter nor paseo\'s plugin can carry it, so it goes with the session\'s next prompt' } : row));
+    return rows.map((row) => {
+      // A session DeepBuild started shows its run and what its agent's own sandbox holds (#1330).
+      const started = this.sessionStarts.rowOf(String(row.id));
+      const shown = started ? { ...row, run: started.run, sandbox: started.sandbox } : row;
+      return this.answerWaiting.has(String(row.id)) ? { ...shown, delivery: 'answer waiting: neither deep-hook\'s waiter nor paseo\'s plugin can carry it, so it goes with the session\'s next prompt' } : shown;
+    });
   }
 
   // ---- Methods.
@@ -5096,6 +5113,8 @@ export class Core {
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);
+      case 'start.approve': return this.sessionStarts.approve(params, context);
+      case 'start.session': return this.sessionStarts.startSession(params, context);
       case 'test.load': return this.testLoad(params);
       case 'record.backup': return this.backup(params);
       case 'lease.wait': return this.heavy.wait(params, context.peer, () => this.agentAbove(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
@@ -5771,6 +5790,8 @@ export class Core {
    */
   private async mcpCall(params: Obj, context: CallContext): Promise<unknown> {
     const tool = String(params.tool);
+    // No MCP call starts a session, whatever it claims (#1330): refused before its arguments are read.
+    if (tool === 'deep_start') return this.sessionStarts.refuseMcp(context.session);
     try {
       const args = checkArguments(tool, params.arguments);
       const sent = isObj(params.arguments) ? params.arguments : {};

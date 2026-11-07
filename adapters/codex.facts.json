@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@1",
+  "schema": "adapter.facts@4",
   "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2", "0.166.0-alpha.5.1"],
   "agent": "codex",
   "hookTimeouts": {
@@ -38,6 +38,41 @@
         "-"
       ],
       "prompt": "stdin"
+    },
+    "started": {
+      "readBy": "a session DeepBuild starts under your approval (#1330): the unmodified CLI in a terminal the hub hosts, your words the prompt's argument and never typed in, its approval policy set at launch as TOML (the one that asks before acting unless the approval names another) and its sandbox's overrides beside it; the environment drops the variables that mark a nested session, and names the account's home only when it isn't the default",
+      "args": ["-c", "approval_policy={mode}", "-c", "projects.\"{worktree}\".trust_level=\"trusted\"", "{sandbox}", "{prompt}"],
+      "asks": "on-request",
+      "modes": { "on-request": "\"on-request\"", "never": "\"never\"" },
+      "skipping": ["never"],
+      "nested": ["CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_THREAD_ID"],
+      "home": "CODEX_HOME",
+      "defaultHome": "~/.codex"
+    }
+  },
+  "sandbox": {
+    "readBy": "a session DeepBuild starts runs inside the agent's own sandbox (#1330): per version, the config overrides that turn it on (spliced where {sandbox} stands), the walls they hold, how the agent's way out is turned off, and the approval policy each mode takes under it. {filesystem} is a TOML inline table: your home read-only and each credential folder denied. A wall not named here is not held, and a version not listed starts with no sandbox and says so. Checked on 0.166.0-alpha.5.1 (spikes/1330): its trusted hooks run outside the sandbox and reach the hub",
+    "conformance": "codex/sandbox/walls",
+    "versions": {
+      "0.166.0-alpha.5.1": {
+        "args": [
+          "-c",
+          "default_permissions=\"deepbuild\"",
+          "-c",
+          "permissions.deepbuild.extends=\":workspace\"",
+          "-c",
+          "permissions.deepbuild.filesystem={filesystem}",
+          "-c",
+          "permissions.deepbuild.network.enabled=false"
+        ],
+        "modes": { "on-request": "{granular={sandbox_approval=false,rules=true,mcp_elicitations=true,request_permissions=true,skill_approval=true}}" },
+        "walls": {
+          "writes": "a command writes only its worktree and the temp folders, your home read-only: a profile extending :workspace",
+          "credentials": "a command can't read the credential folders: each one \"deny\" in the profile's filesystem",
+          "network": "a command reaches no host at all, the approval's hosts included, since naming hosts needs Codex's network proxy: the profile's network.enabled false; the agent's own API calls run outside its sandbox"
+        },
+        "wayOut": { "call": "sandbox_permissions require_escalated", "setting": "approval_policy granular sandbox_approval", "off": false }
+      }
     }
   },
   "modelFamily": {
