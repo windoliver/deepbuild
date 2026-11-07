@@ -1,0 +1,9 @@
+# DeepBuild's bootstrap spec (#33): the repo's existing typecheck and tests, written and approved by the
+# maintainer. Each task takes its definition of done from its issue's acceptance criteria until week 5's
+# drafted spec replaces this file.
+claims:
+  done:
+    checks: [typecheck, test]
+checks:
+  typecheck: { type: command, run: "node node_modules/typescript/bin/tsc --noEmit", deadline: 30m }
+  test: { type: command, run: "node scripts/affected.mjs", min_tests: 1, deadline: 4h }
