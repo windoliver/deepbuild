@@ -1,0 +1,139 @@
+Acceptance tests for #37, run on the base commit 69803b94 (origin/main; no implementation of #37).
+
+Command:  NO_COLOR=1 /var/tmp/deep40/node/bin/node node_modules/vitest/vitest.mjs run --root tests/acceptance/37 --no-file-parallelism
+          (with CLAUDE*, DEEP_* and AI_AGENT unset by helpers.ts, after npm ci and npm run build --workspaces;
+          /var/tmp/deep40/node is a copy of the repo's Node the Linux sandbox can read, README: On Linux)
+Node:     v24.22.0
+Vitest:   5.0.5 linux-arm64
+Date:     2026-11-03
+Machine:  a Linux arm64 box (20 cores), not the reference Mac
+
+Result: 15 of 15 files fail, 62 of 62 collected tests fail, nothing passes and nothing is skipped.
+
+Why each fails, for the expected reason (the surface the README names doesn't exist here):
+- 50 tests fail at helpers.ts's assertion that packages/checks-journey/src/index.ts exists ("the journey check
+  kind's public entry exists at .../packages/checks-journey/src/index.ts: expected false to be true"), the first
+  thing each test asks for.
+- 9 (wrong program) tests (AC13's aside) fail at their own assertion on the error the criterion's assertion raised:
+  the entry-missing assertion above, whose message matches none of the criterion's words (for example
+  "expected 'the journey check kind's public entr…' to match /uncounted|FAIL/").
+- kind.test.ts (AC13 x4): each test loads the fill first and fails at the same entry-missing assertion.
+- budgets.test.ts (AC16 x1): fails BLOCKED before reaching the surface, "this budget counts only on the reference
+  Mac in the local preflight, and this machine can't give it: platform linux"; on the reference Mac it fails at the
+  entry-missing assertion like the rest.
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/37/tsconfig.json exits 2 with 79 errors, every
+one the missing surface: 8 x TS2307 "Cannot find module '../../../packages/checks-journey/src/index.ts'" (helpers.ts
+and each test file that imports its types) and 71 x TS7006 implicit any on the parameters of callbacks over the run
+records those types shape. With a type stub of the README's surface put at that path (the job's own check, removed
+again before this file was written), the same command exits 0 with no error.
+
+---- vitest output (the listing) ----
+
+ ❯ assertions.test.ts (4 tests | 4 failed) 153ms
+   ❯ AC18 #37.66b03932 an expect on the Export button fails on the base build by its locator timeout as an assertion failure at its line, with the selector and a screenshot, before the step's deadline; without it the click times out as an error; a toPass whose last attempt threw a TypeError is an error; a runner with the deadline under the expect timeout fails this test (4)
+     × AC18 the expect fails first, as an assertion failure at its line with the selector and a screenshot, before the step's deadline 33ms
+     × AC18 the same journey without the expect times out at the click, reported as an error (not an assertion failure) at the click's line 4ms
+     × AC18 a toPass block whose last attempt threw a TypeError is reported as an error, by its last attempt 12ms
+     × AC18 (wrong program) a runner that sets the step deadline under the expect timeout overruns the step on the first journey, naming the step, and fails this test 12ms
+ ❯ errors.test.ts (4 tests | 4 failed) 216ms
+   ❯ AC15 #37.8d57abb1 an uncaught error at step 3 and a 404 for an image each fail the journey naming the error or the URL and the step; declared expected they are listed and pass; a runner reading only the end state fails this test (4)
+     × AC15 an uncaught error thrown at the third step fails the journey, naming the error and the step, though the end state passes 50ms
+     × AC15 an image request that answered 404 fails the journey, naming the URL and the step it loaded in, though the end state passes 14ms
+     × AC15 the same errors declared expected by the journey are listed in its evidence and the journey passes; an error not declared still fails 7ms
+     × AC15 (wrong program) a planted runner that reads only the end state passes the broken page, and fails this test 10ms
+ ❯ budgets.test.ts (1 test | 1 failed) 121ms
+   ❯ AC16 #37.2f7f3193 budgets on the reference Mac: a journey run's evidence stays under 20 MB (720p, 15 fps); the runner adds under 10% to Playwright's own time (1)
+     × AC16 on the reference Mac, five cart-journey runs each leave under 20 MB of evidence, and each run's time beyond Playwright's own stays under 10% 3ms
+ ❯ review.test.ts (5 tests | 5 failed) 139ms
+   ❯ AC1 #37.32d0ded7 a journey that checks only a label fails review: end state is required (2)
+     × AC1 a journey whose steps expect a label and whose end state is empty is refused, naming the end state; the same journey with an end-state check passes review 7ms
+     × AC1 an end-state check whose only oracle is a model is not an end state a journey can rest on: review refuses it naming the oracle 3ms
+   ❯ AC17 #37.47553e4b journey files never contain credentials; they come from leases (3)
+     × AC17 a journey whose step types a literal into the password field is refused at review naming the step; one that names the secret passes review 1ms
+     × AC17 the run types the value the lease gave for TEST_PASSWORD, signs in, and keeps the value out of every text it records: the saved script, the steps and the end state 1ms
+     × AC17 a journey file in the checkout that carries a literal secret never runs: the run is refused before any stack starts 2ms
+ ❯ latency.test.ts (2 tests | 2 failed) 136ms
+   ❯ AC10 #37.892b5a33 a latency check times the changed journeys on the branch and the merge base, the same number of runs each, and fails past the margin showing both times (2)
+     × AC10 a branch whose every page answers 400 ms late fails the latency check against the base at a 10% margin, with three runs a side and both times shown 18ms
+     × AC10 the same build on both sides passes the check, with the same number of runs each 1ms
+ ❯ steps.test.ts (6 tests | 6 failed) 137ms
+   ❯ AC21 #37.38cbc4c5 each step records its route with IDs as one placeholder and the controls that appeared, left or changed; a second passing checkout whose only difference is the order ID names no step, one with the Pay button gone names the Pay step, and a comparison by raw URL fails this test (3)
+     × AC21 the confirmation step's route reads /order/{id}, with the order ID as a placeholder; the pay step recorded the Pay button and the Order status that appeared 7ms
+     × AC21 a second passing checkout names no step; the same run with the Pay button gone names the Pay step 2ms
+     × AC21 (wrong program) a comparison by raw URL names the confirmation step on the order ID, and fails this test 2ms
+   ❯ AC22 #37.9ea050d3 a saved journey replayed against the stack is a real run at journey depth; one answered from a recording is a recorded run that can't pass a live-depth requirement; a rule treating every replay as recorded fails this test (3)
+     × AC22 a saved checkout replayed against the stack passes a live-depth requirement, as a real run at journey depth 2ms
+     × AC22 the same script with its responses served from a recording is refused for a live-depth requirement, naming the depth 1ms
+     × AC22 (wrong program) a rule that treats every replay as recorded fails this test on the first 2ms
+ ❯ api.test.ts (3 tests | 3 failed) 111ms
+   ❯ AC14 #37.d6f5f71b an API journey drives the running service with real requests and passes only on the end state it reads back from the real system (3)
+     × AC14 POST /api/cart then GET /api/cart: the journey passes on the working build, whose cart then totals $36.00, with no browser, no video and no screenshot 6ms
+     × AC14 on the build whose POST answers 200 but stores nothing, the journey fails on the end state it reads back 1ms
+     × AC14 (wrong program) a runner that passes on the responses alone passes the planted service, and fails this test 1ms
+ ❯ screens.test.ts (11 tests | 11 failed) 90ms
+   ❯ AC6 #37.bb6b115c a refactor that moves a button 8 px fails its "no visible change" claim, and the diff is shown side by side (1)
+     × AC6 the Pay button moved 8 px fails the claim, naming the step and the box that changed, with a side-by-side image of base and head 3ms
+   ❯ AC9 #37.e421f602 a "no visible change" claim also diffs the DOM and bundle sizes, and lists every delta that remains (1)
+     × AC9 the refactor that moves the button and grows app.js by 100 bytes lists the screen box, the DOM change on the Pay button and the bundle delta with both sizes; the same build lists no delta 1ms
+   ❯ AC11 #37.bb3ba137 a claim with a visual change, and every taste call, carries highlighted screenshots without anyone asking, each change marked in a strip beside the frame (1)
+     × AC11 for a requirement that isn't "no visible change", the moved button is evidence for a taste call, with a highlighted screenshot whose strip beside the frame marks the change's rows, without any ask for it 0ms
+   ❯ AC23 #37.42a70bf0 the only baseline is the base rendered by DeepBuild here; capture once fonts and images loaded and two frames match; equal outside masks, size is a difference; masks painted on both sides, a mask matching nothing is INVALID; a 4×4 block is a difference and a comparator tolerating 16 pixels fails this test (5)
+     × AC23 the base render is the baseline and a committed image never is: a journey naming a baseline image is refused at review 0ms
+     × AC23 each side is captured once its images have loaded: the hero image's pixels are its colour on both sides 0ms
+     × AC23 a mask is a locator the spec names, painted on both sides, so the footer's text is masked while the Pay button's move still differs; a mask that matches nothing makes the check INVALID naming it 0ms
+     × AC23 a planted head image with one 4×4 block changed outside the masks is a difference; under a mask it isn't 0ms
+     × AC23 (wrong program) a comparator that tolerates 16 differing pixels passes the planted block, and fails this test 0ms
+   ❯ AC24 #37.94ac69b6 the base rendered twice and kept per base commit; a region that differs between the renders is uncounted naming it, with one ask proposing a mask for the smallest element holding it, saved to the spec on your answer; a second claim on the same base asks nothing; a rule failing the first as a difference fails this test (3)
+     × AC24 the clock footer is uncounted on its first claim with one ask for a mask on the clock, saved to the spec; a second claim on the same base asks nothing and reuses the renders 0ms
+     × AC24 a head screen that never holds still where the base did is a difference 0ms
+     × AC24 (wrong program) a rule that fails the first claim as a difference fails this test 0ms
+ ❯ reading.test.ts (5 tests | 5 failed) 162ms
+   ❯ AC20 #37.51b3f942 a model reading reads only its requirement and the step's redacted screen, is never a named assertion, sends back on a quote found in the snapshot, leaves a requirement it alone covers INCONCLUSIVE with one taste ask, drops a quote not in the snapshot, and a runner counting it as a pass fails this test (5)
+     × AC20 the model is given the requirement, the end step's text snapshot (roles, names, values) and the screenshot, and nothing else: no earlier step, no agent words, no other account 9ms
+     × AC20 after a secret typed into a plain field, the model gets the snapshot and no screenshot 8ms
+     × AC20 a planted journey whose only end-state check is a model reading that says true on the broken build leaves its claim INCONCLUSIVE with one taste ask 1ms
+     × AC20 a false reading whose quote is in the snapshot sends the claim back; one whose quote isn't there is dropped and counted 1ms
+     × AC20 (wrong program) a runner that counts a true reading as a pass fails this test 5ms
+ ❯ motion.test.ts (4 tests | 4 failed) 124ms
+   ❯ AC25 #37.e2d2dca9 the card's fade-in from 28 px below over 0.7 s on cubic-bezier(0.33, 1, 0.68, 1) is recorded and passes; 400 ms with a plain ease fails naming the card, the duration and the easing; under reduced motion the card is at rest on its first frame, a build ignoring the setting fails naming the card, and a per-frame script leaves it INCONCLUSIVE naming the card (4)
+     × AC25 the working build: the journey runs twice, with reduced motion off and on; off, it records the card's animation, opacity 0 to 1 and translate 28 px to 0, 700 ms, delay 0, that easing, and passes; on, the card shows at full opacity and at rest on the first frame it appears 15ms
+     × AC25 the planted build at 400 ms with a plain ease fails, naming the card, the duration and the easing 5ms
+     × AC25 the planted build that ignores prefers-reduced-motion records the 700 ms translate under reduced motion and fails, naming the card 1ms
+     × AC25 the planted build that moves the card from a per-frame script records no animation and leaves the requirement INCONCLUSIVE, naming the card, never PASS 1ms
+ ❯ kind.test.ts (4 tests | 4 failed) 85ms
+   ❯ AC13 #37.f105223d passes check.kind@1 (#13), whose planted runners, past-deadline, crashed-suite and type-error-as-assertion, each fail it with their own message (4)
+     × AC13 the journey check kind fills check.kind@1 for the kind `journey` and passes every fixed and seeded case of the kit 3ms
+     × AC13 (wrong program) the planted runner past-deadline, built from the journey check kind, fails the kit with its own message 1ms
+     × AC13 (wrong program) the planted runner crashed-suite, built from the journey check kind, fails the kit with its own message 0ms
+     × AC13 (wrong program) the planted runner type-error-as-assertion, built from the journey check kind, fails the kit with its own message 0ms
+ ❯ endings.test.ts (3 tests | 3 failed) 88ms
+   ❯ AC12 #37.08d1098f a step past its deadline is an overran run (a failed run); a wait on an environment that never came up is missing, so BLOCKED with the cause, never FAIL; a run that dies keeps what it captured (3)
+     × AC12 a step that goes to a route that never answers, with a 1500 ms deadline, is overran, naming the step, and ends near its deadline 6ms
+     × AC12 a stack whose health route never answers 200 leaves the run missing, with the cause naming the route, never failed; nothing of the journey ran 1ms
+     × AC12 a run stopped partway (the hub going down, as its stop signal) ends stopped and keeps the screenshot of the step it had captured 1ms
+ ❯ evidence.test.ts (5 tests | 5 failed) 135ms
+   ❯ AC2 #37.ed0df801 evidence remains after `deep env down` (1)
+     × AC2 once the run's stack is down (its process gone, the stack torn down by run), the screenshots, the video and the trace are still in the evidence store, whole, by hash 12ms
+   ❯ AC3 #37.066be7dc each end-state check records the selector and bounding box it looked at, with the run's screenshot (1)
+     × AC3 the total check records the locator by role and name and the box the Total element occupies (100, 200, 120×40 at 1280×720), and a 1280×720 screenshot of the run 1ms
+   ❯ AC4 #37.18a57a59 a broken page fails the journey with a screenshot of the failure (1)
+     × AC4 on the build whose cart shows $18.01 the journey fails at its expect, on an assertion, and the failure carries a screenshot of the page as it was 7ms
+   ❯ AC7 #37.8b056f27 a receipt opens the journey's video within one frame of the checked step (1)
+     × AC7 the video evidence carries each step's start and end, in order, and the receipt for see-total opens the video within one frame (1000/15 ms) of that step's start 1ms
+   ❯ AC8 #37.ff0f6f4d a journey that types a test password into a plain text field marks its later screenshots and video incomplete, and an export refuses them without your approval (1)
+     × AC8 the screenshots before the password step are complete, those from it on and the video are incomplete, and an export of them is withheld until you say yes 7ms
+ ❯ stack.test.ts (3 tests | 3 failed) 132ms
+   ❯ AC19 #37.23f2f878 a journey on S1 passes on a stack that served S1, naming S1's tree; swapped to S2 partway it is uncounted naming S2's tree and its process, its screenshots marked uncounted; a runner recording only the checkout it asked for fails this test (3)
+     × AC19 the cart journey passes on a stack started from S1, and its run and receipt line name S1's tree as served 7ms
+     × AC19 the same journey after the planted environment swapped the stack's app to S2 partway through is uncounted, naming S2's tree and its process; its screenshots stay, marked uncounted 1ms
+     × AC19 (wrong program) a runner that records only the checkout it asked for reports the swapped run as a FAIL of S1 naming the run, and fails this test 2ms
+ ❯ features.test.ts (2 tests | 2 failed) 17ms
+   ❯ AC5 #37.65684c1c a change to a shared file also runs the neighboring features' journeys (2)
+     × AC5 the feature list is read from .deepbuild/features/, and the feature with no journey is reported 11ms
+     × AC5 a change to the cart's own file selects the cart's journeys alone; a change that also touches money.js, which checkout shares, selects checkout's journeys too, and never login's 1ms
+
+ Test Files  15 failed (15)
+      Tests  62 failed (62)
+   Start at  02:30:33
+   Duration  7.82s (import 55%, tests 35%, transform 9%, worker 1%)

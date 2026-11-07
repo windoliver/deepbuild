@@ -1,0 +1,513 @@
+{
+ "family": "paper-move",
+ "subject": "A fence along a long sheet",
+ "look": {
+  "id": "drawn-move-149-look",
+  "ground": {
+   "kind": "paper",
+   "params": {
+    "role": "paper",
+    "seed": "document",
+    "tooth": {
+     "kind": "cold_press",
+     "scale": 18,
+     "depth": 0.25,
+     "seed": 7
+    },
+    "age": {
+     "stains": {
+      "count": 40,
+      "size": 80,
+      "role": "ochre"
+     },
+     "foxing": 0.2,
+     "seed": "document"
+    },
+    "anchor": "world",
+    "zoom": "crossfade_octaves"
+   }
+  }
+ },
+ "doc": {
+  "format": 1,
+  "id": "drawn-move-149",
+  "profile": "figure",
+  "title": "A fence along a long sheet",
+  "description": "The #149 paper dolly and zoom fixture.",
+  "size": [
+   480,
+   270
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "28s"
+  },
+  "requires": {
+   "modules": {
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "dolly": {
+    "target": "items/cam/params/target/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 240,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "20s",
+      "value": 9340,
+      "interp": "hold"
+     }
+    }
+   },
+   "zoom": {
+    "target": "items/cam/params/view_width",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "20s",
+      "value": 480,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "28s",
+      "value": 96,
+      "interp": "hold"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a0",
+    "params": {
+     "projection": "orthographic",
+     "target": [
+      240,
+      135,
+      0
+     ],
+     "view_width": 480
+    }
+   },
+   "post-00": {
+    "id": "post-00",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-00",
+    "order": "b00",
+    "params": {
+     "box": [
+      120,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-01": {
+    "id": "post-01",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-01",
+    "order": "b01",
+    "params": {
+     "box": [
+      600,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-02": {
+    "id": "post-02",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-02",
+    "order": "b02",
+    "params": {
+     "box": [
+      1080,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-03": {
+    "id": "post-03",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-03",
+    "order": "b03",
+    "params": {
+     "box": [
+      1560,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-04": {
+    "id": "post-04",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-04",
+    "order": "b04",
+    "params": {
+     "box": [
+      2040,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-05": {
+    "id": "post-05",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-05",
+    "order": "b05",
+    "params": {
+     "box": [
+      2520,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-06": {
+    "id": "post-06",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-06",
+    "order": "b06",
+    "params": {
+     "box": [
+      3000,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-07": {
+    "id": "post-07",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-07",
+    "order": "b07",
+    "params": {
+     "box": [
+      3480,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-08": {
+    "id": "post-08",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-08",
+    "order": "b08",
+    "params": {
+     "box": [
+      3960,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-09": {
+    "id": "post-09",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-09",
+    "order": "b09",
+    "params": {
+     "box": [
+      4440,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-10": {
+    "id": "post-10",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-10",
+    "order": "b10",
+    "params": {
+     "box": [
+      4920,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-11": {
+    "id": "post-11",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-11",
+    "order": "b11",
+    "params": {
+     "box": [
+      5400,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-12": {
+    "id": "post-12",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-12",
+    "order": "b12",
+    "params": {
+     "box": [
+      5880,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-13": {
+    "id": "post-13",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-13",
+    "order": "b13",
+    "params": {
+     "box": [
+      6360,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-14": {
+    "id": "post-14",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-14",
+    "order": "b14",
+    "params": {
+     "box": [
+      6840,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-15": {
+    "id": "post-15",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-15",
+    "order": "b15",
+    "params": {
+     "box": [
+      7320,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-16": {
+    "id": "post-16",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-16",
+    "order": "b16",
+    "params": {
+     "box": [
+      7800,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-17": {
+    "id": "post-17",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-17",
+    "order": "b17",
+    "params": {
+     "box": [
+      8280,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-18": {
+    "id": "post-18",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-18",
+    "order": "b18",
+    "params": {
+     "box": [
+      8760,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   },
+   "post-19": {
+    "id": "post-19",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "post-19",
+    "order": "b19",
+    "params": {
+     "box": [
+      9240,
+      170,
+      8,
+      60
+     ],
+     "paint": {
+      "fill": {
+       "role": "sepia"
+      }
+     }
+    }
+   }
+  }
+ }
+}

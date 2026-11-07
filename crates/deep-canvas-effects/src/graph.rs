@@ -7,6 +7,9 @@ use std::collections::BTreeMap;
 
 use serde_json::{json, Map, Value};
 
+/// What a collection target's `op` starts with (Effect and GPU operator: collection targets).
+pub const COLLECTION: &str = "collection:";
+
 /// A refusal, named by its code and by the step, field or source position it's about.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Issue {
@@ -844,8 +847,14 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                 match (
                     target.get("op"),
                     target.get("output").and_then(Value::as_str),
+                    target.get("collection").and_then(Value::as_str),
                 ) {
-                    (Some(op), Some(output)) => From::Target {
+                    // #149: a collection's own target, which the frame draws before its passes.
+                    (_, Some(output), Some(collection)) => From::Target {
+                        op: format!("{COLLECTION}{collection}"),
+                        output: output.into(),
+                    },
+                    (Some(op), Some(output), _) => From::Target {
                         op: op.as_str().unwrap_or("core").into(),
                         output: output.into(),
                     },

@@ -845,6 +845,66 @@ workloads['look-frames'] = () => {
   console.log(JSON.stringify({ task: 'canvas-look-frames', fingerprint, runs: measured }));
 };
 
+// #149's drawn looks (tests/acceptance/149/README.md, "AC10's reports"): a release `deep-gpu` plays each family's
+// fixture at 1080p, in 2D through `film2d` and in 3D through `view3d`, 30 warm frames then 300 timed, one warm-up run
+// and five, each run a fresh process. `paper-cost` plays the paper family's 2D film with its paper and on a flat ground.
+const DRAWN_149 = join('tests', 'acceptance', '149', 'fixtures');
+const DRAWN_SIZE = [1920, 1080];
+/** Each family fixture, with its look over the suite's base look. */
+function drawnFamilies() {
+  const base = JSON.parse(readFileSync(join(root, DRAWN_149, 'look.json'), 'utf8'));
+  return readdirSync(join(root, DRAWN_149, 'families')).filter((f) => f.endsWith('.json')).sort().map((f) => {
+    const fixture = `tests/acceptance/149/fixtures/families/${f}`;
+    const family = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+    return { name: f.replace('.json', ''), fixture, family, look: { ...base, ...family.look } };
+  });
+}
+
+workloads['drawn-frames'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const families = drawnFamilies();
+  const dir = mkdtempSync(join(tmpdir(), 'deep-drawn-'));
+  try {
+    const paths = families.map(({ name, family }) => {
+      const path = join(dir, `${name}-3d.json`);
+      writeFileSync(path, JSON.stringify(family['3d']));
+      return path;
+    });
+    const frames = WARM_UP + WARM_FRAMES;
+    const timed = (reply) => reply.frames.slice(WARM_UP).map(({ gpu_ms, cpu_ms }) => ({ gpu_ms, cpu_ms }));
+    const measured = runs(() => {
+      const flat = films(families.map(({ family, look }) => ({ call: 'film2d', doc: family['2d'], look, fps: 30, frames })));
+      const deep = films(families.map(({ look }, i) => ({ call: 'view3d', doc: paths[i], look, size: DRAWN_SIZE, fps: 30, frames, timings: true })));
+      return { families: Object.fromEntries(families.map(({ name, fixture }, i) => [name, {
+        '2d': { fixture, size: DRAWN_SIZE, frames: timed(flat[i]) },
+        '3d': { fixture, size: DRAWN_SIZE, frames: timed(deep[i]) },
+      }])) };
+    });
+    console.log(JSON.stringify({ task: 'canvas-drawn-frames', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+workloads['paper-cost'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const { family, look, fixture } = drawnFamilies().find((f) => f.name === 'paper');
+  const flatLook = { ...look, ground: { kind: 'flat' } };
+  const doc = family['2d'];
+  const measured = runs(() => {
+    const frames = WARM_UP + WARM_FRAMES;
+    const [paper, flat, paperHash, flatHash] = films([
+      { call: 'film2d', doc, look, fps: 30, frames },
+      { call: 'film2d', doc, look: flatLook, fps: 30, frames },
+      { call: 'film2d', doc, look, fps: 30, frames: 1, hash: true },
+      { call: 'film2d', doc, look: flatLook, fps: 30, frames: 1, hash: true },
+    ]);
+    const timed = (reply) => ({ frames: reply.frames.slice(WARM_UP).map(({ gpu_ms, cpu_ms }) => ({ gpu_ms, cpu_ms })) });
+    return { fixture, paper: timed(paper), flat: timed(flat), paper_hash: paperHash.frames[0].pixel_hash, flat_hash: flatHash.frames[0].pixel_hash };
+  });
+  console.log(JSON.stringify({ task: 'canvas-paper-cost', fingerprint, runs: measured }));
+};
+
 /** A walk through every ordered pair of distinct `ids` once, starting and ending at the first (Hierholzer). */
 function everyPair(ids) {
   const used = new Set();
