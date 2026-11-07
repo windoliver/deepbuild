@@ -59,7 +59,7 @@ function planFor(source: string, does: string, changes: string[], targets: Targe
  * gt's and git town's commands that push (#1523).
  */
 const PUSH = /\b(?:(git)(?:\s+(?:-[cC]\s+\S+|-\S+))*\s+push|(jj)(?:\s+-\S+(?:\s+\S+)?)*?\s+git\s+push|(sl)\s+push|gt\s+(?:submit|ss?|(?:stack|upstack|downstack|us|ds|branch|b)\s+(?:submit|s))|git[\s-]town\s+(?:propose|new-pull-request|ship|sync))\b([^;&|)\n]*)/g;
-const VALUED = new Set(['-o', '--push-option', '--receive-pack', '--exec', '--to', '-t', '-r', '--rev', '-B', '--bookmark']);
+const VALUED = { git: new Set(['-o', '--push-option', '--receive-pack', '--exec']), sl: new Set(['--to', '-t', '-r', '--rev', '-B', '--bookmark']) };
 /** How long a held push waits for its session's transcript, well inside the gate's hold. */
 const ARCHIVE_WAIT_MS = 2000;
 /**
@@ -79,7 +79,7 @@ export function pushTargets(line: string): Target[] {
       const word = words[at]!;
       if (git && word === '--repo') return words[at + 1] ?? 'origin';
       if (git && word.startsWith('--repo=')) return word.slice('--repo='.length);
-      if (VALUED.has(word)) at++;
+      if (VALUED[git ? 'git' : 'sl'].has(word)) at++;
       else if (!word.startsWith('-')) return word;
     }
     return sl ? 'default' : 'origin';
@@ -274,7 +274,7 @@ export class Holds {
         const current = await this.branch(meta.cwd);
         const input = meta.call?.input ?? {};
         const targets = typeof input.branch === 'string' ? [input.branch] : pushBranches(String(input.command ?? ''), current);
-        for (const [number, branch] of armed) if (targets.includes(branch)) return `DeepBuild denied this (guard ${rule}): a merge of pull request ${number} armed with --auto is pending, so \`${call.label}\` to ${branch} would change what it merges. Run gh pr merge --disable-auto ${number} first; the new head needs its own verdict.`;
+        for (const [number, branch] of armed) if (targets.includes(branch) || targets.includes('*')) return `DeepBuild denied this (guard ${rule}): a merge of pull request ${number} armed with --auto is pending, so \`${call.label}\` to ${branch} would change what it merges. Run gh pr merge --disable-auto ${number} first; the new head needs its own verdict.`;
       }
     }
     return undefined;

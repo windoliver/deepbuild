@@ -23,11 +23,15 @@ export function namedIn(text: string): Set<Named> {
   return named;
 }
 
-/** Where a shell push goes: its refs' branches, or `current` when it names none or names HEAD. */
+/**
+ * Where a shell push goes: its refs' branches, or `current` when it names none or names HEAD; `*`, which no branch is
+ * named, for a jj push of every bookmark (`--all`, `--tracked`).
+ */
 export function pushBranches(command: string, current: string): string[] {
   // jj and sl name a push's branch by its flag (#1523); gt and git town push the current branch's.
   const flagged = /\b(?:jj\b[^;&|]*?\bgit\s+push|sl\s+push)\b([^;&|]*)/.exec(command);
   if (flagged) {
+    if (/(?:^|\s)--(?:all|tracked)\b/.test(flagged[1]!)) return ['*'];
     const named = [...flagged[1]!.matchAll(/(?:^|\s)(?:--bookmark|--branch|-b|--to|-t)(?:=|\s+)(\S+)/g)].map((m) => m[1]!);
     return named.length ? named : [current];
   }
