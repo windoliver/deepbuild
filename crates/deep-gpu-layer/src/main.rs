@@ -72,6 +72,14 @@ use crate::worker::Worker;
 /// The wrong programs, each reachable only through `--planted` (README: Planted programs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #431's wrong programs (tests/acceptance/431/README.md: Planted programs).
+    VelocityFromPreviousFrame,
+    EmissionThresholdsColor,
+    BuildsUnreadTargets,
+    SampleGradImplicit,
+    NoDivergenceRule,
+    BackdropAfterSeeThrough,
+    PeriodFirstOctave,
     /// #430's wrong programs (tests/acceptance/430/README.md: Planted programs).
     GroupPassAtLayerEnd,
     GroupPassReadsEarlier,
@@ -278,6 +286,13 @@ pub enum Planted {
 impl Planted {
     fn parse(name: &str) -> Option<Planted> {
         Some(match name {
+            "velocity_from_previous_frame" => Planted::VelocityFromPreviousFrame,
+            "emission_thresholds_color" => Planted::EmissionThresholdsColor,
+            "builds_unread_targets" => Planted::BuildsUnreadTargets,
+            "sample_grad_implicit" => Planted::SampleGradImplicit,
+            "no_divergence_rule" => Planted::NoDivergenceRule,
+            "backdrop_after_see_through" => Planted::BackdropAfterSeeThrough,
+            "period_first_octave" => Planted::PeriodFirstOctave,
             "group_pass_at_layer_end" => Planted::GroupPassAtLayerEnd,
             "group_pass_reads_earlier" => Planted::GroupPassReadsEarlier,
             "group_pass_past_grow" => Planted::GroupPassPastGrow,
@@ -645,7 +660,7 @@ impl App {
             Some("calibrate") => calibrate::calibrate(self),
             Some("reference") => effects::reference(self, out, call),
             Some("check_operator") if opframe::wants(call) => opframe::call(self, out, call),
-            Some("check_operator") => effects::check_operator(self, call),
+            Some("check_operator") => effects::check_operator(self, out, call),
             Some("op") => effects::op(self, call),
             Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),

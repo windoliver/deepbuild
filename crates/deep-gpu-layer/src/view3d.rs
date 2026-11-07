@@ -299,11 +299,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
     if targets.iter().any(|t| {
         !matches!(
             t.as_str(),
-            "final" | "linear" | "ids" | "pre_tone" | "dirt" | "scene"
+            "final" | "linear" | "ids" | "pre_tone" | "dirt" | "scene" | "backdrop"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt and scene",
+            "targets are final, linear, ids, pre_tone, dirt, scene and backdrop",
         ));
     }
     let export = match call["class"].as_str() {
@@ -906,6 +906,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     // A document that names packs draws as the check lowers it, the call's packs installed
     // first (#429).
     let packs = install(&args.packs)?;
+    // A material operator bound where it can't run is refused before anything draws (#431).
+    let broken = deep_canvas_effects::module::binding_refusals(&args.doc);
+    if !broken.is_empty() {
+        return Err(json!({"code": "refused", "issues": broken}));
+    }
     let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
     let mut lowered_doc = if packed {
         Some(lowered(&args.doc, &packs)?)
@@ -949,6 +954,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if args.cull_on_cpu {
         session3::cull_on_cpu(app);
     }
+    // The core targets the document's operators read, built only then (#431); the planted core
+    // builds both for every frame.
+    let builds_all = app.planted == Some(Planted::BuildsUnreadTargets);
+    let want = deep_scene3d_render::targets::Want {
+        velocity: builds_all || deep_canvas_effects::module::reads_core(&args.doc, "velocity"),
+        emission: builds_all || deep_canvas_effects::module::reads_core(&args.doc, "emission"),
+    };
+    session3::core_targets(app, want)?;
     let opening = opening.elapsed();
     let mut build_ms = None;
     let (ui, fx) = (opened.ui.clone(), opened.fx.clone());
@@ -979,7 +992,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut strokes = false;
     // Held slots, each with the frame whose present releases it.
     let mut held: Vec<(u64, usize)> = Vec::new();
-    let wants_targets = ["linear", "ids", "pre_tone"]
+    let wants_targets = ["linear", "ids", "pre_tone", "backdrop"]
         .iter()
         .any(|t| args.targets.contains(*t));
     // The bloom's lens dirt (#418): a PNG the assets name, its red channel ÷ 255, or seeded, made
@@ -1035,6 +1048,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     let mut settle: Vec<(f64, Part)> = Vec::new();
     let mut settled_on: Option<Scene> = None;
+    // The scene the session drew last, which #431's planted velocity target reads.
+    let mut last_drawn: Option<Arc<Scene>> = None;
     let mut hover: Option<String> = None;
     let mut viewer_selection: Vec<String> = Vec::new();
     let result = (|| -> Result<(), Value> {
@@ -1419,6 +1434,38 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 sc.motion = Some(Arc::new(motion));
                 moving = Arc::new(sc);
             }
+            // The core's velocity target (#431): the evaluations at t ± s/2 an operator reads,
+            // never an earlier frame, the shutter the look's or 180° without one; the planted
+            // target reads the scene the session drew last instead.
+            if want.velocity {
+                let s = args
+                    .look
+                    .blur
+                    .as_ref()
+                    .map_or(0.5 / fps, |b| b.shutter_s(fps));
+                let half = (s * FLICKS_PER_SECOND as f64 / 2.0).round() as i64;
+                let previous = last_drawn
+                    .as_ref()
+                    .filter(|_| app.planted == Some(Planted::VelocityFromPreviousFrame));
+                let (open, close) = match previous {
+                    Some(prev) => ((**prev).clone(), (*scene).clone()),
+                    None => (
+                        at_time(t - half, &mut labels)?,
+                        at_time(t + half, &mut labels)?,
+                    ),
+                };
+                let (motion, _) = blur::motion(
+                    &scene,
+                    &open,
+                    &close,
+                    blur::Pairing::Shipped,
+                    &Default::default(),
+                );
+                let mut sc = (*moving).clone();
+                sc.velocity = Some(Arc::new(motion));
+                moving = Arc::new(sc);
+            }
+            last_drawn = Some(scene.clone());
             let noise_from_frame = app.planted == Some(Planted::SoftNoiseFromFrame);
             let sub_scene = |k: usize| -> Arc<Scene> {
                 let mut sc = if timed.is_empty() {
@@ -1653,6 +1700,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 // The frame before the viewer's marks (#419).
                 if let (Some(bgra), true) = (&scene_bytes, args.targets.contains("scene")) {
                     frame.insert("scene".into(), json!(write_final(out, bgra, size)?));
+                }
+                // The opaque scene's copy, each mip a file of its own (#431).
+                if let (Some(levels), true) = (&drawn.backdrop, args.targets.contains("backdrop")) {
+                    let mut rows = Vec::new();
+                    for (size, texels) in levels {
+                        rows.push(json!({"size": size, "file": write_named(out, texels, "f32")?}));
+                    }
+                    if let Some(first) = rows.first().cloned() {
+                        frame.insert("backdrop".into(), json!({"format": "rgba16float", "size": first["size"], "file": first["file"], "levels": rows}));
+                    }
                 }
                 if let (Some(pre), true) = (&drawn.pre_tone, args.targets.contains("pre_tone")) {
                     frame.insert("pre_tone".into(), json!(write_named(out, pre, "f32")?));

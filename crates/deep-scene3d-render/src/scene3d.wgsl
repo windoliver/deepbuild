@@ -2221,6 +2221,23 @@ fn shadow_fs(in: MeshOut) {
 
 // The ao prepass (#418): an opaque solid's world normal; its depth goes to the prepass's own
 // depth target.
+// The core's emission target (#431): the emitted radiance of an opaque solid where it shows, its
+// emission map applied, before fog, adjust and bloom; see-through solids and what a cutaway
+// removes write none.
+@fragment
+fn emission_fs(in: MeshOut) -> @location(0) vec4<f32> {
+    let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
+    if in.emission.w < 1.0 || ((in.flags & CUT) != 0u && cut_hides(in.world))
+        || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x) {
+        discard;
+    }
+    var e = in.emission.rgb;
+    if (in.flags & MAPS) != 0u && has_map(4u) {
+        e = e * fetch(4u, map_emission, sampler_emission, in.uv, g).rgb;
+    }
+    return vec4<f32>(e, 1.0);
+}
+
 @fragment
 fn ao_normal_fs(in: MeshOut) -> @location(0) vec4<f32> {
     // A see-through solid writes no occlusion depth, nor what a cutaway removes (#424); a band

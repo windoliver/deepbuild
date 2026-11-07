@@ -24,6 +24,9 @@ pub use deep_scene3d_render::status::lock;
 fn planted3(p: Option<Planted>) -> Planted3 {
     Planted3 {
         forward_z: p == Some(Planted::ForwardZ),
+        emission_thresholds_color: p == Some(Planted::EmissionThresholdsColor),
+        sample_grad_implicit: p == Some(Planted::SampleGradImplicit),
+        backdrop_after_see_through: p == Some(Planted::BackdropAfterSeeThrough),
         encodes_twice: p == Some(Planted::EncodesTwice),
         skips_encode: p == Some(Planted::SkipsEncode),
         encodes_every_frame: p == Some(Planted::EncodesEveryFrame),
@@ -242,6 +245,23 @@ pub fn surface(app: &mut App, surface: Surface) -> Result<(), Value> {
         .map_err(|e| refused("no_session", e))
 }
 
+/// The core targets the session's frames build (#431): only those its operators read.
+pub fn core_targets(app: &mut App, want: deep_scene3d_render::targets::Want) -> Result<(), Value> {
+    app.worker
+        .call(move |state| -> Result<(), String> {
+            let s = state.scene3d.as_mut().ok_or("no session")?;
+            let device = s.view.device().clone();
+            let mut shared = lock(&s.shared);
+            let planted = shared.planted;
+            let renderer = shared
+                .renderer
+                .get_or_insert_with(|| deep_scene3d_render::Renderer::new(&device, planted));
+            renderer.core.want = want;
+            Ok(())
+        })
+        .map_err(|e| refused("no_session", e))
+}
+
 /// Each pass's band masks of the item picked as `key` at blend `level`, as the last frame's
 /// draws evaluate them (#425): `(pass, size, one byte a pixel)`.
 pub fn masks(app: &mut App, key: u32, level: u32) -> Vec<(&'static str, [u32; 2], Vec<u8>)> {
@@ -338,6 +358,9 @@ pub struct Drawn {
     /// The depth target, f32 per pixel, read with the targets, and whether it grows nearer: what
     /// a 3D pick's ties read (#424).
     pub depth: Option<(Vec<u8>, bool)>,
+    /// The opaque scene's copy with its mips, read with the targets while the frame holds one
+    /// (#431): each level's size and f32 RGBA texels.
+    pub backdrop: Option<Vec<([u32; 2], Vec<u8>)>>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -459,6 +482,11 @@ pub fn draw_on(
                 },
                 pre_tone: if read_targets && !noop {
                     r.read_pre_tone(&device)
+                } else {
+                    None
+                },
+                backdrop: if read_targets && !noop {
+                    r.read_backdrop(&device)
                 } else {
                     None
                 },

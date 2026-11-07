@@ -2142,11 +2142,13 @@ const BOUND_VALUE_FIELDS: &[&str] = &[
     "missing",
 ];
 
-/// The transport's `frame_rate` as `[p, q]`, or as `p/q` text, when it is one.
+/// The transport's `frame_rate` as `[p, q]`, as `p/q` text, or as a whole number `p` (p/1),
+/// when it is one.
 pub fn frame_rate_of(transport: &Value) -> Option<(u32, u32)> {
     let whole = |v: &Value| u32::try_from(v.as_u64()?).ok();
     match member(transport, "frame_rate")? {
         Value::Array(pq) if pq.len() == 2 => Some((whole(&pq[0])?, whole(&pq[1])?)),
+        n @ Value::Number(_) => Some((whole(n)?, 1)),
         Value::String(s) => {
             let (p, q) = s.split_once('/').unwrap_or((s, "1"));
             Some((p.trim().parse().ok()?, q.trim().parse().ok()?))

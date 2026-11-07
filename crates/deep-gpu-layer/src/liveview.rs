@@ -632,15 +632,36 @@ impl View {
         self.still = None;
     }
 
-    /// What the view itself holds on the device, as the device reports it.
+    /// The core targets its frames build (#431): those its operators read, or both under the
+    /// planted core.
+    pub fn want_targets(&mut self, doc: &Value, all: bool) {
+        self.renderer.core.want = deep_scene3d_render::targets::Want {
+            velocity: all || deep_canvas_effects::module::reads_core(doc, "velocity"),
+            emission: all || deep_canvas_effects::module::reads_core(doc, "emission"),
+        };
+    }
+
+    /// Each core target the view holds (#431): its name, the bytes the meter counts for it
+    /// (width × height × its texel's bytes) and the size the device reports for it.
+    pub fn targets(&self, device: &Device) -> Vec<(&'static str, u64, Option<u64>)> {
+        self.renderer
+            .target_rows()
+            .into_iter()
+            .map(|(name, texture, bytes)| (name, bytes, memory::texture(device, texture)))
+            .collect()
+    }
+
+    /// What the view itself holds on the device, as the device reports it; the core's velocity
+    /// and emission targets, made after it opened and only while read, as the meter counts them.
     pub fn own_bytes(&self) -> Option<u64> {
         let low = Some(self.renderer.low_bytes());
+        let core: u64 = self.renderer.core.held().iter().map(|(_, _, b)| b).sum();
         let history = self.history.as_ref().map_or(Some(0), |h| h.bytes);
         #[cfg(feature = "test-meter")]
         let test = self.test.bytes();
         #[cfg(not(feature = "test-meter"))]
         let test = Some(0);
-        Some(self.base_bytes? + low? + history? + test?)
+        Some(self.base_bytes? + low? + history? + test? + core)
     }
 
     /// The pixels its effect pass shades, while it has one.
@@ -826,6 +847,10 @@ impl View {
                 .collect();
             let res = &self.op_resolution;
             let canonical = drawing.canonical && !self.canonical_draws_live_only;
+            self.ops.core = ["velocity", "emission"]
+                .into_iter()
+                .filter_map(|n| Some((n, self.renderer.core_target(n)?.clone())))
+                .collect();
             self.ops.plan(
                 device,
                 &linear,
