@@ -17,10 +17,11 @@ transcript held before the session's first hook is never read by the hub.
 
 ## How to run
 
-With the repo's Node (`.node-version`, 24.22.0), `target/debug/deep-hook` built:
+With the repo's Node (`.node-version`, 24.22.0), `target/debug/deep-hook` built with the planted programs, which only an
+`env-plants` build reads (#1408):
 
 ```sh
-npm ci && npm run build --workspaces && cargo build --locked -p deep-hook
+npm ci && npm run build --workspaces && cargo build --locked -p deep-hook --features env-plants
 npx vitest run --root tests/acceptance/824/sessions --no-file-parallelism --exclude '**/budgets.long.test.ts'
 npx vitest run --root tests/acceptance/824/sessions budgets.long.test.ts   # the budget, by hand, on a reference Mac
 ```

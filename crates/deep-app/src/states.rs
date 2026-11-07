@@ -422,8 +422,11 @@ impl Table {
         else {
             return (shown.text(now), shown.entry());
         };
-        // The planted app reads a session waiting on you as working.
+        // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
+        #[cfg(feature = "env-plants")]
         let planted = std::env::var("DEEP_HUB_PLANT").as_deref() == Ok("waiting-as-working");
+        #[cfg(not(feature = "env-plants"))]
+        let planted = false;
         let (word, entry) = match listed.as_str() {
             _ if planted && cause == "waiting" => ("working".to_owned(), "running"),
             "needs you" => ("needs you".to_owned(), "needs_you"),

@@ -20,4 +20,4 @@ Core, beside the hub: deep-contracts (through its crate root) and std, nothing e
 
 - `src/lib.rs`: the matcher and shell reader are a library so the local preflight's cargo-semver-checks can diff their public items against the merge base (#139).
 - `tests/busy_disk.rs`: its own test binary because it keeps the disk busy; cargo runs test binaries one at a time, so no other test's spool write runs beside it.
-- `Cargo.toml`: the `plant-*` features build the planted wrong programs for #16, #304, #315 and #316's acceptance criteria; no default build has them.
+- `Cargo.toml`: the `plant-*` features build the planted wrong programs for #16, #304, #315 and #316's acceptance criteria; no default build has them. `env-plants` reads `DEEP_HUB_PLANT`, the planted programs a test selects at run time; a release build refuses it (#1408).

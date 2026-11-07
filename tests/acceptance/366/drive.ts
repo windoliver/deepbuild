@@ -23,10 +23,11 @@ export const RECENCY = (home: string) => join(home, '.deepbuild', 'app', 'recenc
 let built: string | undefined;
 export function buildDrive(): void {
   if (built === undefined) {
-    const r = spawnSync('cargo', ['build', '--locked', '-p', 'deep-replica', '--bin', 'deep-drive'], { cwd: REPO, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 64 << 20, env: { ...process.env, ...TOOLCHAIN } });
+    // With the planted replicas a test selects with DEEP_DRIVE_PLANT, which only an env-plants build reads (#1408).
+    const r = spawnSync('cargo', ['build', '--locked', '-p', 'deep-replica', '--bin', 'deep-drive', '--features', 'env-plants'], { cwd: REPO, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 64 << 20, env: { ...process.env, ...TOOLCHAIN } });
     built = r.status === 0 && existsSync(DRIVE_BIN) ? 'ok' : `${r.error?.message ?? ''}${(r.stderr ?? '').split('\n').filter((l) => /error/.test(l)).slice(0, 6).join('\n')}`;
   }
-  if (built !== 'ok') expect.fail(`BLOCKED: deep-drive can't be built (cargo build --locked -p deep-replica --bin deep-drive): ${built}`);
+  if (built !== 'ok') expect.fail(`BLOCKED: deep-drive can't be built (cargo build --locked -p deep-replica --bin deep-drive --features env-plants): ${built}`);
 }
 
 const running = new Set<Drive>();

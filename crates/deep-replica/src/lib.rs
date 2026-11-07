@@ -3,6 +3,10 @@
 //! would see, plus a screenshot. The checks that run in it live beside it: the Needs you kit, the
 //! panel registry against the app's slots, and the snapshot against the live tree.
 
+// A release build refuses the planted programs' feature (#1408).
+#[cfg(all(feature = "env-plants", not(debug_assertions)))]
+compile_error!("the env-plants feature is for test builds only, never a release build");
+
 pub mod drive;
 pub mod kit;
 mod replica;

@@ -171,7 +171,7 @@ function cargoBuild(release: boolean): Promise<void> {
   const key = release ? 'release' : 'debug';
   let made = builds.get(key);
   if (!made) {
-    const args = ['build', '--locked', '-q', '-p', 'deep-hook', ...(release ? ['--release'] : [])];
+    const args = ['build', '--locked', '-q', '-p', 'deep-hook', ...(release ? ['--release'] : ['--features', 'env-plants'])];
     made = run('cargo', args, { timeoutMs: 1_200_000 }).then((r) => {
       if (r.code !== 0) throw Error(`BLOCKED: cargo ${args.join(' ')} failed: ${r.stderr.slice(-3000)}`);
     });
@@ -183,9 +183,11 @@ function cargoBuild(release: boolean): Promise<void> {
 export async function ensureBinaries(settings: Line): Promise<void> {
   for (const { hook } of deepEntries(settings)) {
     for (const path of String(hook.command).match(/\/[^\s'"]*deep-hook\b/g) ?? []) {
-      if (existsSync(path)) continue;
-      if (path === join(REPO, 'target/release/deep-hook')) await cargoBuild(true);
-      else if (path === join(REPO, 'target/debug/deep-hook')) await cargoBuild(false);
+      // The debug build is built every run, so it reads the planted programs a test selects, as only an env-plants build
+      // does (#1408); cargo rebuilds only what changed.
+      if (path === join(REPO, 'target/debug/deep-hook')) await cargoBuild(false);
+      else if (existsSync(path)) continue;
+      else if (path === join(REPO, 'target/release/deep-hook')) await cargoBuild(true);
       if (!existsSync(path)) throw Error(`BLOCKED: DeepBuild's entry runs ${path}, which doesn't exist: ${hook.command}`);
     }
   }

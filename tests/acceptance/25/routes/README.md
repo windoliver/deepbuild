@@ -22,7 +22,7 @@ the harness runs).
 
 ## How to run
 
-With the workspaces built (`npm run build --workspaces`) and `target/debug/deep-hook` built:
+With the workspaces built (`npm run build --workspaces`) and `target/debug/deep-hook` built with `--features env-plants`, newer than any `target/release/deep-hook` (setup names the newer, and a release build reads no plant, #1408):
 
 ```sh
 npx vitest run --root tests/acceptance/25/routes --no-file-parallelism

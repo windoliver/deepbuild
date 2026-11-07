@@ -130,10 +130,11 @@ export function run(command: string, args: readonly string[], o: { env?: NodeJS.
   });
 }
 
-// ---- deep-hook, built once per test process (cargo is fine: it only rebuilds what changed).
+// ---- deep-hook, built once per test process (cargo is fine: it only rebuilds what changed), with the planted programs
+// a test selects with DEEP_HUB_PLANT, which only an env-plants build reads (#1408).
 let built: Promise<string> | undefined;
 export function deepHook(): Promise<string> {
-  built ??= run('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { timeoutMs: 900_000 }).then((r) => {
+  built ??= run('cargo', ['build', '--locked', '-q', '-p', 'deep-hook', '--features', 'env-plants'], { timeoutMs: 900_000 }).then((r) => {
     if (r.code !== 0 || !existsSync(DEEP_HOOK)) throw Error(`BLOCKED: cargo build -p deep-hook failed: ${r.stderr.slice(-3000)}`);
     spawnSync(DEEP_HOOK, ['--version'], { stdio: 'ignore', timeout: 30_000 });
     return DEEP_HOOK;
