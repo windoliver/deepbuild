@@ -1,0 +1,101 @@
+# #1410 acceptance suite on the base commit
+# date: 2026-11-07 11:18 UTC
+# base: 2bba2a505170a0dfeec9e5f35b9bccbd39d1667d (claude/issue-1410-77182b, clean but for this folder), no implementation of #1410
+# node: v24.22.0; machine: Linux aarch64 (spark), load average at start: 51.45, 48.56, 60.48
+# command: npx vitest run tests/acceptance/1410/record.test.ts tests/acceptance/1410/hook.test.ts --reporter=verbose
+# expected: 3 failed (AC1: no named evidence file or folder synced; AC2: each named hash reads missing after the cut;
+#           AC3: no evidence sync seen at all), 1 passed (Scope: nothing is synced on the base, so unnamed writes stay
+#           unsynced; it fails on a store that syncs every put).
+
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1410-77182b
+
+ × tests/acceptance/1410/record.test.ts > #1410: evidence a FULL commit names is synced, with its folder, before that commit > AC1: the shim sees each named evidence file and its folder synced before the WAL sync of the FULL commit that names it 19ms
+   → the verdict (verdict.made, citing a run output the caller stored): its evidence file d838453585b94b6e180ceff7a29cf98201d6a2cf0d71f2808df9194d5471d851 was not synced after its last write and before the commit's WAL sync (entry 27); syncs of it seen: []
+the verdict (verdict.made, citing a run output the caller stored): the folder of d838453585b94b6e180ceff7a29cf98201d6a2cf0d71f2808df9194d5471d851 (/tmp/dh1410-CuJWk2/evidence/d8) was not synced after the file was named there and before the commit's WAL sync (entry 27); syncs of it seen: []
+the resuming prompt (user.ask after the session's stop, citing the whole text the record stored): its evidence file 304128065a93556a6976ee75b6122088374b37da674903c7badd87fe98106259 was not synced after its last write and before the commit's WAL sync (entry 35); syncs of it seen: []
+the resuming prompt (user.ask after the session's stop, citing the whole text the record stored): the folder of 304128065a93556a6976ee75b6122088374b37da674903c7badd87fe98106259 (/tmp/dh1410-CuJWk2/evidence/30) was not synced after the file was named there and before the commit's WAL sync (entry 35); syncs of it seen: []: expected [ …(4) ] to deeply equal []
+ × tests/acceptance/1410/record.test.ts > #1410: evidence a FULL commit names is synced, with its folder, before that commit > AC2: with a power cut right after each FULL commit, every evidence hash that commit names reads back whole 16ms
+   → the verdict (verdict.made, citing a run output the caller stored): d838453585b94b6e180ceff7a29cf98201d6a2cf0d71f2808df9194d5471d851 doesn't read back after a cut right after the commit: evidence d838453585b94b6e180ceff7a29cf98201d6a2cf0d71f2808df9194d5471d851 is missing
+the resuming prompt (user.ask after the session's stop, citing the whole text the record stored): 304128065a93556a6976ee75b6122088374b37da674903c7badd87fe98106259 doesn't read back after a cut right after the commit: evidence 304128065a93556a6976ee75b6122088374b37da674903c7badd87fe98106259 is missing: expected [ …(2) ] to deeply equal []
+ ✓ tests/acceptance/1410/record.test.ts > #1410: evidence a FULL commit names is synced, with its folder, before that commit > Scope: an evidence write no FULL commit names is not synced, nor its folder (one cited by no event, one cited only by a stream event) 1ms
+stdout | tests/acceptance/1410/hook.test.ts > #1410: a hook call never waits on an evidence sync > AC3: with each evidence sync slowed to 4 s, the resuming UserPromptSubmit (a FULL commit naming its whole text) and the tool calls after it each reply within 1 s, while the sync still happens
+#1410 AC3: 191 hook calls, slowest the resuming UserPromptSubmit at 29 ms (the prompt 29 ms); each evidence sync takes 4000 ms; evidence syncs seen: 0
+
+ × tests/acceptance/1410/hook.test.ts > #1410: a hook call never waits on an evidence sync > AC3: with each evidence sync slowed to 4 s, the resuming UserPromptSubmit (a FULL commit naming its whole text) and the tool calls after it each reply within 1 s, while the sync still happens 57589ms
+   → no sync of the prompt's evidence file a03a0b8fb98670b939db8136fd3f7241e5b6c331258603e53c3720a726a6998e or of its folder /tmp/dh1410-TnFgN1/h/.deepbuild/evidence/a0 was seen, though a FULL commit names it: no hook call was exposed to an evidence sync: expected [ Array(1) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1410/hook.test.ts > #1410: a hook call never waits on an evidence sync > AC3: with each evidence sync slowed to 4 s, the resuming UserPromptSubmit (a FULL commit naming its whole text) and the tool calls after it each reply within 1 s, while the sync still happens
+AssertionError: no sync of the prompt's evidence file a03a0b8fb98670b939db8136fd3f7241e5b6c331258603e53c3720a726a6998e or of its folder /tmp/dh1410-TnFgN1/h/.deepbuild/evidence/a0 was seen, though a FULL commit names it: no hook call was exposed to an evidence sync: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "no sync of the prompt's evidence file a03a0b8fb98670b939db8136fd3f7241e5b6c331258603e53c3720a726a6998e or of its folder /tmp/dh1410-TnFgN1/h/.deepbuild/evidence/a0 was seen, though a FULL commit names it: no hook call was exposed to an evidence sync",
++ ]
+
+ ❯ tests/acceptance/1410/hook.test.ts:90:45
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/1410/record.test.ts > #1410: evidence a FULL commit names is synced, with its folder, before that commit > AC1: the shim sees each named evidence file and its folder synced before the WAL sync of the FULL commit that names it
+AssertionError: the verdict (verdict.made, citing a run output the caller stored): its evidence file d838453585b94b6e180ceff7a29cf98201d6a2cf0d71f2808df9194d5471d851 was not synced after its last write and before the commit's WAL sync (entry 27); syncs of it seen: []
+the verdict (verdict.made, citing a run output the caller stored): the folder of d838453585b94b6e180ceff7a29cf98201d6a2cf0d71f2808df9194d5471d851 (/tmp/dh1410-CuJWk2/evidence/d8) was not synced after the file was named there and before the commit's WAL sync (entry 27); syncs of it seen: []
+the resuming prompt (user.ask after the session's stop, citing the whole text the record stored): its evidence file 304128065a93556a6976ee75b6122088374b37da674903c7badd87fe98106259 was not synced after its last write and before the commit's WAL sync (entry 35); syncs of it seen: []
+the resuming prompt (user.ask after the session's stop, citing the whole text the record stored): the folder of 304128065a93556a6976ee75b6122088374b37da674903c7badd87fe98106259 (/tmp/dh1410-CuJWk2/evidence/30) was not synced after the file was named there and before the commit's WAL sync (entry 35); syncs of it seen: []: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the verdict (verdict.made, citing a run output the caller stored): its evidence file d838453585b94b6e180ceff7a29cf98201d6a2cf0d71f2808df9194d5471d851 was not synced after its last write and before the commit's WAL sync (entry 27); syncs of it seen: []",
++   "the verdict (verdict.made, citing a run output the caller stored): the folder of d838453585b94b6e180ceff7a29cf98201d6a2cf0d71f2808df9194d5471d851 (/tmp/dh1410-CuJWk2/evidence/d8) was not synced after the file was named there and before the commit's WAL sync (entry 27); syncs of it seen: []",
++   "the resuming prompt (user.ask after the session's stop, citing the whole text the record stored): its evidence file 304128065a93556a6976ee75b6122088374b37da674903c7badd87fe98106259 was not synced after its last write and before the commit's WAL sync (entry 35); syncs of it seen: []",
++   "the resuming prompt (user.ask after the session's stop, citing the whole text the record stored): the folder of 304128065a93556a6976ee75b6122088374b37da674903c7badd87fe98106259 (/tmp/dh1410-CuJWk2/evidence/30) was not synced after the file was named there and before the commit's WAL sync (entry 35); syncs of it seen: []",
++ ]
+
+ ❯ tests/acceptance/1410/record.test.ts:59:43
+     57|       }
+     58|     }
+     59|     expect(problems, problems.join('\n')).toEqual([]);
+       |                                           ^
+     60|   });
+     61|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/1410/record.test.ts > #1410: evidence a FULL commit names is synced, with its folder, before that commit > AC2: with a power cut right after each FULL commit, every evidence hash that commit names reads back whole
+AssertionError: the verdict (verdict.made, citing a run output the caller stored): d838453585b94b6e180ceff7a29cf98201d6a2cf0d71f2808df9194d5471d851 doesn't read back after a cut right after the commit: evidence d838453585b94b6e180ceff7a29cf98201d6a2cf0d71f2808df9194d5471d851 is missing
+the resuming prompt (user.ask after the session's stop, citing the whole text the record stored): 304128065a93556a6976ee75b6122088374b37da674903c7badd87fe98106259 doesn't read back after a cut right after the commit: evidence 304128065a93556a6976ee75b6122088374b37da674903c7badd87fe98106259 is missing: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the verdict (verdict.made, citing a run output the caller stored): d838453585b94b6e180ceff7a29cf98201d6a2cf0d71f2808df9194d5471d851 doesn't read back after a cut right after the commit: evidence d838453585b94b6e180ceff7a29cf98201d6a2cf0d71f2808df9194d5471d851 is missing",
++   "the resuming prompt (user.ask after the session's stop, citing the whole text the record stored): 304128065a93556a6976ee75b6122088374b37da674903c7badd87fe98106259 doesn't read back after a cut right after the commit: evidence 304128065a93556a6976ee75b6122088374b37da674903c7badd87fe98106259 is missing",
++ ]
+
+ ❯ tests/acceptance/1410/record.test.ts:80:43
+     78|       }
+     79|     }
+     80|     expect(problems, problems.join('\n')).toEqual([]);
+       |                                           ^
+     81|   });
+     82|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 1 passed (4)
+   Start at  03:17:04
+   Duration  57.83s (tests 100%)
+
