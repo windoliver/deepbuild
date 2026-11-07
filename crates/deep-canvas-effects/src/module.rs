@@ -333,8 +333,63 @@ fn reads_only_its_target(graph: &Value) -> bool {
         let Some(t) = i["from"].get("texture") else {
             return true;
         };
-        t.get("target").is_some_and(|t| t["op"] == "core" && t["output"] == "color")
+        t.get("target").is_some_and(|t| {
+            (t["op"] == "core" && t["output"] == "color") || t["collection"].is_string()
+        })
     })
+}
+
+/// A collection target a graph reads (Effect and GPU operator: collection targets).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TargetRead {
+    pub collection: String,
+    pub output: String,
+    pub half: bool,
+    pub mips: bool,
+}
+
+/// The collection targets `graph` reads.
+pub fn target_reads(graph: &Value) -> Vec<TargetRead> {
+    graph["inputs"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(_, i)| {
+            let t = i["from"].get("texture")?.get("target")?;
+            Some(TargetRead {
+                collection: t["collection"].as_str()?.to_string(),
+                output: t["output"].as_str()?.to_string(),
+                half: t["resolution"] == "half",
+                mips: t["mips"] == true,
+            })
+        })
+        .collect()
+}
+
+/// The first collection a pass of `doc` reads across writers: its members' layer isn't the pass's
+/// (a collection stays inside one writer's layer). `Some((pass, collection))` names both.
+pub fn foreign_read(doc: &Map<String, Value>) -> Option<(String, String)> {
+    let items = doc.get("items")?.as_object()?;
+    let layer_of = |item: &Value| item["layer"].as_str().map(str::to_string);
+    for (id, item) in items {
+        if !matches!(item["kind"].as_str(), Some("gpu.pass@1" | "gpu.compute@1")) {
+            continue;
+        }
+        for read in target_reads(&item["params"]) {
+            let members = doc
+                .get("collections")
+                .and_then(|c| c.get(&read.collection))
+                .and_then(|c| c.get("members"))
+                .and_then(Value::as_array);
+            let foreign = members.into_iter().flatten().filter_map(Value::as_str).any(|m| {
+                items.get(m).and_then(layer_of) != layer_of(item)
+            });
+            if foreign {
+                return Some((id.clone(), read.collection));
+            }
+        }
+    }
+    None
 }
 
 /// What a group's pass runs: its graphs in order, and the px it reaches when the pass sets no grow.

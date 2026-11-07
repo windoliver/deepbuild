@@ -1,0 +1,23 @@
+# The cart journey on snapshot S1: the cart shows $18.00. Every step has an ID and a deadline (ms); each expect's
+# timeout stays under its step's deadline. Each end-state check names its oracle and what it reads.
+journey: cart-total
+feature: cart
+depth: journey
+masks: []
+steps:
+  - id: open
+    deadline: 10000
+    goto: /cart
+  - id: see-total
+    deadline: 5000
+    expect: { role: status, name: Total, text: "$18.00" }
+    timeout: 2000
+end_state:
+  - id: total-shown
+    oracle: code
+    locator: { role: status, name: Total }
+    text: "$18.00"
+  - id: cart-stored
+    oracle: code
+    readback: { method: GET, path: /api/cart }
+    equals: { total: "$18.00" }

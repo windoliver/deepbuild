@@ -122,6 +122,8 @@ pub struct Opened {
     pub profiler: Option<Profiler>,
     /// The status stage, attached only where status can show.
     pub stage: Option<SharedStage>,
+    /// #149: what a drawing look lays over this frame's surfaces.
+    pub drawn: Arc<Mutex<crate::drawn::Frame3>>,
 }
 
 /// Opens the session: a view at `size` whose render module is scene3d with the effects between
@@ -190,6 +192,8 @@ fn open_with(
     let path = on.path;
     let fx_planted = effects::planted_fx(on.planted);
     let timings = timings && on.backend != Backend::Noop;
+    let drawn3 = Arc::new(Mutex::new(crate::drawn::Frame3::default()));
+    let opened3 = drawn3.clone();
     on.worker
         .call(move |state| -> Result<Opened, String> {
             let (module, shared) = Module3::new(planted);
@@ -197,7 +201,12 @@ fn open_with(
             let mut effects = Effects::new(Default::default(), fx_planted);
             setup(&mut effects);
             let fx = Arc::new(Mutex::new(effects));
-            lock(&shared).post = Some(Box::new(fx::Shared(fx.clone())));
+            let drawn = crate::drawn::Post3::new(
+                Box::new(fx::Shared(fx.clone())),
+                drawn3.clone(),
+                fx.clone(),
+            );
+            lock(&shared).post = Some(Box::new(drawn));
             let stage = if with_stage {
                 let device = state.gpu.recover()?;
                 let stage = Arc::new(Mutex::new(Stage::new(&device)));
@@ -233,6 +242,7 @@ fn open_with(
                 fx,
                 profiler,
                 stage,
+                drawn: opened3,
             })
         })
         .map_err(|e| refused("no_session", e))

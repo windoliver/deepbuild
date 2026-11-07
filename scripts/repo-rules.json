@@ -1717,6 +1717,46 @@
           "why": "Issue #238's blind suite: lists each fixture's operators with their offsets, so a test knows where each trap's instruction is."
         }
       }
+    },
+    "packages/checks-journey/package.json": {
+      "dependencies": {
+        "@deepbuild/checks-command": {
+          "spec": "0.0.0",
+          "why": "Issue #37: check.kind@1's kit cases are command suites, so the journey fill answers a command spec as the command kind does, through its public entry."
+        },
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #37: the check.kind@1 result shape the journey kind returns, and its kit at install."
+        },
+        "@deepbuild/env-local": {
+          "spec": "0.0.0",
+          "why": "Issue #37: the stack a journey runs against is started from the run's checkout by env-local, through the host."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #37: a saved script's typed and observed values are scrubbed as evidence is, by value."
+        },
+        "@deepbuild/gate": {
+          "spec": "0.0.0",
+          "why": "Issue #37: the tree a stack served, worked out by the core from the supervisor's records, which an uncounted run names."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #37: host@1's types; the driver and every stack process start, are signalled and waited for through the host."
+        },
+        "@deepbuild/verdicts": {
+          "spec": "0.0.0",
+          "why": "Issue #37: the Depth type a run and a requirement carry (journey or live), types only."
+        },
+        "playwright": {
+          "spec": "1.64.1",
+          "why": "Issue #37: the browser driver journeys run on; the design names Playwright, and its Chromium is the fixed browser build of the environment profile."
+        },
+        "yaml": {
+          "spec": "2.9.1",
+          "why": "Issue #37: journey files and feature entries under .deepbuild/ are YAML; env-local's pinned parser."
+        }
+      }
     }
   },
   "allowedFindings": [
