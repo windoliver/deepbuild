@@ -43,10 +43,12 @@ export function hubAdapters(): AdapterRegistry {
   const base = shipped();
   if (!folder) return base;
   const reg = emptyRegistry();
-  for (const file of readdirSync(folder).filter((f) => f.endsWith('.facts.json') && f !== 'mcp-servers.facts.json' && f !== 'loops.facts.json')) {
+  // A facts file for an agent with no shipped adapter (cursor's, opencode's) is data for other readers, as the
+  // MCP and loop facts are: it registers nothing.
+  for (const file of readdirSync(folder).filter((f) => f.endsWith('.facts.json'))) {
     const facts = JSON.parse(readFileSync(join(folder, file), 'utf8')) as JsonObject;
     const name = String(facts.agent);
-    reg.register(name, factsAdapter(facts, base.get(name) as Adapter));
+    if (base.names().includes(name)) reg.register(name, factsAdapter(facts, base.get(name) as Adapter));
   }
   return reg;
 }
