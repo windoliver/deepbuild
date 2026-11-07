@@ -89,20 +89,24 @@ pub fn decide(app: &mut App, call: &Value) -> Value {
     if call["via"] != "you" {
         return json!({"outcome": "refused", "code": "not_your_decision", "reason": "only your decision blesses a golden"});
     }
-    let (Some(store), Some(fixture), Some(png)) = (
+    // A bless names a PNG, or an operator output's bytes (`state`, #252).
+    let bless = &call["decision"]["bless"];
+    let snapshot = bless["png"].as_str().map(|p| (p, false)).or(bless["state"].as_str().map(|p| (p, true)));
+    let (Some(store), Some(fixture), Some((png, state))) = (
         call["store"].as_str(),
-        call["decision"]["bless"]["fixture"].as_str(),
-        call["decision"]["bless"]["png"].as_str(),
+        bless["fixture"].as_str(),
+        snapshot,
     ) else {
         return refused(
             "bad_input",
-            "decide takes a store and a bless {fixture, png}",
+            "decide takes a store and a bless {fixture, png | state}",
         );
     };
     let Ok(bytes) = std::fs::read(png) else {
         return json!({"outcome": "refused", "code": "no_snapshot", "reason": format!("{png} isn't there")});
     };
     let (meta, image) = store_paths(store, fixture);
+    let image = if state { state_path(store, fixture) } else { image };
     let record =
         json!({"fixture": fixture, "fingerprint": fingerprint(app), "digest": hex(&bytes)});
     let written = std::fs::create_dir_all(store)
@@ -117,6 +121,93 @@ pub fn decide(app: &mut App, call: &Value) -> Value {
         Ok(()) => json!({"outcome": "decided"}),
         Err(e) => refused("not_written", e.to_string()),
     }
+}
+
+/// #149's `pixel_hash` oracle: a snapshot's RGBA8 rows by hash against `<store>/<fixture>.golden.json`,
+/// which keeps no picture. The blank guard reads the snapshot alone, before anything else.
+fn pixel_hash(call: &Value, store: &str, fixture: &str, fp: &Value) -> Value {
+    let oracle = "pixel_hash";
+    let snapshot = call["png"].as_str().and_then(|p| std::fs::read(p).ok());
+    let Some(b) = snapshot.as_deref().and_then(rgba) else {
+        return json!({"verdict": "BLOCKED", "reason": "no_snapshot", "fingerprint": fp, "oracle": oracle});
+    };
+    if blank(&b) {
+        return json!({"verdict": "BLOCKED", "reason": "blank", "fingerprint": fp, "oracle": oracle});
+    }
+    let pixels = hex(b.as_raw());
+    let path = std::path::Path::new(store).join(format!("{fixture}.golden.json"));
+    let record = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok());
+    let Some(record) = record else {
+        return json!({"verdict": "BLOCKED", "reason": "no_golden", "fingerprint": fp, "oracle": oracle,
+            "numbers": {"pixels": pixels}});
+    };
+    if record["fingerprint"] != *fp {
+        let changed: Vec<Value> = ["os", "gpu", "driver", "wgpu"]
+            .iter()
+            .filter(|k| record["fingerprint"][**k] != fp[**k])
+            .map(|k| json!({"field": k, "golden": record["fingerprint"][*k], "run": fp[*k]}))
+            .collect();
+        return json!({"verdict": "INCONCLUSIVE", "reason": "environment_changed", "fingerprint": fp,
+            "oracle": oracle, "changed": changed, "numbers": {"pixels": pixels}});
+    }
+    json!({
+        "verdict": if record["pixels"] == pixels.as_str() { "PASS" } else { "FAIL" },
+        "fingerprint": fp, "oracle": oracle,
+        "numbers": {"pixels": pixels, "golden_pixels": record["pixels"]},
+    })
+}
+
+fn state_path(store: &str, fixture: &str) -> PathBuf {
+    Path::new(store).join(format!("{fixture}.state"))
+}
+
+/// #252: the snapshot is an operator output's bytes as the view3d's first frame reads them,
+/// compared byte for byte under the class its writer computes: a same-machine output compares
+/// only under the fingerprint its golden was blessed under, and reads INCONCLUSIVE under another,
+/// naming both; an exact one compares anywhere.
+fn state_golden(app: &mut App, out: &str, call: &Value, store: &str, fixture: &str, key: &str, fp: &Value) -> Value {
+    let oracle = "hash";
+    let mut v = call["view3d"].clone();
+    let from = v["from"].as_u64().unwrap_or(0);
+    v["capture"] = json!([from]);
+    v["frames"] = json!(1);
+    v["read"] = json!([key]);
+    let reply = view3d::call(app, out, &v);
+    let read = &reply["frames"][0]["read"][key];
+    let class = read["class"].as_str().unwrap_or("same_machine");
+    let snapshot = read["file"]
+        .as_str()
+        .and_then(|h| std::fs::read(Path::new(out).join(format!("{h}.u32"))).ok());
+    let Some(snapshot) = snapshot else {
+        return json!({"verdict": "BLOCKED", "reason": "no_snapshot", "fingerprint": fp, "golden": null, "oracle": oracle, "class": class});
+    };
+    let (meta, _) = store_paths(store, fixture);
+    let record = std::fs::read_to_string(&meta).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
+    let (Some(record), Ok(golden_bytes)) = (record, std::fs::read(state_path(store, fixture))) else {
+        return json!({"verdict": "BLOCKED", "reason": "no_golden", "fingerprint": fp, "golden": null, "oracle": oracle, "class": class,
+            "ask": {"kind": "bless", "fixture": fixture, "ask": "bless this fixture's golden by your decision"}});
+    };
+    let golden = json!({"fingerprint": record["fingerprint"], "digest": record["digest"]});
+    if record["fingerprint"] != *fp && class != "exact" {
+        let changed: Vec<Value> = ["os", "gpu", "driver", "wgpu"]
+            .iter()
+            .filter(|k| record["fingerprint"][**k] != fp[**k])
+            .map(|k| json!({"field": k, "golden": record["fingerprint"][*k], "run": fp[*k]}))
+            .collect();
+        return json!({
+            "verdict": "INCONCLUSIVE", "reason": "environment_changed", "fingerprint": fp, "golden": golden,
+            "oracle": oracle, "class": class, "changed": changed,
+            "ask": {"kind": "bless", "fixture": fixture, "ask": "record this fixture's golden again on this machine"},
+        });
+    }
+    let (state, golden_state) = (hex(&snapshot), hex(&golden_bytes));
+    json!({
+        "verdict": if state == golden_state { "PASS" } else { "FAIL" },
+        "fingerprint": fp, "golden": golden, "oracle": oracle, "class": class,
+        "numbers": {"state": state, "golden_state": golden_state},
+    })
 }
 
 /// `golden`: a snapshot against its fixture's golden.
@@ -135,6 +226,12 @@ pub fn golden(app: &mut App, out: &str, call: &Value) -> Value {
         for (k, v) in env {
             fp[k.as_str()] = v.clone();
         }
+    }
+    if call["oracle"] == "pixel_hash" {
+        return pixel_hash(call, store, fixture, &fp);
+    }
+    if let (Some(key), true) = (call["read"].as_str(), call["view3d"].is_object()) {
+        return state_golden(app, out, call, store, fixture, key, &fp);
     }
     let fails_missing = app.planted == Some(Planted::FailsMissingSnapshot);
     let any_environment = app.planted == Some(Planted::ComparesAnyEnvironment);

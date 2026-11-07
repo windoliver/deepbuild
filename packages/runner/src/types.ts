@@ -145,6 +145,8 @@ export interface Runner {
   /** Why the plan window of the account `agent` runs on in `home` keeps a drafting job waiting at your reserve (#322), or undefined. */
   atReserve(agent: Agent, home: string): string | undefined;
   planWindows(): Map<string, { used: number; resets: number | null; at: number }>;
+  /** The most used of the live plan windows of the account `agent` runs on in `home`, in percent, or undefined with no reading (#1330's plan share). */
+  windowUsed(agent: Agent, home: string): number | undefined;
   /** Re-reads the clock, windows, answers and budgets, and starts what may start. */
   tick(): Promise<void>;
   close(): Promise<void>;
