@@ -25,6 +25,12 @@ export function namedIn(text: string): Set<Named> {
 
 /** Where a shell push goes: its refs' branches, or `current` when it names none or names HEAD. */
 export function pushBranches(command: string, current: string): string[] {
+  // jj and sl name a push's branch by its flag (#1523); gt and git town push the current branch's.
+  const flagged = /\b(?:jj\b[^;&|]*?\bgit\s+push|sl\s+push)\b([^;&|]*)/.exec(command);
+  if (flagged) {
+    const named = [...flagged[1]!.matchAll(/(?:^|\s)(?:--bookmark|--branch|-b|--to|-t)(?:=|\s+)(\S+)/g)].map((m) => m[1]!);
+    return named.length ? named : [current];
+  }
   const refs = /\bgit\b[^;&|]*?\bpush\b([^;&|]*)/.exec(command)?.[1]?.trim().split(/\s+/).filter((w) => w && !w.startsWith('-')).slice(1) ?? [];
   return refs.length ? refs.map((r) => r.split(':').at(-1)!.replace(/^refs\/heads\//, '')).map((b) => (b === 'HEAD' ? current : b)) : [current];
 }

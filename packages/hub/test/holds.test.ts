@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { openAsks } from '@deepbuild/asks';
 import { openRecord, ulid, type Connection } from '@deepbuild/record';
 import { Holds, pushTargets } from '../src/holds.js';
+import { pushBranches } from '../src/named.js';
 import type { HookMeta } from '../src/wire.js';
 import { hookLine, reply, withHub } from './hub.js';
 
@@ -117,12 +118,30 @@ describe('a held push (#1156)', () => {
     ['git push --repo mirror', 'mirror'],
     ['cd web && git push "$REMOTE" main; echo ok', '$REMOTE'],
     ["sh -c 'git push'", 'origin'],
+    ['jj git push --bookmark main', 'origin'],
+    ['jj git push --remote fork', 'fork'],
+    ['jj -R ../shop git push --remote=fork -b b', 'fork'],
+    ['sl push --to main', 'default'],
+    ['sl push upstream --to main', 'upstream'],
+    ['gt submit --stack', 'origin'],
+    ['git town ship', 'origin'],
   ])('`%s` goes to %s', (line, ref) => {
     expect(pushTargets(line)).toEqual([{ kind: 'remote', ref }]);
   });
   it('names each remote of a line once, and a line that pushes nothing names none', () => {
     expect(pushTargets('git push a main && git push b main && git push a dev').map((t) => t.ref)).toEqual(['a', 'b']);
     expect(pushTargets('git status && echo push')).toEqual([]);
+    expect(pushTargets('jj log && jj git fetch && gt log')).toEqual([]);
+  });
+  it.each([
+    ['git push origin HEAD:b', ['b']],
+    ['jj git push --bookmark b', ['b']],
+    ['jj git push -b a --bookmark=b', ['a', 'b']],
+    ['jj git push', ['cur']],
+    ['sl push --to b', ['b']],
+    ['gt submit --stack', ['cur']],
+  ])('`%s` pushes %j', (line, branches) => {
+    expect(pushBranches(line, 'cur')).toEqual(branches);
   });
 
   it("copies the session's transcript before it raises the ask, so what the session read is placed as read", async () => {
