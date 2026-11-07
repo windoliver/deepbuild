@@ -15,6 +15,9 @@ use crate::chrome;
 
 actions!(deepbuild, [OpenCommands]);
 
+/// How tall ⌘K's list grows before it scrolls.
+const LIST_HEIGHT: f32 = 320.;
+
 /// ⌘K opens the list wherever focus is in the app.
 pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("cmd-k", OpenCommands, None)]);
@@ -309,6 +312,7 @@ impl Render for Palette {
             .child(
                 div()
                     .w(px(480.))
+                    .flex_none()
                     .p_2()
                     .flex()
                     .flex_col()
@@ -318,13 +322,16 @@ impl Render for Palette {
                     .border_color(chrome.divider)
                     .rounded_md()
                     .text_color(chrome.ink_primary)
-                    .child(Input::new(&self.query))
+                    .child(div().flex_none().h(px(32.)).child(Input::new(&self.query)))
                     .child(
                         div()
                             .id("command-list")
                             .test_support()
                             .role(Role::ListBox)
                             .aria_label("Commands and pages")
+                            .flex_none()
+                            .max_h(px(LIST_HEIGHT))
+                            .overflow_y_scroll()
                             .flex()
                             .flex_col()
                             .children(ranked.into_iter().enumerate().map(|(at, entry)| {
