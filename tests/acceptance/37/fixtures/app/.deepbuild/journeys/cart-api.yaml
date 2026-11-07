@@ -1,0 +1,15 @@
+# An API journey: real requests to the running service, no browser, the end state read back from the real system.
+journey: cart-api
+feature: cart
+depth: journey
+api: true
+steps:
+  - id: add
+    deadline: 5000
+    request: { method: POST, path: /api/cart, body: { name: Tea } }
+    status: 200
+end_state:
+  - id: cart-holds-two
+    oracle: code
+    readback: { method: GET, path: /api/cart }
+    equals: { total: "$36.00" }

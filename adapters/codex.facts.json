@@ -66,7 +66,8 @@
     "readBy": "a run keeps its session's own rollout",
     "conformance": "codex/transcripts/folder",
     "home": ["CODEX_HOME", "~/.codex"],
-    "path": "sessions/{YYYY}/{MM}/{DD}/rollout-{time}-{thread}.jsonl"
+    "path": "sessions/{YYYY}/{MM}/{DD}/rollout-{time}-{thread}.jsonl",
+    "archived": "archived_sessions/rollout-{time}-{thread}.jsonl"
   },
   "appLinks": {
     "readBy": "Open on a session's row",
