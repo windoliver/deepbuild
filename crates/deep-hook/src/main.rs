@@ -41,6 +41,19 @@ const BILLING_KEYS: &[&str] = &[
     "OPENAI_API_KEY",
 ];
 
+// A release build refuses the planted programs' feature (#1408).
+#[cfg(all(feature = "env-plants", not(debug_assertions)))]
+compile_error!("the env-plants feature is for test builds only, never a release build");
+
+/// The planted wrong program a test selects with `DEEP_HUB_PLANT`: read only in a build with the `env-plants` feature,
+/// so a shipped hook never bends on it (#1408).
+fn hub_plant() -> Option<String> {
+    #[cfg(feature = "env-plants")]
+    return env::var("DEEP_HUB_PLANT").ok();
+    #[cfg(not(feature = "env-plants"))]
+    None
+}
+
 /// Who is calling: Cursor's CLI and Grok run the hooks in Claude Code's settings file, so a hook installed for Claude
 /// Code may come from either. Each sets variables of its own in its hooks' environment, and a hook that has another
 /// tool's is sent under that tool's name. Claude Code's CLAUDECODE says nothing here: a tool started from a shell
@@ -1179,7 +1192,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let read = read_fields(called.as_ref(), &matched);
     // A shell call that runs a heavy command (#1015), for the hub to run under `deep lease`; spooled with it, so a
     // hub that was away reads that it ran unleased.
-    let plant = env::var("DEEP_HUB_PLANT").ok();
+    let plant = hub_plant();
     let heavy = parsed
         .as_ref()
         .filter(|_| event == "PreToolUse")
@@ -1688,7 +1701,7 @@ fn waiter() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     // #824's planted wrong program: a copy of the session's transcript in the waiter's own memory while it waits.
-    let kept = if env::var("DEEP_HUB_PLANT").as_deref() == Ok("waiter-keeps-transcript") {
+    let kept = if hub_plant().as_deref() == Some("waiter-keeps-transcript") {
         fs::read(field("transcript_path")).unwrap_or_default()
     } else {
         Vec::new()
@@ -1709,7 +1722,7 @@ fn waiter() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     // Only the planted wrong program waiter-outlives-session doesn't watch its session's agent.
-    let watched = env::var("DEEP_HUB_PLANT").as_deref() != Ok("waiter-outlives-session");
+    let watched = hub_plant().as_deref() != Some("waiter-outlives-session");
     let gone = || watched && (agent_pid() != agent || !alive(agent));
     loop {
         std::hint::black_box(&kept);
