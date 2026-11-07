@@ -411,3 +411,81 @@ three readers (`foreground`, `frontApp`'s PID, the planted tests' bundle id) now
 samples and the clipboard, sound and ask checks are unchanged. Measured on the base: the honest replica's judge returns no
 problems, and `moves-focus` is named `moved focus: the replica registered as a foreground app`. A plant test can still pass when
 someone switches apps during it, since any change of the frontmost app is judged as moved focus (Judgment calls: Your app).
+
+## Criterion 9: a journey's UI check at every step (added November 7)
+
+Added blind on November 7 at base commit `c12a65bb`, by a job that saw only the issue with the owner's new Scope line and criterion,
+the design (Replica; Replica `deep_drive`; How runs become one of five verdicts, journeys and app journeys) and the code at that commit,
+plus this folder's earlier blind files. No check over a journey, no step audit and no device exists there. The files:
+`ac9-journey-steps.test.ts`, `scope-ac9-device.test.ts`, `journey-helpers.ts`,
+`fixtures/panels/{journey-cover,journey-cover-twin,device-insets,device-insets-twin}`. `ui-helpers.ts` is used unchanged. Run them with
+`npx vitest run --root tests/acceptance/124 --no-file-parallelism ac9`.
+
+### New surface (additions to The surface; everything above stands)
+
+**`ui_check.journey`.** `ui_check` takes a journey: `{"call": "ui_check", "ui_check": {"journey": [<deep_drive arguments>]}}`, the calls in
+order, a `launch` first, with no `replica` (the check adds the handle, and a `close` when the journey has none). The other `ui_check` fields
+may be left out; then `views` and `not_covered` are empty and the claim rests on the steps. The check replays the journey in a fresh replica
+and audits the screen after every step: step `i` is the `i`-th call after the launch, as `close`'s `journey.steps` numbers it. With
+`launch.panel`, it audits the nodes the panel draws, the same rule as the clean-panel tests above, so the shell's rows beside it don't count.
+The reply adds:
+
+- `journey`: `close`'s journey for the replay, `{outcome, tests_run, failures, steps, evidence}`.
+- `steps`: one `{step: i, id: "step i: <call>", snapshot, findings}` per step, in order, `id` the journey's own step id, `snapshot` `see`'s
+  shape for the screen after that step.
+- Each finding also carries `step: i` and `by: {role, name, bounds}`, and is in its step's `findings` and the top-level list. Three new
+  audits: `under_sibling`, a node drawn under a sibling, `by` the sibling over it; `under_system_bar`, `by: {role: "system_bar", name: null,
+  bounds}`; `under_keyboard`, `by: {role: "keyboard", name: null, bounds}`. `node` is the covered element with its real bounds, `box` the part
+  of it covered (the overlap of the two boxes), `size` and `theme` the launch's.
+- `claim`: `FAIL` when a finding exists; else `INCONCLUSIVE` when a step has no audit or the journey didn't pass (it ran nothing, having
+  no `expect`, or it failed); else `PASS`. Only the first two are tested; a failed journey is never PASS either way.
+
+**`launch.device`.** `{"system_bar": <points>, "keyboard": <points>}`: the replica draws a system bar that tall over the window's top edge
+for the whole run, and an on-screen keyboard that tall over the bottom edge while a text input has focus, each across the window's width.
+In device pixels at the reference window and scale 2, `{system_bar: 24, keyboard: 300}` puts the bar at `[0, 0, 3024, 48]` and the keyboard at
+`[0, 1364, 3024, 600]`. With no `device` there is neither. `SCHEMAS.deep_drive` in `packages/hub/src/tools.ts` takes it in `launch`.
+
+### Fixtures
+
+- `fixtures/panels/journey-cover`: three pages, each but the last with "Next". Page 3 has "Publish" and, in the same row, its sibling
+  "Promo banner", drawn after it and filled `#e8590c`, an orange nothing else draws; "Hide banner" takes the banner away. With
+  `COVERED = true` the banner lies over Publish. `journey-cover-twin` is the same file with `COVERED = false`, the one line that differs:
+  the banner lies beside Publish. The journey: step 1 asserts "Page 1 of 3", steps 2 and 3 click Next, step 4 clicks "Hide banner",
+  step 5 asserts Publish visible. So only the screen after step 3 has a node under a sibling, and the journey's assertions pass either way.
+- `fixtures/panels/device-insets`: "Account" 4 points from the panel's top, a "Message" field mid-panel (labelled by the text before it),
+  and "Send" pinned 12 points above the bottom. `device-insets-twin` is the same file with `SAFE = true`: Account 48 points down and Send
+  under the field. The journey launches with `device: {system_bar: 24, keyboard: 300}`; step 1 asserts "Compose a message", step 2
+  clicks the field, step 3 asserts again.
+
+At the base, a plain run of each fixture draws what this says: on page 3 the banner's box holds Publish's and 9,440 of Publish's 11,200
+pixels are orange (0 on the twin); Account is at `[24, 8, 200, 56]` and Send at `[24, 1884, 160, 56]` (twin: `[24, 96, ...]` and
+`[24, 496, ...]`).
+
+### Criteria, tests and wrong programs
+
+| ID | Criterion (short) | Tests | Wrong programs it must fail on |
+|---|---|---|---|
+| `#124.f1263f80` | A planted button under a sibling at step 3 of a journey fails, naming the step and the node | `ac9-journey-steps.test.ts`: "a planted button under a sibling at step 3...": a plain run shows the banner over Publish after step 3 (its box and its pixels) and nothing covered at the end; the check audits all five steps, the journey passes, the claim is `FAIL`, and the one finding is `under_sibling` at step 3 alone, naming Publish at its real bounds under "Promo banner", `box` the overlap, `id` `step 3: act`; "the twin journey...": every step audited, page 3 reached with the two apart, no finding, `PASS`; "the same journey with its assertions taken out...": `ran_nothing`, steps still audited, `INCONCLUSIVE` | A check of the end screen alone, of the launch alone, or of the rendered views alone (none names step 3). Judge tests: the end screen alone saying PASS, no steps, a skipped step, a step with no snapshot, a finding at step 4, the sibling named as the covered node, no `by`, a wrong box, a finding missing from the top-level list or filed under another step |
+
+Scope tests, untagged: `scope-ac9-device.test.ts`. On `device-insets` with the device, Account is named `under_system_bar` at every step and
+Send `under_keyboard` at steps 2 and 3, not 1, each at its real bounds with the bar's and the keyboard's boxes; the claim is `FAIL`. The twin
+gets nothing and `PASS`; the plant with no device gets nothing and `PASS`; the hub's strict check takes `launch.device`.
+
+### Judgment calls a redraft may revisit
+
+- **The surface for "a journey".** The check takes the journey as its list of `deep_drive` calls in `ui_check.journey` and replays it, as
+  a journey check replays a recorded run, rather than a launch flag that audits an agent's live run. `ui_check` stays a call of the binary.
+  The step numbering is the replica's own (`step i` from the first call after launch), so "step 3" is the third call.
+- **What "fails" is.** The UI claim is `FAIL`; the journey's own outcome stays `passed`, since its assertions pass, and the claim is the
+  reply's word, as in criterion 7. Whether a finding should also fail the journey for the verdict engine is left to a redraft.
+- **One audit per step, at the launch's size and theme.** The step check doesn't render each step four ways, as a changed view is.
+- **"Under a sibling"** is judged on the snapshot: two nodes of one parent whose boxes overlap, the later-drawn one on top. Here both are
+  buttons, because a script's plain `div` gets no accessibility node; the base's snapshot puts every panel node under the window, so they
+  are siblings there. Paint order is shown by the plain run's pixels, never asked of the check.
+- **The system bar and the on-screen keyboard.** The design names neither for the replica: a fixed status bar appears only in an app
+  journey's device profile (iOS simulator, Android emulator), and no on-screen keyboard appears at all. The issue's Scope line names both,
+  so `launch.device` is this job's choice: a bar over the top edge and a keyboard over the bottom, given in points, the keyboard up only
+  while a text input has focus. If the owner means something else (a device model, the macOS menu bar, the Accessibility Keyboard),
+  `scope-ac9-device.test.ts` is the file to redraft; the criterion's file doesn't depend on it.
+- **The panel's nodes only.** With a panel, the shell's "Needs you" heading and session row are left out: at the base they lie under a
+  24-point bar and a 300-point keyboard too, and the shell has no device-aware layout.

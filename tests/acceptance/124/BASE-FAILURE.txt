@@ -122,3 +122,30 @@ Measured at the base, by hand, on the fixtures: a plain click on Save under the 
 the panel then reads "Draft discarded", "Not saved" and "Scrim events 2", and the Scrim node is gone. The real session row on the
 stress set draws past its frame: the repo row puts 106 pixels of ink in the 12 px band right of its frame at 1512 x 982, light; every
 short row of the default record puts 0, light and dark. So the honest row needs that fix (README: What the implementer owes).
+
+Criterion 9 (#124.f1263f80) and its Scope tests at base c12a65bb, run from the base root on 2026-11-07:
+node scripts/throttle.mjs test --wait 60 -- scripts/lease npx vitest run --root tests/acceptance/124 --no-file-parallelism ac9
+
+     × #124.f1263f80 a planted button under a sibling at step 3 of a journey fails, naming step 3 and the node 21066ms
+     × #124.f1263f80 the twin journey, its banner beside Publish, has nothing covered at any step and passes 76ms
+     × #124.f1263f80 the same journey with its assertions taken out ran nothing, and the check over it is INCONCLUSIVE, never PASS 114ms
+     × a button under the system bar is named at every step, and a button under the keyboard from the step that raised it 6ms
+     × the twin, clear of the bar and the keyboard, has nothing covered at any step and passes 9532ms
+     × with no device the replica has no system bar or keyboard, so the same panel gets neither finding 54ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  ac9-journey-steps.test.ts > #124.f1263f80 the UI check runs at every journey step, and a button under a sibling at step 3 fails, naming the step and the node > #124.f1263f80 a planted button under a sibling at step 3 of a journey fails, naming step 3 and the node
+AssertionError: ui_check answers a journey: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+ FAIL  ac9-journey-steps.test.ts > #124.f1263f80 the UI check runs at every journey step, and a button under a sibling at step 3 fails, naming the step and the node > #124.f1263f80 the twin journey, its banner beside Publish, has nothing covered at any step and passes
+AssertionError: ui_check answers a journey: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+ FAIL  ac9-journey-steps.test.ts > #124.f1263f80 the UI check runs at every journey step, and a button under a sibling at step 3 fails, naming the step and the node > #124.f1263f80 the same journey with its assertions taken out ran nothing, and the check over it is INCONCLUSIVE, never PASS
+AssertionError: ui_check answers a journey: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+ FAIL  scope-ac9-device.test.ts > scope: the UI check at every journey step names a node under a system bar and a node under the on-screen keyboard > a button under the system bar is named at every step, and a button under the keyboard from the step that raised it
+AssertionError: launch.device is a deep_drive launch field the hub's strict check takes: expected [Function] to not throw an error but 'Error: Leave out device: the schema l…' was thrown
+ FAIL  scope-ac9-device.test.ts > scope: the UI check at every journey step names a node under a system bar and a node under the on-screen keyboard > the twin, clear of the bar and the keyboard, has nothing covered at any step and passes
+AssertionError: ui_check answers a journey: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+ FAIL  scope-ac9-device.test.ts > scope: the UI check at every journey step names a node under a system bar and a node under the on-screen keyboard > with no device the replica has no system bar or keyboard, so the same panel gets neither finding
+AssertionError: ui_check answers a journey: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+ Test Files  2 failed (2)
+      Tests  6 failed | 3 passed (9)
+
+Every failure is the missing surface: ui_check with a journey is refused ("no replica runs here"), and the hub's strict schema refuses launch.device. The three judge tests on synthetic wrong programs pass at the base, as they must. The first test's plain-run fixture checks (banner over Publish after step 3, uncovered at the end) passed before it reached ui_check.
