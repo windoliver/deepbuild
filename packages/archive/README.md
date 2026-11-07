@@ -7,7 +7,7 @@ The transcript archive (#20), a first-party extension that ships on by default. 
 ## Where new code goes
 
 - `src/index.ts`: the whole archive. What it already copied is read back from the record, never kept in memory, so a restart copies nothing twice; keep it that way.
-- Sources come from each adapter's facts (`transcripts.home`, `transcripts.path`): a new agent's folder goes in its facts file, not here.
+- Sources come from each adapter's facts (`transcripts.home`, `transcripts.path`, and `transcripts.archived` where its agent moves a transcript it archives): a new agent's folder goes in its facts file, not here.
 - Tests: `test/` for regressions beyond the acceptance suite in `tests/acceptance/20/`.
 
 ## What it may import

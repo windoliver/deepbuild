@@ -108,7 +108,15 @@ pub fn child_of(parent: &Pose, own: &Pose, ops_: &mut Ops) -> Pose {
     }
 }
 
-/// Turns `own` so its +X axis points at `target`: yaw about Z and pitch about Y, in degrees.
+/// Whether an aim at `target` has no heading: zero, or parallel to the up axis.
+pub fn aimless(own: &Pose, target: Vec3) -> bool {
+    let d = [target[0] - own.pos[0], target[1] - own.pos[1], target[2] - own.pos[2]];
+    let flat = ops::hypot(d[0], d[1]);
+    flat <= 1e-9 * (flat + d[2].abs()) || flat == 0.0
+}
+
+/// Turns `own` so its +X axis points at `target`: yaw about Z and pitch about Y, in degrees. An
+/// aim with no heading takes the fixed basis, yaw and pitch 0 (`look_at_degenerate`).
 pub fn look_at(own: &Pose, target: Vec3, ops_: &mut Ops) -> Pose {
     let d = [
         target[0] - own.pos[0],
@@ -117,6 +125,9 @@ pub fn look_at(own: &Pose, target: Vec3, ops_: &mut Ops) -> Pose {
     ];
     let flat = ops::hypot(d[0], d[1]);
     ops_.n(10);
+    if aimless(own, target) {
+        return Pose { rot: [own.rot[0], 0.0, 0.0], ..*own };
+    }
     Pose {
         rot: [
             own.rot[0],
