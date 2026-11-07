@@ -398,3 +398,16 @@ implementation. The first draft sent the Codex session's calls with no PreToolUs
 the lease; a Codex `deep mcp` binds to nothing and each call binds only by its own stamp. Every call now goes through `Stand.stamp`,
 as #806's do. The judge also samples processes through the third launch's call instead of after it, and holds the exact count after
 the launches, after the close and after the third launch gets its place. Its names, helpers and planted hub are unchanged.
+
+## Redraft, November 7 (`ac2-isolation.test.ts`, focus in `#124.ca91d3c1`)
+
+Redrafted from the same inputs as the first draft and the criterion: the issue, the design (Replica) and base `c12a65bb`, never an
+implementation. The planted `moves-focus` replica wasn't named: on macOS 27.2, `lsappinfo info -only <key>` no longer prints
+`"ApplicationType"="Foreground"`, `"pid"=…` or `"CFBundleIdentifier"="…"`; it prints its record, with `type="Foreground"`,
+`pid = 123` and `bundleID="…"`. So the "registered as a foreground app" line never fired, the frontmost app's PID was always null,
+and the planted tests never found the bundle to put the front app back. Cooperative activation (macOS 14 and later) also keeps
+`activateIgnoringOtherApps` from changing the frontmost app, so that line can't catch the plant either; it stays as it was. The
+three readers (`foreground`, `frontApp`'s PID, the planted tests' bundle id) now take either format. The judge's lines, names,
+samples and the clipboard, sound and ask checks are unchanged. Measured on the base: the honest replica's judge returns no
+problems, and `moves-focus` is named `moved focus: the replica registered as a foreground app`. A plant test can still pass when
+someone switches apps during it, since any change of the frontmost app is judged as moved focus (Judgment calls: Your app).
