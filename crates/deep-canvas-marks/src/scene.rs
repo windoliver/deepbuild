@@ -33,7 +33,9 @@ use crate::paint::{self, Adjust, By, Over, Ramp, Span, Steps};
 use crate::path::{self, Mesh, Verb};
 use crate::pathops;
 use crate::relations;
+use crate::story;
 use deep_canvas::schedule::{Key, KeyTree};
+use deep_canvas::template;
 
 /// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
 pub const KINDS: &[&str] = &[
@@ -2528,8 +2530,25 @@ pub struct Format {
     pub ungrouped: bool,
     /// `missing: hide`: an empty text where the reading is missing, instead of a dash.
     pub hide_missing: bool,
+    /// `unit_at: super`: the unit at the number's top, as a degree sign sits.
+    pub unit_raised: bool,
+    /// `ellipsis`: an ellipsis after the number, which never shortens it.
+    pub ellipsis: bool,
     /// The view's locale's group separator and decimal mark (`group: locale`).
     pub marks: Marks,
+}
+
+/// A unit set at the number's top, in the superscript letters a text run's font holds; one with
+/// none, such as a degree sign, already sits there.
+fn raised(unit: &str) -> String {
+    const PLAIN: &str = "0123456789+-=()abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUVW";
+    const RAISED: &str = "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁⱽᵂ";
+    unit.chars()
+        .map(|c| match PLAIN.chars().position(|p| p == c) {
+            Some(i) => RAISED.chars().nth(i).unwrap_or(c),
+            None => c,
+        })
+        .collect()
 }
 
 /// A locale's thousands separator and decimal mark.
@@ -2615,6 +2634,16 @@ impl Format {
             Some("none") => true,
             Some(_) => return refuse("bad_format", format!("{path}/format/group")),
         };
+        f.unit_raised = match map.get("unit_at").and_then(Value::as_str) {
+            None | Some("after") => false,
+            Some("super") => true,
+            Some(_) => return refuse("bad_format", format!("{path}/format/unit_at")),
+        };
+        f.ellipsis = match map.get("ellipsis") {
+            None => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return refuse("bad_format", format!("{path}/format/ellipsis")),
+        };
         Ok(f)
     }
 
@@ -2635,18 +2664,20 @@ impl Format {
         };
         let sign = if n < 0.0 && body.chars().any(|c| c.is_ascii_digit() && c != '0') {
             "−"
-        } else if self.sign_always && n > 0.0 {
+        } else if self.sign_always && n >= 0.0 {
             "+"
         } else {
             ""
         };
         let unit = match (&self.unit, self.notation) {
             (_, Notation::Percent | Notation::Duration) => String::new(),
+            (Some(u), _) if self.unit_raised => raised(u),
             (Some(u), _) if u == "%" || u == "°" => u.clone(),
             (Some(u), _) => format!(" {u}"),
             (None, _) => String::new(),
         };
-        format!("{sign}{body}{suffix}{unit}")
+        let more = if self.ellipsis { "…" } else { "" };
+        format!("{sign}{body}{suffix}{unit}{more}")
     }
 
     /// A magnitude's digits: `precision` decimals, or its shortest form; thousands grouped
@@ -2837,11 +2868,66 @@ pub fn bound_texts(
     let locale = doc.get("locale").and_then(Value::as_str).unwrap_or("en");
     for id in bound_ids(doc, items)? {
         let item = items.get(&id).unwrap_or(&Value::Null);
-        if let Some(shown) = bound_text(doc, &id, item, record, locale)? {
+        if let Some(shown) = text_at(doc, items, &id, item, record, locale)? {
             out.insert(id, shown);
         }
     }
     Ok(out)
+}
+
+/// A number and the decimals its source carries, `None` where it holds none at t.
+type Evaluated = Option<(f64, Option<u32>)>;
+
+/// A number an anchor or a driver gives a counter or a template, and the decimals its source
+/// carries: `items/<set>#period/by`, `items/<set>#head/<column>`, or a driver's evaluated target.
+/// `None` where it holds none at t, such as a head before the first row.
+fn evaluated_number(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+    item: &Value,
+    source: &str,
+) -> Result<Evaluated, Refused> {
+    if let Some(found) = anchor_of(items, source)? {
+        return Ok(found);
+    }
+    let target = doc
+        .get("drivers")
+        .and_then(|d| d.get(source))
+        .and_then(|d| d.get("target"))
+        .and_then(Value::as_str);
+    let Some(target) = target else {
+        return refuse("ref_unresolved", source);
+    };
+    let value = match target.split_once('/') {
+        Some(("data", name)) => item.pointer(&format!("/params/data/{name}")).or_else(|| {
+            doc.get("data")?
+                .get(name)
+                .map(|d| d.get("value").unwrap_or(d))
+        }),
+        Some(("items", rest)) => {
+            let (id, field) = rest.split_once('/').unwrap_or((rest, ""));
+            items.get(id).and_then(|i| i.pointer(&format!("/{field}")))
+        }
+        _ => None,
+    };
+    Ok(value.and_then(Value::as_f64).map(|v| (v, None)))
+}
+
+/// The value at an anchor path, or `None` for a path that names no anchor.
+fn anchor_of(items: &Map<String, Value>, path: &str) -> Result<Option<Evaluated>, Refused> {
+    let Some((set, anchor, field)) = path
+        .strip_prefix("items/")
+        .and_then(|p| p.split_once('#'))
+        .and_then(|(set, rest)| Some((set, rest.split_once('/')?)))
+        .map(|(set, (anchor, field))| (set, anchor, field))
+    else {
+        return Ok(None);
+    };
+    let Some(item) = items.get(set) else {
+        return refuse("ref_unresolved", path);
+    };
+    let rows = data::rows(set, item, items, &data::BoundRows::new())?;
+    Ok(Some(rows.anchor(anchor, field)))
 }
 
 /// Every item a bound value's text targets or that is a counter, in ID order.
@@ -2877,11 +2963,38 @@ pub(crate) fn template_of(item: &Value) -> Option<&str> {
     item.get("params")?.get("template")?.as_str()
 }
 
+/// Whether a text shows a mark set's anchor, which only a frame with the set's rows can read: a
+/// counter or a template's slot on `items/<set>#…`.
+pub fn reads_anchor(item: &Value) -> bool {
+    let anchor = |s: &str| s.starts_with("items/") && s.contains('#');
+    let counter = item.pointer("/params/text/counter/source");
+    counter.and_then(Value::as_str).is_some_and(anchor)
+        || template_of(item).is_some_and(|t| {
+            let parts = template::parts(t).unwrap_or_default();
+            parts
+                .iter()
+                .any(|p| matches!(p, template::Part::Slot(s) if anchor(s)))
+        })
+}
+
 /// What one item shows when a bound value's text targets it or it is a counter, its numbers
 /// written as `locale` writes them; `None` for any other item. A counter's own format wins
 /// over its bound value's.
 pub fn bound_text(
     doc: &Map<String, Value>,
+    id: &str,
+    item: &Value,
+    record: &Record,
+    locale: &str,
+) -> Result<Option<Shown>, Refused> {
+    let items = object_or_empty(doc.get("items"));
+    text_at(doc, items, id, item, record, locale)
+}
+
+/// [`bound_text`] among a frame's evaluated `items`, which anchors and drivers read.
+pub fn text_at(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
     id: &str,
     item: &Value,
     record: &Record,
@@ -2907,8 +3020,22 @@ pub fn bound_text(
                 }
             }
         }
-        let text = deep_canvas::template::expand(&Value::Object(at_t), template)
-            .or_else(|_| refuse("ref_unresolved", format!("items/{id}/params/template")))?;
+        let path = format!("items/{id}/params/template");
+        let mut text = String::new();
+        let at_t = Value::Object(at_t);
+        for part in template::parts(template).or_else(|_| refuse("ref_unresolved", path.clone()))? {
+            match part {
+                template::Part::Words(w) => text.push_str(w),
+                template::Part::Slot(slot) => match anchor_of(items, slot)? {
+                    Some(Some((v, p))) => text.push_str(&story::number(v, p)),
+                    Some(None) => text.push('—'),
+                    None => match template::value(&at_t, slot) {
+                        Some(shown) => text.push_str(&shown.text),
+                        None => return refuse("ref_unresolved", path),
+                    },
+                },
+            }
+        }
         return Ok(Some(Shown {
             bound: "template".into(),
             text,
@@ -2937,12 +3064,30 @@ pub fn bound_text(
     }
     if let Some(counter) = counter_of(item) {
         let path = format!("items/{id}/params/text/counter");
-        let Some(b) = counter
-            .get("source")
-            .and_then(Value::as_str)
-            .and_then(|s| bound.get(s))
-        else {
+        let named = counter.get("source").and_then(Value::as_str);
+        let Some(named) = named else {
             return refuse("ref_unresolved", format!("{path}/source"));
+        };
+        let Some(b) = bound.get(named) else {
+            let mut format = Format::read(counter.get("format"), None, &path)?;
+            format.marks = Marks::of(locale);
+            let found = evaluated_number(doc, items, item, named).map_err(|r| Refused {
+                code: r.code,
+                path: format!("{path}/source"),
+            })?;
+            if let (Some((_, Some(p))), None) = (found, format.precision) {
+                format.precision = Some(p);
+            }
+            if let Some((_, Some(p))) = found {
+                format.precision = format.precision.map(|f| f.min(p));
+            }
+            return Ok(Some(Shown {
+                bound: named.to_string(),
+                text: format.show(found.map(|(v, _)| v)),
+                stale: false,
+                age: None,
+                changes_at: None,
+            }));
         };
         let Some(Value::String(source)) = b.get("source") else {
             return refuse("bad_doc", format!("{path}/source"));
@@ -3643,7 +3788,9 @@ pub fn as_written(doc: &Map<String, Value>, items: &mut Map<String, Value>) {
         if item.get("kind").and_then(Value::as_str) != Some("group@1") {
             continue;
         }
-        let Some(w) = written.and_then(|w| w.get(id)) else { continue };
+        let Some(w) = written.and_then(|w| w.get(id)) else {
+            continue;
+        };
         if w.get("kind") == item.get("kind") {
             continue;
         }
@@ -3839,6 +3986,41 @@ fn frame_shown(
         Some(&boxes),
     )?
     .0)
+}
+
+/// An item's `at.pos` in u, as written or as evaluated.
+pub(crate) fn item_pos(item: &Value) -> [f64; 2] {
+    pair(item.pointer("/at/pos")).unwrap_or([0.0, 0.0])
+}
+
+/// `items` with each one anchored to a mark set's `#head` moved there (Item and kind: `at.anchor`:
+/// "with an anchor, pos offsets from that point"). A head with no row yet leaves it where it is.
+fn anchored(items: Cow<'_, Map<String, Value>>) -> Result<Cow<'_, Map<String, Value>>, Refused> {
+    let mut moves = Vec::new();
+    for (id, item) in items.iter() {
+        let anchor = item.pointer("/at/anchor").and_then(Value::as_str);
+        let Some(set) = anchor.and_then(|a| a.strip_suffix("#head")) else {
+            continue;
+        };
+        let Some(source) = items.get(set) else {
+            return refuse("ref_unresolved", format!("items/{id}/at/anchor"));
+        };
+        if let Some(point) = data::head_place(set, source, &items)? {
+            moves.push((id.clone(), point));
+        }
+    }
+    if moves.is_empty() {
+        return Ok(items);
+    }
+    let mut items = items.into_owned();
+    for (id, point) in moves {
+        let Some(item) = items.get_mut(&id) else {
+            continue;
+        };
+        let pos = item_pos(item);
+        item["at"]["pos"] = json!([pos[0] + point[0], pos[1] + point[1], 0.0]);
+    }
+    Ok(Cow::Owned(items))
 }
 
 /// An item's place in its layer's draw order (#160): by z, then by the tree, each level as its
@@ -4197,6 +4379,8 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
     let adjust = Adjust::read(item, ctx.palette, id)?;
     let mut after: Vec<Mark> = Vec::new();
+    // The rows a transform left below full opacity, each through its own pass.
+    let mut fades: BTreeMap<String, f64> = BTreeMap::new();
     let mut marks: Vec<Mark> = match kind {
         // A scale draws only its legend. A mask and a group draw nothing themselves, and a
         // camera is the view a document is seen through, not a mark (#378: a 3D figure's
@@ -4352,17 +4536,25 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 ctx.paints.shapes(id, &built, place, paint, &paint_path)?
             }
         }
-        "marks@1" => data::mark_set(
-            id,
-            item,
-            ctx.items,
-            ctx.palette,
-            pos,
-            ctx.row_readings
-                .get(id.as_str())
-                .unwrap_or(&data::BoundRows::new()),
-        )?,
-        "axis@1" => data::axis(id, item, ctx.items, ctx.palette, pos)?,
+        "marks@1" => {
+            let drawing = data::mark_set(
+                id,
+                item,
+                ctx.items,
+                ctx.palette,
+                pos,
+                ctx.row_readings
+                    .get(id.as_str())
+                    .unwrap_or(&data::BoundRows::new()),
+            )?;
+            fades = drawing.fades;
+            drawing.marks
+        }
+        "axis@1" => {
+            let drawing = data::axis(id, item, ctx.items, ctx.palette, pos)?;
+            fades = drawing.fades;
+            drawing.marks
+        }
         "series@1" => {
             let how = match ctx.planted {
                 Planted::DecimateFirstLast => data::Decimate::FirstLast,
@@ -4537,11 +4729,16 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         marks
             .into_iter()
             .map(|mark| {
-                Arc::new(Drawn {
-                    mark,
-                    clip,
-                    scopes: scopes.clone(),
-                })
+                let mut scopes = scopes.clone();
+                if let Some(alpha) = fades.get(mark.item()) {
+                    scopes.push(Scope::Opacity {
+                        item: format!("{}#fade", mark.item()),
+                        alpha: *alpha,
+                        blend: None,
+                        effect: None,
+                    });
+                }
+                Arc::new(Drawn { mark, clip, scopes })
             })
             .collect()
     };
@@ -4701,7 +4898,10 @@ pub fn item_placed(
     shown: Option<&Shown>,
 ) -> Option<Placed> {
     let kind = item.get("kind").and_then(Value::as_str)?;
-    if !matches!(kind, "rect@1" | "circle@1" | "path@1" | "text@1") || item.get("parent").is_some()
+    if !matches!(kind, "rect@1" | "circle@1" | "path@1" | "text@1")
+        || item.get("parent").is_some()
+        || item.pointer("/at/anchor").is_some()
+        || reads_anchor(item)
     {
         return None;
     }
@@ -4802,7 +5002,8 @@ fn build(
     planted: Planted,
     boxes: Option<&BTreeMap<String, [f64; 4]>>,
 ) -> Result<(Frame, bool, Places), Refused> {
-    let items = &*laid_out(doc, items)?;
+    let items = laid_out(doc, items)?;
+    let items = &*anchored(items)?;
     let size = pair(doc.get("size")).ok_or(Refused {
         code: "bad_doc",
         path: "size".into(),
