@@ -172,7 +172,8 @@ impl KitCall {
             param_sets: u32::try_from(n("param_sets", u64::from(PARAM_SETS))?).ok()?,
             patch_seed: optional(c.get("patch_seed"), Value::as_u64)?,
             replay: path("replay")?,
-            corpus: path("corpus")?,
+            // The committed migration corpus, unless the call names another folder.
+            corpus: path("corpus")?.or_else(|| Some(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/kit-corpus")))),
             ledger: path("ledger")?,
         })
     }

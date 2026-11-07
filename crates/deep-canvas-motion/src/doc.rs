@@ -9,11 +9,13 @@ use deep_canvas::grammar::{Seeded, Time, TimeContext, FLICKS_PER_SECOND};
 use serde_json::{Map, Value};
 
 use crate::constraint::What;
-use crate::curve::{Bezier, Curve, Ease, Extrapolate, Interp, Key};
+use crate::curve::{steps_done, Bezier, Curve, Ease, Extrapolate, Interp, Jump, Key};
 use deep_canvas::ease::{self, Named};
 use crate::follow;
 use crate::modifier::{Kind as ModKind, Modifier, Rate, Shape};
 use crate::spring::Spring;
+use crate::quat;
+use crate::remap::{self, Pending, Ratio, Remap};
 use crate::tempo::Tempo;
 
 /// Why a document can't be evaluated, as a refusal code and the path it names.
@@ -51,6 +53,12 @@ pub enum ValueType {
     /// Held only, as the index of its value in [`Motion::labels`]; a vector part's role is one
     /// (Vector and formula `vector@1`: `items/<id>/parts/<part>/role`).
     Enum,
+    /// `vec2` and `vec3`, per component.
+    Vec,
+    /// A unit quaternion `[x, y, z, w]`, keys sign-aligned and segments on the shorter arc.
+    Quat,
+    /// Degrees, with `space: shortest` turning each segment the shorter way.
+    Angle,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -68,6 +76,44 @@ pub struct Channel {
     /// On a frame's `layout` (#491): the keys' interpolations over their index, 0, 1, 2…, so a
     /// key mixes each flow child from the layout before to the layout after.
     pub glide: Option<Curve>,
+}
+
+impl Channel {
+    /// The time a keyed read takes: `t`, stepped by a quantize modifier on its keys' span.
+    pub fn stepped(&self, t: i64) -> i64 {
+        self.modifiers.iter().fold(t, |t, m| match m.kind {
+            ModKind::Quantize { hz, jump } => {
+                let (Some(a), Some(b)) = (self.curve.keys.first(), self.curve.keys.last()) else {
+                    return t;
+                };
+                let span = b.t - a.t;
+                if t < a.t || t >= b.t {
+                    return t;
+                }
+                let n = ((span as f64 * hz / FLICKS_PER_SECOND as f64).round() as u32).max(1);
+                let u = jump.progress(steps_done(t - a.t, span, n), n);
+                a.t + (u * span as f64).floor() as i64
+            }
+            _ => t,
+        })
+    }
+
+    /// The value at `t` into `out`: stepped, sampled, then its modifiers, as a clip's channel
+    /// reads in local time.
+    pub fn read(&self, t: i64, out: &mut [f64]) {
+        self.curve.sample_into(self.stepped(t), out);
+        for m in &self.modifiers {
+            out[0] = m.apply(out[0], t);
+        }
+    }
+
+    /// Each component's rate at `t`, per second of the channel's own time.
+    pub fn rate(&self, t: i64, out: &mut [f64]) {
+        out.fill(0.0);
+        if !self.modifiers.iter().any(|m| matches!(m.kind, ModKind::Quantize { .. })) {
+            self.curve.rate_into(t, out);
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -104,6 +150,184 @@ pub struct Placement {
     pub count: u32,
     pub before: Extend,
     pub after: Extend,
+    /// What the clip's time does from `start` on, with every default where the document says
+    /// nothing (Placement).
+    pub timing: Timing,
+    /// How it writes over what earlier writers gave a path.
+    pub blending: Blending,
+    /// Its writer layer's order key and its own (`The order of one evaluation`).
+    pub rank: (String, String),
+}
+
+/// Repeat's way back to the clip's start.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Repeat {
+    #[default]
+    Wrap,
+    PingPong,
+}
+
+/// `in`, `span`, `rate`, repeat's mode, `hold_at` and `quantize`, in the order they apply.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Timing {
+    pub trim: i64,
+    pub span: Option<i64>,
+    pub rate: Ratio,
+    pub repeat: Repeat,
+    pub hold_at: Option<i64>,
+    pub quantize: Option<(u32, u32)>,
+    /// The time remap that targets the placement, by index in [`Motion::remaps`].
+    pub remap: Option<usize>,
+    /// `start_on`: the starts of its runs, when an input or an occurrence starts it.
+    pub start_on: Option<StartOn>,
+    pub runs: Vec<i64>,
+    /// `stagger.reverse_on_close`: with it, each run that a close started, in [`Timing::runs`]
+    /// order, and the last target's delay, which a close turns the stagger around.
+    pub closes: Vec<bool>,
+    pub reach: Option<i64>,
+}
+
+impl Default for Timing {
+    fn default() -> Timing {
+        Timing {
+            trim: 0,
+            span: None,
+            rate: (1, 1),
+            repeat: Repeat::Wrap,
+            hold_at: None,
+            quantize: None,
+            remap: None,
+            start_on: None,
+            runs: Vec::new(),
+            closes: Vec::new(),
+            reach: None,
+        }
+    }
+}
+
+/// `start_on`: what starts a run of the placement and what a start during a run does.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StartOn {
+    pub on: crate::occurrence::Filter,
+    /// `each: change`: only an entry that changes the control's value.
+    pub change: bool,
+    pub policy: Policy,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Policy {
+    #[default]
+    Restart,
+    Overlap,
+    Ignore,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Blend {
+    #[default]
+    Replace,
+    Add,
+    Multiply,
+    Mix,
+}
+
+/// An add placement's reference pose.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AddFrom {
+    #[default]
+    First,
+    Bind,
+    At(i64),
+}
+
+/// A placement's `influence`: a number, keys of its own over the document's time, or a control.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Influence {
+    Value(f64),
+    Keys(Curve),
+    Control(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Blending {
+    pub blend: Blend,
+    pub influence: Influence,
+    pub add_from: AddFrom,
+    pub fade_in: i64,
+    pub fade_out: i64,
+    pub switch: Option<Switch>,
+}
+
+/// `switch`: the placement weighs as case `case` of a choice cross-fading over `span`. Changes
+/// stacked in one span weigh newest first: each takes its mix of what the newer ones leave.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Switch {
+    pub control: String,
+    pub case: Value,
+    pub span: i64,
+    pub along: Along,
+    /// `sync: next_loop_phase`: each change waits for the placement's next pass.
+    pub sync: bool,
+    /// The choice before any change, then each change's flick and value, filled from the track.
+    pub first: Value,
+    pub changes: Vec<(i64, Value)>,
+}
+
+/// How a switch's mix runs over its span.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Along {
+    Ease(Named),
+    Spring(Spring),
+}
+
+impl Switch {
+    /// The mix of a change `d` flicks old: 1 from its span's end on.
+    fn mix(&self, d: i64) -> f64 {
+        if d >= self.span {
+            return 1.0;
+        }
+        match self.along {
+            Along::Ease(ease) => ease.at(d as f64 / self.span as f64),
+            Along::Spring(spring) => {
+                let seconds = d as f64 / FLICKS_PER_SECOND as f64;
+                (1.0 - spring.at(1.0, 0.0, seconds).e).clamp(0.0, 1.0)
+            }
+        }
+    }
+
+    /// The case's weight at `t`, in closed form: older changes than the span have nothing left.
+    pub fn weight(&self, t: i64) -> f64 {
+        let mut left = 1.0;
+        let mut weight = 0.0;
+        let upto = self.changes.partition_point(|c| c.0 <= t);
+        for (tc, value) in self.changes[..upto].iter().rev() {
+            let mix = self.mix(t - tc);
+            if *value == self.case {
+                weight += left * mix;
+            }
+            left *= 1.0 - mix;
+            if left == 0.0 {
+                return weight;
+            }
+        }
+        if self.first == self.case {
+            weight += left;
+        }
+        weight
+    }
+}
+
+impl Default for Blending {
+    fn default() -> Blending {
+        Blending {
+            blend: Blend::Replace,
+            influence: Influence::Value(1.0),
+            add_from: AddFrom::First,
+            fade_in: 0,
+            fade_out: 0,
+            switch: None,
+        }
+    }
 }
 
 /// A cut between two adjacent placements, at the flick the second starts.
@@ -166,6 +390,10 @@ pub enum DriverInput {
     Control(String),
     /// An occurrence list with its filter (#491), read through the occurrence functions.
     List(crate::occurrence::Filter),
+    /// `channels/<id>.rate`: a channel's rate per second.
+    Rate(String),
+    /// `<remap>.active`, or with `true` `<remap>.progress`.
+    Remap(String, bool),
 }
 
 /// Each axis's `[min, max]`, `None` for an axis a limit leaves free.
@@ -230,6 +458,8 @@ impl Kind {
 pub struct Feel {
     pub span: i64,
     pub ease: Ease,
+    /// `time.quantize_hz`: the look's stepped time, which every channel and placement reads.
+    pub quantize: Option<(u32, u32)>,
 }
 
 impl Default for Feel {
@@ -237,6 +467,7 @@ impl Default for Feel {
         Feel {
             span: FLICKS_PER_SECOND / 4,
             ease: Ease::InOutCubic,
+            quantize: None,
         }
     }
 }
@@ -310,9 +541,10 @@ pub struct Motion {
     pub frame_rate: (u32, u32),
     /// Every enum channel's values, each once; an enum key holds its value's index here.
     pub labels: Vec<String>,
-    /// Each reversing time remap (Time remap; #429): the recipe instance it targets and the
-    /// span it reverses over, outer targets first.
-    pub remaps: Vec<(String, i64)>,
+    /// Each time remap (Time remap), outer targets first.
+    pub remaps: Vec<Remap>,
+    /// Each world the scene lists, with whether it declares inputs (World `physics.world@1`).
+    pub worlds: Vec<(String, bool)>,
     /// The notices the check raised on an accepted document (#491's
     /// `literal_time_with_tempo_map`).
     pub notices: Vec<Value>,
@@ -323,25 +555,39 @@ impl Motion {
         self.clips.iter().find(|c| c.id == id)
     }
 
-    /// Whether a time remap targets `item`: the instance itself or an item it derives
-    /// (`<instance>.<step>…`).
+    /// Whether a time remap targets `item`: the document, the instance itself or an item it
+    /// derives (`<instance>.<step>…`).
     pub fn remapped(&self, item: &str) -> bool {
-        self.remaps.iter().any(|(target, _)| derives(target, item))
+        self.remaps.iter().any(|r| self.applies(r, item))
+    }
+
+    /// Whether remap `r` moves `item`'s own time.
+    pub fn applies(&self, r: &Remap, item: &str) -> bool {
+        r.target == DOCUMENT || derives(&r.target, item)
     }
 
     /// `item`'s own time at timeline position `doc_t`: each remap that targets it, outer to
-    /// inner, maps parent time to child time, `reverse` as span − parent time from the start,
-    /// clamped into the span (Time remap: `clamp: true`).
+    /// inner, maps parent time to child time, read from the transport's start.
     pub fn item_time(&self, item: &str, doc_t: i64) -> i64 {
         let start = self.transport.start;
         self.remaps
             .iter()
-            .filter(|(target, _)| derives(target, item))
-            .fold(doc_t, |t, (_, span)| {
-                start + (span - (t - start)).clamp(0, *span)
-            })
+            .filter(|r| self.applies(r, item))
+            .fold(doc_t, |t, r| start + r.child(t - start))
+    }
+
+    /// The timeline position a placement reads at `doc_t`: a `document` remap's child time.
+    pub fn document_time(&self, doc_t: i64) -> i64 {
+        let start = self.transport.start;
+        self.remaps
+            .iter()
+            .filter(|r| r.target == DOCUMENT)
+            .fold(doc_t, |t, r| start + r.child(t - start))
     }
 }
+
+/// The target naming the whole document (Time remap: `replay`).
+pub const DOCUMENT: &str = "document";
 
 /// Whether `item` is `target` or an item `target` derives.
 fn derives(target: &str, item: &str) -> bool {
@@ -377,6 +623,8 @@ fn section<'a>(doc: &'a Map<String, Value>, name: &str) -> Result<Entries<'a>, R
 pub struct Ctx {
     pub time: TimeContext,
     pub tempo: Option<Tempo>,
+    /// The arc quat keys turn on, the short one but for a planted twin.
+    arc: quat::Arc,
     notices: std::cell::RefCell<Vec<Value>>,
 }
 
@@ -446,6 +694,17 @@ fn number(value: Option<&Value>, path: &str) -> Result<f64, Refused> {
     }
 }
 
+/// A quantize's `jump`, `end` when absent.
+fn jump_of(value: Option<&Value>, path: &str) -> Result<Jump, Refused> {
+    match value {
+        None => Ok(Jump::End),
+        Some(v) => match v.as_str().and_then(Jump::parse) {
+            Some(jump) => Ok(jump),
+            None => refuse("bad_doc", path),
+        },
+    }
+}
+
 fn interp_of(value: Option<&Value>, path: &str) -> Result<Interp, Refused> {
     match value {
         None => Ok(Interp::Linear),
@@ -476,6 +735,14 @@ fn interp_of(value: Option<&Value>, path: &str) -> Result<Interp, Refused> {
             }
             if let Some(Value::Object(s)) = o.get("spring") {
                 return Ok(Interp::Spring(spring_of(s, &format!("{path}/spring"))?));
+            }
+            if let Some(q) = o.get("quantize") {
+                let n = q.get("n").unwrap_or(q).as_u64().and_then(|n| u32::try_from(n).ok());
+                let jump = jump_of(q.get("jump"), &format!("{path}/quantize/jump"))?;
+                return match n {
+                    Some(n) if n >= 1 && (n >= 2 || jump != Jump::None) => Ok(Interp::Quantize { n, jump }),
+                    _ => refuse("out_of_range", format!("{path}/quantize")),
+                };
             }
             if let Some(e) = o.get("ease") {
                 // `{table: "<pack>.<name>"}` names a pack's ease table, resolved by the program.
@@ -587,6 +854,13 @@ fn ease_of(value: &Value, path: &str) -> Result<Ease, Refused> {
 /// look names none; paths name the request's `look`.
 pub fn feel_of(look: &Map<String, Value>, frame_rate: (u32, u32)) -> Result<Feel, Refused> {
     let mut feel = Feel::default();
+    if let Some(hz) = look.get("time").and_then(|t| t.get("quantize_hz")) {
+        let (num, den) = ratio_of(hz, "look/time/quantize_hz")?;
+        match (u32::try_from(num), u32::try_from(den)) {
+            (Ok(num), Ok(den)) if num > 0 && FLICKS_PER_SECOND * i64::from(den) % i64::from(num) == 0 => feel.quantize = Some((num, den)),
+            _ => return refuse("bad_look", "look/time/quantize_hz"),
+        }
+    }
     let state = match look.get("time") {
         None => None,
         Some(Value::Object(time)) => match time.get("state") {
@@ -893,6 +1167,18 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
         }
         if let Some(c) = text.strip_prefix("controls/").and_then(|r| r.strip_suffix("/value")) {
             inputs.push((name.clone(), DriverInput::Control(c.to_string())));
+            continue;
+        }
+        if let Some(c) = text.strip_prefix("channels/").and_then(|r| r.strip_suffix(".rate")) {
+            inputs.push((name.clone(), DriverInput::Rate(c.to_string())));
+            continue;
+        }
+        if let Some(r) = text.strip_suffix(".active") {
+            inputs.push((name.clone(), DriverInput::Remap(r.to_string(), false)));
+            continue;
+        }
+        if let Some(r) = text.strip_suffix(".progress") {
+            inputs.push((name.clone(), DriverInput::Remap(r.to_string(), true)));
             continue;
         }
         vars.push((name.clone(), target_of(text, false, &vpath)?));
@@ -1294,6 +1580,13 @@ fn modifier_of(
                 Some(v) => v.as_u64().map_or_else(|| refuse("out_of_range", format!("{at}/seed")), Ok)?,
             },
         },
+        "quantize" => {
+            let hz = num("hz", 0.0)?;
+            if hz <= 0.0 {
+                return refuse("out_of_range", format!("{at}/hz"));
+            }
+            ModKind::Quantize { hz, jump: jump_of(body.get("jump"), &format!("{at}/jump"))? }
+        }
         "limits" => ModKind::Limits {
             min: num("min", f64::MIN)?,
             max: num("max", f64::MAX)?,
@@ -1355,9 +1648,24 @@ fn channel_of(
             Some("oklab") | None => ValueType::Color,
             _ => return refuse("bad_space", format!("{path}/space")),
         },
+        Some("vec2" | "vec3") => ValueType::Vec,
+        Some("quat") => ValueType::Quat,
+        Some("angle") => ValueType::Angle,
         Some("bool") => ValueType::Bool,
         Some("enum") => ValueType::Enum,
         _ => return refuse("bad_type", format!("{path}/type")),
+    };
+    let width = match c.get("type").and_then(Value::as_str) {
+        Some("vec2") => 2,
+        Some("quat") => 4,
+        Some("color" | "vec3") => 3,
+        _ => 1,
+    };
+    let absolute = match (ty, c.get("space").and_then(Value::as_str)) {
+        (ValueType::Angle, Some("absolute")) => true,
+        (ValueType::Angle, None | Some("shortest")) => false,
+        (ValueType::Angle, Some(_)) => return refuse("bad_space", format!("{path}/space")),
+        _ => false,
     };
     let range = match c.get("range") {
         None => None,
@@ -1406,7 +1714,7 @@ fn channel_of(
             placed_time_of(key.get("t"), ctx, &format!("{kpath}/t"), &format!("{id}/{kid}"))?
         };
         let value = match (ty, key.get("value")) {
-            (ValueType::F32, v) => vec![number(v, &format!("{kpath}/value"))?],
+            (ValueType::F32 | ValueType::Angle, v) => vec![number(v, &format!("{kpath}/value"))?],
             (ValueType::Bool, Some(Value::Bool(b))) => vec![if *b { 1.0 } else { 0.0 }],
             (ValueType::Enum, Some(Value::String(s))) => {
                 let i = labels.iter().position(|l| l == s).unwrap_or_else(|| {
@@ -1415,7 +1723,7 @@ fn channel_of(
                 });
                 vec![i as f64]
             }
-            (ValueType::Color, Some(Value::Array(parts))) if parts.len() == 3 => parts
+            (ValueType::Color | ValueType::Vec | ValueType::Quat, Some(Value::Array(parts))) if parts.len() == width => parts
                 .iter()
                 .enumerate()
                 .map(|(i, p)| number(Some(p), &format!("{kpath}/value/{i}")))
@@ -1444,6 +1752,7 @@ fn channel_of(
             return refuse("bad_interp", format!("{kpath}/interp"));
         }
         let mut k = Key::new(kid, t, value, interp);
+        k.turns = (ty == ValueType::Quat).then_some(ctx.arc);
         if interp == Interp::Table {
             let name = key.get("interp").and_then(|i| i.pointer("/ease/table")).and_then(Value::as_str);
             k.table = name.map(|n| (n.to_string(), None));
@@ -1473,8 +1782,27 @@ fn channel_of(
             .collect::<Result<_, _>>()?,
         Some(_) => return refuse("bad_doc", format!("{path}/modifiers")),
     };
-    if !modifiers.is_empty() && ty != ValueType::F32 {
+    let stepping = modifiers.iter().all(|m| matches!(m.kind, ModKind::Quantize { .. }));
+    if (!modifiers.is_empty() && !stepping) && ty != ValueType::F32 {
         return refuse("bad_doc", format!("{path}/modifiers"));
+    }
+    keys.sort_by(|a, b| a.t.cmp(&b.t).then_with(|| a.id.cmp(&b.id)));
+    match ty {
+        // q and −q are one rotation: each key takes the sign nearest the key before it.
+        ValueType::Quat if ctx.arc == quat::Arc::Short => {
+            for i in 1..keys.len() {
+                let aligned = quat::aligned(quat::of(&keys[i].value), quat::of(&keys[i - 1].value));
+                keys[i].value = aligned.to_vec();
+            }
+        }
+        // Each key takes the turn nearest the key before it, so a segment goes the short way.
+        ValueType::Angle if !absolute => {
+            for i in 1..keys.len() {
+                let (a, b) = (keys[i - 1].value[0], keys[i].value[0]);
+                keys[i].value[0] = a + (b - a + 180.0).rem_euclid(360.0) - 180.0;
+            }
+        }
+        _ => {}
     }
     Ok(Channel {
         id: id.to_string(),
@@ -1543,12 +1871,12 @@ fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), R
 
 /// Reads a document's motion.
 pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
-    read_with(doc, false)
+    read_with(doc, false, quat::Arc::Short)
 }
 
 /// Reads a document's motion, its constant tempo sections' beats in f32 seconds when
 /// `f32_beats` (the planted twin of #491 AC1).
-pub fn read_with(doc: &Map<String, Value>, f32_beats: bool) -> Result<Motion, Refused> {
+pub fn read_with(doc: &Map<String, Value>, f32_beats: bool, arc: quat::Arc) -> Result<Motion, Refused> {
     let transport_map = match doc.get("transport") {
         None | Some(Value::Null) => None,
         Some(Value::Object(t)) => Some(t),
@@ -1556,6 +1884,7 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool) -> Result<Motion, Re
     };
     let frame_rate = frame_rate_of(transport_map)?;
     let mut ctx = Ctx::of(frame_rate);
+    ctx.arc = arc;
     ctx.tempo = Tempo::read(doc, &ctx.time, f32_beats)?;
     let (markers, firsts) = markers_of(doc, &mut ctx)?;
     let reduce_holds = transport_map
@@ -1657,7 +1986,7 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool) -> Result<Motion, Re
     }
     let mut raw = Vec::new();
     for (id, p) in section(doc, "placements")? {
-        raw.push(placement_of(id, p, &clips, &ctx)?);
+        raw.push(placement_of(id, p, &clips, &ctx, doc.get("layers").and_then(Value::as_object))?);
     }
     let seed = match doc.get("seed") {
         None => fnv1a(doc.get("id").and_then(Value::as_str).unwrap_or("")),
@@ -1673,7 +2002,7 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool) -> Result<Motion, Re
     for (id, d) in section(doc, "drivers")? {
         drivers.push(driver_of(id, d)?);
     }
-    let remaps = remaps_of(doc, &transport)?;
+    let remaps = remaps_of(doc, &transport, &ctx, &mut placements, &clips)?;
     let mut control_defaults = Vec::new();
     for (id, c) in section(doc, "controls")? {
         let default = match c.get("default") {
@@ -1712,33 +2041,145 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool) -> Result<Motion, Re
         frame_rate,
         labels,
         remaps,
+        worlds: section(doc, "worlds")?
+            .into_iter()
+            .map(|(id, w)| (id.clone(), w.get("inputs").and_then(Value::as_object).is_some_and(|i| !i.is_empty())))
+            .collect(),
         notices: ctx.notices.take(),
     })
 }
 
-/// The document's time remaps (Time remap): each `{target, map: reverse}` reverses its recipe
-/// instance over the document's span. The other maps land later and are refused, naming the map.
+/// The document's time remaps (Time remap), outer targets first, so nested remaps compose outer
+/// to inner. Each map compiles to closed-form pieces, here or, for what reads occurrences or the
+/// input track, in the program. A placement target points the placement at its remap.
 fn remaps_of(
     doc: &Map<String, Value>,
     transport: &Transport,
-) -> Result<Vec<(String, i64)>, Refused> {
+    ctx: &Ctx,
+    placements: &mut [Placement],
+    clips: &[Clip],
+) -> Result<Vec<Remap>, Refused> {
     let mut out = Vec::new();
     for (id, r) in section(doc, "time_remaps")? {
         let path = format!("time_remaps/{id}");
         let Some(target) = r.get("target").and_then(Value::as_str) else {
             return refuse("ref_unresolved", format!("{path}/target"));
         };
-        if r.get("map").and_then(Value::as_str) != Some("reverse") {
-            return refuse("out_of_range", format!("{path}/map"));
+        let placed = placements.iter().find(|p| p.id == target);
+        let span = match placed {
+            Some(p) => Some(i64::from(p.count) * clips.iter().find(|c| c.id == p.clip).map_or(1, |c| c.span)),
+            None => transport.span.filter(|s| *s > 0),
+        };
+        let (segs, pending) = map_of(r, span, ctx, transport, &path)?;
+        out.push(Remap {
+            id: id.clone(),
+            target: target.to_string(),
+            segs,
+            pending,
+            clamp: r.get("clamp").and_then(Value::as_bool).unwrap_or(true),
+        });
+    }
+    out.sort_by_key(|r| r.target.matches('.').count());
+    for (i, r) in out.iter().enumerate() {
+        if let Some(p) = placements.iter_mut().find(|p| p.id == r.target) {
+            p.timing.remap = Some(i);
         }
-        let Some(span) = transport.span.filter(|s| *s > 0) else {
+    }
+    Ok(out)
+}
+
+/// A remap's `map`: a preset by name with `{<preset>: fields}`, `reverse`, or a channel of keys.
+fn map_of(
+    r: &Map<String, Value>,
+    span: Option<i64>,
+    ctx: &Ctx,
+    transport: &Transport,
+    path: &str,
+) -> Result<(Vec<remap::Seg>, Option<Pending>), Refused> {
+    let mpath = format!("{path}/map");
+    let Some(map) = r.get("map") else {
+        return refuse("out_of_range", mpath);
+    };
+    if map.as_str() == Some("reverse") {
+        let Some(span) = span else {
             return refuse("bad_time", "transport/span");
         };
-        out.push((target.to_string(), span));
+        return Ok((remap::reverse(span), None));
     }
-    // Outer targets first, so nested remaps compose outer to inner.
-    out.sort_by_key(|(target, _)| target.matches('.').count());
-    Ok(out)
+    let Value::Object(o) = map else {
+        return refuse("out_of_range", mpath);
+    };
+    if o.contains_key("keys") {
+        let mut labels = Vec::new();
+        let channel = channel_of("map", &with_target(o), false, ctx, transport, &mpath, &mut labels)?;
+        return Ok((vec![remap::Seg { t: i64::MIN / 2, c: 0, piece: remap::Piece::Map(channel.curve), active: None }], None));
+    }
+    let Some((name, Value::Object(f))) = o.iter().next() else {
+        return refuse("out_of_range", mpath);
+    };
+    let at = format!("{mpath}/{name}");
+    let time = |key: &str| time_of(f.get(key), ctx, &format!("{at}/{key}"));
+    let time_or = |key: &str, d: i64| if f.contains_key(key) { time(key) } else { Ok(d) };
+    let rational = |key: &str, d: Ratio| f.get(key).map_or(Ok(d), |v| ratio_of(v, &format!("{at}/{key}")));
+    let times = |key: &str| -> Result<Vec<i64>, Refused> {
+        let Some(Value::Array(list)) = f.get(key) else {
+            return refuse("bad_doc", format!("{at}/{key}"));
+        };
+        list.iter().enumerate().map(|(i, v)| time_of(Some(v), ctx, &format!("{at}/{key}/{i}"))).collect()
+    };
+    Ok(match name.as_str() {
+        "hold_at" => (remap::hold_at(time("at")?, time("for")?), None),
+        "ramp" => {
+            let ease = match f.get("ease") {
+                None => Named::Penner(ease::Family::Quad, ease::Side::InOut),
+                Some(e) => named_of(e, &format!("{at}/ease"))?,
+            };
+            let to = rational("to", (1, 1))?;
+            (remap::ramp(rational("from", (1, 1))?, to, time("at")?, time("over")?, ease), None)
+        }
+        "hitstop" => {
+            let hold = time_or("hold", FLICKS_PER_SECOND * 3 / 25)?;
+            if hold <= 0 || hold > FLICKS_PER_SECOND / 4 {
+                return refuse("out_of_range", format!("{at}/hold"));
+            }
+            let rejoin = match f.get("then").and_then(Value::as_str) {
+                None | Some("lag") => false,
+                Some("rejoin") => true,
+                Some(_) => return refuse("bad_doc", format!("{at}/then")),
+            };
+            let on = f.get("on").map(|on| list_of(on, &format!("{at}/on"))).transpose()?;
+            let at_times = if f.contains_key("at") { times("at")? } else { Vec::new() };
+            if on.is_none() && at_times.is_empty() {
+                return refuse("bad_doc", at);
+            }
+            (Vec::new(), Some(Pending::Hitstop { at: at_times, on, hold, rejoin }))
+        }
+        "replay" => {
+            let rate = rational("rate", (1, 4))?;
+            if rate.0 <= 0 || rate.0 > rate.1 {
+                return refuse("out_of_range", format!("{at}/rate"));
+            }
+            let on = match (f.get("on"), f.get("control").and_then(Value::as_str)) {
+                (Some(on), None) => list_of(on, &format!("{at}/on"))?,
+                (None, Some(control)) => filter_named(&format!("input.{control}")),
+                _ => return refuse("bad_doc", at),
+            };
+            let (before, after) = (time_or("before", 2 * FLICKS_PER_SECOND)?, time_or("after", FLICKS_PER_SECOND / 2)?);
+            (Vec::new(), Some(Pending::Replay { on, before, after, rate }))
+        }
+        "scrub" => match f.get("control").and_then(Value::as_str) {
+            Some(control) => (Vec::new(), Some(Pending::Scrub { control: control.to_string() })),
+            None => return refuse("bad_doc", format!("{at}/control")),
+        },
+        _ => return refuse("out_of_range", mpath),
+    })
+}
+
+/// A `map` channel as a channel: its target names nothing it writes.
+fn with_target(o: &Map<String, Value>) -> Map<String, Value> {
+    let mut c = o.clone();
+    c.entry("target").or_insert(Value::String("data/map".into()));
+    c
 }
 
 /// FNV-1a over a string's bytes: the seed a document without one takes from its ID, and what a
@@ -1773,10 +2214,10 @@ fn cuts_of(
                     path: format!("{path}/{field}"), detail: None })
         };
         let (from, to) = (find("from")?, find("to")?);
-        let span = |p: &Placement| clips.iter().find(|c| c.id == p.clip).map_or(1, |c| c.span);
+        let span = |p: &Placement| p.active_for(clips.iter().find(|c| c.id == p.clip).map_or(1, |c| c.span));
         let out = &placements[from];
         let reach = out.bindings.iter().map(|b| b.delay).max().unwrap_or(0);
-        let end = out.start + reach + span(out) * i64::from(out.count);
+        let end = out.start + reach + span(out);
         if placements[to].start != end {
             return refuse("transition_gap", path);
         }
@@ -2007,6 +2448,7 @@ fn placement_of(
     p: &Map<String, Value>,
     clips: &[Clip],
     ctx: &Ctx,
+    doc_layers: Option<&Map<String, Value>>,
 ) -> Result<Raw, Refused> {
     let path = format!("placements/{id}");
     let Some(Value::String(clip)) = p.get("clip") else {
@@ -2059,13 +2501,50 @@ fn placement_of(
                 Some(_) => return refuse("bad_time", format!("{path}/offset")),
             },
         },
+        (None, None) if p.contains_key("start_on") => Start::At(0),
         _ => return refuse("bad_doc", format!("{path}/start")),
     };
+    let mut timing = Timing::default();
+    let flick = |key: &str| -> Result<Option<i64>, Refused> {
+        match p.get(key) {
+            None => Ok(None),
+            Some(Value::String(s)) if s == "none" || s == "auto" => Ok(None),
+            v => time_of(v, ctx, &format!("{path}/{key}")).map(Some),
+        }
+    };
+    timing.trim = flick("in")?.unwrap_or(0);
+    timing.span = flick("span")?;
+    timing.hold_at = flick("hold_at")?;
+    if let Some(rate) = p.get("rate") {
+        timing.rate = ratio_of(rate, &format!("{path}/rate"))?;
+        if timing.rate.0 <= 0 {
+            return refuse("out_of_range", format!("{path}/rate"));
+        }
+    }
+    timing.quantize = match p.get("quantize") {
+        None => None,
+        Some(Value::String(s)) if s == "none" => None,
+        Some(v) => {
+            let (num, den) = ratio_of(v, &format!("{path}/quantize"))?;
+            let whole = FLICKS_PER_SECOND.checked_mul(den).is_some_and(|f| num > 0 && f % num == 0);
+            match (u32::try_from(num), u32::try_from(den)) {
+                (Ok(num), Ok(den)) if whole => Some((num, den)),
+                _ => return refuse("bad_rate", format!("{path}/quantize")),
+            }
+        }
+    };
+    timing.start_on = match p.get("start_on") {
+        None => None,
+        Some(Value::Object(o)) => Some(start_on_of(o, &format!("{path}/start_on"))?),
+        Some(_) => return refuse("bad_doc", format!("{path}/start_on")),
+    };
+    let blending = blending_of(p, ctx, &path)?;
     let count = match p.get("repeat") {
         None => 1,
         Some(Value::Object(r)) => {
             match r.get("mode").and_then(Value::as_str) {
                 None | Some("wrap") => {}
+                Some("ping_pong") => timing.repeat = Repeat::PingPong,
                 Some(_) => return refuse("bad_doc", format!("{path}/repeat/mode")),
             }
             match r.get("count").and_then(Value::as_u64) {
@@ -2099,7 +2578,9 @@ fn placement_of(
                 },
                 None => return refuse("bad_doc", format!("{path}/stagger/lag")),
             };
-            // reverse_on_close lands with controls in R6.
+            if st.get("reverse_on_close").and_then(Value::as_bool) == Some(true) {
+                timing.reach = Some(0);
+            }
             let order = match st.get("order").and_then(Value::as_str) {
                 None | Some("index") => Order::Index,
                 Some("reverse") => Order::Reverse,
@@ -2119,10 +2600,175 @@ fn placement_of(
             count,
             before,
             after,
+            timing,
+            blending,
+            rank: (
+                layer_key(doc_layers, p.get("layer")),
+                p.get("order").and_then(Value::as_str).unwrap_or_default().to_string(),
+            ),
         },
         start,
         lag,
     })
+}
+
+/// A placement's writer layer's order key, empty with none.
+fn layer_key(layers: Option<&Map<String, Value>>, layer: Option<&Value>) -> String {
+    layer
+        .and_then(Value::as_str)
+        .and_then(|l| layers?.get(l)?.get("order")?.as_str())
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// A rational: `"p/q"`, `[p, q]` or a number, as whole parts in lowest terms.
+fn ratio_of(v: &Value, path: &str) -> Result<Ratio, Refused> {
+    let fraction = deep_canvas::document::frame_rate_of(&serde_json::json!({ "frame_rate": v }))
+        .map(|(p, q)| (i64::from(p), i64::from(q)));
+    let parsed = match v {
+        Value::Number(n) => n.as_f64().and_then(decimal_ratio),
+        _ => fraction,
+    };
+    match parsed {
+        Some((p, q)) if q > 0 => {
+            let d = gcd(p, q).max(1);
+            Ok((p / d, q / d))
+        }
+        _ => refuse("out_of_range", path),
+    }
+}
+
+/// A number's exact fraction over a power of ten, for the decimals a document writes.
+fn decimal_ratio(x: f64) -> Option<Ratio> {
+    if !x.is_finite() {
+        return None;
+    }
+    let scale = 1_000_000_i64;
+    let num = (x * scale as f64).round();
+    ((num / scale as f64 - x).abs() < 1e-12 && num.abs() < 9e15).then_some((num as i64, scale))
+}
+
+fn gcd(a: i64, b: i64) -> i64 {
+    if b == 0 {
+        a.abs()
+    } else {
+        gcd(b, a % b)
+    }
+}
+
+/// `start_on`: `{control, each, policy}`, or `{on: <list>, policy}`, as an occurrence filter.
+fn start_on_of(o: &Map<String, Value>, path: &str) -> Result<StartOn, Refused> {
+    let policy = match o.get("policy").and_then(Value::as_str) {
+        None | Some("restart") => Policy::Restart,
+        Some("overlap") => Policy::Overlap,
+        Some("ignore") => Policy::Ignore,
+        Some(_) => return refuse("bad_doc", format!("{path}/policy")),
+    };
+    let change = match o.get("each").and_then(Value::as_str) {
+        None | Some("entry") => false,
+        Some("change") => true,
+        Some(_) => return refuse("bad_doc", format!("{path}/each")),
+    };
+    let on = match (o.get("control").and_then(Value::as_str), o.get("on")) {
+        (Some(control), None) => filter_named(&format!("input.{control}")),
+        (None, Some(on)) => list_of(on, &format!("{path}/on"))?,
+        _ => return refuse("bad_doc", path),
+    };
+    Ok(StartOn { on, change, policy })
+}
+
+/// The whole of a named occurrence list.
+fn filter_named(list: &str) -> crate::occurrence::Filter {
+    crate::occurrence::Filter {
+        list: list.to_string(),
+        kinds: None,
+        a: None,
+        b: None,
+        tags: Vec::new(),
+        where_: None,
+    }
+}
+
+/// An occurrence list and its filter: its name, or `{list, kinds, a, b, tags, where}`.
+fn list_of(v: &Value, path: &str) -> Result<crate::occurrence::Filter, Refused> {
+    match v {
+        Value::String(list) => Ok(filter_named(list)),
+        Value::Object(f) => filter_of(f, path),
+        _ => refuse("bad_doc", path),
+    }
+}
+
+fn blending_of(p: &Map<String, Value>, ctx: &Ctx, path: &str) -> Result<Blending, Refused> {
+    let blend = match p.get("blend").and_then(Value::as_str) {
+        None | Some("replace") => Blend::Replace,
+        Some("add") => Blend::Add,
+        Some("multiply") => Blend::Multiply,
+        Some("mix") => Blend::Mix,
+        Some(_) => return refuse("bad_doc", format!("{path}/blend")),
+    };
+    let ipath = format!("{path}/influence");
+    let influence = match p.get("influence") {
+        None => Influence::Value(1.0),
+        Some(Value::Number(n)) => Influence::Value(n.as_f64().unwrap_or(1.0)),
+        Some(Value::String(s)) => match s.strip_prefix("controls/").and_then(|r| r.strip_suffix("/value")) {
+            Some(control) => Influence::Control(control.to_string()),
+            None => return refuse("bad_path", ipath),
+        },
+        Some(Value::Object(c)) => {
+            let Some(Value::Object(keys)) = c.get("keys") else {
+                return refuse("bad_doc", ipath);
+            };
+            let mut list = Vec::new();
+            for (id, key) in keys {
+                let kpath = format!("{ipath}/keys/{id}");
+                let t = time_of(key.get("t"), ctx, &format!("{kpath}/t"))?;
+                let value = number(key.get("value"), &format!("{kpath}/value"))?;
+                list.push(Key::new(id, t, vec![value], interp_of(key.get("interp"), &format!("{kpath}/interp"))?));
+            }
+            Influence::Keys(Curve::new(list))
+        }
+        Some(_) => return refuse("bad_doc", ipath),
+    };
+    let add_from = match p.get("add_from") {
+        None => AddFrom::First,
+        Some(Value::String(s)) if s == "first" => AddFrom::First,
+        Some(Value::String(s)) if s == "bind" => AddFrom::Bind,
+        Some(Value::Object(o)) if o.contains_key("t") => AddFrom::At(time_of(o.get("t"), ctx, &format!("{path}/add_from/t"))?),
+        Some(_) => return refuse("bad_doc", format!("{path}/add_from")),
+    };
+    let fade = |key: &str| match p.get(key) {
+        None => Ok(0),
+        v => time_of(v, ctx, &format!("{path}/{key}")),
+    };
+    let switch = match p.get("switch") {
+        None => None,
+        Some(Value::Object(s)) => Some(switch_of(s, ctx, &format!("{path}/switch"))?),
+        Some(_) => return refuse("bad_doc", format!("{path}/switch")),
+    };
+    Ok(Blending { blend, influence, add_from, fade_in: fade("fade_in")?, fade_out: fade("fade_out")?, switch })
+}
+
+/// `switch: {control, case, span, ease}`, its changes filled from the track by the program.
+fn switch_of(s: &Map<String, Value>, ctx: &Ctx, path: &str) -> Result<Switch, Refused> {
+    let (Some(Value::String(control)), Some(case)) = (s.get("control"), s.get("case")) else {
+        return refuse("bad_doc", path);
+    };
+    let span = time_of(s.get("span"), ctx, &format!("{path}/span"))?;
+    if span <= 0 {
+        return refuse("bad_time", format!("{path}/span"));
+    }
+    let along = match (s.get("ease"), s.get("spring")) {
+        (None, None) => Along::Ease(Named::Penner(ease::Family::Quad, ease::Side::InOut)),
+        (Some(e), None) => Along::Ease(named_of(e, &format!("{path}/ease"))?),
+        (None, Some(Value::Object(spring))) => Along::Spring(spring_of(spring, &format!("{path}/spring"))?),
+        _ => return refuse("bad_doc", path),
+    };
+    let sync = match s.get("sync").and_then(Value::as_str) {
+        None | Some("none") => false,
+        Some("next_loop_phase") => true,
+        Some(_) => return refuse("bad_doc", format!("{path}/sync")),
+    };
+    Ok(Switch { control: control.clone(), case: case.clone(), span, along, sync, first: Value::Null, changes: Vec::new() })
 }
 
 /// Resolves each placement's start, in dependency order: one `after` another starts at that one's
@@ -2130,10 +2776,10 @@ fn placement_of(
 /// placement. Then each target's stagger delay: target i of n starts i × lag × d later, with d the
 /// placement's active span, so the whole takes d × ((n − 1) × lag + 1).
 fn resolve_series(raw: Vec<Raw>, clips: &[Clip], seed: u64) -> Result<Vec<Placement>, Refused> {
-    let span_of = |p: &Placement| clips.iter().find(|c| c.id == p.clip).map_or(1, |c| c.span);
+    let span_of = |p: &Placement| p.active_for(clips.iter().find(|c| c.id == p.clip).map_or(1, |c| c.span));
     let mut placed: Vec<Raw> = raw;
     for r in &mut placed {
-        let d = span_of(&r.placement) * i64::from(r.placement.count);
+        let d = span_of(&r.placement);
         if let Some((lag, order)) = r.lag {
             let step = match lag {
                 Lag::Ratio(x) => (x * d as f64).floor() as i64,
@@ -2156,6 +2802,9 @@ fn resolve_series(raw: Vec<Raw>, clips: &[Clip], seed: u64) -> Result<Vec<Placem
                     Order::Seeded => shuffled[i],
                 };
                 b.delay = rank as i64 * step;
+            }
+            if r.placement.timing.reach.is_some() {
+                r.placement.timing.reach = r.placement.bindings.iter().map(|b| b.delay).max();
             }
         }
     }
@@ -2184,7 +2833,7 @@ fn resolve_series(raw: Vec<Raw>, clips: &[Clip], seed: u64) -> Result<Vec<Placem
             if let Some(start) = resolved[j] {
                 let p = &placed[j].placement;
                 let reach = p.bindings.iter().map(|b| b.delay).max().unwrap_or(0);
-                let end = start + reach + span_of(p) * i64::from(p.count);
+                let end = start + reach + span_of(p);
                 resolved[i] = Some(end + offset);
                 progress = true;
             }
