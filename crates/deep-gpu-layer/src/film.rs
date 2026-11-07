@@ -44,9 +44,9 @@ const FLICKS_PER_SECOND: i64 = 705_600_000;
 /// When the frame's Vello GPU passes finished encoding, set by the surface's module.
 pub type Encoded = Arc<Mutex<Option<Instant>>>;
 
-/// A look's light theme as the 2D marks read it: its roles and its type.
-fn look_of(app: &App, v: &Value, doc: &Map<String, Value>) -> Result<(Palette, Type), Value> {
-    let def = match v {
+/// A look's definition: a shipped look's by its ID, or the look@1 given.
+fn def_of(v: &Value) -> Result<Value, Value> {
+    Ok(match v {
         Value::String(id) => look::shipped(id)
             .ok_or_else(|| refused("bad_input", format!("look: {id} isn't a shipped look")))?,
         Value::Object(_) => v.clone(),
@@ -56,7 +56,12 @@ fn look_of(app: &App, v: &Value, doc: &Map<String, Value>) -> Result<(Palette, T
                 "a look is a shipped look's ID or a look@1",
             ))
         }
-    };
+    })
+}
+
+/// A look's light theme as the 2D marks read it: its roles and its type.
+fn look_of(app: &App, v: &Value, doc: &Map<String, Value>) -> Result<(Palette, Type), Value> {
+    let def = def_of(v)?;
     let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
     // A film played on its own holds the status distance only where it shows status, which the
     // check judges (The status-color rule).
@@ -72,21 +77,32 @@ fn look_of(app: &App, v: &Value, doc: &Map<String, Value>) -> Result<(Palette, T
     Ok((resolved.light, ty))
 }
 
-/// The film's marks at `t` in a look, by writer layer, and its ground.
+/// The film's marks at `t` in a look, by writer layer, its ground, its camera, its lamps and its
+/// evaluated items.
+type Marked = (Vec<Vec<Arc<Drawn>>>, Rgb, Option<View>, Vec<Lamp>, Map<String, Value>);
+
 fn marks_at(
     doc: &Map<String, Value>,
     program: &Program,
     state: &mut State,
     t: i64,
     (palette, ty): &(Palette, Type),
-) -> Result<(Vec<Vec<Arc<Drawn>>>, Rgb, Option<View>, Vec<Lamp>), Value> {
+    snap: Option<f64>,
+) -> Result<Marked, Value> {
     program.evaluate(t, eval::Validity::Full, state);
     let mut items = eval::items(doc, program, state);
     let lamps = match &ty.drawn {
         Some(look) => drawn::screen_lamps(look, &items, palette).map_err(|r| refused(r.code, r.path))?,
         None => Vec::new(),
     };
-    let view = drawn::view_of(doc, &mut items);
+    let mut view = drawn::view_of(doc, &mut items);
+    // #464: an indexed look's camera snaps to whole target pixels.
+    if let (Some(v), Some(scale)) = (view.as_mut(), snap) {
+        for i in 0..2 {
+            let origin = v.center[i] - v.target[i] * v.k;
+            v.target[i] = (v.center[i] - (origin / scale).round() * scale) / v.k;
+        }
+    }
     if let Some(v) = &view {
         drawn::through(v, &mut items);
     }
@@ -108,7 +124,7 @@ fn marks_at(
         .iter()
         .map(|l| l.marks.iter().cloned().collect())
         .collect();
-    Ok((layers, frame.ground, view, lamps))
+    Ok((layers, frame.ground, view, lamps, items))
 }
 
 fn hex(c: &image::Rgba<u8>) -> String {
@@ -190,17 +206,37 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         .ok_or_else(|| bad("fps"))? as i64;
     let from = call["from"].as_u64().unwrap_or(0);
     let hash = call["hash"] == true;
+    // #464: the targets a captured frame writes beside its final PNG, reduced motion and the
+    // flicker check over the frames played.
+    let targets: Vec<&str> = call["targets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    if let Some(t) = targets
+        .iter()
+        .find(|t| !["final", "linear", "indices"].contains(t))
+    {
+        return Err(bad(&format!("targets are final, linear and indices; {t} isn't one")));
+    }
+    let wants_linear = targets.contains(&"linear");
+    let wants_indices = targets.contains(&"indices");
+    let reduced_motion = call["reduced_motion"] == true;
+    let checks_flicker = call["flicker"] == true;
+    let seed = doc.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
     let mut events = Vec::new();
     for e in call["events"].as_array().into_iter().flatten() {
         let frame = e["frame"]
             .as_u64()
             .filter(|f| *f > 0 && *f < count)
             .ok_or_else(|| bad("an event names a frame after the first, within the film"))?;
-        events.push((frame, look_of(app, &e["look"], &doc)?));
+        events.push((frame, (look_of(app, &e["look"], &doc)?, def_of(&e["look"])?)));
     }
     events.sort_by_key(|(f, _)| *f);
     let mut events = events.into_iter().peekable();
     let mut look = look_of(app, &call["look"], &doc)?;
+    let mut def = def_of(&call["look"])?;
     let capture: Vec<u64> = call["capture"]
         .as_array()
         .into_iter()
@@ -223,7 +259,67 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 .collect(),
         )
     };
-    let (first, ground, view, lamps) = marks_at(&doc, &program, &mut state, at(from), &look)?;
+    let planted = app.planted;
+    // The look's print finish for frame `n`, refused at check before any frame is drawn.
+    let printing_at = |n: u64,
+                       def: &Value,
+                       look: &(Palette, Type),
+                       items: &Map<String, Value>,
+                       view: Option<&View>,
+                       ground: Rgb|
+     -> Result<Option<Arc<crate::print2d::Printing>>, Value> {
+        let placed = view.map_or_else(Default::default, |v| {
+            let (scale, offset) = v.to_world();
+            deep_scene3d_render::print::Placed { scale, offset }
+        });
+        crate::print2d::printing(
+            def,
+            &look.0,
+            f64::from(size[0]),
+            seed,
+            at(n),
+            reduced_motion,
+            items,
+            placed,
+            ground,
+            planted,
+        )
+        .map(|p| p.map(Arc::new))
+        .map_err(|r| {
+            let mut v = refused(r.code, r.path);
+            for (k, x) in r.extra {
+                v[k] = x;
+            }
+            v
+        })
+    };
+    // #464: an indexed look, its tables checked before any frame is drawn.
+    let indexed = |def: &Value, look: &(Palette, Type)| {
+        deep_canvas_marks::print::indexed(def, &look.0).map_err(|r| {
+            let mut v = refused(r.code, r.path);
+            for (k, x) in r.extra {
+                v[k] = x;
+            }
+            v
+        })
+    };
+    let mut ix = indexed(&def, &look)?;
+    for (_, (l, d)) in events.clone() {
+        indexed(&d, &l)?;
+    }
+    let index_frame = |ix: &Option<deep_canvas_marks::print::Indexed>,
+                       layers: &[Vec<Arc<Drawn>>],
+                       items: &Map<String, Value>| {
+        ix.as_ref().map(|ix| {
+            let marks: Vec<Arc<Drawn>> = layers.iter().flatten().cloned().collect();
+            Arc::new(crate::indexed::frame(ix, &marks, items, "ground", planted))
+        })
+    };
+    let snap = |ix: &Option<deep_canvas_marks::print::Indexed>| ix.as_ref().map(|i| f64::from(i.scale));
+    let (first, ground, view, lamps, items) =
+        marks_at(&doc, &program, &mut state, at(from), &look, snap(&ix))?;
+    let first_print = printing_at(from, &def, &look, &items, view.as_ref(), ground)?;
+    let first_index = index_frame(&ix, &first, &items);
     // The paper's fields hold still; only where the pixels land moves with the camera.
     let page = page_of(&look.1, view.as_ref(), &doc, &roles(&look), call)?;
     let first_page = page.as_ref().map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
@@ -244,25 +340,30 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     let baseline = frames::baseline_ns(app);
     let packs = Arc::new(packs_of(call)?);
-    let frame2 = |layers, n, look: &(Palette, Type), page: Option<Arc<Page>>| {
+    let frame2 = |layers, n, look: &(Palette, Type), page: Option<Arc<Page>>, print, indexed| {
         Arc::new(Frame2 {
+            indexed,
             layers,
             clock: Clock::of(&doc, at(n)),
             roles: roles(look),
             guard: None,
             packs: packs.clone(),
             page,
+            print,
         })
     };
-    let marks: Marks2 = Arc::new(Mutex::new(frame2(first, from, &look, first_page)));
+    let marks: Marks2 = Arc::new(Mutex::new(frame2(first, from, &look, first_page, first_print, first_index)));
     let encoded: Encoded = Arc::new(Mutex::new(None));
-    let (ui, error) = open2(app, marks.clone(), size, Some(encoded.clone()))?;
+    let taps = crate::print2d::Taps::default();
+    *taps.want_linear.lock().unwrap_or_else(|e| e.into_inner()) = wants_linear;
+    let (ui, error) = open2(app, marks.clone(), size, Some(encoded.clone()), taps.clone())?;
     app.window.as_ref().expect("opened").paint.borrow_mut().ui = Some(ui.clone());
     ui.record(false);
     ui.take_record();
     ui.record(true);
 
     let mut listed = Vec::with_capacity(count as usize);
+    let mut lumas: Vec<Vec<f32>> = Vec::new();
     let mut switches = Vec::new();
     let mut movie = Movie::new(out, export, size);
     let played = (|| -> Result<(), Value> {
@@ -282,12 +383,17 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 } else {
                     request = Some(asked);
                 }
-                look = next;
+                (look, def) = next;
+                ix = indexed(&def, &look)?;
             }
             let started = Instant::now();
-            let (drawn, ground, view, lamps) = marks_at(&doc, &program, &mut state, at(n), &look)?;
+            let (drawn, ground, view, lamps, items) =
+                marks_at(&doc, &program, &mut state, at(n), &look, snap(&ix))?;
+            let print = printing_at(n, &def, &look, &items, view.as_ref(), ground)?;
+            let index = index_frame(&ix, &drawn, &items);
             let page = page.as_ref().map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
-            *marks.lock().unwrap_or_else(|e| e.into_inner()) = frame2(drawn, n, &look, page);
+            *marks.lock().unwrap_or_else(|e| e.into_inner()) =
+                frame2(drawn, n, &look, page, print, index);
             {
                 let win = app.window.as_ref().expect("opened");
                 let mut p = win.paint.borrow_mut();
@@ -296,7 +402,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
             }
             let built = started.elapsed().as_secs_f64() * 1e3;
-            let keep = export || capture.contains(&n);
+            let keep = export || checks_flicker || capture.contains(&n);
             let (encode_ms, layer_gpu_ms, pixels, bytes) = render(app, k, &encoded, hash, keep)?;
             if let Some(e) = error.lock().unwrap_or_else(|e| e.into_inner()).take() {
                 return Err(e);
@@ -331,6 +437,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 let image = picture(&bytes, size, ground, black);
                 if capture.contains(&n) {
                     row["final"] = json!(write_named(out, &png(&image, size)?, "png")?);
+                    if wants_linear {
+                        row["linear"] = json!(linear_of(app, out, &taps, &image, size)?);
+                    }
+                    if wants_indices && ix.is_some() {
+                        row["indices"] = json!(indices_of(app, out, &taps)?);
+                    }
+                }
+                if checks_flicker {
+                    lumas.push(crate::print2d::luminance(&image));
                 }
                 movie.add(&image, at(n))?;
             }
@@ -356,10 +471,66 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     close2(app, &ui);
     played?;
     let mut reply = json!({"size": size, "frames": listed, "switches": switches});
+    if let Some(ix) = &ix {
+        let palette: Vec<&str> = ix.palette.iter().map(|(r, _)| r.as_str()).collect();
+        reply["indexed"] = json!({"operator": crate::indexed::OPERATOR,
+            "class": crate::indexed::class(), "palette": palette});
+    }
+    if checks_flicker {
+        reply["flicker"] = crate::print2d::flicker(&lumas, fps as f64);
+    }
     if export {
         reply["export"] = movie.finish()?;
     }
     Ok(reply)
+}
+
+/// A captured frame's linear target, `<sha256>.f32`: the print finish's, read back, or the
+/// frame's own pixels decoded where nothing printed it.
+fn linear_of(
+    app: &App,
+    out: &str,
+    taps: &crate::print2d::Taps,
+    image: &[u8],
+    size: [u32; 2],
+) -> Result<String, Value> {
+    let written = taps.linear.lock().unwrap_or_else(|e| e.into_inner()).take();
+    let bytes = match written {
+        Some((texture, at)) if at == size => app
+            .worker
+            .call(move |state| {
+                let d = state.gpu.device();
+                crate::print2d::read_f32(&d.device, &d.queue, &texture, size)
+            })
+            .map_err(|e| refused("no_read_back", e))?,
+        _ => image
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|p| {
+                let lin = |c: u8| deep_canvas_marks::finish::srgb_decode(f64::from(c) / 255.0) as f32;
+                [lin(p[0]), lin(p[1]), lin(p[2]), 1.0]
+            })
+            .flat_map(f32::to_le_bytes)
+            .collect(),
+    };
+    write_named(out, &bytes, "f32")
+}
+
+/// A captured frame's index target as the operator wrote it, `<sha256>.u16`.
+fn indices_of(app: &App, out: &str, taps: &crate::print2d::Taps) -> Result<String, Value> {
+    let written = taps.indices.buffer.lock().unwrap_or_else(|e| e.into_inner()).take();
+    let Some((buffer, size)) = written else {
+        return Err(refused("no_read_back", "the frame's index target wasn't written"));
+    };
+    let bytes = app
+        .worker
+        .call(move |state| {
+            let d = state.gpu.device();
+            crate::indexed::read_indices(&d.device, &buffer, size)
+        })
+        .map_err(|e| refused("no_read_back", e))?;
+    write_named(out, &bytes, "u16")
 }
 
 /// A frame's surface as a picture: its premultiplied BGRA over the page's ground, RGBA rows.

@@ -24,6 +24,7 @@ import { answers as stackHealthy, composeKind, downStack, environmentOf, keysOf,
 import { endsEmpty, freshCount, judgeStop, leftOpen, openCheckouts, priceDefinition, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
 import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
+import { Acceptance } from './acceptance.js';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { alive as running, openSupervisor, openUnder, type Grant, type Host, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, recordVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
@@ -63,7 +64,7 @@ import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { openGitHub, type GitHub, type GitHubPlant } from '@deepbuild/github';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
-import { liveFetch, liveGraphql, recordedFetch, recordedGraphql } from './github-source.js';
+import { liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
 import { OpenItems } from './open-items.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
 import { apiHost, networkCheck, reachable, slackConfig, slackThread, slackThreads } from './reach.js';
@@ -481,6 +482,8 @@ export class Core {
   private compose?: ReturnType<typeof composeKind>;
   /** DeepBuild's own headless jobs (#159): their hooks are theirs, never a session's. */
   private runner!: Runner;
+  /** The blind acceptance job (#1328): the runner's one kind that writes, before an issue's first attempt. */
+  private acceptance!: Acceptance;
   /** Sessions started without your Send, under a run you approved (#1330). */
   private sessionStarts!: Starts;
   /** Setup's wiki build (#356). */
@@ -1054,6 +1057,14 @@ export class Core {
     // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
     const trust = this.trust = await openTrust({ record: this.record, now: this.now });
     await this.spaces.open();
+    this.acceptance = new Acceptance({
+      record: this.record, runner: () => this.runner, supervisor: () => this.supervisor, checkouts: () => this.checkouts, asks: () => this.asks, core: this.connection('core'), now: this.now, ...this.config().acceptance,
+      append: async (kind, data) => { const ts = this.now(); await this.append(this.connection('core'), { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue }); },
+      read: async (owner, name, n) => {
+        const fetch = this.options.github ? recordedFetch(this.options.github) : liveFetch(this.options.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
+        return (await readIssue(fetch, owner, name, n, undefined))?.[0];
+      },
+    });
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite') });
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
@@ -1136,6 +1147,7 @@ export class Core {
     void this.agents.recoverAtStart().catch((error: unknown) => process.stderr.write(`deep hub: agent syncs not recovered: ${error instanceof Error ? error.message : String(error)}\n`));
     // The promised checks the record still holds wait on, armed again (#120).
     await this.restorePromises().catch(() => undefined);
+    await this.acceptance.open();
     for (const timer of this.timers) timer.unref();
   }
 
@@ -1167,7 +1179,7 @@ export class Core {
     return typeof slot === 'number' && Number.isInteger(slot) && slot > 0 ? slot : 4;
   }
   /** What setup wrote to <root>/config.json for the runner: the login shell's PATH and the plan's reserve. */
-  private config(): { loginPath: string; reservePct: number; rules: { margin: number; windowMs: number } } {
+  private config(): { loginPath: string; reservePct: number; rules: { margin: number; windowMs: number }; acceptance: { slots: number; gateKey: string | null } } {
     let c: Obj = {};
     try { c = JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as Obj; } catch { /* none yet: no binary resolves, so every job is refused saying so */ }
     const runner = isObj(c.runner) ? c.runner : {};
@@ -1178,6 +1190,8 @@ export class Core {
       loginPath: typeof runner.login_path === 'string' ? runner.login_path : '',
       reservePct: typeof plan.reserve_pct === 'number' ? plan.reserve_pct : 10,
       rules: { margin: typeof rules.margin === 'number' ? rules.margin : 1.5, windowMs: (typeof rules.window_days === 'number' ? rules.window_days : 30) * DAY },
+      // The issues that run at once, and the gate identity's key (#1325): with none, a swap goes to you.
+      acceptance: { slots: isObj(c.acceptance) && typeof c.acceptance.slots === 'number' ? c.acceptance.slots : 1, gateKey: isObj(c.gate) && typeof c.gate.key === 'string' ? c.gate.key : null },
     };
   }
 
@@ -2914,6 +2928,7 @@ export class Core {
     this.permits.get(delivery.ask)?.(delivery);
     if (this.prompts.has(delivery.ask)) return;
     this.tasks.answered(delivery);
+    this.acceptance?.answered(delivery);
     this.delivery(delivery);
     void this.waitsOnTask(delivery).catch(() => undefined);
     const asker = this.sessions.get(delivery.session);
@@ -5230,6 +5245,10 @@ export class Core {
       }
       case 'memory.list': return { lessons: await this.lessons(), rejected: await rejectedDirections(this.raw) };
       case 'memory.act': return this.memoryAct(params, context);
+      case 'acceptance.start': return this.acceptance.start(params);
+      case 'acceptance.status': return this.acceptance.status(params);
+      case 'acceptance.dispute': return this.acceptance.dispute(params);
+      case 'acceptance.ended': return this.acceptance.ended(params).then(() => ({ ended: true }));
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.runner.list() };
