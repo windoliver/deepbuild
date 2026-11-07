@@ -191,17 +191,29 @@ test's name starts with `AC[n] #149.<id>`.
 | `AC2 #149.c0138bef` | 2: paper through a 9,100 px dolly and a 5× zoom; 2 code values | `paper.test.ts`: each link of the chain within 0.5 px on every patch, and the sum along the chain; every adjacent pair of the 240-frame push, every pixel, at its place on the page. |
 | `AC3 #149.92bebcd4` | 3: pressure 0.3 reads the tooth | `pressure.test.ts`: the stroke's alpha against smoothstep(tooth − 0.7) within 1/255 on an image tooth the test wrote. |
 | `AC4 #149.fc5501aa` | 4: line weight; a taper under 1 px | `weight-profile.test.ts`: width by alpha integral, 1.6× at weight 0.6 within 2%; each column under 0.95 px one row wide at alpha = width within 5%. |
-| `AC5 #149.75d75ba2` | 5: seek equals play for every field | `seek.test.ts`: every family in 2D and 3D, plus each tooth and noise kind: a second play, a play opened at 10, frames sought alone, and the same times at twice the rate. |
+| `AC5 #149.75d75ba2` | 5: seek equals play for every field | `../149-redraft-ac5/`, the blind redraft that replaced `seek.test.ts` (Swapped redrafts, below). |
 | `AC6 #149.9ffe6b6a` | 6: a collection target | `targets.test.ts`: a pass writes the pressure target out: 0.6 on the collection's stroke, 0 on the same writer's other stroke, another writer's and the page. Twin: a read of `theirs` is refused, naming it. |
 | `AC7 #149.f455f94d` | 7: "1/300fw" | `units.test.ts`: the rational 32/5 from the grammar; 6.4 exactly in a document and a look at 1920; the same literals at 1280 follow the document. |
 | `AC8 #149.1c3a3068` | 8: the noise fill | `noise.test.ts`: 1,440° equals 0° and 720° doesn't; seek equals play and the loop closes; AC2's chain through a dolly. Twin: `status.pass` in the ramp refused, naming the item; a data role checks. |
 | `AC9 #149.e2b5abff` | 9: the shadow play | `shadow-play.test.ts`: L(0) = 0 and L(0.5) = L(1) / 2 within 1/255 in linear light for each collection; shadows fall away from a walking lamp; the description checks, seek equals play, and an H.264 MP4 with one sample a frame. |
-| `AC10 #149.affd8de8` | 10: budgets | `budgets.test.ts`: both tasks in `budgets.json` through the lane's validator; 10 and 4 ms p95 per family; paper under 0.2 ms; a target's device bytes within its declaration. |
+| `AC10 #149.affd8de8` | 10: budgets | `budgets.test.ts`: both tasks in `budgets.json` through the lane's validator; 10 and 4 ms p95 per family; paper under 0.2 ms. A target's device bytes: `../149-redraft-ac10/`, the blind redraft that replaced that test (Swapped redrafts, below). |
 | `AC11 #149.c911c0df` | 11: two rims | `rim.test.ts`: both edges, 3.5 px within 1 px, mirror within 1 px, nothing within 45° of straight down. Twin: `rim_keeps_first` fails, naming `rim 1 at 20°`. |
 | `AC12 #149.583b9b35` | 12: shown to you | `taste.test.ts`: below. |
 
 Proof line: "the dolly and zoom recordings with the paper's reprojection error" is AC2's printed errors and AC12's
 recording; "each field's measured cost" is AC10's reports, whose per-family frames name each.
+
+## Swapped redrafts
+
+Two tests here failed on every correct program, so their blind redrafts replaced them, on the owner's call on PR #1563:
+
+- AC5's `seek.test.ts`: `fov` runs across the wider side, so in four 3D fixtures (`ink`, `spatter`, `hatch`, `strokes`) the
+  only moving item sits above the frame and "the film moves" can't hold. `../149-redraft-ac5/` keeps its moving items in
+  frame by arithmetic.
+- AC10's target bytes in `budgets.test.ts`: Metal allocates in 16 KB pages, so a 4,147,200 B target holds 4,161,536 B at
+  least and "no more than" can't hold exactly. `../149-redraft-ac10/` allows the meter's 1%.
+
+`helpers.ts` and the fixtures are as written.
 
 ## The taste call
 

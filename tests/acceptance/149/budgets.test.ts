@@ -11,21 +11,17 @@
 //
 // The showpiece budget is the cost model's table: 10 ms of GPU and 4 ms of CPU a frame, at p95 over every frame of a run
 // of at least 300. Paper's cost is the paper family's fixture, a run's median GPU ms with its paper less the same film
-// on a flat ground. A target's bytes come from the device's own count on the `layers` call, against the bytes its
-// declaration works out to: 960 × 540 × 8 for rgba16float at half 1080p, the design's "about 4 MB". That read is no
-// timing, so it runs on any Mac. At the base no mode, task or target exists.
+// on a flat ground. The clause on a target's bytes is tests/acceptance/149-redraft-ac10/, the blind redraft that replaced
+// this file's test (README: Swapped redrafts). At the base no mode or task exists.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  AC, DIMS, FAMILIES, FAMILY_SIZE, REPO, answered, arr, familyFixture, fixtureRel, inconclusive, layersCall, loadPerCore, lookOf, none, num, obj, requireMetal, runGpu, shown, str, useDir,
-  useGpu, type JsonObject, type JsonValue,
+  AC, DIMS, FAMILIES, FAMILY_SIZE, REPO, arr, fixtureRel, inconclusive, loadPerCore, none, num, obj, requireMetal, shown, type JsonObject, type JsonValue,
 } from './helpers.ts';
 
 const ID = AC[10];
-const bin = useGpu();
-const dir = useDir();
 const LANE_MARGIN = 0.5;
 const FRAMES = { id: 'canvas-drawn-frames', mode: 'drawn-frames', targets: { frame_gpu_p95_ms: 10, frame_cpu_p95_ms: 4 } };
 const PAPER = { id: 'canvas-paper-cost', mode: 'paper-cost', targets: { paper_added_gpu_ms: 0.2 } };
@@ -122,20 +118,5 @@ describe(`${ID} the drawn looks' budgets`, () => {
     });
     none(problems, 'the report');
     await judge(`${ID} paper's added GPU (ms a frame)`, PAPER.targets.paper_added_gpu_ms, added, report['fingerprint']!);
-  });
-
-  it(`${ID} a collection target costs no more than its declared bytes, counted on the device`, () => {
-    requireMetal();
-    const fixture = familyFixture('targets');
-    const [reply] = runGpu(bin(), dir(), [layersCall(obj(fixture['2d'], '2d'), lookOf(fixture), { target_costs: true })]);
-    answered(reply!, 'the targets fixture');
-    const row = arr(reply!['target_costs'], 'target_costs').map((v) => obj(v, 'a target')).find((t) => t['collection'] === 'fish' && t['output'] === 'pressure');
-    expect(row, `the reply lists the fish's pressure target: ${shown(reply!['target_costs'] ?? null)}`).toBeDefined();
-    expect([row!['width'], row!['height'], str(row!['format'], 'format')], 'half 1080p in rgba16float').toEqual([960, 540, 'rgba16float']);
-    const declared = 960 * 540 * 8;
-    expect(num(row!['declared_bytes'], 'declared_bytes'), 'its declaration works out to width × height × 8').toBe(declared);
-    const bytes = num(row!['bytes'], 'bytes');
-    expect(bytes, 'the device holds it').toBeGreaterThan(0);
-    expect(bytes, `the device's count, ${bytes}, is no more than the declared ${declared}`).toBeLessThanOrEqual(declared);
   });
 });
