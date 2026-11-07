@@ -8,6 +8,8 @@ export { ulidTime } from '@deepbuild/record/ids';
 export const VERSION = 1;
 /** The features the hub lists in its hello; a client turns off any of its own the hub doesn't list. */
 export const FEATURES: readonly string[] = [];
+/** The hub's contract version, "major.minor": a client needing a newer one shows the hub as older (compat.ts). */
+export const CONTRACT = '1.0';
 
 /** error@3: one refusal. */
 export interface Refusal { code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[] }

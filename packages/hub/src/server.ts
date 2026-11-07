@@ -24,7 +24,7 @@ import { shedStartup, YOUNG } from './settle.js';
 import { heavyDenial } from './heavy.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
 import { plantedStart } from './plant.js';
-import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
+import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
@@ -407,7 +407,7 @@ class Hub {
     const scrub = (values: string[]) => { this.parsers.scrub(values); };
     // The record's writer generation (#572), read before the core opens the ledger so every hello carries it from the
     // first; read-only, so this thread never checkpoints or syncs the ledger, and one that can't be read stops the start.
-    this.helloLine = line({ hello: 'deep-hub', start: this.start, features: FEATURES, generation: writerGeneration(this.root.ledger) });
+    this.helloLine = line({ hello: 'deep-hub', start: this.start, contract: CONTRACT, features: FEATURES, generation: writerGeneration(this.root.ledger) });
     this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub) : coreWorker(options, frame, fatal, asking, acking, scrub);
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant) : parserPool(held, this.plant);
     this.server.on('connection', (sock) => this.accept(sock));
