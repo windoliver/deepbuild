@@ -94,6 +94,29 @@ pub fn value(doc: &Value, path: &str) -> Option<Shown> {
     })
 }
 
+/// Whether `path` reads a mark set's read-only anchor, `items/<set>#period/by` or
+/// `items/<set>#head/<column>`, whose value the frame's rows give at t (Mark set and columns).
+pub fn reads_anchor(doc: &Value, path: &str) -> bool {
+    let anchor = path
+        .strip_prefix("items/")
+        .and_then(|p| p.split_once('#'))
+        .and_then(|(set, rest)| Some((set, rest.split_once('/')?)));
+    let Some((set, (name, field))) = anchor else {
+        return false;
+    };
+    let params = doc.get("items").and_then(|i| i.get(set)?.get("params"));
+    let transform = |kind: &str| {
+        params
+            .and_then(|p| p.get("transforms")?.as_array())
+            .is_some_and(|t| t.iter().any(|t| t.get(kind).is_some()))
+    };
+    match name {
+        "period" => field == "by" && transform("periods"),
+        "head" => transform("reveal"),
+        _ => false,
+    }
+}
+
 /// The template with each slot replaced by what it shows; `Err` holds the first slot that
 /// resolves to nothing, or `None` when a brace is unbalanced.
 pub fn expand(doc: &Value, template: &str) -> Result<String, Option<String>> {

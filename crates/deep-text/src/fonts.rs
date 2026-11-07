@@ -88,6 +88,16 @@ pub static FACES: &[Face] = &[
         license_file: "LICENSE-Inter.txt",
         bytes: include_bytes!("../fonts/Inter-SemiBold.ttf"),
     },
+    // #496: the variable face, a weight axis from 100 to 900, for text whose weight a channel
+    // drives; every weight it takes is shaped from these bytes, never snapped to a static face.
+    Face {
+        family: "Inter Variable",
+        weight: 400,
+        file: "InterVariable.ttf",
+        license: "OFL-1.1",
+        license_file: "LICENSE-Inter.txt",
+        bytes: include_bytes!("../fonts/InterVariable.ttf"),
+    },
     Face {
         family: "JetBrains Mono",
         weight: 400,
@@ -145,6 +155,32 @@ pub static FACES: &[Face] = &[
         bytes: include_bytes!("../fonts/NotoEmoji-Regular.ttf"),
     },
 ];
+
+/// #496: the family a text at `weight` is set in: `family` itself when it has a face at that
+/// weight or no variable twin, else its variable twin, so a weight between or past the static
+/// faces is drawn at that weight on the variable face's axis, never snapped to the nearest static.
+pub fn family_at(family: &'static str, weight: u16) -> &'static str {
+    let twin = match family {
+        "Inter" => "Inter Variable",
+        _ => return family,
+    };
+    if FACES
+        .iter()
+        .any(|f| f.family == family && f.weight == weight)
+    {
+        family
+    } else {
+        twin
+    }
+}
+
+/// The static family a variable twin stands in for (#496's planted snapping build).
+pub fn static_of(family: &'static str) -> &'static str {
+    match family {
+        "Inter Variable" => "Inter",
+        _ => family,
+    }
+}
 
 /// A face's bytes as the blob the font collection and the rasterizer share.
 pub fn blob(face: &Face) -> Blob<u8> {

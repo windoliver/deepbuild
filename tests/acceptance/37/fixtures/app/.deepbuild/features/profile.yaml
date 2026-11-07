@@ -1,0 +1,5 @@
+# A feature with no journey yet: reported as such, never run.
+feature: profile
+name: The profile page
+files: [public/profile.js]
+journeys: []
