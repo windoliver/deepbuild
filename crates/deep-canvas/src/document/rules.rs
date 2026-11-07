@@ -288,13 +288,17 @@ fn template_numbers(doc: &Value, texts: &Texts<'_>, id: &str, t: &str, issues: &
                 "its words show a number with no source; show the number through a `{path}` slot",
             )),
             Part::Words(_) => {}
-            Part::Slot(slot) if template::value(doc, slot).is_none() => issues.push(Issue::error(
-                "ref_unresolved",
-                id,
-                path.clone(),
-                json!(slot),
-                "the slot's path names no data constant this build shows",
-            )),
+            Part::Slot(slot)
+                if template::value(doc, slot).is_none() && !template::reads_anchor(doc, slot) =>
+            {
+                issues.push(Issue::error(
+                    "ref_unresolved",
+                    id,
+                    path.clone(),
+                    json!(slot),
+                    "the slot's path names no data constant this build shows",
+                ))
+            }
             Part::Slot(_) => {}
         }
     }

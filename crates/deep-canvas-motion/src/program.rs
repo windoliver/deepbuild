@@ -38,6 +38,8 @@ pub struct Field {
     pub enumerated: bool,
     /// Something writes it; a field only a driver reads is never written back.
     pub written: bool,
+    /// A keyed data value's name (`data/<name>`), which owns the field in place of an item.
+    pub data: Option<String>,
 }
 
 /// One step of a driver's compiled expression, over the program's slots.
@@ -312,6 +314,8 @@ pub struct Program {
     /// With a layout solve: the document's boxes, and each layout glide's channel with the
     /// boxes of the layout at each of its keys, all solved at check (#491).
     pub(crate) layout: Option<(Boxes, Glides)>,
+    /// The mark sets whose rows come from occurrence lists.
+    pub(crate) rows: Vec<crate::rows::RowList>,
     pub options: Options,
 }
 
@@ -434,6 +438,7 @@ impl Program {
             order_names: Vec::new(),
             channel_follows: Vec::new(),
             layout: None,
+            rows: Vec::new(),
             options,
             motion: motion.clone(),
         };
@@ -524,6 +529,7 @@ impl Program {
         program.motion.markers.sort_by(|a, b| a.id.cmp(&b.id));
         program.resolve_times(doc)?;
         program.gather_mixes();
+        program.rows = program.occurrence_rows(items_json, doc.get("controls").and_then(Value::as_object))?;
         for driver in &motion.drivers {
             let path = format!("drivers/{}", driver.id);
             let mut vars = Vec::new();
@@ -626,6 +632,13 @@ impl Program {
         program.refuse_look_ahead()?;
         program.schedule(program.options.planted == Planted::SchedulesWholeItems)?;
         program.channel_follows = program.build_follows();
+        // A keyed data value holds its document value until something writes it.
+        for field in &program.fields {
+            let held = field.data.as_ref().and_then(|n| doc.get("data")?.get(n));
+            if let Some(v) = held.map(|d| d.get("value").unwrap_or(d)).and_then(Value::as_f64) {
+                program.base[field.slot] = v;
+            }
+        }
         Ok(program)
     }
 
@@ -1126,10 +1139,11 @@ impl Program {
                 }
             }
         }
+        let data = owner.strip_prefix("data/").map(str::to_string);
         if let Some(f) = self
             .fields
             .iter()
-            .find(|f| f.item == item && f.path == target.field)
+            .find(|f| f.item == item && f.path == target.field && f.data == data)
         {
             return f.slot;
         }
@@ -1151,6 +1165,7 @@ impl Program {
             boolean: false,
             enumerated: false,
             written: false,
+            data,
         });
         slot
     }
@@ -2124,6 +2139,50 @@ impl Program {
             Some(fallback) if !v.is_finite() => fallback,
             _ => v,
         }
+    }
+
+    /// Each mark set whose `rows` read an occurrence list, its filter applied once.
+    fn occurrence_rows(
+        &self,
+        items: &Map<String, Value>,
+        controls: Option<&Map<String, Value>>,
+    ) -> Result<Vec<crate::rows::RowList>, Refused> {
+        let mut out = Vec::new();
+        for (id, item) in items {
+            if item.get("kind").and_then(Value::as_str) != Some("marks@1") {
+                continue;
+            }
+            let Some(rows) = item.get("params").and_then(|p| p.get("rows")) else {
+                continue;
+            };
+            let path = format!("items/{id}/params/rows");
+            let bad = |code, at: &str| Refused {
+                code,
+                path: format!("{path}{at}"),
+                detail: None,
+            };
+            let Some(rows) = rows.as_object() else {
+                return Err(bad("bad_doc", ""));
+            };
+            let from = rows.get("from").and_then(Value::as_object);
+            let filter = doc::filter_of(from.ok_or(bad("bad_doc", "/from"))?, &format!("{path}/from"))?;
+            let entries = self
+                .occurrences(&filter, controls)
+                .ok_or(bad("ref_unresolved", "/from/list"))?;
+            let list = crate::occurrence::filtered(&filter, entries).map_err(|r| Refused {
+                code: r.code,
+                path: format!("{path}/from: {}", r.why),
+                detail: None,
+            })?;
+            let control = |name: &str| {
+                let c = controls?.get(name)?;
+                let default = c.get("default").and_then(Value::as_f64).unwrap_or(0.0);
+                let entries = self.options.input.iter().filter(|e| e.control == name);
+                Some((entries.filter_map(|e| Some((e.t, e.value.as_f64()?))).collect(), default))
+            };
+            out.push(crate::rows::RowList::read(id, rows, list, control)?);
+        }
+        Ok(out)
     }
 
     /// The occurrences a list names: `markers.<kind>`, or `input.<control>`, the input track's
