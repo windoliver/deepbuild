@@ -53,6 +53,56 @@ export interface ClaimRequirement extends Requirement { real_users?: boolean }
 export interface ClaimedRuns { claim: string; agent: string; repo: string; task: string; commit: string; requirements: ClaimRequirement[]; checks: ClaimedCheck[]; now: number; /** A workspace claim's digests of what its state sources read (#67), part of the verdict's key. */ state?: string[] }
 /** The planted twin: a gate that judges only the exit code, with no masked-exit rule; tests only. */
 export type VerdictPlant = 'exit-code-only';
+/**
+ * A fault the kit gate@1 plays for a row of the verdict table no commit can reach (#33), named by
+ * DEEP_HUB_TEST_JUDGE_FAULT, which only the kit sets: what a broken runner, evidence store or state source would hand
+ * the engine (two records of one run that differ, a stdout slot missing, truncated or with no digest, a state digest
+ * that isn't one), or what the hub doesn't gather from you yet (a waiver of every failure, a numeric contract, your
+ * answer to a requirement whose oracle is you, a failure rate too wide to count, a quick check that failed so no
+ * check started, a claim no requirement reaches, as a definition the hub refuses to lock empty would leave it). Each is applied to every check, run or requirement it names, and to nothing else.
+ */
+export type JudgeFault =
+  | 'conflicting-record' | 'evidence-missing' | 'evidence-missing-outside' | 'evidence-no-digest' | 'evidence-truncated' | 'state-not-a-digest'
+  | 'contract-unreported' | 'contract-short' | 'waived' | 'answered-pass' | 'answered-fail' | 'ask-unanswered' | 'rate-unreadable' | 'quick-check-failed' | 'no-requirements';
+export const JUDGE_FAULTS: readonly JudgeFault[] = [
+  'conflicting-record', 'evidence-missing', 'evidence-missing-outside', 'evidence-no-digest', 'evidence-truncated', 'state-not-a-digest',
+  'contract-unreported', 'contract-short', 'waived', 'answered-pass', 'answered-fail', 'ask-unanswered', 'rate-unreadable', 'quick-check-failed', 'no-requirements',
+];
+/** The contract the contract faults declare: two outputs' worth of `total`, compared in FP32 against an FP64 reference. */
+const KIT_CONTRACT: NumericContract = {
+  reference: { precision: 'fp64' }, accumulate: 'fp32', tolerances: [{ output: 'total', size: 2, atol: 0, rtol: 0, unit: 'cents' }], twin: { accumulate: 'fp16' }, assert: 'the totals match the reference',
+};
+const DAY_MS = 86_400_000;
+/** The claim's runs as the fault leaves them, before the engine's records are made: a contract and its counts. */
+function faultedRuns(claim: ClaimedRuns, fault: JudgeFault): ClaimedRuns {
+  if (fault !== 'contract-unreported' && fault !== 'contract-short') return claim;
+  const counts = fault === 'contract-short' ? [{ output: 'total', size: 2, compared: 1, largest_error: 0 }] : null;
+  return { ...claim, checks: claim.checks.map((c) => ({ ...c, contract: KIT_CONTRACT, runs: c.runs.map((r) => ({ ...r, contract: counts })) })) };
+}
+/** The engine's input as the fault leaves it. */
+function faultedInput(input: ClaimInput, fault: JudgeFault): ClaimInput {
+  const slot = (state: EvidenceSlot): ((r: Run) => Run) => (r) => ({ ...r, evidence: r.evidence.map((s) => (s.slot === 'stdout' ? state : s)) });
+  const answered = (answer: 'PASS' | 'FAIL' | 'unanswered') => ({ ...input, requirements: input.requirements.map((q) => (q.oracle === 'person' ? { ...q, answer, ask: 'ask:gatekit' } : q)) });
+  switch (fault) {
+    case 'conflicting-record': {
+      const first = input.runs[0];
+      return first ? { ...input, runs: [...input.runs, { ...first, outcome: first.outcome === 'passed' ? 'failed' : 'passed' }] } : input;
+    }
+    case 'evidence-missing': return { ...input, runs: input.runs.map(slot({ slot: 'stdout', state: 'missing', reason: 'the capture never ended' })) };
+    case 'evidence-missing-outside': return { ...input, runs: input.runs.map(slot({ slot: 'stdout', state: 'missing', outside_code: true, reason: 'the disk was full' })) };
+    case 'evidence-no-digest': return { ...input, runs: input.runs.map(slot({ slot: 'stdout', state: 'captured' })) };
+    case 'evidence-truncated': return { ...input, runs: input.runs.map(slot({ slot: 'stdout', state: 'truncated', counts: { kept: 1, expected: 2 } })) };
+    case 'state-not-a-digest': return { ...input, state: [...(input.state ?? []), 'not-a-digest'] };
+    case 'waived': return { ...input, waivers: input.runs.flatMap((r) => r.failures.map((f) => ({ check: r.check, error: f.message, owner: 'you', approved_by: 'you', ends: { date: input.now + DAY_MS } }))) };
+    case 'answered-pass': return answered('PASS');
+    case 'answered-fail': return answered('FAIL');
+    case 'ask-unanswered': return answered('unanswered');
+    case 'rate-unreadable': return { ...input, checks: input.checks.map(({ runs: _, ...c }) => ({ ...c, accept: '0%' })) };
+    case 'quick-check-failed': return { ...input, checks: input.checks.map((c) => ({ ...c, state: 'never_started' as const, never_started: 'quick_check_failed' as const })) };
+    case 'no-requirements': return { ...input, requirements: [] };
+    default: return input;
+  }
+}
 
 /** A check's digest, as the record names one (`d1:` and the sha256): the command and the contract, so a run of another counts for nothing. */
 const digestOf = (c: ClaimedCheck): string => `d1:${createHash('sha256').update(stableText({ check: c.check, command: c.command, contract: c.contract ?? null })).digest('hex')}`;
@@ -101,8 +151,9 @@ function recordOf(claim: ClaimedRuns, c: ClaimedCheck, digest: string, r: Record
 }
 
 /** The claim's verdict from its checks' runs: the gate's records of them, judged by the verdict engine. */
-export function claimVerdict(claim: ClaimedRuns, options: { plant?: VerdictPlant } = {}): Verdict {
+export function claimVerdict(given: ClaimedRuns, options: { plant?: VerdictPlant; fault?: JudgeFault } = {}): Verdict {
   const exitOnly = options.plant === 'exit-code-only';
+  const claim = options.fault ? faultedRuns(given, options.fault) : given;
   const checks: ClaimCheck[] = [];
   const runs: Run[] = [];
   for (const c of claim.checks) {
@@ -126,5 +177,5 @@ export function claimVerdict(claim: ClaimedRuns, options: { plant?: VerdictPlant
     claim: claim.claim, agent: claim.agent, repo: claim.repo, task: claim.task, commit: claim.commit,
     requirements: claim.requirements, checks, runs, changes: [], waivers: [], now: claim.now, ...(claim.state ? { state: claim.state } : {}),
   };
-  return verdict(input);
+  return verdict(options.fault ? faultedInput(input, options.fault) : input);
 }
