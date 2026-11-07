@@ -323,7 +323,7 @@ function mergeNamed(meta: HookMeta, data: Obj): NonNullable<Gated['merge']> {
   if (read !== undefined) {
     const part = (name: string) => new RegExp(`\\b${name}=(\\S+)`).exec(read)?.[1];
     const [pr, head] = [part('pr'), part('head')];
-    return { ...(pr ? { pr } : {}), ...(head ? { head } : {}), ...(/ auto\b/.test(read) ? { auto: true } : {}), ...(/ disable\b/.test(read) ? { disable: true } : {}) };
+    return { ...(pr ? { pr } : {}), ...(head ? { head } : {}), ...(/ auto\b/.test(read) ? { auto: true } : {}), ...(/ disable\b/.test(read) ? { disable: true } : {}), ...(/ blind\b/.test(read) ? { blind: true } : {}) };
   }
   const input = isObj(meta.call?.input) ? meta.call.input : {};
   const pr = input.pullNumber ?? input.pull_number;
@@ -794,6 +794,8 @@ class Hub {
       const words: [string, string[]][] = [['git push', ['push-needs-ask']], ['gh pr create', ['pr-needs-ask']], ['gh pr merge', ['merge-needs-ask', 'merge-names-head']]];
       matched = words.filter(([w]) => String(data.command ?? '').includes(w)).flatMap(([, rules]) => rules);
     }
+    // The planted wrong program for #1523 holds every call to the programs the new forms run, as a push.
+    if (this.plant === 'holds-every-program' && /^\s*(?:jj|gt|sl|glab|git[\s-]town|gh\s+api)\b/.test(String(data.command ?? ''))) matched = [...matched, 'push-needs-ask'];
     const shell = Object.entries(NAMED_RULES).flatMap(([rule, effect]) => (matched.includes(rule) ? [{ rule, effect }] : []));
     const tool = Object.entries(NAMED_RULES).flatMap(([rule, effect]) => (effect === data.effect ? [{ rule, effect }] : []));
     return [...shell, ...tool.filter((t) => !shell.some((s) => s.rule === t.rule))].filter((n) => blocks(n.rule));
