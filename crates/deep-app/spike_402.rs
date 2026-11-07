@@ -112,6 +112,8 @@ mod spike {
             (w, view.expect("the grid view"))
         });
         let mut term = Terminal::new(COLS, ROWS, 0);
+        // The 16 ANSI colors are the look's dark ones, as the app draws them on a dark grid (#1003).
+        let (ansi, ..) = deep_app::chrome::terminal(true);
         let mut feed_ms = Vec::new();
         let mut frame_ms = Vec::new();
         let mut failures = Vec::new();
@@ -120,7 +122,7 @@ mod spike {
             let t0 = Instant::now();
             term.feed(&bytes);
             let rows = term.take_dirty();
-            let screen = Screen::of(&term, k as u64 + 1, FG, BG);
+            let screen = Screen::of(&term, k as u64 + 1, FG, BG, &ansi);
             let t1 = Instant::now();
             let want: Vec<String> = screen.rows.iter().map(|r| r.text.clone()).collect();
             cx.update(|cx| grid.update(cx, |g, _| g.screen = Some(screen)));

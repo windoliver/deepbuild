@@ -16,7 +16,7 @@ use std::io::{BufWriter, Read, Write};
 use deep_canvas_cells::emulator::Terminal;
 use serde_json::{json, Value};
 
-use crate::terminal::{cell_json, grid_json, BG, FG};
+use crate::terminal::{cell_json, grid_json, Colors};
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -30,7 +30,9 @@ pub fn run(args: &[String]) -> i32 {
     };
     let planted = args.get(4).map(String::as_str);
     let mut term = Terminal::new(cols as u16, rows as u16, history);
-    term.colors = [FG, BG];
+    // The look's terminal colors, as the hub draws them (#1003), and OSC 10 and 11 answer.
+    let colors = Colors::of(&crate::hub::shipped_look());
+    term.colors = colors.defaults();
     let stdin = std::io::stdin();
     let mut input = stdin.lock();
     let stdout = std::io::stdout();
@@ -70,7 +72,7 @@ pub fn run(args: &[String]) -> i32 {
             b'X' => term.reset_modes(),
             b'Q' => {
                 let q: Value = serde_json::from_slice(&buf).unwrap_or(Value::Null);
-                let reply = query(&mut term, &q);
+                let reply = query(&mut term, &q, &colors);
                 let _ = writeln!(out, "{reply}");
             }
             _ => return 2,
@@ -79,7 +81,7 @@ pub fn run(args: &[String]) -> i32 {
     }
 }
 
-fn query(term: &mut Terminal, q: &Value) -> Value {
+fn query(term: &mut Terminal, q: &Value, colors: &Colors) -> Value {
     let n = |k: &str| q.get(k).and_then(Value::as_u64);
     match q.get("q").and_then(Value::as_str) {
         Some("cells") => {
@@ -94,7 +96,7 @@ fn query(term: &mut Terminal, q: &Value) -> Value {
             if x >= u64::from(term.cols()) || y >= u64::from(term.rows()) {
                 return json!({"code": "out_of_range"});
             }
-            cell_json(&term.row(y as u16)[x as usize], None)
+            cell_json(&term.row(y as u16)[x as usize], colors, None)
         }
         Some("rows") => {
             let (from, count) = (

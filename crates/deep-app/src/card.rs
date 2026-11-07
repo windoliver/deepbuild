@@ -235,7 +235,7 @@ impl Card {
                 .py_1()
                 .border_1()
                 .border_color(if focused {
-                    chrome.accent
+                    chrome.focus
                 } else {
                     chrome.ink_primary
                 })

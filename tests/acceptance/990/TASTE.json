@@ -2,11 +2,11 @@
   "issue": 990,
   "criterion": "AC8",
   "verdict": "looks_right",
-  "who": "the owner (GitHub JingW6), in session: asked Claude (Opus 5.5) to check, then answered \"y\" to its \"both look right\"",
-  "when": "2026-11-06T08:40:00.212Z",
+  "who": "the owner (GitHub JingW6), in the #1003 session: shown the new session-row-readings.png, answered \"Yes, record it\" to \"Does #990's restyled session row look right, so I record a new call on it?\"",
+  "when": "2026-11-07T00:44:12.830Z",
   "screenshots": {
     "composition-at-cursor.png": "143993728f66982c9fa0339be09ba5f6c2a19512b7aebb65a593c0adf96510b1",
-    "session-row-readings.png": "fd2309456f4e67a641c229c9f1b70bafbdbfec1884d055794e9425280e64ad5a"
+    "session-row-readings.png": "b4137512e453c3392373a10296e18705ef5815110c2674d0eadd65359307ecaf"
   },
-  "note": "Reference Mac (Mac15,12) run at f21d8970. The composition \"ni hao\" covers its 6 cells from the program's cursor cell (11, 4), inverted, the tab dark to its edges; its bottom border is drawn in the background color, so no separate underline shows. The session row's working, blocked and done readings sit under it, the long one ending in an ellipsis inside the sidebar."
+  "note": "Reference Mac (Mac15,12) run at 57ada54a, after #1003 restyled the sidebar row; composition-at-cursor.png is unchanged from the call at f21d8970. The composition \"ni hao\" covers its 6 cells from the program's cursor cell (11, 4), inverted, the tab dark to its edges; its bottom border is drawn in the background color, so no separate underline shows. The session row, at #1003's padding, has its working, blocked and done readings under it, the long one ending in an ellipsis inside the sidebar."
 }

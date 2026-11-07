@@ -399,3 +399,22 @@ mod tests {
         assert_eq!(verdict.names.as_deref(), Some("ask:B"));
     }
 }
+
+/// The look's 16 terminal colors as the app's cell grid draws them, on the terminal's background (#1003).
+pub struct TerminalColors {
+    pub dark: bool,
+}
+
+impl gpui_kit::Render for TerminalColors {
+    fn render(
+        &mut self,
+        _: &mut gpui_kit::Window,
+        _: &mut gpui_kit::Context<Self>,
+    ) -> impl gpui_kit::IntoElement {
+        use gpui_kit::{div, InteractiveElement as _, ParentElement as _, Styled as _};
+        div()
+            .id("terminal-colors")
+            .size_full()
+            .child(deep_app::cells::look_colors_page(self.dark))
+    }
+}
