@@ -537,12 +537,12 @@ export function exactTree(cwd) {
 }
 
 /** A lane's evidence record, which T7 and T8 read: its state, where it ran, on what tree, and each test's state. */
-export function writeRecord(lane, state, tree, tests) {
+export function writeRecord(lane, state, tree, tests, more = {}) {
   if (!tree) throw new Error("git can't write this checkout's tree");
   const folder = join(homedir(), '.deepbuild', 'lanes');
   mkdirSync(folder, { recursive: true, mode: 0o700 });
   const file = join(folder, `${tree}-${lane.replace(/\W+/g, '-')}.json`);
-  writeFileSync(file, `${JSON.stringify({ lane, state, host: hostname(), platform: `${process.platform}-${process.arch}`, tree, tests }, null, 2)}\n`);
+  writeFileSync(file, `${JSON.stringify({ lane, state, host: hostname(), platform: `${process.platform}-${process.arch}`, tree, tests, ...more }, null, 2)}\n`);
   return file;
 }
 
