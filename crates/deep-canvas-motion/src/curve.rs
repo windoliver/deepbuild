@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use deep_canvas::table::EaseTable;
 
+use crate::quat;
 use crate::spring::Spring;
 
 /// The Bézier timing solver's step count: Newton steps, each replaced by a bisection step where
@@ -39,6 +40,48 @@ pub enum Interp {
     Auto { clamp: bool, smoothness: f64 },
     /// A cubic Hermite through the neighboring keys.
     CatmullRom,
+    /// `quantize(n, jump)`: n steps across the segment, on exact flicks.
+    Quantize { n: u32, jump: Jump },
+}
+
+/// Where a quantized step lands, as CSS `steps()` defines (Channel and key: quantize jump).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Jump {
+    Start,
+    #[default]
+    End,
+    None,
+    Both,
+}
+
+impl Jump {
+    pub fn parse(name: &str) -> Option<Jump> {
+        Some(match name {
+            "start" => Jump::Start,
+            "end" => Jump::End,
+            "none" => Jump::None,
+            "both" => Jump::Both,
+            _ => return None,
+        })
+    }
+
+    /// The stepped progress after `done` whole steps of `n`, clamped to [0, 1].
+    pub fn progress(self, done: i64, n: u32) -> f64 {
+        let (done, n) = (done as f64, f64::from(n));
+        let u = match self {
+            Jump::End => done / n,
+            Jump::Start => (done + 1.0) / n,
+            Jump::None => done / (n - 1.0),
+            Jump::Both => (done + 1.0) / (n + 1.0),
+        };
+        u.clamp(0.0, 1.0)
+    }
+}
+
+/// Whole steps of `n` done `x` flicks into a `span`: exact, so a step lands on one flick at every
+/// display rate.
+pub fn steps_done(x: i64, span: i64, n: u32) -> i64 {
+    (i128::from(x) * i128::from(n)).div_euclid(i128::from(span)) as i64
 }
 
 /// One key: its time in flicks, its value's components and the interpolation it owns.
@@ -56,6 +99,8 @@ pub struct Key {
     /// A `Table` key's ease table: its `<pack>.<name>`, and the table once the program resolves
     /// it from the document's packs.
     pub table: Option<(String, Option<Arc<EaseTable>>)>,
+    /// A quat channel's key: the arc its segment turns on.
+    pub turns: Option<quat::Arc>,
 }
 
 impl Key {
@@ -68,6 +113,7 @@ impl Key {
             velocity: Vec::new(),
             slopes: Vec::new(),
             table: None,
+            turns: None,
         }
     }
 
@@ -204,6 +250,52 @@ impl Curve {
         self.inside(t, out)
     }
 
+    /// Each component's rate at `t`, per second: the segment's derivative, right-continuous, 0 on
+    /// a hold or a step and beyond a held end. Linear segments are exact; the rest take a central
+    /// difference over one flick either side, of the closed-form value.
+    pub fn rate_into(&self, t: i64, out: &mut [f64]) {
+        out.fill(0.0);
+        let Some((a, b)) = self.owner(t).and_then(|i| Some((&self.keys[i], self.keys.get(i + 1)?))) else {
+            return;
+        };
+        match a.interp {
+            Interp::Hold | Interp::Quantize { .. } => {}
+            Interp::Linear if a.turns.is_none() => {
+                let span = (b.t - a.t) as f64 / FLICKS_PER_SECOND as f64;
+                for (c, o) in out.iter_mut().enumerate() {
+                    *o = (b.value[c] - a.value[c]) / span;
+                }
+            }
+            _ => {
+                // A step of 1e-5 of the segment: wide enough for an f64's rounding, and second
+                // order all the way to the keys, so a key's own flick reads as well as any.
+                let span = b.t - a.t;
+                let h = (span / 100_000).max(1);
+                let width = out.len();
+                let values = |at: i64| {
+                    let mut v = [0.0; 4];
+                    segment_into(a, b, at, &mut v[..width]);
+                    v
+                };
+                let dt = h as f64 / FLICKS_PER_SECOND as f64;
+                let slope = |c: usize| {
+                    if t - h >= a.t && t + h < b.t {
+                        (values(t + h)[c] - values(t - h)[c]) / (2.0 * dt)
+                    } else if t + 2 * h < b.t {
+                        (4.0 * values(t + h)[c] - 3.0 * values(t)[c] - values(t + 2 * h)[c]) / (2.0 * dt)
+                    } else if t - 2 * h >= a.t {
+                        (3.0 * values(t)[c] - 4.0 * values(t - h)[c] + values(t - 2 * h)[c]) / (2.0 * dt)
+                    } else {
+                        0.0
+                    }
+                };
+                for (c, o) in out.iter_mut().enumerate() {
+                    *o = slope(c);
+                }
+            }
+        }
+    }
+
     /// The keyed value at `t`, held before the first key and after the last.
     fn inside(&self, t: i64, out: &mut [f64]) -> u32 {
         let held = |k: &Key, out: &mut [f64]| {
@@ -316,12 +408,17 @@ pub fn segment(a: &Key, b: &Key, t: i64) -> Sample {
 /// [`segment`] into `out`, with no allocation; returns the Bézier solver's step count.
 pub fn segment_into(a: &Key, b: &Key, t: i64, out: &mut [f64]) -> u32 {
     let mix = |w: f64, out: &mut [f64]| {
+        if let Some(arc) = a.turns {
+            out.copy_from_slice(&quat::blend(arc, quat::of(&a.value), quat::of(&b.value), w));
+            return;
+        }
         for ((o, &va), &vb) in out.iter_mut().zip(&a.value).zip(&b.value) {
             *o = va + (vb - va) * w;
         }
     };
-    // At its own time a key shows its own value, bit for bit, whatever it interpolates by.
-    if t == a.t {
+    // At its own time a key shows its own value, bit for bit, whatever it interpolates by; a
+    // quantize's first step may start past it.
+    if t == a.t && !matches!(a.interp, Interp::Quantize { .. }) {
         out.iter_mut().zip(&a.value).for_each(|(o, v)| *o = *v);
         return 0;
     }
@@ -333,6 +430,11 @@ pub fn segment_into(a: &Key, b: &Key, t: i64, out: &mut [f64]) -> u32 {
         }
         Interp::Linear => {
             mix(u, out);
+            0
+        }
+        Interp::Quantize { n, jump } => {
+            let done = steps_done(t - a.t, b.t - a.t, n);
+            mix(jump.progress(done, n), out);
             0
         }
         Interp::Bezier { x1, y1, x2, y2 } => {
