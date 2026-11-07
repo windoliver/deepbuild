@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7A",
+  "kind": "attempt.started",
+  "data": {
+    "issue": "https://github.com/windoliver/deepbuild/issues/1328",
+    "branch": "deep/attempt/1328",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "base": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}

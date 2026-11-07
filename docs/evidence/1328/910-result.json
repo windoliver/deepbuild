@@ -1,0 +1,111 @@
+{
+  "status": {
+    "state": "done",
+    "result": "ready",
+    "why": null,
+    "jobs": [
+      "run:01M6TQB6M5ZTV6N6KVR5EMFQWE"
+    ],
+    "branch": "deep/attempt/910",
+    "commit": "fe581d923ef5d86ed9dd1242ac31d754a69abd66",
+    "base": [
+      {
+        "test": "tests/acceptance/910/issue-link.test.mjs \u203a #910.ed201fe7 A planted issue body linking technical-design.md#no-such-heading fails the lane, naming the issue and the link",
+        "criterion": "#910.ed201fe7",
+        "outcome": "failed",
+        "at": "tests/acceptance/910/issue-link.test.mjs:32"
+      },
+      {
+        "test": "tests/acceptance/910/renamed-heading.test.mjs \u203a #910.4dcc6995 A heading renamed in a fixture design doc fails every doc line that links its old slug, naming each",
+        "criterion": "#910.4dcc6995",
+        "outcome": "failed",
+        "at": "tests/acceptance/910/renamed-heading.test.mjs:46"
+      },
+      {
+        "test": "tests/acceptance/910/offline.test.mjs \u203a #910.fa84e550 With no network and no cache, the lane is INCONCLUSIVE, never PASS",
+        "criterion": "#910.fa84e550",
+        "outcome": "failed",
+        "at": "tests/acceptance/910/offline.test.mjs:14"
+      }
+    ],
+    "disputes": []
+  },
+  "recorded": {
+    "job": "run:01M6TQB6M5ZTV6N6KVR5EMFQWE",
+    "kind": "acceptance",
+    "agent": "claude-code",
+    "account": "<redacted>",
+    "folder": "/private/tmp/dh1328p/root/jobs/01M6TQB6M5ZTV6N6KVR5EMFQWE",
+    "prompt": "f37f4432323a0bb3bda1028cabc6d4a7151ed84908bc7d846af5e783a56461c7",
+    "waiting": [],
+    "inputs": [
+      {
+        "kind": "issue",
+        "ref": "https://github.com/windoliver/deepbuild/issues/910",
+        "sha256": "34271ce4ef0f241cd2ee0cf157374ca6f2e670a9cb3f3eaad63fb914cc0fef70"
+      },
+      {
+        "kind": "design",
+        "ref": "AGENTS.md",
+        "sha256": "868cffeee4f67d4196f945488c7ea5ed4a68cd2b309f12d6751d04996fa4257f"
+      },
+      {
+        "kind": "design",
+        "ref": "docs/technical-design.md",
+        "sha256": "bcd98e5b180ad8b54cb6559acc4d270e6501081ce28f51ec72a024417e68c3cb"
+      },
+      {
+        "kind": "base",
+        "ref": "2f43a66911824a4b303d165f931faaecc831209c"
+      }
+    ]
+  },
+  "job": {
+    "job": "run:01M6TQB6M5ZTV6N6KVR5EMFQWE",
+    "kind": "acceptance",
+    "agent": "claude-code",
+    "account": "<redacted>",
+    "state": "finished",
+    "binary": {
+      "path": "<scratch>/claude308/node_modules/.bin/claude",
+      "version": "2.1.308"
+    },
+    "model": "claude-opus-5-5",
+    "stop": null,
+    "usage": {
+      "input": 32644,
+      "cached": 262670,
+      "output": 131
+    },
+    "cost_usd": 0.6592762000000001,
+    "inputs": [
+      {
+        "kind": "issue",
+        "ref": "https://github.com/windoliver/deepbuild/issues/910",
+        "sha256": "34271ce4ef0f241cd2ee0cf157374ca6f2e670a9cb3f3eaad63fb914cc0fef70"
+      },
+      {
+        "kind": "design",
+        "ref": "AGENTS.md",
+        "sha256": "868cffeee4f67d4196f945488c7ea5ed4a68cd2b309f12d6751d04996fa4257f"
+      },
+      {
+        "kind": "design",
+        "ref": "docs/technical-design.md",
+        "sha256": "bcd98e5b180ad8b54cb6559acc4d270e6501081ce28f51ec72a024417e68c3cb"
+      },
+      {
+        "kind": "base",
+        "ref": "2f43a66911824a4b303d165f931faaecc831209c"
+      }
+    ]
+  },
+  "attempt": [
+    {
+      "issue": "https://github.com/windoliver/deepbuild/issues/910",
+      "branch": "deep/attempt/910",
+      "commit": "fe581d923ef5d86ed9dd1242ac31d754a69abd66",
+      "base": "2f43a66911824a4b303d165f931faaecc831209c"
+    }
+  ]
+}

@@ -216,6 +216,30 @@
     "called_by": "deep setup"
   },
   {
+    "method": "acceptance.start",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1328"
+  },
+  {
+    "method": "acceptance.status",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1328"
+  },
+  {
+    "method": "acceptance.dispute",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1328"
+  },
+  {
+    "method": "acceptance.ended",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1328"
+  },
+  {
     "method": "job.submit",
     "since": "R1",
     "stability": "preview",

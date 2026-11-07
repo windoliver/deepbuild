@@ -67,7 +67,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 8192,
-          "description": "What the job is for: draft, review, read or smoke."
+          "description": "What the job is for: draft, review, read, smoke or acceptance."
         },
         "agent": {
           "type": "string",
@@ -105,6 +105,39 @@
             "description": "A task: or claim: handle that waits on it."
           },
           "description": "The tasks and claims waiting on it."
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["issue", "design", "base", "criterion"],
+                "x-closure": {
+                  "closed": "a blind job reads nothing else: a branch, a transcript or a session has no kind here",
+                  "reopens": "a new major of this schema",
+                  "mark": "exhaustive"
+                },
+                "description": "What it is: the issue's body, a design document, the base commit, or on a redraft the disputed criterion."
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "Its handle: the issue's link, the document's path at the base, the commit, or the criterion's tag."
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "maxLength": 8192,
+                "description": "The SHA-256 of its text as the job read it."
+              }
+            },
+            "required": ["kind", "ref"],
+            "additionalProperties": false
+          },
+          "description": "A blind job's inputs, exactly (#1328): it reads nothing else."
         }
       },
       "required": [

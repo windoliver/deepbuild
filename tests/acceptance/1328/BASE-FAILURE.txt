@@ -1,0 +1,1 @@
+Not run: at ed83819d there is no acceptance job kind and no acceptance.* hub method, and this worktree has no node_modules, so every test would stop at the expect in Stage.answered on acceptance.start.
