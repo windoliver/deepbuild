@@ -118,6 +118,8 @@ export interface HookMeta {
   pr?: string;
   /** A shell call that ran, with what it printed, read against the repo's outside resources (#342). */
   ran?: { command: string; stdout: string };
+  /** All a shell call printed, its stdout, stderr and error, failed or not: what a started session's sandbox refused (#1330). */
+  printed?: string;
   /**
    * A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, a background subagent or
    * command (#907) started, by its call, or a monitor's watch armed or stopped, by its ID (#997).

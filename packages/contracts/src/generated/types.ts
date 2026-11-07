@@ -1054,6 +1054,402 @@ export interface AdapterFactsV3 {
   } };
 }
 
+export type AdapterFactsV4Text = string;
+
+export type AdapterFactsV4Match = { [key: string]: unknown };
+
+export type AdapterFactsV4Texts = Array<AdapterFactsV4Text>;
+
+export type AdapterFactsV4Version = string;
+
+export type AdapterFactsV4TextMap = { [key: string]: AdapterFactsV4Text };
+
+export type AdapterFactsV4DataTemplate = { [key: string]: AdapterFactsV4Text };
+
+export type AdapterFactsV4FieldTypes = { [key: string]: string };
+
+export type AdapterFactsV4Payload = {
+  required: AdapterFactsV4FieldTypes;
+  optional: AdapterFactsV4FieldTypes;
+  tools?: { [key: string]: AdapterFactsV4FieldTypes };
+};
+
+export type AdapterFactsV4ToolKind = "shell" | "read" | "edit" | "write" | "search" | "fetch" | "mcp" | "unknown";
+
+export type AdapterFactsV4StopCause = "sign_in_required" | "token_refresh_failed" | "plan_window_spent" | "rate_limited" | "refusal" | "max_turns" | "context_overflow" | "tool_schema_rejected" | "agent_crashed" | "timed_out" | "unknown";
+
+export type AdapterFactsV4CauseMap = { [key: string]: AdapterFactsV4StopCause };
+
+export type AdapterFactsV4OriginRule = {
+  prompt?: AdapterFactsV4Text;
+  match?: { [key: string]: unknown };
+  from: AdapterFactsV4Text;
+};
+
+export type AdapterFactsV4HookRule = {
+  kind: string;
+  data?: AdapterFactsV4DataTemplate;
+  origin?: {
+    join?: {
+      payload: AdapterFactsV4Text;
+      transcript: AdapterFactsV4Text;
+    };
+    rules: Array<AdapterFactsV4OriginRule>;
+    otherwise: AdapterFactsV4Text;
+  };
+  call?: "kind" | "detail";
+  stop?: boolean;
+  cause?: {
+    field: AdapterFactsV4Text;
+    values: AdapterFactsV4CauseMap;
+    otherwise: AdapterFactsV4StopCause;
+  };
+  state?: {
+    field: AdapterFactsV4Text;
+    values: { [key: string]: "working" | "waiting" | "finished" };
+  };
+};
+
+export type AdapterFactsV4Operation = {
+  readBy: AdapterFactsV4Text;
+  conformance: AdapterFactsV4Text;
+};
+
+export type AdapterFactsV4MarkerMap = { [key: string]: AdapterFactsV4Text };
+
+/** adapter.facts@4 */
+export interface AdapterFactsV4 {
+  schema: "adapter.facts@4";
+  versions: Array<AdapterFactsV4Version>;
+  agent: string;
+  hookTimeouts: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    defaultMs?: number | null;
+    perHook?: { [key: string]: number };
+  };
+  continuation: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    cap?: number;
+    field?: AdapterFactsV4Text;
+  };
+  launch: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    session?: {
+      readBy?: AdapterFactsV4Text;
+      args: AdapterFactsV4Texts;
+    };
+    readOnlyJob?: {
+      readBy?: AdapterFactsV4Text;
+      args: AdapterFactsV4Texts;
+      prompt: AdapterFactsV4Text;
+    };
+    started?: {
+      readBy?: AdapterFactsV4Text;
+      args: AdapterFactsV4Texts;
+      asks: AdapterFactsV4Text;
+      modes: AdapterFactsV4TextMap;
+      skipping: AdapterFactsV4Texts;
+      nested: AdapterFactsV4Texts;
+      home: AdapterFactsV4Text;
+      defaultHome: AdapterFactsV4Text;
+      trust?: {
+        readBy?: AdapterFactsV4Text;
+        file: AdapterFactsV4Text;
+        homeFile: AdapterFactsV4Text;
+        set: AdapterFactsV4Text;
+      };
+    };
+  };
+  sandbox?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    versions: { [key: string]: {
+      settings?: AdapterFactsV4Text;
+      args?: AdapterFactsV4Texts;
+      modes?: AdapterFactsV4TextMap;
+      walls: {
+        writes?: AdapterFactsV4Text;
+        credentials?: AdapterFactsV4Text;
+        network?: AdapterFactsV4Text;
+      };
+      wayOut: {
+        call: AdapterFactsV4Text;
+        setting: AdapterFactsV4Text;
+        off: boolean;
+      };
+    } };
+  };
+  modelFamily: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    families: AdapterFactsV4TextMap;
+  };
+  billing: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    apiKeyVariables: AdapterFactsV4Texts;
+  };
+  usage: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    cost: "reported" | "estimated" | "unpriced";
+    costFrom: AdapterFactsV4Text;
+    tokens: AdapterFactsV4Text;
+  };
+  questionTools: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    tools: AdapterFactsV4Texts;
+  };
+  transcripts: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    home: Array<AdapterFactsV4Text>;
+    path: AdapterFactsV4Text;
+    archived?: AdapterFactsV4Text;
+  };
+  appLinks: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    open: AdapterFactsV4Text;
+  };
+  errorTexts: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    causes: AdapterFactsV4CauseMap;
+  };
+  events: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    versions: { [key: string]: { [key: string]: AdapterFactsV4Payload } };
+  };
+  mapping: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    common: AdapterFactsV4DataTemplate;
+    SessionStart?: AdapterFactsV4HookRule;
+    UserPromptSubmit?: AdapterFactsV4HookRule;
+    PreToolUse?: AdapterFactsV4HookRule;
+    PermissionRequest?: AdapterFactsV4HookRule;
+    PostToolUse?: AdapterFactsV4HookRule;
+    PostToolUseFailure?: AdapterFactsV4HookRule;
+    Stop?: AdapterFactsV4HookRule;
+    StopFailure?: AdapterFactsV4HookRule;
+    SessionEnd?: AdapterFactsV4HookRule;
+    SubagentStart?: AdapterFactsV4HookRule;
+    SubagentStop?: AdapterFactsV4HookRule;
+    TaskCreated?: AdapterFactsV4HookRule;
+    TaskCompleted?: AdapterFactsV4HookRule;
+    Notification?: AdapterFactsV4HookRule;
+    Elicitation?: AdapterFactsV4HookRule;
+    ElicitationResult?: AdapterFactsV4HookRule;
+    TeammateIdle?: AdapterFactsV4HookRule;
+    WorktreeCreate?: AdapterFactsV4HookRule;
+    WorktreeRemove?: AdapterFactsV4HookRule;
+    PreCompact?: AdapterFactsV4HookRule;
+    PostCompact?: AdapterFactsV4HookRule;
+    Interrupt?: AdapterFactsV4HookRule;
+    sessionStart?: AdapterFactsV4HookRule;
+    sessionEnd?: AdapterFactsV4HookRule;
+    preToolUse?: AdapterFactsV4HookRule;
+    postToolUse?: AdapterFactsV4HookRule;
+    stop?: AdapterFactsV4HookRule;
+  };
+  toolKinds: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    tools: { [key: string]: AdapterFactsV4ToolKind };
+    prefixes?: { [key: string]: AdapterFactsV4ToolKind };
+    otherwise: AdapterFactsV4ToolKind;
+  };
+  toolDetail?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    command?: AdapterFactsV4TextMap;
+    paths?: AdapterFactsV4TextMap;
+    mcp?: {
+      tool: AdapterFactsV4Text;
+    };
+  };
+  patch?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    tools: AdapterFactsV4Texts;
+    command: AdapterFactsV4Text;
+    shell: AdapterFactsV4Text;
+  };
+  turnWithoutPrompt?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    payloadField: AdapterFactsV4Text;
+    startedBy: AdapterFactsV4Texts;
+    turnEntry: AdapterFactsV4Text;
+    turnField: AdapterFactsV4Text;
+    messageRole: {
+      path: AdapterFactsV4Text;
+      value: AdapterFactsV4Text;
+    };
+    messageText: AdapterFactsV4Text;
+    values: AdapterFactsV4MarkerMap;
+    otherwise: AdapterFactsV4Text;
+  };
+  signIn?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    args: AdapterFactsV4Texts;
+    signedIn: AdapterFactsV4Text;
+  };
+  stop?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    turn: {
+      payload: AdapterFactsV4Text;
+      transcript: AdapterFactsV4Text;
+      elsewhere?: AdapterFactsV4Text;
+    };
+    cause: {
+      readBy?: AdapterFactsV4Text;
+      payload?: {
+        field: AdapterFactsV4Text;
+        values: AdapterFactsV4CauseMap;
+      };
+      errors?: {
+        match: AdapterFactsV4Match;
+        field: AdapterFactsV4Text;
+        values: AdapterFactsV4CauseMap;
+      };
+      rateLimits?: {
+        match: AdapterFactsV4Match;
+        reached: AdapterFactsV4Text;
+        windows: AdapterFactsV4Texts;
+        used: AdapterFactsV4Text;
+        resetsAt: AdapterFactsV4Text;
+        toMs: number;
+        spent: AdapterFactsV4StopCause;
+        withoutReset: AdapterFactsV4StopCause;
+      };
+      otherwise: AdapterFactsV4StopCause;
+    };
+    usage: {
+      readBy?: AdapterFactsV4Text;
+      covers: "turn" | "session";
+      records: {
+        match: AdapterFactsV4Match;
+        has: AdapterFactsV4Text;
+        skip?: AdapterFactsV4Match;
+        once?: AdapterFactsV4Text;
+      };
+      take: "sum" | "last";
+      counts: {
+        input: AdapterFactsV4Texts;
+        cached: AdapterFactsV4Texts;
+        output: AdapterFactsV4Texts;
+      };
+      exact: boolean;
+      model: {
+        record?: AdapterFactsV4Text;
+        payload?: AdapterFactsV4Text;
+      };
+      contextFill?: {
+        used: AdapterFactsV4Texts;
+        window: AdapterFactsV4Text;
+      };
+    };
+  };
+  readUsage?: AdapterFactsV4Operation;
+  taskList?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    tool: AdapterFactsV4Text;
+    items: AdapterFactsV4Text;
+    text: AdapterFactsV4Text;
+    status: AdapterFactsV4Text;
+    open: AdapterFactsV4Texts;
+  };
+  tokenizer?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    name: AdapterFactsV4Text;
+    package: AdapterFactsV4Text;
+    version: AdapterFactsV4Version;
+  };
+  mods?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    since: {
+      terminal: AdapterFactsV4Version;
+      desktop: AdapterFactsV4Version;
+    };
+    validate: {
+      args: AdapterFactsV4Texts;
+      hooks: AdapterFactsV4Text;
+      calls: AdapterFactsV4Text;
+    };
+    overrides: {
+      event: AdapterFactsV4Text;
+      past: AdapterFactsV4Text;
+    };
+    promptCalls: AdapterFactsV4Texts;
+    holdsWhen: Array<{
+      case: "managed" | "login" | "plan" | "interactive";
+      text: AdapterFactsV4Text;
+      subscriptionTypes?: AdapterFactsV4Texts;
+      mode?: AdapterFactsV4Text;
+      since?: AdapterFactsV4Version;
+      tools?: AdapterFactsV4Texts;
+    }>;
+  };
+  classifyStop?: AdapterFactsV4Operation;
+  skills?: AdapterFactsV4Operation;
+  entries?: {
+    readBy?: string;
+    name: string;
+    home?: string;
+    mcp?: {
+      file: string;
+      format: "json" | "toml";
+      key: string;
+      perProject?: string;
+      transports: {
+        stdio?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+        http?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+      };
+      refused: Array<{
+        transport: "stdio" | "http";
+        field: string;
+        reason?: string;
+      }>;
+      list?: Array<string>;
+    };
+    skills?: {
+      write: string;
+      readFrom: Array<string>;
+    };
+  };
+  daemon?: {
+    readBy?: string;
+    restart: Array<string>;
+    picksUp: { [key: string]: {
+      "hooks.json": boolean;
+      mcp_servers: boolean;
+      readBy?: string;
+    } };
+  };
+}
+
 /** adapter.unsupported@1 */
 export type AdapterUnsupported = { [key: string]: Array<"startTurn" | "steer" | "followUp" | "interrupt" | "respond" | "history"> };
 
@@ -6009,6 +6405,28 @@ export interface SandboxDeniedV2 {
   evidence?: Array<string>;
 }
 
+/** sandbox.refused@1 */
+export interface SandboxRefused {
+  v: 1;
+  id: string;
+  kind: "sandbox.refused";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    session: string;
+    operation: string;
+    target: string;
+    call: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** schedule.run@1 */
 export interface ScheduleRun {
   v: 1;
@@ -6234,6 +6652,25 @@ export interface SessionGone {
   data: {
     pid: number;
     start: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.never_started@1 */
+export interface SessionNeverStarted {
+  v: 1;
+  id: string;
+  kind: "session.never_started";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    after_ms: number;
   };
   evidence?: Array<string>;
 }
@@ -6605,6 +7042,119 @@ export interface StackWaiting {
     check: string;
     wait_ms: number;
     expected_ms: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** start.approval@1 */
+export interface StartApproval {
+  v: 1;
+  id: string;
+  kind: "start.approval";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    repo: string;
+    issues: Array<number>;
+    agents: Array<string>;
+    homes: { [key: string]: string };
+    modes: { [key: string]: string };
+    at_once: number;
+    plan_share: number;
+    until: number | null;
+    hosts: Array<string>;
+    sandbox: { [key: string]: {
+      sandboxed: boolean;
+      walls: {
+        writes: boolean;
+        credentials: boolean;
+        network: boolean;
+      };
+    } };
+  };
+  evidence?: Array<string>;
+}
+
+/** start.refused@1 */
+export interface StartRefused {
+  v: 1;
+  id: string;
+  kind: "start.refused";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    caller: string;
+    bound: "approval" | "set" | "agent" | "mode" | "end" | "at_once" | "plan_share" | "version" | "caller";
+    reason: string;
+    repo: string | null;
+    issue: number | null;
+    agent: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** start.session@1 */
+export interface StartSession {
+  v: 1;
+  id: string;
+  kind: "start.session";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    session: string;
+    agent: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** start.started@1 */
+export interface StartStarted {
+  v: 1;
+  id: string;
+  kind: "start.started";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    ask: string;
+    repo: string;
+    issue: number;
+    agent: string;
+    version: string;
+    home: string;
+    mode: string;
+    worktree: string;
+    branch: string;
+    base: string;
+    sandbox: {
+      sandboxed: boolean;
+      walls: {
+        writes: boolean;
+        credentials: boolean;
+        network: boolean;
+      };
+    };
   };
   evidence?: Array<string>;
 }

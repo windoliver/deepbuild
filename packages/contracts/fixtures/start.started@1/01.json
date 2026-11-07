@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "start.started",
+  "subject": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "run": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "ask": "ask:01K74FKZVK8Q2X5R7M3N9P4T6X",
+    "repo": "/Users/you/src/shop",
+    "issue": 41,
+    "agent": "claude-code",
+    "version": "2.1.308",
+    "home": "/Users/you/.claude",
+    "mode": "default",
+    "worktree": "/Users/you/.deepbuild/worktrees/shop/01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "branch": "deep/41-p4t6w",
+    "base": "0000000000000000000000000000000000000000",
+    "sandbox": {
+      "sandboxed": true,
+      "walls": {
+        "writes": true,
+        "credentials": true,
+        "network": true
+      }
+    }
+  }
+}
