@@ -9,6 +9,7 @@ import { basename, isAbsolute, relative } from 'node:path';
 import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
 import { sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { scrubText, type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
+import type { CheckResult } from '@deepbuild/conformance';
 import type { ExtensionHost } from '@deepbuild/extension-host';
 import { slot } from '@deepbuild/gate';
 import type { LeaseTable } from '@deepbuild/leases';
@@ -31,7 +32,9 @@ export interface Run { run: string; check: string; claim: string; commit: string
   /** What its key is made of (#1018): a gate run's, kept with its finish so any claim with an equal key reads it. */
   key?: RunKey;
   /** Recovered runs with withheld environment values cannot run again unchanged (#996). */
-  withheld?: string[] }
+  withheld?: string[];
+  /** A claim's check of a kind other than command (#1537): check@1's spec, run through the kinds the hub holds. */
+  spec?: Obj }
 /**
  * How long a claim's check runs when its definition names no deadline: a day, so a run no tool ends is still stopped and
  * recorded overran. Spec-draft sets a check's own deadline from the time it took when drafted (#30); until it does, this stands.
@@ -76,6 +79,8 @@ export interface RunsOptions {
   supervisor: () => Supervisor;
   leases: () => LeaseTable;
   extensions: () => ExtensionHost | undefined;
+  /** One run of a held kind's check (#1537): its result as check.kind@1's, for the run's claim, ended by `stop`. */
+  kind(run: Run, checkout: string, deadline: number, stop: AbortSignal): Promise<CheckResult>;
 }
 
 /**
@@ -194,7 +199,7 @@ export class Runs {
 
   /** run.start, and deep_run's runs with the deadline their spec gives, in ms; a gate run's with its key, and whether it's a held-out variant's (#1018); a claim's check that needs the app with its stack (#580). */
   async start(params: Obj, deadline?: number, id?: string, key?: RunKey, heldOut = false, stack?: StackWant): Promise<Obj> {
-    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins } = params;
+    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins, spec } = params;
     const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
     if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
@@ -220,7 +225,7 @@ export class Runs {
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
       ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
       ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
-      ...(key ? { key } : {}),
+      ...(key ? { key } : {}), ...(isObj(spec) && typeof command === 'string' ? { spec } : {}),
     }).catch((error: unknown) => { this.heldOut.delete(handle); throw error; });
     return { run };
   }
@@ -278,7 +283,13 @@ export class Runs {
       stop = () => controller.abort();
       const empty = { stdout: '', stderr: '', sha256: { stdout: sha256Hex(new Uint8Array()), stderr: sha256Hex(new Uint8Array()) } };
       const replaced = async (): Promise<boolean> => (await this.o.extensions()?.checks().catch(() => []) ?? []).some((c) => c.kind === 'command');
-      ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun } | { code: null; missing: string }> => {
+      // A check of another kind runs through the table of kinds the hub holds (#1537), within its deadline: its result
+      // is check.kind@1's, with no exit, output, attempts or stand-ins, as a replacing package's is.
+      if (run.spec) {
+        ended = this.o.kind(run, run.cwd, deadline, controller.signal)
+          .then((result) => ({ code: null, record: { run: run.run, ...result, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun }))
+          .catch((error: Error) => ({ code: null, failed: error.message }));
+      } else ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun } | { code: null; missing: string }> => {
         if (!byPackage) {
           // #669's planted runner judges the run by its exit code alone, whatever masks it.
           const exitOnly = this.o.plant === 'runner-passes-masked-exit' ? { plant: 'exit-code-only' as const } : {};
