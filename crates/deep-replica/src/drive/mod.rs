@@ -161,6 +161,12 @@ struct Recording {
     actions: Vec<Value>,
 }
 
+/// What a device draws over the app, in device pixels; a height of 0 is none. Only the UI check reads them.
+struct Device {
+    bar: [i64; 4],
+    keyboard: [i64; 4],
+}
+
 struct Replica {
     id: String,
     cx: HeadlessAppContext,
@@ -178,6 +184,7 @@ struct Replica {
     hub: Option<(PathBuf, String)>,
     /// The last target acted on with a locator, which keys and words go to.
     focus: Option<Target>,
+    device: Option<Device>,
     pasted: Option<String>,
     shots: u64,
     recordings: u64,
@@ -262,6 +269,40 @@ impl Replica {
                 ))
             }
         };
+        // A device's system bar over the window's top edge and on-screen keyboard over its bottom, in device pixels.
+        let device = match &args["device"] {
+            Value::Null => None,
+            Value::Object(fields)
+                if fields.keys().all(|k| k == "system_bar" || k == "keyboard") =>
+            {
+                let points = |key: &str| match &fields.get(key) {
+                    None | Some(Value::Null) => Ok(0),
+                    Some(v) => v.as_u64().filter(|&n| n as f32 <= size.1).ok_or_else(|| {
+                        fail(
+                            "refused",
+                            format!(
+                                "launch.device.{key} is points up to the window's height, not {v}"
+                            ),
+                        )
+                    }),
+                };
+                let (w, h, s) = (size.0 * scale, size.1 * scale, scale);
+                let (bar, keys) = (
+                    points("system_bar")? as f32 * s,
+                    points("keyboard")? as f32 * s,
+                );
+                Some(Device {
+                    bar: [0., 0., w, bar].map(|v| v.round() as i64),
+                    keyboard: [0., h - keys, w, keys].map(|v| v.round() as i64),
+                })
+            }
+            other => {
+                return Err(fail(
+                    "refused",
+                    format!("launch.device is {{system_bar, keyboard}} in points, not {other}"),
+                ))
+            }
+        };
         if let Some(packs) = args["packs"].as_array().filter(|p| !p.is_empty()) {
             return Err(fail(
                 "refused",
@@ -310,7 +351,9 @@ impl Replica {
                     other => {
                         return Err(fail(
                             "refused",
-                            format!("launch.fixture is an events file's absolute path, not {other}"),
+                            format!(
+                                "launch.fixture is an events file's absolute path, not {other}"
+                            ),
                         ))
                     }
                 };
@@ -479,6 +522,7 @@ impl Replica {
             notifier,
             hub,
             focus: None,
+            device,
             pasted: None,
             shots: 0,
             recordings: 0,
@@ -791,15 +835,36 @@ impl Replica {
             }));
         }
         // Delivered is all an action can say: what the target did with it is for an assertion.
-        Ok(json!({"point": center, "box": target.bounds, "waited_ms": waited * 1000 / FLICKS, "result": "delivered"}))
+        Ok(
+            json!({"point": center, "box": target.bounds, "waited_ms": waited * 1000 / FLICKS, "result": "delivered"}),
+        )
     }
 
     /// What a pointer event at `at` would reach: `target`, or what's in front of it.
     fn receiver(&mut self, target: &Target, at: [i64; 2]) -> Target {
         let frame = self.frame();
         self.cx
-            .update_window(self.window, |_, window, _| frame.receiver(window, target, at))
+            .update_window(self.window, |_, window, _| {
+                frame.receiver(window, target, at)
+            })
             .expect("the replica's window is open")
+    }
+
+    /// The system bar, and the keyboard while a text input has focus: each `(audit, role, box)` over the app now.
+    fn insets(&self) -> Vec<(&'static str, &'static str, [i64; 4])> {
+        let Some(device) = &self.device else {
+            return Vec::new();
+        };
+        let typing = self
+            .focus
+            .as_ref()
+            .is_some_and(|t| t.role.ends_with("input"));
+        let mut over = vec![("under_system_bar", "system_bar", device.bar)];
+        if typing {
+            over.push(("under_keyboard", "keyboard", device.keyboard));
+        }
+        over.retain(|(_, _, b)| b[3] > 0);
+        over
     }
 
     /// An action's hit test with no action: the point a click would use and what would get it. Nothing is sent and
@@ -809,13 +874,17 @@ impl Replica {
         let target = match self.frame().one(locator) {
             Ok(target) => target,
             Err(Miss::Bad(why)) => return Err(fail("refused", why)),
-            Err(Miss::None) => return Err(fail("locate.none", format!("nothing matches {locator}"))),
+            Err(Miss::None) => {
+                return Err(fail("locate.none", format!("nothing matches {locator}")))
+            }
             Err(Miss::Ambiguous(all)) => return Err(ambiguous(locator, all)),
         };
         let center = target.center();
         let receiver = self.receiver(&target, center);
         let clear = receiver.path == target.path && receiver.text == target.text;
-        Ok(json!({"point": center, "box": target.bounds, "receiver": receiver.summary(), "clear": clear}))
+        Ok(
+            json!({"point": center, "box": target.bounds, "receiver": receiver.summary(), "clear": clear}),
+        )
     }
 
     fn click(&mut self, position: Point<Pixels>, count: usize) {
@@ -888,8 +957,8 @@ impl Replica {
                             .is_some_and(|question| name.starts_with(question))
                 });
                 let ask = asked.map(|e| format!("ask:{}", e["id"].as_str().unwrap_or_default()));
-                let option = asked
-                    .and_then(|e| e["data"]["options"][0]["id"].as_str().map(str::to_owned));
+                let option =
+                    asked.and_then(|e| e["data"]["options"][0]["id"].as_str().map(str::to_owned));
                 if let (Some((socket, token)), Some(ask), Some(option)) = (&self.hub, ask, option) {
                     let answered = plant::answer(socket, token, &ask, &option);
                     self.trace.push(json!({"planted": "answers-your-record", "ask": ask, "reply": answered.unwrap_or_else(|e| json!(e))}));

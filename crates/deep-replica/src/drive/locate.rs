@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use gpui_kit::{base::test_support::snapshots, px, point, ElementId, HitboxBehavior, Window};
+use gpui_kit::{base::test_support::snapshots, point, px, ElementId, HitboxBehavior, Window};
 use serde_json::{json, Value};
 
 use super::glyphs::{Glyphs, Run};

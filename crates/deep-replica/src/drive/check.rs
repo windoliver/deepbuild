@@ -2,7 +2,9 @@
 //! light and dark, and audits each: text drawn past its frame, cut-off text whose full value isn't in its accessibility
 //! name, a control with no name, and a raw string key. Files the change touches that no rendered view loads are listed
 //! as not covered, and the claim can't then pass. With a build of the merge base, each render stands beside the same
-//! view from that build, the proof for a change that promises nothing visible changes.
+//! view from that build, the proof for a change that promises nothing visible changes. Given a journey instead, it
+//! replays the journey in a fresh replica and audits the screen after every step, adding what covers a control: a
+//! sibling drawn over it, and a device's system bar or on-screen keyboard.
 
 use std::{
     collections::BTreeSet,
@@ -19,7 +21,7 @@ use serde_json::{json, Value};
 use super::{
     fail,
     locate::{contains, string, Frame, Target, CONTROLS},
-    panel_bounds, sha256, Drive, Fail,
+    panel_bounds, sha256, Drive, Fail, Replica,
 };
 
 /// The reference window and the narrow width, in points. The app has no narrower layout of its own to name, so narrow
@@ -40,14 +42,17 @@ struct View {
     panel: Option<PathBuf>,
 }
 
-/// One render's place, which each of its findings names.
+/// One render's place, which each of its findings names; a journey's step has no view of its own.
 struct Place<'a> {
-    view: &'a View,
+    view: Option<&'a View>,
     size: [u32; 2],
     theme: &'a str,
 }
 
 pub fn run(drive: &mut Drive, args: &Value) -> Result<Value, Fail> {
+    if let Some(calls) = args["journey"].as_array() {
+        return journey(drive, calls);
+    }
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let root = root.canonicalize().unwrap_or(root);
     let changed: Vec<&str> = args["changed"]
@@ -79,7 +84,11 @@ pub fn run(drive: &mut Drive, args: &Value) -> Result<Value, Fail> {
         let mut renders = Vec::new();
         for size in SIZES {
             for theme in THEMES {
-                let place = Place { view, size, theme };
+                let place = Place {
+                    view: Some(view),
+                    size,
+                    theme,
+                };
                 let launch = json!({
                     "from": "fixture", "fixture": args["fixture"], "panel": view.panel, "center": view.center,
                     "size": size, "theme": theme, "clock": "virtual",
@@ -141,8 +150,7 @@ fn render(drive: &mut Drive, place: &Place, launch: &Value) -> Result<(Value, Ve
     let frame = replica.frame();
     let slot = place
         .view
-        .panel
-        .as_ref()
+        .and_then(|view| view.panel.as_ref())
         .map(|_| panel_bounds(frame.scale))
         .transpose()?;
     let findings = audit(&frame, place, slot);
@@ -359,15 +367,11 @@ fn holds_all_of(name: Option<&str>, text: &str) -> bool {
 /// element. Text belongs to the smallest element with a role holding where it starts. Only text is measured against
 /// its frame: an element past its parent may be scrolled or clipped, and an element's clip isn't in the frame's reading.
 fn audit(frame: &Frame, place: &Place, slot: Option<[i64; 4]>) -> Vec<Value> {
-    let view = ElementId::Name(format!("view:{}", place.view.name).into());
-    let ours = |target: &Target| match slot {
-        Some(slot) => contains(slot, target.bounds),
-        None => target.path.contains(&view),
-    };
+    let ours = |target: &Target| ours(place, slot, target);
     let finding = |audit: &str, node: Value, boxed: [i64; 4], frame: Value, text: Value| {
         json!({
-            "audit": audit, "view": place.view.name, "size": place.size, "theme": place.theme, "node": node,
-            "box": boxed, "frame": frame, "text": text,
+            "audit": audit, "view": place.view.map(|v| &v.name), "size": place.size, "theme": place.theme,
+            "node": node, "box": boxed, "frame": frame, "text": text,
         })
     };
     let mut found = Vec::new();
@@ -411,11 +415,7 @@ fn audit(frame: &Frame, place: &Place, slot: Option<[i64; 4]>) -> Vec<Value> {
         }
     }
     // An empty text field has no text of its own by nature; only a control drawn as an icon needs a name to be one.
-    for control in frame.elements.iter().filter(|e| {
-        let control = e.role == "button"
-            || (CONTROLS.contains(&e.role.as_str()) && !e.role.ends_with("input"));
-        e.visible && ours(e) && control
-    }) {
+    for control in controls(frame, |e| ours(e)).filter(|e| !e.role.ends_with("input")) {
         let unnamed = control.name.as_deref().is_none_or(str::is_empty);
         if unnamed && control.value.is_none() && frame.text_inside(control.bounds).is_empty() {
             found.push(finding(
@@ -428,6 +428,141 @@ fn audit(frame: &Frame, place: &Place, slot: Option<[i64; 4]>) -> Vec<Value> {
         }
     }
     found
+}
+
+/// Whether an element is the view's: inside the panel's slot, or under the view's own element; a journey's step with
+/// no panel is the whole window.
+fn ours(place: &Place, slot: Option<[i64; 4]>, target: &Target) -> bool {
+    match (slot, place.view) {
+        (Some(slot), _) => contains(slot, target.bounds),
+        (None, Some(view)) => target
+            .path
+            .contains(&ElementId::Name(format!("view:{}", view.name).into())),
+        (None, None) => true,
+    }
+}
+
+/// The visible controls a view holds: buttons and the roles a person sets.
+fn controls<'a>(
+    frame: &'a Frame,
+    ours: impl Fn(&Target) -> bool + 'a,
+) -> impl Iterator<Item = &'a Target> {
+    frame.elements.iter().filter(move |e| {
+        e.visible && (e.role == "button" || CONTROLS.contains(&e.role.as_str())) && ours(e)
+    })
+}
+
+/// The part two boxes share, or None.
+fn overlap(a: [i64; 4], b: [i64; 4]) -> Option<[i64; 4]> {
+    let (x0, y0) = (a[0].max(b[0]), a[1].max(b[1]));
+    let (x1, y1) = (
+        (a[0] + a[2]).min(b[0] + b[2]),
+        (a[1] + a[3]).min(b[1] + b[3]),
+    );
+    (x1 > x0 && y1 > y0).then_some([x0, y0, x1 - x0, y1 - y0])
+}
+
+/// The controls something covers on the screen now: another branch the frame's own hit test gives the control's
+/// centre to, and the device's system bar and keyboard wherever they overlap it. Each finding names what covers the
+/// control and the part it covers.
+fn covered(
+    replica: &mut Replica,
+    frame: &Frame,
+    place: &Place,
+    slot: Option<[i64; 4]>,
+) -> Vec<Value> {
+    let insets = replica.insets();
+    let mut found = Vec::new();
+    for control in controls(frame, |e| ours(place, slot, e)) {
+        let over = replica
+            .cx
+            .update_window(replica.window, |_, window, _| {
+                frame.receiver(window, control, control.center())
+            })
+            .expect("the replica's window is open");
+        let mut by = Vec::new();
+        if over.path != control.path {
+            by.push(("under_sibling", over.summary(), over.bounds));
+        }
+        for (audit, role, bounds) in &insets {
+            by.push((
+                *audit,
+                json!({"role": role, "name": null, "bounds": bounds}),
+                *bounds,
+            ));
+        }
+        for (audit, by, bounds) in by {
+            if let Some(part) = overlap(control.bounds, bounds) {
+                found.push(json!({
+                    "audit": audit, "view": place.view.map(|v| &v.name), "size": place.size,
+                    "theme": place.theme, "node": control.summary(), "by": by, "box": part, "frame": null,
+                    "text": null,
+                }));
+            }
+        }
+    }
+    found
+}
+
+/// A journey, replayed in a fresh replica and audited after every step: each step's screen gets the render audits
+/// and what covers its controls. The claim fails on any finding, and can't pass when the journey didn't.
+fn journey(drive: &mut Drive, calls: &[Value]) -> Result<Value, Fail> {
+    let Some((first, rest)) = calls.split_first().filter(|(c, _)| c["call"] == "launch") else {
+        return Err(fail(
+            "refused",
+            "ui_check.journey is deep_drive calls, a launch first",
+        ));
+    };
+    let launch = answered(drive.call(first))?;
+    let id = launch["replica"].clone();
+    let size = [
+        first["launch"]["size"][0]
+            .as_u64()
+            .map_or(crate::WINDOW.0 as u32, |w| w as u32),
+        first["launch"]["size"][1]
+            .as_u64()
+            .map_or(crate::WINDOW.1 as u32, |h| h as u32),
+    ];
+    let theme = first["launch"]["theme"].as_str().unwrap_or("light");
+    let place = Place {
+        view: None,
+        size,
+        theme,
+    };
+    let panel = !first["launch"]["panel"].is_null();
+    let (mut steps, mut findings) = (Vec::new(), Vec::new());
+    for call in rest.iter().filter(|c| c["call"] != "close") {
+        let mut call = call.clone();
+        call["replica"] = id.clone();
+        drive.call(&call);
+        let replica = drive.replica.as_mut().expect("the launch above");
+        let (snapshot, frame) = replica.tree();
+        let slot = panel.then(|| panel_bounds(frame.scale)).transpose()?;
+        let mut found = audit(&frame, &place, slot);
+        found.extend(covered(replica, &frame, &place, slot));
+        let k = replica.steps.len();
+        for finding in &mut found {
+            finding["step"] = json!(k);
+        }
+        let step_id = replica
+            .steps
+            .last()
+            .map_or(Value::Null, |s| s["id"].clone());
+        findings.extend(found.iter().cloned());
+        steps.push(json!({"step": k, "id": step_id, "snapshot": snapshot, "findings": found}));
+    }
+    let closed = answered(drive.call(&json!({"call": "close", "replica": id})))?;
+    let journey = &closed["journey"];
+    let claim = if !findings.is_empty() {
+        "FAIL"
+    } else if journey["outcome"] != "passed"
+        || steps.len() != journey["steps"].as_array().map_or(0, Vec::len)
+    {
+        "INCONCLUSIVE"
+    } else {
+        "PASS"
+    };
+    Ok(json!({"claim": claim, "journey": journey, "steps": steps, "findings": findings}))
 }
 
 #[cfg(test)]
