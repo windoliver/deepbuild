@@ -1553,6 +1553,17 @@ fn check_at(key: &str, at_value: &Value, issues: &mut Vec<Issue>) {
                     "not a number finite at f32",
                 ));
             }
+        } else if name == "anchor" {
+            // `ID#anchor`: a mark set's `#head`, drawn at the revealed end (Item and kind).
+            if !value.as_str().is_some_and(|a| a.contains('#')) {
+                issues.push(Issue::error(
+                    "out_of_range",
+                    key,
+                    path,
+                    value.clone(),
+                    "not `ID#anchor`",
+                ));
+            }
         } else {
             issues.push(Issue::error(
                 "unknown_field",

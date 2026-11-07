@@ -32,8 +32,10 @@ pub(crate) enum TexIn {
 /// bind with each solid's maps.
 pub(crate) struct MatOp {
     pub pipeline: wgpu::RenderPipeline,
-    /// Its pipeline as a see-through part draws it, blending over what's behind (#431).
+    /// Its pipeline as a see-through part draws it, blending over what's behind (#431), at the
+    /// frame's samples, and after the resolve at one, as the parts after the opaque copy draw.
     pub blend: wgpu::RenderPipeline,
+    pub blend_late: wgpu::RenderPipeline,
     /// Its depth pipeline for a shadow map, when it writes its coverage (#446).
     pub shadow: Option<wgpu::RenderPipeline>,
     pub layout: wgpu::BindGroupLayout,
@@ -152,6 +154,7 @@ pub(crate) fn compile(
     groups: [&wgpu::BindGroupLayout; 3],
     forward_z: bool,
     options: emit::Options,
+    samples: u32,
     op: &SolidOp,
 ) -> Result<MatOp, String> {
     let item = module::operator_of(&op.id, &op.item).ok_or("not a gpu.material@1 item")?;
@@ -262,6 +265,7 @@ pub(crate) fn compile(
     });
     let pipeline = draw_pipeline(
         d,
+        samples,
         &module,
         &layout,
         forward_z,
@@ -272,7 +276,8 @@ pub(crate) fn compile(
     );
     // As a see-through part (#431): its premultiplied color over what's behind, depth-tested
     // and writing no depth or object ID, as the renderer's blend parts draw.
-    let blend = crate::op_blend_pipeline(d, &module, &layout, forward_z);
+    let blend = crate::op_blend_pipeline(d, samples, &module, &layout, forward_z, false);
+    let blend_late = crate::op_blend_pipeline(d, samples, &module, &layout, forward_z, true);
     // Its coverage holes let the light through (#446): the shadow passes' depth state, drawn
     // under the frame group and its own alone.
     let cuts = |o: &graph::Operator| {
@@ -316,6 +321,7 @@ pub(crate) fn compile(
     Ok(MatOp {
         pipeline,
         blend,
+        blend_late,
         shadow,
         textures,
         layout: inputs_layout,

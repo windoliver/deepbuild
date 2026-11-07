@@ -185,14 +185,20 @@ impl Core {
                     module,
                     ("mesh_vs", &crate::mesh_buffers()),
                     Some(("emission_fs", &[target(EMISSION, None)])),
-                    // The frame's own depth, read only, equal: the same vertex stage marks its
-                    // position invariant, so a surface writes exactly where it shows.
+                    // The frame's resolved depth, read only (#1173: from a pixel's first covered
+                    // sample, not its centre): a few units of bias toward the eye (reversed Z:
+                    // greater is nearer) keep its own surface's ties, while what lies behind it
+                    // fails.
                     Some(wgpu::DepthStencilState {
                         format: DEPTH,
                         depth_write_enabled: Some(false),
-                        depth_compare: Some(wgpu::CompareFunction::Equal),
+                        depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
                         stencil: Default::default(),
-                        bias: Default::default(),
+                        bias: wgpu::DepthBiasState {
+                            constant: 64,
+                            slope_scale: 1.0,
+                            clamp: 0.0,
+                        },
                     }),
                 )
             })
