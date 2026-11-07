@@ -20,6 +20,11 @@
       "types": "./src/mcp.ts",
       "development": "./src/mcp.ts",
       "default": "./dist/mcp.js"
+    },
+    "./mcp-exec": {
+      "types": "./src/mcp-exec.ts",
+      "development": "./src/mcp-exec.ts",
+      "default": "./dist/mcp-exec.js"
     }
   },
   "scripts": { "build": "tsc -p tsconfig.json && node native/build.mjs" },
@@ -29,11 +34,16 @@
     "@deepbuild/asks": "0.0.0",
     "@deepbuild/budget": "0.0.0",
     "@deepbuild/checks-command": "0.0.0",
+    "@deepbuild/checks-numbers": "0.0.0",
+    "@deepbuild/checks-review": "0.0.0",
+    "@deepbuild/checks-work": "0.0.0",
+    "@deepbuild/conformance": "0.0.0",
     "@deepbuild/contracts": "0.0.0",
     "@deepbuild/env-local": "0.0.0",
     "@deepbuild/evidence": "0.0.0",
     "@deepbuild/extension-host": "0.0.0",
     "@deepbuild/gate": "0.0.0",
+    "@deepbuild/github": "0.0.0",
     "@deepbuild/leases": "0.0.0",
     "@deepbuild/reading": "0.0.0",
     "@deepbuild/readings": "0.0.0",

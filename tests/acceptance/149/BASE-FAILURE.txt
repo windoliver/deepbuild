@@ -1,0 +1,17 @@
+#149 acceptance suite at the base, c12a65bb (Merge pull request #1281), before any implementation.
+
+Not run at the base: the surfaces plainly don't exist there, and no cargo binary was built. Planted::parse in
+crates/deep-gpu-layer/src/main.rs has neither ink_fill_flat nor rim_keeps_first, so deep-gpu refuses them at startup;
+draws_black reaches only 3D. film2d has no capture or export and doesn't receive `out`; `layers` has no ground, assets or
+target_costs; golden has no pixel_hash oracle, and its no_golden reply comes before any guard. 2D writer layers don't read
+a camera@1 (scene.rs skips the kind), so AC2 and AC8's dollies draw nothing that moves. paint.rs has no noise fill:
+fill_of reaches role() with no role, which answers bad_paint, so the noise family and AC5, which holds every family,
+fail. The check converts every literal against UnitContext::default(), a frame of (0, 0), so `fw` in a document is
+refused, and `parse unit` takes no frame. No look field in the issue is read: light, tooth, age, profile, pressure, ink,
+wash, spatter, offset, the hatch fields, a collection target. benchmarks/canvas.mjs has neither mode and budgets.json
+neither task. taste.test.ts is INCONCLUSIVE with no TASTE.json, and goldens/ doesn't exist.
+
+Checked instead: `npx tsc --noEmit -p tests/acceptance/149` exits 0. The reprojection arithmetic in helpers.ts ran on
+synthetic fields under Vitest and was then deleted: a field in its place reads no problem through a 243 px dolly link
+and a 1.25× zoom link; a 0.7 px shift is caught; a 0.3 px shift passes a link but its sum over ten links is caught as
+drift; a field stuck to the screen and a 1% scale error are caught; adjacent frames of the push read under 2 code values.

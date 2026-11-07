@@ -1,0 +1,61 @@
+One run of tests/acceptance/1330 at the base ec8f2c9a44f6a5ec4fccf5edb7a17e7f723de497 (main, 2026-11-07), Node 24.22.0, macOS:
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1330 --no-file-parallelism --testTimeout=600000
+
+Why each fails: the base has no `deep start` command ("Unsupported command"), so no approval is raised and no start is
+made or refused (AC1 to AC5, AC9); the shipped Claude Code facts name no sandbox walls (AC6 to AC8); the hub lists none
+of the four plants, so the AC1 plant reads BLOCKED at the hub's start and the AC6 to AC8 plants read BLOCKED on the facts.
+The live test (start.live.test.ts) is skipped without DEEP_1330_LIVE=1. The hubs started and stopped cleanly on their
+test homes; the stand-in agent was never launched.
+
+   × AC6 #1330.ea16f151 in a started session a child of npm test can't read ~/.ssh/id_ed25519, write ~/.zshrc or reach an unnamed host, and each refusal is recorded
+   × AC7 #1330.cb616e31 in that session a call asking to run outside the sandbox is still refused the same read
+   × AC8 #1330.88d51ada in that session a Stop hook still reaches the hub
+   × AC6 #1330.ea16f151 a start with no sandbox lets all three through and fails, naming the path
+   × AC7 #1330.cb616e31 a setting that leaves the way out open lets the read through and fails
+   × AC8 #1330.88d51ada a sandbox that cuts the hub's socket leaves no event and fails
+   × AC1 #1330.89d3f79e with an approval a session starts in its own worktree and its first event names the run; with none the start is refused
+   × AC1 #1330.89d3f79e a planted hub that starts without an approval fails, naming the issue
+   × AC4 #1330.0e898a6c an approval of a mode that skips prompts shows that mode on its ask; a start with no named mode uses the mode that asks
+   × AC2 #1330.9fc71a10 a start from an agent's process tree and one through an MCP call are refused, each naming the caller
+   × AC9 #1330.7ab28245 a version whose facts name no sandbox starts, its row saying it has none; one with only the write wall shows the other two as not held
+   × AC5 #1330.7c62dec2 a started agent with no first event in 60 s ends as never started and frees its slot
+   × AC3 #1330.33af7183 a start past the approval's end, or for an issue, agent or mode outside it, is refused, naming the bound
+
+ FAIL  bounds.test.ts > AC3 #1330.33af7183 ...
+AssertionError: deep start approve exits 0 with the ask it raised (exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"): expected 2 to be +0
+ FAIL  callers.test.ts > AC2 #1330.9fc71a10 ...
+AssertionError: deep start approve exits 0 with the ask it raised (exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"): expected 2 to be +0
+ FAIL  facts.test.ts > AC9 #1330.7ab28245 ...
+AssertionError: deep start approve exits 0 with the ask it raised (exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"): expected 2 to be +0
+ FAIL  never-started.test.ts > AC5 #1330.7c62dec2 ...
+AssertionError: deep start approve exits 0 with the ask it raised (exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"): expected 2 to be +0
+ FAIL  sandbox.test.ts > AC6 #1330.ea16f151 in a started session ...
+AssertionError: the shipped Claude Code facts name all three walls (writes, credentials, network) under `sandbox` (README, The surface under test): expected false to be true
+ FAIL  sandbox.test.ts > AC7 #1330.cb616e31 in that session ...
+AssertionError: the shipped Claude Code facts name all three walls (writes, credentials, network) under `sandbox` (README, The surface under test): expected false to be true
+ FAIL  sandbox.test.ts > AC8 #1330.88d51ada in that session ...
+AssertionError: the shipped Claude Code facts name all three walls (writes, credentials, network) under `sandbox` (README, The surface under test): expected false to be true
+ FAIL  sandbox.test.ts > AC6 #1330.ea16f151 a start with no sandbox ...
+Error: BLOCKED: the shipped Claude Code facts don't name all three walls under `sandbox`, so no plant here can be judged
+ FAIL  sandbox.test.ts > AC7 #1330.cb616e31 a setting that leaves the way out open ...
+Error: BLOCKED: the shipped Claude Code facts don't name all three walls under `sandbox`, so no plant here can be judged
+ FAIL  sandbox.test.ts > AC8 #1330.88d51ada a sandbox that cuts the hub's socket ...
+Error: BLOCKED: the shipped Claude Code facts don't name all three walls under `sandbox`, so no plant here can be judged
+ FAIL  start.test.ts > AC1 #1330.89d3f79e with an approval ...
+AssertionError: #1330 AC1 #1330.89d3f79e: a start for issue 41 with no approval on the record is refused (exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"): expected undefined to be 'refused'
+ FAIL  start.test.ts > AC1 #1330.89d3f79e a planted hub that starts without an approval ...
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=starts-without-approval did not start (a hub that doesn't list a plant refuses to start): .../packages/hub/dist/plant.js:83
+Error: DEEP_HUB_PLANT=starts-without-approval names no planted program
+ FAIL  start.test.ts > AC4 #1330.0e898a6c ...
+AssertionError: deep start approve exits 0 with the ask it raised (exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"): expected 2 to be +0
+
+ Test Files  6 failed | 1 skipped (7)
+      Tests  13 failed | 1 skipped (14)
+   Duration  31.35s
+
+The stand-in itself was checked apart from any hub (not part of the suite): with Claude Code settings
+{"sandbox":{"enabled":true,"allowUnsandboxedCommands":false},"permissions":{"deny":["Read(~/.ssh/**)"]}} both `npm test`
+calls had all three acts refused (EPERM); with the way out left open the unsandboxed call read the key, wrote ~/.zshrc and
+reached the listener; with no sandbox both did. A Seatbelt rule allowing one unix socket let a client reach it, and its
+absence refused the connection (EPERM).

@@ -8,6 +8,8 @@ The hub daemon on its socket (#16), the one writer to the record and evidence st
 
 - `src/server.ts`: the socket and event loop; `src/core.ts`: the core, run in a worker (`src/core-worker.ts`); `src/wire.ts`: what crosses the socket and threads.
 - `src/stacks.ts`: worktree and check-run stack policy (`deep env`, `deep_env`, #331, #332), through a supplied lifecycle provider. The composition root currently supplies env-local. Runtime selection of an installed `environment@1` remains unimplemented; the empty release list is a separate limitation, not proof that replacement works.
+- `src/teardowns.ts`: the teardown task each outside resource gets, from the `resources` of a repo's done.yaml and its sessions' own calls (#342); only its check closes it.
+- `src/agents.ts`: the Agents page's syncs (#148): an MCP server or a skill written into each chosen agent's own file at user level, planned in memory, journaled, replaced and flushed, recovered at start, undone by `deep undo sync:<id>`; each agent's rules come from its facts' `entries`. `src/mcp-exec.ts` is `deep mcp-exec <name>`, a synced server's command with its secrets by handle.
 - `src/runs.ts`: the supervisor's runs (`run.start`, deep_run, a claim's checks) and their journal; a claim's check goes through the command check kind, or the kind a loaded package installed with `replaces`.
 - `src/acceptance.ts`: the blind acceptance job (#1328): its start on the runner, the base rule, the attempt's first commit, disputes and their slots.
 - `src/drive.ts`: deep_drive's replicas, each under the replica lease; `src/retention.ts`: the evidence retention pass and snapshot pruning.

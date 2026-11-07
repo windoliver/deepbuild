@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "start.refused",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "caller": "agent session 4a6c1f0e-2b7d-4e55-9c1a-0d2f6b8e3a71",
+    "bound": "caller",
+    "reason": "deep start runs inside agent session 4a6c1f0e-2b7d-4e55-9c1a-0d2f6b8e3a71's process tree, so it acts as that session, and no session starts another",
+    "repo": "/Users/you/src/shop",
+    "issue": 41,
+    "agent": "claude-code"
+  }
+}
