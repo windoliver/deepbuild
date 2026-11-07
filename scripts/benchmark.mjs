@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -186,6 +186,24 @@ export function warm(cwd) {
   for (const [command, ...args] of steps) spawnSync(command, args, { cwd, stdio: 'ignore' });
 }
 
+// A copy of a tree made ready to run in: the checks and benches read git, so it gets its own throwaway repository,
+// committed without the user's hooks or signing. Its origin/main is that commit, as on main itself, so checks that
+// compare with main (repo-rules' size) do the same work on both sides instead of skipping it in the copy. Then its
+// packages and warm builds, kept in CARGO_TARGET_DIR.
+export function prepareCopy(directory) {
+  const run = (command, args, options = {}) => execFileSync(command, args, { cwd: directory, encoding: 'utf8', timeout: 120_000, maxBuffer: 128 * 1024 * 1024, ...options });
+  const git = (...args) => run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'user.name=DeepBuild perf', '-c', 'user.email=perf@example.invalid', ...args], { stdio: 'pipe' });
+  git('init', '-q');
+  git('add', '-A');
+  git('commit', '-qm', 'perf copy');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  // target/ links to the kept builds, so ./target/debug binaries stay where the lanes and budgets run
+  // them. It is made after the commit: .gitignore's target/ matches a directory, not a link.
+  symlinkSync(process.env.CARGO_TARGET_DIR, join(directory, 'target'), 'dir');
+  run('npm', ['ci', '--no-audit', '--no-fund']);
+  warm(directory);
+}
+
 // A timing or memory budget counts only on a reference Mac, on mains power, with Low Power Mode
 // off and the thermal state nominal (design: The reference Mac). There are two, and a budget holds
 // on each.
@@ -276,4 +294,40 @@ export function compare(budget, current, base, keys = metrics) {
     if (base && metric !== 'p95Ms' && current[metric] > base[metric] * (1 + budget.margin)) throw Error(`${budget.id}: ${metric} ${current[metric]} regressed beyond base ${base[metric]} + ${budget.margin * 100}%`);
   }
   return base ? { status: 'PASS' } : { status: 'INITIAL', reason: budget.initialReason };
+}
+
+// One task judged against its merge base, as perf and the budget window judge it: 20 alternated rounds a side, its
+// limits on five runs after one untimed warm-up run, instructions retired where both sides ran, and the merge-base
+// regression, whose message is `regression`. A command that won't run throws.
+export function judgeTask(budget, established, cwd, baseCwd) {
+  const [now, then = null] = measure(budget.command, cwd, established && { command: established.command, cwd: baseCwd });
+  const once = () => {
+    const result = measureOnce(budget.command, cwd, false, undefined, false);
+    if (result.status !== 0) throw Error(`${budget.command[0]} exited ${result.status}: ${result.output}`);
+    return result;
+  };
+  const runs = Object.keys(budget.limits).length ? (once(), Array.from({ length: 5 }, once)) : [];
+  const machine = fingerprint();
+  const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine })]));
+  // Instructions retired don't move with load, so this comparison holds on any machine; it never
+  // changes a limit's verdict.
+  const instructions = then && judgeInstructions(now.instructions.map((current, round) => ({ current, base: then.instructions[round] })), [...new Set([...now.uncounted, ...then.uncounted])]);
+  let outcome, regression = null;
+  try {
+    // compare holds only the merge-base regression here; the limits are judged above.
+    outcome = compare({ ...budget, limits: {} }, now, then);
+  } catch (error) {
+    regression = error.message;
+  }
+  return { now, then, machine, limits, instructions, outcome, regression };
+}
+
+// A task's report is its command's last stdout line; `<bench> judge` reads it on stdin and prints its verdict.
+export function judgeTargets(budget, cwd) {
+  const last = (out) => JSON.parse(out.trim().split('\n').at(-1));
+  const ran = spawnSync(budget.command[0], budget.command.slice(1), { cwd, encoding: 'utf8', timeout: 3_600_000, maxBuffer: 512 * 1024 * 1024 });
+  if (ran.status !== 0) return { status: 'BLOCKED', reason: `${budget.command.join(' ')} exited ${ran.status}: ${ran.stderr.slice(-1000)}` };
+  const judged = spawnSync(budget.command[0], [budget.command[1], 'judge'], { cwd, encoding: 'utf8', input: JSON.stringify({ current: last(ran.stdout), base: null }) });
+  if (judged.status !== 0) return { status: 'BLOCKED', reason: `the judge exited ${judged.status}: ${judged.stderr.slice(-1000)}` };
+  return last(judged.stdout);
 }

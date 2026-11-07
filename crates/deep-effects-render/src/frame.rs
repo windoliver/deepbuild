@@ -77,6 +77,9 @@ pub struct Planted {
     pub slow_glow: bool,
     /// #418: the lens dirt laid over the frame, `intensity × d` added to every pixel.
     pub dirt_overlay: bool,
+    /// #1173: a half-resolution puff shaded once per 2 × 2 px block, that value copied to all
+    /// four, as the base drew it.
+    pub block_copy: bool,
 }
 
 /// A pass of the frame, for the view's reply: its name, the targets it reads and writes, and the
@@ -100,6 +103,8 @@ pub struct Effects {
     /// The chain's targets by index, with their sizes.
     targets: Vec<([u32; 2], wgpu::TextureView)>,
     sparks: Option<SparkDraw>,
+    /// The half-resolution puffs' half-size target, with the full size it was made for (#1173).
+    half: Option<([u32; 2], wgpu::TextureView)>,
     /// The lens dirt on the GPU, with the image it holds; black with none.
     dirt: Option<(Option<Arc<Image>>, wgpu::TextureView)>,
     /// The document whose composed operators the chain runs, with the emitter's and the
@@ -120,6 +125,11 @@ pub struct Effects {
 struct SparkDraw {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
+    /// The half-resolution puffs' draw into their half-size target, and the filtered upsample
+    /// adding that to the linear target, with its sampler (#1173).
+    half: wgpu::RenderPipeline,
+    upsample: wgpu::RenderPipeline,
+    sampler: wgpu::Sampler,
     instances: wgpu::Buffer,
     /// The particles its instance buffer holds: a showpiece's count grows it (#420).
     capacity: u32,
@@ -158,6 +168,7 @@ impl Effects {
             runners: BTreeMap::new(),
             targets: Vec::new(),
             sparks: None,
+            half: None,
             dirt: None,
             op_doc: None,
             op_hooks: crate::docops::Hooks::default(),
@@ -304,42 +315,57 @@ impl Effects {
                 operation: wgpu::BlendOperation::Add,
             },
         };
-        let pipeline = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(SPARKS),
-            layout: None,
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: LINEAR,
-                    blend: Some(additive),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: Default::default(),
-            depth_stencil: Some(wgpu::DepthStencilState {
+        let additive_into = |vs, fs, depth_stencil| {
+            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(SPARKS),
+                layout: None,
+                vertex: wgpu::VertexState {
+                    module: &module,
+                    entry_point: Some(vs),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &module,
+                    entry_point: Some(fs),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: LINEAR,
+                        blend: Some(additive),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                primitive: Default::default(),
+                depth_stencil,
+                multisample: Default::default(),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let pipeline = additive_into(
+            "vs",
+            "fs",
+            Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
                 depth_write_enabled: Some(false),
                 depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
-            multiview_mask: None,
-            cache: None,
-        });
+        );
         let layout = pipeline.get_bind_group_layout(0);
         let instances = instance_buffer(d, shipped::MAX_PARTICLES);
         self.sparks = Some(SparkDraw {
             pipeline,
             layout,
+            half: additive_into("vs", "half_fs", None),
+            upsample: additive_into("upsample_vs", "upsample_fs", None),
+            sampler: d.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some(SPARKS),
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            }),
             instances,
             capacity: shipped::MAX_PARTICLES,
         });
@@ -360,6 +386,13 @@ impl Effects {
         let d = &device.device;
         let compute = self.runner(device, "particles.sparks@1");
         self.spark_draw(device);
+        // A half-resolution puff draws into a half-size target, filtered up into `target` (#1173).
+        let small = (s.half && !self.planted.block_copy).then(|| {
+            if self.half.as_ref().is_none_or(|(k, _)| *k != size) {
+                self.half = Some((size, make(device, size.map(|n| n.div_ceil(2)))));
+            }
+            self.half.as_ref().expect("made above").1.clone()
+        });
         if let Some(draw) = self.sparks.as_mut().filter(|dr| dr.capacity < s.count) {
             draw.instances = instance_buffer(d, s.count);
             draw.capacity = s.count;
@@ -396,7 +429,12 @@ impl Effects {
                 s.opacity as f32,
             ])
             .chain([s.size[0], s.size[1], s.fade[0], s.fade[1]].map(|x| x as f32))
-            .chain([s.draw as f32, f32::from(u8::from(s.half)), n_stops, 0.0])
+            .chain([
+                s.draw as f32,
+                f32::from(u8::from(s.half)),
+                n_stops,
+                f32::from(u8::from(s.half && self.planted.block_copy)),
+            ])
             .chain(stops.iter().map(|st| st.0 as f32))
             .chain(
                 stops
@@ -425,6 +463,42 @@ impl Effects {
                 },
             ],
         });
+        let halved = small.map(|small| {
+            let drawn = d.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("particles half"),
+                layout: &draw.half.get_bind_group_layout(0),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: ub.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: draw.instances.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&depth),
+                    },
+                ],
+            });
+            let up = d.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("particles upsample"),
+                layout: &draw.upsample.get_bind_group_layout(0),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&small),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::Sampler(&draw.sampler),
+                    },
+                ],
+            });
+            let pipelines = (draw.half.clone(), draw.upsample.clone());
+            (small, drawn, up, pipelines)
+        });
         let pipeline = draw.pipeline.clone();
         let profiler = self.profiler.clone();
         let count = s.count;
@@ -441,6 +515,45 @@ impl Effects {
                     }
                     None => compute.dispatch(encoder, *n, &groups, None),
                 }
+            }
+            if let Some((small, drawn, up, (half, upsample))) = &halved {
+                timed(&profiler, SPARKS, encoder, |e, ts| {
+                    let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some(SPARKS),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: small,
+                            resolve_target: None,
+                            depth_slice: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        timestamp_writes: ts,
+                        ..Default::default()
+                    });
+                    pass.set_pipeline(half);
+                    pass.set_bind_group(0, drawn, &[]);
+                    pass.draw(0..6, 0..count);
+                    drop(pass);
+                    let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some(SPARKS),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &target,
+                            resolve_target: None,
+                            depth_slice: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        ..Default::default()
+                    });
+                    pass.set_pipeline(upsample);
+                    pass.set_bind_group(0, up, &[]);
+                    pass.draw(0..3, 0..1);
+                });
+                return;
             }
             timed(&profiler, SPARKS, encoder, |e, ts| {
                 let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
