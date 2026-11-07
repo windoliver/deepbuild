@@ -11,9 +11,10 @@
 // snapshot, every checkout and a fix check's run on the merge base come from the base-commit service (#31). A slow run a
 // newer claim outdates is recorded stale only when that claim's snapshot changed its check's inputs, by tree (#45). Pure
 // rules live in @deepbuild/gate; this module drives them with the hub's runs and record.
-import { mkdir, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { baseProof, claimVerdict, ownRead, OverBudget, type Checkouts, type ClaimRequirement, type DeclaredSurface, type RecordedRun, type StandIn, type TempCheckout } from '@deepbuild/gate';
+import { baseProof, claimVerdict, ownChanges, ownRead, OverBudget, runnerConfig, type Checkouts, type ClaimRequirement, type DeclaredSurface, type RecordedRun, type StandIn, type TempCheckout } from '@deepbuild/gate';
 import { sha256Hex } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import type { BaseResult, Result, Verdict } from '@deepbuild/verdicts';
@@ -140,7 +141,23 @@ interface Entry {
 }
 /** A slow check held in its place: what holds it (background work, a due wake-up or cron job, or a prompt within the grace window) and its record. */
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
-interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; state?: StatePin | undefined }
+interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; state?: StatePin | undefined; changes?: Changes }
+/** What a claim's worktree changed against its merge base when its snapshot was taken, and the test runners' configs it held, each with its text (#33). */
+interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean }
+async function changesOf(cwd: string, base: string): Promise<Changes> {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+  const git = (args: string[]): Promise<string[]> => new Promise((done) => execFile('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd, env, maxBuffer: 64 << 20 }, (error, out) => done(error ? [] : out.split('\n').filter(Boolean))));
+  const [diff, others, tracked] = await Promise.all([git(['diff', '--name-only', '--no-renames', base]), git(['ls-files', '--others', '--exclude-standard']), git(['ls-files'])]);
+  const configs = new Map<string, string>();
+  for (const path of new Set([...tracked, ...others].filter(runnerConfig))) {
+    const text = await readFile(join(cwd, path), 'utf8').catch(() => undefined);
+    if (text !== undefined) configs.set(path, text);
+  }
+  // Whether package.json's scripts changed: the script a check runs is its own.
+  const scriptsOf = (text: string | undefined): string => { try { return JSON.stringify((JSON.parse(text ?? '{}') as { scripts?: unknown }).scripts ?? null); } catch { return 'unreadable'; } };
+  const scripts = diff.includes('package.json') && scriptsOf((await git(['show', `${base}:package.json`])).join('\n')) !== scriptsOf(await readFile(join(cwd, 'package.json'), 'utf8').catch(() => undefined));
+  return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts };
+}
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);
 /** A base run that ended as a run: what a fix is proven by, on its key as on its claim. */
@@ -257,7 +274,8 @@ export class GateRunner {
    * key, by stem and snapshot, is what the check waits for; null when there is none and the check runs on its own.
    */
   private async carry(c: Claim, e: Entry, dir: string): Promise<'carried' | { wait: Promise<void> } | null> {
-    if (this.onStack(e, dir)) return null;
+    // #33's planted gate reads no result it had for a head whose inputs didn't change: each claim's runs stand alone.
+    if (this.onStack(e, dir) || this.o.plant === 'empty-commit-run-alone') return null;
     const stem = await this.stemOf(c, e, null);
     for (const g of await this.shared.find(e.check.check, stem, dir)) {
       if (this.unread.has(g.id)) continue;
@@ -400,6 +418,12 @@ export class GateRunner {
     const last = e.runs.length ? e.runs[e.runs.length - 1] : e.group ? this.runsOn(e.group).find((s) => !s.withheld)?.run : undefined;
     return last ? this.records.get(last) : undefined;
   }
+  /** The files the claim changed that are the check's own, by what its last run on the snapshot read (#33). */
+  private ownChanged(c: Claim, e: Entry): string[] {
+    if (!c.changes || e.check.check === DEFINITION) return [];
+    const plant = this.o.plant === 'edited-check-approved' || this.o.plant === 'own-files-test-folders-only' ? this.o.plant : undefined;
+    return ownChanges(c.changes, this.headOf(e)?.read ?? [], plant);
+  }
   /** The files a check's last run on the snapshot read under the test, fixture and script folders: its own (#875). */
   private ownOf(e: Entry): string[] {
     return this.headOf(e)?.read.filter(ownRead) ?? [];
@@ -446,13 +470,17 @@ export class GateRunner {
     const whys: string[] = [];
     // What the claim read as carried from another claim's runs (#1018), naming each run, its claim and its session.
     const carried: string[] = [];
+    // Each approved check whose own files the claim changed counts as the agent's own, naming them (#33; design: Whose checks count).
+    const owns: string[] = [];
     const v = claimVerdict({
       claim: c.claim, agent: `session:${c.session.replace(/[^0-9A-Za-z]/g, '')}`, repo: c.cwd, task: c.task, commit: c.snapshot, requirements: c.requirements, now: this.o.now(), ...(c.state ? { state: c.state.digests } : {}),
       checks: [...c.entries.values()].map((e) => {
         const { base, why } = this.baseOf(e) ?? {};
         if (why) whys.push(`${e.check.check} ${why}`);
+        const mine = e.check.source === 'own' ? [] : this.ownChanged(c, e);
+        if (mine.length) owns.push(`${e.check.check} counts as the agent's own: the claim changed ${mine.join(', ')}, which it loads`);
         return {
-          check: e.check.check, command: e.check.command, source: e.check.source ?? 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
+          check: e.check.check, command: e.check.command, source: mine.length ? 'own' as const : e.check.source ?? 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
           ...(e.check.runs !== undefined ? { needed: e.check.runs } : {}),
           runs: this.runsOf(c, e, carried),
           ...(base ? { base } : {}),
@@ -461,11 +489,11 @@ export class GateRunner {
           ...(e.running || e.waiting || queued.has(e) ? { state: 'running' as const } : e.runs.length || e.group ? { state: 'ended' as const } : e.stale ? { state: 'never_started' as const, never_started: 'newer_claim' as const } : {}),
         };
       }),
-    });
+    }, this.o.plant === 'verdict-from-exit-status' ? { plant: 'exit-code-only' } : {});
     for (const e of c.entries.values()) {
       if (e.base && e.baseFrom && e.baseFrom.claim !== c.claim) carried.push(`${e.check.check} carried its base run ${e.baseFrom.run} from ${e.baseFrom.claim} in ${e.baseFrom.session}`);
     }
-    const reasons = [...(v.outcome === 'INVALID' ? whys : []), ...v.reasons, ...carried];
+    const reasons = [...(v.outcome === 'INVALID' ? whys : []), ...v.reasons, ...owns, ...carried];
     return reasons.length === v.reasons.length ? v : { ...v, reasons };
   }
   /**
@@ -474,7 +502,7 @@ export class GateRunner {
    * claim's is named in `carried`.
    */
   private runsOf(c: Claim, e: Entry, carried: string[]): RecordedRun[] {
-    const on = e.group ? this.runsOn(e.group) : [];
+    const on = e.group ? this.runsOn(e.group).filter((s) => this.o.plant !== 'empty-commit-run-alone' || s.claim === c.claim) : [];
     const loose = [...e.runs, ...e.variants ?? []].filter((run) => !this.keyOf.has(run)).map((run) => ({ run, claim: c.claim, session: sessionOf(c.session), withheld: (e.variants ?? []).includes(run) }));
     // The planted counter counts a shared run once for each claim that reads it.
     const readers = this.o.plant === 'counts-shared-run-per-claim' && e.group ? [...this.claims.values()].flat().filter((x) => [...x.entries.values()].some((y) => y.group === e.group)).length : 1;
@@ -522,6 +550,8 @@ export class GateRunner {
     // worktree; the installs its checkouts clone from the worktree; and the names of the files its checkout holds.
     const repo = this.repoOf(r.cwd);
     let installs: Promise<string> | undefined;
+    // Read beside the snapshot, from the same worktree: whose checks count turns on what the claim changed (#33).
+    const changes = changesOf(r.cwd, r.base);
     let snapshot = r.base;
     // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
     let tree: string | undefined;
@@ -555,7 +585,7 @@ export class GateRunner {
     const held = checkout === null ? null : Promise.resolve({ dir: checkout, commit: snapshot });
     const facts = installs && checkout !== null ? { installs, names: namesOf(checkout) } : null;
     const claim: Claim = joined ?? { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, base: r.base, snapshot, tree, checkout: held, requirements: r.requirements, entries: new Map(),
-      repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve(''), state: r.state };
+      repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve(''), state: r.state, changes: await changes };
     const last = older.at(-1)?.tree;
     const changed = r.checks.length > 0 && (tree === undefined || last === undefined || tree !== last);
     if (joined) {
@@ -566,6 +596,7 @@ export class GateRunner {
       joined.checkout = held ?? joined.checkout;
       if (facts) Object.assign(joined, facts);
       joined.state = r.state;
+      joined.changes = await changes;
       this.lockWaits.get(r.claim)?.();
     }
     this.claims.set(r.session, [...older, claim]);
@@ -600,7 +631,7 @@ export class GateRunner {
     }
     // A snapshot that changed no check's inputs reuses results and runs nothing (#82; design: Held time is counted):
     // each check that ended on the last claim of the same tree carries its result to this one.
-    const same = changed || tree === undefined ? [] : older.filter((o) => o.tree === tree).reverse();
+    const same = changed || tree === undefined || this.o.plant === 'empty-commit-run-alone' ? [] : older.filter((o) => o.tree === tree).reverse();
     const toRun = r.checks.filter((c) => {
       const carried = same.map((o) => o.entries.get(c.check)).find(ended);
       if (!carried) return true;
