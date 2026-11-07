@@ -2155,7 +2155,7 @@ For: hex boards: a tactics map, a strategy board, a hex puzzle, a board game exp
 - `target: ID + path`
 - `source: reading: | run: | ask: | verdict: | task: | req: handle`
 - `select: value | p50 | p95 | count | expected | received | a named query = value`
-- `format: {unit, unit_at: after | super = after, precision (no more than the reading's), notation: fixed | compact | percent | duration, sign: auto | always = auto, group: none | locale = locale, ellipsis: bool = false}`
+- `format: {unit, unit_at: after | super = after, precision (no more than the reading's), notation: fixed | compact | percent | duration | clock (hh:mm:ss, #496), sign: auto | always = auto, group: none | locale = locale, ellipsis: bool = false}`
 - `as_of: now | record | time = now` (in a replayed film, the mapped record time)
 - `show: {source: bool, as_of: bool}`
 - `stale_after: duration` (the reading's freshness)
