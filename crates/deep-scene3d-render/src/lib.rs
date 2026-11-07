@@ -12,6 +12,7 @@ pub mod cull;
 pub mod env;
 mod glass;
 pub mod local;
+pub mod print;
 pub mod maps;
 mod mesh;
 mod motion;
@@ -1013,6 +1014,33 @@ pub(crate) fn extent([width, height]: [u32; 2]) -> wgpu::Extent3d {
 }
 
 /// A 2D texture of `size`: one layer, one mip, one sample.
+/// #464: one frame's print pass, recorded after the output into where the output would write.
+struct PrintStage {
+    device: wgpu::Device,
+    printer: Arc<Mutex<print::Printer>>,
+    params: print::Params,
+    source: wgpu::TextureView,
+    ids: wgpu::TextureView,
+    masks: Vec<u32>,
+    format: wgpu::TextureFormat,
+}
+
+impl PrintStage {
+    fn record(&self, encoder: &mut wgpu::CommandEncoder, into: &wgpu::TextureView) {
+        let coverage = print::Coverage::Ids(&self.ids, self.masks.clone());
+        self.printer.lock().unwrap_or_else(|e| e.into_inner()).record(
+            &self.device,
+            encoder,
+            &self.params,
+            &self.source,
+            &coverage,
+            into,
+            self.format,
+            None,
+        );
+    }
+}
+
 pub(crate) fn texture2d(
     d: &wgpu::Device,
     label: &str,
@@ -1663,6 +1691,12 @@ pub struct Renderer {
     output_f32: wgpu::RenderPipeline,
     /// The finished frame (status::FINISHED), made when a frame has passes after the finish.
     finished: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
+    /// #464: the look's print finish for the frame being drawn (its fields, the frame's values,
+    /// the ground, each item's color for its separations), the pass, and the frame it reads.
+    print: Option<(Arc<deep_canvas_marks::print::Print>, deep_canvas_marks::print::Frame, [u8; 3])>,
+    print_colors: BTreeMap<String, [u8; 3]>,
+    printer: Option<Arc<Mutex<print::Printer>>>,
+    print_source: Option<(wgpu::TextureView, [u32; 2], wgpu::TextureFormat)>,
     /// The pass resolving the geometry pass's object IDs and depth (#1173), and the planted
     /// resolve_accumulates_frames' blend of the previous frame.
     resolve: wgpu::RenderPipeline,
@@ -2948,6 +2982,10 @@ impl Renderer {
             output_pipeline,
             output_f32,
             finished: None,
+            print: None,
+            print_colors: BTreeMap::new(),
+            printer: None,
+            print_source: None,
             resolve,
             accumulate,
             compiled: 3,
@@ -4345,6 +4383,18 @@ impl Renderer {
     /// The frame's uniforms, outlines and shadow, and its atlas pages.
     fn prepare_frame(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.counts = Counts::default();
+        // #464: the print finish this frame draws, and each solid's color its separations read.
+        self.print = (!look.print.is_identity())
+            .then(|| (look.print.clone(), scene.print, scene.ground));
+        self.print_colors = if look.print.separations.is_empty() {
+            BTreeMap::new()
+        } else {
+            scene
+                .layers
+                .iter()
+                .flat_map(|l| l.solids.iter().map(|s| (s.id.clone(), s.color)))
+                .collect()
+        };
         // Below internal scale 1 the targets are the internal size; px-sized marks shrink with
         // them, and the upscale returns the frame to `scene.size` (#386).
         self.size = scene.size;
@@ -5770,6 +5820,13 @@ impl Renderer {
             Some(f) => (f.clone(), self.output_f32.clone()),
             None => (framed.clone(), self.output_pipeline.clone()),
         };
+        // #464: with a print finish, the output writes a frame of its own that the print pass
+        // reads, and the print pass writes where the output would have.
+        let printing = self.print_stage(device, size, finished.is_some());
+        let (target, printed_into) = match &printing {
+            Some(p) => (p.source.clone(), Some(target)),
+            None => (target, None),
+        };
         let profiler = self.profiler.clone();
         let (busy, busy_slot) = (self.busy.clone(), slot.clone());
         let output: Job = Box::new(move |encoder| {
@@ -5803,7 +5860,10 @@ impl Renderer {
                     &bind,
                     timestamps,
                 )
-            })
+            });
+            if let (Some(p), Some(into)) = (&printing, &printed_into) {
+                p.record(encoder, into);
+            }
         });
         jobs.push((OUTPUT_PASS.into(), output));
         let mut after_jobs = match (after, finished) {
@@ -6017,6 +6077,63 @@ impl Renderer {
     }
 
     /// The finished frame's view at `size`, made or remade when the size changed.
+    /// #464: the print pass for this frame, when the look prints anything: the frame the output
+    /// writes for it at `size`, in the format the output would have written.
+    fn print_stage(&mut self, device: &Device, size: [u32; 2], finished: bool) -> Option<PrintStage> {
+        let (print, frame, ground) = self.print.clone()?;
+        let format = if finished { status::FINISHED } else { FORMAT };
+        if self
+            .print_source
+            .as_ref()
+            .is_none_or(|(_, s, f)| *s != size || *f != format)
+        {
+            let texture = deep_gpu::alloc::outside(|| {
+                texture2d(
+                    &device.device,
+                    "scene3d print source",
+                    size,
+                    format,
+                    wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                )
+            });
+            self.print_source = Some((texture.create_view(&Default::default()), size, format));
+        }
+        let printer = self
+            .printer
+            .get_or_insert_with(|| Arc::new(Mutex::new(print::Printer::new(&device.device))))
+            .clone();
+        // Each object ID's separations: the bits of those whose ink is its surface's role color.
+        let top = self.picks.values().copied().max().unwrap_or(0) as usize;
+        let mut masks = vec![0u32; top + 1];
+        for (id, pick) in &self.picks {
+            if let Some(c) = self.print_colors.get(id) {
+                for (k, sep) in print.separations.iter().enumerate() {
+                    if sep.color == *c {
+                        masks[*pick as usize] |= 1 << k;
+                    }
+                }
+            }
+        }
+        let params = print::params(
+            &print,
+            &frame,
+            size,
+            print::Placed::default(),
+            ground,
+            true,
+            print::Planted::default(),
+        );
+        Some(PrintStage {
+            device: device.device.clone(),
+            printer,
+            params,
+            source: self.print_source.as_ref().expect("made above").0.clone(),
+            ids: self.targets.as_ref()?.ids_view.clone(),
+            masks,
+            format,
+        })
+    }
+
     fn finished(&mut self, device: &Device, size: [u32; 2]) -> wgpu::TextureView {
         if self.finished.as_ref().is_none_or(|(_, _, s)| *s != size) {
             let texture = deep_gpu::alloc::outside(|| {
@@ -6380,7 +6497,13 @@ impl Renderer {
 /// The look's tone map alone (#418's `tone` call), as the output pass runs it, over `input` (f32
 /// RGBA, rows top-down, `size` px) on `device`, with no exposure and no encode; the output in the
 /// same layout, or `None` on a backend with no pixels.
-pub fn tone(device: &Device, map: ToneMap, input: &[f32], size: [u32; 2]) -> Option<Vec<u8>> {
+pub fn tone(
+    device: &Device,
+    map: ToneMap,
+    grade: &deep_canvas_marks::finish::Grade,
+    input: &[f32],
+    size: [u32; 2],
+) -> Option<Vec<u8>> {
     let d = &device.device;
     let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("scene3d tone"),
@@ -6432,6 +6555,8 @@ pub fn tone(device: &Device, map: ToneMap, input: &[f32], size: [u32; 2]) -> Opt
         ToneMap::Agx { white, contrast } => (2, white, contrast),
         other => (other.code(), 16.29, 1.25),
     };
+    // #464: the grade inside the pass, as the output runs it: the white balance before the curve
+    // and the CDL after it.
     let uniform = ToneUniform {
         exposure: 1.0,
         map: code,
@@ -6439,16 +6564,14 @@ pub fn tone(device: &Device, map: ToneMap, input: &[f32], size: [u32; 2]) -> Opt
         contrast: contrast as f32,
         encode: 0,
         deband: 0.0,
-        saturation: 1.0,
-        graded: 0,
-        wb: [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-        ],
-        slope: [1.0; 4],
-        offset: [0.0; 4],
-        power: [1.0; 4],
+        saturation: grade.saturation as f32,
+        graded: u32::from(!grade.is_identity()),
+        wb: grade
+            .white_balance()
+            .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]),
+        slope: rgb4(grade.slope),
+        offset: rgb4(grade.offset),
+        power: rgb4(grade.power),
     };
     let buffer = d.create_buffer(&wgpu::BufferDescriptor {
         label: Some("scene3d tone"),
