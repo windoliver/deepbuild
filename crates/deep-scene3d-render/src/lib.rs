@@ -1504,6 +1504,8 @@ struct EnvState {
     stub: wgpu::TextureView,
     cube: Option<env::Cube>,
     to: Option<env::Cube>,
+    /// The blurred background's cubes (#426), from and to: one mip at the blur's roughness.
+    bg: [Option<env::Cube>; 2],
 }
 
 /// A camera as the effects read it: world to clip (column-major), the eye and the near plane.
@@ -1935,6 +1937,8 @@ fn lights_bind(
             wgpu::BindingResource::TextureView(&ies.view),
             wgpu::BindingResource::Sampler(&ies.sampler),
             grid.as_entire_binding(),
+            wgpu::BindingResource::TextureView(env.bg[0].as_ref().map_or(&env.stub, |c| &c.view)),
+            wgpu::BindingResource::TextureView(env.bg[1].as_ref().map_or(&env.stub, |c| &c.view)),
         ],
     )
 }
@@ -2374,6 +2378,9 @@ impl Renderer {
                 },
                 uniform(5, wgpu::ShaderStages::FRAGMENT),
                 cube_entry(6),
+                // The blurred background's own cubes (#426), from and to.
+                cube_entry(18),
+                cube_entry(19),
                 wgpu::BindGroupLayoutEntry {
                     binding: 7,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -2490,6 +2497,7 @@ impl Renderer {
             stub: env::Prefilter::stub(d),
             cube: None,
             to: None,
+            bg: [None, None],
         };
         let ies = local::Tables::new(d);
         let cluster_buffer = d.create_buffer(&wgpu::BufferDescriptor {
@@ -3312,6 +3320,9 @@ impl Renderer {
         match wanted {
             None => {
                 rebuilt = self.env.cube.take().is_some() | self.env.to.take().is_some();
+                for slot in &mut self.env.bg {
+                    rebuilt |= slot.take().is_some();
+                }
             }
             Some((key, e)) => {
                 let sky = scene.sky.as_ref().expect("an environment is a sky's");
@@ -3328,7 +3339,7 @@ impl Renderer {
                     self.env.cube = Some(
                         self.env
                             .prefilter
-                            .build(device, key, &source, e.size, filled),
+                            .build(device, key, &source, e.size, filled, None),
                     );
                     rebuilt = true;
                 }
@@ -3336,9 +3347,30 @@ impl Renderer {
                 if self.env.to.as_ref().map(|c| c.key) != to_key {
                     self.env.to = e.mix.as_ref().zip(to_key).map(|((to, _), k)| {
                         let source = env::source(sky, to);
-                        self.env.prefilter.build(device, k, &source, e.size, None)
+                        self.env
+                            .prefilter
+                            .build(device, k, &source, e.size, None, None)
                     });
                     rebuilt = true;
+                }
+                // The blurred background's own cubes (#426): the lobe at exactly the blur's
+                // roughness, keyed by the environment's key and the blur, never lighting's.
+                let blur = sky.background_blur as f32;
+                let bg_keys = [Some(key), to_key].map(|k| {
+                    k.filter(|_| blur > 0.0)
+                        .map(|k| k ^ u64::from(blur.to_bits()).wrapping_mul(0x9e37_79b9_7f4a_7c15))
+                });
+                let froms = [Some(&e.from), e.mix.as_ref().map(|(to, _)| to)];
+                for ((slot, k), from) in self.env.bg.iter_mut().zip(bg_keys).zip(froms) {
+                    if slot.as_ref().map(|c| c.key) != k {
+                        *slot = k.zip(from).map(|(k, from)| {
+                            let source = env::source(sky, from);
+                            self.env
+                                .prefilter
+                                .build(device, k, &source, e.size, None, Some(blur))
+                        });
+                        rebuilt = true;
+                    }
                 }
                 let cube = self.env.cube.as_ref().expect("built above");
                 u.sh = cube.sh;
@@ -3353,7 +3385,7 @@ impl Renderer {
                     e.intensity as f32,
                     e.rotation.to_radians() as f32,
                 ];
-                u.bg[1] = sky.background_blur as f32 * last;
+                u.bg[1] = blur;
             }
         }
         if rebuilt {
