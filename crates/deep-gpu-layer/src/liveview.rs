@@ -857,6 +857,8 @@ impl View {
                 .into_iter()
                 .filter_map(|n| Some((n, self.renderer.core_target(n)?.clone())))
                 .collect();
+            // Stepped operators count fixed steps from the exact time, not its f32 (#252).
+            self.ops.clock = Some(t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64);
             self.ops.plan(
                 device,
                 &linear,

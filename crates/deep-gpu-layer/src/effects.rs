@@ -1091,6 +1091,7 @@ pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
             noise_weight_halved: p == Some(Planted::NoiseWeightHalved),
             no_divergence_rule: p == Some(Planted::NoDivergenceRule),
             wide_fetches: false,
+            carried_exact: p == Some(Planted::CarriedClassExact),
         },
     )
 }
@@ -1107,6 +1108,8 @@ pub fn operator_hooks(p: Option<Planted>) -> deep_effects_render::docops::Hooks 
         ties_decreasing: p == Some(Planted::SortTiesDecreasing),
         compact_by_atomic: p == Some(Planted::CompactByAtomic),
         dispatch_without_guard: p == Some(Planted::DispatchWithoutGuard),
+        steps_per_frame: p == Some(Planted::StepsPerFrame),
+        keeps_every_checkpoint: p == Some(Planted::RingKeepsEveryCheckpoint),
     }
 }
 

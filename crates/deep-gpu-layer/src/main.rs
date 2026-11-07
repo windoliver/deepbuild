@@ -289,6 +289,10 @@ pub enum Planted {
     MipsLevel0Only,
     MipsKeptUnderOldKey,
     PoolWithoutClear,
+    // #252: stepped carried state's wrong programs.
+    StepsPerFrame,
+    RingKeepsEveryCheckpoint,
+    CarriedClassExact,
 }
 
 impl Planted {
@@ -466,6 +470,9 @@ impl Planted {
             "mips_level0_only" => Planted::MipsLevel0Only,
             "mips_kept_under_old_key" => Planted::MipsKeptUnderOldKey,
             "pool_without_clear" => Planted::PoolWithoutClear,
+            "steps_per_frame" => Planted::StepsPerFrame,
+            "ring_keeps_every_checkpoint" => Planted::RingKeepsEveryCheckpoint,
+            "carried_class_exact" => Planted::CarriedClassExact,
             _ => return None,
         })
     }
