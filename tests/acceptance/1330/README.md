@@ -74,6 +74,16 @@ what it saw to `~/.standin/<pid>.json`, which the tests read. Only Claude Code i
 The test repo has an origin, and its `npm test` is `node probe.mjs` (`fixtures/probe.mjs`), which reads the planted
 `~/.ssh/id_ed25519` (random text), appends to `~/.zshrc`, and connects to a TCP listener on 127.0.0.1 that no
 approval names, writing what happened to `probe-<label>.json` in its worktree.
+The probe reads its paths and port from `probe-config.json`, committed with it; the repo's `.gitignore` names only
+the reports, `probe-in.json` and `probe-out.json`.
+
+### Redraft: the probe's config reached no worktree
+
+Dispute from the implementing job: the first draft's `.gitignore` held `probe-*.json`, so `probe-config.json` was
+never committed or pushed to `origin/main`. A session's worktree, made from the default branch's head as the issue
+says, had `probe.mjs` but no config, and `npm test` died with ENOENT before trying anything; AC6's and AC7's main
+tests and both their plants failed on that, judging nothing. The ignore rule now names only `probe-in.json` and
+`probe-out.json`, so the config is committed. No criterion's reading, expected value, plant or other test changed.
 
 ## The surface under test
 

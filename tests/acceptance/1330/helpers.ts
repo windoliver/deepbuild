@@ -277,7 +277,8 @@ export async function openWorld(o: WorldOptions = {}): Promise<World> {
     'probe-config.json': `${JSON.stringify({ key: l.key, rc: l.rc, host: listener.host, port: listener.port })}\n`,
     // npm's cache and logs out of the home: what a repo's build needs, kept to the temp folder and the worktree.
     '.npmrc': 'update-notifier=false\nfund=false\naudit=false\nlogs-max=0\ncache=/tmp/dh1330-npm-cache\n',
-    '.gitignore': 'probe-*.json\n',
+    // Only the probe's reports are ignored: probe-config.json is committed, so a worktree from origin/main has it.
+    '.gitignore': 'probe-in.json\nprobe-out.json\n',
   };
   for (const [path, text] of Object.entries(files)) writeFileSync(join(l.repo, path), text);
   git(l.repo, 'init', '-q', '-b', 'main');
