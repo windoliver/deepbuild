@@ -9,7 +9,7 @@
     "key": "instance-1f2e3d4c",
     "cost_usd": 49,
     "check": "instance-gone",
-    "cwd": "/Users/you/shop"
+    "cwd": "/srv/shop"
   },
   "writer": "core",
   "actor": "you",
