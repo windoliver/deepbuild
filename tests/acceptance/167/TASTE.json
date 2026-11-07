@@ -1,0 +1,19 @@
+{
+  "issue": 167,
+  "criterion": "#167.25ddf151",
+  "verdict": "looks_right",
+  "who": "Claude Code, delegated by the owner (Tao Feng) in session: \"validate the screnshot if needed for me\"",
+  "when": "2026-11-07T05:46:30Z",
+  "screenshots": {
+    "race-2000.png": "0dea4082673b1b2e02f5a5d7239d3e63e04e622f939f8946ba461fbd9171d13c",
+    "race-2000-5.png": "ef4c8bfca20e4e6d603767c2d55e5f7d3aee3d9691d48b5743b7f3796aef56b3",
+    "race-2001.png": "bd9d45e97c60a1a16076436215e49f29c5d3a68bc31ee80a20d6b182c40bf36e",
+    "reveal.png": "6b9a1fed1cf40441e4341314df9216067f108770d2a6f390080e6a7dbb997707",
+    "ticks-2000.png": "3d1b38cb677efee2964f4ad4733c0157e8b5ad547380976f7ea5ae906dc289c0",
+    "ticks-2000-5.png": "0791d14ca7afa8fadf8fbcf0aa3e89857058fb9ca67242a11c96f27c50430117",
+    "ticks-2001.png": "6d6e46454dd3b0d59724423a461305d38690bc5f4fb1ff81a8bc93f34dad4f9a",
+    "race.apng": "7764c125393c4e506f1a86b3b4b9948fa22544797d44f5c26214663f63b83b7b",
+    "reveal.apng": "2589ae7e26fc9623e3e9b5b8fc1939e63b409337768f8879d5457fbc5b5d370f"
+  },
+  "note": "Checked each picture against its numbers. Race at 2000 and 2001: bars in standing order at the issue's values; at 2000.5 all three standings are 2, so they overlap and read as one bar, as the data says. Reveal: the line ends on its head point, with the counter at the value. Ticks: 30 tops the axis at 2000, 40 at 2001, and at 2000.5 tick 40 shows faded just past the domain's top, at its true place. The race document paints ink labels on ink bars, so its labels can't be seen; docs/evidence/167/proof-race-mid.png and proof-stage-2008.png show labels on a race of eight keys."
+}
