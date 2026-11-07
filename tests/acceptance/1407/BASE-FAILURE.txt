@@ -1,0 +1,56 @@
+#1407 acceptance suite on the base commit 2bba2a50 (origin/main), November 7, 2026, before any #1407 code.
+Run: CARGO_BUILD_JOBS=4 npx vitest run --root tests/acceptance/1407 --no-file-parallelism
+     (Node 24.22.0, Linux, 20 cores, 1-minute load about 60; cargo niced)
+Result: Test Files 2 failed (2); Tests 4 failed | 3 passed (7). Every planted case fails as BLOCKED on the missing
+plant; none crashes the runner. The 3 AC3 comparisons pass on the base by construction (base against itself): they
+are regression protection, and their wrong-program case is BLOCKED like the others.
+
+The first run had 6 failures: AC3's denial and matched-allow comparisons failed base-against-base on the line
+"deep-hook: spooled <ULID>, but its sync didn't finish within the hook's 50 ms" (a timing line with a fresh ID,
+printed when the spool's fsync runs past 50 ms under load). The comparison now sets that one line aside on both
+sides (helpers.ts, steady; README, AC3); the lines below are from the run after that change.
+
+panic.test.ts (AC1 #1407.3799f437, AC2 #1407.055ae8d4)
+  x AC1 plant-matcher-panic, a fail_closed entry for gh pr merge, hub away: gh pr merge 12 exits 2 with the
+    watchdog's denial and no panic text
+    Error: BLOCKED: the deep-hook build with the plant plant-matcher-panic did not build: cargo build --locked -q
+    -p deep-hook --features plant-matcher-panic --target-dir target/plant-matcher-panic exited 101: error: the
+    package 'deep-hook' does not contain this feature: plant-matcher-panic
+    -> the plant is the implementer's to write (its control, the plain build denying gh pr merge 12 in t-closed's
+       words, passed first).
+  x AC2 plant-matcher-panic, no fail_closed entry, hub away: `gh pr merge 12` is allowed byte for byte as the
+    unplanted build allows it
+    Error: BLOCKED: (the same missing plant)
+  x AC2 plant-matcher-panic, no fail_closed entry, hub away: `echo hello` is allowed byte for byte as the
+    unplanted build allows it
+    Error: BLOCKED: (the same missing plant)
+
+unchanged.test.ts (AC3 #1407.14eb6bf3)
+  v AC3 a normal denial (fail_closed t-closed matches): `gh pr merge 12`
+  v AC3 a normal allow (t-open, not fail_closed, matches): `ls -la`
+  v AC3 a normal allow (nothing matches): `echo hello`
+  x AC3 (wrong program) the plant-matcher-panic build's denial is not the base's, so the comparison can fail
+    Error: BLOCKED: (the same missing plant)
+
+What the base does with the panic itself ("on main it exits 101"), shown by hand since the base has no plant
+feature: `git archive 2bba2a50 Cargo.toml Cargo.lock .cargo crates vendor` unpacked into /tmp/dh1407-probe, one
+line added to the top of `Call::matches` in that copy's crates/deep-hook/src/matcher.rs,
+    panic!("planted panic in the matcher for {pattern}");
+built with `cargo build --locked -q -p deep-hook --target-dir /tmp/dh1407-probe/target`, and run as
+`deep-hook claude-code PreToolUse` with a temp HOME (no hub) and a Bash payload `gh pr merge 12` on stdin:
+
+  rules.json {"t-closed": run:gh pr merge, fail_closed true}     (AC1's case)
+    exit 101, stdout "", stderr:
+      thread 'main' (3722125) panicked at crates/deep-hook/src/matcher.rs:208:9:
+      planted panic in the matcher for run:gh pr merge
+      note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    -> no denial; exit 101 doesn't block the call. AC1 fails at "deep-hook must exit 2".
+  rules.json {"t-open": run:gh pr merge, fail_closed false}     (AC2's case)
+    exit 101, stdout "", stderr: the same panic message
+    -> the unplanted base allows this call with exit 0 and empty stdout and stderr (spool timing line aside), so
+       AC2 fails at "stderr must not hold Rust's panic message" and then at the exit code.
+
+The same unplanted base, same HOME shape, hub away: gh pr merge 12 with t-closed exits 2, stderr
+"DeepBuild blocked this: Test entry t-closed holds this call. Leave t-closed alone; this is a test. It runs: gh pr
+merge 12 (guard t-closed, which holds while the hub doesn't answer)"; ls -la and echo hello exit 0, stdout and
+stderr empty.
