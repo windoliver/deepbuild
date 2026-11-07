@@ -24,21 +24,21 @@ AssertionError: the volume deep-c000_data still stands 60000 ms after its sessio
  FAIL  interrupted.test.ts > AC6 killed with SIGKILL the session keeps its volume and stack past the reap budget; resumed and ended by SessionEnd, the volume is gone within 30 s
 AssertionError: the volume deep-c000_data still stands 60000 ms after the resumed session ended: expected undefined to be defined
  FAIL  interrupted.test.ts > AC6 (wrong program) a reaper that treats the kill as an end (DEEP_HUB_PLANT=reap-on-kill) removes the volume and fails, naming it
-Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=reap-on-kill did not start: file:///Users/taofeng/dev/claude-worktrees/doneright/github-issue-342-413cd0/packages/hub/dist/plant.js:82
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=reap-on-kill did not start: file://~/dev/claude-worktrees/doneright/github-issue-342-413cd0/packages/hub/dist/plant.js:82
 Error: DEEP_HUB_PLANT=reap-on-kill names no planted program
-Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=pool-asks-which-stack did not start: file:///Users/taofeng/dev/claude-worktrees/doneright/github-issue-342-413cd0/packages/hub/dist/plant.js:82
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=pool-asks-which-stack did not start: file://~/dev/claude-worktrees/doneright/github-issue-342-413cd0/packages/hub/dist/plant.js:82
 Error: DEEP_HUB_PLANT=pool-asks-which-stack names no planted program
  FAIL  teardown.test.ts > AC3 each resource has a task at its cost; "I did it" with it still there leaves the task open; gone, its check passes and only its task closes
 Error: timed out after 30000 ms waiting for a teardown task naming each of instance-6830f2fe, number-d2e68158, instance-69925590; the hub (pid 95822) runs, its stderr ends ""; the unblock tasks raised: []
  FAIL  teardown.test.ts > AC3 (wrong program) a task closed on your word (DEEP_HUB_PLANT=teardown-closes-on-word) fails this test, naming the resource
-Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=teardown-closes-on-word did not start: file:///Users/taofeng/dev/claude-worktrees/doneright/github-issue-342-413cd0/packages/hub/dist/plant.js:82
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=teardown-closes-on-word did not start: file://~/dev/claude-worktrees/doneright/github-issue-342-413cd0/packages/hub/dist/plant.js:82
 Error: DEEP_HUB_PLANT=teardown-closes-on-word names no planted program
  FAIL  volumes.test.ts > AC2 after SessionEnd the stack's volume is gone, and the bare volume its agent made stays
 AssertionError: the volume deep-c000_data, which the session started through deep env up, still stands after the session ended: expected undefined to be defined
  FAIL  volumes.test.ts > AC2 a Codex Desktop thread's Archive ends its session with no hook fired, and its stack's volume is gone
 AssertionError: the volume deep-c000_data still stands after its thread's Archive ended the session: expected undefined to be defined
  FAIL  volumes.test.ts > AC2 (wrong program) a reaper that removes every volume the session's commands created (DEEP_HUB_PLANT=reap-session-volumes) removes the bare volume and fails this test, naming it
-Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=reap-session-volumes did not start: file:///Users/taofeng/dev/claude-worktrees/doneright/github-issue-342-413cd0/packages/hub/dist/plant.js:82
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=reap-session-volumes did not start: file://~/dev/claude-worktrees/doneright/github-issue-342-413cd0/packages/hub/dist/plant.js:82
 Error: DEEP_HUB_PLANT=reap-session-volumes names no planted program
 
 AC5, after the fix: the first run read C's volumes as B's, since C leases B's project name again; volumes are now read by name
