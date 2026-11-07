@@ -41,7 +41,7 @@ mod replica {
         if first {
             // A launch reads this home's hub, when one answers; a setup that stopped left none.
             let root = deep_app::hub::root();
-            match deep_app::record::RecordReader::open(
+            match deep_app::record::RecordReader::open_folded(
                 &deep_app::hub::address(),
                 &root.join("control.token"),
             ) {
@@ -104,7 +104,7 @@ mod replica {
         }
         if first {
             // The menu bar's count is an AppKit status item the offscreen window can't capture, so its title is written.
-            let title = deep_app::menu_bar_line(&deep_app::sessions());
+            let title = deep_app::menu_bar_line();
             std::fs::write(out.join("menu-bar.txt"), format!("{title}\n"))
                 .expect("the menu bar's title is written");
         }

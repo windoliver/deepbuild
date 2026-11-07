@@ -1,6 +1,6 @@
 //! Issue #882: the chrome's colors. Every color the app draws, outside a status mark's core, is a role of
 //! its look, the clean one, in the appearance macOS reports for the window: ground, raised and divider; the
-//! one ink at four tiers; hover and selected; accent; and the session's readout and line. No module names a
+//! one ink at four tiers; muted; hover and selected; accent; and the session's readout and line. No module names a
 //! color of its own, and `scripts/color-literal-guard.mjs` holds the source to that. The same roles fill
 //! gpui-base's semantic theme, which a script panel reads as `color.*` and the dock's handles draw with.
 
@@ -21,6 +21,8 @@ pub struct Chrome {
     pub ink_secondary: Hsla,
     pub ink_tertiary: Hsla,
     pub ink_disabled: Hsla,
+    /// A bound value past its freshness (#1172).
+    pub muted: Hsla,
     pub hover: Hsla,
     pub selected: Hsla,
     pub accent: Hsla,
@@ -71,6 +73,7 @@ pub fn chrome(dark: bool) -> &'static Chrome {
         ink_secondary: role("ink_secondary", dark),
         ink_tertiary: role("ink_tertiary", dark),
         ink_disabled: role("ink_disabled", dark),
+        muted: role("muted", dark),
         hover: role("hover", dark),
         selected: role("selected", dark),
         accent: role("accent", dark),

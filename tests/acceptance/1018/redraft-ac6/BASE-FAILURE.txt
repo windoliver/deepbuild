@@ -1,0 +1,20 @@
+Base 69803b946abf4881f818485c5898865949a2a871, Linux aarch64 (not a reference Mac), Node 24.22.0, 2026-11-04.
+
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/1018/redraft-ac6 --reporter=verbose
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1018/redraft-ac6
+
+ ↓ budgets.test.ts > AC6 #1018.e558130f budgets on the reference Mac in the local preflight, compared with the merge base > AC6 #1018.e558130f with 10,000 keys kept, carrying a result across sessions adds under 5 ms at p95 to a claim's verdict 54ms [INCONCLUSIVE a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB); mains power, Low Power Mode off, thermal state nominal): model is null, chip is null, memoryBytes is null: neither Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB); power (mains) is null, not "ac"; Low Power Mode is null, not false; thermal state is null, not "nominal"; the macOS build is missing: a budget counts only on a reference Mac]
+
+ Test Files  1 passed (1)
+      Tests  1 skipped (1)
+   Start at  01:37:31
+   Duration  657ms (transform 50%, import 34%, tests 13%, worker 2%)
+
+
+Carry check against two hubs of this base (scratch code, not kept), first pair:
+BASE FAILURE: pair 0: this side's B claim claim:01M6JZ5XDTFPJYXJTVNQK51C55, in another session and worktree on A's tree, must read A's result (run:01M6JZ5WRVKK7HKFGSSD47CA04) as carried and run nothing of its own; it ran run:01M6JZ5XR0BRY2QY6RNMCK76MJ (.deepbuild/checks/c01.sh): expected 1 to be +0 // Object.is equality
+
+A/A noise reading (scratch, this checkout against itself, no seeding, 2 runs x 30 pairs, load 31-78 on 20 cores):
+a adds -25.0, -287.0 floors 31.0, 94.0 res 49.49 p95 379.0, 807.0 404.0, 1094.0 p50 271.0, 441.0 220.0, 410.0
+b adds -16.0, 101.0 floors 44.0, 343.0 res 172.91 p95 411.0, 969.0 427.0, 868.0 p50 246.0, 471.0 297.0, 444.0
