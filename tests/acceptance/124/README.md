@@ -28,7 +28,7 @@ DEEP_DRIVE_LIVE=1 CLAUDE_CODE_OAUTH_TOKEN=... [CODEX_API_KEY=...] npx vitest run
 
 Node 24.22 first on `PATH`; cargo; macOS (the replica renders with GPUI's offscreen Metal renderer; off macOS every replica test
 fails `INCONCLUSIVE:` and never passes). Every file builds `deep-drive` once with
-`cargo build --locked -p deep-replica --bin deep-drive`; the live agents file also needs `target/debug/deep-hook`. Temp folders are
+`cargo build --locked -p deep-replica --bin deep-drive --features env-plants` (the planted replicas, #1408); the live agents file also needs `target/debug/deep-hook`. Temp folders are
 `/tmp/dd124-*` (and #26's `/tmp/dh26-*`); every process is stopped by its PID. `scripts/lanes.mjs` needs `tests/acceptance/124/`
 in its `alone` list (the files build binaries and start hubs) and both `*.live.test.ts` files in `byHand`; the implementer makes
 that edit. No `[[test]]` entry and no file outside this folder was added by this job.
