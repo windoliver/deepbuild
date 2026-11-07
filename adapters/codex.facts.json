@@ -898,5 +898,68 @@
     "name": "o200k_base",
     "package": "gpt-tokenizer",
     "version": "4.0.0"
+  },
+  "entries": {
+    "readBy": "where the hub's sync (#148) writes and reads this agent's MCP servers and skills, at user level only, and the fields it refuses; checked against each entry before a plan shows",
+    "name": "Codex",
+    "mcp": {
+      "file": "~/.codex/config.toml",
+      "format": "toml",
+      "key": "mcp_servers",
+      "transports": {
+        "stdio": {
+          "fields": ["command", "args", "env"]
+        },
+        "http": {
+          "fields": ["url", "headers"],
+          "names": {
+            "headers": "http_headers"
+          }
+        }
+      },
+      "refused": [
+        {
+          "transport": "http",
+          "field": "env",
+          "reason": "Codex 0.166.0-alpha.5.1's loader refuses env on a streamable_http server, and codex mcp list then fails to read config.toml"
+        },
+        {
+          "transport": "http",
+          "field": "args",
+          "reason": "refused on a streamable_http server"
+        },
+        {
+          "transport": "http",
+          "field": "command",
+          "reason": "refused on a streamable_http server"
+        },
+        {
+          "transport": "stdio",
+          "field": "url",
+          "reason": "refused on a stdio server"
+        },
+        {
+          "transport": "stdio",
+          "field": "headers",
+          "reason": "http_headers is refused on a stdio server"
+        }
+      ],
+      "list": ["mcp", "list", "--json"]
+    },
+    "skills": {
+      "write": "~/.codex/skills",
+      "readFrom": ["~/.codex/skills", "~/.agents/skills"]
+    }
+  },
+  "daemon": {
+    "readBy": "the Agents page (#148): Codex's sessions share one app-server daemon, so a sync that lands after it started shows on each session's row until that session's own evidence shows the new set, and a restart is only ever an authority ask naming the sessions it would interrupt, run through this command, never a signal",
+    "restart": ["app-server", "daemon", "restart"],
+    "picksUp": {
+      "0.166.0-alpha.5.1": {
+        "hooks.json": true,
+        "mcp_servers": true,
+        "readBy": "measured Nov 7, 2026 on a running `codex app-server` in a temp HOME: after config.toml gained an [mcp_servers] table and hooks.json a SessionStart entry, the same server's next mcpServerStatus/list and hooks/list named both, with no restart. A session already started keeps the set it loaded; only a new thread reads the new one"
+      }
+    }
   }
 }
